@@ -1,0 +1,31 @@
+{
+  "name": "ai-video-editer",
+  "version": "1.0.0",
+  "description": "AI VIDEO EDITER",
+  "main": "index.js",
+  "scripts": {
+    "start": "remotion studio",
+    "build": "remotion render ArticleZoom out/article-zoom.mp4",
+    "render": "remotion render ArticleZoom out/article-zoom.mp4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:42087/git/karnalamahesh810-ops/AI-VIDEO-EDITER"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@remotion/cli": "4.0.436",
+    "@remotion/player": "4.0.436",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "remotion": "4.0.436",
+    "roughjs": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3"
+  }
+}
