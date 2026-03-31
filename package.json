@@ -1,0 +1,27 @@
+{
+  "name": "ai-video-editer-usa-map",
+  "version": "1.0.0",
+  "description": "Animated USA Map with Remotion",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "npx remotion studio",
+    "build": "npx remotion render USAMapAnimation out/usa-map-animation.mp4",
+    "render": "npx remotion render USAMapAnimation out/usa-map-animation.mp4"
+  },
+  "dependencies": {
+    "d3-geo": "^3.1.0",
+    "remotion": "^4.0.0",
+    "@remotion/cli": "^4.0.0",
+    "topojson-client": "^3.1.0",
+    "us-atlas": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/d3-geo": "^3.1.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@types/topojson-client": "^3.1.4",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}
