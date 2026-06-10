@@ -1,0 +1,40 @@
+PASTE INTO LOVABLE CHAT after the RunPod serverless endpoint exists.
+Replace <ENDPOINT_ID> with the real endpoint id first.
+=================================================================
+
+Switch the Studio video worker from the old pod URL to my new auto-scaling backend.
+Do NOT call RunPod from the browser — create a Supabase Edge Function proxy so the
+API key stays server-side.
+
+1) SUPABASE SETUP
+- Create a PUBLIC storage bucket "videos" (if missing) and an "audio" bucket (public).
+- Add a Supabase secret named RUNPOD_API_KEY (I will paste its value in the Supabase
+  dashboard myself — reference it as an env secret, never hardcode).
+
+2) EDGE FUNCTION "video-jobs"
+- POST /video-jobs  with JSON {audio_url, title, channels?}:
+    forwards to https://api.runpod.ai/v2/<ENDPOINT_ID>/run
+    with body {"input": {"audio_url": audio_url, "title": title, "channels": channels}}
+    and header Authorization: Bearer ${RUNPOD_API_KEY}
+    -> returns RunPod's {id, status}
+- GET /video-jobs?id=<job_id>:
+    forwards to https://api.runpod.ai/v2/<ENDPOINT_ID>/status/<job_id>
+    -> returns RunPod's response verbatim
+- CORS: allow the site origin.
+
+3) STUDIO PAGE CHANGES (src/lib/studioWorker.ts)
+- uploadAudio: upload the file to the Supabase "audio" bucket instead of the old pod
+  /upload; audio_url = the bucket's public URL for that file.
+- createJob: call the edge function POST with {audio_url, title, channels} (channels only
+  when the YouTube Channel card is selected). Save returned id as job_id.
+- getJob: call the edge function GET. Map RunPod statuses:
+    IN_QUEUE -> stage "queued", IN_PROGRESS -> use the latest item in the "output"/
+    progress stream if present (it carries {stage, pct, detail, elapsedSec}),
+    COMPLETED -> done, output.video_url is the final video (absolute URL, plays directly),
+    FAILED -> show output.error or the error field with a Retry button.
+- Multiple jobs can now run AT THE SAME TIME: remove any "worker busy" blocking. Track an
+  array of active jobs (localStorage), show each as a card with its own progress bar in
+  Studio + History.
+- Health indicator: GET https://api.runpod.ai/v2/<ENDPOINT_ID>/health via the edge
+  function (add a passthrough) — show "workers: N idle / M running" if available.
+=================================================================

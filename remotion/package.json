@@ -1,0 +1,19 @@
+{
+  "name": "vidrush-remotion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VidRush-style faceless documentary assembly: b-roll matched to narration + Ken-Burns + captions + (transitions/SFX).",
+  "scripts": {
+    "studio": "remotion studio src/index.ts --public-dir=../runtime",
+    "render": "remotion render src/index.ts DocVideo out/doc.mp4 --public-dir=../runtime --concurrency=4",
+    "render:demo": "remotion render src/index.ts TemplateDemo out/template_demo.mp4 --public-dir=../runtime --concurrency=2",
+    "render:auto": "remotion render src/index.ts AutoDoc out/auto_doc.mp4 --public-dir=../runtime --concurrency=1"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.443",
+    "@remotion/google-fonts": "4.0.443",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.443"
+  }
+}

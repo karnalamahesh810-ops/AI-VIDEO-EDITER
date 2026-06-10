@@ -1,0 +1,7 @@
+runpod==1.7.*
+faster-whisper
+opencv-python-headless
+pillow
+yt-dlp
+google-generativeai
+requests
