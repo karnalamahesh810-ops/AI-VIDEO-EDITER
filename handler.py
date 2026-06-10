@@ -108,8 +108,8 @@ def handler(job):
             video_url = _upload_supabase(final, f"{job['id']}.mp4")
     except Exception as e:
         return {"error": f"render OK but upload failed: {e}", "size_mb": size_mb}
-    return {"video_url": video_url, "size_mb": size_mb,
-            "duration_min": round(float(dur or 0) / 60, 1), "title": title}
+    return {"video_url": video_url, "video_path": inp.get("video_path", ""),
+            "size_mb": size_mb, "duration_min": round(float(dur or 0) / 60, 1), "title": title}
 
 
 runpod.serverless.start({"handler": handler})
