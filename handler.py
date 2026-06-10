@@ -18,15 +18,24 @@ APP = "/app"
 STATUS = f"{APP}/out/pipeline_status.json"
 
 
-def _prepare_workspace():
+def _prepare_workspace(inp):
     # fresh per-job state; keep the baked remotion + runtime_assets
     for d in ("in", "out", "runtime", "channel_src"):
         shutil.rmtree(f"{APP}/{d}", ignore_errors=True)
         os.makedirs(f"{APP}/{d}", exist_ok=True)
     shutil.copytree(f"{APP}/runtime_assets/fx", f"{APP}/runtime/fx", dirs_exist_ok=True)
-    key = os.environ.get("GEMINI_KEY", "")
+    # gemini key: per-job from the edge function (preferred) or endpoint env
+    key = inp.get("gemini_key") or os.environ.get("GEMINI_KEY", "")
     if key:
         open(f"{APP}/gemini_key.txt", "w").write(key)
+
+
+def _upload_signed(path, upload_url):
+    """PUT to a pre-signed Supabase Storage upload URL (no secrets needed on the worker)."""
+    with open(path, "rb") as f:
+        r = requests.put(upload_url, headers={"Content-Type": "video/mp4",
+                                              "x-upsert": "true"}, data=f, timeout=900)
+    r.raise_for_status()
 
 
 def _upload_supabase(path, dest_name):
@@ -51,7 +60,7 @@ def handler(job):
     title = inp.get("title", "")
     channels = inp.get("channels", "")
 
-    _prepare_workspace()
+    _prepare_workspace(inp)
 
     cmd = ["python3", f"{APP}/pipeline_sl.py", "--audio", audio_url, "--title", title]
     if channels:
@@ -90,9 +99,13 @@ def handler(job):
                               "-of", "csv=p=0", final], capture_output=True, text=True).stdout.strip()
     except Exception:
         pass
-    dest = f"{job['id']}.mp4"
     try:
-        video_url = _upload_supabase(final, dest)
+        if inp.get("upload_url"):
+            # zero-secret path: edge function pre-signed this URL for videos/<job>.mp4
+            _upload_signed(final, inp["upload_url"])
+            video_url = inp.get("public_url", "")
+        else:
+            video_url = _upload_supabase(final, f"{job['id']}.mp4")
     except Exception as e:
         return {"error": f"render OK but upload failed: {e}", "size_mb": size_mb}
     return {"video_url": video_url, "size_mb": size_mb,
