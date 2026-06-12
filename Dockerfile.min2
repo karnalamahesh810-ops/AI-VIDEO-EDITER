@@ -1,0 +1,7 @@
+# Bisect step 2: hello-world's EXACT trivial handler on OUR modern base + SDK.
+# Works -> our handler.py content is the problem. Fails -> base/SDK vintage is.
+FROM python:3.11-slim-bookworm
+ENV PIP_NO_CACHE_DIR=1
+RUN pip install runpod
+RUN printf 'import runpod\ndef handler(event):\n    return "Hello World"\nrunpod.serverless.start({"handler": handler})\n' > /handler.py
+CMD ["python", "-u", "/handler.py"]
