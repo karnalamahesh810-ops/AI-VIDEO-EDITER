@@ -29,4 +29,4 @@ COPY runtime_assets /app/runtime_assets
 COPY pipeline_sl.py handler.py /app/
 WORKDIR /app
 
-CMD ["python3", "-u", "handler.py"]
+CMD ["python3", "-u", "/app/handler.py"]
