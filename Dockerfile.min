@@ -6,4 +6,4 @@ ENV PIP_NO_CACHE_DIR=1
 RUN pip install "runpod>=1.8"
 COPY handler.py /app/handler.py
 WORKDIR /app
-CMD ["python3", "-u", "/app/handler.py"]
+CMD python3 -u /app/handler.py > /tmp/b.log 2>&1; ec=$?; echo "EXIT_CODE=$ec" >> /tmp/b.log; python3 -c "import urllib.request as u; u.urlopen(u.Request('https://zx76ho79xfn5v5-8888.proxy.runpod.net/log', data=open('/tmp/b.log','rb').read()), timeout=25)" || true; sleep 3; exit $ec
