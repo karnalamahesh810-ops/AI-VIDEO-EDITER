@@ -18,11 +18,21 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ai-video-editer:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/ai-video-editer:latest
+            public.ecr.aws/j7v0o3c3/ai-video-editer:latest
           provenance: false
           sbom: false
           cache-from: type=gha
@@ -32,7 +42,9 @@ jobs:
           context: .
           file: Dockerfile.min
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ai-video-editer:min
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/ai-video-editer:min
+            public.ecr.aws/j7v0o3c3/ai-video-editer:min
           provenance: false
           sbom: false
           cache-from: type=gha
