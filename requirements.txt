@@ -1,4 +1,4 @@
-runpod==1.7.*
+runpod>=1.8
 faster-whisper
 opencv-python-headless
 pillow
