@@ -3,7 +3,7 @@
 # problem; if this ALSO times out, ghcr-on-serverless is the problem.
 FROM python:3.11-slim-bookworm
 ENV PIP_NO_CACHE_DIR=1
-RUN pip install "runpod>=1.8" requests
+RUN pip install "runpod>=1.8"
 COPY handler.py /app/handler.py
 WORKDIR /app
 CMD ["python3", "-u", "handler.py"]

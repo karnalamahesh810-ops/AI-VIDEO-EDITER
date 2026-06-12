@@ -11,7 +11,7 @@ Endpoint env vars (set in RunPod console):
   SUPABASE_BUCKET       e.g. "videos" (public bucket)
 """
 import json, os, shutil, subprocess, time
-import requests
+import urllib.request
 import runpod
 
 APP = "/app"
@@ -32,23 +32,21 @@ def _prepare_workspace(inp):
 
 def _upload_signed(path, upload_url):
     """PUT to a pre-signed Supabase Storage upload URL (no secrets needed on the worker)."""
-    with open(path, "rb") as f:
-        r = requests.put(upload_url, headers={"Content-Type": "video/mp4",
-                                              "x-upsert": "true"}, data=f, timeout=900)
-    r.raise_for_status()
+    req = urllib.request.Request(upload_url, method="PUT", data=open(path, "rb").read(),
+                                 headers={"Content-Type": "video/mp4", "x-upsert": "true"})
+    urllib.request.urlopen(req, timeout=900).read()
 
 
 def _upload_supabase(path, dest_name):
     url = os.environ["SUPABASE_URL"].rstrip("/")
     key = os.environ["SUPABASE_SERVICE_KEY"]
     bucket = os.environ.get("SUPABASE_BUCKET", "videos")
-    with open(path, "rb") as f:
-        r = requests.post(
-            f"{url}/storage/v1/object/{bucket}/{dest_name}",
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "video/mp4",
-                     "x-upsert": "true"},
-            data=f, timeout=900)
-    r.raise_for_status()
+    req = urllib.request.Request(
+        f"{url}/storage/v1/object/{bucket}/{dest_name}", method="POST",
+        data=open(path, "rb").read(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "video/mp4",
+                 "x-upsert": "true"})
+    urllib.request.urlopen(req, timeout=900).read()
     return f"{url}/storage/v1/object/public/{bucket}/{dest_name}"
 
 
