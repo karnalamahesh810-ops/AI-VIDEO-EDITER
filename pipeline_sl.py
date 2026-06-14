@@ -88,18 +88,11 @@ def prep_audio(audio_in):
 
 # ---------- 2. transcribe ----------
 def transcribe():
-    # detect GPU FIRST — attempting cuda on a CPU-only pod can segfault (uncatchable)
-    has_gpu = subprocess.run("nvidia-smi -L", shell=True, capture_output=True).returncode == 0
-    status("transcribe", 6, f"faster-whisper ({'GPU' if has_gpu else 'CPU'})")
+    # CPU-only: the image ships no CUDA runtime (libcublas/cudnn), so cuda whisper crashes at
+    # encode time (past the init try/except). small.en int8 on CPU is fast enough; render is CPU-bound too.
+    status("transcribe", 6, "faster-whisper (CPU)")
     from faster_whisper import WhisperModel
-    if has_gpu:
-        try:
-            m = WhisperModel("small.en", device="cuda", compute_type="float16")
-        except Exception as e:
-            print("cuda init failed -> cpu:", e)
-            m = WhisperModel("small.en", device="cpu", compute_type="int8")
-    else:
-        m = WhisperModel("small.en", device="cpu", compute_type="int8")
+    m = WhisperModel("small.en", device="cpu", compute_type="int8")
     segs, _ = m.transcribe(f"{WS}/audio.wav", vad_filter=True)
     segs = list(segs)
     out = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()} for s in segs]
