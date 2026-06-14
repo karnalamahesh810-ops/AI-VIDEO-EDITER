@@ -202,6 +202,37 @@ def fetch_channels(channels, per=2):
         vids += [(ch, v) for v in ids]
     return download_videos(vids)
 
+def fetch_own_clips(urls):
+    """User-uploaded clips: download each and turn it into one or more 7s pool clips directly
+    (no 90s source gate — uploads may already be short). Normalized to even dims, no audio."""
+    status("download", 16, f"{len(urls)} uploaded clips")
+    import urllib.request as _ur
+    idx = 0
+    for j, u in enumerate(urls):
+        u = u.strip()
+        if not u:
+            continue
+        tmp = f"{SRC}/own_src_{j}.mp4"
+        try:
+            _ur.urlretrieve(u, tmp)
+        except Exception as e:
+            print("  own clip dl fail:", u[:70], e); continue
+        d = float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                       "-of", "csv=p=0", tmp]).stdout.strip() or 0)
+        if d <= 0:
+            continue
+        n = 1 if d <= 8 else min(12, max(1, int(d // 8)))
+        for k in range(n):
+            t = 0.0 if n == 1 else d * k / n
+            o = f"{POOL}/own_{idx:03d}.mp4"
+            run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", tmp, "-t", "7", "-an",
+                 "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1",
+                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
+            if os.path.exists(o) and os.path.getsize(o) > 40000:
+                idx += 1
+    print(f"  own clips -> {idx} pool clips")
+    return idx
+
 # ---------- 5. slice ----------
 def slice_videos(n_per=24, clip=7):
     status("slice", 32, "cutting 7s segments")
@@ -392,8 +423,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--audio", required=True, help="path or URL to the voiceover")
     ap.add_argument("--channels", default="", help="comma-separated channel handles (no @)")
-    ap.add_argument("--source", default=None, choices=["channels", "auto"],
-                    help="auto = Gemini discovers on-topic source videos (no channels needed)")
+    ap.add_argument("--source", default=None, choices=["channels", "auto", "clips"],
+                    help="auto = Gemini discovers on-topic source videos; clips = use --own-clips URLs")
+    ap.add_argument("--own-clips", default="", help="comma-separated URLs of user-uploaded video clips")
     ap.add_argument("--title", default="", help="video title (improves auto discovery)")
     ap.add_argument("--skip-source", action="store_true", help="reuse existing broll_pool")
     a = ap.parse_args()
@@ -403,13 +435,17 @@ if __name__ == "__main__":
     prep_audio(a.audio)
     segs = transcribe()
     scenes = build_scenes(segs)
-    mode = a.source or ("channels" if a.channels else "auto")
+    mode = a.source or ("clips" if a.own_clips else ("channels" if a.channels else "auto"))
     if not a.skip_source:
-        if mode == "channels":
+        if mode == "clips":
+            if fetch_own_clips([u for u in a.own_clips.split(",") if u.strip()]) == 0:
+                raise RuntimeError("no usable uploaded clips")
+        elif mode == "channels":
             fetch_channels([c.strip().lstrip("@") for c in a.channels.split(",") if c.strip()])
+            slice_videos()
         else:
             download_videos(discover_sources(segs, a.title))
-        slice_videos()
+            slice_videos()
     themes = auto_qc()
     themes = gemini_tag(themes)
     match(scenes, themes)

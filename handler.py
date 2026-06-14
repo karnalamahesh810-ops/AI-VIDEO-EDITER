@@ -63,11 +63,16 @@ def handler(job):
         return {"error": "audio_url is required"}
     title = inp.get("title", "")
     channels = inp.get("channels", "")
+    own_clips = inp.get("own_clips") or []
+    if isinstance(own_clips, list):
+        own_clips = ",".join(str(u) for u in own_clips)
 
     _prepare_workspace(inp)
 
     cmd = ["python3", f"{APP}/pipeline_sl.py", "--audio", audio_url, "--title", title]
-    if channels:
+    if own_clips:                       # user-uploaded clips take priority
+        cmd += ["--own-clips", own_clips, "--source", "clips"]
+    elif channels:
         cmd += ["--channels", channels, "--source", "channels"]
     else:
         cmd += ["--source", inp.get("source", "auto")]
