@@ -221,8 +221,10 @@ def _fetch_clip_source(u, j):
             import gdown
             if "/folders/" in u:                       # a whole Drive folder of clips
                 d = f"{SRC}/gd_{j}"; os.makedirs(d, exist_ok=True)
-                gdown.download_folder(url=u, output=d, quiet=True, use_cookies=False)
-                out = [os.path.join(d, f) for f in os.listdir(d)]
+                # remaining_ok=True: allow folders with >50 files (gdown's default cap raises otherwise)
+                gdown.download_folder(url=u, output=d, quiet=True, use_cookies=False, remaining_ok=True)
+                files = sorted(os.path.join(d, f) for f in os.listdir(d) if os.path.isfile(os.path.join(d, f)))
+                out = files[:80]                        # cap: 80 clips is ample b-roll variety, avoids huge folders
             else:                                       # a single Drive file (handles confirm token)
                 o = f"{SRC}/gd_{j}.mp4"; gdown.download(url=u, output=o, quiet=True, fuzzy=True)
                 if os.path.exists(o): out = [o]
