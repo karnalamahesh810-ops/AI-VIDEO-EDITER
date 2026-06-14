@@ -183,15 +183,27 @@ def download_videos(vids):
         raise RuntimeError(f"ALL downloads failed (datacenter-IP block): {hint}")
     return got
 
+def _channel_url(ch):
+    """Accept a bare handle, @handle, or any YouTube channel URL (with ?si=... etc.) -> /videos URL."""
+    ch = ch.strip()
+    m = re.search(r"@([A-Za-z0-9._-]+)", ch)            # @handle or .../@handle?si=...
+    if m:
+        return f"https://www.youtube.com/@{m.group(1)}/videos"
+    m = re.search(r"youtube\.com/((?:channel|c|user)/[A-Za-z0-9._-]+)", ch)   # /channel/UC.., /c/.., /user/..
+    if m:
+        return f"https://www.youtube.com/{m.group(1)}/videos"
+    return f"https://www.youtube.com/@{ch.lstrip('@')}/videos"
+
 def fetch_channels(channels, per=2):
     vids = []
     for ch in channels:
+        url = _channel_url(ch)
         r = run([sys.executable, "-m", "yt_dlp", *PX, "--flat-playlist", "--print", "%(id)s",
                  "--playlist-end", str(per),
                  "--extractor-args", "youtube:player_client=web_safari,android",
-                 f"https://www.youtube.com/@{ch}/videos"], timeout=180)
+                 url], timeout=150)
         ids = r.stdout.split()
-        if not ids: print(f"  list FAILED @{ch}: {r.stderr[-200:]}")
+        if not ids: print(f"  list FAILED {url}: {r.stderr[-200:]}")
         vids += [(ch, v) for v in ids]
     return download_videos(vids)
 
@@ -434,7 +446,7 @@ if __name__ == "__main__":
             if fetch_own_clips([u for u in a.own_clips.split(",") if u.strip()]) == 0:
                 raise RuntimeError("no usable uploaded clips")
         elif mode == "channels":
-            fetch_channels([c.strip().lstrip("@") for c in a.channels.split(",") if c.strip()])
+            fetch_channels([c.strip() for c in a.channels.split(",") if c.strip()])
             slice_videos()
         else:
             download_videos(discover_sources(segs, a.title))
