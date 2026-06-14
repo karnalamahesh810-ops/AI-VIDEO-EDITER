@@ -298,6 +298,9 @@ def auto_qc():
     import cv2, numpy as np
     keep = {}
     for f in sorted(os.listdir(POOL)):
+        if not f.endswith(".mp4"): continue
+        if f.startswith("own_"):            # user-chosen clips (upload/Drive/Dropbox): always keep, skip text-card filter
+            keep[f] = "news"; continue
         if not f.startswith("chan_"): continue
         cap = cv2.VideoCapture(f"{POOL}/{f}")
         n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)); ok = True
