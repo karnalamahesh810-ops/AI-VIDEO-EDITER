@@ -456,21 +456,37 @@ def render(scenes):
     for stub in ("overlays.json",):
         p = f"{RT}/{stub}"
         if not os.path.exists(p): json.dump({"overlays": []}, open(p, "w"))
-    frames = max(1, round((scenes[-1]["end"] + 0.6) * 30))
-    status("render", 80, f"{frames} frames")
-    r = None
-    for conc in (8, 4):                              # ladder+retry: big clip pools crash Chrome at high concurrency
-        run(f"rm -f {OUT}/final.mp4", timeout=30)
-        r = run(f"cd {WS}/remotion && npx remotion render src/index.ts AutoDoc {OUT}/final.mp4 "
-                f"--public-dir={RT} --concurrency={conc} --image-format=jpeg --jpeg-quality=95 "
-                f"--x264-preset=medium --crf=19 --offthreadvideo-cache-size-in-bytes=3000000000 "
-                f"--timeout=120000 2>&1 | tail -6", timeout=3600)   # --timeout: slow-serving clips; cache: stability
-        if os.path.exists(f"{OUT}/final.mp4") and os.path.getsize(f"{OUT}/final.mp4") > 500000:
-            break
-        print(f"  render concurrency={conc} produced no file -> retrying lower")
-    print(r.stdout[-300:])
-    if not os.path.exists(f"{OUT}/final.mp4"): raise RuntimeError("render produced no file")
-    status("done", 100, f"final.mp4 {os.path.getsize(f'{OUT}/final.mp4')//1048576} MB")
+    total = max(1, round((scenes[-1]["end"] + 0.6) * 30))
+    # Serverless workers have limited RAM: high concurrency + a big offthreadvideo cache OOMs Chrome
+    # (the @remotion/renderer WebSocket crash). Use modest concurrency + 1GB cache, stream "Rendered X/Y"
+    # for a LIVE % + ETA (so the site shows real progress, not a stuck 80%), and retry lower on crash/stall.
+    status("render", 80, f"0/{total} frames")
+    for conc in (4, 2):
+        run(f"rm -f {OUT}/final.mp4 {OUT}/r.log", timeout=20)
+        run(f"cd {WS}/remotion && setsid nohup npx remotion render src/index.ts AutoDoc {OUT}/final.mp4 "
+            f"--public-dir={RT} --concurrency={conc} --image-format=jpeg --jpeg-quality=95 "
+            f"--x264-preset=medium --crf=19 --offthreadvideo-cache-size-in-bytes=1000000000 "
+            f"--timeout=120000 > {OUT}/r.log 2>&1 < /dev/null & echo started", timeout=30)
+        t0 = time.time(); last_fr = -1; last_change = t0
+        while True:
+            time.sleep(15)
+            log = run(f"tr '\\r' '\\n' < {OUT}/r.log 2>/dev/null | grep -oE '(Rendered|Encoded) [0-9]+/[0-9]+' | tail -1; "
+                      f"echo SZ=$(stat -c%s {OUT}/final.mp4 2>/dev/null||echo 0); "
+                      f"grep -qiE 'error|cannot|killed|out of memory' {OUT}/r.log && echo HASERR || true", timeout=30).stdout
+            mm = re.search(r"(Rendered|Encoded) (\d+)/(\d+)", log); sz = re.search(r"SZ=(\d+)", log)
+            if sz and int(sz.group(1)) > 500000:
+                status("done", 100, f"final.mp4 {int(sz.group(1))//1048576} MB"); return
+            fr = int(mm.group(2)) if mm else last_fr
+            if fr > last_fr:
+                last_fr = fr; last_change = time.time()
+                el = time.time() - t0; fps = fr / max(1.0, el); rem = int((total - fr) / max(0.1, fps))
+                status("render", 80 + int(min(1.0, fr / total) * 19), f"{fr}/{total} frames · ~{rem//60}m {rem%60}s left")
+            if "HASERR" in log and last_fr <= 0:
+                print(f"  render conc={conc} errored pre-frame -> retry lower"); break
+            if time.time() - last_change > 240:
+                run("pkill -9 -f remotion; pkill -9 -f chrome 2>/dev/null; true", timeout=20)
+                print(f"  render conc={conc} stalled -> retry lower"); break
+    raise RuntimeError("render produced no file after retries")
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
