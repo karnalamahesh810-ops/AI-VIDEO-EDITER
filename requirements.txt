@@ -3,5 +3,6 @@ faster-whisper
 opencv-python-headless
 pillow
 yt-dlp
+gdown
 google-generativeai
 requests

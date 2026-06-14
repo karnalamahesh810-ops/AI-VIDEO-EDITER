@@ -207,35 +207,58 @@ def fetch_channels(channels, per=2):
         vids += [(ch, v) for v in ids]
     return download_videos(vids)
 
-def fetch_own_clips(urls):
-    """User-uploaded clips: download each and turn it into one or more 7s pool clips directly
-    (no 90s source gate — uploads may already be short). Normalized to even dims, no audio."""
-    status("download", 16, f"{len(urls)} uploaded clips")
+_VIDEXT = (".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi")
+
+def _fetch_clip_source(u, j):
+    """Download one clip source to local file(s). Handles direct URLs, Dropbox share links, and
+    Google Drive file OR folder links (RunPod's datacenter bandwidth = no slow home upload).
+    Returns a list of local video file paths."""
     import urllib.request as _ur
-    idx = 0
+    u = u.strip()
+    out = []
+    try:
+        if "drive.google.com" in u or "docs.google.com" in u:
+            import gdown
+            if "/folders/" in u:                       # a whole Drive folder of clips
+                d = f"{SRC}/gd_{j}"; os.makedirs(d, exist_ok=True)
+                gdown.download_folder(url=u, output=d, quiet=True, use_cookies=False)
+                out = [os.path.join(d, f) for f in os.listdir(d)]
+            else:                                       # a single Drive file (handles confirm token)
+                o = f"{SRC}/gd_{j}.mp4"; gdown.download(url=u, output=o, quiet=True, fuzzy=True)
+                if os.path.exists(o): out = [o]
+        else:
+            if "dropbox.com" in u:                      # share link -> direct download
+                u = u.split("?")[0] + "?dl=1"
+                u = u.replace("www.dropbox.com", "dl.dropboxusercontent.com")
+            o = f"{SRC}/own_src_{j}.mp4"; _ur.urlretrieve(u, o); out = [o]
+    except Exception as e:
+        print("  clip source fail:", u[:70], e)
+    return [f for f in out if f.lower().endswith(_VIDEXT) and os.path.getsize(f) > 50000]
+
+def fetch_own_clips(urls):
+    """Clip sources = direct URLs / Dropbox links / Google Drive file or folder links. Each video is
+    sliced into one or more 7s pool clips (no 90s gate). Fetched on RunPod, so no slow home upload."""
+    status("download", 16, f"{len(urls)} clip source(s)")
+    raw = []
     for j, u in enumerate(urls):
-        u = u.strip()
-        if not u:
-            continue
-        tmp = f"{SRC}/own_src_{j}.mp4"
-        try:
-            _ur.urlretrieve(u, tmp)
-        except Exception as e:
-            print("  own clip dl fail:", u[:70], e); continue
+        if u.strip():
+            raw += _fetch_clip_source(u, j)
+    idx = 0
+    for src in raw:
         d = float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                       "-of", "csv=p=0", tmp]).stdout.strip() or 0)
+                       "-of", "csv=p=0", src]).stdout.strip() or 0)
         if d <= 0:
             continue
         n = 1 if d <= 8 else min(12, max(1, int(d // 8)))
         for k in range(n):
             t = 0.0 if n == 1 else d * k / n
             o = f"{POOL}/own_{idx:03d}.mp4"
-            run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", tmp, "-t", "7", "-an",
+            run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", src, "-t", "7", "-an",
                  "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1",
                  "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
             if os.path.exists(o) and os.path.getsize(o) > 40000:
                 idx += 1
-    print(f"  own clips -> {idx} pool clips")
+    print(f"  own clips -> {idx} pool clips from {len(raw)} source files")
     return idx
 
 # ---------- 5. slice ----------
