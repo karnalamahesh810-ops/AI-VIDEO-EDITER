@@ -456,10 +456,17 @@ def render(scenes):
         p = f"{RT}/{stub}"
         if not os.path.exists(p): json.dump({"overlays": []}, open(p, "w"))
     frames = max(1, round((scenes[-1]["end"] + 0.6) * 30))
-    status("render", 80, f"{frames} frames @16-core")
-    r = run(f"cd {WS}/remotion && npx remotion render src/index.ts AutoDoc {OUT}/final.mp4 "
-            f"--public-dir={RT} --concurrency=16 --image-format=jpeg --jpeg-quality=95 "
-            f"--x264-preset=medium --crf=19 2>&1 | tail -3", timeout=3600)
+    status("render", 80, f"{frames} frames")
+    r = None
+    for conc in (8, 4):                              # ladder+retry: big clip pools crash Chrome at high concurrency
+        run(f"rm -f {OUT}/final.mp4", timeout=30)
+        r = run(f"cd {WS}/remotion && npx remotion render src/index.ts AutoDoc {OUT}/final.mp4 "
+                f"--public-dir={RT} --concurrency={conc} --image-format=jpeg --jpeg-quality=95 "
+                f"--x264-preset=medium --crf=19 --offthreadvideo-cache-size-in-bytes=3000000000 "
+                f"--timeout=120000 2>&1 | tail -6", timeout=3600)   # --timeout: slow-serving clips; cache: stability
+        if os.path.exists(f"{OUT}/final.mp4") and os.path.getsize(f"{OUT}/final.mp4") > 500000:
+            break
+        print(f"  render concurrency={conc} produced no file -> retrying lower")
     print(r.stdout[-300:])
     if not os.path.exists(f"{OUT}/final.mp4"): raise RuntimeError("render produced no file")
     status("done", 100, f"final.mp4 {os.path.getsize(f'{OUT}/final.mp4')//1048576} MB")
