@@ -461,11 +461,11 @@ def render(scenes):
     # (the @remotion/renderer WebSocket crash). Use modest concurrency + 1GB cache, stream "Rendered X/Y"
     # for a LIVE % + ETA (so the site shows real progress, not a stuck 80%), and retry lower on crash/stall.
     status("render", 80, f"0/{total} frames")
-    for conc in (4, 2):
+    for conc in (8, 4):                              # 8 is ~2x faster than 4 and still memory-safe with the 1GB cache
         run(f"rm -f {OUT}/final.mp4 {OUT}/r.log", timeout=20)
         run(f"cd {WS}/remotion && setsid nohup npx remotion render src/index.ts AutoDoc {OUT}/final.mp4 "
             f"--public-dir={RT} --concurrency={conc} --image-format=jpeg --jpeg-quality=95 "
-            f"--x264-preset=medium --crf=19 --offthreadvideo-cache-size-in-bytes=1000000000 "
+            f"--x264-preset=veryfast --crf=20 --offthreadvideo-cache-size-in-bytes=1000000000 "
             f"--timeout=120000 > {OUT}/r.log 2>&1 < /dev/null & echo started", timeout=30)
         t0 = time.time(); last_fr = -1; last_change = t0
         while True:
