@@ -227,14 +227,16 @@ def _fetch_clip_source(u, j):
                 listing = gdown.download_folder(url=u, output=d, skip_download=True, quiet=True, use_cookies=False) or []
                 N = 60
                 step = max(1, len(listing) // N)
-                for it in [listing[k] for k in range(0, len(listing), step)][:N]:
+                picks = [listing[k] for k in range(0, len(listing), step)][:N]
+                def _dl(it):
                     op = os.path.join(d, os.path.basename(getattr(it, "path", "") or f"f{it.id}.mp4"))
                     try:
                         gdown.download(id=it.id, output=op, quiet=True)
-                        if os.path.exists(op):
-                            out.append(op)
+                        return op if os.path.exists(op) else None
                     except Exception as ee:
-                        print("  drive file fail:", getattr(it, "path", "?"), str(ee)[:80])
+                        print("  drive file fail:", getattr(it, "path", "?"), str(ee)[:80]); return None
+                from concurrent.futures import ThreadPoolExecutor
+                out = [p for p in ThreadPoolExecutor(8).map(_dl, picks) if p]   # 8 parallel = ~8x faster
             else:                                       # a single Drive file (handles confirm token)
                 o = f"{SRC}/gd_{j}.mp4"; gdown.download(url=u, output=o, quiet=True, fuzzy=True)
                 if os.path.exists(o): out = [o]
