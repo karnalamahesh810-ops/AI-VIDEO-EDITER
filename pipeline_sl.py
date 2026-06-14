@@ -21,6 +21,17 @@ for d in (RT, POOL, SRC, OUT): os.makedirs(d, exist_ok=True)
 STATUS = f"{OUT}/pipeline_status.json"
 T0 = time.time()
 
+# Residential proxy for yt-dlp: RunPod workers have datacenter IPs that YouTube blocks, so
+# channel/auto footage download fails in the cloud (it works on the laptop's home IP). Set
+# YTDLP_PROXY on the endpoint to a residential/rotating proxy (http://user:pass@host:port)
+# to route every yt-dlp call through a home-looking IP. Empty -> no proxy (uploaded-clips path).
+PROXY = os.environ.get("YTDLP_PROXY", "").strip()
+# accept a full URL (http://user:pass@host:port) OR Decodo's "host:port:user:pass" list format
+if PROXY and "://" not in PROXY and PROXY.count(":") == 3:
+    _h, _pt, _u, _pw = PROXY.split(":")
+    PROXY = f"http://{urllib.parse.quote(_u, safe='')}:{urllib.parse.quote(_pw, safe='')}@{_h}:{_pt}"
+PX = ["--proxy", PROXY] if PROXY else []
+
 def status(stage, pct, detail=""):
     json.dump({"stage": stage, "pct": pct, "detail": detail, "elapsedSec": int(time.time()-T0)},
               open(STATUS, "w"))
@@ -142,10 +153,10 @@ def discover_sources(segs, title=""):
         queries = [segs[0]["text"][:60] + " documentary"]
     vids, seen_ch = [], set()
     for qy in queries:
-        r = run([sys.executable, "-m", "yt_dlp", "--flat-playlist",
+        r = run([sys.executable, "-m", "yt_dlp", *PX, "--flat-playlist",
                  "--print", "%(id)s|%(duration)s|%(channel)s", "--playlist-end", "6",
                  "--extractor-args", "youtube:player_client=web_safari,android",
-                 f"ytsearch6:{qy}"], timeout=120)
+                 f"ytsearch6:{qy}"], timeout=180)
         for line in r.stdout.strip().splitlines():
             p = line.split("|")
             if len(p) < 3: continue
@@ -166,22 +177,26 @@ def download_videos(vids):
         if os.path.exists(base + ".mp4"): got += 1; continue
         for args in (["--extractor-args", "youtube:player_client=web_safari,android"],
                      ["--extractor-args", "youtube:player_client=tv"],):
-            run([sys.executable, "-m", "yt_dlp", "-f", "bv*[height<=1080]/b[height<=1080]/best", *args,
-                 "--remux-video", "mp4", "-o", base + ".%(ext)s", "-q", "--no-warnings",
+            run([sys.executable, "-m", "yt_dlp", *PX, "-f", "bv*[height<=1080]/b[height<=1080]/best", *args,
+                 "--remux-video", "mp4", "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
+                 "-o", base + ".%(ext)s", "-q", "--no-warnings",
                  f"https://www.youtube.com/watch?v={vid}"], timeout=900)
             if os.path.exists(base + ".mp4") and os.path.getsize(base + ".mp4") > 1e6:
                 got += 1; break
         status("download", 14 + int((i + 1) / max(1, len(vids)) * 16), f"{got}/{len(vids)} videos")
-    if got == 0: raise RuntimeError("ALL downloads failed (likely datacenter-IP block)")
+    if got == 0:
+        hint = "set YTDLP_PROXY (residential proxy) on the endpoint" if not PROXY else \
+               f"proxy is set but all downloads failed — check the proxy is residential + has quota"
+        raise RuntimeError(f"ALL downloads failed (datacenter-IP block): {hint}")
     return got
 
 def fetch_channels(channels, per=2):
     vids = []
     for ch in channels:
-        r = run([sys.executable, "-m", "yt_dlp", "--flat-playlist", "--print", "%(id)s",
+        r = run([sys.executable, "-m", "yt_dlp", *PX, "--flat-playlist", "--print", "%(id)s",
                  "--playlist-end", str(per),
                  "--extractor-args", "youtube:player_client=web_safari,android",
-                 f"https://www.youtube.com/@{ch}/videos"], timeout=120)
+                 f"https://www.youtube.com/@{ch}/videos"], timeout=180)
         ids = r.stdout.split()
         if not ids: print(f"  list FAILED @{ch}: {r.stderr[-200:]}")
         vids += [(ch, v) for v in ids]

@@ -21,7 +21,20 @@ Docker image from it in their cloud (no Docker needed locally).
    - `SUPABASE_URL` = https://<project-ref>.supabase.co   (Lovable → project settings)
    - `SUPABASE_SERVICE_KEY` = service-role key (Supabase dashboard → API)
    - `SUPABASE_BUCKET` = videos   (create a PUBLIC bucket named "videos" in Supabase Storage)
+   - `YTDLP_PROXY` = http://USER:PASS@HOST:PORT  — **required for the YouTube channels/auto
+     footage path.** RunPod workers have datacenter IPs that YouTube blocks, so without a
+     residential proxy the footage download fails (this is why footage runs on the laptop
+     today). Leave UNSET if you only accept uploaded clips. Paste it in the RunPod console
+     ONLY — never commit it to GitHub or paste it in chat.
 6. Deploy → wait for the image build (~10 min first time) → note the **Endpoint ID**.
+
+## Footage proxy (only for the YouTube channels / auto path)
+A RunPod worker's datacenter IP gets blocked by YouTube, so `yt-dlp` must go through a
+**residential or rotating proxy**. Pick any residential-proxy provider (e.g. a pay-as-you-go
+residential plan, ~$10-15/mo at low volume), get a `http://user:pass@host:port` endpoint, and
+put it in the `YTDLP_PROXY` env var above. The code already routes every yt-dlp call through
+it (`pipeline_sl.py` → `PX`). Cookies are NOT used and must never be put on the worker.
+Uploaded-clips jobs skip download entirely and need no proxy.
 
 Stable API (never changes):
 - POST https://api.runpod.ai/v2/<ENDPOINT_ID>/run        body {"input":{audio_url,title,channels?}}

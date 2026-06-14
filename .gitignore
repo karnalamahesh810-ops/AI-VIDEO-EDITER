@@ -1,4 +1,24 @@
+# secrets — NEVER commit (RunPod keys, SSH private key, API tokens, Supabase key)
 gh_token.txt
 api_token.txt
+admin_key.txt
+runpod_api_key.txt
+runpod_fixed
+runpod_fixed.pub
+supabase_anon.txt
+proxy.txt
+proxy_creds.txt
+*_key.txt
+*_token.txt
+*.pem
+
+# local machine state / scratch (not code — safe to ignore)
 *.log
 __pycache__/
+audio_url.txt
+test_audio.mp3
+new_digest.txt
+runids.txt
+*_id.txt
+*_ip.txt
+*_port.txt
