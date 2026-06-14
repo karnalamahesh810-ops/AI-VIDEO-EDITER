@@ -1,6 +1,7 @@
 """RunPod Serverless handler — one worker = one video job. Scale = max workers (10+).
 Input  (from /run):  {"audio_url": "...", "title": "...", "channels": "a,b" (optional),
-                      "source": "auto"|"channels" (optional)}
+                      "source": "auto"|"channels" (optional), "proxy": "..." (optional —
+                      residential/datacenter proxy for yt-dlp; needed for channels/auto in cloud)}
 Output: {"video_url": "...", "duration_min": float, "size_mb": int}
 Progress: mirrors the pipeline's status JSON into runpod progress (site polls /status/{id}).
 
@@ -28,6 +29,11 @@ def _prepare_workspace(inp):
     key = inp.get("gemini_key") or os.environ.get("GEMINI_KEY", "")
     if key:
         open(f"{APP}/gemini_key.txt", "w").write(key)
+    # yt-dlp proxy (channels/auto footage): per-job from the edge function or endpoint env.
+    # pipeline_sl.py (launched as a child process) inherits os.environ, so setting it here is enough.
+    proxy = inp.get("proxy") or os.environ.get("YTDLP_PROXY", "")
+    if proxy:
+        os.environ["YTDLP_PROXY"] = proxy
 
 
 def _upload_signed(path, upload_url):
