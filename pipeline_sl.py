@@ -264,10 +264,11 @@ def fetch_own_clips(urls):
         if d <= 0:
             continue
         n = 1 if d <= 8 else min(12, max(1, int(d // 8)))
+        loop_args = ["-stream_loop", "-1"] if d < 7.2 else []   # loop short clips to fill the full 7s -> no end-freeze in render
         for k in range(n):
             t = 0.0 if n == 1 else d * k / n
             o = f"{POOL}/own_{idx:03d}.mp4"
-            run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", src, "-t", "7", "-an",
+            run(["ffmpeg", "-y", *loop_args, "-ss", f"{t:.1f}", "-i", src, "-t", "7", "-an",
                  "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1",
                  "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
             if os.path.exists(o) and os.path.getsize(o) > 40000:
