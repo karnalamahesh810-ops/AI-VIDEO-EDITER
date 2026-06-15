@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Sequence, Audio, staticFile, useVideoConfig } from "remotion";
+import "./fonts"; // side-effect: load Oswald/Anton/Montserrat/Inter (matches theme.ts font stacks)
 import { SceneClip } from "../components/SceneClip";
 import { GradeOverlay } from "./components/GradeOverlay";
 import { REGISTRY } from "./registry";

@@ -12,6 +12,12 @@ proxy_creds.txt
 *_token.txt
 *.pem
 
+# build + local render artifacts (NEVER commit — huge / machine-local)
+remotion/node_modules/
+remotion/out/
+remotion/package-lock.json
+/runtime/
+
 # local machine state / scratch (not code — safe to ignore)
 *.log
 __pycache__/

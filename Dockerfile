@@ -26,7 +26,7 @@ RUN npm install --no-audit --no-fund && npx remotion browser ensure
 
 # pipeline + handler + static assets (sfx)
 COPY runtime_assets /app/runtime_assets
-COPY pipeline_sl.py handler.py /app/
+COPY pipeline_sl.py handler.py director.py /app/
 WORKDIR /app
 
 CMD ["python3", "-u", "/app/handler.py"]

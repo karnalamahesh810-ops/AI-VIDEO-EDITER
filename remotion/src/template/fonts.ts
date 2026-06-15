@@ -5,7 +5,9 @@ import { loadFont as loadMontserrat } from "@remotion/google-fonts/Montserrat";
 import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
 import { loadFont as loadAnton } from "@remotion/google-fonts/Anton";
 
-loadOswald({ weights: ["400", "500", "600", "700"] });
-loadMontserrat({ weights: ["400", "600", "700", "800"] });
-loadInter({ weights: ["400", "600", "700"] });
+// loadFont()'s first positional arg is the STYLE (not options) in @remotion/google-fonts
+// 4.x — call with no args to load the default style with all weights (safe + complete).
+loadOswald();
+loadMontserrat();
+loadInter();
 loadAnton();

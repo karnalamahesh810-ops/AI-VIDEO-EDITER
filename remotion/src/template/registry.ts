@@ -12,6 +12,8 @@ import { CountdownList } from "./components/CountdownList";
 import { DateStamp } from "./components/DateStamp";
 import { DocumentCard } from "./components/DocumentCard";
 import { DonutStat } from "./components/DonutStat";
+import { FactCard } from "./components/FactCard";
+import { NewsLowerThird } from "./components/NewsLowerThird";
 import { GhostKeyword } from "./components/GhostKeyword";
 import { GradeOverlay } from "./components/GradeOverlay";
 import { GrungeTab } from "./components/GrungeTab";
@@ -58,6 +60,8 @@ export const REGISTRY: Record<string, React.ComponentType<any>> = {
   DateStamp,
   DocumentCard,
   DonutStat,
+  FactCard,
+  NewsLowerThird,
   GhostKeyword,
   GradeOverlay,
   GrungeTab,
