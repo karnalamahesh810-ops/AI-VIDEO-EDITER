@@ -166,7 +166,7 @@ def discover_sources(segs, title=""):
     return vids[:12]  # more sources — HD floor skips some, so over-fetch to keep enough clips
 
 # footage quality (user): prefer 1080p, floor 720p; graceful fallbacks so a fetch never fails outright
-HD_FORMAT = "bv*[height<=1440][height>=720]+ba/b[height<=1440][height>=720]/bv*[height>=720]+ba/b[height>=720]"  # HARD 720p floor — no sub-HD fallback; a source with no >=720 stream is skipped
+HD_FORMAT = "bv*[height<=1440][height>=720]+ba/b[height>=720]/bv*[height<=1080]+ba/b[height<=1080]/best"  # strongly PREFER >=720 (up to 1440), but keep a reliable fallback so a download never zeroes out
 # normalize every pool clip to crisp 1080p (lanczos, sharper than browser upscaling) + ~5% edge-trim that
 # clips most burned-in source watermarks/captions sitting near the frame edges
 SLICE_VF = "scale=2016:1134:force_original_aspect_ratio=increase:flags=lanczos,crop=1920:1080,setsar=1"
