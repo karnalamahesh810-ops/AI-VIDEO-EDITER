@@ -163,10 +163,13 @@ def discover_sources(segs, title=""):
             if ch in seen_ch: continue                  # spread across distinct channels
             seen_ch.add(ch); vids.append(("auto", p[0]))
     print(f"  discovered {len(vids)} source videos across {len(seen_ch)} channels")
-    return vids[:8]
+    return vids[:12]  # more sources — HD floor skips some, so over-fetch to keep enough clips
 
 # footage quality (user): prefer 1080p, floor 720p; graceful fallbacks so a fetch never fails outright
-HD_FORMAT = "bv*[height<=1080][height>=720]/bv*[height>=720]/bv*[height<=1080]/b[height<=1080]/best"
+HD_FORMAT = "bv*[height<=1440][height>=720]+ba/b[height<=1440][height>=720]/bv*[height>=720]+ba/b[height>=720]"  # HARD 720p floor — no sub-HD fallback; a source with no >=720 stream is skipped
+# normalize every pool clip to crisp 1080p (lanczos, sharper than browser upscaling) + ~5% edge-trim that
+# clips most burned-in source watermarks/captions sitting near the frame edges
+SLICE_VF = "scale=2016:1134:force_original_aspect_ratio=increase:flags=lanczos,crop=1920:1080,setsar=1"
 
 def download_videos(vids):
     status("download", 14, f"{len(vids)} source videos")
@@ -275,7 +278,7 @@ def fetch_own_clips(urls):
             t = 0.0 if n == 1 else d * k / n
             o = f"{POOL}/own_{idx:03d}.mp4"
             run(["ffmpeg", "-y", *loop_args, "-ss", f"{t:.1f}", "-i", src, "-t", "7", "-an",
-                 "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1",
+                 "-vf", SLICE_VF,
                  "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
             if os.path.exists(o) and os.path.getsize(o) > 40000:
                 idx += 1
@@ -296,7 +299,7 @@ def slice_videos(n_per=24, clip=7):
             t = 30 + span * k / n_per
             o = f"{POOL}/chan_{idx:03d}.mp4"
             run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", p, "-t", str(clip), "-an",
-                 "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1",
+                 "-vf", SLICE_VF,
                  "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
             if os.path.exists(o) and os.path.getsize(o) > 40000: idx += 1
     return idx
@@ -447,7 +450,7 @@ def _person_clip(query, idx):
         t = max(5.0, d * 0.3)
         o = f"{POOL}/person_{idx:03d}.mp4"
         run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", src + ".mp4", "-t", "7", "-an",
-             "-vf", "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1",
+             "-vf", "scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,crop=1920:1080,setsar=1",
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
         return f"person_{idx:03d}.mp4" if os.path.exists(o) and os.path.getsize(o) > 40000 else None
     except Exception as e:
