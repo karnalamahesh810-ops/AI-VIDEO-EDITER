@@ -165,6 +165,9 @@ def discover_sources(segs, title=""):
     print(f"  discovered {len(vids)} source videos across {len(seen_ch)} channels")
     return vids[:8]
 
+# footage quality (user): prefer 1080p, floor 720p; graceful fallbacks so a fetch never fails outright
+HD_FORMAT = "bv*[height<=1080][height>=720]/bv*[height>=720]/bv*[height<=1080]/b[height<=1080]/best"
+
 def download_videos(vids):
     status("download", 14, f"{len(vids)} source videos")
     got = 0
@@ -173,7 +176,7 @@ def download_videos(vids):
         if os.path.exists(base + ".mp4"): got += 1; continue
         for args in (["--extractor-args", "youtube:player_client=web_safari,android"],
                      ["--extractor-args", "youtube:player_client=tv"],):
-            run([sys.executable, "-m", "yt_dlp", *PX, "-f", "bv*[height<=1080]/b[height<=1080]/best", *args,
+            run([sys.executable, "-m", "yt_dlp", *PX, "-f", HD_FORMAT, *args,
                  "--remux-video", "mp4", "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
                  "-o", base + ".%(ext)s", "-q", "--no-warnings",
                  f"https://www.youtube.com/watch?v={vid}"], timeout=900)
@@ -416,43 +419,105 @@ def overlays(scenes):
     json.dump({"theme": "business", "grade": {"vignette": 0.35, "grain": 0.06}, "overlays": ovl},
               open(f"{RT}/edit.json", "w"), indent=1)
 
-# ---------- 9. portraits ----------
-def portraits(segs):
-    status("portraits", 74, "Wikipedia portraits for mentioned people")
-    text = " ".join(s["text"] for s in segs)
-    cands = set(re.findall(r"(?:Mayor|Governor|Senator|Gov\.|Sen\.|CEO)\s+([A-Z][a-z]+ [A-Z][a-z]+)", text))
-    cands |= set(re.findall(r"\b([A-Z][a-z]+ [A-Z][a-z]+)\b(?=,? (?:the )?(?:founder|former|billionaire|investor))", text))
-    os.makedirs(f"{RT}/portraits", exist_ok=True)
-    UA = {"User-Agent": "video-pipeline/1.0"}
-    def get(u):
-        return urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=30).read()
-    from PIL import Image
-    got = {}
-    for name in list(cands)[:10]:
-        slug = name.lower().replace(" ", "_")
-        try:
-            time.sleep(3)
-            s = json.loads(get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(name)}"))
-            img = (s.get("originalimage") or s.get("thumbnail") or {}).get("source")
-            if not img: continue
-            im = Image.open(io.BytesIO(get(img))).convert("RGB"); im.thumbnail((800, 1000))
-            im.save(f"{RT}/portraits/{slug}.jpg", "JPEG", quality=85); got[name] = slug
-        except Exception as e: print("  portrait skip", name, e)
-    # naive placement: first mention of each name -> PortraitFrame
-    if got:
+# ---------- 9. people: full-screen clip / portrait of named persons ----------
+def _person_clip(query, idx):
+    """Find + download a clip of a specific person; slice a 7s full-screen 1080p segment.
+    Returns the pool filename or None."""
+    try:
+        r = run([sys.executable, "-m", "yt_dlp", *PX, "--flat-playlist", "--print", "%(id)s|%(duration)s",
+                 "--playlist-end", "6", "--extractor-args", "youtube:player_client=web_safari,android",
+                 f"ytsearch6:{query}"], timeout=120)
+        vid = None
+        for line in r.stdout.strip().splitlines():
+            p = line.split("|")
+            if len(p) < 2: continue
+            try: dur = float(p[1])
+            except: dur = 0
+            if 30 <= dur <= 1800: vid = p[0]; break     # real clip, not a short or long stream
+        if not vid: return None
+        src = f"{SRC}/person_src_{idx}"
+        for args in (["--extractor-args", "youtube:player_client=web_safari,android"],
+                     ["--extractor-args", "youtube:player_client=tv"]):
+            run([sys.executable, "-m", "yt_dlp", *PX, "-f", HD_FORMAT, *args, "--remux-video", "mp4",
+                 "--socket-timeout", "30", "--retries", "2", "-o", src + ".%(ext)s", "-q", "--no-warnings",
+                 f"https://www.youtube.com/watch?v={vid}"], timeout=600)
+            if os.path.exists(src + ".mp4") and os.path.getsize(src + ".mp4") > 1e6: break
+        if not (os.path.exists(src + ".mp4") and os.path.getsize(src + ".mp4") > 1e6): return None
+        d = float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", src + ".mp4"]).stdout.strip() or 0)
+        t = max(5.0, d * 0.3)
+        o = f"{POOL}/person_{idx:03d}.mp4"
+        run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", src + ".mp4", "-t", "7", "-an",
+             "-vf", "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
+        return f"person_{idx:03d}.mp4" if os.path.exists(o) and os.path.getsize(o) > 40000 else None
+    except Exception as e:
+        print("  person clip fail:", str(e)[:90]); return None
+
+def _person_portrait(name, idx):
+    """Wikipedia portrait -> 7s full-screen Ken-Burns clip (fallback when no video is found)."""
+    try:
+        UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"}
+        def get(u): return urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=30).read()
+        s = json.loads(get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(name)}"))
+        img = (s.get("originalimage") or s.get("thumbnail") or {}).get("source")
+        if not img: return None
+        jp = f"{SRC}/portrait_{idx}.jpg"; open(jp, "wb").write(get(img))
+        o = f"{POOL}/person_{idx:03d}.mp4"
+        run(["ffmpeg", "-y", "-loop", "1", "-i", jp, "-t", "7",
+             "-vf", "scale=2200:-1,zoompan=z='min(zoom+0.0009,1.18)':d=210:"
+                    "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080,setsar=1",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
+        return f"person_{idx:03d}.mp4" if os.path.exists(o) and os.path.getsize(o) > 40000 else None
+    except Exception as e:
+        print("  portrait fail:", name, str(e)[:90]); return None
+
+def people_fullscreen(scenes, segs):
+    """When the narration names a REAL person, show THAT person FULL-SCREEN at the mention:
+    a downloaded clip of them (preferred), else a Ken-Burns Wikipedia portrait, + a name lower-third.
+    Self-contained (never raises) so the render always proceeds."""
+    status("people", 74, "matching named people to full-screen clips")
+    try:
+        key = gem_key()
+        people = []
+        if key:
+            try:
+                text = " ".join(s["text"] for s in segs)[:6000]
+                r = llm_json("From this documentary narration, list the REAL, NAMED public people who should "
+                             "be SHOWN on screen (politicians, officials, CEOs, founders, named experts/analysts "
+                             "— never generic roles like 'a worker'). For each give the exact name as written and "
+                             "a YouTube SEARCH QUERY to find video of THAT specific person speaking/appearing. "
+                             "Reply ONLY JSON {\"people\":[{\"name\":\"\",\"query\":\"\"}]}.\n\n" + text)
+                people = [p for p in r.get("people", []) if p.get("name")][:5]
+            except Exception as e:
+                print("  people-extract fallback:", e)
+        if not people:
+            text = " ".join(s["text"] for s in segs)
+            names = set(re.findall(r"(?:Mayor|Governor|Senator|Gov\.|Sen\.|CEO|President|Dr\.)\s+([A-Z][a-z]+ [A-Z][a-z]+)", text))
+            people = [{"name": n, "query": n} for n in list(names)[:5]]
         edit = json.load(open(f"{RT}/edit.json"))
-        side = "right"
-        for name, slug in got.items():
-            for s in segs:
-                if name in s["text"]:
-                    edit["overlays"].append({"start": round(s["start"] + 0.2, 2), "dur": 4,
-                        "component": "PortraitFrame",
-                        "props": {"imgSrc": f"portraits/{slug}.jpg", "side": side, "label": name.upper()},
-                        "sfx": "pop"})
-                    side = "left" if side == "right" else "right"
-                    break
+        used = 0
+        for i, p in enumerate(people):
+            name = (p.get("name") or "").strip()
+            if not name: continue
+            query = p.get("query") or name
+            last = name.split()[-1]
+            sc = next((s for s in scenes if name.lower() in s["text"].lower()
+                       or (len(last) > 3 and last.lower() in s["text"].lower())), None)
+            if not sc: continue
+            clip = _person_clip(query, i) or _person_portrait(name, i)
+            if not clip: continue
+            sc["clip"] = f"{POOL}/{clip}"           # FULL-SCREEN: this scene now plays the person
+            edit["overlays"].append({"start": round(sc["start"] + 0.3, 2),
+                "dur": round(min(4.5, max(2.0, sc["end"] - sc["start"])), 2),
+                "component": "LowerThirdName", "props": {"name": name}, "sfx": "pop"})
+            used += 1
+            status("people", 74, f"{used} people matched full-screen")
         edit["overlays"].sort(key=lambda o: o["start"])
         json.dump(edit, open(f"{RT}/edit.json", "w"), indent=1)
+        json.dump({"scenes": scenes}, open(f"{RT}/scenes.json", "w"), indent=1)
+        print(f"  people full-screen: {used}/{len(people)}")
+    except Exception as e:
+        print("  people step failed (continuing to render):", str(e)[:120])
 
 # ---------- 10. render ----------
 def render(scenes):
@@ -522,6 +587,6 @@ if __name__ == "__main__":
     themes = gemini_tag(themes)
     match(scenes, themes)
     overlays(scenes)
-    portraits(segs)
+    people_fullscreen(scenes, segs)
     render(scenes)
 
