@@ -58,7 +58,10 @@ def kie_chat(prompt, image_paths=None, model=None, timeout=120):
     body = json.dumps({"messages": [{"role": "user", "content": content if image_paths else prompt}]}).encode()
     req = urllib.request.Request(
         f"https://api.kie.ai/{model or KIE_MODEL}/v1/chat/completions", data=body,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                 # kie.ai now Cloudflare-blocks the default python-urllib UA (403 err 1010); use a browser UA
+                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                               "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", "Accept": "application/json"})
     r = json.loads(urllib.request.urlopen(req, timeout=timeout).read())
     return r["choices"][0]["message"]["content"]
 
