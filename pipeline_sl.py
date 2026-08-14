@@ -37,6 +37,14 @@ def status(stage, pct, detail=""):
               open(STATUS, "w"))
     print(f"[{int(time.time()-T0):4d}s] {stage} {pct}% {detail}", flush=True)
 
+# Encode quality. Intermediate clips are re-encoded up to 3x before the final render,
+# so a lossy intermediate compounds. References sit at 7.4-9.2 Mbps @1080p; crf20/veryfast
+# throughout gave us 2.07 Mbps. Overridable per-job via env.
+CLIP_CRF     = os.environ.get("CLIP_CRF", "18")
+CLIP_PRESET  = os.environ.get("CLIP_PRESET", "faster")
+FINAL_CRF    = os.environ.get("FINAL_CRF", "17")
+FINAL_PRESET = os.environ.get("FINAL_PRESET", "medium")
+
 def run(cmd, timeout=600, check=False):
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, shell=isinstance(cmd, str))
     if check and r.returncode != 0: raise RuntimeError(f"cmd failed: {cmd}\n{r.stderr[-800:]}")
@@ -112,6 +120,10 @@ FALLBACK_TAGS = [
  ("people", ["residents","families","households","population","workers","professionals","people"]),
  ("news", ["report","study","data","analysis","ranking","index","survey","poll"]),
 ]
+# Measured from the VidRush reference renders: 14-18 cuts/min, median shot 2.8-4.0s.
+# We were merging to >=5.5s which rendered as ~7.2s shots (8 cuts/min) and felt static.
+SCENE_SECS = float(os.environ.get("SCENE_SECS", "3.2"))
+
 def build_scenes(segs):
     status("scenes", 10, "merge + tag")
     def topic(t):
@@ -122,7 +134,7 @@ def build_scenes(segs):
     scenes, cur = [], None
     for s in segs:
         if cur is None: cur = {"start": s["start"], "end": s["end"], "text": s["text"]}
-        elif cur["end"] - cur["start"] >= 5.5:
+        elif cur["end"] - cur["start"] >= SCENE_SECS:
             scenes.append(cur); cur = {"start": s["start"], "end": s["end"], "text": s["text"]}
         else: cur["end"] = s["end"]; cur["text"] += " " + s["text"]
     if cur: scenes.append(cur)
@@ -279,15 +291,15 @@ def fetch_own_clips(urls):
             o = f"{POOL}/own_{idx:03d}.mp4"
             run(["ffmpeg", "-y", *loop_args, "-ss", f"{t:.1f}", "-i", src, "-t", "7", "-an",
                  "-vf", SLICE_VF,
-                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
+                 "-c:v", "libx264", "-preset", CLIP_PRESET, "-crf", CLIP_CRF, "-pix_fmt", "yuv420p", o], timeout=120)
             if os.path.exists(o) and os.path.getsize(o) > 40000:
                 idx += 1
     print(f"  own clips -> {idx} pool clips from {len(raw)} source files")
     return idx
 
 # ---------- 5. slice ----------
-def slice_videos(n_per=24, clip=7):
-    status("slice", 32, "cutting 7s segments")
+def slice_videos(n_per=36, clip=7):
+    status("slice", 32, f"cutting {clip}s segments")
     idx = 0
     for f in sorted(os.listdir(SRC)):
         if not f.endswith(".mp4"): continue
@@ -300,7 +312,7 @@ def slice_videos(n_per=24, clip=7):
             o = f"{POOL}/chan_{idx:03d}.mp4"
             run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", p, "-t", str(clip), "-an",
                  "-vf", SLICE_VF,
-                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
+                 "-c:v", "libx264", "-preset", CLIP_PRESET, "-crf", CLIP_CRF, "-pix_fmt", "yuv420p", o], timeout=120)
             if os.path.exists(o) and os.path.getsize(o) > 40000: idx += 1
     return idx
 
@@ -451,7 +463,7 @@ def _person_clip(query, idx):
         o = f"{POOL}/person_{idx:03d}.mp4"
         run(["ffmpeg", "-y", "-ss", f"{t:.1f}", "-i", src + ".mp4", "-t", "7", "-an",
              "-vf", "scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,crop=1920:1080,setsar=1",
-             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
+             "-c:v", "libx264", "-preset", CLIP_PRESET, "-crf", CLIP_CRF, "-pix_fmt", "yuv420p", o], timeout=120)
         return f"person_{idx:03d}.mp4" if os.path.exists(o) and os.path.getsize(o) > 40000 else None
     except Exception as e:
         print("  person clip fail:", str(e)[:90]); return None
@@ -469,7 +481,7 @@ def _person_portrait(name, idx):
         run(["ffmpeg", "-y", "-loop", "1", "-i", jp, "-t", "7",
              "-vf", "scale=2200:-1,zoompan=z='min(zoom+0.0009,1.18)':d=210:"
                     "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080,setsar=1",
-             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", o], timeout=120)
+             "-c:v", "libx264", "-preset", CLIP_PRESET, "-crf", CLIP_CRF, "-pix_fmt", "yuv420p", o], timeout=120)
         return f"person_{idx:03d}.mp4" if os.path.exists(o) and os.path.getsize(o) > 40000 else None
     except Exception as e:
         print("  portrait fail:", name, str(e)[:90]); return None
@@ -536,7 +548,7 @@ def render(scenes):
         run(f"rm -f {OUT}/final.mp4 {OUT}/r.log", timeout=20)
         run(f"cd {WS}/remotion && setsid nohup npx remotion render src/index.ts AutoDoc {OUT}/final.mp4 "
             f"--public-dir={RT} --concurrency={conc} --image-format=jpeg --jpeg-quality=95 "
-            f"--x264-preset=veryfast --crf=20 --offthreadvideo-cache-size-in-bytes=1000000000 "
+            f"--x264-preset={FINAL_PRESET} --crf={FINAL_CRF} --offthreadvideo-cache-size-in-bytes=1000000000 "
             f"--timeout=120000 > {OUT}/r.log 2>&1 < /dev/null & echo started", timeout=30)
         t0 = time.time(); last_fr = -1; last_change = t0
         while True:
