@@ -125,7 +125,34 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     return doc
 
 
+def _sign_supabase_media(doc: dict):
+    """
+    Re-sign any Supabase storage URLs inside the timeline.
+
+    Media the user swapped in from the editor is stored in a private bucket, and
+    Remotion fetches those URLs from inside headless Chrome where the public
+    form returns 400. Signing them here keeps private buckets working without
+    exposing anything publicly. Mutates the document in place.
+    """
+    base = (config.SUPABASE_URL or "").rstrip("/")
+    if not base:
+        return
+    marker = "/storage/v1/object/public/"
+    for scene in doc.get("scenes", []):
+        m = scene.get("media") or {}
+        url = m.get("url") or ""
+        if not url.startswith(base) or marker not in url:
+            continue
+        tail = url.split(marker, 1)[1]
+        bucket, _, obj = tail.partition("/")
+        try:
+            m["url"] = storage.signed_url(obj, bucket=bucket)
+        except Exception as e:  # noqa: BLE001
+            print(f"[worker] could not sign scene media {obj}: {e}", flush=True)
+
+
 def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
+    _sign_supabase_media(doc)
     report(f"Rendering {doc['meta'].get('sceneCount', '?')} scenes", 70)
     out_path = os.path.join(work, "final.mp4")
     renderer.render(
@@ -136,11 +163,28 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
 
     project_id = inp.get("project_id") or uuid.uuid4().hex
     object_path = inp.get("object_path") or f"projects/{project_id}/final.mp4"
+    bucket = inp.get("bucket") or config.SUPABASE_BUCKET
     report("Uploading video", 92)
-    url = storage.upload_to_supabase(out_path, object_path, bucket=inp.get("bucket"))
+    public_url = storage.upload_to_supabase(out_path, object_path, bucket=bucket)
+
+    # The renders bucket may be private. A public-form URL 400s there, so sign
+    # the object as well — signing works against public buckets too, making this
+    # correct either way. Both are returned so the app can re-sign from the path
+    # when a long-lived link expires.
+    playable = public_url
+    try:
+        playable = storage.signed_url(
+            object_path, bucket=bucket,
+            expires_in=int(inp.get("signed_url_ttl", 60 * 60 * 24 * 7)),
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[worker] could not sign render, falling back to public url: {e}", flush=True)
+
     return {
-        "video_url": url,
+        "video_url": playable,
+        "public_url": public_url,
         "object_path": object_path,
+        "bucket": bucket,
         "size_bytes": os.path.getsize(out_path),
         "duration": doc["durationInFrames"] / doc["fps"],
     }
