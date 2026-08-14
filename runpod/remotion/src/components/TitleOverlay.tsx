@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { useOverlaySafeStyle, useScale } from "./layout";
 import type { Overlay } from "../types";
 
 /**
@@ -13,9 +14,11 @@ export const TitleOverlay: React.FC<{ overlay: Overlay; accent: string }> = ({
 }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
+  const s = useScale();
+  const safe = useOverlaySafeStyle();
 
   const enter = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 18 });
-  const y = interpolate(enter, [0, 1], [60, 0]);
+  const y = interpolate(enter, [0, 1], [s(60), 0]);
   const exit = interpolate(
     frame,
     [durationInFrames - 10, durationInFrames],
@@ -31,6 +34,7 @@ export const TitleOverlay: React.FC<{ overlay: Overlay; accent: string }> = ({
   return (
     <AbsoluteFill
       style={{
+        ...safe,
         justifyContent: "center",
         alignItems: "center",
         opacity: enter * exit,
@@ -42,13 +46,13 @@ export const TitleOverlay: React.FC<{ overlay: Overlay; accent: string }> = ({
           <div
             style={{
               fontFamily: "Inter, system-ui, sans-serif",
-              fontSize: 46,
+              fontSize: s(46),
               fontWeight: 600,
               letterSpacing: "0.14em",
               textTransform: "uppercase",
               color: "#fff",
               opacity: 0.9,
-              marginBottom: 10,
+              marginBottom: s(10),
               textShadow: "0 4px 20px rgba(0,0,0,0.9)",
             }}
           >
@@ -58,7 +62,7 @@ export const TitleOverlay: React.FC<{ overlay: Overlay; accent: string }> = ({
         <div
           style={{
             fontFamily: "Inter, system-ui, sans-serif",
-            fontSize: 108,
+            fontSize: s(108),
             fontWeight: 900,
             lineHeight: 1.02,
             color: accent,

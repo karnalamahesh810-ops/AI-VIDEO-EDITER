@@ -26,11 +26,15 @@ export interface Scene {
 }
 
 export interface Overlay {
-  type: "title" | "callout";
+  /** title = multi-font card, callout = fact pill, typewriter = typed line,
+   *  split = horizontal split-screen comparison (needs two media entries). */
+  type: "title" | "callout" | "typewriter" | "split";
   variant?: string;
   text: string;
   startFrame: number;
   durationInFrames: number;
+  /** Only used by "split": the two visuals to show, top then bottom. */
+  media?: SceneMedia[];
 }
 
 export interface TimelineProps {
@@ -49,4 +53,11 @@ export interface TimelineProps {
   scenes: Scene[];
   overlays: Overlay[];
   meta?: Record<string, unknown>;
+  /**
+   * Remotion requires composition props to be assignable to
+   * Record<string, unknown>. Without this index signature <Composition> falls
+   * back to that type and every field inside calculateMetadata reads as
+   * `unknown`. Declared fields above keep their real types.
+   */
+  [key: string]: unknown;
 }

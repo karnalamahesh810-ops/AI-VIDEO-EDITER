@@ -8,10 +8,12 @@ monetised channel. Set prefer="youtube" to flip that.
 Every asset carries its `source` and `attribution` so the UI can show where each
 clip came from and you can see your exposure per video.
 """
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 from typing import List, Optional, Dict, Any
 import os
 import subprocess
+import threading
 import requests
 
 from . import config
@@ -244,6 +246,90 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
 
 DEFAULT_ORDER = ["pexels", "pixabay", "wikimedia", "openverse", "youtube"]
 YOUTUBE_FIRST = ["youtube", "pexels", "pixabay", "wikimedia", "openverse"]
+
+# Downloaded-asset cache, keyed by query. A 17-minute script repeats subjects
+# constantly ("the dam", "the highway"); without this we refetch the same clip
+# dozens of times. Persists for the life of the worker process.
+_CACHE: Dict[str, "MediaAsset"] = {}
+_CACHE_LOCK = threading.Lock()
+
+
+def reset_cache():
+    """Call between jobs — serverless worker processes are reused across renders."""
+    with _CACHE_LOCK:
+        _CACHE.clear()
+
+
+def source_many(
+    jobs: List[Dict[str, Any]], work_dir: str, *,
+    prefer: str = "stock", allow_youtube: bool = True,
+    workers: int = 6, on_done=None,
+) -> List[Optional["MediaAsset"]]:
+    """
+    Source visuals for many scenes concurrently.
+
+    Sourcing is almost entirely network-bound, so a modest thread pool turns a
+    300-scene job from serial minutes into something practical.
+
+    Duplicate queries are collapsed BEFORE dispatch rather than checked inside
+    each worker: submitting them concurrently would let identical queries race
+    past a cache check and fetch the same asset several times over.
+
+    Results come back in the original scene order regardless of completion order.
+    `jobs` is a list of {"index": int, "query": str, "seconds": float}.
+    """
+    results: List[Optional[MediaAsset]] = [None] * len(jobs)
+
+    # query -> the scene indices that want it, and the longest duration needed
+    groups: Dict[str, Dict[str, Any]] = {}
+    for j in jobs:
+        key = j["query"]
+        g = groups.setdefault(key, {"indices": [], "seconds": 0.0})
+        g["indices"].append(j["index"])
+        g["seconds"] = max(g["seconds"], float(j.get("seconds") or 0))
+
+    done = 0
+    lock = threading.Lock()
+
+    def fetch(key: str, seconds: float) -> Optional[MediaAsset]:
+        with _CACHE_LOCK:
+            hit = _CACHE.get(key)
+        if hit:
+            return hit
+        try:
+            asset = source_for_segment(
+                key, seconds, work_dir,
+                prefer=prefer, allow_youtube=allow_youtube,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[media] '{key}' failed: {e}", flush=True)
+            return None
+        if asset:
+            with _CACHE_LOCK:
+                _CACHE[key] = asset
+        return asset
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = {
+            pool.submit(fetch, key, g["seconds"]): key
+            for key, g in groups.items()
+        }
+        for fut in as_completed(futures):
+            key = futures[fut]
+            try:
+                asset = fut.result()
+            except Exception as e:  # noqa: BLE001
+                print(f"[media] worker error on '{key}': {e}", flush=True)
+                asset = None
+            idxs = groups[key]["indices"]
+            for i in idxs:
+                results[i] = asset
+            with lock:
+                done += len(idxs)
+                if on_done:
+                    on_done(done, len(jobs))
+
+    return results
 
 
 def source_for_segment(query: str, seconds: float, work_dir: str,

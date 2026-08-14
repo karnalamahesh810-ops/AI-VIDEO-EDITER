@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import { useScale } from "./layout";
 import type { Scene, TimelineProps } from "../types";
 
 /**
@@ -14,6 +15,7 @@ export const Captions: React.FC<{
 }> = ({ scene, style }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const s = useScale();
 
   // Scene-relative frame -> absolute seconds, to compare against word timings.
   const sceneStartSec = scene.startFrame / fps;
@@ -48,13 +50,13 @@ export const Captions: React.FC<{
       style={{
         justifyContent: style.position === "center" ? "center" : "flex-end",
         alignItems: "center",
-        padding: "0 8% 6%",
+        padding: `0 8% ${s(70)}px`,
       }}
     >
       <div
         style={{
           fontFamily: `${style.fontFamily}, Inter, system-ui, sans-serif`,
-          fontSize: 62,
+          fontSize: s(62),
           fontWeight: 800,
           lineHeight: 1.22,
           textAlign: "center",

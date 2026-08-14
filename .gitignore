@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 out/
 tmp/
+node_modules/
+.remotion/
+tsconfig.tsbuildinfo
