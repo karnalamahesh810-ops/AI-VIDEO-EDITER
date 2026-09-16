@@ -1,9 +1,10 @@
 """
 Media sourcing for a scene.
 
-Order matters. Stock and public-domain sources are tried before YouTube because
-footage lifted from other creators' uploads can attract Content ID claims on a
-monetised channel. Set prefer="youtube" to flip that.
+Stock and public-domain sources only, by default. Footage lifted from other
+creators' uploads attracts Content ID claims on a monetised channel and carries
+someone else's copyright, so the YouTube path is opt-in: pass
+allow_youtube=True to enable it, and prefer="youtube" to try it first.
 
 Every asset carries its `source` and `attribution` so the UI can show where each
 clip came from and you can see your exposure per video.
@@ -192,12 +193,18 @@ def search_openverse(query: str, limit: int = 5) -> List[MediaAsset]:
 # --------------------------------------------------------------------------- #
 
 def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
-                 start_at: float = 30.0) -> Optional[MediaAsset]:
+                 start_at: float = 30.0, require_cc: bool = True) -> Optional[MediaAsset]:
     """
     Pull a short section of a YouTube video with yt-dlp.
 
     Uses --download-sections so we fetch only the slice we need instead of a
     whole 4K upload. `query_or_url` may be a URL or a plain search phrase.
+
+    require_cc restricts this to uploads the creator published under Creative
+    Commons Attribution, which is the only footage here you may legally re-cut
+    and monetise. The default YouTube licence reserves every right, so anything
+    else gets claimed by Content ID and is someone else's copyright besides.
+    Turn it off only for footage you own or have separately licensed.
     """
     os.makedirs(out_dir, exist_ok=True)
     target = query_or_url if query_or_url.startswith("http") else f"ytsearch1:{query_or_url}"
@@ -214,9 +221,16 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         "-o", out_tpl,
         "--print", "after_move:filepath",
     ]
+    if require_cc:
+        # yt-dlp exposes YouTube's licence field; skip-on-mismatch keeps a
+        # search rolling to the next hit instead of failing the whole scene.
+        cmd += ["--match-filter", "license *= Creative Commons"]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired:
+        return None
+    except FileNotFoundError:
+        print("[media] yt-dlp not on PATH - skipping the YouTube source", flush=True)
         return None
     if p.returncode != 0:
         return None
@@ -235,8 +249,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
 
     return MediaAsset(
         kind="video", source="youtube", url=query_or_url, local_path=path,
-        duration=seconds, attribution="YouTube source",
-        license="unverified - review before monetised use", query=query_or_url,
+        duration=seconds, attribution="YouTube source - credit the uploader",
+        license=("Creative Commons Attribution (CC BY)" if require_cc
+                 else "unverified - you must hold the rights"),
+        query=query_or_url,
     )
 
 
@@ -262,8 +278,8 @@ def reset_cache():
 
 def source_many(
     jobs: List[Dict[str, Any]], work_dir: str, *,
-    prefer: str = "stock", allow_youtube: bool = True,
-    workers: int = 6, on_done=None,
+    prefer: str = "stock", allow_youtube: bool = False,
+    require_cc: bool = True, workers: int = 6, on_done=None,
 ) -> List[Optional["MediaAsset"]]:
     """
     Source visuals for many scenes concurrently.
@@ -299,7 +315,7 @@ def source_many(
         try:
             asset = source_for_segment(
                 key, seconds, work_dir,
-                prefer=prefer, allow_youtube=allow_youtube,
+                prefer=prefer, allow_youtube=allow_youtube, require_cc=require_cc,
             )
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{key}' failed: {e}", flush=True)
@@ -333,8 +349,8 @@ def source_many(
 
 
 def source_for_segment(query: str, seconds: float, work_dir: str,
-                       prefer: str = "stock", allow_youtube: bool = True,
-                       want: str = "auto") -> Optional[MediaAsset]:
+                       prefer: str = "stock", allow_youtube: bool = False,
+                       want: str = "auto", require_cc: bool = True) -> Optional[MediaAsset]:
     """
     Find and download one visual for a scene.
 
@@ -347,7 +363,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str,
     candidates: List[MediaAsset] = []
     for src in order:
         if src == "youtube":
-            asset = youtube_clip(query, work_dir, seconds=seconds)
+            asset = youtube_clip(query, work_dir, seconds=seconds,
+                                 require_cc=require_cc)
             if asset:
                 return asset
             continue

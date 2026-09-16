@@ -78,7 +78,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     total = len(segments)
     report(f"Sourcing media for {total} scenes", 20)
     prefer = inp.get("prefer", "stock")
-    allow_youtube = bool(inp.get("allow_youtube", True))
+    # Opt-in: see the sourcing note in src/media.py.
+    allow_youtube = bool(inp.get("allow_youtube", False))
     overrides = inp.get("scene_queries") or {}
 
     media.reset_cache()
