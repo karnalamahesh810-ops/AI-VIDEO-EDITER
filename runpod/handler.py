@@ -22,6 +22,9 @@ plan    : everything up to the timeline document. Returns it WITHOUT rendering,
 render  : take a timeline document (possibly edited by the user) -> MP4.
 build   : plan + render in one call.
 health  : cheap readiness probe.
+selftest: render the whole template library in-container, upload nothing.
+          Proves ffmpeg, Chrome, the asset server, every animation and the
+          whisper model all work on this worker — with no credentials set.
 
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
@@ -36,7 +39,7 @@ from typing import Dict
 import runpod
 
 from src import (config, director, geocode, media, render as renderer,
-                 storage, timeline, transcribe)
+                 selftest, storage, timeline, transcribe)
 
 
 def _work_dir(job_id: str) -> str:
@@ -318,6 +321,11 @@ def handler(job):
     work = _work_dir(job_id)
 
     try:
+        if action == "selftest":
+            out = selftest.run(work, width=int(inp.get("width", 854)), report=report)
+            return {"ok": out.get("ok", False), "action": "selftest", **out,
+                    "elapsed": round(time.time() - started, 1)}
+
         if action == "health":
             return {"ok": True, "status": "ready",
                     "sourcePolicy": "stock_allowed" if config.ALLOW_STOCK else "no_stock",
