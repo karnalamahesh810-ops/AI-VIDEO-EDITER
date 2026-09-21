@@ -49,6 +49,23 @@ class MediaAsset:
     review_required: bool = False
     review_reason: str = ""
 
+    @property
+    def identity(self) -> str:
+        """
+        What makes this asset the same asset.
+
+        Used to guarantee no two scenes show the same visual. For YouTube it
+        is the video id, so two differently-worded searches that land on the
+        same upload still count as one. For everything else the remote URL,
+        and for a generated image the local file, since each generation is
+        unique by construction.
+        """
+        if self.source == "youtube" and self.local_path:
+            name = os.path.basename(self.local_path)
+            if name.startswith("yt_"):
+                return f"yt:{name[3:].rsplit('.', 1)[0]}"
+        return f"{self.source}:{self.url or self.local_path}"
+
     def dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -204,7 +221,8 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
 # --------------------------------------------------------------------------- #
 
 def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
-                 start_at: float = 30.0, require_cc: bool = True) -> Optional[MediaAsset]:
+                 start_at: float = 30.0, require_cc: bool = True,
+                 skip: int = 0, used: set = None) -> Optional[MediaAsset]:
     """
     Pull a short section of a YouTube video with yt-dlp.
 
@@ -245,9 +263,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]",
         "--no-warnings", "--quiet",
         "--merge-output-format", "mp4",
-        # A search page is a playlist; take the first few candidates and stop
-        # as soon as one downloads.
-        "--playlist-items", "1-8", "--max-downloads", "1",
+        # A search page is a playlist. `skip` starts further down it, so a
+        # scene repeating an earlier query gets a different upload rather
+        # than the same top hit again.
+        "--playlist-items", f"{skip + 1}-{skip + 12}", "--max-downloads", "1",
         "-o", out_tpl,
         "--print", "after_move:filepath",
     ]
@@ -281,6 +300,19 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             break
     if not path:
         return None
+
+    # Two differently-worded queries can still land on the same upload;
+    # reject it here so the caller falls through to another source instead
+    # of showing the same footage twice.
+    if used:
+        name = os.path.basename(path)
+        vid = f"yt:{name[3:].rsplit('.', 1)[0]}" if name.startswith("yt_") else ""
+        if vid and vid in used:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return None
 
     return MediaAsset(
         kind="video", source="youtube", url=query_or_url, local_path=path,
@@ -375,145 +407,219 @@ def search_pixabay(query: str, kind: str = "video", per_page: int = 5) -> List[M
     return [a for a in out if a.url]
 
 
+
+
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
 
-# Downloaded-asset cache, keyed by (visual_type, query). A 17-minute script
-# repeats subjects constantly ("the dam", "the highway"); without this we
-# refetch the same clip dozens of times. Lives for the worker process.
-_CACHE: Dict[str, "MediaAsset"] = {}
+# Search results are cached per query; the ASSETS handed out from them are not
+# shared. An earlier version cached one downloaded asset per query and reused
+# it for every scene that asked the same thing — fast, but a 20-minute script
+# repeats subjects constantly ("the lake", "the ramp"), so the same clip came
+# back a dozen times and the video looked broken. Caching the candidate LIST
+# keeps the API savings while still giving every scene its own visual.
+_SEARCH_CACHE: Dict[str, List[MediaAsset]] = {}
 _CACHE_LOCK = threading.Lock()
 
 
 def reset_cache():
     """Call between jobs — serverless worker processes are reused across renders."""
     with _CACHE_LOCK:
-        _CACHE.clear()
+        _SEARCH_CACHE.clear()
 
 
-def _download_first(candidates: List[MediaAsset], query: str,
-                    work_dir: str) -> Optional[MediaAsset]:
-    """Take the best candidate that actually downloads."""
-    for best in candidates[:3]:
-        ext = ".mp4" if best.kind == "video" else ".jpg"
-        safe = "".join(ch for ch in query if ch.isalnum())[:24] or "asset"
-        dest = os.path.join(
-            work_dir, f"{best.source}_{safe}_{abs(hash(best.url)) % 99999}{ext}")
-        try:
-            best.local_path = download(best.url, dest)
-            return best
-        except Exception:
+def _cached_search(fn, query: str) -> List[MediaAsset]:
+    key = f"{fn.__name__}::{query}"
+    with _CACHE_LOCK:
+        if key in _SEARCH_CACHE:
+            return _SEARCH_CACHE[key]
+    try:
+        found = fn(query)
+    except Exception as e:  # noqa: BLE001
+        print(f"[media] {fn.__name__} '{query}' failed: {e}", flush=True)
+        found = []
+    with _CACHE_LOCK:
+        _SEARCH_CACHE[key] = found
+    return found
+
+
+def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[MediaAsset]:
+    ext = ".mp4" if candidate.kind == "video" else ".jpg"
+    safe = "".join(ch for ch in query if ch.isalnum())[:24] or "asset"
+    dest = os.path.join(
+        work_dir, f"{candidate.source}_{safe}_{abs(hash(candidate.url)) % 999999}{ext}")
+    try:
+        candidate.local_path = download(candidate.url, dest)
+        return candidate
+    except Exception:
+        return None
+
+
+def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
+                 query: str, work_dir: str) -> Optional[MediaAsset]:
+    """First candidate whose identity hasn't been used yet, that also downloads."""
+    for candidate in candidates:
+        if used is not None and candidate.identity in used:
             continue
+        got = _download(candidate, query, work_dir)
+        if got:
+            return got
     return None
 
 
 def source_for_segment(query: str, seconds: float, work_dir: str, *,
-                       visual_type: str = "footage",
+                       visual_type: str = "footage", nth: int = 0,
+                       used: set = None,
                        allow_youtube: bool = None, allow_stock: bool = None,
                        require_cc: bool = None) -> Optional[MediaAsset]:
     """
     Find and download one visual for a scene.
 
-    `visual_type` is the director's call: "footage" wants moving pictures of
-    the subject, "image" wants a still (a portrait, a document, a landscape)
-    that Ken Burns will animate. Footage falls back to stills rather than
-    leaving the scene black — a good photograph beats a wrong clip.
+    `visual_type` is the director's call: "footage" wants moving pictures,
+    "image" wants a still that Ken Burns will animate. Footage falls back to
+    stills rather than leaving the scene black — a good photograph beats a
+    wrong clip.
+
+    `nth` and `used` are what keep a long video from repeating itself. `nth`
+    is how many earlier scenes already asked this exact question, so the Nth
+    one reaches further down the result list instead of taking the same top
+    hit. `used` is every asset already placed anywhere in this video, so even
+    two differently-worded queries cannot land on the same clip.
     """
     allow_youtube = config.ALLOW_YOUTUBE if allow_youtube is None else allow_youtube
     allow_stock = config.ALLOW_STOCK if allow_stock is None else allow_stock
     require_cc = config.REQUIRE_CC if require_cc is None else require_cc
 
     if visual_type == "footage" and allow_youtube:
-        asset = youtube_clip(query, work_dir, seconds=seconds, require_cc=require_cc)
+        # Skip past results earlier scenes already took, and offset the grab
+        # point so a repeat of the same subject is at least a different
+        # moment of footage rather than the identical seconds again.
+        asset = youtube_clip(query, work_dir, seconds=seconds, require_cc=require_cc,
+                             skip=nth, start_at=30.0 + 25.0 * nth, used=used)
         if asset:
             return asset
 
     if allow_stock and visual_type == "footage":
         for fn in (search_pexels, search_pixabay):
-            long_enough = [c for c in fn(query, kind="video")
-                           if c.duration >= seconds * 0.8]
-            asset = _download_first(long_enough, query, work_dir)
+            clips = [c for c in _cached_search(lambda q: fn(q, kind="video"), query)
+                     if c.duration >= seconds * 0.8]
+            asset = _pick_unused(clips[nth:] + clips[:nth], used, query, work_dir)
             if asset:
                 return asset
 
     # Real photographs of the named subject, before any generated impression.
     for search in (search_wikimedia, search_openverse):
-        asset = _download_first(search(query), query, work_dir)
+        found = _cached_search(search, query)
+        # Rotate the list so repeats start further down, but still fall back
+        # to earlier entries rather than giving up and rendering black.
+        ordered = found[nth:] + found[:nth] if found else []
+        asset = _pick_unused(ordered, used, query, work_dir)
         if asset:
             return asset
 
     if allow_stock:
         for fn in (search_pexels, search_pixabay):
-            asset = _download_first(fn(query, kind="image"), query, work_dir)
+            found = _cached_search(lambda q: fn(q, kind="image"), query)
+            asset = _pick_unused(found[nth:] + found[:nth], used, query, work_dir)
             if asset:
                 return asset
 
-    # Last resort: an illustration for a beat nothing real covers.
+    # Last resort: an illustration for a beat nothing real covers. Always a
+    # fresh generation, so it is never a duplicate.
     return generate_image(query, work_dir)
 
 
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, **kwargs) -> List[Optional[MediaAsset]]:
     """
-    Source visuals for many scenes concurrently.
+    Source visuals for many scenes, with no two scenes sharing a visual.
 
-    Sourcing is almost entirely network-bound, so a modest thread pool turns a
-    300-scene job from serial minutes into something practical.
+    Sourcing is network-bound, so scenes are fetched through a thread pool.
+    Duplicate suppression needs a shared view of what has been taken, which a
+    pool cannot provide safely mid-flight, so it works in two passes:
 
-    Duplicate queries are collapsed BEFORE dispatch rather than checked inside
-    each worker: submitting them concurrently would let identical queries race
-    past a cache check and fetch the same asset several times over.
+      1. Fetch every scene in parallel. Each scene is told how many earlier
+         scenes asked the same question (`nth`) and reaches that far down the
+         result list, which resolves the common case — a repeated subject —
+         without any coordination.
+      2. Walk the results in order and re-source, serially, any scene whose
+         asset was already claimed by an earlier one. Only actual collisions
+         pay for this, and each retry reaches further down the list.
 
-    Results come back in the original scene order regardless of completion
-    order. `jobs` is a list of
+    `jobs` is a list of
     {"index": int, "query": str, "seconds": float, "visual_type": str}.
     """
     results: List[Optional[MediaAsset]] = [None] * len(jobs)
+    ordered = sorted(jobs, key=lambda j: j["index"])
 
-    # (query, visual_type) -> scene indices wanting it, and the longest slice needed
-    groups: Dict[tuple, Dict[str, Any]] = {}
-    for j in jobs:
+    # How many earlier scenes already asked this exact question.
+    seen: Dict[tuple, int] = {}
+    plan = []
+    for j in ordered:
         key = (j["query"], j.get("visual_type", "footage"))
-        g = groups.setdefault(key, {"indices": [], "seconds": 0.0})
-        g["indices"].append(j["index"])
-        g["seconds"] = max(g["seconds"], float(j.get("seconds") or 0))
+        plan.append((j, seen.get(key, 0)))
+        seen[key] = seen.get(key, 0) + 1
 
     done = 0
     lock = threading.Lock()
 
-    def fetch(key: tuple, seconds: float) -> Optional[MediaAsset]:
-        cache_key = f"{key[1]}::{key[0]}"
-        with _CACHE_LOCK:
-            hit = _CACHE.get(cache_key)
-        if hit:
-            return hit
+    def fetch(job, nth):
         try:
-            asset = source_for_segment(key[0], seconds, work_dir,
-                                       visual_type=key[1], **kwargs)
+            return source_for_segment(
+                job["query"], float(job.get("seconds") or 0), work_dir,
+                visual_type=job.get("visual_type", "footage"), nth=nth, **kwargs)
         except Exception as e:  # noqa: BLE001
-            print(f"[media] '{key[0]}' failed: {e}", flush=True)
+            print(f"[media] '{job['query']}' failed: {e}", flush=True)
             return None
-        if asset:
-            with _CACHE_LOCK:
-                _CACHE[cache_key] = asset
-        return asset
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(fetch, key, g["seconds"]): key
-                   for key, g in groups.items()}
+        futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in plan}
         for fut in as_completed(futures):
-            key = futures[fut]
+            idx = futures[fut]
             try:
-                asset = fut.result()
+                results[idx] = fut.result()
             except Exception as e:  # noqa: BLE001
-                print(f"[media] worker error on '{key[0]}': {e}", flush=True)
-                asset = None
-            for i in groups[key]["indices"]:
-                results[i] = asset
+                print(f"[media] worker error on scene {idx}: {e}", flush=True)
             with lock:
-                done += len(groups[key]["indices"])
+                done += 1
                 if on_done:
                     on_done(done, len(jobs))
 
+    # Pass 2: nothing may appear twice.
+    used: set = set()
+    duplicates = 0
+    for job, nth in plan:
+        i = job["index"]
+        asset = results[i]
+        if asset and asset.identity not in used:
+            used.add(asset.identity)
+            continue
+        if asset:
+            duplicates += 1
+        replacement = None
+        # Reach progressively further down the result list.
+        for attempt in range(1, 4):
+            try:
+                replacement = source_for_segment(
+                    job["query"], float(job.get("seconds") or 0), work_dir,
+                    visual_type=job.get("visual_type", "footage"),
+                    nth=nth + attempt, used=used, **kwargs)
+            except Exception:  # noqa: BLE001
+                replacement = None
+            if replacement and replacement.identity not in used:
+                break
+            replacement = None
+        if replacement:
+            results[i] = replacement
+            used.add(replacement.identity)
+        elif asset:
+            # Nothing else available. Keep the repeat rather than rendering
+            # black, but say so — the editor can swap it with `resource`.
+            asset.review_required = True
+            asset.review_reason = "Repeat of an earlier shot — no other match found"
+            used.add(asset.identity)
+
+    if duplicates:
+        print(f"[media] resolved {duplicates} duplicate shot(s)", flush=True)
     return results

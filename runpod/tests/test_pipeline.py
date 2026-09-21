@@ -775,5 +775,121 @@ class ResourceAction(unittest.TestCase):
             self._run(asset=None)
 
 
+class NoDuplicateShots(unittest.TestCase):
+    """
+    No two scenes may show the same visual.
+
+    The first version of source_many cached one downloaded asset per query
+    and handed it to every scene that asked the same thing. On a 20-minute
+    script that repeats its subject constantly ("the lake", "the ramp"), the
+    same clip came back a dozen times.
+    """
+
+    def _pool(self, per_query=8):
+        """Fake sourcing: each (query, nth) yields a distinct asset."""
+        calls = []
+
+        def fake(query, seconds, work_dir, *, visual_type="footage", nth=0,
+                 used=None, **kw):
+            calls.append((query, nth))
+            # Mirrors the real code: the candidate list is rotated by nth and
+            # WRAPS, so asking past the end returns an earlier hit rather than
+            # nothing. That wrap is exactly what produces duplicates, so the
+            # fake has to reproduce it or the test proves nothing.
+            a = asset(kind="image", source="wikimedia", query=query,
+                      url=f"https://x/{query}-{nth % per_query}.jpg")
+            if used and a.identity in used:
+                return None
+            return a
+
+        return fake, calls
+
+    def _run(self, queries, per_query=8):
+        fake, calls = self._pool(per_query)
+        original = media.source_for_segment
+        media.source_for_segment = fake
+        try:
+            jobs = [{"index": i, "query": q, "seconds": 3.0, "visual_type": "footage"}
+                    for i, q in enumerate(queries)]
+            return media.source_many(jobs, "/tmp/x", workers=4), calls
+        finally:
+            media.source_for_segment = original
+
+    def test_a_repeated_query_gets_different_footage_each_time(self):
+        out, _ = self._run(["the lake"] * 6)
+        ids = [a.identity for a in out]
+        self.assertEqual(len(set(ids)), 6, f"duplicates: {ids}")
+
+    def test_results_stay_in_scene_order(self):
+        """Completion order in the pool must not reorder the visual track."""
+        out, _ = self._run(["a", "b", "c", "d"])
+        self.assertEqual([a.url.split("/")[-1].split("-")[0] for a in out],
+                         ["a", "b", "c", "d"])
+
+    def test_the_nth_repeat_reaches_further_down_the_results(self):
+        _, calls = self._run(["the lake"] * 4)
+        first_pass = sorted(n for q, n in calls if q == "the lake")[:4]
+        self.assertEqual(first_pass, [0, 1, 2, 3])
+
+    def test_distinct_queries_are_untouched(self):
+        out, calls = self._run(["a", "b", "c"])
+        self.assertEqual(sorted(calls), [("a", 0), ("b", 0), ("c", 0)])
+        self.assertEqual(len({a.identity for a in out}), 3)
+
+    def test_running_out_of_options_keeps_the_repeat_but_flags_it(self):
+        # Only two distinct assets exist for six scenes asking the same thing.
+        out, _ = self._run(["the lake"] * 6, per_query=2)
+        placed = [a for a in out if a]
+        self.assertEqual(len(placed), 6, "must not render black rather than repeat")
+        repeats = [a for a in placed if a.review_required]
+        self.assertTrue(repeats, "an unavoidable repeat must be flagged for review")
+        self.assertIn("Repeat", repeats[0].review_reason)
+
+    def test_youtube_identity_is_the_video_not_the_query(self):
+        # Two different searches landing on the same upload count as one.
+        a = MediaAsset(kind="video", source="youtube", url="lake powell",
+                       local_path="/w/yt_XYZ.mp4")
+        b = MediaAsset(kind="video", source="youtube", url="glen canyon dam",
+                       local_path="/w/yt_XYZ.mp4")
+        self.assertEqual(a.identity, b.identity)
+
+    def test_youtube_rejects_an_already_used_upload(self):
+        seen = {}
+
+        class Result:
+            returncode, stderr = 0, ""
+            stdout = ""
+
+        tmp = os.path.join(ROOT, "out", "_t_yt", "yt_TAKEN.mp4")
+        os.makedirs(os.path.dirname(tmp), exist_ok=True)
+        open(tmp, "wb").close()
+        Result.stdout = tmp
+
+        original = media.subprocess.run
+        media.subprocess.run = lambda cmd, **k: seen.update(cmd=cmd) or Result()
+        try:
+            got = media.youtube_clip("lake", os.path.dirname(tmp), seconds=3.0,
+                                     used={"yt:TAKEN"})
+        finally:
+            media.subprocess.run = original
+        self.assertIsNone(got, "an already-used upload must be rejected")
+        self.assertFalse(os.path.exists(tmp), "the redundant download is cleaned up")
+
+    def test_skip_moves_the_playlist_window(self):
+        seen = {}
+
+        class Result:
+            returncode, stdout, stderr = 0, "", ""
+
+        original = media.subprocess.run
+        media.subprocess.run = lambda cmd, **k: seen.update(cmd=cmd) or Result()
+        try:
+            media.youtube_clip("lake", "/tmp/x", seconds=3.0, skip=3)
+        finally:
+            media.subprocess.run = original
+        cmd = seen["cmd"]
+        self.assertEqual(cmd[cmd.index("--playlist-items") + 1], "4-15")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
