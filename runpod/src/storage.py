@@ -152,6 +152,34 @@ def resolve_audio(url_or_path: str, bucket: str = "video-audio") -> str:
     return signed_url(url_or_path, bucket=bucket)
 
 
+def upload_to_signed_url(local_path: str, upload_url: str, timeout: int = 1800) -> int:
+    """
+    PUT a finished render to a pre-signed Supabase upload URL.
+
+    This is the zero-secret path and the one to prefer. The caller (the app's
+    `video-render` edge function) already holds the service-role key, so it
+    signs the destination before the job starts and hands the worker a URL
+    that is good for exactly one object. The worker then needs no Supabase
+    credentials of its own — nothing to leak from a serverless image, and
+    nothing to rotate when the key changes.
+
+    It also fails early in the right place: if the bucket is missing or the
+    key is wrong, the edge function finds out before spending a render,
+    instead of the worker discovering it after twenty minutes of GPU time.
+    """
+    size = os.path.getsize(local_path)
+    content_type = mimetypes.guess_type(local_path)[0] or "video/mp4"
+    with open(local_path, "rb") as f:
+        r = requests.put(
+            upload_url, data=f, timeout=timeout,
+            headers={"Content-Type": content_type, "x-upsert": "true"},
+        )
+    if r.status_code >= 400:
+        raise StorageError(
+            f"Pre-signed upload failed ({r.status_code}): {r.text[:300]}")
+    return size
+
+
 def upload_to_supabase(local_path: str, object_path: str, bucket: str = None,
                        upsert: bool = True) -> str:
     """

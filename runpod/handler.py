@@ -197,6 +197,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         warnings=warnings,
     )
     # A signed URL expires; keep the original reference so render can re-sign.
+    unsupported = [k for k in ("own_clips", "channels")
+                   if inp.get(k) and inp.get("source") in ("clips", "channels")]
+    if unsupported:
+        doc["meta"]["warnings"].append(
+            f"Requested source mode '{inp.get('source')}' is not implemented yet; "
+            f"sourced from Creative Commons YouTube and Commons instead.")
     doc["meta"]["audioSource"] = raw_audio
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
@@ -273,16 +279,36 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
         serve_dir=work,
     )
 
+    report("Uploading video", 92)
+    duration = doc["durationInFrames"] / doc["fps"]
+
+    # Preferred: the caller pre-signed a destination for us, so this worker
+    # needs no Supabase credentials at all. The app's video-render edge
+    # function already does this — it holds the service key, we do not.
+    upload_url = inp.get("upload_url")
+    if upload_url:
+        size = storage.upload_to_signed_url(out_path, upload_url)
+        public_url = inp.get("public_url") or ""
+        return {
+            "video_url": public_url,
+            "public_url": public_url,
+            "object_path": inp.get("video_path") or "",
+            "bucket": "",
+            "uploadedVia": "signed_url",
+            "size_bytes": size,
+            "duration": duration,
+        }
+
+    # Fallback: upload with our own service-role key.
     project_id = inp.get("project_id") or uuid.uuid4().hex
     object_path = inp.get("object_path") or f"projects/{project_id}/final.mp4"
     bucket = inp.get("bucket") or config.SUPABASE_BUCKET
-    report("Uploading video", 92)
     public_url = storage.upload_to_supabase(out_path, object_path, bucket=bucket)
 
-    # The renders bucket may be private. A public-form URL 400s there, so sign
-    # the object as well — signing works against public buckets too, making
-    # this correct either way. Both are returned so the app can re-sign from
-    # the path when a long-lived link expires.
+    # The bucket may be private. A public-form URL 400s there, so sign the
+    # object as well — signing works against public buckets too, making this
+    # correct either way. Both are returned so the app can re-sign from the
+    # path when a long-lived link expires.
     playable = public_url
     try:
         playable = storage.signed_url(
@@ -297,8 +323,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
         "public_url": public_url,
         "object_path": object_path,
         "bucket": bucket,
+        "uploadedVia": "service_key",
         "size_bytes": os.path.getsize(out_path),
-        "duration": doc["durationInFrames"] / doc["fps"],
+        "duration": duration,
     }
 
 

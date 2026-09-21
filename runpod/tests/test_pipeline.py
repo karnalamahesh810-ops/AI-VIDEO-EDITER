@@ -623,5 +623,98 @@ class SourcingCommands(unittest.TestCase):
         self.assertNotIn("python-requests", agent)
 
 
+class PresignedUpload(unittest.TestCase):
+    """
+    The zero-secret upload path the app's edge function expects.
+
+    It pre-signs a destination and hands the worker a one-object URL, so the
+    worker holds no Supabase credentials. Getting the routing wrong means
+    either a needless credential on the endpoint or a render that uploads
+    nowhere.
+    """
+
+    def _fake_put(self, status=200, text=""):
+        seen = {}
+
+        class Response:
+            status_code = status
+
+            def __init__(self):
+                self.text = text
+
+        def put(url, data=None, timeout=None, headers=None):
+            seen["url"] = url
+            seen["headers"] = headers or {}
+            seen["read"] = len(data.read()) if hasattr(data, "read") else 0
+            return Response()
+
+        return put, seen
+
+    def test_uploads_to_the_signed_url_with_a_video_content_type(self):
+        tmp = os.path.join(ROOT, "out", "_t_upload.mp4")
+        os.makedirs(os.path.dirname(tmp), exist_ok=True)
+        with open(tmp, "wb") as f:
+            f.write(bytes(1) * 2048)
+        put, seen = self._fake_put()
+        original = storage.requests.put
+        storage.requests.put = put
+        try:
+            size = storage.upload_to_signed_url(tmp, "https://sb/upload?token=x")
+        finally:
+            storage.requests.put = original
+            os.remove(tmp)
+        self.assertEqual(size, 2048)
+        self.assertEqual(seen["url"], "https://sb/upload?token=x")
+        self.assertEqual(seen["headers"].get("Content-Type"), "video/mp4")
+        self.assertEqual(seen["read"], 2048)
+
+    def test_a_rejected_upload_raises_rather_than_reporting_success(self):
+        tmp = os.path.join(ROOT, "out", "_t_upload2.mp4")
+        os.makedirs(os.path.dirname(tmp), exist_ok=True)
+        with open(tmp, "wb") as f:
+            f.write(b"x")
+        put, _ = self._fake_put(status=403, text="signature expired")
+        original = storage.requests.put
+        storage.requests.put = put
+        try:
+            with self.assertRaisesRegex(storage.StorageError, "403"):
+                storage.upload_to_signed_url(tmp, "https://sb/upload")
+        finally:
+            storage.requests.put = original
+            os.remove(tmp)
+
+    def test_signed_url_path_needs_no_service_key(self):
+        """do_render must not reach for the service key when handed a URL."""
+        import handler
+        doc = build_doc()
+        calls = {"signed": 0, "service": 0}
+        out_dir = os.path.join(ROOT, "out", "_t_render")
+        os.makedirs(out_dir, exist_ok=True)
+        out_file = os.path.join(out_dir, "final.mp4")
+        with open(out_file, "wb") as f:
+            f.write(bytes(1) * 64)
+
+        originals = (handler.renderer.render, storage.upload_to_signed_url,
+                     storage.upload_to_supabase)
+        handler.renderer.render = lambda *a, **k: out_file
+        storage.upload_to_signed_url = lambda p, u, **k: calls.__setitem__("signed", 1) or 64
+        storage.upload_to_supabase = lambda *a, **k: calls.__setitem__("service", 1) or ""
+        try:
+            res = handler.do_render(
+                doc,
+                {"upload_url": "https://sb/upload?token=x",
+                 "public_url": "https://sb/public/videos/a.mp4",
+                 "video_path": "a.mp4"},
+                out_dir, handler.Reporter(""))
+        finally:
+            (handler.renderer.render, storage.upload_to_signed_url,
+             storage.upload_to_supabase) = originals
+
+        self.assertEqual(calls["signed"], 1)
+        self.assertEqual(calls["service"], 0, "service-key upload must not run")
+        self.assertEqual(res["uploadedVia"], "signed_url")
+        self.assertEqual(res["video_url"], "https://sb/public/videos/a.mp4")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

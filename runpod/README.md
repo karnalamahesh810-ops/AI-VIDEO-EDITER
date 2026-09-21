@@ -154,9 +154,9 @@ UI show where every clip came from — so you can see Content ID exposure before
 
 | var | required | notes |
 |---|---|---|
-| `SUPABASE_URL` | yes | `https://wrcucopsyqftqbkhwjag.supabase.co` |
-| `SUPABASE_SERVICE_KEY` | yes | service-role key — server-side only, never ship to the browser |
-| `SUPABASE_BUCKET` | no | default `renders` |
+| `SUPABASE_URL` | only for the fallback upload | `https://wrcucopsyqftqbkhwjag.supabase.co` |
+| `SUPABASE_SERVICE_KEY` | **no** — see below | only needed when the caller does *not* pre-sign the upload |
+| `SUPABASE_BUCKET` | no | default `renders`; the app uses `videos` |
 | `IMAGE_API_KEY` | recommended | enables generated stills; OpenAI-compatible |
 | `IMAGE_API_BASE` / `IMAGE_MODEL` | no | default OpenAI / `gpt-image-1` |
 | `DIRECTOR_API_KEY` / `DIRECTOR_API_BASE` / `DIRECTOR_MODEL` | recommended | enables the AI director |
@@ -164,6 +164,29 @@ UI show where every clip came from — so you can see Content ID exposure before
 | `ALLOW_STOCK` | no | default off; also relaxes `timeline.validate()` |
 | `WHISPER_MODEL` | no | `base` on CPU, `small`/`medium` on GPU |
 | `CONTACT_EMAIL` | no | sent in the User-Agent Wikimedia and Nominatim require |
+
+## How the app calls this worker
+
+`supabase/functions/video-render` in the ThumbGenius app is the caller, and it uses a
+**zero-secret upload path** that this worker prefers over its own credentials:
+
+1. The edge function holds the service-role key. Before starting a job it checks the `videos`
+   bucket exists and calls `createSignedUploadUrl`, so a missing bucket or bad key fails in
+   milliseconds instead of after a twenty-minute render.
+2. It passes `upload_url`, `video_path` and `public_url` in the job input.
+3. The worker renders and `PUT`s the MP4 straight to that one-object URL.
+
+So **the RunPod endpoint needs no Supabase credentials at all** — nothing to leak from a
+serverless image, nothing to rotate. `storage.upload_to_supabase` remains as a fallback for
+callers that do not pre-sign, and is what `SUPABASE_SERVICE_KEY` is for.
+
+Inputs the app sends that this worker does not yet honour: `source: "clips"` with `own_clips`,
+and `source: "channels"` with `channels`. They are recorded in `meta.warnings` rather than
+silently ignored, and sourcing falls back to Creative Commons YouTube plus Commons. `gemini_key`
+is likewise not used — the director is configured per endpoint via `DIRECTOR_API_*`.
+
+The app also does not currently send `project_id`, so the worker cannot write progress back into
+`video_projects`; add it to the edge function's `input` to light that up.
 
 ## Development
 
