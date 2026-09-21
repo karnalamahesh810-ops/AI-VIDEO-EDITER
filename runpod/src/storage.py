@@ -36,6 +36,41 @@ def download(url: str, dest_path: str, timeout: int = 180) -> str:
     return dest_path
 
 
+def check(bucket: str = None) -> dict:
+    """
+    Can this worker actually reach Supabase Storage and write to the bucket?
+
+    Worth its own check because the alternative is discovering a missing
+    bucket or a bad key *after* a twenty-minute render, at the upload step,
+    with all the work already paid for. Read-only: lists the bucket, writes
+    nothing.
+    """
+    bucket = bucket or config.SUPABASE_BUCKET
+    out = {"url": bool(config.SUPABASE_URL), "serviceKey": bool(config.SUPABASE_SERVICE_KEY),
+           "bucket": bucket, "bucketExists": False, "ok": False, "detail": ""}
+    if not out["url"] or not out["serviceKey"]:
+        out["detail"] = "SUPABASE_URL or SUPABASE_SERVICE_KEY is not set on this endpoint"
+        return out
+    base = config.SUPABASE_URL.rstrip("/")
+    headers = {"apikey": config.SUPABASE_SERVICE_KEY,
+               "Authorization": f"Bearer {config.SUPABASE_SERVICE_KEY}"}
+    try:
+        r = requests.get(f"{base}/storage/v1/bucket", headers=headers, timeout=30)
+        if r.status_code == 401:
+            out["detail"] = "Supabase rejected the service key (401)"
+            return out
+        r.raise_for_status()
+        names = [b.get("name") for b in r.json()]
+        out["buckets"] = sorted(n for n in names if n)
+        out["bucketExists"] = bucket in names
+        out["ok"] = out["bucketExists"]
+        if not out["bucketExists"]:
+            out["detail"] = f"bucket '{bucket}' does not exist; found {out['buckets']}"
+    except Exception as e:  # noqa: BLE001
+        out["detail"] = f"{type(e).__name__}: {str(e)[:200]}"
+    return out
+
+
 def patch_project(project_id: str, fields: dict) -> bool:
     """
     Write progress/status straight into public.video_projects.

@@ -201,22 +201,31 @@ Then on RunPod → Serverless → your endpoint: point the template at that imag
 
 ### Endpoint configuration
 
-Re-checked 2026-09-21: `workersMax` is now 2 on all four endpoints, so the old
-"maxWorkers: 0, nothing can ever start" problem is gone.
+Deployed and verified on RunPod 2026-09-21.
 
-The real cause of the failing job history was different, and worse. Template `sfsrod27cx`
-(used by `ai-video-worker-v2` and `ai-video-worker-cpu`) points at
-`ghcr.io/karnalamahesh810-ops/ai-video-editer:latest`, **and that image does not exist** — GHCR
-returns 404 for it, while `thumbgenius-video-worker:latest` returns 200 and pulls anonymously.
-Every worker failed to pull before running a line of code, which is exactly the
-0-completed / 9-failed history.
+- Template **`gjr1mh79q6`** (`thumbgenius-video-worker`) — image pinned to a commit SHA, not
+  `:latest`, so a redeploy is deliberate and two concurrent CI builds cannot race over which
+  image an endpoint picks up.
+- Endpoint **`tuxcziwby5plod`** (`thumbgenius-worker`) — GPU (A5000 / L4 / 3090), workersMax 2,
+  idleTimeout 10s, executionTimeout 3h (a 20-minute 1080p render does not fit in the 1h default).
 
-Point the template at `ghcr.io/karnalamahesh810-ops/thumbgenius-video-worker:latest`, and set the
-env vars above on it — the template currently carries none at all, so the worker would have no
-Supabase credentials even once it boots.
+`health` and `selftest` both pass there: all 14 templates rendered in-container, audio track
+present, whisper `base` loaded in 3.1s.
 
-Also worth reviewing: `workersStandby: 3` on `ai-video-worker-v2`. Standby workers stay warm and
-bill continuously; `0` is saner while testing on a small balance.
+Two things that cost time, recorded so they don't again:
+
+- **Changing a template's image does not recycle a warm worker.** After repointing an existing
+  endpoint, jobs kept landing on the same `workerId` still running the previous image. The giveaway
+  was an error string that didn't match this codebase. `workersStandby` is settable in neither the
+  REST nor the GraphQL API, so the fix is a fresh endpoint rather than fighting the old one.
+- **Do not diagnose a missing image from a bare GHCR manifest probe.** Requesting only the OCI
+  *index* and Docker *manifest-list* media types 404s on a single-arch image that is perfectly
+  present. Include `application/vnd.oci.image.manifest.v1+json` and
+  `application/vnd.docker.distribution.manifest.v2+json` in `Accept`, or you will conclude an
+  image does not exist when it does. (This note exists because that is exactly what happened.)
+
+`workersStandby: 3` on the older `ai-video-worker-v2` is still worth dropping to 0 in the console;
+standby workers stay warm and bill.
 
 ### Smoke test
 

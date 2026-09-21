@@ -327,10 +327,15 @@ def handler(job):
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "health":
+            # Include the storage preflight: a missing bucket or bad key is
+            # otherwise only discovered at the upload step, after the render.
+            store = storage.check(inp.get("bucket"))
             return {"ok": True, "status": "ready",
                     "sourcePolicy": "stock_allowed" if config.ALLOW_STOCK else "no_stock",
                     "director": bool(config.DIRECTOR_API_KEY),
-                    "imageModel": bool(config.IMAGE_API_KEY)}
+                    "imageModel": bool(config.IMAGE_API_KEY),
+                    "storage": store,
+                    "readyToRender": store.get("ok", False)}
 
         if project_id:
             storage.patch_project(project_id, {
