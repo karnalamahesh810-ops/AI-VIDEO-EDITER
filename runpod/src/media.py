@@ -48,7 +48,29 @@ def _next_proxy() -> str:
         return next(_PROXY_CYCLE)
 
 
-BOT_CHECK = "sign in to confirm"
+# How YouTube refuses a datacenter IP. It does not always use the famous
+# "sign in to confirm you're not a bot" wording — on a RunPod worker the
+# observed message was "The following content is not available on this app",
+# which reads like a missing video rather than a blocked client. Matching only
+# the famous string reported that as "no results", which is precisely the
+# ambiguity this detection exists to remove.
+BLOCK_SIGNS = (
+    "sign in to confirm",
+    "confirm you're not a bot",
+    "confirm you are not a bot",
+    "not available on this app",
+    "this content isn't available",
+    "please sign in",
+    "http error 429",
+    "too many requests",
+)
+BOT_CHECK = BLOCK_SIGNS[0]  # kept for callers that check the classic wording
+
+
+def looks_blocked(stderr: str) -> bool:
+    """True when yt-dlp's failure is the IP being refused, not an empty search."""
+    low = (stderr or "").lower()
+    return any(sign in low for sign in BLOCK_SIGNS)
 
 
 @dataclass
@@ -317,10 +339,9 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     # video. It looks identical to "no results" from the outside, which would
     # send every scene to a still and make the whole video look wrong for a
     # reason nobody could see — so it is called out loudly.
-    stderr = (p.stderr or "").lower()
-    if BOT_CHECK in stderr or "confirm you" in stderr:
-        print("[media] YouTube bot check hit — this IP is blocked. Set YTDLP_PROXY "
-              "to a residential proxy; RunPod workers have datacenter IPs.",
+    if looks_blocked(p.stderr):
+        print("[media] YouTube refused this IP — set YTDLP_PROXY to a residential "
+              "proxy. RunPod workers have datacenter IPs and cannot download.",
               flush=True)
         return None
 

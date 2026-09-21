@@ -1084,5 +1084,87 @@ class GeneratedImages(unittest.TestCase):
         self.assertNotEqual(shots[0]["prompt"], shots[0]["query"])
 
 
+class BlockedIPDetection(unittest.TestCase):
+    """
+    A refused IP must never be mistaken for an empty search.
+
+    Measured on the live RunPod endpoint: YouTube answered
+    "The following content is not available on this app" — which reads like a
+    missing video, not a blocked client. Matching only the famous "sign in to
+    confirm you're not a bot" wording reported it as "no results", so every
+    scene would have fallen back to a still and the video would have come out
+    wrong with nothing in the logs to explain it.
+    """
+
+    def test_the_message_runpod_actually_returns_is_recognised(self):
+        self.assertTrue(media.looks_blocked(
+            "ERROR: [youtube] QYNSgqysNoM: The following content is not "
+            "available on this app."))
+
+    def test_the_classic_bot_wording_is_recognised(self):
+        for msg in ("Sign in to confirm you're not a bot",
+                    "ERROR: Please sign in",
+                    "HTTP Error 429: Too Many Requests"):
+            self.assertTrue(media.looks_blocked(msg), msg)
+
+    def test_a_genuinely_empty_search_is_not_called_a_block(self):
+        for msg in ("ERROR: no results found", "", None,
+                    "ERROR: Unsupported URL"):
+            self.assertFalse(media.looks_blocked(msg), repr(msg))
+
+    def test_a_blocked_fetch_returns_none_rather_than_a_broken_asset(self):
+        class Result:
+            returncode, stdout = 1, ""
+            stderr = "ERROR: [youtube] X: The following content is not available on this app."
+
+        original = media.subprocess.run
+        media.subprocess.run = lambda cmd, **k: Result()
+        try:
+            self.assertIsNone(media.youtube_clip("lake", "/tmp/x", seconds=3.0))
+        finally:
+            media.subprocess.run = original
+
+    def test_configured_proxies_are_passed_to_yt_dlp(self):
+        seen = {}
+
+        class Result:
+            returncode, stdout, stderr = 0, "", ""
+
+        original_run = media.subprocess.run
+        original_cycle = media._PROXY_CYCLE
+        import itertools
+        media._PROXY_CYCLE = itertools.cycle(["http://u:p@host1:8000",
+                                              "http://u:p@host2:8000"])
+        media.subprocess.run = lambda cmd, **k: seen.setdefault("cmds", []).append(cmd) or Result()
+        try:
+            media.youtube_clip("a", "/tmp/x", seconds=3.0)
+            media.youtube_clip("b", "/tmp/x", seconds=3.0)
+        finally:
+            media.subprocess.run = original_run
+            media._PROXY_CYCLE = original_cycle
+
+        proxies = [c[c.index("--proxy") + 1] for c in seen["cmds"] if "--proxy" in c]
+        self.assertEqual(len(proxies), 2)
+        # Rotated, so one address does not absorb every download and get flagged.
+        self.assertNotEqual(proxies[0], proxies[1])
+
+    def test_no_proxy_flag_when_none_configured(self):
+        seen = {}
+
+        class Result:
+            returncode, stdout, stderr = 0, "", ""
+
+        original_run = media.subprocess.run
+        original_cycle = media._PROXY_CYCLE
+        media._PROXY_CYCLE = None
+        media.subprocess.run = lambda cmd, **k: seen.update(cmd=cmd) or Result()
+        try:
+            media.youtube_clip("a", "/tmp/x", seconds=3.0)
+        finally:
+            media.subprocess.run = original_run
+            media._PROXY_CYCLE = original_cycle
+        self.assertNotIn("--proxy", seen["cmd"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

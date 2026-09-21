@@ -105,10 +105,10 @@ def _youtube_status() -> str:
     except Exception as e:  # noqa: BLE001
         return f"FAILED: {type(e).__name__}: {str(e)[:120]}"
 
-    err = (p.stderr or "").lower()
-    if media.BOT_CHECK in err or "confirm you" in err:
-        return ("FAILED: YouTube bot check — this IP is blocked. Set YTDLP_PROXY "
-                "to a residential proxy (RunPod uses datacenter IPs).")
+    if media.looks_blocked(p.stderr):
+        return ("FAILED: YouTube refused this IP — no footage can be downloaded. "
+                "Set YTDLP_PROXY to a residential proxy; RunPod workers have "
+                "datacenter IPs.")
     vid = (p.stdout or "").strip().splitlines()
     if vid and vid[0].strip():
         how = "via proxy" if proxy else "direct — no proxy configured"
