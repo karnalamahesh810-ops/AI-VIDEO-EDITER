@@ -19,6 +19,8 @@ Actions
 -------
 plan    : everything up to the timeline document. Returns it WITHOUT rendering,
           so the user can fix shots before paying for a render.
+resource: re-source ONE scene's media and hand the timeline back, so the
+          editor can replace a bad shot without re-running the whole plan.
 render  : take a timeline document (possibly edited by the user) -> MP4.
 build   : plan + render in one call.
 health  : cheap readiness probe.
@@ -211,6 +213,66 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     return doc
 
 
+def do_resource(inp: dict, work: str, report: Reporter) -> dict:
+    """
+    Re-source the media for ONE scene and return the whole timeline back.
+
+    This is what makes the editor usable: the user rejects a single shot and
+    gets a replacement in seconds, instead of re-running a twenty-minute plan
+    to change one clip. Timing is deliberately untouched — only `media` and
+    its review flags change, so the visual track still tiles the narration
+    exactly and the voiceover cannot drift.
+    """
+    doc = inp.get("timeline")
+    if not isinstance(doc, dict):
+        raise ValueError("resource requires the current `timeline` document")
+    scenes = doc.get("scenes") or []
+    idx = inp.get("scene_index")
+    if not isinstance(idx, int) or isinstance(idx, bool) or not 0 <= idx < len(scenes):
+        raise ValueError(f"scene_index must be between 0 and {len(scenes) - 1}")
+
+    scene = scenes[idx]
+    fps = int(doc.get("fps") or config.DEFAULT_FPS)
+    seconds = max(0.4, int(scene.get("durationInFrames", fps)) / fps)
+    query = str(inp.get("query") or scene.get("query")
+                or scene.get("text") or "").strip()[:240]
+    if not query:
+        raise ValueError("this scene has nothing to search for — set a query first")
+
+    report(f"Re-sourcing scene {idx + 1}", 20)
+    media.reset_cache()
+    asset = media.source_for_segment(
+        query, seconds, work,
+        visual_type=scene.get("visualType", "footage"),
+        allow_youtube=inp.get("allow_youtube"),
+        allow_stock=inp.get("allow_stock"),
+        require_cc=inp.get("require_cc"),
+    )
+    if not asset:
+        raise ValueError(f"no usable media found for '{query}' — try different wording")
+
+    scene["media"] = asset.to_scene_media()
+    scene["query"] = query
+    scene["motion"] = (timeline._IMAGE_MOTIONS[idx % len(timeline._IMAGE_MOTIONS)]
+                       if asset.kind == "image" else "none")
+    scene["reviewRequired"] = bool(asset.review_required)
+    scene["reviewReason"] = asset.review_reason or ""
+
+    project_id = inp.get("project_id") or ""
+    if project_id and inp.get("publish_media", True):
+        report("Saving replacement media", 70)
+        publish_media(doc, project_id,
+                      inp.get("media_bucket") or config.SUPABASE_BUCKET, report)
+
+    meta = doc.setdefault("meta", {})
+    meta["scenesWithoutMedia"] = sum(
+        1 for s in scenes if (s.get("media") or {}).get("type") == "color")
+    meta["scenesNeedingReview"] = sum(1 for s in scenes if s.get("reviewRequired"))
+    # Only this scene changed, so validate without demanding the rest be filled.
+    timeline.validate(doc, require_media=False)
+    return doc
+
+
 def _sign_supabase_urls(doc: dict):
     """
     Re-sign any Supabase storage URLs inside the timeline.
@@ -384,6 +446,17 @@ def handler(job):
                     "current_step": "Timeline ready", "progress": 68,
                 })
             return {"ok": True, "action": "plan", "timeline": doc,
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action == "resource":
+            doc = do_resource(inp, work, report)
+            if project_id:
+                storage.patch_project(project_id, {
+                    "scene_data": doc, "status": "editing",
+                    "current_step": "Scene re-sourced", "progress": 100,
+                })
+            return {"ok": True, "action": "resource", "timeline": doc,
+                    "scene_index": inp.get("scene_index"),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "render":

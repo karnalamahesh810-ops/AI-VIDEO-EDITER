@@ -716,5 +716,64 @@ class PresignedUpload(unittest.TestCase):
         self.assertEqual(res["video_url"], "https://sb/public/videos/a.mp4")
 
 
+class ResourceAction(unittest.TestCase):
+    """
+    Replacing one scene must never move another frame.
+
+    The app validates that scenes tile the narration exactly; if re-sourcing
+    nudged any timing, every subsequent scene would desync the voiceover and
+    the editor would refuse to render.
+    """
+
+    def _run(self, scene_index=1, asset=None, inp_extra=None):
+        import handler
+        doc = build_doc(n=4, seconds=3.0)
+        original = handler.media.source_for_segment
+        handler.media.source_for_segment = lambda *a, **k: asset
+        try:
+            return handler.do_resource(
+                {"timeline": doc, "scene_index": scene_index, **(inp_extra or {})},
+                os.path.join(ROOT, "out", "_t_res"), handler.Reporter(""))
+        finally:
+            handler.media.source_for_segment = original
+
+    def test_timing_is_untouched(self):
+        before = [(s["startFrame"], s["durationInFrames"]) for s in build_doc(n=4).get("scenes")]
+        doc = self._run(asset=asset(kind="image", source="wikimedia",
+                                    url="https://x/new.jpg"))
+        after = [(s["startFrame"], s["durationInFrames"]) for s in doc["scenes"]]
+        self.assertEqual(before, after)
+        timeline.validate(doc)
+
+    def test_only_the_named_scene_changes(self):
+        doc = self._run(scene_index=2,
+                        asset=asset(kind="image", source="wikimedia",
+                                    url="https://x/new.jpg"))
+        self.assertEqual(doc["scenes"][2]["media"]["url"], "https://x/new.jpg")
+        self.assertEqual(doc["scenes"][0]["media"]["url"], "file:///tmp/a.mp4")
+        self.assertEqual(doc["scenes"][3]["media"]["url"], "file:///tmp/a.mp4")
+
+    def test_a_still_replacement_gets_ken_burns(self):
+        doc = self._run(asset=asset(kind="image", source="wikimedia",
+                                    url="https://x/new.jpg"))
+        self.assertIn(doc["scenes"][1]["motion"], timeline._IMAGE_MOTIONS)
+
+    def test_generated_replacement_is_flagged_for_review(self):
+        doc = self._run(asset=asset(kind="image", source="generated",
+                                    url="https://x/g.png", review_required=True,
+                                    review_reason="Generated illustration"))
+        self.assertTrue(doc["scenes"][1]["reviewRequired"])
+        self.assertEqual(doc["meta"]["scenesNeedingReview"], 1)
+
+    def test_out_of_range_index_is_refused(self):
+        for bad in (-1, 99, "1", True, None):
+            with self.assertRaises(ValueError):
+                self._run(scene_index=bad, asset=asset())
+
+    def test_no_match_is_an_error_not_a_blank_scene(self):
+        with self.assertRaisesRegex(ValueError, "no usable media"):
+            self._run(asset=None)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
