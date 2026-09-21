@@ -546,7 +546,8 @@ class SourcingCommands(unittest.TestCase):
         original = media.subprocess.run
         media.subprocess.run = fake_run
         try:
-            media.youtube_clip("colombia earthquake", "/tmp/x", seconds=4.0, **kwargs)
+            media.youtube_clip("colombia earthquake", "/tmp/x", seconds=4.0,
+                               b_roll_intent=False, **kwargs)
         finally:
             media.subprocess.run = original
         return seen["cmd"]
@@ -565,34 +566,25 @@ class SourcingCommands(unittest.TestCase):
         cmd = self._captured_yt_cmd(require_cc=False)
         self.assertTrue(cmd[1].startswith("ytsearch"))
 
-    def test_aspect_filter_compares_against_a_literal(self):
-        # A match-filter compares a field to a constant. "width > height"
-        # parses `height` as a string and every candidate dies on int > str.
-        cmd = self._captured_yt_cmd(require_cc=True)
-        flt = cmd[cmd.index("--match-filter") + 1]
-        self.assertIn("aspect_ratio", flt)
-        self.assertNotIn("width > height", flt)
-        self.assertIn("Creative Commons", flt)
-
     def test_licence_filter_is_absent_when_not_required(self):
         cmd = self._captured_yt_cmd(require_cc=False)
-        flt = cmd[cmd.index("--match-filter") + 1]
-        self.assertNotIn("Creative Commons", flt)
+        self.assertNotIn("--match-filter", cmd)
 
-    def test_success_is_read_from_the_printed_path_not_the_exit_code(self):
-        # --max-downloads makes yt-dlp exit 101 on success.
-        class Result:
-            returncode, stderr = 101, ""
-            stdout = __file__          # a path that exists
+    def test_shape_is_judged_by_score_not_a_match_filter(self):
+        """
+        "width > height" as a match-filter killed every candidate: a filter
+        compares a field to a literal, so `height` parsed as a string. Shape
+        is now judged from metadata that was fetched anyway.
+        """
+        vertical = media._score_candidate("Lake Powell", 300, 0.56, 4)
+        wide = media._score_candidate("Lake Powell", 300, 1.78, 4)
+        self.assertLess(vertical, wide)
 
-        original = media.subprocess.run
-        media.subprocess.run = lambda cmd, **_: Result()
-        try:
-            asset = media.youtube_clip("x", "/tmp/x", seconds=2.0)
-        finally:
-            media.subprocess.run = original
-        self.assertIsNotNone(asset)
-        self.assertEqual(asset.source, "youtube")
+    def test_talking_heads_rank_below_footage(self):
+        """The first real run put a podcast clip where a boat ramp belonged."""
+        head = media._score_candidate("Lake Powell Podcast Episode 12", 300, 1.78, 4)
+        broll = media._score_candidate("Lake Powell drone aerial 4K", 300, 1.78, 4)
+        self.assertLess(head, broll)
 
     def test_downloads_identify_themselves(self):
         # Wikimedia 403s the default python-requests agent, so without this
@@ -853,47 +845,81 @@ class NoDuplicateShots(unittest.TestCase):
                        local_path="/w/yt_XYZ.mp4")
         self.assertEqual(a.identity, b.identity)
 
-    def test_youtube_rejects_an_already_used_upload(self):
-        seen = {}
+    def _stub_yt(self, cands, picked=None, starts=None):
+        orig_c, orig_f = media._yt_candidates, media._yt_fetch
 
-        class Result:
-            returncode, stderr = 0, ""
-            stdout = ""
+        def fetch(vid, out, start, secs, **k):
+            if picked is not None:
+                picked.append(vid)
+            if starts is not None:
+                starts.append(start)
+            return "/w/yt_%s.mp4" % vid
 
-        tmp = os.path.join(ROOT, "out", "_t_yt", "yt_TAKEN.mp4")
-        os.makedirs(os.path.dirname(tmp), exist_ok=True)
-        open(tmp, "wb").close()
-        Result.stdout = tmp
+        media._yt_candidates = lambda *a, **k: cands
+        media._yt_fetch = fetch
+        return orig_c, orig_f
 
-        original = media.subprocess.run
-        media.subprocess.run = lambda cmd, **k: seen.update(cmd=cmd) or Result()
+    def _restore_yt(self, saved):
+        media._yt_candidates, media._yt_fetch = saved
+
+    def test_skip_walks_down_the_ranking(self):
+        """A repeated subject must get a different video, not the same top hit."""
+        picked = []
+        cands = [{"id": "V%d" % i, "duration": 300, "aspect": 1.78,
+                  "title": "Lake Powell aerial footage %d" % i} for i in range(6)]
+        saved = self._stub_yt(cands, picked=picked)
         try:
-            got = media.youtube_clip("lake", os.path.dirname(tmp), seconds=3.0,
-                                     used={"yt:TAKEN"})
+            media.youtube_clip("lake", "/tmp/x", seconds=3.0, skip=0)
+            media.youtube_clip("lake", "/tmp/x", seconds=3.0, skip=2)
         finally:
-            media.subprocess.run = original
-        self.assertIsNone(got, "an already-used upload must be rejected")
-        # It must NOT delete the file: yt-dlp names by video id, so this is
-        # the same path an earlier scene already points at. Deleting it
-        # blanked four scenes and failed the render on a real run.
-        self.assertTrue(os.path.exists(tmp),
-                        "must not delete a file an earlier scene is using")
-        os.remove(tmp)
+            self._restore_yt(saved)
+        self.assertNotEqual(picked[0], picked[1])
 
-    def test_skip_moves_the_playlist_window(self):
-        seen = {}
-
-        class Result:
-            returncode, stdout, stderr = 0, "", ""
-
-        original = media.subprocess.run
-        media.subprocess.run = lambda cmd, **k: seen.update(cmd=cmd) or Result()
+    def test_a_used_video_is_skipped(self):
+        picked = []
+        cands = [{"id": "TAKEN", "duration": 300, "aspect": 1.78, "title": "a"},
+                 {"id": "FRESH", "duration": 300, "aspect": 1.78, "title": "b"}]
+        saved = self._stub_yt(cands, picked=picked)
         try:
-            media.youtube_clip("lake", "/tmp/x", seconds=3.0, skip=3)
+            media.youtube_clip("lake", "/tmp/x", seconds=3.0, used={"yt:TAKEN"})
         finally:
-            media.subprocess.run = original
-        cmd = seen["cmd"]
-        self.assertEqual(cmd[cmd.index("--playlist-items") + 1], "4-15")
+            self._restore_yt(saved)
+        self.assertEqual(picked, ["FRESH"])
+
+    def test_vertical_candidates_are_never_downloaded(self):
+        picked = []
+        cands = [{"id": "TALL", "duration": 300, "aspect": 0.56, "title": "a"},
+                 {"id": "WIDE", "duration": 300, "aspect": 1.78, "title": "b"}]
+        saved = self._stub_yt(cands, picked=picked)
+        try:
+            media.youtube_clip("lake", "/tmp/x", seconds=3.0)
+        finally:
+            self._restore_yt(saved)
+        self.assertEqual(picked, ["WIDE"])
+
+    def test_grab_point_is_a_fraction_of_the_video_not_a_fixed_offset(self):
+        """0:30 of a ten-minute documentary is still the intro."""
+        starts = []
+        cands = [{"id": "V", "duration": 600, "aspect": 1.78, "title": "aerial"}]
+        saved = self._stub_yt(cands, starts=starts)
+        try:
+            media.youtube_clip("lake", "/tmp/x", seconds=4.0)
+        finally:
+            self._restore_yt(saved)
+        self.assertAlmostEqual(starts[0], 210.0, delta=1.0)   # 35% of 600s
+
+    def test_b_roll_intent_is_tried_before_the_plain_query(self):
+        searched = []
+        orig_c, orig_f = media._yt_candidates, media._yt_fetch
+        media._yt_candidates = lambda target, *a, **k: searched.append(target) or []
+        media._yt_fetch = lambda *a, **k: ""
+        try:
+            media.youtube_clip("lake powell", "/tmp/x", seconds=3.0, require_cc=False)
+        finally:
+            media._yt_candidates, media._yt_fetch = orig_c, orig_f
+        first_word = media.B_ROLL_INTENT.split()[0]
+        self.assertIn(first_word, searched[0])
+        self.assertNotIn(first_word, searched[-1])
 
 
 class QueryRelaxation(unittest.TestCase):
@@ -1137,8 +1163,8 @@ class BlockedIPDetection(unittest.TestCase):
                                               "http://u:p@host2:8000"])
         media.subprocess.run = lambda cmd, **k: seen.setdefault("cmds", []).append(cmd) or Result()
         try:
-            media.youtube_clip("a", "/tmp/x", seconds=3.0)
-            media.youtube_clip("b", "/tmp/x", seconds=3.0)
+            media._yt_candidates("ytsearch1:a", False)
+            media._yt_candidates("ytsearch1:b", False)
         finally:
             media.subprocess.run = original_run
             media._PROXY_CYCLE = original_cycle
@@ -1159,7 +1185,7 @@ class BlockedIPDetection(unittest.TestCase):
         media._PROXY_CYCLE = None
         media.subprocess.run = lambda cmd, **k: seen.update(cmd=cmd) or Result()
         try:
-            media.youtube_clip("a", "/tmp/x", seconds=3.0)
+            media._yt_candidates("ytsearch1:a", False)
         finally:
             media.subprocess.run = original_run
             media._PROXY_CYCLE = original_cycle

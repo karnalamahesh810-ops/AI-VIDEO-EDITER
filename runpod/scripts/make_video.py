@@ -36,6 +36,10 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--out", default="")
     ap.add_argument("--no-maps", action="store_true")
+    ap.add_argument("--any-licence", action="store_true",
+                    help="drop the Creative Commons filter — far better footage, "
+                         "but the clips are someone else's copyright and can "
+                         "attract Content ID claims on a monetised channel")
     args = ap.parse_args()
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -67,6 +71,7 @@ def main() -> int:
         "captions": True,
         "maps": not args.no_maps,
         "source_workers": args.workers,
+        "require_cc": not args.any_licence,
         "brand": {"accent": "#FFD400", "fontFamily": "Inter"},
     }
 

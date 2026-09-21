@@ -259,129 +259,227 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
 # YouTube via yt-dlp
 # --------------------------------------------------------------------------- #
 
-def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
-                 start_at: float = 30.0, require_cc: bool = True,
-                 skip: int = 0, used: set = None) -> Optional[MediaAsset]:
+
+# Titles that almost always mean a person talking to camera. A documentary
+# needs the thing itself, not somebody discussing it — the single most common
+# failure in the first real run was an interview clip standing in for a shot
+# of the subject.
+_TALKING_HEAD = re.compile(
+    r"\b(interview|podcast|reaction|react|vlog|q&a|ama|explained|"
+    r"my thoughts|commentary|discussion|talks? about|responds?|"
+    r"live ?stream|full episode|ep\.? ?\d+|tutorial|how to)\b", re.I)
+
+# Titles that usually mean actual footage of the subject.
+_B_ROLL = re.compile(
+    r"\b(drone|aerial|4k|footage|b[- ]?roll|timelapse|time[- ]lapse|"
+    r"flyover|walkthrough|tour|no commentary|ambience|cinematic|"
+    r"raw video|caught on|satellite)\b", re.I)
+
+# Search suffix that biases YouTube itself toward footage rather than people
+# discussing the subject. Tried first; the plain query remains the fallback.
+B_ROLL_INTENT = "drone aerial footage"
+
+
+def _score_candidate(title: str, duration: float, aspect: float,
+                     seconds: float) -> float:
     """
-    Pull a short section of a YouTube video with yt-dlp.
+    How likely is this result to be usable footage of the subject?
 
-    Uses --download-sections so we fetch only the slice we need instead of a
-    whole 4K upload. `query_or_url` may be a URL or a plain search phrase.
-
-    require_cc restricts this to uploads the creator published under Creative
-    Commons Attribution, which is the only footage here you may legally re-cut
-    and monetise. The default YouTube licence reserves every right, so anything
-    else gets claimed by Content ID and is someone else's copyright besides.
-    Turn it off only for footage you own or have separately licensed.
+    Cheap title/metadata heuristics only — no downloads, no API calls. It
+    cannot tell what is actually on screen, but it reliably demotes the
+    obvious failures (a podcast episode, a two-hour livestream, a vertical
+    short) that dominated the first real run.
     """
-    os.makedirs(out_dir, exist_ok=True)
-    if query_or_url.startswith("http"):
-        target = query_or_url
-    elif require_cc:
-        # NOT ytsearch: yt-dlp's flat search extractor reports license=NA for
-        # every hit, so a "license *= Creative Commons" match-filter rejects
-        # the entire result set and this source silently never returns
-        # anything. Measured, not assumed. Going through YouTube's own search
-        # page with its Creative Commons filter (sp=EgIwAQ%3D%3D) returns
-        # results whose licence field is populated, so the filter below then
-        # works as a second check rather than as the only one.
-        target = ("https://www.youtube.com/results?search_query="
-                  + urllib.parse.quote_plus(query_or_url) + "&sp=EgIwAQ%3D%3D")
-    else:
-        target = f"ytsearch8:{query_or_url}"
-    out_tpl = os.path.join(out_dir, "yt_%(id)s.%(ext)s")
-    # Pad the requested slice: a keyframe-aligned cut can land short of the
-    # scene length, and a clip shorter than its scene freezes on its last frame.
-    grab = max(2.0, seconds + 1.5)
-    section = f"*{start_at}-{start_at + grab}"
+    score = 0.0
+    if _B_ROLL.search(title):
+        score += 3.0
+    if _TALKING_HEAD.search(title):
+        score -= 4.0
+    # Too short to cut from, or so long it is a stream/compilation.
+    if duration and duration < max(20.0, seconds + 8):
+        score -= 3.0
+    elif duration and duration > 3600:
+        score -= 2.5
+    elif 60 <= (duration or 0) <= 900:
+        score += 1.0
+    if aspect and aspect < 1.2:
+        score -= 5.0          # vertical; object-fit would crop it to nothing
+    elif aspect and aspect >= 1.7:
+        score += 1.0
+    return score
 
+
+def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
+                   timeout: int = 90) -> List[dict]:
+    """
+    List search results with the metadata needed to choose between them.
+
+    Metadata only — no video is fetched. Downloading the first hit and hoping
+    is what produced a man in an armchair for a line about a boat trailer.
+    """
     cmd = [
-        "yt-dlp", target,
-        "--download-sections", section,
+        "yt-dlp", target, "--skip-download", "--no-warnings",
+        "--playlist-items", f"1-{limit}",
+        "--print", "%(id)s\t%(duration)s\t%(width)s\t%(height)s\t%(title)s",
+    ]
+    if require_cc:
+        cmd += ["--match-filter", "license *= Creative Commons"]
+    proxy = _next_proxy()
+    if proxy:
+        cmd += ["--proxy", proxy]
+    if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
+        cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
+
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+    if looks_blocked(p.stderr):
+        print("[media] YouTube refused this IP — set YTDLP_PROXY to a residential "
+              "proxy. RunPod workers have datacenter IPs and cannot download.",
+              flush=True)
+        return []
+
+    out = []
+    for line in (p.stdout or "").splitlines():
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) < 5 or not parts[0].strip():
+            continue
+        vid, dur, w, h, title = parts[0], parts[1], parts[2], parts[3], "\t".join(parts[4:])
+
+        def num(x):
+            try:
+                return float(x)
+            except (TypeError, ValueError):
+                return 0.0
+        width, height = num(w), num(h)
+        out.append({
+            "id": vid.strip(),
+            "duration": num(dur),
+            "aspect": (width / height) if height else 0.0,
+            "title": title.strip(),
+        })
+    return out
+
+
+def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
+              timeout: int = 300) -> str:
+    """Download one section of one known video. Returns the local path or ''."""
+    out_tpl = os.path.join(out_dir, "yt_%(id)s.%(ext)s")
+    cmd = [
+        "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
+        "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
         "--force-keyframes-at-cuts",
         "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]",
-        "--no-warnings", "--quiet",
+        "--no-playlist", "--no-warnings", "--quiet",
         "--merge-output-format", "mp4",
-        # A search page is a playlist. `skip` starts further down it, so a
-        # scene repeating an earlier query gets a different upload rather
-        # than the same top hit again.
-        "--playlist-items", f"{skip + 1}-{skip + 12}", "--max-downloads", "1",
-        "-o", out_tpl,
-        "--print", "after_move:filepath",
+        "-o", out_tpl, "--print", "after_move:filepath",
     ]
-    # Reject portrait uploads. A 608x1080 clip in a 1920x1080 frame gets
-    # object-fit: cover'd into a massive centre crop — measured on a real CC
-    # search result, which is how this filter came to exist. It has to be
-    # aspect_ratio against a literal: a match-filter compares a field to a
-    # constant, so "width > height" parses `height` as a string and every
-    # candidate errors out with int > str.
-    match = ["aspect_ratio > 1.2"]
-    if require_cc:
-        # yt-dlp exposes YouTube's licence field; a match-filter keeps a search
-        # rolling to the next hit instead of failing the whole scene.
-        match.append("license *= Creative Commons")
-    cmd += ["--match-filter", " & ".join(match)]
-
     proxy = _next_proxy()
     if proxy:
         cmd += ["--proxy", proxy]
     if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
         cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    except subprocess.TimeoutExpired:
-        return None
-    except FileNotFoundError:
-        print("[media] yt-dlp not on PATH - skipping the YouTube source", flush=True)
-        return None
-
-    # A datacenter IP gets "Sign in to confirm you're not a bot" instead of a
-    # video. It looks identical to "no results" from the outside, which would
-    # send every scene to a still and make the whole video look wrong for a
-    # reason nobody could see — so it is called out loudly.
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
     if looks_blocked(p.stderr):
-        print("[media] YouTube refused this IP — set YTDLP_PROXY to a residential "
-              "proxy. RunPod workers have datacenter IPs and cannot download.",
-              flush=True)
-        return None
-
-    # --max-downloads makes yt-dlp exit non-zero once it has what we asked for,
-    # so the printed path decides success, not the return code.
-    path = ""
+        return ""
     for line in (p.stdout or "").splitlines():
         line = line.strip()
         if line and os.path.exists(line):
-            path = line
-            break
-    if not path:
-        return None
+            return line
+    guess = os.path.join(out_dir, f"yt_{video_id}.mp4")
+    return guess if os.path.exists(guess) else ""
 
-    # Two differently-worded queries can still land on the same upload;
-    # reject it here so the caller falls through to another source instead
-    # of showing the same footage twice.
-    if used:
-        name = os.path.basename(path)
-        vid = f"yt:{name[3:].rsplit('.', 1)[0]}" if name.startswith("yt_") else ""
-        if vid and vid in used:
-            # Return None, but do NOT delete the file. yt-dlp names by video
-            # id, so this is the very same path an earlier scene is already
-            # pointing at — deleting it blanked four scenes' footage and
-            # failed the render at asset-download time. The work directory is
-            # wiped when the job ends; a few redundant megabytes until then
-            # cost nothing.
+
+def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
+                 start_at: float = 30.0, require_cc: bool = True,
+                 skip: int = 0, used: set = None,
+                 b_roll_intent: bool = True) -> Optional[MediaAsset]:
+    """
+    Find and download a clip that plausibly shows the subject.
+
+    Two passes, because one was not enough. The old version searched, took the
+    first result, and grabbed the seconds at 0:30 — which on a real script
+    produced talking heads, vertical phone video, and podcast intros. Now the
+    search returns metadata for a dozen candidates, they are scored on title
+    and shape, and only the winner is downloaded.
+
+    The grab point is a fraction of the video's own length rather than a fixed
+    offset: 0:30 of a ten-minute documentary is still the intro, but 35% in is
+    reliably the body. `skip` walks further down the ranking so a repeated
+    subject gets a different video.
+
+    require_cc restricts this to Creative Commons uploads, the only footage
+    you may legally re-cut and monetise. Turning it off opens up the whole of
+    YouTube — far better footage, and someone else's copyright.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    if query_or_url.startswith("http"):
+        path = _yt_fetch(query_or_url.rsplit("=", 1)[-1], out_dir,
+                         start_at, max(2.0, seconds + 1.5))
+        if not path:
             return None
+        return _asset_for(path, query_or_url, seconds, require_cc)
 
+    # Bias the search itself toward footage; fall back to the plain query.
+    searches = []
+    if b_roll_intent:
+        searches.append(f"{query_or_url} {B_ROLL_INTENT}")
+    searches.append(query_or_url)
+
+    for search in searches:
+        if require_cc:
+            # yt-dlp's flat search extractor reports license=NA for every hit,
+            # so a CC match-filter over ytsearch rejects everything. YouTube's
+            # own results page with its CC filter populates the field.
+            target = ("https://www.youtube.com/results?search_query="
+                      + urllib.parse.quote_plus(search) + "&sp=EgIwAQ%3D%3D")
+        else:
+            target = f"ytsearch12:{search}"
+
+        candidates = _yt_candidates(target, require_cc)
+        if not candidates:
+            continue
+
+        ranked = sorted(candidates,
+                        key=lambda c: _score_candidate(c["title"], c["duration"],
+                                                       c["aspect"], seconds),
+                        reverse=True)
+        for candidate in ranked[skip:] + ranked[:skip]:
+            if used and f"yt:{candidate['id']}" in used:
+                continue
+            if candidate["aspect"] and candidate["aspect"] < 1.2:
+                continue                       # vertical, unusable in 16:9
+            duration = candidate["duration"] or 0
+            grab = max(2.0, seconds + 1.5)
+            # 35% in skips intros and titles; clamp so we never run off the end.
+            point = max(5.0, duration * 0.35) if duration else start_at
+            if duration:
+                point = min(point, max(5.0, duration - grab - 2))
+            path = _yt_fetch(candidate["id"], out_dir, point, grab)
+            if path:
+                return _asset_for(path, query_or_url, grab, require_cc,
+                                  title=candidate["title"])
+    return None
+
+
+def _asset_for(path: str, query: str, seconds: float, require_cc: bool,
+               title: str = "") -> MediaAsset:
     return MediaAsset(
-        kind="video", source="youtube", url=query_or_url, local_path=path,
-        duration=grab,
-        attribution="YouTube (CC BY) - credit the uploader",
+        kind="video", source="youtube", url=query, local_path=path,
+        duration=seconds,
+        attribution=(f"YouTube: {title}" if title else "YouTube — credit the uploader"),
         license=("Creative Commons Attribution (CC BY)" if require_cc
-                 else "unverified - you must hold the rights"),
-        query=query_or_url,
+                 else "unverified — you must hold the rights"),
+        query=query,
         review_required=not require_cc,
-        review_reason="" if require_cc else "Licence unverified - confirm you hold the rights",
+        review_reason=("" if require_cc
+                       else "Licence unverified — confirm you hold the rights"),
     )
-
 
 # --------------------------------------------------------------------------- #
 # Stock (escape hatch only — off unless ALLOW_STOCK is set)
