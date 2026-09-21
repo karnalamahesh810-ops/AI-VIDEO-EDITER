@@ -136,7 +136,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     audio_duration = renderer.probe_duration(audio_path)
 
     report("Aligning narration", 8)
-    words = transcribe.transcribe_words(audio_path, language=inp.get("language"))
+    words = transcribe.transcribe_words(
+        audio_path, language=inp.get("language"),
+        # 8 -> 13%: the band between download and the planner.
+        on_progress=lambda f: report("Aligning narration", 8 + int(5 * f)))
     if not words:
         raise ValueError("no speech detected in the narration audio")
     segments = transcribe.segment_words(words)

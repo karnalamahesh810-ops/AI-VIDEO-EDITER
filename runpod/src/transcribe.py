@@ -55,22 +55,37 @@ def _load_model():
     return _model
 
 
-def transcribe_words(audio_path: str, language: Optional[str] = None) -> List[Word]:
-    """Word-level timestamps for the narration track."""
+def transcribe_words(audio_path: str, language: Optional[str] = None,
+                     on_progress=None) -> List[Word]:
+    """
+    Word-level timestamps for the narration track.
+
+    `on_progress(fraction)` is called as whisper walks the audio. Without it
+    this stage is a single silent block - ten minutes on a 21-minute file -
+    which is indistinguishable from a hang to anyone watching a progress bar.
+    faster-whisper yields segments lazily, so the position is free: it is just
+    how far the last decoded segment reached.
+    """
     model = _load_model()
-    segments, _info = model.transcribe(
+    segments, info = model.transcribe(
         audio_path,
         language=language,
         word_timestamps=True,
         vad_filter=True,
         beam_size=5,
     )
+    total = float(getattr(info, "duration", 0.0) or 0.0)
     words: List[Word] = []
     for seg in segments:
         for w in (seg.words or []):
             t = (w.word or "").strip()
             if t:
                 words.append(Word(text=t, start=float(w.start), end=float(w.end)))
+        if on_progress and total > 0:
+            try:
+                on_progress(min(1.0, float(seg.end) / total))
+            except Exception:  # noqa: BLE001
+                pass
     return words
 
 

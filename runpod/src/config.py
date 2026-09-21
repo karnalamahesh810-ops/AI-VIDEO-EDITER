@@ -12,6 +12,11 @@ def _load_dotenv() -> None:
 
     Real environment variables always win; this only fills what is unset.
     """
+    # The test suite asserts unconfigured behaviour (rule planner, generation
+    # off). Filling those from a developer's real .env silently tests the
+    # configured path instead, so tests opt out explicitly.
+    if os.getenv("SKIP_DOTENV"):
+        return
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for path in (os.path.join(here, ".env"),
                  os.path.join(os.path.dirname(here), ".env")):

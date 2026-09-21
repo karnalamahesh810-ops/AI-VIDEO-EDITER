@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import re
 import shutil
 import subprocess
 
@@ -31,9 +32,28 @@ def _renderer_argv() -> list:
     return [shutil.which("npx") or "npx", "remotion"]
 
 
+_FRAC = re.compile(r"(\d+)\s*/\s*(\d+)")
+_PCT = re.compile(r"(\d{1,3})\s*%")
+
+
+def _render_progress(line: str):
+    """0..1 out of a Remotion progress line, or None when it isn't one."""
+    m = _FRAC.search(line)
+    if m:
+        done, total = int(m.group(1)), int(m.group(2))
+        if total > 0 and done <= total:
+            return done / total
+    m = _PCT.search(line)
+    if m:
+        v = int(m.group(1))
+        if v <= 100:
+            return v / 100.0
+    return None
+
+
 def render(props: dict, out_path: str, composition: str = "Main",
            concurrency: int = None, timeout: int = 5400,
-           serve_dir: str = None) -> str:
+           serve_dir: str = None, on_progress=None) -> str:
     """
     Render `props` to `out_path` with Remotion.
 
@@ -45,6 +65,11 @@ def render(props: dict, out_path: str, composition: str = "Main",
     Props are written to disk and passed with --props=<file>; passing a large
     JSON document as an inline argument blows the command-line length limit
     once a video has a few hundred scenes.
+
+    `on_progress(fraction)` receives 0..1 as Remotion encodes. Without it the
+    render is a silent multi-minute block, which on a 20-minute video is
+    indistinguishable from a hang. Streaming costs the plain capture_output
+    path, so the output is buffered here to keep the same error tail.
     """
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     work = serve_dir or os.path.dirname(out_path)
@@ -60,20 +85,61 @@ def render(props: dict, out_path: str, composition: str = "Main",
         cmd = _renderer_argv() + [
             "render", "src/index.ts", composition, out_path,
             f"--props={props_path}",
-            "--log=error",
+            # --log=error hides the progress lines, so ask for more only when
+            # somebody is listening.
+            "--log=info" if on_progress else "--log=error",
         ]
         if concurrency:
             cmd.append(f"--concurrency={concurrency}")
 
-        p = subprocess.run(
-            cmd, cwd=config.REMOTION_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=timeout,
-        )
+        if on_progress is None:
+            p = subprocess.run(
+                cmd, cwd=config.REMOTION_DIR, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=timeout,
+            )
+        else:
+            p = _run_streaming(cmd, timeout, on_progress)
 
     if p.returncode != 0 or not os.path.exists(out_path):
         tail = (p.stderr or p.stdout or "")[-1500:]
         raise RenderError(f"remotion render failed (exit {p.returncode}): {tail}")
     return out_path
+
+
+class _Completed:
+    """Just enough of CompletedProcess for the error path below."""
+
+    def __init__(self, returncode, stdout, stderr):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def _run_streaming(cmd, timeout, on_progress) -> "_Completed":
+    """Run Remotion, forwarding progress while keeping the output for errors."""
+    import time
+    proc = subprocess.Popen(
+        cmd, cwd=config.REMOTION_DIR, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+        bufsize=1,
+    )
+    lines, deadline = [], time.time() + timeout
+    try:
+        for line in proc.stdout:
+            lines.append(line)
+            if len(lines) > 400:          # keep the tail, not the whole log
+                del lines[:200]
+            frac = _render_progress(line)
+            if frac is not None:
+                try:
+                    on_progress(frac)
+                except Exception:
+                    pass
+            if time.time() > deadline:
+                proc.kill()
+                raise subprocess.TimeoutExpired(cmd, timeout)
+    finally:
+        proc.stdout.close()
+        proc.wait()
+    return _Completed(proc.returncode, "".join(lines), "")
 
 
 def probe_duration(media_path: str) -> float:

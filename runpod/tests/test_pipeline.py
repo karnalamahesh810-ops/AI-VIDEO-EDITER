@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -406,7 +407,13 @@ class DirectorRules(unittest.TestCase):
     def test_every_beat_gets_a_shot_without_an_api_key(self):
         segments = [seg(f"Sentence number {i} about the valley.", i * 3, i * 3 + 3)
                     for i in range(6)]
-        shots, kind, warnings = director.plan(segments, title="Dry Valley", allow_maps=False)
+        # The name of this test is its precondition, so assert it rather than
+        # inheriting it from the machine: config now fills unset variables from
+        # a local .env, so a developer with a real key would otherwise silently
+        # be testing the configured path.
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""),                 mock.patch.object(config, "DIRECTOR_API_BASE", ""),                 mock.patch.object(config, "DIRECTOR_MODEL", ""):
+            shots, kind, warnings = director.plan(segments, title="Dry Valley",
+                                                  allow_maps=False)
         self.assertEqual(len(shots), len(segments))
         self.assertEqual(kind, "rules")
         self.assertTrue(all(s["query"] for s in shots))

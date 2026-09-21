@@ -23,11 +23,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 from typing import List, Optional, Dict, Any
 import base64
+import json
 import os
 import re
 import itertools
 import subprocess
 import threading
+import time
 import urllib.parse
 import requests
 
@@ -311,6 +313,99 @@ def search_nasa_video(query: str, limit: int = 5) -> List[MediaAsset]:
 # Generated images
 # --------------------------------------------------------------------------- #
 
+def _openai_generate(full_prompt: str, timeout: int) -> Optional[dict]:
+    """One image from an OpenAI-compatible /images/generations endpoint."""
+    try:
+        r = requests.post(
+            f"{config.IMAGE_API_BASE}/images/generations",
+            headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={"model": config.IMAGE_MODEL, "prompt": full_prompt,
+                  "n": 1, "size": config.IMAGE_SIZE},
+            timeout=timeout,
+        )
+        r.raise_for_status()
+        return (r.json().get("data") or [{}])[0]
+    except (requests.RequestException, ValueError, KeyError, IndexError) as e:
+        print(f"[media] image generation failed: {e}", flush=True)
+        return None
+
+
+def _kie_image_size(size: str) -> str:
+    """OpenAI's WIDTHxHEIGHT -> the aspect ratio string KIE's jobs API wants."""
+    try:
+        w, h = (int(v) for v in size.lower().split("x"))
+    except (ValueError, AttributeError):
+        return "3:2"
+    from math import gcd
+    g = gcd(w, h) or 1
+    w, h = w // g, h // g
+    # Snap to the ratios KIE actually accepts rather than emitting 48:32.
+    best, ratio = "3:2", w / h
+    for cand in ("1:1", "3:2", "2:3", "16:9", "9:16", "4:3", "3:4"):
+        cw, ch = (int(x) for x in cand.split(":"))
+        if abs(cw / ch - ratio) < abs(int(best.split(":")[0]) / int(best.split(":")[1]) - ratio):
+            best = cand
+    return best
+
+
+def _kie_generate(full_prompt: str, timeout: int) -> Optional[str]:
+    """Submit one image job to KIE and block until it has a URL.
+
+    KIE has no OpenAI-compatible /images/generations (it 404s). Everything goes
+    through one asynchronous jobs API: createTask returns a taskId, and
+    recordInfo reports state until `success`, at which point resultJson carries
+    the URLs. Observed cost is ~70s per image, which is why the caller runs
+    these on the sourcing thread pool rather than one at a time.
+    """
+    base = config.IMAGE_API_BASE.rstrip("/")
+    if not base.endswith("/api/v1"):
+        base = "https://api.kie.ai/api/v1"
+    headers = {"Authorization": f"Bearer {config.IMAGE_API_KEY}",
+               "Content-Type": "application/json"}
+    try:
+        r = requests.post(
+            f"{base}/jobs/createTask", headers=headers, timeout=60,
+            json={"model": config.IMAGE_MODEL,
+                  "input": {"prompt": full_prompt,
+                            "image_size": _kie_image_size(config.IMAGE_SIZE)}},
+        )
+        r.raise_for_status()
+        body = r.json()
+        if body.get("code") != 200:
+            print(f"[media] kie createTask refused: {body.get('code')} "
+                  f"{body.get('msg')}", flush=True)
+            return None
+        task_id = (body.get("data") or {}).get("taskId")
+        if not task_id:
+            return None
+    except (requests.RequestException, ValueError) as e:
+        print(f"[media] kie createTask failed: {e}", flush=True)
+        return None
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(5)
+        try:
+            q = requests.get(f"{base}/jobs/recordInfo", headers=headers,
+                             params={"taskId": task_id}, timeout=45).json()
+        except (requests.RequestException, ValueError):
+            continue
+        data = q.get("data") or {}
+        state = (data.get("state") or "").lower()
+        if state == "success":
+            try:
+                urls = json.loads(data.get("resultJson") or "{}").get("resultUrls") or []
+            except ValueError:
+                urls = []
+            return urls[0] if urls else None
+        if state in ("fail", "failed", "error"):
+            print(f"[media] kie image failed: {data.get('failMsg')}", flush=True)
+            return None
+    print(f"[media] kie image timed out after {timeout}s", flush=True)
+    return None
+
+
 def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[MediaAsset]:
     """
     Render an illustration for a beat no real photograph covers.
@@ -328,19 +423,14 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
         return None
     os.makedirs(out_dir, exist_ok=True)
     full_prompt = f"{prompt}. {config.IMAGE_STYLE_SUFFIX}"[:3800]
-    try:
-        r = requests.post(
-            f"{config.IMAGE_API_BASE}/images/generations",
-            headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}",
-                     "Content-Type": "application/json"},
-            json={"model": config.IMAGE_MODEL, "prompt": full_prompt,
-                  "n": 1, "size": config.IMAGE_SIZE},
-            timeout=timeout,
-        )
-        r.raise_for_status()
-        item = (r.json().get("data") or [{}])[0]
-    except (requests.RequestException, ValueError, KeyError, IndexError) as e:
-        print(f"[media] image generation failed for '{prompt[:60]}': {e}", flush=True)
+
+    # KIE speaks its own asynchronous jobs API, not OpenAI's synchronous one.
+    if "kie.ai" in config.IMAGE_API_BASE:
+        url = _kie_generate(full_prompt, timeout)
+        item = {"url": url} if url else None
+    else:
+        item = _openai_generate(full_prompt, timeout)
+    if not item:
         return None
 
     safe = "".join(ch for ch in prompt if ch.isalnum())[:24] or "gen"
@@ -379,17 +469,109 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
 _TALKING_HEAD = re.compile(
     r"\b(interview|podcast|reaction|react|vlog|q&a|ama|explained|"
     r"my thoughts|commentary|discussion|talks? about|responds?|"
-    r"live ?stream|full episode|ep\.? ?\d+|tutorial|how to)\b", re.I)
+    r"live ?stream|full episode|ep\.? ?\d+|tutorial|how to|"
+    # Broadcast desks and commentary: an anchor reading copy, or a creator
+    # reviewing the subject, is not footage OF the subject. Both dominated
+    # the first Yellowstone run.
+    r"news|anchor|press conference|briefing|panel|debate|"
+    r"sits? down with|speaks? (?:out|to)|breaks? (?:down|silence)|"
+    r"on (?:cnn|fox|msnbc|abc|nbc|cbs)|late night|"
+    r"recap|review|ranking|top \d+|theory|theories|"
+    r"everything we know|what happened to|"
+    # Screen captures: gameplay, streams and desktop recordings are
+    # all text-covered UI, whatever the subject.
+    r"gameplay|let's play|lets play|speedrun|playthrough|"
+    r"build guide|tier list|patch notes|season \\d+ ladder|"
+    r"stream (?:highlights|vod)|twitch)\b", re.I)
 
 # Titles that usually mean actual footage of the subject.
 _B_ROLL = re.compile(
     r"\b(drone|aerial|4k|footage|b[- ]?roll|timelapse|time[- ]lapse|"
-    r"flyover|walkthrough|tour|no commentary|ambience|cinematic|"
+    r"flyover|tour|no commentary|ambience|cinematic|"
     r"raw video|caught on|satellite)\b", re.I)
 
 # Search suffix that biases YouTube itself toward footage rather than people
 # discussing the subject. Tried first; the plain query remains the fallback.
 B_ROLL_INTENT = "drone aerial footage"
+
+
+def _gray_frames(path: str, count: int = 4, w: int = 320, h: int = 180):
+    """`count` evenly spaced frames as (h, w) uint8 arrays, [] if unreadable."""
+    try:
+        import numpy as np
+    except ImportError:
+        return []
+    p = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", path,
+         "-vf", f"fps={count}/max(1\\,{max(1, count)}),scale={w}:{h},format=gray",
+         "-frames:v", str(count), "-f", "rawvideo", "-"],
+        capture_output=True, timeout=90)
+    buf = p.stdout or b""
+    n = len(buf) // (w * h)
+    if n == 0:
+        return []
+    import numpy as np
+    return [np.frombuffer(buf[i * w * h:(i + 1) * w * h], dtype="uint8").reshape(h, w)
+            for i in range(n)]
+
+
+def has_burned_captions(path: str, count: int = 4) -> bool:
+    """
+    True when a clip carries text that is not ours: hardsubs, or a UI.
+
+    Two separate failures, one cheap geometric test each:
+
+    * **Subtitles** sit in the lower third and make a tight horizontal band of
+      many strong vertical edges - letter strokes. Scenery rarely does that in
+      a band a few rows tall.
+    * **Screen recordings** (gameplay HUDs, leaderboards, dashboards, slides)
+      spread that same signature across the whole frame. The clip that forced
+      this was a Diablo IV leaderboard with a webcam in the corner: no
+      subtitles at all, and unusable as documentary footage.
+
+    Runs on the downloaded section, because a title never admits to either.
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        return False
+    frames = _gray_frames(path, count)
+    if not frames:
+        return False
+
+    sub_hits = texty_hits = 0
+    for fr in frames:
+        h, w = fr.shape
+        rows = _texty_rows(fr, np)
+        if not rows:
+            continue
+        lower = [r for r in rows if r >= h * 0.62]
+        # a caption band: a short contiguous run down in the lower third
+        if lower and _longest_run(lower) >= 3 and len(lower) <= h * 0.20:
+            sub_hits += 1
+        # a UI: text-like rows scattered over much of the frame height
+        if len(rows) >= h * 0.14 and (max(rows) - min(rows)) > h * 0.45:
+            texty_hits += 1
+
+    need = max(2, len(frames) // 2)
+    return sub_hits >= need or texty_hits >= need
+
+
+def _texty_rows(frame, np) -> list:
+    """Row indices whose strong-vertical-edge count looks like a line of text."""
+    h, w = frame.shape
+    a = frame.astype("int16")
+    edges = np.abs(np.diff(a, axis=1)) > 48
+    per_row = edges.sum(axis=1)
+    return [i for i, c in enumerate(per_row) if c > w * 0.16]
+
+
+def _longest_run(rows: list) -> int:
+    run = best = 1
+    for a, b in zip(rows, rows[1:]):
+        run = run + 1 if b - a <= 2 else 1
+        best = max(best, run)
+    return best
 
 
 def _score_candidate(title: str, duration: float, aspect: float,
@@ -573,9 +755,20 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             if duration:
                 point = min(point, max(5.0, duration - grab - 2))
             path = _yt_fetch(candidate["id"], out_dir, point, grab)
-            if path:
-                return _asset_for(path, query_or_url, grab, require_cc,
-                                  title=candidate["title"])
+            if not path:
+                continue
+            # Burned-in subtitles only become visible after the download, and a
+            # clip carrying them puts two sets of captions on screen at once.
+            if has_burned_captions(path):
+                print(f"[media] hardsubs, skipping: {candidate['title'][:60]}",
+                      flush=True)
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                continue
+            return _asset_for(path, query_or_url, grab, require_cc,
+                              title=candidate["title"])
     return None
 
 
@@ -867,6 +1060,63 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
     return None
 
 
+def clip_quality(path: str) -> tuple:
+    """
+    (ok, reason) for a sourced file. Reason is empty when it passes.
+
+    Everything here is a failure that only shows up once the bytes are on disk,
+    which is why the title heuristics upstream cannot catch it:
+
+    * somebody else's text - hardsubs, or a UI (see has_burned_captions)
+    * near-black - a fade, a night shot, or a download that grabbed the gap
+      between scenes
+    * frozen - a still image uploaded as a video, or a held title card, which
+      reads as a broken player rather than a cut
+    """
+    if not path or not os.path.exists(path):
+        return False, "missing"
+    try:
+        import numpy as np
+    except ImportError:
+        return True, ""
+    frames = _gray_frames(path, 4)
+    if not frames:
+        return False, "unreadable"
+
+    if has_burned_captions(path):
+        return False, "burned-in text or UI"
+
+    dark = sum(1 for f in frames if float(f.mean()) < 26)
+    if dark >= max(2, len(frames) // 2):
+        return False, "near-black"
+
+    if len(frames) >= 2:
+        deltas = [float(np.abs(a.astype("int16") - b.astype("int16")).mean())
+                  for a, b in zip(frames, frames[1:])]
+        if max(deltas) < 1.2:
+            return False, "frozen frame"
+    return True, ""
+
+
+def _asset_ok(asset) -> tuple:
+    """
+    Quality verdict for a MediaAsset.
+
+    Only judges what it can actually open. An asset with nothing on disk is
+    trusted rather than dropped: the inspection is the whole basis of the
+    verdict, and guessing without it would throw away perfectly good remote
+    assets (and every asset in a test that does not touch the filesystem).
+    """
+    if asset is None:
+        return False, "missing"
+    if asset.source == "generated":
+        return True, ""
+    path = getattr(asset, "local_path", "") or ""
+    if not path or not os.path.exists(path):
+        return True, ""
+    return clip_quality(path)
+
+
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, **kwargs) -> List[Optional[MediaAsset]]:
     """
@@ -925,35 +1175,59 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 if on_done:
                     on_done(done, len(jobs))
 
-    # Pass 2: nothing may appear twice.
+    # Pass 2: nothing may appear twice, and nothing unusable may stay.
+    #
+    # Both failures want the same repair - reach further down the same result
+    # list - so they share one loop. A clip that is merely a repeat is better
+    # than black; a clip covered in somebody else's subtitles is not, so an
+    # unusable shot is dropped even when there is nothing to put in its place.
     used: set = set()
-    duplicates = 0
+    duplicates = rejected = 0
     for job, nth in plan:
         i = job["index"]
         asset = results[i]
-        if asset and asset.identity not in used:
+        bad_reason = ""
+        if asset:
+            ok, why = _asset_ok(asset)
+            if not ok:
+                bad_reason = why
+                rejected += 1
+                print(f"[media] scene {i + 1}: dropping clip ({why})", flush=True)
+
+        if asset and not bad_reason and asset.identity not in used:
             used.add(asset.identity)
             continue
-        if asset:
+        if asset and not bad_reason:
             duplicates += 1
+
         replacement = None
         # Reach progressively further down the result list.
         for attempt in range(1, 4):
             try:
-                replacement = source_for_segment(
+                candidate = source_for_segment(
                     job["query"], float(job.get("seconds") or 0), work_dir,
                     visual_type=job.get("visual_type", "footage"),
                     nth=nth + attempt, used=used,
                     fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
                     **kwargs)
             except Exception:  # noqa: BLE001
-                replacement = None
-            if replacement and replacement.identity not in used:
-                break
-            replacement = None
+                candidate = None
+            if candidate and candidate.identity not in used:
+                ok, why = _asset_ok(candidate)
+                if ok:
+                    replacement = candidate
+                    break
+                print(f"[media] scene {i + 1}: replacement also bad ({why})",
+                      flush=True)
         if replacement:
             results[i] = replacement
             used.add(replacement.identity)
+            if bad_reason:
+                print(f"[media] scene {i + 1}: replaced", flush=True)
+        elif bad_reason:
+            # Nothing clean to put here. Leaving it empty lets the timeline
+            # hold the previous shot instead of showing the bad one.
+            results[i] = None
         elif asset:
             # Nothing else available. Keep the repeat rather than rendering
             # black, but say so — the editor can swap it with `resource`.
@@ -963,4 +1237,6 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
 
     if duplicates:
         print(f"[media] resolved {duplicates} duplicate shot(s)", flush=True)
+    if rejected:
+        print(f"[media] rejected {rejected} unusable clip(s)", flush=True)
     return results

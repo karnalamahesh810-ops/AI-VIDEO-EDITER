@@ -1,0 +1,144 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>render preview</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.5 system-ui, sans-serif; background: #0d0d10; color: #eee;
+         margin: 0; padding: 22px; }
+  header { max-width: 1400px; margin: 0 auto 22px; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 14px; }
+  .track { height: 22px; border-radius: 11px; background: #26262e; overflow: hidden; }
+  .fill { height: 100%; width: 0; border-radius: 11px; background: #FFD400;
+          transition: width .4s ease; }
+  .row { display: flex; justify-content: space-between; margin-top: 8px;
+         font-variant-numeric: tabular-nums; }
+  .muted { color: #9a9aa8; }
+  .grid { max-width: 1400px; margin: 0 auto;
+          display: grid; gap: 14px;
+          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .card { background: #16161c; border: 1px solid #26262e; border-radius: 10px;
+          overflow: hidden; }
+  .card video, .card img { width: 100%; aspect-ratio: 16/9; object-fit: cover;
+                           display: block; background: #000; cursor: pointer; }
+  .meta { padding: 9px 11px; }
+  .name { font-size: 12px; color: #c8c8d4; word-break: break-all; }
+  .sub { font-size: 11px; margin-top: 4px; }
+  .badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px;
+           background: #2c2c36; color: #b9b9c6; margin-right: 5px; }
+  .yt { background: #3a1f22; color: #ff8d95; }
+  .gen { background: #2a2340; color: #b9a6ff; }
+  .wiki { background: #16303a; color: #7fd4ef; }
+  .quote { font-size: 12px; color: #dcdce4; margin-top: 6px; font-style: italic; }
+  #final { max-width: 1400px; margin: 0 auto 22px; display: none; }
+  #final video { width: 100%; border-radius: 10px; }
+</style>
+
+<header>
+  <h1>ThumbGenius render</h1>
+  <div class="track"><div class="fill" id="fill"></div></div>
+  <div class="row">
+    <span class="muted" id="step">starting...</span>
+    <span id="pct">0%</span>
+  </div>
+  <div class="row">
+    <span class="muted" id="count">no clips yet</span>
+    <span class="muted" id="elapsed"></span>
+  </div>
+</header>
+
+<div id="final"><video controls></video></div>
+<div class="grid" id="grid"></div>
+
+<script>
+let scenes = {};        // filename -> {text, query, source}
+let shown = new Set();
+let runStart = null;    // unix seconds; clips older than this are earlier runs
+
+async function loadScenes() {
+  // timeline.json only exists once planning finishes, but when it does it says
+  // which narration line each clip was chosen for - the thing worth checking.
+  for (const f of ['scenes.json', 'timeline.json']) {
+    try {
+      const r = await fetch(f + '?t=' + Date.now());
+      if (!r.ok) continue;
+      const j = await r.json();
+      const list = j.scenes || j;
+      if (!Array.isArray(list)) continue;
+      for (const s of list) {
+        const m = s.media || s;
+        const u = (m.url || m.local_path || m.file || '') + '';
+        const base = u.split(/[\\/]/).pop();
+        if (base) scenes[base] = {
+          text: s.text || s.narration || '',
+          query: m.query || s.query || '',
+          source: m.source || ''
+        };
+      }
+    } catch (e) {}
+  }
+}
+
+async function listMedia() {
+  // preview_server.py adds mtimes, which is what lets us hide the clips left
+  // behind by earlier runs in this same directory.
+  try {
+    const items = await (await fetch('index.json?t=' + Date.now())).json();
+    const fresh = runStart ? items.filter(i => i.mtime >= runStart - 120) : items;
+    return fresh.map(i => i.name);
+  } catch (e) { return []; }
+}
+
+function card(file) {
+  const info = scenes[file] || {};
+  const isVid = /\.(mp4|webm|mov)$/i.test(file);
+  const el = document.createElement('div');
+  el.className = 'card';
+  const src = './' + file;
+  const cls = info.source === 'generated' ? 'gen'
+            : info.source === 'youtube' ? 'yt'
+            : info.source ? 'wiki' : '';
+  el.innerHTML = `
+    ${isVid
+      ? `<video src="${src}" muted loop preload="metadata"
+           onmouseover="this.play()" onmouseout="this.pause()"
+           onclick="this.muted=!this.muted;this.play()"></video>`
+      : `<img src="${src}" loading="lazy">`}
+    <div class="meta">
+      <div class="name">${file}</div>
+      <div class="sub">
+        ${info.source ? `<span class="badge ${cls}">${info.source}</span>` : ''}
+        ${info.query ? `<span class="muted">${info.query}</span>` : ''}
+      </div>
+      ${info.text ? `<div class="quote">&ldquo;${info.text}&rdquo;</div>` : ''}
+    </div>`;
+  return el;
+}
+
+async function tick() {
+  try {
+    const j = await (await fetch('progress.json?t=' + Date.now())).json();
+    fill.style.width = j.percent + '%';
+    pct.textContent = j.percent + '%';
+    step.textContent = j.step + (j.eta ? '  -  ' + j.eta + ' left' : '');
+    elapsed.textContent = j.elapsed ? Math.round(j.elapsed / 60) + 'm elapsed' : '';
+    if (runStart === null) runStart = Math.floor(Date.now() / 1000) - (j.elapsed || 0);
+    if (j.done && j.video) {
+      const box = document.getElementById('final');
+      const v = box.querySelector('video');
+      if (!v.src) { v.src = j.video; box.style.display = 'block'; }
+    }
+  } catch (e) {}
+
+  await loadScenes();
+  const files = await listMedia();
+  count.textContent = files.length + ' clips sourced';
+  for (const f of files) {
+    if (shown.has(f)) continue;
+    shown.add(f);
+    grid.prepend(card(f));
+  }
+  setTimeout(tick, 4000);
+}
+tick();
+</script>
