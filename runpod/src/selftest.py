@@ -55,7 +55,7 @@ _TEMPLATE_SAMPLES = [
 
 
 def _run(cmd, timeout=180):
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
 
 
 def _synth_words(text: str, wps: float = 2.7):

@@ -443,7 +443,7 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
         cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
 
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return []
     if looks_blocked(p.stderr):
@@ -493,7 +493,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
         cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return ""
     if looks_blocked(p.stderr):

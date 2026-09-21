@@ -66,7 +66,7 @@ def render(props: dict, out_path: str, composition: str = "Main",
             cmd.append(f"--concurrency={concurrency}")
 
         p = subprocess.run(
-            cmd, cwd=config.REMOTION_DIR, capture_output=True, text=True,
+            cmd, cwd=config.REMOTION_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=timeout,
         )
 
@@ -88,7 +88,7 @@ def probe_duration(media_path: str) -> float:
         p = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", media_path],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
         )
         return float((p.stdout or "0").strip())
     except FileNotFoundError:
