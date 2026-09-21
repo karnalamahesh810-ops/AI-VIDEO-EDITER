@@ -1,6 +1,17 @@
 export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right";
 
 /**
+ * The grade applied to a scene's footage.
+ *
+ * Borrowed clips come from different cameras, decades and upload qualities, so
+ * a shared grade is what makes them read as one film. `vintage` and `archival`
+ * additionally mark a beat as the past without narrating it.
+ *
+ * Must match TREATMENTS in src/director.py; a test asserts they agree.
+ */
+export type Treatment = "none" | "film" | "vintage" | "archival";
+
+/**
  * Every animation template the renderer can draw.
  *
  * This list is the renderer's half of a three-way contract: it must match
@@ -48,6 +59,8 @@ export interface Scene {
   visualType?: "footage" | "image";
   media: SceneMedia;
   motion: Motion;
+  /** Footage grade — film grain, vintage warmth, archival black and white. */
+  treatment?: Treatment;
   transition: "none" | "fade";
   words: SceneWord[];
   /** Set when the media is generated or unlicensed and a human should look. */

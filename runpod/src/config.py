@@ -138,6 +138,12 @@ DEFAULT_HEIGHT = int(os.getenv("DEFAULT_HEIGHT", "1080"))
 # instead of ~430 for a 21-minute video — which halves sourcing time, proxy
 # bandwidth, and how often a poorly-matched clip appears. Set these back to
 # 1.4 / 2.6 / 5.0 for the faster VidRush cutting.
+# Base footage grade. Sourced clips come from different cameras, decades and
+# upload qualities, so one shared grade is what makes them cut together as a
+# single film. Era beats override it (director.pick_treatment). "none" is a
+# clean passthrough.
+SCENE_TREATMENT = os.getenv("SCENE_TREATMENT", "film").strip().lower()
+
 MIN_SCENE_SECONDS = float(os.getenv("MIN_SCENE_SECONDS", "5.0"))
 TARGET_SCENE_SECONDS = float(os.getenv("TARGET_SCENE_SECONDS", "7.0"))
 MAX_SCENE_SECONDS = float(os.getenv("MAX_SCENE_SECONDS", "9.0"))

@@ -107,6 +107,63 @@ class TemplateContract(unittest.TestCase):
         # timeline.build looks this up; a miss silently falls back to 3.5s.
         self.assertEqual(set(timeline._OVERLAY_SECONDS), director.TEMPLATES)
 
+    def _ts_treatments(self):
+        with open(os.path.join(REMOTION, "types.ts"), encoding="utf-8") as fh:
+            src = fh.read()
+        block = re.search(r"export type Treatment\s*=(.*?);", src, re.S)
+        self.assertIsNotNone(block, "Treatment union not found in types.ts")
+        return set(re.findall(r'"([a-z-]+)"', block.group(1)))
+
+    def test_python_and_types_agree_on_treatments(self):
+        # Same contract as the overlay templates: a grade the renderer does not
+        # know renders as an ungraded clip, silently, mid-render.
+        self.assertEqual(director.TREATMENTS, self._ts_treatments())
+
+    def test_film_layer_handles_every_treatment(self):
+        path = os.path.join(REMOTION, "components", "FilmLayer.tsx")
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        handled = set(re.findall(r'case "([a-z-]+)":', src)) | {"none"}
+        self.assertEqual(director.TREATMENTS, handled)
+
+
+class Treatments(unittest.TestCase):
+    """
+    The grade is chosen from what the beat is talking about.
+
+    A shared base makes borrowed clips cut together as one film; the era grades
+    are how the picture says "this is the past" without the narration doing it.
+    """
+
+    def test_a_spoken_decade_reads_as_archival(self):
+        self.assertEqual(
+            director.pick_treatment("He acted through the 1990s and 2000s."),
+            "archival")
+
+    def test_a_recent_year_keeps_the_base_grade(self):
+        self.assertEqual(
+            director.pick_treatment("On a Sunday night in November of 2024."),
+            "film")
+
+    def test_the_older_year_wins_when_a_beat_spans_eras(self):
+        # "from 1996 to 2021" is a beat about the past, not the present.
+        self.assertEqual(
+            director.pick_treatment("From 1996 to 2021 the ranch changed hands."),
+            "archival")
+
+    def test_cues_work_without_any_year(self):
+        self.assertEqual(
+            director.pick_treatment("Archive footage shows the ranch."), "archival")
+        self.assertEqual(
+            director.pick_treatment("Back then nobody thought it would work."),
+            "vintage")
+
+    def test_every_choice_is_one_the_renderer_knows(self):
+        samples = ["In 1975 it began.", "Today it ended.", "Back then.",
+                   "Archival newsreel.", "Nothing notable here at all."]
+        for text in samples:
+            self.assertIn(director.pick_treatment(text), director.TREATMENTS)
+
 
 # --------------------------------------------------------------------------- #
 # Pacing — the VidRush editing signature

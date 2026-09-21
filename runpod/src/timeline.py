@@ -107,6 +107,7 @@ def build(segments: List[Segment], shots: List[dict],
             "visualType": shot.get("visualType", "footage"),
             "media": media,
             "motion": motion,
+            "treatment": shot.get("treatment", "film"),
             "transition": "fade" if i > 0 else "none",
             "words": ([{"text": w.text, "start": w.start, "end": w.end}
                        for w in seg.words] if keep_captions else []),

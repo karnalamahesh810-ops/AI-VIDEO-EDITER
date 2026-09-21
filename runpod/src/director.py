@@ -38,6 +38,52 @@ TEMPLATES = {
     "arrow", "split",
 }
 
+# Footage grades the renderer can apply. Kept in sync with `Treatment` in
+# remotion/src/types.ts and the switch in FilmLayer.tsx; a test asserts they
+# agree, for the same reason the overlay templates do.
+TREATMENTS = {"none", "film", "vintage", "archival"}
+
+# Talk that means "this beat is the past", independent of any year.
+_ARCHIVAL_CUES = re.compile(
+    r"\b(archive|archival|newsreel|black and white|decades ago|"
+    r"a century|last century|footage from the|at the time it was|"
+    r"back in the day|historic|historical)\b", re.I)
+_VINTAGE_CUES = re.compile(
+    r"\b(years ago|originally|in those days|back then|early days|"
+    r"the beginning|first season|used to be|once was|nostalg)\b", re.I)
+
+# Decade forms matter as much as exact years: documentary narration says
+# "through the 1990s" far more often than it says "in 1994".
+_YEAR = re.compile(r"\b(1[89]\d{2}|20[0-2]\d)s?\b")
+
+
+def pick_treatment(text: str, base: str = "") -> str:
+    """
+    The grade for one beat.
+
+    A shared base grade is what makes a set of borrowed clips read as one film
+    rather than a scrapbook; the era grades are how a documentary says "this
+    part is the past" without narrating it. A spoken year is the strongest
+    signal available and costs nothing to read, so it is checked first.
+    """
+    base = base or config.SCENE_TREATMENT
+    if base not in TREATMENTS:
+        base = "film"
+
+    years = [int(y) for y in _YEAR.findall(text or "")]
+    if years:
+        oldest = min(years)
+        if oldest <= 1999:
+            return "archival"
+        if oldest <= 2012:
+            return "vintage"
+    if _ARCHIVAL_CUES.search(text or ""):
+        return "archival"
+    if _VINTAGE_CUES.search(text or ""):
+        return "vintage"
+    return base
+
+
 # Templates whose whole point is a number or a list of them.
 _NUMERIC = {"stat", "bar-chart", "comparison"}
 
@@ -408,6 +454,12 @@ def plan(segments: List[Segment], title: str = "", report=None,
         warnings.extend(_resolve_maps(segments, shots))
 
     _thin_overlays(segments, shots)
+
+    # Grade every beat from what it is talking about. Done after the AI pass so
+    # a model that set one explicitly keeps it.
+    for shot, seg in zip(shots, segments):
+        if not shot.get("treatment"):
+            shot["treatment"] = pick_treatment(seg.text)
 
     kind = "ai" if enriched == len(segments) else "mixed" if enriched else "rules"
     return shots, kind, warnings

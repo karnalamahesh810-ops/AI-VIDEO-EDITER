@@ -4,6 +4,7 @@ import {
   useCurrentFrame, useVideoConfig,
 } from "remotion";
 import { fadeRange } from "./layout";
+import { FilmLayer, cssFilterFor } from "./FilmLayer";
 import type { Scene } from "../types";
 
 /**
@@ -15,7 +16,7 @@ import type { Scene } from "../types";
 export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
-  const { media, motion } = scene;
+  const { media, motion, treatment } = scene;
 
   const opacity = interpolate(
     frame,
@@ -47,6 +48,7 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
     height: "100%",
     objectFit: "cover",
     transform,
+    filter: cssFilterFor(treatment),
   };
 
   return (
@@ -56,6 +58,7 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
       ) : (
         <Img src={media.url} style={fill} />
       )}
+      <FilmLayer treatment={treatment} />
     </AbsoluteFill>
   );
 };
