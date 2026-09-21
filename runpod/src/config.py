@@ -91,13 +91,21 @@ DEFAULT_FPS = int(os.getenv("DEFAULT_FPS", "30"))
 DEFAULT_WIDTH = int(os.getenv("DEFAULT_WIDTH", "1920"))
 DEFAULT_HEIGHT = int(os.getenv("DEFAULT_HEIGHT", "1080"))
 
-# Scene pacing. These defaults are measured from the VidRush reference renders
-# (4 videos, 240s sample each): 16.8-21.8 cuts/min, median shot 2.56-3.33s,
-# ~70% of shots land in the 2-4s band. One visual per spoken clause.
-# MIN is deliberately below 2s: ~20-29% of reference shots are sub-2s punches.
-MIN_SCENE_SECONDS = float(os.getenv("MIN_SCENE_SECONDS", "1.4"))
-TARGET_SCENE_SECONDS = float(os.getenv("TARGET_SCENE_SECONDS", "2.6"))
-MAX_SCENE_SECONDS = float(os.getenv("MAX_SCENE_SECONDS", "5.0"))
+# Scene pacing, measured from a finished GoMotion project (197 clips, 22:59):
+# 8.7 cuts/min, median clip 7.00s, and 92% of clips inside a 6.5-7.5s band.
+# That is a near-uniform ~7s grid, not one visual per spoken clause.
+#
+# This replaces the earlier VidRush-derived defaults (2.6s target, 16.8-21.8
+# cuts/min). Both were measured from real output; they are simply different
+# house styles, and the slower one is the one Mahesh judged good.
+#
+# Halving the cut rate also halves the clip count for a given runtime — ~191
+# instead of ~430 for a 21-minute video — which halves sourcing time, proxy
+# bandwidth, and how often a poorly-matched clip appears. Set these back to
+# 1.4 / 2.6 / 5.0 for the faster VidRush cutting.
+MIN_SCENE_SECONDS = float(os.getenv("MIN_SCENE_SECONDS", "5.0"))
+TARGET_SCENE_SECONDS = float(os.getenv("TARGET_SCENE_SECONDS", "7.0"))
+MAX_SCENE_SECONDS = float(os.getenv("MAX_SCENE_SECONDS", "9.0"))
 
 # Contact address used in the User-Agent for Wikimedia/Nominatim, both of which
 # require identifying your client in their terms of use.

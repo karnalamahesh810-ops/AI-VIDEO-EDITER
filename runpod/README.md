@@ -16,26 +16,38 @@ narration audio
 
 ## Why it cuts the way it does
 
-Pacing defaults are **measured from four VidRush reference renders** (240s sample each):
+Two real products, two different house styles, both measured from finished output:
 
-| Reference video | Cuts/min | Median shot |
-|---|---|---|
-| Colombia 7.4 Quake | 17.0 | 3.33s |
-| 7 Cities / Yellowstone | 21.8 | 2.56s |
-| Loneliest Road | 17.8 | 3.30s |
-| Death Valley → Vegas | 16.8 | 3.29s |
+| | cuts/min | median clip | clips per 21 min |
+|---|---|---|---|
+| **GoMotion** (current default) | **8.7** | **7.00s** | ~197 |
+| VidRush | 16.8–21.8 | 2.56–3.33s | ~430 |
 
-All were 1920×1080 @ 30fps. The pattern: **one visual per spoken clause**, which lands ~3s.
-`src/transcribe.py` reproduces it by cutting on sentence punctuation, then soft punctuation,
-then natural breaths, then a stretch limit. The band is pinned by a test — see
-`tests/test_pipeline.py::Pacing`.
+The GoMotion numbers come from reading a finished 22:59 project in its editor: 197 clips,
+mode exactly 7.0s across 117 of them, and **92% inside a 6.5–7.5s band**. That is a near-uniform
+~7-second grid — not one visual per spoken clause, which is what the VidRush renders do and what
+this worker originally copied.
 
-Tune via env vars: `MIN_SCENE_SECONDS` (1.4), `TARGET_SCENE_SECONDS` (2.6), `MAX_SCENE_SECONDS` (5.0).
+The default is now the slower cut, for three reasons beyond taste. It halves the clip count for a
+given runtime, which halves sourcing time and proxy bandwidth; it halves how often a
+poorly-matched clip appears; and it gives each shot time to register instead of cutting away
+every three seconds.
 
-Note the asymmetry the reference renders show and this worker copies: **supporting shots are
-short, explanatory graphics are long.** A bar chart holds 9s and a map 8s even when the beat
-that triggered them is 2.6s, because a chart cut after 2.6s is a chart nobody can read.
-Durations live in `timeline._OVERLAY_SECONDS`.
+Both styles are one config change apart, and a test asserts the faster one stays reachable:
+
+```
+MIN_SCENE_SECONDS=5.0  TARGET_SCENE_SECONDS=7.0  MAX_SCENE_SECONDS=9.0   # GoMotion (default)
+MIN_SCENE_SECONDS=1.4  TARGET_SCENE_SECONDS=2.6  MAX_SCENE_SECONDS=5.0   # VidRush
+```
+
+`src/transcribe.py` still cuts on sentence punctuation, then soft punctuation, then natural
+breaths, then a stretch limit — the targets simply moved. Narration does not divide evenly into a
+grid, so the band is wider than GoMotion's; see `tests/test_pipeline.py::Pacing`.
+
+Note the asymmetry both references share and this worker copies: **supporting shots are short,
+explanatory graphics are long.** A bar chart holds 9s and a map 8s even when the beat that
+triggered them is shorter, because a chart cut early is a chart nobody can read. Durations live in
+`timeline._OVERLAY_SECONDS`.
 
 ## Sourcing: no stock
 

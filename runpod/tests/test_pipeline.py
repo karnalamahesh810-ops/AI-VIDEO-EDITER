@@ -113,9 +113,15 @@ class TemplateContract(unittest.TestCase):
 
 class Pacing(unittest.TestCase):
     """
-    Cut rate is the thing being reproduced: 16.8-21.8 cuts/min, median ~3s,
-    measured from four reference renders. Drifting out of that band means the
-    output stops looking like the reference, so it is pinned by a test.
+    Cut rate is the editing signature, so it is pinned by a test.
+
+    The target changed once already. It was 16.8-21.8 cuts/min from four
+    VidRush renders; it is now ~8.7 cuts/min with a median 7.0s clip,
+    measured from a finished GoMotion project (197 clips over 22:59, 92% of
+    them inside a 6.5-7.5s band). Both numbers came from real output — they
+    are different house styles, and the slower one is the one that was
+    judged good. The band here is deliberately wide because narration does
+    not divide evenly into a grid.
     """
 
     NARRATION = (
@@ -132,8 +138,30 @@ class Pacing(unittest.TestCase):
         segments = segment_words(words_from(self.NARRATION))
         duration = segments[-1].end
         cpm = len(segments) / (duration / 60)
-        self.assertGreaterEqual(cpm, 15.0, f"too slow: {cpm:.1f} cuts/min")
-        self.assertLessEqual(cpm, 24.0, f"too fast: {cpm:.1f} cuts/min")
+        self.assertGreaterEqual(cpm, 6.0, f"too slow: {cpm:.1f} cuts/min")
+        self.assertLessEqual(cpm, 12.0, f"too fast: {cpm:.1f} cuts/min")
+
+    def test_clips_cluster_around_the_target_length(self):
+        """GoMotion puts 92% of clips in a 6.5-7.5s band; aim near the target."""
+        segments = segment_words(words_from(self.NARRATION))
+        import statistics
+        median = statistics.median([s.duration for s in segments])
+        self.assertAlmostEqual(median, config.TARGET_SCENE_SECONDS, delta=2.0,
+                               msg=f"median clip {median:.2f}s")
+
+    def test_pacing_is_still_tunable_back_to_the_faster_style(self):
+        """The VidRush cutting must remain reachable, not be designed out."""
+        import importlib
+        from src import config as cfg
+        saved = (cfg.MIN_SCENE_SECONDS, cfg.TARGET_SCENE_SECONDS, cfg.MAX_SCENE_SECONDS)
+        cfg.MIN_SCENE_SECONDS, cfg.TARGET_SCENE_SECONDS, cfg.MAX_SCENE_SECONDS = 1.4, 2.6, 5.0
+        try:
+            segments = segment_words(words_from(self.NARRATION))
+            cpm = len(segments) / (segments[-1].end / 60)
+            self.assertGreater(cpm, 14.0, f"fast style unreachable: {cpm:.1f}")
+        finally:
+            (cfg.MIN_SCENE_SECONDS, cfg.TARGET_SCENE_SECONDS,
+             cfg.MAX_SCENE_SECONDS) = saved
 
     def test_no_scene_is_shorter_than_the_floor(self):
         segments = segment_words(words_from(self.NARRATION))
