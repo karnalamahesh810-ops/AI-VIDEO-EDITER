@@ -164,9 +164,28 @@ def _rule_shot(seg: Segment, index: int, title: str) -> dict:
     again" is meaningless to a search engine on its own; with the project title
     in front it resolves to the actual subject.
     """
-    query = f"{title} {keywords_for(seg, max_terms=7)}".strip()[:240]
+    # Four terms, not seven. A search engine given "Lake Powell houseboat
+    # trailer concrete ramp tires downhill" matches nothing at all — measured
+    # on real narration, where a 7-term query left 30 of 55 scenes with no
+    # media. Fallbacks relax the query step by step so a scene ends up with a
+    # broader but still on-topic visual rather than a black frame.
+    terms = keywords_for(seg, max_terms=4)
+    query = f"{title} {terms}".strip()[:240]
+    fallbacks = []
+    narrow = terms.split()
+    if len(narrow) > 2:
+        fallbacks.append(f"{title} {' '.join(narrow[:2])}".strip()[:240])
+    if title:
+        fallbacks.append(title[:240])
+    elif narrow:
+        fallbacks.append(narrow[0])
+    # Drop repeats while keeping order.
+    seen_q = {query}
+    fallbacks = [q for q in fallbacks if q and not (q in seen_q or seen_q.add(q))]
+
     text = seg.text.strip()
-    shot = {"query": query, "visualType": "footage", "overlay": None}
+    shot = {"query": query, "fallbacks": fallbacks,
+            "visualType": "footage", "overlay": None}
 
     if index == 0 and title:
         shot["overlay"] = {"type": "chapter", "text": title[:90]}
@@ -270,6 +289,9 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
             seen.add(idx)
             shots[idx] = {
                 "query": query,
+                # Keep the rule planner's broader fallbacks: a model query can
+                # be just as unsearchable as a long rule-built one.
+                "fallbacks": shots[idx].get("fallbacks", []),
                 "visualType": "image" if shot.get("visualType") == "image" else "footage",
                 "overlay": validate_overlay(shot.get("overlay")),
             }

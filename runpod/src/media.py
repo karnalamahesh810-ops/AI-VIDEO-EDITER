@@ -470,9 +470,31 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
 
 def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        visual_type: str = "footage", nth: int = 0,
-                       used: set = None,
+                       used: set = None, fallbacks: List[str] = None,
                        allow_youtube: bool = None, allow_stock: bool = None,
                        require_cc: bool = None) -> Optional[MediaAsset]:
+    """
+    Source one scene, relaxing the query until something is found.
+
+    The specific phrasing is tried first because it gives the most relevant
+    visual; each fallback is broader. Without this a precise query that
+    matches nothing leaves the scene black, which is far worse than a
+    slightly more general shot of the right subject.
+    """
+    for attempt in [query] + list(fallbacks or []):
+        got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
+                          nth=nth, used=used, allow_youtube=allow_youtube,
+                          allow_stock=allow_stock, require_cc=require_cc)
+        if got:
+            return got
+    return None
+
+
+def _source_one(query: str, seconds: float, work_dir: str, *,
+                visual_type: str = "footage", nth: int = 0,
+                used: set = None,
+                allow_youtube: bool = None, allow_stock: bool = None,
+                require_cc: bool = None) -> Optional[MediaAsset]:
     """
     Find and download one visual for a scene.
 
@@ -568,7 +590,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         try:
             return source_for_segment(
                 job["query"], float(job.get("seconds") or 0), work_dir,
-                visual_type=job.get("visual_type", "footage"), nth=nth, **kwargs)
+                visual_type=job.get("visual_type", "footage"), nth=nth,
+                fallbacks=job.get("fallbacks"), **kwargs)
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{job['query']}' failed: {e}", flush=True)
             return None
@@ -604,7 +627,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 replacement = source_for_segment(
                     job["query"], float(job.get("seconds") or 0), work_dir,
                     visual_type=job.get("visual_type", "footage"),
-                    nth=nth + attempt, used=used, **kwargs)
+                    nth=nth + attempt, used=used,
+                    fallbacks=job.get("fallbacks"), **kwargs)
             except Exception:  # noqa: BLE001
                 replacement = None
             if replacement and replacement.identity not in used:

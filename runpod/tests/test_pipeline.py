@@ -891,5 +891,73 @@ class NoDuplicateShots(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--playlist-items") + 1], "4-15")
 
 
+class QueryRelaxation(unittest.TestCase):
+    """
+    A query too specific to match anything is worse than a broader one.
+
+    Measured on real narration: a 7-term query left 30 of 55 scenes with no
+    media at all, which renders as black frames. Each shot now carries
+    progressively broader fallbacks, ending at the project title.
+    """
+
+    def test_fallbacks_get_broader_and_end_at_the_title(self):
+        s = seg("The concrete ramp under his tires runs downhill and stops.", 0, 3)
+        shots, _, _ = director.plan([s], title="Lake Powell", allow_maps=False)
+        query, fallbacks = shots[0]["query"], shots[0]["fallbacks"]
+        self.assertTrue(query.startswith("Lake Powell"))
+        self.assertTrue(fallbacks, "a specific query needs a way down")
+        self.assertEqual(fallbacks[-1], "Lake Powell")
+        # Strictly shorter each step.
+        lengths = [len(query.split())] + [len(f.split()) for f in fallbacks]
+        self.assertEqual(lengths, sorted(lengths, reverse=True))
+
+    def test_the_primary_query_stays_short_enough_to_match(self):
+        s = seg("The concrete ramp under his tires runs downhill and simply stops "
+                "past gravel and dried mud sloping toward the shoreline.", 0, 4)
+        shots, _, _ = director.plan([s], title="Lake Powell", allow_maps=False)
+        self.assertLessEqual(len(shots[0]["query"].split()), 7)
+
+    def test_no_duplicate_fallbacks(self):
+        s = seg("Powell dropped.", 0, 3)
+        shots, _, _ = director.plan([s], title="Lake Powell", allow_maps=False)
+        all_q = [shots[0]["query"]] + shots[0]["fallbacks"]
+        self.assertEqual(len(all_q), len(set(all_q)))
+
+    def test_sourcing_tries_each_fallback_in_order_and_stops_on_a_hit(self):
+        tried = []
+
+        def fake_one(query, seconds, work_dir, **kw):
+            tried.append(query)
+            return asset() if query == "Lake Powell" else None
+
+        original = media._source_one
+        media._source_one = fake_one
+        try:
+            got = media.source_for_segment(
+                "Lake Powell concrete ramp under tires", 3.0, "/tmp/x",
+                fallbacks=["Lake Powell concrete ramp", "Lake Powell"])
+        finally:
+            media._source_one = original
+        self.assertIsNotNone(got)
+        self.assertEqual(tried, ["Lake Powell concrete ramp under tires",
+                                 "Lake Powell concrete ramp", "Lake Powell"])
+
+    def test_a_hit_on_the_specific_query_never_falls_back(self):
+        tried = []
+
+        def fake_one(query, seconds, work_dir, **kw):
+            tried.append(query)
+            return asset()
+
+        original = media._source_one
+        media._source_one = fake_one
+        try:
+            media.source_for_segment("specific", 3.0, "/tmp/x",
+                                     fallbacks=["broad", "broader"])
+        finally:
+            media._source_one = original
+        self.assertEqual(tried, ["specific"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

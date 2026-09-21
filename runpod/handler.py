@@ -167,7 +167,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     report(f"Sourcing media for {total} scenes", 22)
     media.reset_cache()
     jobs = [{"index": i, "query": shot["query"], "seconds": seg.duration,
-             "visual_type": shot.get("visualType", "footage")}
+             "visual_type": shot.get("visualType", "footage"),
+             "fallbacks": shot.get("fallbacks") or []}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 
     last_pct = [22]
