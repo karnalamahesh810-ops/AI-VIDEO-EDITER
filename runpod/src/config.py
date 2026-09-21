@@ -2,6 +2,36 @@
 import os
 
 
+def _load_dotenv() -> None:
+    """Fill gaps in the environment from a local .env, for runs off RunPod.
+
+    On RunPod the endpoint supplies every variable and this finds no file. On a
+    dev box there is no endpoint, so without this a configured YTDLP_PROXY sits
+    in .env doing nothing and sourcing quietly falls back to the bare IP —
+    which looks like working code right up until it runs in production.
+
+    Real environment variables always win; this only fills what is unset.
+    """
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for path in (os.path.join(here, ".env"),
+                 os.path.join(os.path.dirname(here), ".env")):
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+        except OSError:
+            pass
+
+
+_load_dotenv()
+
+
 def _flag(name: str, default: bool = False) -> bool:
     return os.getenv(name, "1" if default else "0").strip().lower() in {"1", "true", "yes", "on"}
 

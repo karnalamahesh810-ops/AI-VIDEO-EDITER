@@ -72,6 +72,31 @@ is Content ID food. Turn it off only for footage you own.
 Pexels/Pixabay adapters are still in `media.py` as an escape hatch behind `ALLOW_STOCK=1`;
 `timeline.validate()` rejects stock sources unless that is set.
 
+### YouTube refuses datacenter IPs — `YTDLP_PROXY` is not optional
+
+Sourcing that works perfectly on a home connection returns **nothing at all** from a RunPod
+worker, because serverless workers get datacenter IPs and YouTube answers those with a block.
+It is not always the famous "Sign in to confirm you're not a bot": the message observed from a
+worker was *"The following content is not available on this app"*, which reads like a missing
+video rather than a refused client. `media.looks_blocked()` matches the whole family
+(`BLOCK_SIGNS`) so the log says *blocked* instead of silently reporting "no results" — that
+ambiguity is the entire reason the check exists.
+
+Set a residential or ISP proxy:
+
+```
+YTDLP_PROXY=http://user:pass@host:10001,http://user:pass@host:10002,http://user:pass@host:10003
+```
+
+A comma-separated list is rotated round-robin per request (`media._next_proxy`) so one address
+does not absorb every download and get flagged. Check what you are actually buying before
+listing ports — on Decodo ISP plans the ports cycle through a small pool of static IPs, so
+`:10001` and `:10004` can be the same address and listing both buys nothing.
+
+Locally there is no RunPod endpoint to supply the variable, so `config._load_dotenv()` fills it
+from a `.env` at the repo root (real environment variables still win). `.env` is gitignored;
+keep proxy credentials out of the tree.
+
 ## Animation templates
 
 Fourteen, all in `remotion/src/components/`:
@@ -172,6 +197,8 @@ UI show where every clip came from — so you can see Content ID exposure before
 | `IMAGE_API_KEY` | recommended | enables generated stills; OpenAI-compatible |
 | `IMAGE_API_BASE` / `IMAGE_MODEL` | no | default OpenAI / `gpt-image-1` |
 | `DIRECTOR_API_KEY` / `DIRECTOR_API_BASE` / `DIRECTOR_MODEL` | recommended | enables the AI director |
+| `YTDLP_PROXY` | **yes, in production** | residential proxy for yt-dlp; one url or a comma-separated list, rotated per request. See below |
+| `YTDLP_COOKIES_FILE` | no | path to a cookies.txt; helps with the same check |
 | `ALLOW_YOUTUBE` / `REQUIRE_CC` | no | both default on |
 | `ALLOW_STOCK` | no | default off; also relaxes `timeline.validate()` |
 | `WHISPER_MODEL` | no | `base` on CPU, `small`/`medium` on GPU |
