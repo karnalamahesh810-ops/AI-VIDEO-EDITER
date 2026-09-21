@@ -127,6 +127,39 @@ class TemplateContract(unittest.TestCase):
         self.assertEqual(director.TREATMENTS, handled)
 
 
+class DisqualifyingTitles(unittest.TestCase):
+    """
+    Titles that must never reach the timeline.
+
+    These are regressions, each named after a clip that actually shipped into a
+    render: scoring them down was not enough, because the ranker still takes the
+    best of whatever is left when a query finds nothing good.
+    """
+
+    REJECT = [
+        "Create Epic TRAILER TEXT Animation in Premiere Pro",   # Premiere screen capture
+        "Diablo 4 season 5 ladder gameplay",                    # gameplay HUD
+        "Kevin Costner interview on CBS News",                  # broadcast desk
+        "Free cinematic LUT preset download",                   # editing-software content
+        "Why Yellowstone was cancelled - my thoughts",          # commentary
+    ]
+    KEEP = [
+        "Montana ranch drone aerial 4k footage",
+        "Yellowstone national park timelapse cinematic",
+        "Aerial view of cattle on open range, no commentary",
+    ]
+
+    def test_disqualifying_titles_are_rejected(self):
+        for title in self.REJECT:
+            with self.subTest(title=title):
+                self.assertTrue(media._TALKING_HEAD.search(title))
+
+    def test_real_footage_titles_survive(self):
+        for title in self.KEEP:
+            with self.subTest(title=title):
+                self.assertIsNone(media._TALKING_HEAD.search(title))
+
+
 class Treatments(unittest.TestCase):
     """
     The grade is chosen from what the beat is talking about.

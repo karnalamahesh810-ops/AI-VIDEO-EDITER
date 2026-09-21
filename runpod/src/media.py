@@ -468,7 +468,7 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
 # of the subject.
 _TALKING_HEAD = re.compile(
     r"\b(interview|podcast|reaction|react|vlog|q&a|ama|explained|"
-    r"my thoughts|commentary|discussion|talks? about|responds?|"
+    r"my thoughts|(?<!no )commentary|discussion|talks? about|responds?|"
     r"live ?stream|full episode|ep\.? ?\d+|tutorial|how to|"
     # Broadcast desks and commentary: an anchor reading copy, or a creator
     # reviewing the subject, is not footage OF the subject. Both dominated
@@ -478,6 +478,10 @@ _TALKING_HEAD = re.compile(
     r"on (?:cnn|fox|msnbc|abc|nbc|cbs)|late night|"
     r"recap|review|ranking|top \d+|theory|theories|"
     r"everything we know|what happened to|"
+    # Editing-software content: screen recordings of Premiere, After
+    # Effects and friends answer "cinematic trailer" all day long.
+    r"premiere pro|after effects|photoshop|davinci|final cut|"
+    r"template|preset|free download|plugin|"
     # Screen captures: gameplay, streams and desktop recordings are
     # all text-covered UI, whatever the subject.
     r"gameplay|let's play|lets play|speedrun|playthrough|"
@@ -745,6 +749,15 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                         reverse=True)
         for candidate in ranked[skip:] + ranked[:skip]:
             if used and f"yt:{candidate['id']}" in used:
+                continue
+            # A disqualifying title excludes the candidate outright. Scoring it
+            # down is not enough: the loop still takes the best of what is left,
+            # so when a query finds nothing good a penalised tutorial wins
+            # anyway. That is how a Premiere Pro screen recording ended up in a
+            # documentary. No clip is better than the wrong clip - the caller
+            # falls through to the next query, and the timeline holds the
+            # previous shot.
+            if _TALKING_HEAD.search(candidate["title"] or ""):
                 continue
             if candidate["aspect"] and candidate["aspect"] < 1.2:
                 continue                       # vertical, unusable in 16:9
