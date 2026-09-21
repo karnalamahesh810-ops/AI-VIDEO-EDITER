@@ -1192,5 +1192,53 @@ class BlockedIPDetection(unittest.TestCase):
         self.assertNotIn("--proxy", seen["cmd"])
 
 
+class ExtraSources(unittest.TestCase):
+    """
+    Sources beyond YouTube. "Not only yt-dlp" is how the one person who has
+    shipped this described his setup, and these carry clean licences —
+    Commons video is freely licensed, NASA is public domain outright.
+    """
+
+    def _commons(self, url):
+        payload = {"query": {"pages": {"1": {"imageinfo": [
+            {"url": url, "width": 1920, "height": 1080, "extmetadata": {}}]}}}}
+
+        class R:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self_inner): return payload
+
+        original = media.requests.get
+        media.requests.get = lambda *a, **k: R()
+        try:
+            return media.search_wikimedia_video("lake powell")
+        finally:
+            media.requests.get = original
+
+    def test_tracking_params_do_not_hide_a_video(self):
+        """
+        Commons appends utm_* params, so the extension must be read off the
+        parsed path. Testing the raw URL matched nothing and silently
+        disabled the entire source.
+        """
+        hits = self._commons(
+            "https://upload.wikimedia.org/x/1993_LakePowell.ogv"
+            "?utm_source=commons.wikimedia.org&utm_campaign=imageinfo")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].kind, "video")
+        self.assertEqual(hits[0].source, "wikimedia")
+
+    def test_non_video_files_are_still_rejected(self):
+        self.assertEqual(
+            self._commons("https://upload.wikimedia.org/x/photo.jpg?utm_source=y"), [])
+
+    def test_nasa_video_helper_is_named_for_the_search_cache(self):
+        # _cached_search keys on fn.__name__; a lambda or partial would make
+        # the image and video searches share one cache entry.
+        self.assertEqual(media.search_nasa_video.__name__, "search_nasa_video")
+        self.assertNotEqual(media.search_nasa.__name__,
+                            media.search_nasa_video.__name__)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

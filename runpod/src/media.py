@@ -195,6 +195,118 @@ def search_openverse(query: str, limit: int = 5) -> List[MediaAsset]:
     ]
 
 
+def search_wikimedia_video(query: str, limit: int = 5) -> List[MediaAsset]:
+    """
+    Commons holds video, not just stills, and the old code never asked for it.
+
+    `filetype:bitmap` was hard-coded into the only Commons search, so every
+    piece of freely-licensed footage on Commons was invisible to this
+    pipeline. Chrome plays webm natively and Ogg Theora too, so these drop
+    straight into the renderer.
+    """
+    try:
+        r = requests.get(
+            "https://commons.wikimedia.org/w/api.php",
+            headers={"User-Agent": config.USER_AGENT},
+            params={
+                "action": "query", "format": "json", "generator": "search",
+                "gsrsearch": f"{query} filetype:video", "gsrlimit": limit,
+                "gsrnamespace": 6, "prop": "imageinfo",
+                "iiprop": "url|size|extmetadata",
+            },
+            timeout=25,
+        )
+        r.raise_for_status()
+        pages = (r.json().get("query") or {}).get("pages") or {}
+    except Exception:
+        return []
+
+    out: List[MediaAsset] = []
+    for page in pages.values():
+        info = (page.get("imageinfo") or [{}])[0]
+        url = info.get("url") or ""
+        # Commons appends utm_* tracking params, so the extension has to be
+        # read off the parsed PATH. Checking the raw URL matched nothing and
+        # silently disabled this whole source.
+        ext = urllib.parse.urlparse(url).path.lower()
+        if not ext.endswith((".webm", ".ogv", ".mp4")):
+            continue
+        meta = info.get("extmetadata") or {}
+        artist = re.sub(r"<[^>]+>", "", meta.get("Artist", {}).get("value", "") or "")
+        out.append(MediaAsset(
+            kind="video", source="wikimedia", url=url,
+            width=info.get("width", 0), height=info.get("height", 0),
+            attribution=artist.strip()[:200],
+            license=meta.get("LicenseShortName", {}).get("value", "") or "see Commons",
+            query=query,
+        ))
+    return out
+
+
+def search_nasa(query: str, want_video: bool = False,
+                limit: int = 5) -> List[MediaAsset]:
+    """
+    NASA's image and video library. Public domain, no key, no attribution
+    obligation — and squarely on-topic for a channel about water, weather and
+    land in the United States: Landsat and MODIS coverage of reservoirs,
+    drought, flooding, storms and wildfire.
+
+    Two calls: search returns an id, the asset endpoint returns the actual
+    renditions. Worth it, because this is the one source whose licence is
+    unambiguous and whose subject matter matches the niche exactly.
+    """
+    media_type = "video" if want_video else "image"
+    try:
+        r = requests.get(
+            "https://images-api.nasa.gov/search",
+            headers={"User-Agent": config.USER_AGENT},
+            params={"q": query, "media_type": media_type},
+            timeout=25,
+        )
+        r.raise_for_status()
+        items = ((r.json().get("collection") or {}).get("items") or [])[:limit]
+    except Exception:
+        return []
+
+    out: List[MediaAsset] = []
+    for item in items:
+        data = (item.get("data") or [{}])[0]
+        nasa_id = data.get("nasa_id")
+        if not nasa_id:
+            continue
+        try:
+            a = requests.get(f"https://images-api.nasa.gov/asset/{nasa_id}",
+                             headers={"User-Agent": config.USER_AGENT}, timeout=25)
+            a.raise_for_status()
+            hrefs = [x.get("href", "") for x in
+                     ((a.json().get("collection") or {}).get("items") or [])]
+        except Exception:
+            continue
+
+        if want_video:
+            # Prefer a mid-size mp4; "~orig" can be a multi-GB master.
+            picks = [h for h in hrefs if h.endswith(".mp4") and "~orig" not in h] \
+                or [h for h in hrefs if h.endswith(".mp4")]
+        else:
+            picks = [h for h in hrefs if h.endswith((".jpg", ".png"))
+                     and ("~large" in h or "~orig" in h)] \
+                or [h for h in hrefs if h.endswith((".jpg", ".png"))]
+        if not picks:
+            continue
+        out.append(MediaAsset(
+            kind="video" if want_video else "image",
+            source="nasa", url=picks[0].replace("http://", "https://"),
+            attribution=f"NASA — {data.get('title', nasa_id)}"[:200],
+            license="Public domain (NASA)", query=query,
+        ))
+    return out
+
+
+def search_nasa_video(query: str, limit: int = 5) -> List[MediaAsset]:
+    """NASA footage. A named function so _cached_search keys it separately."""
+    return search_nasa(query, want_video=True, limit=limit)
+
+
 # --------------------------------------------------------------------------- #
 # Generated images
 # --------------------------------------------------------------------------- #
@@ -697,6 +809,17 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         if asset:
             return asset
 
+    # Free footage sources beyond YouTube. These carry clean licences, so
+    # they are tried for motion before falling back to a Ken Burns still —
+    # a real moving shot of the subject beats a panned photograph of it.
+    if visual_type == "footage":
+        for search in (search_nasa_video, search_wikimedia_video):
+            found = _cached_search(search, query)
+            ordered = found[nth:] + found[:nth] if found else []
+            got = _pick_unused(ordered, used, query, work_dir)
+            if got:
+                return got
+
     if allow_stock and visual_type == "footage":
         for fn in (search_pexels, search_pixabay):
             clips = [c for c in _cached_search(lambda q: fn(q, kind="video"), query)
@@ -717,7 +840,7 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
                 return made
 
     # Real photographs of the named subject, before any generated impression.
-    for search in (search_wikimedia, search_openverse):
+    for search in (search_wikimedia, search_nasa, search_openverse):
         found = _cached_search(search, query)
         # Rotate the list so repeats start further down, but still fall back
         # to earlier entries rather than giving up and rendering black.
