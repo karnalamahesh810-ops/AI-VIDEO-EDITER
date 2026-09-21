@@ -873,7 +873,12 @@ class NoDuplicateShots(unittest.TestCase):
         finally:
             media.subprocess.run = original
         self.assertIsNone(got, "an already-used upload must be rejected")
-        self.assertFalse(os.path.exists(tmp), "the redundant download is cleaned up")
+        # It must NOT delete the file: yt-dlp names by video id, so this is
+        # the same path an earlier scene already points at. Deleting it
+        # blanked four scenes and failed the render on a real run.
+        self.assertTrue(os.path.exists(tmp),
+                        "must not delete a file an earlier scene is using")
+        os.remove(tmp)
 
     def test_skip_moves_the_playlist_window(self):
         seen = {}

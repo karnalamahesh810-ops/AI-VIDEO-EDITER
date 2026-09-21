@@ -308,10 +308,12 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         name = os.path.basename(path)
         vid = f"yt:{name[3:].rsplit('.', 1)[0]}" if name.startswith("yt_") else ""
         if vid and vid in used:
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+            # Return None, but do NOT delete the file. yt-dlp names by video
+            # id, so this is the very same path an earlier scene is already
+            # pointing at — deleting it blanked four scenes' footage and
+            # failed the render at asset-download time. The work directory is
+            # wiped when the job ends; a few redundant megabytes until then
+            # cost nothing.
             return None
 
     return MediaAsset(
