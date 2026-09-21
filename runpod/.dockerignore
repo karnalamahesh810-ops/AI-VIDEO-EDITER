@@ -1,0 +1,18 @@
+# Without this, `COPY remotion/ remotion/` drags the host's node_modules into
+# the image — 600MB+, and on a Windows dev box it includes a Windows
+# chrome-headless-shell.exe that silently shadows the Linux browser the image
+# installed. CI never hit it because node_modules is gitignored; a local
+# `docker build` does.
+**/node_modules
+**/.remotion
+**/__pycache__
+**/*.pyc
+
+# Render output and local scratch.
+out/
+tmp/
+remotion/public/
+
+.git
+.env
+*.local

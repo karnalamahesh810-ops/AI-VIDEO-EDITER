@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { useOverlaySafeStyle, useScale } from "./layout";
+import { fadeRange, useOverlaySafeStyle, useScale } from "./layout";
 import type { Overlay } from "../types";
 
 /**
@@ -31,7 +31,7 @@ export const TypewriterTitle: React.FC<{ overlay: Overlay; accent: string }> = (
 
   const fade = interpolate(
     frame,
-    [0, 5, durationInFrames - 8, durationInFrames],
+    fadeRange(durationInFrames, 8),
     [0, 1, 1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );

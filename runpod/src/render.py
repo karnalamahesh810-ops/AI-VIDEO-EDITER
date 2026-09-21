@@ -1,10 +1,12 @@
 """Invoke the Remotion renderer as a subprocess and return the output path."""
+import copy
 import json
 import os
 import shutil
 import subprocess
 
 from . import config
+from .assetserver import AssetServer, localise
 
 
 class RenderError(RuntimeError):
@@ -30,31 +32,44 @@ def _renderer_argv() -> list:
 
 
 def render(props: dict, out_path: str, composition: str = "Main",
-           concurrency: int = None, timeout: int = 5400) -> str:
+           concurrency: int = None, timeout: int = 5400,
+           serve_dir: str = None) -> str:
     """
     Render `props` to `out_path` with Remotion.
+
+    Sourced media lives on local disk, and headless Chrome cannot read a
+    filesystem path from an http origin, so the job directory is served over
+    loopback for the duration of the render and every local reference in the
+    document is rewritten to point at it. See assetserver.py.
 
     Props are written to disk and passed with --props=<file>; passing a large
     JSON document as an inline argument blows the command-line length limit
     once a video has a few hundred scenes.
     """
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    work = serve_dir or os.path.dirname(out_path)
     props_path = os.path.join(os.path.dirname(out_path), "props.json")
-    with open(props_path, "w", encoding="utf-8") as f:
-        json.dump(props, f)
 
-    cmd = _renderer_argv() + [
-        "render", "src/index.ts", composition, out_path,
-        f"--props={props_path}",
-        "--log=error",
-    ]
-    if concurrency:
-        cmd.append(f"--concurrency={concurrency}")
+    with AssetServer(work) as assets:
+        # Rewrite a copy: the caller keeps the document it passed in, which is
+        # what gets stored for the editor. Localhost URLs must not leak there.
+        served = localise(copy.deepcopy(props), assets)
+        with open(props_path, "w", encoding="utf-8") as f:
+            json.dump(served, f)
 
-    p = subprocess.run(
-        cmd, cwd=config.REMOTION_DIR, capture_output=True, text=True,
-        timeout=timeout,
-    )
+        cmd = _renderer_argv() + [
+            "render", "src/index.ts", composition, out_path,
+            f"--props={props_path}",
+            "--log=error",
+        ]
+        if concurrency:
+            cmd.append(f"--concurrency={concurrency}")
+
+        p = subprocess.run(
+            cmd, cwd=config.REMOTION_DIR, capture_output=True, text=True,
+            timeout=timeout,
+        )
+
     if p.returncode != 0 or not os.path.exists(out_path):
         tail = (p.stderr or p.stdout or "")[-1500:]
         raise RenderError(f"remotion render failed (exit {p.returncode}): {tail}")

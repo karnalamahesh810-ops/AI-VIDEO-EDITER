@@ -3,6 +3,7 @@ import {
   AbsoluteFill, Img, OffthreadVideo, interpolate,
   useCurrentFrame, useVideoConfig,
 } from "remotion";
+import { fadeRange } from "./layout";
 import type { Scene } from "../types";
 
 /**
@@ -16,10 +17,9 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
   const { durationInFrames } = useVideoConfig();
   const { media, motion } = scene;
 
-  const FADE = 6;
   const opacity = interpolate(
     frame,
-    [0, FADE, Math.max(FADE + 1, durationInFrames - FADE), durationInFrames],
+    fadeRange(durationInFrames, 6),
     [0, 1, 1, scene.transition === "fade" ? 0 : 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );

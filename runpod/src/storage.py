@@ -11,7 +11,15 @@ class StorageError(RuntimeError):
 
 
 def download(url: str, dest_path: str, timeout: int = 180) -> str:
-    """Stream any http(s) URL to disk. Returns the local path."""
+    """
+    Stream any http(s) URL to disk. Returns the local path.
+
+    A path that is already a local file is returned untouched — the caller may
+    have been handed a local narration file (`audio_path`) rather than a URL,
+    and re-fetching it over HTTP is neither possible nor useful.
+    """
+    if os.path.isfile(url):
+        return url
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     with requests.get(url, stream=True, timeout=timeout) as r:
         r.raise_for_status()
@@ -85,6 +93,9 @@ def resolve_audio(url_or_path: str, bucket: str = "video-audio") -> str:
     """
     if not url_or_path:
         return ""
+    # A real file on disk is neither a URL nor a storage key.
+    if os.path.isfile(url_or_path):
+        return url_or_path
     if url_or_path.startswith("http"):
         # A public-URL form pointing at a private bucket will 400 on download;
         # re-sign it from the object path instead.

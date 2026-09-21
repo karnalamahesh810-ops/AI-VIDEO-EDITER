@@ -1,5 +1,29 @@
 export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right";
 
+/**
+ * Every animation template the renderer can draw.
+ *
+ * This list is the renderer's half of a three-way contract: it must match
+ * `TEMPLATES` in src/director.py and the switch in Main.tsx. A type present
+ * here but missing from the switch renders as a plain title card — silently,
+ * which is why the Python test suite asserts all three agree.
+ */
+export type OverlayType =
+  | "title"
+  | "chapter"
+  | "callout"
+  | "typewriter"
+  | "stat"
+  | "bar-chart"
+  | "map"
+  | "quote"
+  | "timeline"
+  | "highlight"
+  | "lower-third"
+  | "comparison"
+  | "arrow"
+  | "split";
+
 export interface SceneWord {
   text: string;
   start: number;
@@ -19,25 +43,55 @@ export interface Scene {
   startFrame: number;
   durationInFrames: number;
   text: string;
+  /** What the sourcing step searched for — shown in the editor, not on screen. */
+  query?: string;
+  visualType?: "footage" | "image";
   media: SceneMedia;
   motion: Motion;
   transition: "none" | "fade";
   words: SceneWord[];
+  /** Set when the media is generated or unlicensed and a human should look. */
+  reviewRequired?: boolean;
+  reviewReason?: string;
+}
+
+/** One row of a chart, comparison or timeline. */
+export interface OverlayItem {
+  label: string;
+  value?: number;
+  text?: string;
+}
+
+/**
+ * A map pin. Coordinates always come from a gazetteer lookup in geocode.py,
+ * never from a language model, and `label` is what that lookup returned.
+ */
+export interface MapLocation {
+  label: string;
+  lat: number;
+  lon: number;
+  kind?: string;
 }
 
 export interface Overlay {
-  /** title = multi-font card, callout = fact pill, typewriter = typed line,
-   *  split = horizontal split-screen comparison (needs two media entries). */
-  type: "title" | "callout" | "typewriter" | "split";
-  variant?: string;
+  type: OverlayType;
   text: string;
-  startFrame: number;
-  durationInFrames: number;
+  subtitle?: string;
+  label?: string;
+  /** Unit drawn after a stat's number: "%", "km", "years". */
+  suffix?: string;
+  value?: number;
+  items?: OverlayItem[];
+  locations?: MapLocation[];
   /** Only used by "split": the two visuals to show, top then bottom. */
   media?: SceneMedia[];
+  variant?: string;
+  startFrame: number;
+  durationInFrames: number;
 }
 
 export interface TimelineProps {
+  schemaVersion?: number;
   fps: number;
   width: number;
   height: number;

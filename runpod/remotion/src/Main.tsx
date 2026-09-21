@@ -6,22 +6,57 @@ import { TitleOverlay } from "./components/TitleOverlay";
 import { CalloutOverlay } from "./components/CalloutOverlay";
 import { TypewriterTitle } from "./components/TypewriterTitle";
 import { SplitScreen } from "./components/SplitScreen";
-import type { Overlay, TimelineProps } from "./types";
+import { ChapterCard } from "./components/ChapterCard";
+import { StatOverlay } from "./components/StatOverlay";
+import { BarChartOverlay } from "./components/BarChartOverlay";
+import { ComparisonOverlay } from "./components/ComparisonOverlay";
+import { MapOverlay } from "./components/MapOverlay";
+import { QuoteOverlay } from "./components/QuoteOverlay";
+import { TimelineOverlay } from "./components/TimelineOverlay";
+import { HighlightOverlay } from "./components/HighlightOverlay";
+import { LowerThird } from "./components/LowerThird";
+import { ArrowOverlay } from "./components/ArrowOverlay";
+import type { Overlay, OverlayType, TimelineProps } from "./types";
 
-/** Route an overlay to its effect. Unknown types fall back to the title card. */
+/**
+ * Overlay type -> component.
+ *
+ * A lookup rather than a switch so the keys can be type-checked against
+ * OverlayType: adding a template to types.ts without wiring it here becomes a
+ * compile error instead of a title card appearing where a chart should be.
+ * The Python test suite checks this same set against director.TEMPLATES.
+ */
+const OVERLAYS: Record<
+  OverlayType,
+  React.FC<{ overlay: Overlay; accent: string }>
+> = {
+  title: TitleOverlay,
+  chapter: ChapterCard,
+  callout: CalloutOverlay,
+  typewriter: TypewriterTitle,
+  stat: StatOverlay,
+  "bar-chart": BarChartOverlay,
+  comparison: ComparisonOverlay,
+  map: MapOverlay,
+  quote: QuoteOverlay,
+  timeline: TimelineOverlay,
+  highlight: HighlightOverlay,
+  "lower-third": LowerThird,
+  arrow: ArrowOverlay,
+  // Split takes its two media entries rather than a text payload, so it gets
+  // a small adapter instead of the shared signature.
+  split: ({ overlay, accent }) =>
+    overlay.media && overlay.media.length >= 2 ? (
+      <SplitScreen top={overlay.media[0]} bottom={overlay.media[1]} accent={accent} />
+    ) : null,
+};
+
 const renderOverlay = (ov: Overlay, accent: string) => {
-  switch (ov.type) {
-    case "callout":
-      return <CalloutOverlay overlay={ov} accent={accent} />;
-    case "typewriter":
-      return <TypewriterTitle overlay={ov} accent={accent} />;
-    case "split":
-      return ov.media && ov.media.length >= 2 ? (
-        <SplitScreen top={ov.media[0]} bottom={ov.media[1]} accent={accent} />
-      ) : null;
-    default:
-      return <TitleOverlay overlay={ov} accent={accent} />;
-  }
+  const Component = OVERLAYS[ov.type];
+  // A document can arrive from the editor or an older schema, so an unknown
+  // type is possible at runtime even though it is not at compile time.
+  if (!Component) return null;
+  return <Component overlay={ov} accent={accent} />;
 };
 
 export const Main: React.FC<TimelineProps> = (props) => {
@@ -40,7 +75,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
         </Sequence>
       ))}
 
-      {/* Caption track, burned in over everything */}
+      {/* Caption track, burned in over the visuals but under the graphics */}
       {captions.enabled &&
         scenes.map((scene) => (
           <Sequence
@@ -52,8 +87,8 @@ export const Main: React.FC<TimelineProps> = (props) => {
           </Sequence>
         ))}
 
-      {/* Overlay track */}
-      {overlays.map((ov, i) => (
+      {/* Overlay track — graphics sit on top of everything visual */}
+      {(overlays || []).map((ov, i) => (
         <Sequence
           key={`ov-${i}`}
           from={ov.startFrame}
@@ -64,7 +99,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
       ))}
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
-      {audio.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
+      {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
       {bgm?.url ? <Audio src={bgm.url} volume={bgm.volume ?? 0.12} loop /> : null}
     </AbsoluteFill>
   );

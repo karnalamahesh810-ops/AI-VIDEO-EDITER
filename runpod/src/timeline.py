@@ -1,101 +1,150 @@
 """
-Build the Remotion props document.
+The timeline document: the contract between worker, renderer and UI.
 
-This is the contract between the worker and the renderer, and between the
-backend and the ThumbGenius UI: the frontend timeline editor reads and writes
-this same shape, so a user edit is just a mutated document re-sent to render.
+One JSON shape does three jobs. The worker writes it, Remotion renders it, and
+the ThumbGenius editor reads and mutates it — so a user edit is just a changed
+document sent back to `render`. That is what makes the plan/edit/render loop
+possible without a second data model.
+
+`validate()` is the gate in front of the renderer. It runs on documents the
+worker built AND on documents that came back from the browser after editing,
+so it assumes nothing about where a field came from. A render is minutes of
+GPU time; failing here with a sentence the UI can show beats failing inside
+headless Chrome with a stack trace.
 """
-from typing import List, Dict, Any, Optional
-import random
+import math
+from typing import Any, Dict, List, Optional
 
 from . import config
+from .director import TEMPLATES
 from .transcribe import Segment
 from .media import MediaAsset
 
-# Alternating Ken Burns keeps still images alive. Videos mostly play straight,
-# matching the reference renders where motion comes from the footage itself.
-_IMAGE_MOTIONS = ["zoom-in", "zoom-out", "pan-left", "pan-right"]
+SCHEMA_VERSION = 2
+
+# Stills need Ken Burns or they read as a stalled video. Cycled rather than
+# random so a re-plan of the same script produces the same document.
+_IMAGE_MOTIONS = ["zoom-in", "pan-left", "zoom-out", "pan-right"]
+
+# How long each graphic wants to be on screen, in seconds, independent of the
+# beat that triggered it. Measured from the reference renders: supporting shots
+# run 2-4s but an explanatory graphic holds far longer (bar chart 10.5s, city
+# map 9.0s, callout 3.5s). A chart cut after 2.6s is a chart nobody can read.
+_OVERLAY_SECONDS = {
+    "title": 3.5, "chapter": 2.5, "callout": 3.5, "typewriter": 3.0,
+    "stat": 4.0, "bar-chart": 9.0, "map": 8.0, "quote": 5.0,
+    "timeline": 8.0, "highlight": 3.0, "lower-third": 4.0,
+    "comparison": 7.0, "arrow": 2.5, "split": 4.0,
+}
+
+# Sources this workflow refuses. Kept as data so the check and the error
+# message can't drift apart.
+_STOCK_SOURCES = {"pexels", "pixabay", "stock", "shutterstock", "storyblocks"}
 
 
-def _sec_to_frames(seconds: float, fps: int) -> int:
-    return max(1, int(round(seconds * fps)))
+def _scene_bounds(segments: List[Segment], fps: int, total: int) -> List[int]:
+    """
+    Frame boundaries for the visual track: [0, b1, b2, ..., total].
+
+    The visual track must tile the narration exactly — no gaps, no overlaps,
+    covering frame 0 to the last frame. Rounding each segment start
+    independently does not guarantee that: a segment can round onto its
+    neighbour, the first can start late, and the last can stop short of the
+    audio. So boundaries are walked forward, each forced at least one frame
+    past the previous and far enough from the end to leave every remaining
+    scene a frame of its own.
+    """
+    n = len(segments)
+    if total < n:
+        raise ValueError(
+            f"{n} scenes will not fit in {total} frames of narration; "
+            "raise TARGET_SCENE_SECONDS or check the audio duration")
+    bounds = [0]
+    for i in range(1, n):
+        want = int(round(segments[i].start * fps))
+        bounds.append(max(bounds[-1] + 1, min(want, total - (n - i))))
+    bounds.append(total)
+    return bounds
 
 
-def build(
-    segments: List[Segment],
-    assets: List[Optional[MediaAsset]],
-    audio_url: str,
-    audio_duration: float,
-    *,
-    fps: int = None,
-    width: int = None,
-    height: int = None,
-    bgm_url: str = "",
-    bgm_volume: float = 0.12,
-    captions: bool = True,
-    brand: Dict[str, Any] = None,
-    title_overlay: str = "",
-    seed: int = 7,
-) -> Dict[str, Any]:
-    fps = fps or config.DEFAULT_FPS
-    width = width or config.DEFAULT_WIDTH
-    height = height or config.DEFAULT_HEIGHT
-    brand = brand or {}
-    rng = random.Random(seed)
+def build(segments: List[Segment], shots: List[dict],
+          assets: List[Optional[MediaAsset]], *,
+          audio_url: str, audio_duration: float, inp: Dict[str, Any],
+          planner: str = "rules", warnings: List[str] = None) -> Dict[str, Any]:
+    """Assemble the render document from beats, shot plan and sourced media."""
+    warnings = list(warnings or [])
+    fps = int(inp.get("fps") or config.DEFAULT_FPS)
+    width = int(inp.get("width") or config.DEFAULT_WIDTH)
+    height = int(inp.get("height") or config.DEFAULT_HEIGHT)
+    brand = inp.get("brand") or {}
+    total = max(1, int(round(audio_duration * fps)))
+    bounds = _scene_bounds(segments, fps, total)
 
     scenes: List[Dict[str, Any]] = []
+    overlays: List[Dict[str, Any]] = []
+    keep_captions = bool(inp.get("captions", True))
+
     for i, seg in enumerate(segments):
+        shot = shots[i] if i < len(shots) else {}
         asset = assets[i] if i < len(assets) else None
-        start_f = _sec_to_frames(seg.start, fps)
-        dur_f = _sec_to_frames(max(seg.duration, 0.4), fps)
+        start, duration = bounds[i], bounds[i + 1] - bounds[i]
 
         if asset is None:
             media = {"type": "color", "url": "", "source": "none"}
             motion = "none"
+            review, reason = True, "No media found for this beat"
         else:
-            media = {
-                "type": asset.kind,
-                "url": asset.local_path or asset.url,
-                "source": asset.source,
-                "attribution": asset.attribution,
-                "license": asset.license,
-            }
-            motion = rng.choice(_IMAGE_MOTIONS) if asset.kind == "image" else "none"
+            media = asset.to_scene_media()
+            motion = _IMAGE_MOTIONS[i % len(_IMAGE_MOTIONS)] if asset.kind == "image" else "none"
+            review, reason = asset.review_required, asset.review_reason
 
         scenes.append({
             "id": f"s{i:04d}",
-            "startFrame": start_f,
-            "durationInFrames": dur_f,
+            "startFrame": start,
+            "durationInFrames": duration,
             "text": seg.text,
+            "query": shot.get("query", ""),
+            "visualType": shot.get("visualType", "footage"),
             "media": media,
             "motion": motion,
             "transition": "fade" if i > 0 else "none",
-            "words": [
-                {"text": w.text, "start": w.start, "end": w.end} for w in seg.words
-            ] if captions else [],
+            "words": ([{"text": w.text, "start": w.start, "end": w.end}
+                       for w in seg.words] if keep_captions else []),
+            "reviewRequired": bool(review),
+            "reviewReason": reason or "",
         })
 
-    overlays: List[Dict[str, Any]] = []
-    if title_overlay and scenes:
-        overlays.append({
-            "type": "title",
-            "variant": "multiFont",
-            "text": title_overlay,
-            "startFrame": _sec_to_frames(1.0, fps),
-            "durationInFrames": _sec_to_frames(3.5, fps),
+        overlay = shot.get("overlay")
+        if overlay:
+            # A graphic runs for as long as it needs to be read, not for as
+            # long as the beat that introduced it — so it can span later cuts.
+            want = int(round(_OVERLAY_SECONDS.get(overlay["type"], 3.5) * fps))
+            overlays.append({**overlay,
+                             "startFrame": start,
+                             "durationInFrames": min(max(duration, want), total - start)})
+
+    if inp.get("title_overlay"):
+        overlays.insert(0, {
+            "type": "title", "text": str(inp["title_overlay"])[:240],
+            "startFrame": int(round(1.0 * fps)),
+            "durationInFrames": min(int(round(3.5 * fps)), max(1, total - int(round(1.0 * fps)))),
         })
 
-    total_frames = _sec_to_frames(audio_duration, fps)
+    missing = sum(1 for a in assets if a is None)
+    if missing:
+        warnings.append(f"{missing} scene(s) have no media and will render black.")
 
     return {
+        "schemaVersion": SCHEMA_VERSION,
         "fps": fps,
         "width": width,
         "height": height,
-        "durationInFrames": total_frames,
-        "audio": {"url": audio_url, "volume": 1.0},
-        "bgm": {"url": bgm_url, "volume": bgm_volume} if bgm_url else None,
+        "durationInFrames": total,
+        "audio": {"url": audio_url, "volume": float(inp.get("audio_volume", 1.0))},
+        "bgm": ({"url": inp["bgm_url"], "volume": float(inp.get("bgm_volume", 0.12))}
+                if inp.get("bgm_url") else None),
         "captions": {
-            "enabled": bool(captions),
+            "enabled": keep_captions,
             "position": brand.get("captionPosition", "bottom"),
             "accent": brand.get("accent", "#FFD400"),
             "fontFamily": brand.get("fontFamily", "Inter"),
@@ -103,8 +152,142 @@ def build(
         "scenes": scenes,
         "overlays": overlays,
         "meta": {
+            "schemaVersion": SCHEMA_VERSION,
             "sceneCount": len(scenes),
+            "overlayCount": len(overlays),
+            "planner": planner,
+            "sourcePolicy": "stock_allowed" if config.ALLOW_STOCK else "no_stock",
             "cutsPerMinute": round(len(scenes) / max(audio_duration / 60, 0.01), 1),
-            "sources": sorted({s["media"].get("source", "none") for s in scenes}),
+            "sources": sorted({a.source for a in assets if a}),
+            "scenesWithoutMedia": missing,
+            "scenesNeedingReview": sum(1 for s in scenes if s["reviewRequired"]),
+            "generatedScenes": sum(1 for a in assets if a and a.source == "generated"),
+            "warnings": warnings,
         },
     }
+
+
+# --------------------------------------------------------------------------- #
+# Validation
+# --------------------------------------------------------------------------- #
+
+def _integer(value, name: str, lo: int, hi: int) -> int:
+    # bool is an int subclass in Python; True would sail through as 1.
+    if not isinstance(value, int) or isinstance(value, bool) or not lo <= value <= hi:
+        raise ValueError(f"{name} must be a whole number from {lo} to {hi}")
+    return value
+
+
+def _number(value, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite number")
+    return float(value)
+
+
+def _validate_overlay(ov: Any, index: int, total: int) -> None:
+    where = f"Overlay {index + 1}"
+    if not isinstance(ov, dict):
+        raise ValueError(f"{where} is not an object")
+    if ov.get("type") not in TEMPLATES:
+        raise ValueError(f"{where}: unknown animation template {ov.get('type')!r}")
+    start = _integer(ov.get("startFrame"), f"{where} start", 0, total - 1)
+    length = _integer(ov.get("durationInFrames"), f"{where} duration", 1, total)
+    if start + length > total:
+        raise ValueError(f"{where} runs past the end of the narration")
+
+    kind = ov["type"]
+    if kind == "map":
+        places = ov.get("locations")
+        if not isinstance(places, list) or not places:
+            raise ValueError(f"{where}: a map needs at least one verified location")
+        for p in places:
+            if not isinstance(p, dict) or not str(p.get("label", "")).strip():
+                raise ValueError(f"{where}: every map location needs a label")
+            for key, limit in (("lat", 90), ("lon", 180)):
+                if abs(_number(p.get(key), f"{where} {key}")) > limit:
+                    raise ValueError(f"{where}: {key} is out of range")
+    elif kind == "split":
+        media = ov.get("media")
+        if not isinstance(media, list) or len(media) < 2:
+            raise ValueError(f"{where}: a split screen needs two media assets")
+    elif kind == "stat":
+        _number(ov.get("value"), f"{where} value")
+    elif kind in {"bar-chart", "comparison"}:
+        items = ov.get("items")
+        if not isinstance(items, list) or len(items) < 2:
+            raise ValueError(f"{where}: a chart needs at least two items")
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError(f"{where}: malformed chart item")
+            _number(item.get("value"), f"{where} item value")
+    elif kind == "timeline":
+        items = ov.get("items")
+        if not isinstance(items, list) or len(items) < 2:
+            raise ValueError(f"{where}: a timeline needs at least two entries")
+
+
+def validate(doc: Any, require_media: bool = True,
+             allow_stock: bool = None) -> Dict[str, Any]:
+    """
+    Check a timeline document before spending a render on it.
+
+    Raises ValueError with a message meant to be shown to the user. Set
+    require_media=False to validate a plan that the editor is still filling in.
+    """
+    allow_stock = config.ALLOW_STOCK if allow_stock is None else allow_stock
+    if not isinstance(doc, dict):
+        raise ValueError("Timeline must be an object")
+
+    fps = _integer(doc.get("fps"), "fps", 12, 120)
+    width = _integer(doc.get("width"), "width", 320, 3840)
+    height = _integer(doc.get("height"), "height", 180, 2160)
+    if width % 2 or height % 2:
+        # h.264 chroma subsampling needs even dimensions; ffmpeg refuses odd ones.
+        raise ValueError("Video width and height must both be even numbers")
+    total = _integer(doc.get("durationInFrames"), "durationInFrames", 1, fps * 7200)
+
+    audio = doc.get("audio")
+    if not isinstance(audio, dict) or not str(audio.get("url", "")).strip():
+        raise ValueError("Timeline has no narration audio — the render would be silent")
+
+    scenes = doc.get("scenes")
+    if not isinstance(scenes, list) or not 1 <= len(scenes) <= 4000:
+        raise ValueError("Timeline needs between 1 and 4000 scenes")
+
+    cursor = 0
+    for i, scene in enumerate(scenes):
+        if not isinstance(scene, dict):
+            raise ValueError(f"Scene {i + 1} is not an object")
+        start = _integer(scene.get("startFrame"), f"Scene {i + 1} start", 0, total - 1)
+        length = _integer(scene.get("durationInFrames"), f"Scene {i + 1} duration", 1, total)
+        if start != cursor:
+            raise ValueError(
+                f"Scene {i + 1} starts at frame {start} but the previous scene ends at "
+                f"{cursor} — the visual track must stay flush with the narration")
+        cursor += length
+
+        media = scene.get("media")
+        if not isinstance(media, dict):
+            raise ValueError(f"Scene {i + 1} has no media object")
+        source = str(media.get("source", "")).lower()
+        if not allow_stock and source in _STOCK_SOURCES:
+            raise ValueError(
+                f"Scene {i + 1} uses {source} footage; this workflow is no-stock "
+                "(set ALLOW_STOCK=1 to override)")
+        if require_media and (media.get("type") == "color" or not media.get("url")):
+            raise ValueError(f"Scene {i + 1} still needs media before it can render")
+
+    if cursor != total:
+        raise ValueError(
+            f"Scenes cover {cursor} frames but the narration is {total} — "
+            "the visual track must cover it exactly")
+
+    overlays = doc.get("overlays")
+    if overlays is not None:
+        if not isinstance(overlays, list):
+            raise ValueError("overlays must be a list")
+        for i, ov in enumerate(overlays):
+            _validate_overlay(ov, i, total)
+
+    return doc

@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Img, OffthreadVideo, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { fadeRange } from "./layout";
 import type { SceneMedia } from "../types";
 
 /**
@@ -23,7 +24,7 @@ export const SplitScreen: React.FC<{
   const offset = interpolate(t, [0, 1], [55, 0]);
   const fade = interpolate(
     frame,
-    [0, 6, durationInFrames - 6, durationInFrames],
+    fadeRange(durationInFrames, 6),
     [0, 1, 1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );

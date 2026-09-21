@@ -40,6 +40,10 @@ RUN cd remotion && npx remotion browser ensure || true
 # --- app ---------------------------------------------------------------------
 COPY handler.py .
 COPY src/ src/
+# Tests and the overlay preview are a few KB and make the image able to check
+# itself: `python -m unittest discover -s tests -t .` inside a running worker.
+COPY tests/ tests/
+COPY scripts/ scripts/
 
 RUN mkdir -p ${WORK_DIR}
 
