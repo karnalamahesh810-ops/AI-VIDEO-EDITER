@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import threading
+import urllib.parse
 import requests
 
 from . import config
@@ -217,9 +218,20 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     Turn it off only for footage you own or have separately licensed.
     """
     os.makedirs(out_dir, exist_ok=True)
-    # Search several candidates: with the CC filter on most hits are skipped,
-    # and ytsearch1 would give up after the first non-CC result.
-    target = query_or_url if query_or_url.startswith("http") else f"ytsearch8:{query_or_url}"
+    if query_or_url.startswith("http"):
+        target = query_or_url
+    elif require_cc:
+        # NOT ytsearch: yt-dlp's flat search extractor reports license=NA for
+        # every hit, so a "license *= Creative Commons" match-filter rejects
+        # the entire result set and this source silently never returns
+        # anything. Measured, not assumed. Going through YouTube's own search
+        # page with its Creative Commons filter (sp=EgIwAQ%3D%3D) returns
+        # results whose licence field is populated, so the filter below then
+        # works as a second check rather than as the only one.
+        target = ("https://www.youtube.com/results?search_query="
+                  + urllib.parse.quote_plus(query_or_url) + "&sp=EgIwAQ%3D%3D")
+    else:
+        target = f"ytsearch8:{query_or_url}"
     out_tpl = os.path.join(out_dir, "yt_%(id)s.%(ext)s")
     # Pad the requested slice: a keyframe-aligned cut can land short of the
     # scene length, and a clip shorter than its scene freezes on its last frame.
@@ -231,17 +243,26 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         "--download-sections", section,
         "--force-keyframes-at-cuts",
         "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]",
-        "--no-playlist", "--no-warnings", "--quiet",
+        "--no-warnings", "--quiet",
         "--merge-output-format", "mp4",
-        # Stop at the first hit that passes the licence filter.
-        "--break-on-reject", "--max-downloads", "1",
+        # A search page is a playlist; take the first few candidates and stop
+        # as soon as one downloads.
+        "--playlist-items", "1-8", "--max-downloads", "1",
         "-o", out_tpl,
         "--print", "after_move:filepath",
     ]
+    # Reject portrait uploads. A 608x1080 clip in a 1920x1080 frame gets
+    # object-fit: cover'd into a massive centre crop — measured on a real CC
+    # search result, which is how this filter came to exist. It has to be
+    # aspect_ratio against a literal: a match-filter compares a field to a
+    # constant, so "width > height" parses `height` as a string and every
+    # candidate errors out with int > str.
+    match = ["aspect_ratio > 1.2"]
     if require_cc:
         # yt-dlp exposes YouTube's licence field; a match-filter keeps a search
         # rolling to the next hit instead of failing the whole scene.
-        cmd += ["--match-filter", "license *= Creative Commons"]
+        match.append("license *= Creative Commons")
+    cmd += ["--match-filter", " & ".join(match)]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired:

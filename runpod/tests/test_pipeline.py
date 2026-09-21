@@ -17,7 +17,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src import config, director, geocode, timeline  # noqa: E402
+from src import config, director, geocode, media, storage, timeline  # noqa: E402
 from src.media import MediaAsset  # noqa: E402
 from src.transcribe import Segment, Word, keywords_for, segment_words, align_to_script  # noqa: E402
 
@@ -523,6 +523,104 @@ class MediaContract(unittest.TestCase):
         a = MediaAsset(kind="image", source="wikimedia", url="https://remote/a.jpg",
                        local_path="/work/a.jpg")
         self.assertEqual(a.to_scene_media()["url"], "/work/a.jpg")
+
+
+class SourcingCommands(unittest.TestCase):
+    """
+    Regression tests for three failures that raised nothing at all.
+
+    Each one made a whole source silently contribute zero assets, which looks
+    exactly like "no good match for that query" from the outside.
+    """
+
+    def _captured_yt_cmd(self, **kwargs):
+        seen = {}
+
+        class Result:
+            returncode, stdout, stderr = 0, "", ""
+
+        def fake_run(cmd, **_):
+            seen["cmd"] = cmd
+            return Result()
+
+        original = media.subprocess.run
+        media.subprocess.run = fake_run
+        try:
+            media.youtube_clip("colombia earthquake", "/tmp/x", seconds=4.0, **kwargs)
+        finally:
+            media.subprocess.run = original
+        return seen["cmd"]
+
+    def test_cc_search_does_not_use_ytsearch(self):
+        # yt-dlp's flat search extractor reports license=NA for every hit, so
+        # a Creative Commons match-filter over ytsearch rejects everything and
+        # the YouTube source returns nothing, ever.
+        cmd = self._captured_yt_cmd(require_cc=True)
+        target = cmd[1]
+        self.assertNotIn("ytsearch", target)
+        self.assertIn("youtube.com/results", target)
+        self.assertIn("sp=EgIwAQ%3D%3D", target)   # YouTube's CC search filter
+
+    def test_plain_search_still_uses_ytsearch(self):
+        cmd = self._captured_yt_cmd(require_cc=False)
+        self.assertTrue(cmd[1].startswith("ytsearch"))
+
+    def test_aspect_filter_compares_against_a_literal(self):
+        # A match-filter compares a field to a constant. "width > height"
+        # parses `height` as a string and every candidate dies on int > str.
+        cmd = self._captured_yt_cmd(require_cc=True)
+        flt = cmd[cmd.index("--match-filter") + 1]
+        self.assertIn("aspect_ratio", flt)
+        self.assertNotIn("width > height", flt)
+        self.assertIn("Creative Commons", flt)
+
+    def test_licence_filter_is_absent_when_not_required(self):
+        cmd = self._captured_yt_cmd(require_cc=False)
+        flt = cmd[cmd.index("--match-filter") + 1]
+        self.assertNotIn("Creative Commons", flt)
+
+    def test_success_is_read_from_the_printed_path_not_the_exit_code(self):
+        # --max-downloads makes yt-dlp exit 101 on success.
+        class Result:
+            returncode, stderr = 101, ""
+            stdout = __file__          # a path that exists
+
+        original = media.subprocess.run
+        media.subprocess.run = lambda cmd, **_: Result()
+        try:
+            asset = media.youtube_clip("x", "/tmp/x", seconds=2.0)
+        finally:
+            media.subprocess.run = original
+        self.assertIsNotNone(asset)
+        self.assertEqual(asset.source, "youtube")
+
+    def test_downloads_identify_themselves(self):
+        # Wikimedia 403s the default python-requests agent, so without this
+        # every Commons image failed to download and the best source of real
+        # named subjects never contributed anything.
+        seen = {}
+
+        class Response:
+            status_code = 200
+            def raise_for_status(self): pass
+            def iter_content(self, chunk_size=0): return []
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def fake_get(url, **kw):
+            seen.update(kw)
+            return Response()
+
+        original = storage.requests.get
+        storage.requests.get = fake_get
+        try:
+            storage.download("https://commons.example/x.jpg",
+                             os.path.join(ROOT, "out", "_t", "x.jpg"))
+        finally:
+            storage.requests.get = original
+        agent = (seen.get("headers") or {}).get("User-Agent", "")
+        self.assertIn("ThumbGenius", agent)
+        self.assertNotIn("python-requests", agent)
 
 
 if __name__ == "__main__":

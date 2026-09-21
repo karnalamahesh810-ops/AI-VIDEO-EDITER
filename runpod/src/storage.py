@@ -17,11 +17,17 @@ def download(url: str, dest_path: str, timeout: int = 180) -> str:
     A path that is already a local file is returned untouched — the caller may
     have been handed a local narration file (`audio_path`) rather than a URL,
     and re-fetching it over HTTP is neither possible nor useful.
+
+    The User-Agent is not decoration. Wikimedia returns 403 to the default
+    python-requests agent, so without it every Commons download failed
+    silently and the best source of real named subjects never contributed a
+    single image. Their terms require an identifying agent; this sends one.
     """
     if os.path.isfile(url):
         return url
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    with requests.get(url, stream=True, timeout=timeout) as r:
+    with requests.get(url, stream=True, timeout=timeout,
+                      headers={"User-Agent": config.USER_AGENT}) as r:
         r.raise_for_status()
         with open(dest_path, "wb") as f:
             for chunk in r.iter_content(chunk_size=1 << 20):
