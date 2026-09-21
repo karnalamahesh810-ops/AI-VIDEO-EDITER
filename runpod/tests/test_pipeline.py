@@ -964,5 +964,125 @@ class QueryRelaxation(unittest.TestCase):
         self.assertEqual(tried, ["specific"])
 
 
+class GeneratedImages(unittest.TestCase):
+    """Generated stills: ordering, spend cap, and honest labelling."""
+
+    def setUp(self):
+        self._prefer = config.PREFER_GENERATED_IMAGES
+        self._cap = config.IMAGE_MAX_PER_VIDEO
+        media.reset_cache()
+
+    def tearDown(self):
+        config.PREFER_GENERATED_IMAGES = self._prefer
+        config.IMAGE_MAX_PER_VIDEO = self._cap
+        media.reset_cache()
+
+    def _stub(self, generated_ok=True):
+        made = []
+
+        def fake_generate(prompt, out_dir, **kw):
+            made.append(prompt)
+            if not generated_ok:
+                return None
+            return MediaAsset(kind="image", source="generated", url="",
+                              local_path=f"/w/gen{len(made)}.png",
+                              review_required=True,
+                              review_reason="Generated illustration, not documentary footage")
+        return fake_generate, made
+
+    def test_off_by_default_real_photos_win(self):
+        self.assertFalse(self._prefer, "generation must be opt-in")
+
+    def test_footage_still_prefers_real_youtube_clips(self):
+        """Generation is for stills. Moving pictures still come from YouTube."""
+        config.PREFER_GENERATED_IMAGES = True
+        gen, made = self._stub()
+        orig_gen, orig_yt = media.generate_image, media.youtube_clip
+        media.generate_image = gen
+        media.youtube_clip = lambda *a, **k: MediaAsset(
+            kind="video", source="youtube", url="q", local_path="/w/yt_A.mp4")
+        try:
+            got = media.source_for_segment("lake powell ramp", 3.0, "/tmp/x",
+                                           visual_type="footage", prompt="p")
+        finally:
+            media.generate_image, media.youtube_clip = orig_gen, orig_yt
+        self.assertEqual(got.source, "youtube")
+        self.assertEqual(made, [], "no image should be generated for a footage beat")
+
+    def test_when_preferred_generation_runs_before_the_archives(self):
+        config.PREFER_GENERATED_IMAGES = True
+        gen, made = self._stub()
+        orig_gen, orig_wiki = media.generate_image, media.search_wikimedia
+        media.generate_image = gen
+        media.search_wikimedia = lambda q, limit=5: [
+            asset(kind="image", source="wikimedia", url="https://x/real.jpg")]
+        try:
+            got = media.source_for_segment("Lake Powell ramp", 3.0, "/tmp/x",
+                                           visual_type="image", allow_youtube=False,
+                                           prompt="Lake Powell. The ramp stops.")
+        finally:
+            media.generate_image, media.search_wikimedia = orig_gen, orig_wiki
+        self.assertEqual(got.source, "generated")
+        self.assertEqual(made, ["Lake Powell. The ramp stops."],
+                         "the narration line is the prompt, not the search keywords")
+
+    def test_generation_is_always_flagged_as_an_illustration(self):
+        config.PREFER_GENERATED_IMAGES = True
+        gen, _ = self._stub()
+        orig = media.generate_image
+        media.generate_image = gen
+        try:
+            # allow_youtube=False: this is the STILLS path. Motion footage
+            # still comes from YouTube first — generation is for images.
+            got = media.source_for_segment("x", 3.0, "/tmp/x", prompt="a prompt",
+                                           visual_type="image", allow_youtube=False)
+        finally:
+            media.generate_image = orig
+        self.assertTrue(got.review_required)
+        self.assertIn("not documentary", got.review_reason)
+
+    def test_the_spend_cap_is_enforced(self):
+        config.PREFER_GENERATED_IMAGES = True
+        config.IMAGE_MAX_PER_VIDEO = 3
+        gen, made = self._stub()
+        orig_gen, orig_wiki, orig_open = (media.generate_image,
+                                          media.search_wikimedia, media.search_openverse)
+        media.generate_image = gen
+        media.search_wikimedia = lambda q, limit=5: []
+        media.search_openverse = lambda q, limit=5: []
+        try:
+            for i in range(10):
+                media.source_for_segment(f"q{i}", 3.0, "/tmp/x", prompt=f"p{i}",
+                                         visual_type="image", allow_youtube=False)
+        finally:
+            (media.generate_image, media.search_wikimedia,
+             media.search_openverse) = orig_gen, orig_wiki, orig_open
+        self.assertLessEqual(len(made), 3, f"cap of 3 exceeded: {len(made)} calls")
+
+    def test_the_cap_resets_between_jobs(self):
+        config.PREFER_GENERATED_IMAGES = True
+        config.IMAGE_MAX_PER_VIDEO = 1
+        gen, made = self._stub()
+        orig_gen, orig_wiki = media.generate_image, media.search_wikimedia
+        media.generate_image = gen
+        media.search_wikimedia = lambda q, limit=5: []
+        try:
+            media.source_for_segment("a", 3.0, "/tmp/x", prompt="a",
+                                     visual_type="image", allow_youtube=False)
+            media.reset_cache()
+            media.source_for_segment("b", 3.0, "/tmp/x", prompt="b",
+                                     visual_type="image", allow_youtube=False)
+        finally:
+            media.generate_image, media.search_wikimedia = orig_gen, orig_wiki
+        self.assertEqual(len(made), 2, "a new job must get a fresh budget")
+
+    def test_director_prompt_is_a_description_not_keywords(self):
+        s = seg("The concrete ramp under his tires runs downhill and stops.", 0, 3)
+        shots, _, _ = director.plan([s], title="Lake Powell", allow_maps=False)
+        self.assertIn("concrete ramp under his tires", shots[0]["prompt"])
+        self.assertTrue(shots[0]["prompt"].startswith("Lake Powell"))
+        self.assertNotEqual(shots[0]["prompt"], shots[0]["query"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

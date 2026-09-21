@@ -25,6 +25,21 @@ PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY", "")
 ALLOW_YOUTUBE = _flag("ALLOW_YOUTUBE", True)
 REQUIRE_CC = _flag("REQUIRE_CC", True)
 
+# Residential proxy for yt-dlp. NOT optional on RunPod: serverless workers get
+# datacenter IPs, and YouTube answers those with "Sign in to confirm you're not
+# a bot", so sourcing that works perfectly on a home connection returns nothing
+# at all in production. A handful of residential proxies is enough for one
+# channel's throughput.
+#
+# Accepts one proxy or a comma-separated list, which is rotated per request so
+# a single address does not absorb every download and get flagged.
+# Format: http://user:pass@host:port (or socks5://...).
+YTDLP_PROXY = os.getenv("YTDLP_PROXY", "").strip()
+YTDLP_PROXIES = [p.strip() for p in YTDLP_PROXY.split(",") if p.strip()]
+
+# yt-dlp can also present browser cookies, which helps with the same check.
+YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
+
 # --- generated images --------------------------------------------------------
 # Any OpenAI-compatible /images/generations endpoint (OpenAI gpt-image-1, or a
 # compatible gateway). Same env shape as the director below, deliberately.
@@ -36,6 +51,20 @@ IMAGE_STYLE_SUFFIX = os.getenv(
     "IMAGE_STYLE_SUFFIX",
     "photorealistic documentary still, natural lighting, 16:9, no text, no watermark",
 )
+
+# Generate stills FIRST instead of only when nothing real is found. This is
+# how VidRush looks: consistent, on-topic illustration rather than whatever a
+# photo archive happens to hold. The trade-off is real and worth stating — a
+# generated photoreal image of an actual event is an illustration of it, not a
+# record, so generated frames always carry review_required and their licence
+# field says so. For a beat about a real, documented event a real photograph
+# is still the better shot, which is why the real sources remain the fallback.
+PREFER_GENERATED_IMAGES = _flag("PREFER_GENERATED_IMAGES", False)
+
+# Hard ceiling per video. At roughly $0.02-0.19 an image, a 20-minute script
+# of ~400 scenes could run to real money on a single render, and a runaway
+# retry loop could do it without anyone watching.
+IMAGE_MAX_PER_VIDEO = int(os.getenv("IMAGE_MAX_PER_VIDEO", "80"))
 
 # --- AI director -------------------------------------------------------------
 # Optional. Without it the rule-based planner in director.py runs alone.

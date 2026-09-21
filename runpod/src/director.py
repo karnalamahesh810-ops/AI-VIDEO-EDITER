@@ -184,7 +184,11 @@ def _rule_shot(seg: Segment, index: int, title: str) -> dict:
     fallbacks = [q for q in fallbacks if q and not (q in seen_q or seen_q.add(q))]
 
     text = seg.text.strip()
-    shot = {"query": query, "fallbacks": fallbacks,
+    # Separate from `query` on purpose. A search engine wants keywords; an
+    # image model wants a description, so it gets the spoken line plus the
+    # subject for context.
+    prompt = f"{title}. {text}".strip(". ")[:600] if title else text[:600]
+    shot = {"query": query, "fallbacks": fallbacks, "prompt": prompt,
             "visualType": "footage", "overlay": None}
 
     if index == 0 and title:
@@ -292,6 +296,7 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                 # Keep the rule planner's broader fallbacks: a model query can
                 # be just as unsearchable as a long rule-built one.
                 "fallbacks": shots[idx].get("fallbacks", []),
+                "prompt": shots[idx].get("prompt", ""),
                 "visualType": "image" if shot.get("visualType") == "image" else "footage",
                 "overlay": validate_overlay(shot.get("overlay")),
             }

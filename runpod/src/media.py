@@ -25,6 +25,7 @@ from typing import List, Optional, Dict, Any
 import base64
 import os
 import re
+import itertools
 import subprocess
 import threading
 import urllib.parse
@@ -32,6 +33,22 @@ import requests
 
 from . import config
 from .storage import download
+
+
+# Round-robin over the configured proxies so one address does not take every
+# download and get flagged. itertools.cycle is not thread-safe on its own.
+_PROXY_CYCLE = itertools.cycle(config.YTDLP_PROXIES) if config.YTDLP_PROXIES else None
+_PROXY_LOCK = threading.Lock()
+
+
+def _next_proxy() -> str:
+    if not _PROXY_CYCLE:
+        return ""
+    with _PROXY_LOCK:
+        return next(_PROXY_CYCLE)
+
+
+BOT_CHECK = "sign in to confirm"
 
 
 @dataclass
@@ -282,12 +299,29 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         # rolling to the next hit instead of failing the whole scene.
         match.append("license *= Creative Commons")
     cmd += ["--match-filter", " & ".join(match)]
+
+    proxy = _next_proxy()
+    if proxy:
+        cmd += ["--proxy", proxy]
+    if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
+        cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired:
         return None
     except FileNotFoundError:
         print("[media] yt-dlp not on PATH - skipping the YouTube source", flush=True)
+        return None
+
+    # A datacenter IP gets "Sign in to confirm you're not a bot" instead of a
+    # video. It looks identical to "no results" from the outside, which would
+    # send every scene to a still and make the whole video look wrong for a
+    # reason nobody could see — so it is called out loudly.
+    stderr = (p.stderr or "").lower()
+    if BOT_CHECK in stderr or "confirm you" in stderr:
+        print("[media] YouTube bot check hit — this IP is blocked. Set YTDLP_PROXY "
+              "to a residential proxy; RunPod workers have datacenter IPs.",
+              flush=True)
         return None
 
     # --max-downloads makes yt-dlp exit non-zero once it has what we asked for,
@@ -424,11 +458,29 @@ def search_pixabay(query: str, kind: str = "video", per_page: int = 5) -> List[M
 _SEARCH_CACHE: Dict[str, List[MediaAsset]] = {}
 _CACHE_LOCK = threading.Lock()
 
+# Generated images are billed per call, so the budget is enforced here rather
+# than trusted to callers. Reset per job alongside the cache.
+_GENERATED = [0]
+
 
 def reset_cache():
     """Call between jobs — serverless worker processes are reused across renders."""
     with _CACHE_LOCK:
         _SEARCH_CACHE.clear()
+        _GENERATED[0] = 0
+
+
+def _generation_budget_left() -> bool:
+    with _CACHE_LOCK:
+        if _GENERATED[0] >= config.IMAGE_MAX_PER_VIDEO:
+            return False
+        _GENERATED[0] += 1
+        return True
+
+
+def generated_count() -> int:
+    with _CACHE_LOCK:
+        return _GENERATED[0]
 
 
 def _cached_search(fn, query: str) -> List[MediaAsset]:
@@ -473,6 +525,7 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
 def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        visual_type: str = "footage", nth: int = 0,
                        used: set = None, fallbacks: List[str] = None,
+                       prompt: str = "",
                        allow_youtube: bool = None, allow_stock: bool = None,
                        require_cc: bool = None) -> Optional[MediaAsset]:
     """
@@ -485,7 +538,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     """
     for attempt in [query] + list(fallbacks or []):
         got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
-                          nth=nth, used=used, allow_youtube=allow_youtube,
+                          nth=nth, used=used, prompt=prompt,
+                          allow_youtube=allow_youtube,
                           allow_stock=allow_stock, require_cc=require_cc)
         if got:
             return got
@@ -494,7 +548,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
 
 def _source_one(query: str, seconds: float, work_dir: str, *,
                 visual_type: str = "footage", nth: int = 0,
-                used: set = None,
+                used: set = None, prompt: str = "",
                 allow_youtube: bool = None, allow_stock: bool = None,
                 require_cc: bool = None) -> Optional[MediaAsset]:
     """
@@ -532,6 +586,17 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
             if asset:
                 return asset
 
+    # Generated stills first, when asked for. The prompt is the narration
+    # line rather than the search keywords: "Lake Powell concrete ramp" is a
+    # good thing to search for and a poor thing to describe to an image model.
+    tried_generation = False
+    if config.PREFER_GENERATED_IMAGES:
+        tried_generation = True
+        if _generation_budget_left():
+            made = generate_image(prompt or query, work_dir)
+            if made:
+                return made
+
     # Real photographs of the named subject, before any generated impression.
     for search in (search_wikimedia, search_openverse):
         found = _cached_search(search, query)
@@ -551,7 +616,13 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
 
     # Last resort: an illustration for a beat nothing real covers. Always a
     # fresh generation, so it is never a duplicate.
-    return generate_image(query, work_dir)
+    # The budget is always consulted. Writing this as
+    # `if PREFER_GENERATED or budget_left()` short-circuits past the check
+    # whenever the preference is on, which silently disabled the spend cap
+    # entirely — caught by the cap test, not by reading it.
+    if not tried_generation and _generation_budget_left():
+        return generate_image(prompt or query, work_dir)
+    return None
 
 
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
@@ -593,7 +664,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             return source_for_segment(
                 job["query"], float(job.get("seconds") or 0), work_dir,
                 visual_type=job.get("visual_type", "footage"), nth=nth,
-                fallbacks=job.get("fallbacks"), **kwargs)
+                fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
+                **kwargs)
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{job['query']}' failed: {e}", flush=True)
             return None
@@ -630,7 +702,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     job["query"], float(job.get("seconds") or 0), work_dir,
                     visual_type=job.get("visual_type", "footage"),
                     nth=nth + attempt, used=used,
-                    fallbacks=job.get("fallbacks"), **kwargs)
+                    fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
+                    **kwargs)
             except Exception:  # noqa: BLE001
                 replacement = None
             if replacement and replacement.identity not in used:

@@ -80,6 +80,42 @@ def _tool_versions() -> dict:
     return tools
 
 
+def _youtube_status() -> str:
+    """
+    Can this worker actually reach YouTube, or is its IP blocked?
+
+    The decisive check for a serverless deployment. RunPod hands out
+    datacenter IPs and YouTube answers those with "Sign in to confirm you're
+    not a bot" — which from the pipeline's point of view is indistinguishable
+    from "no results for that query". Every scene would quietly fall back to
+    a still and the video would look wrong for a reason nobody could see.
+
+    Metadata only, no download.
+    """
+    from . import media
+    cmd = ["yt-dlp", "ytsearch1:lake powell water level", "--skip-download",
+           "--no-warnings", "--print", "%(id)s"]
+    proxy = media._next_proxy()
+    if proxy:
+        cmd += ["--proxy", proxy]
+    try:
+        p = _run(cmd, timeout=90)
+    except FileNotFoundError:
+        return "FAILED: yt-dlp is not installed in this image"
+    except Exception as e:  # noqa: BLE001
+        return f"FAILED: {type(e).__name__}: {str(e)[:120]}"
+
+    err = (p.stderr or "").lower()
+    if media.BOT_CHECK in err or "confirm you" in err:
+        return ("FAILED: YouTube bot check — this IP is blocked. Set YTDLP_PROXY "
+                "to a residential proxy (RunPod uses datacenter IPs).")
+    vid = (p.stdout or "").strip().splitlines()
+    if vid and vid[0].strip():
+        how = "via proxy" if proxy else "direct — no proxy configured"
+        return f"ok (search returned {vid[0].strip()}, {how})"
+    return f"FAILED: search returned nothing ({(p.stderr or '')[:120]})"
+
+
 def _whisper_status() -> str:
     """Loading the model is the expensive, failure-prone part — check it here."""
     try:
@@ -187,8 +223,12 @@ def run(work: str, width: int = 854, seconds_per_template: float = 1.6,
         else f"SUSPECT (size={size}, duration={actual:.2f})")
     result["checks"]["audio"] = "ok" if result["render"]["hasAudio"] else "FAILED: no audio track"
 
-    step("Self test: checking whisper", 85)
+    step("Self test: checking whisper", 82)
     result["checks"]["whisper"] = _whisper_status()
+
+    step("Self test: checking YouTube access", 90)
+    result["checks"]["youtube"] = _youtube_status()
+    result["proxyConfigured"] = bool(config.YTDLP_PROXIES)
 
     result["elapsed"] = round(time.time() - started, 1)
     result["ok"] = all(not str(v).startswith(("FAILED", "SUSPECT"))

@@ -168,7 +168,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     media.reset_cache()
     jobs = [{"index": i, "query": shot["query"], "seconds": seg.duration,
              "visual_type": shot.get("visualType", "footage"),
-             "fallbacks": shot.get("fallbacks") or []}
+             "fallbacks": shot.get("fallbacks") or [],
+             "prompt": shot.get("prompt") or ""}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 
     last_pct = [22]
@@ -424,6 +425,9 @@ def handler(job):
                     "sourcePolicy": "stock_allowed" if config.ALLOW_STOCK else "no_stock",
                     "director": bool(config.DIRECTOR_API_KEY),
                     "imageModel": bool(config.IMAGE_API_KEY),
+                    "imageModelName": config.IMAGE_MODEL if config.IMAGE_API_KEY else "",
+                    "preferGenerated": config.PREFER_GENERATED_IMAGES,
+                    "imageCapPerVideo": config.IMAGE_MAX_PER_VIDEO,
                     "storage": store,
                     "readyToRender": store.get("ok", False)}
 
