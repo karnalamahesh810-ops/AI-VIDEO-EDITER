@@ -761,14 +761,28 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
 
     Metadata only — no video is fetched. Downloading the first hit and hoping
     is what produced a man in an armchair for a line about a boat trailer.
+
+    A flat search: one request for the results page. Asking for width/height
+    made yt-dlp open every result's player (twelve extra requests with a JS
+    challenge each): measured 30 s and a bot-check refusal against 5.5 s and
+    twelve results for the flat form. Shorts are recognised from their URL;
+    any other vertical video is dropped when it is scouted (_scout), which
+    reads the full info anyway. Only the CC-only mode still needs the full
+    form, because the licence is not on the results page.
     """
-    cmd = [
-        "yt-dlp", target, "--skip-download", "--no-warnings",
-        "--playlist-items", f"1-{limit}",
-        "--print", "%(id)s\t%(duration)s\t%(width)s\t%(height)s\t%(title)s",
-    ]
     if require_cc:
-        cmd += ["--match-filter", "license *= Creative Commons"]
+        cmd = [
+            "yt-dlp", target, "--skip-download", "--no-warnings",
+            "--playlist-items", f"1-{limit}",
+            "--print", "%(id)s\t%(duration)s\t%(width)s\t%(height)s\t%(title)s",
+            "--match-filter", "license *= Creative Commons",
+        ]
+    else:
+        cmd = [
+            "yt-dlp", target, "--flat-playlist", "--no-warnings",
+            "--playlist-items", f"1-{limit}",
+            "--print", "%(id)s\t%(duration)s\t%(url)s\t\t%(title)s",
+        ]
     proxy = _next_proxy()
     cmd += _yt_network_args(proxy)
 
@@ -798,11 +812,16 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
                 return float(x)
             except (TypeError, ValueError):
                 return 0.0
-        width, height = num(w), num(h)
+        if require_cc:
+            width, height = num(w), num(h)
+            aspect = (width / height) if height else 0.0
+        else:
+            # Flat results carry the URL where the full form had dimensions.
+            aspect = 9 / 16 if "/shorts/" in w else 0.0
         out.append({
             "id": vid.strip(),
             "duration": num(dur),
-            "aspect": (width / height) if height else 0.0,
+            "aspect": aspect,
             "title": title.strip(),
         })
     return out
@@ -883,7 +902,14 @@ def _fixed_point(candidate: dict, grab: float, start_at: float) -> float:
 def _scout(candidate: dict, grab: float, intent: str, context: str) -> Optional[dict]:
     """Storyboard moment for one candidate video, or None if unavailable."""
     info, proxy = _yt_info(candidate["id"])
-    return moments.pick(info, intent, context, grab, proxy) if info else None
+    if not info:
+        return None
+    w, h = info.get("width") or 0, info.get("height") or 0
+    if w and h and w / h < 1.2:
+        # Vertical. The flat search cannot see this; a zero score drops it
+        # before anything is downloaded.
+        return {"start": 0.0, "score": 0.0, "description": "vertical video", "tile": 0}
+    return moments.pick(info, intent, context, grab, proxy)
 
 
 def _plan_grabs(eligible: List[dict], grab: float, start_at: float,
