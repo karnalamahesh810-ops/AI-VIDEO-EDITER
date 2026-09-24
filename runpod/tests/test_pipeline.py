@@ -160,6 +160,74 @@ class DisqualifyingTitles(unittest.TestCase):
                 self.assertIsNone(media._TALKING_HEAD.search(title))
 
 
+class StorageBroker(unittest.TestCase):
+    """
+    With no service key on the worker, uploads go through the app's
+    worker-storage function, authorised by the running job's id.
+    """
+
+    def setUp(self):
+        self.patches = [
+            mock.patch.object(config, "SUPABASE_SERVICE_KEY", ""),
+            mock.patch.object(config, "STORAGE_BROKER_URL", "https://x/functions/v1/worker-storage"),
+        ]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+
+    def test_broker_is_used_only_without_a_service_key(self):
+        self.assertTrue(storage.broker_enabled())
+        with mock.patch.object(config, "SUPABASE_SERVICE_KEY", "key"):
+            self.assertFalse(storage.broker_enabled())
+
+    def test_upload_signs_puts_then_reads(self):
+        calls = []
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append(json)
+            r = mock.Mock(status_code=200)
+            r.json.return_value = ({"ok": True, "uploadUrl": "https://up"} if json["action"] == "upload"
+                                   else {"ok": True, "readUrl": "https://read"})
+            return r
+
+        with mock.patch.object(storage.requests, "post", side_effect=fake_post), \
+                mock.patch.object(storage, "upload_to_signed_url") as put:
+            url = storage.broker_upload("/tmp/a.mp4", "video-media", "projects/p1/media/s1.mp4", "p1", "job-9")
+        self.assertEqual(url, "https://read")
+        put.assert_called_once_with("/tmp/a.mp4", "https://up")
+        self.assertEqual([c["action"] for c in calls], ["upload", "read"])
+        # The broker authorises by project + running job id.
+        self.assertTrue(all(c["project_id"] == "p1" and c["job_id"] == "job-9" for c in calls))
+
+    def test_a_refusal_raises(self):
+        r = mock.Mock(status_code=403)
+        r.json.return_value = {"ok": False, "error": "job is not running"}
+        with mock.patch.object(storage.requests, "post", return_value=r):
+            with self.assertRaisesRegex(storage.StorageError, "job is not running"):
+                storage.broker_upload("/tmp/a.mp4", "renders", "projects/p1/final.mp4", "p1", "j")
+
+    def test_published_media_records_where_it_lives(self):
+        import handler
+        import tempfile
+        doc = build_doc(n=2, seconds=3.0)
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fh:
+            fh.write(b"x")
+        doc["scenes"][0]["media"]["url"] = fh.name
+        try:
+            with mock.patch.object(storage, "broker_upload", return_value="https://signed") as up:
+                handler.publish_media(doc, "p1", "video-media", handler.Reporter(""), job_id="job-9")
+        finally:
+            os.unlink(fh.name)
+        media = doc["scenes"][0]["media"]
+        self.assertEqual(media["url"], "https://signed")
+        self.assertEqual(media["storage"], {"bucket": "video-media",
+                                            "path": f"projects/p1/media/{doc['scenes'][0]['id']}.mp4"})
+        self.assertEqual(up.call_args[0][3:], ("p1", "job-9"))
+
+
 class VisionFailuresAreReported(unittest.TestCase):
     """
     A failed vision call keeps the clip unjudged, which looks normal in the

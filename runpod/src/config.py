@@ -151,6 +151,16 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "renders")
+# Where sourced clips and finished renders go. Both buckets are private; the
+# app re-signs their URLs before it shows or renders them.
+MEDIA_BUCKET = os.getenv("MEDIA_BUCKET", "video-media")
+RENDER_BUCKET = os.getenv("RENDER_BUCKET", "renders")
+# Zero-secret storage. With no service key, uploads go through the app's
+# `worker-storage` edge function, which signs one upload at a time and only
+# for the project whose running job id matches this job. Nothing in this
+# image can then write anywhere else in the app's storage.
+STORAGE_BROKER_URL = os.getenv("STORAGE_BROKER_URL", "") or (
+    f"{SUPABASE_URL.rstrip('/')}/functions/v1/worker-storage" if SUPABASE_URL else "")
 
 # --- paths -------------------------------------------------------------------
 WORK_DIR = os.getenv("WORK_DIR", "/tmp/work")

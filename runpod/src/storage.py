@@ -36,6 +36,38 @@ def download(url: str, dest_path: str, timeout: int = 180) -> str:
     return dest_path
 
 
+def broker_enabled() -> bool:
+    """Upload through the app's worker-storage function (no service key here)."""
+    return bool(config.STORAGE_BROKER_URL and not config.SUPABASE_SERVICE_KEY)
+
+
+def _broker(payload: dict, timeout: int = 60) -> dict:
+    r = requests.post(config.STORAGE_BROKER_URL, json=payload, timeout=timeout)
+    try:
+        body = r.json()
+    except ValueError:
+        body = {}
+    if r.status_code >= 400 or not body.get("ok"):
+        raise StorageError(f"storage broker refused ({r.status_code}): "
+                           f"{str(body.get('error') or r.text)[:200]}")
+    return body
+
+
+def broker_upload(local_path: str, bucket: str, object_path: str, project_id: str,
+                  job_id: str, read_ttl: int = 60 * 60 * 24 * 7) -> str:
+    """
+    Upload one file through the app's broker and return a signed read URL.
+
+    The broker checks that `job_id` is the job currently running for
+    `project_id` and that the path sits under projects/<project_id>/, so a
+    leaked request can only ever write into that one project's folder.
+    """
+    ref = {"project_id": project_id, "job_id": job_id,
+           "bucket": bucket, "path": object_path.lstrip("/")}
+    upload_to_signed_url(local_path, _broker({**ref, "action": "upload"})["uploadUrl"])
+    return _broker({**ref, "action": "read", "expires_in": read_ttl})["readUrl"]
+
+
 def check(bucket: str = None) -> dict:
     """
     Can this worker actually reach Supabase Storage and write to the bucket?
@@ -45,6 +77,16 @@ def check(bucket: str = None) -> dict:
     with all the work already paid for. Read-only: lists the bucket, writes
     nothing.
     """
+    if broker_enabled():
+        # No key to test; ask the broker whether it is deployed and reachable.
+        out = {"mode": "broker", "url": bool(config.SUPABASE_URL), "serviceKey": False,
+               "ok": False, "detail": ""}
+        try:
+            out["ok"] = bool(_broker({"action": "ping"}, timeout=20).get("pong"))
+            out["detail"] = "uploads go through the app's worker-storage function"
+        except Exception as e:  # noqa: BLE001
+            out["detail"] = f"worker-storage function unreachable: {str(e)[:200]}"
+        return out
     bucket = bucket or config.SUPABASE_BUCKET
     out = {"url": bool(config.SUPABASE_URL), "serviceKey": bool(config.SUPABASE_SERVICE_KEY),
            "bucket": bucket, "bucketExists": False, "ok": False, "detail": ""}

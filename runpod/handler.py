@@ -76,7 +76,8 @@ class Reporter:
         storage.patch_project(self.project_id, payload)
 
 
-def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter) -> int:
+def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
+                  job_id: str = "") -> int:
     """
     Upload sourced media to Supabase and point the timeline at it.
 
@@ -105,8 +106,11 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter) -> 
         ext = os.path.splitext(path)[1] or ".bin"
         obj = f"projects/{project_id}/media/{scene['id']}{ext}"
         try:
-            storage.upload_to_supabase(path, obj, bucket=bucket)
-            url = storage.signed_url(obj, bucket=bucket, expires_in=60 * 60 * 24 * 7)
+            if storage.broker_enabled():
+                url = storage.broker_upload(path, bucket, obj, project_id, job_id)
+            else:
+                storage.upload_to_supabase(path, obj, bucket=bucket)
+                url = storage.signed_url(obj, bucket=bucket, expires_in=60 * 60 * 24 * 7)
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not publish {obj}: {e}", flush=True)
             scene["reviewRequired"] = True
@@ -115,6 +119,8 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter) -> 
             continue
         published[path] = url
         media["url"] = url
+        # The signed URL expires; the app re-signs from this before a render.
+        media["storage"] = {"bucket": bucket, "path": obj}
         if i % 20 == 0:
             report(f"Saving media {i + 1}/{len(scenes)}", 66)
     doc["meta"]["publishedMedia"] = len(published)
@@ -282,8 +288,8 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
     project_id = inp.get("project_id") or ""
     if project_id and inp.get("publish_media", True):
         report("Saving replacement media", 70)
-        publish_media(doc, project_id,
-                      inp.get("media_bucket") or config.SUPABASE_BUCKET, report)
+        publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
+                      report, job_id=inp.get("_job_id", ""))
 
     meta = doc.setdefault("meta", {})
     meta["scenesWithoutMedia"] = sum(
@@ -342,7 +348,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
     # A plan can sit in the editor for days; any signed URL in it has long
     # since expired. Re-resolve the narration from the reference the plan
     # recorded, then re-sign whatever else points at Supabase.
-    source = (doc.get("meta") or {}).get("audioSource")
+    # The caller's fresh narration link wins: the plan's own link is signed
+    # for hours, and a timeline can sit in the editor for days.
+    source = inp.get("audio_url") or (doc.get("meta") or {}).get("audioSource")
     if source:
         try:
             doc["audio"]["url"] = storage.resolve_audio(
@@ -379,6 +387,23 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
             "bucket": "",
             "uploadedVia": "signed_url",
             "size_bytes": size,
+            "duration": duration,
+        }
+
+    # No key on this worker: the app's broker signs the one destination.
+    if storage.broker_enabled() and inp.get("project_id"):
+        bucket = config.RENDER_BUCKET
+        object_path = f"projects/{inp['project_id']}/final-{int(time.time())}.mp4"
+        playable = storage.broker_upload(
+            out_path, bucket, object_path, inp["project_id"], inp.get("_job_id", ""),
+            read_ttl=int(inp.get("signed_url_ttl", 60 * 60 * 24 * 7)))
+        return {
+            "video_url": playable,
+            "public_url": "",
+            "object_path": object_path,
+            "bucket": bucket,
+            "uploadedVia": "broker",
+            "size_bytes": os.path.getsize(out_path),
             "duration": duration,
         }
 
@@ -425,6 +450,8 @@ def handler(job):
     started = time.time()
     job_id = job.get("id") or uuid.uuid4().hex
     inp = job.get("input") or {}
+    # The storage broker authorises uploads by the running job's id.
+    inp["_job_id"] = job_id
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
     report = Reporter(project_id)
@@ -465,7 +492,8 @@ def handler(job):
             if project_id and inp.get("publish_media", True):
                 report("Saving sourced media", 66)
                 publish_media(doc, project_id,
-                              inp.get("media_bucket") or config.SUPABASE_BUCKET, report)
+                              inp.get("media_bucket") or config.MEDIA_BUCKET, report,
+                              job_id=job_id)
             if project_id:
                 storage.patch_project(project_id, {
                     "scene_data": doc, "status": "editing",
