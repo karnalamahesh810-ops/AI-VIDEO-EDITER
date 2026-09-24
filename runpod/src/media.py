@@ -46,6 +46,11 @@ _PROXY_POS = [0]
 _PROXY_BENCHED: Dict[str, float] = {}
 _PROXY_BENCH_SECONDS = 600
 
+# Bounds how many yt-dlp subprocesses run at once, across every scene and
+# every scout, so sourcing does not send more simultaneous requests than
+# there are proxy IPs to carry them. See config.NETWORK_CONCURRENCY.
+_NET_SEM = threading.Semaphore(config.NETWORK_CONCURRENCY)
+
 
 def _next_proxy() -> str:
     """Next healthy proxy; if every one is benched, the least-recently benched."""
@@ -787,7 +792,8 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
     cmd += _yt_network_args(proxy)
 
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        with _NET_SEM:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         _bench_proxy(proxy, "search timed out")
         return []
@@ -831,10 +837,17 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
     """(full yt-dlp info dict, proxy used) for one video, or ({}, proxy).
 
     Needed for moment selection: the flat search results carry no formats, and
-    the storyboard (`sb*`) formats are what map thumbnails to timestamps. The
-    proxy is returned because the storyboard sheets are fetched separately and
-    should leave from the same address.
+    the storyboard (`sb*`) formats are what map thumbnails to timestamps. This
+    is a full extraction (opens the player, runs its JS challenge) - as slow
+    as the per-result lookup the flat search above exists to avoid - so a
+    popular subject that several scenes reach for the same candidate is
+    cached rather than re-extracted every time.
     """
+    with _CACHE_LOCK:
+        cached = _YT_INFO_CACHE.get(video_id)
+    if cached is not None:
+        return cached
+
     proxy = _next_proxy()
     cmd = ["yt-dlp", f"https://www.youtube.com/watch?v={video_id}", "-J",
            "--no-warnings", "--ignore-config", "--socket-timeout", "20"]
@@ -843,14 +856,21 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
     if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
         cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=timeout)
-        return (json.loads(p.stdout) if p.returncode == 0 and p.stdout else {}), proxy
+        with _NET_SEM:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=timeout)
+        info = json.loads(p.stdout) if p.returncode == 0 and p.stdout else {}
     except subprocess.TimeoutExpired:
         _bench_proxy(proxy, "metadata timed out")
         return {}, proxy
     except (FileNotFoundError, ValueError):
         return {}, proxy
+    if info:
+        # A failed extraction is never cached - the next scout should retry
+        # it, possibly through a different (unbenched) proxy.
+        with _CACHE_LOCK:
+            _YT_INFO_CACHE[video_id] = (info, proxy)
+    return info, proxy
 
 
 def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
@@ -871,7 +891,8 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     proxy = _next_proxy()
     cmd += _yt_network_args(proxy)
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        with _NET_SEM:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         _bench_proxy(proxy, "download timed out")
         return ""
@@ -1192,6 +1213,9 @@ def search_pixabay(query: str, kind: str = "video", per_page: int = 5) -> List[M
 _SEARCH_CACHE: Dict[str, List[MediaAsset]] = {}
 _CACHE_LOCK = threading.Lock()
 
+# One yt-dlp -J extraction per video per job, however many scenes scout it.
+_YT_INFO_CACHE: Dict[str, tuple] = {}
+
 # Generated images are billed per call, so the budget is enforced here rather
 # than trusted to callers. Reset per job alongside the cache.
 _GENERATED = [0]
@@ -1201,6 +1225,7 @@ def reset_cache():
     """Call between jobs — serverless worker processes are reused across renders."""
     with _CACHE_LOCK:
         _SEARCH_CACHE.clear()
+        _YT_INFO_CACHE.clear()
         _GENERATED[0] = 0
     vision.reset()  # per-job call/failure counts for the job result
 

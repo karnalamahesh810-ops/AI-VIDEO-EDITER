@@ -13,6 +13,8 @@ import json
 import os
 import re
 import sys
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -1723,6 +1725,72 @@ class BlockedIPDetection(unittest.TestCase):
             media._PROXIES[:] = saved[0]
             media._PROXY_BENCHED.clear()
             media._PROXY_BENCHED.update(saved[1])
+
+
+class NetworkConcurrency(unittest.TestCase):
+    """
+    Scene-level sourcing (6 workers) x moment scouting (MOMENT_PARALLEL) can
+    ask for far more simultaneous yt-dlp requests than there are proxy IPs,
+    which reads as "sourcing is slow" with nothing to explain it: a contended
+    proxy does not error, it just queues.
+    """
+
+    def setUp(self):
+        media.reset_cache()
+
+    def tearDown(self):
+        media.reset_cache()
+
+    def test_yt_dlp_calls_never_exceed_the_configured_cap(self):
+        import concurrent.futures
+        cap = 3
+        current = [0]
+        peak = [0]
+        lock = threading.Lock()
+
+        class Result:
+            returncode, stdout, stderr = 0, "", ""
+
+        def fake_run(cmd, **k):
+            with lock:
+                current[0] += 1
+                peak[0] = max(peak[0], current[0])
+            time.sleep(0.05)
+            with lock:
+                current[0] -= 1
+            return Result()
+
+        with mock.patch.object(config, "NETWORK_CONCURRENCY", cap), \
+                mock.patch.object(media, "_NET_SEM", threading.Semaphore(cap)), \
+                mock.patch.object(media.subprocess, "run", side_effect=fake_run):
+            with concurrent.futures.ThreadPoolExecutor(10) as pool:
+                list(pool.map(lambda i: media._yt_candidates(f"ytsearch1:{i}", False), range(10)))
+        self.assertLessEqual(peak[0], cap)
+
+    def test_the_same_video_is_extracted_only_once_per_job(self):
+        calls = []
+
+        class Result:
+            returncode, stdout, stderr = 0, '{"id": "abc", "duration": 300}', ""
+
+        def fake_run(cmd, **k):
+            calls.append(1)
+            return Result()
+
+        with mock.patch.object(media.subprocess, "run", side_effect=fake_run):
+            info1, _ = media._yt_info("abc")
+            info2, _ = media._yt_info("abc")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(info1, info2)
+
+    def test_a_failed_extraction_is_not_cached(self):
+        class Result:
+            returncode, stdout, stderr = 1, "", "error"
+
+        with mock.patch.object(media.subprocess, "run", return_value=Result()):
+            info, _ = media._yt_info("bad-video")
+        self.assertEqual(info, {})
+        self.assertNotIn("bad-video", media._YT_INFO_CACHE)
 
 
 class ExtraSources(unittest.TestCase):

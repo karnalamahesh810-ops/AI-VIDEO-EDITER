@@ -77,6 +77,15 @@ YTDLP_PROXIES = [p.strip() for p in YTDLP_PROXY.split(",") if p.strip()]
 # yt-dlp can also present browser cookies, which helps with the same check.
 YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
 
+# Cap on concurrent yt-dlp subprocesses (search, metadata, download combined).
+# Scene-level sourcing (6 workers) x moment-scouting (MOMENT_PARALLEL, 3) can
+# ask for up to 18 requests at once; with only a handful of proxy IPs that is
+# real oversubscription, not real speed - contended proxies just queue and
+# time out, which reads as "sourcing is slow" with nothing to explain why.
+# Default tracks the proxy pool (one request per healthy IP), floor of 4 so
+# an unproxied dev box still gets some parallelism.
+NETWORK_CONCURRENCY = int(os.getenv("NETWORK_CONCURRENCY", "0")) or max(4, len(YTDLP_PROXIES))
+
 # --- generated images --------------------------------------------------------
 # Any OpenAI-compatible /images/generations endpoint (OpenAI gpt-image-1, or a
 # compatible gateway). Same env shape as the director below, deliberately.
