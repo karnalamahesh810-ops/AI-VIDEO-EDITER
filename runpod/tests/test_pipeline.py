@@ -272,15 +272,44 @@ class SecondPass(unittest.TestCase):
         # Repeats are kept (better than black) but flagged for the editor.
         self.assertTrue(all(a.review_required for a in out[1:]))
 
-    def test_an_empty_scene_gets_one_more_reach_not_three(self):
+    def test_an_empty_scene_gets_the_same_reach_as_a_bad_one_plus_a_guaranteed_try(self):
+        # A scene that pass 1 could not fill at all used to get only one retry
+        # here (vs. three for a merely-bad or duplicate clip) and, if that one
+        # retry also missed, silently stayed None with no further attempt -
+        # the exact gap that let "Scene 1 still needs media before it can
+        # render" reach a real job. It now gets the same three timed retries,
+        # plus one guaranteed unbudgeted try before the pass gives up.
         calls = {"n": 0}
 
         def nothing(query, seconds, work_dir, *, nth=0, used=None, **kw):
             calls["n"] += 1
             return None
 
-        self._run(nothing, n=2)
-        self.assertEqual(calls["n"], 2 + 2)  # pass 1 + one retry each
+        out, _ = self._run(nothing, n=2)
+        self.assertEqual(calls["n"], 2 * 5)  # pass 1 + 3 timed retries + 1 guaranteed
+        # No source ever succeeds and the test environment has no image-gen
+        # key, so there is genuinely nothing to show - it must stay None
+        # rather than being forced into a fake success, so timeline.validate
+        # still catches it before a render is attempted.
+        self.assertTrue(all(a is None for a in out))
+
+    def test_an_empty_scene_is_filled_by_the_guaranteed_final_try(self):
+        # Pass 1 and all three timed retries miss; only the extra guaranteed
+        # attempt after the timed pass succeeds. Before this fix the scene
+        # would have been abandoned as None right after pass 1's one weak
+        # retry, and only surfaced later as a render-time failure.
+        calls = {"n": 0}
+
+        def eventually(query, seconds, work_dir, *, nth=0, used=None, **kw):
+            calls["n"] += 1
+            if calls["n"] < 5:
+                return None
+            return MediaAsset(kind="image", source="wikimedia", url="https://x/late.jpg")
+
+        out, _ = self._run(eventually, n=1)
+        self.assertEqual(calls["n"], 5)
+        self.assertIsNotNone(out[0])
+        self.assertEqual(out[0].url, "https://x/late.jpg")
 
 
 class PipelineProgress(unittest.TestCase):

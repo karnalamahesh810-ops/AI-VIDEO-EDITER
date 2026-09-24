@@ -1535,14 +1535,17 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # Then replace in parallel, under a time budget. This pass used to run one
     # scene at a time with up to three full attempts each and no progress
     # report: on a 17-scene test it sat at "Sourced 17/17" for over ten
-    # minutes. A scene pass 1 could not fill at all gets one more reach, not
-    # three - it has already exhausted its first choices.
+    # minutes. A genuinely empty scene used to get only one reach here instead
+    # of three, on the theory that pass 1 had already exhausted its first
+    # choices - but pass 1 only ever tries nth, so that scene had the least
+    # margin for failure of any in `todo` and silently stayed None when its
+    # one attempt missed. All three reasons now get the same three attempts.
     claim = threading.Lock()
     deadline = time.time() + config.REPLACE_BUDGET_SECONDS
     replaced = [0]
 
     def replace(job, nth, bad_reason, is_dup):
-        for attempt in range(1, (3 if (bad_reason or is_dup) else 1) + 1):
+        for attempt in range(1, 4):
             if time.time() >= deadline:
                 return None
             try:
@@ -1569,6 +1572,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             return candidate
         return None
 
+    still_empty = []  # (job, nth) - genuinely empty and unfilled after the timed pass
     if todo:
         if on_review:
             on_review(0, len(todo))
@@ -1595,8 +1599,52 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     # the editor can swap it with `resource`.
                     results[i].review_required = True
                     results[i].review_reason = "Repeat of an earlier shot — no other match found"
+                elif results[i] is None:
+                    # Genuinely empty, and the timed pass above could not fill it
+                    # either (candidates exhausted, or REPLACE_BUDGET_SECONDS ran
+                    # out mid-flight). Queue it for one guaranteed try below - left
+                    # as None here it would only surface as "Scene N still needs
+                    # media" at render time, after the job already paid for
+                    # sourcing every other scene.
+                    still_empty.append((job, nth))
                 if on_review:
                     on_review(n, len(todo))
+
+    # No scene may leave this function without media: an empty scene fails the
+    # whole render (timeline.validate's require_media check), long after the
+    # rest of the job's sourcing budget is already spent. One more try per
+    # scene here, ignoring the time budget and the generated-image spend cap -
+    # a beat with a hard-to-source subject gets an extra reach (and, failing
+    # that, an illustration) instead of failing the whole video.
+    for job, nth in still_empty:
+        i = job["index"]
+        try:
+            candidate = source_for_segment(
+                job["query"], float(job.get("seconds") or 0), work_dir,
+                visual_type=job.get("visual_type", "footage"), nth=nth + 4,
+                used=used, fallbacks=job.get("fallbacks"),
+                prompt=job.get("prompt", ""), intent=job.get("intent", ""),
+                context=job.get("context", ""), **kwargs)
+        except Exception:  # noqa: BLE001
+            candidate = None
+        if candidate is not None:
+            ok, why = _asset_ok(candidate)
+            if ok and candidate.identity not in used:
+                used.add(candidate.identity)
+                results[i] = candidate
+                replaced[0] += 1
+                print(f"[media] scene {i + 1}: filled on final pass", flush=True)
+                continue
+        made = generate_image(job.get("prompt") or job["query"], work_dir)
+        if made:
+            made.review_required = True
+            made.review_reason = "No real footage found - generated on the final pass"
+            results[i] = made
+            replaced[0] += 1
+            print(f"[media] scene {i + 1}: generated illustration (final pass)", flush=True)
+        else:
+            print(f"[media] scene {i + 1}: still no usable media after every pass",
+                  flush=True)
 
     if duplicates:
         print(f"[media] resolved {duplicates} duplicate shot(s)", flush=True)
