@@ -1418,7 +1418,8 @@ def _asset_ok(asset) -> tuple:
 
 
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
-                workers: int = 6, on_done=None, **kwargs) -> List[Optional[MediaAsset]]:
+                workers: int = 6, on_done=None, on_review=None,
+                **kwargs) -> List[Optional[MediaAsset]]:
     """
     Source visuals for many scenes, with no two scenes sharing a visual.
 
@@ -1430,9 +1431,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
          scenes asked the same question (`nth`) and reaches that far down the
          result list, which resolves the common case — a repeated subject —
          without any coordination.
-      2. Walk the results in order and re-source, serially, any scene whose
-         asset was already claimed by an earlier one. Only actual collisions
-         pay for this, and each retry reaches further down the list.
+      2. Walk the results in order to find repeats, unusable clips and empty
+         scenes, then re-source those in parallel under
+         REPLACE_BUDGET_SECONDS, reporting through `on_review(done, total)`.
+         Each retry reaches further down the same result list.
 
     `jobs` is a list of
     {"index": int, "query": str, "seconds": float, "visual_type": str}.
@@ -1482,28 +1484,41 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # list - so they share one loop. A clip that is merely a repeat is better
     # than black; a clip covered in somebody else's subtitles is not, so an
     # unusable shot is dropped even when there is nothing to put in its place.
+    # Classify first (no network): the first scene to claim a clip keeps it.
     used: set = set()
-    duplicates = rejected = 0
+    duplicates = rejected = empty = 0
+    todo = []  # (job, nth, bad_reason, is_duplicate)
     for job, nth in plan:
         i = job["index"]
         asset = results[i]
-        bad_reason = ""
-        if asset:
-            ok, why = _asset_ok(asset)
-            if not ok:
-                bad_reason = why
-                rejected += 1
-                print(f"[media] scene {i + 1}: dropping clip ({why})", flush=True)
-
-        if asset and not bad_reason and asset.identity not in used:
-            used.add(asset.identity)
+        if asset is None:
+            empty += 1
+            todo.append((job, nth, "", False))
             continue
-        if asset and not bad_reason:
+        ok, why = _asset_ok(asset)
+        if not ok:
+            rejected += 1
+            print(f"[media] scene {i + 1}: dropping clip ({why})", flush=True)
+            todo.append((job, nth, why, False))
+        elif asset.identity in used:
             duplicates += 1
+            todo.append((job, nth, "", True))
+        else:
+            used.add(asset.identity)
 
-        replacement = None
-        # Reach progressively further down the result list.
-        for attempt in range(1, 4):
+    # Then replace in parallel, under a time budget. This pass used to run one
+    # scene at a time with up to three full attempts each and no progress
+    # report: on a 17-scene test it sat at "Sourced 17/17" for over ten
+    # minutes. A scene pass 1 could not fill at all gets one more reach, not
+    # three - it has already exhausted its first choices.
+    claim = threading.Lock()
+    deadline = time.time() + config.REPLACE_BUDGET_SECONDS
+    replaced = [0]
+
+    def replace(job, nth, bad_reason, is_dup):
+        for attempt in range(1, (3 if (bad_reason or is_dup) else 1) + 1):
+            if time.time() >= deadline:
+                return None
             try:
                 candidate = source_for_segment(
                     job["query"], float(job.get("seconds") or 0), work_dir,
@@ -1514,31 +1529,54 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     **kwargs)
             except Exception:  # noqa: BLE001
                 candidate = None
-            if candidate and candidate.identity not in used:
-                ok, why = _asset_ok(candidate)
-                if ok:
-                    replacement = candidate
-                    break
-                print(f"[media] scene {i + 1}: replacement also bad ({why})",
+            if not candidate:
+                continue
+            ok, why = _asset_ok(candidate)
+            if not ok:
+                print(f"[media] scene {job['index'] + 1}: replacement also bad ({why})",
                       flush=True)
-        if replacement:
-            results[i] = replacement
-            used.add(replacement.identity)
-            if bad_reason:
-                print(f"[media] scene {i + 1}: replaced", flush=True)
-        elif bad_reason:
-            # Nothing clean to put here. Leaving it empty lets the timeline
-            # hold the previous shot instead of showing the bad one.
-            results[i] = None
-        elif asset:
-            # Nothing else available. Keep the repeat rather than rendering
-            # black, but say so — the editor can swap it with `resource`.
-            asset.review_required = True
-            asset.review_reason = "Repeat of an earlier shot — no other match found"
-            used.add(asset.identity)
+                continue
+            with claim:
+                if candidate.identity in used:
+                    continue
+                used.add(candidate.identity)
+            return candidate
+        return None
+
+    if todo:
+        if on_review:
+            on_review(0, len(todo))
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = {pool.submit(replace, *t): t for t in todo}
+            for n, fut in enumerate(as_completed(futures), 1):
+                job, nth, bad_reason, is_dup = futures[fut]
+                i = job["index"]
+                try:
+                    replacement = fut.result()
+                except Exception:  # noqa: BLE001
+                    replacement = None
+                if replacement:
+                    results[i] = replacement
+                    replaced[0] += 1
+                    if bad_reason:
+                        print(f"[media] scene {i + 1}: replaced", flush=True)
+                elif bad_reason:
+                    # Nothing clean to put here. Leaving it empty lets the
+                    # timeline hold the previous shot instead of the bad one.
+                    results[i] = None
+                elif is_dup and results[i]:
+                    # Keep the repeat rather than rendering black, but say so -
+                    # the editor can swap it with `resource`.
+                    results[i].review_required = True
+                    results[i].review_reason = "Repeat of an earlier shot — no other match found"
+                if on_review:
+                    on_review(n, len(todo))
 
     if duplicates:
         print(f"[media] resolved {duplicates} duplicate shot(s)", flush=True)
     if rejected:
         print(f"[media] rejected {rejected} unusable clip(s)", flush=True)
+    if todo:
+        print(f"[media] second pass: {replaced[0]}/{len(todo)} scene(s) replaced "
+              f"({empty} empty, {duplicates} repeats, {rejected} unusable)", flush=True)
     return results

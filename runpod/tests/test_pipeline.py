@@ -228,6 +228,61 @@ class StorageBroker(unittest.TestCase):
         self.assertEqual(up.call_args[0][3:], ("p1", "job-9"))
 
 
+class SecondPass(unittest.TestCase):
+    """The replace pass is parallel, reported and time-boxed."""
+
+    def _run(self, fake, n=4, budget=240):
+        jobs = [{"index": i, "query": "same", "seconds": 3.0} for i in range(n)]
+        seen = []
+        with mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")), \
+                mock.patch.object(config, "REPLACE_BUDGET_SECONDS", budget):
+            out = media.source_many(jobs, "/tmp", workers=3,
+                                    on_review=lambda d, t: seen.append((d, t)))
+        return out, seen
+
+    def test_repeats_are_replaced_and_progress_is_reported(self):
+        def fake(query, seconds, work_dir, *, nth=0, used=None, **kw):
+            return MediaAsset(kind="image", source="wikimedia", url=f"https://x/{nth}.jpg")
+
+        # Every scene asks "same"; nth spreads them, so force a collision by
+        # making pass 1 return one url for everybody.
+        calls = {"n": 0}
+
+        def colliding(query, seconds, work_dir, *, nth=0, used=None, **kw):
+            calls["n"] += 1
+            if calls["n"] <= 4:
+                return MediaAsset(kind="image", source="wikimedia", url="https://x/dup.jpg")
+            return fake(query, seconds, work_dir, nth=nth + calls["n"], used=used)
+
+        out, seen = self._run(colliding)
+        self.assertEqual(len({a.identity for a in out}), 4)
+        self.assertEqual(seen[0], (0, 3))
+        self.assertEqual(seen[-1], (3, 3))
+
+    def test_nothing_new_starts_after_the_budget(self):
+        calls = {"n": 0}
+
+        def colliding(query, seconds, work_dir, *, nth=0, used=None, **kw):
+            calls["n"] += 1
+            return MediaAsset(kind="image", source="wikimedia", url="https://x/dup.jpg")
+
+        out, _ = self._run(colliding, budget=0)
+        self.assertEqual(calls["n"], 4)  # pass 1 only
+        # Repeats are kept (better than black) but flagged for the editor.
+        self.assertTrue(all(a.review_required for a in out[1:]))
+
+    def test_an_empty_scene_gets_one_more_reach_not_three(self):
+        calls = {"n": 0}
+
+        def nothing(query, seconds, work_dir, *, nth=0, used=None, **kw):
+            calls["n"] += 1
+            return None
+
+        self._run(nothing, n=2)
+        self.assertEqual(calls["n"], 2 + 2)  # pass 1 + one retry each
+
+
 class PipelineProgress(unittest.TestCase):
     """The app draws its pipeline screen from these progress updates."""
 

@@ -60,6 +60,7 @@ _PHASE_BY_PREFIX = (
     ("Aligning narration", "transcribe"),
     ("Planning", "plan"),
     ("Sourcing", "source"), ("Sourced", "source"), ("Re-sourcing", "source"),
+    ("Replacing", "source"),
     ("Rendering", "render"),
     ("Uploading", "upload"),
     ("Saving", "save"),
@@ -269,6 +270,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         allow_stock=inp.get("allow_stock"),
         require_cc=inp.get("require_cc"),
         on_done=on_done,
+        on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
     )
 
     doc = timeline.build(

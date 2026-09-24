@@ -135,6 +135,9 @@ VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
 # Moment selection: read the video's storyboard (YouTube's hover-preview
 # thumbnails, ~1/sec, a few hundred KB) and let the vision model pick the
 # timestamp that shows the intent, instead of cutting at a fixed 35%.
+# Wall-clock cap on the second sourcing pass (repeats, rejected and empty
+# scenes). Attempts in flight finish; no new ones start after it.
+REPLACE_BUDGET_SECONDS = int(os.getenv("REPLACE_BUDGET_SECONDS", "240"))
 MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
 MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp
