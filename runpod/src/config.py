@@ -54,17 +54,19 @@ ALLOW_STOCK = _flag("ALLOW_STOCK", False)
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY", "")
 
-# YouTube footage. require_cc keeps sourcing to uploads published under
-# Creative Commons Attribution — the only footage you may legally re-cut and
-# monetise. Everything else is someone's reserved copyright and Content ID food.
+# YouTube footage. REQUIRE_CC restricts sourcing to Creative Commons uploads.
+# Off by default: CC-licensed YouTube is dominated by gaming streams, phone
+# video and tutorials, which is exactly what made early renders look amateur,
+# and neither VidRush nor GoMotion filters on licence (their timelines carry
+# CNN and Kinolibrary cuts). Unfiltered clips are flagged reviewRequired with an
+# "unverified licence" note, so the Content ID exposure stays visible per scene.
+# Set REQUIRE_CC=1 for channels that must stay claim-free.
 ALLOW_YOUTUBE = _flag("ALLOW_YOUTUBE", True)
-REQUIRE_CC = _flag("REQUIRE_CC", True)
+REQUIRE_CC = _flag("REQUIRE_CC", False)
 
-# Residential proxy for yt-dlp. NOT optional on RunPod: serverless workers get
-# datacenter IPs, and YouTube answers those with "Sign in to confirm you're not
-# a bot", so sourcing that works perfectly on a home connection returns nothing
-# at all in production. A handful of residential proxies is enough for one
-# channel's throughput.
+# Optional residential/ISP proxy for yt-dlp. Datacenter addresses may be
+# challenged by YouTube, but a proxy alone does not guarantee downloads.
+# Test metadata extraction AND a short media download on the deployed worker.
 #
 # Accepts one proxy or a comma-separated list, which is rotated per request so
 # a single address does not absorb every download and get flagged.
@@ -106,6 +108,44 @@ IMAGE_MAX_PER_VIDEO = int(os.getenv("IMAGE_MAX_PER_VIDEO", "80"))
 DIRECTOR_API_BASE = os.getenv("DIRECTOR_API_BASE", "").rstrip("/")
 DIRECTOR_API_KEY = os.getenv("DIRECTOR_API_KEY", "")
 DIRECTOR_MODEL = os.getenv("DIRECTOR_MODEL", "")
+
+# --- vision verification -----------------------------------------------------
+# Every candidate clip/image is shown to a multimodal model, which describes
+# what is actually in the frames and scores it against the shot's intent.
+# Below VISION_MIN_SCORE it is rejected and the next candidate is tried. 0.70
+# is VidRush's own floor: across 325 scored items on one of their timelines the
+# minimum was exactly 0.70. Defaults reuse the director's key, so a Kie key
+# configured once powers both.
+VISION_ENABLED = _flag("VISION_ENABLED", True)
+VISION_API_BASE = os.getenv("VISION_API_BASE", "") or DIRECTOR_API_BASE or "https://api.kie.ai/v1"
+VISION_API_KEY = (os.getenv("VISION_API_KEY", "") or DIRECTOR_API_KEY
+                  or os.getenv("KIE_API_KEY", ""))
+# gpt-5-2 is the model verified to accept images on the Kie account (Gemini
+# Flash answers "channel is not supported" there).
+VISION_MODEL = os.getenv("VISION_MODEL", "gpt-5-2")
+VISION_FALLBACK_MODELS = [m.strip() for m in
+                          os.getenv("VISION_FALLBACK_MODELS", "gemini-3-pro").split(",")
+                          if m.strip()]
+VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
+VISION_FRAMES = int(os.getenv("VISION_FRAMES", "3"))
+# Candidates judged per search before giving up on that query. Each judged
+# candidate costs one model call, so this bounds spend per scene.
+VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
+
+# Moment selection: read the video's storyboard (YouTube's hover-preview
+# thumbnails, ~1/sec, a few hundred KB) and let the vision model pick the
+# timestamp that shows the intent, instead of cutting at a fixed 35%.
+MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
+MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
+# Candidate videos scouted in parallel per search. Each scout is one yt-dlp
+# metadata call plus one vision call; the beat then costs about the slowest.
+MOMENT_PARALLEL = int(os.getenv("MOMENT_PARALLEL", "3"))
+
+# --- web image search ----------------------------------------------------------
+# Real photographs of named people, places and events. Serper (Google Images)
+# when SERPER_API_KEY is set; otherwise the keyless DuckDuckGo image search.
+ALLOW_WEB_IMAGES = _flag("ALLOW_WEB_IMAGES", True)
+SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 
 # --- supabase storage --------------------------------------------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")

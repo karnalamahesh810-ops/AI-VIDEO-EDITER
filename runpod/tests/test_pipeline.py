@@ -160,6 +160,46 @@ class DisqualifyingTitles(unittest.TestCase):
                 self.assertIsNone(media._TALKING_HEAD.search(title))
 
 
+class TransitionsAndEffects(unittest.TestCase):
+    """Scene entrances and per-clip effects: contract + placement rules."""
+
+    def _ts_union(self, name):
+        with open(os.path.join(REMOTION, "types.ts"), encoding="utf-8") as fh:
+            src = fh.read()
+        block = re.search(r"export type %s\s*=(.*?);" % name, src, re.S)
+        self.assertIsNotNone(block, f"{name} not found in types.ts")
+        return set(re.findall(r'"([a-z-]+)"', block.group(1)))
+
+    def test_python_and_types_agree_on_transitions(self):
+        self.assertEqual(timeline.TRANSITIONS, self._ts_union("SceneTransition"))
+
+    def test_python_and_types_agree_on_effects(self):
+        self.assertEqual(timeline.EFFECTS, self._ts_union("SceneEffect"))
+
+    def test_most_cuts_are_hard_cuts(self):
+        shots = [{"subject": "Lake Mead" if i < 10 else "Hoover Dam"} for i in range(20)]
+        plan = timeline.plan_transitions(shots)
+        self.assertEqual(plan[0], "none")
+        self.assertLessEqual(sum(1 for p in plan if p != "none"), 5)
+
+    def test_a_subject_change_gets_a_transition(self):
+        shots = [{"subject": "Lake Mead"}] * 5 + [{"subject": "Hoover Dam"}] * 5
+        plan = timeline.plan_transitions(shots)
+        self.assertNotEqual(plan[5], "none")
+
+    def test_transitions_are_never_back_to_back(self):
+        shots = [{"subject": f"place {i}"} for i in range(30)]
+        plan = timeline.plan_transitions(shots)
+        idx = [i for i, p in enumerate(plan) if p != "none"]
+        self.assertTrue(all(b - a >= 3 for a, b in zip(idx, idx[1:])))
+
+    def test_every_choice_is_in_the_contract(self):
+        shots = [{"subject": f"s{i // 3}", "overlay": {"type": "chapter"} if i % 7 == 0 else None}
+                 for i in range(40)]
+        for p in timeline.plan_transitions(shots):
+            self.assertIn(p, timeline.TRANSITIONS)
+
+
 class Treatments(unittest.TestCase):
     """
     The grade is chosen from what the beat is talking about.
@@ -1282,17 +1322,18 @@ class BlockedIPDetection(unittest.TestCase):
             returncode, stdout, stderr = 0, "", ""
 
         original_run = media.subprocess.run
-        original_cycle = media._PROXY_CYCLE
-        import itertools
-        media._PROXY_CYCLE = itertools.cycle(["http://u:p@host1:8000",
-                                              "http://u:p@host2:8000"])
+        saved = (media._PROXIES[:], dict(media._PROXY_BENCHED))
+        media._PROXIES[:] = ["http://u:p@host1:8000", "http://u:p@host2:8000"]
+        media._PROXY_BENCHED.clear()
         media.subprocess.run = lambda cmd, **k: seen.setdefault("cmds", []).append(cmd) or Result()
         try:
             media._yt_candidates("ytsearch1:a", False)
             media._yt_candidates("ytsearch1:b", False)
         finally:
             media.subprocess.run = original_run
-            media._PROXY_CYCLE = original_cycle
+            media._PROXIES[:] = saved[0]
+            media._PROXY_BENCHED.clear()
+            media._PROXY_BENCHED.update(saved[1])
 
         proxies = [c[c.index("--proxy") + 1] for c in seen["cmds"] if "--proxy" in c]
         self.assertEqual(len(proxies), 2)
@@ -1306,15 +1347,61 @@ class BlockedIPDetection(unittest.TestCase):
             returncode, stdout, stderr = 0, "", ""
 
         original_run = media.subprocess.run
-        original_cycle = media._PROXY_CYCLE
-        media._PROXY_CYCLE = None
+        saved = media._PROXIES[:]
+        media._PROXIES[:] = []
         media.subprocess.run = lambda cmd, **k: seen.update(cmd=cmd) or Result()
         try:
             media._yt_candidates("ytsearch1:a", False)
         finally:
             media.subprocess.run = original_run
-            media._PROXY_CYCLE = original_cycle
+            media._PROXIES[:] = saved
         self.assertNotIn("--proxy", seen["cmd"])
+
+    def test_a_refused_proxy_is_skipped_until_it_recovers(self):
+        class Refused:
+            returncode, stdout = 1, ""
+            stderr = "ERROR: Sign in to confirm you're not a bot"
+
+        class Ok:
+            returncode, stdout, stderr = 0, "", ""
+
+        used, replies = [], [Refused(), Ok(), Ok(), Ok()]
+
+        def fake_run(cmd, **k):
+            used.append(cmd[cmd.index("--proxy") + 1])
+            return replies.pop(0)
+
+        original_run = media.subprocess.run
+        saved = (media._PROXIES[:], dict(media._PROXY_BENCHED), media._PROXY_POS[0])
+        media._PROXIES[:] = ["http://a:1", "http://b:2", "http://c:3"]
+        media._PROXY_BENCHED.clear()
+        media._PROXY_POS[0] = 0
+        media.subprocess.run = fake_run
+        try:
+            for q in "wxyz":
+                media._yt_candidates(f"ytsearch1:{q}", False)
+        finally:
+            media.subprocess.run = original_run
+            media._PROXIES[:] = saved[0]
+            media._PROXY_BENCHED.clear()
+            media._PROXY_BENCHED.update(saved[1])
+            media._PROXY_POS[0] = saved[2]
+        self.assertEqual(used[0], "http://a:1")
+        # a was refused, so the rotation carries on without it.
+        self.assertNotIn("http://a:1", used[1:])
+
+    def test_all_proxies_benched_still_returns_one(self):
+        saved = (media._PROXIES[:], dict(media._PROXY_BENCHED))
+        media._PROXIES[:] = ["http://a:1", "http://b:2"]
+        media._PROXY_BENCHED.clear()
+        media._PROXY_BENCHED.update({"http://a:1": 9e12, "http://b:2": 8e12})
+        try:
+            # Least-recently benched wins rather than running with no proxy.
+            self.assertEqual(media._next_proxy(), "http://b:2")
+        finally:
+            media._PROXIES[:] = saved[0]
+            media._PROXY_BENCHED.clear()
+            media._PROXY_BENCHED.update(saved[1])
 
 
 class ExtraSources(unittest.TestCase):

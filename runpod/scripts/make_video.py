@@ -70,6 +70,46 @@ tick();
 """
 
 
+class _CachedTranscribe:
+    """Wraps the transcribe module, memoising transcribe_words on disk.
+
+    Keyed by the audio file's path, size and mtime, so editing the narration
+    invalidates it automatically. Everything else on the module passes through.
+    """
+
+    def __init__(self, inner, work_dir, audio_path):
+        self._inner = inner
+        st = os.stat(audio_path)
+        key = f"{os.path.basename(audio_path)}-{st.st_size}-{int(st.st_mtime)}"
+        self._path = os.path.join(work_dir, f"words-{key}.json")
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    def transcribe_words(self, audio_path, language=None, on_progress=None):
+        from src.transcribe import Word
+        if os.path.exists(self._path):
+            try:
+                with io.open(self._path, encoding="utf-8") as fh:
+                    raw = json.load(fh)
+                print(f"cached transcript: {len(raw)} words ({self._path})", flush=True)
+                if on_progress:
+                    on_progress(1.0)
+                return [Word(text=w["text"], start=w["start"], end=w["end"])
+                        for w in raw]
+            except (OSError, ValueError, KeyError):
+                pass          # unreadable cache is not worth failing over
+        words = self._inner.transcribe_words(
+            audio_path, language=language, on_progress=on_progress)
+        try:
+            with io.open(self._path, "w", encoding="utf-8") as fh:
+                json.dump([{"text": w.text, "start": w.start, "end": w.end}
+                           for w in words], fh)
+        except OSError:
+            pass
+        return words
+
+
 class BarReporter(handler.Reporter):
     """Reporter that draws a 0-100% bar and feeds preview.html.
 
@@ -195,6 +235,11 @@ def main() -> int:
         "require_cc": not args.any_licence,
         "brand": {"accent": "#FFD400", "fontFamily": "Inter"},
     }
+
+    # Whisper is ~8 minutes on a 21-minute file and its result only depends on
+    # the audio. Iterating on sourcing or templates should not pay for it every
+    # time, so it is cached beside the work directory and keyed by the file.
+    handler.transcribe = _CachedTranscribe(handler.transcribe, work, audio)
 
     started = time.time()
     report = BarReporter(work, out_path)

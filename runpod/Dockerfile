@@ -4,7 +4,7 @@ FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    NODE_VERSION=20 \
+    NODE_VERSION=22 \
     REMOTION_DIR=/app/remotion \
     WORK_DIR=/tmp/work
 

@@ -26,6 +26,55 @@ SCHEMA_VERSION = 2
 # random so a re-plan of the same script produces the same document.
 _IMAGE_MOTIONS = ["zoom-in", "pan-left", "zoom-out", "pan-right"]
 
+# Scene entrances and per-clip effects. Both lists are a contract with
+# remotion/src/types.ts (SceneTransition / SceneEffect) and SceneEffects.tsx;
+# a test asserts they agree.
+TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide"}
+EFFECTS = {"none", "ken-burns", "light-leaks", "dust", "film-flicker", "color-shift"}
+
+# Rotation for the strong transitions at section changes. Film burn leads
+# because it is VidRush's most-used transition (24 of 61 on one timeline).
+_TRANSITION_CYCLE = ["film-burn", "zoom", "glitch", "film-burn", "slide", "zoom"]
+
+# One effect per clip, weighted roughly like VidRush's own distribution
+# (colour 37, Ken Burns 34, light leaks 29, flicker 21, dust 15 per 160 clips).
+_EFFECT_CYCLE = ["color-shift", "ken-burns", "light-leaks", "color-shift",
+                 "film-flicker", "ken-burns", "dust", "light-leaks"]
+
+# Fewest cuts between two transitions. Transitions are punctuation; on every
+# cut they read as an amateur edit.
+_MIN_TRANSITION_GAP = 3
+
+
+def plan_transitions(shots: List[dict]) -> List[str]:
+    """
+    Entrance per scene: hard cuts by default, a real transition where the
+    story changes section.
+
+    A section change is a chapter/title graphic, or the named subject moving on
+    ("Lake Mead" -> "Hoover Dam"). VidRush runs about one transition per four
+    cuts; the gap rule keeps it near that and never back to back.
+    """
+    out, last, used = [], -99, 0
+    prev_subject = None
+    for i, shot in enumerate(shots):
+        subject = (shot.get("subject") or "").strip().lower()
+        overlay = shot.get("overlay") or {}
+        choice = "none"
+        if i > 0 and i - last >= _MIN_TRANSITION_GAP:
+            chapter = overlay.get("type") in ("chapter", "title")
+            moved_on = bool(subject and prev_subject and subject != prev_subject)
+            if chapter:
+                choice = "film-burn"
+            elif moved_on:
+                choice = _TRANSITION_CYCLE[used % len(_TRANSITION_CYCLE)]
+        if choice != "none":
+            last, used = i, used + 1
+        out.append(choice)
+        if subject:
+            prev_subject = subject
+    return out
+
 # How long each graphic wants to be on screen, in seconds, independent of the
 # beat that triggered it. Measured from the reference renders: supporting shots
 # run 2-4s but an explanatory graphic holds far longer (bar chart 10.5s, city
@@ -84,6 +133,8 @@ def build(segments: List[Segment], shots: List[dict],
     overlays: List[Dict[str, Any]] = []
     keep_captions = bool(inp.get("captions", True))
 
+    entrances = plan_transitions(list(shots) + [{}] * max(0, len(segments) - len(shots)))
+
     for i, seg in enumerate(segments):
         shot = shots[i] if i < len(shots) else {}
         asset = assets[i] if i < len(assets) else None
@@ -108,7 +159,17 @@ def build(segments: List[Segment], shots: List[dict],
             "media": media,
             "motion": motion,
             "treatment": shot.get("treatment", "film"),
-            "transition": "fade" if i > 0 else "none",
+            "transition": entrances[i] if i < len(entrances) else "none",
+            "effect": ("none" if asset is None
+                       else _EFFECT_CYCLE[i % len(_EFFECT_CYCLE)]),
+            "semanticMetadata": {
+                "intent": shot.get("intent", ""),
+                "subject": shot.get("subject", ""),
+                "searchQuery": shot.get("query", ""),
+                "contentDescription": getattr(asset, "content_description", "") or "",
+                "relevanceScore": getattr(asset, "relevance_score", None),
+                "provider": getattr(asset, "source", "") or "",
+            },
             "words": ([{"text": w.text, "start": w.start, "end": w.end}
                        for w in seg.words] if keep_captions else []),
             "reviewRequired": bool(review),

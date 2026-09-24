@@ -72,10 +72,39 @@ is Content ID food. Turn it off only for footage you own.
 Pexels/Pixabay adapters are still in `media.py` as an escape hatch behind `ALLOW_STOCK=1`;
 `timeline.validate()` rejects stock sources unless that is set.
 
-### YouTube refuses datacenter IPs — `YTDLP_PROXY` is not optional
+### How a clip is chosen (VidRush-style matching)
 
-Sourcing that works perfectly on a home connection returns **nothing at all** from a RunPod
-worker, because serverless workers get datacenter IPs and YouTube answers those with a block.
+Reverse-engineered from VidRush's and GoMotion's own timelines. VidRush stores,
+per clip, the intent, the search query, a vision model's description of what the
+downloaded frames actually show, and a relevance score — and nothing on their
+timeline scores below 0.70. GoMotion always searches the *named subject*
+("Lake Mead"), never the idea.
+
+Per beat:
+
+1. **Director** writes `subject` (named place/person/thing), `intent` (what the
+   camera should literally show) and a `query` that always contains the subject.
+2. **Search** YouTube; title filters drop tutorials, gameplay and news desks.
+3. **Scout in parallel** (`MOMENT_PARALLEL`): for the top candidates, read the
+   YouTube storyboard (hover-preview thumbnails for the whole video, a few hundred
+   KB), lay ~20 tiles on a numbered sheet, and ask the vision model which tile
+   shows the intent. Videos with no tile at or above `VISION_MIN_SCORE` are
+   dropped before any download. The sharpest storyboard is chosen by pixel width:
+   format ids do not map to fixed sizes (`sb1` is 160x90 on one video, 80x45 on
+   another), and an 80x45 tile once made the model "see" Hoover Dam in a river.
+4. **Download** only that section, check for burned-in text, then **judge the real
+   frames** — the final gate. Below 0.70, or any text/watermark/talking head, and
+   the next candidate is tried.
+5. Stills: web image search, then Commons/NASA/Openverse, each vision-checked.
+6. Every scene carries `semanticMetadata` (intent, subject, searchQuery,
+   contentDescription, relevanceScore, provider) for the editor.
+
+Cost: roughly 2–4 vision calls per beat.
+
+### Proxy configuration and verification
+
+Sourcing that works on a home connection can fail from a RunPod worker because
+YouTube may challenge datacenter addresses. Proxies can also be rejected.
 It is not always the famous "Sign in to confirm you're not a bot": the message observed from a
 worker was *"The following content is not available on this app"*, which reads like a missing
 video rather than a refused client. `media.looks_blocked()` matches the whole family
@@ -96,6 +125,30 @@ listing ports — on Decodo ISP plans the ports cycle through a small pool of st
 Locally there is no RunPod endpoint to supply the variable, so `config._load_dotenv()` fills it
 from a `.env` at the repo root (real environment variables still win). `.env` is gitignored;
 keep proxy credentials out of the tree.
+
+The image pins `yt-dlp[default]==2026.8.19` (including its matching EJS
+package) and Node 22. Both search and download explicitly enable the Node
+runtime and bound network retries. This follows the
+[yt-dlp runtime setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+Changing these files does not update an already deployed RunPod image.
+
+Verify a real download before starting a long job:
+
+```
+python scripts/check_sourcing.py --download
+```
+
+This checks an unfiltered search, downloads a three-second diagnostic excerpt,
+and verifies its video stream and duration. Reports omit proxy credentials.
+Add `--require-cc` to also test the worker's licence filter. The unfiltered
+diagnostic does not change production sourcing policy or establish reuse rights.
+Run it inside the deployed worker as well as locally; neither a provider
+IP check nor a local success proves that the deployed downloader works.
+
+The AI director uses `DIRECTOR_API_BASE`, `DIRECTOR_API_KEY`, and
+`DIRECTOR_MODEL` from backend environment variables. Keep the API key out
+of frontend builds and job payloads. A Kie-compatible endpoint must return
+Chat Completions JSON; configuring a key alone does not validate the model.
 
 ## Animation templates
 
@@ -199,7 +252,11 @@ UI show where every clip came from — so you can see Content ID exposure before
 | `DIRECTOR_API_KEY` / `DIRECTOR_API_BASE` / `DIRECTOR_MODEL` | recommended | enables the AI director |
 | `YTDLP_PROXY` | **yes, in production** | residential proxy for yt-dlp; one url or a comma-separated list, rotated per request. See below |
 | `YTDLP_COOKIES_FILE` | no | path to a cookies.txt; helps with the same check |
-| `ALLOW_YOUTUBE` / `REQUIRE_CC` | no | both default on |
+| `ALLOW_YOUTUBE` / `REQUIRE_CC` | no | YouTube on; **CC-only is OFF by default** — set `REQUIRE_CC=1` for claim-free channels. Unfiltered clips carry `reviewRequired` |
+| `VISION_ENABLED` / `VISION_MODEL` / `VISION_MIN_SCORE` | no | vision check on every clip/image; default `gpt-5-2` via the director's Kie key, reject below `0.70` |
+| `VISION_API_KEY` / `VISION_API_BASE` | no | default to the director key/base |
+| `MOMENT_SELECTION` / `MOMENT_TILES` / `MOMENT_PARALLEL` | no | pick the timestamp from YouTube storyboards; defaults on / 20 / 3 |
+| `SERPER_API_KEY` | no | Google Images via Serper; keyless DuckDuckGo image search is used without it |
 | `ALLOW_STOCK` | no | default off; also relaxes `timeline.validate()` |
 | `WHISPER_MODEL` | no | `base` on CPU, `small`/`medium` on GPU |
 | `CONTACT_EMAIL` | no | sent in the User-Agent Wikimedia and Nominatim require |

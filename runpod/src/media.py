@@ -26,28 +26,65 @@ import base64
 import json
 import os
 import re
-import itertools
 import subprocess
 import threading
 import time
 import urllib.parse
 import requests
 
-from . import config
+from . import config, moments, vision
 from .storage import download
 
 
 # Round-robin over the configured proxies so one address does not take every
-# download and get flagged. itertools.cycle is not thread-safe on its own.
-_PROXY_CYCLE = itertools.cycle(config.YTDLP_PROXIES) if config.YTDLP_PROXIES else None
+# download and get flagged — but skip any address that was just refused or
+# timed out. Blind rotation meant every third request went to an IP YouTube
+# had already started refusing, costing a failed search plus a retry each time.
+_PROXIES = list(config.YTDLP_PROXIES)
 _PROXY_LOCK = threading.Lock()
+_PROXY_POS = [0]
+_PROXY_BENCHED: Dict[str, float] = {}
+_PROXY_BENCH_SECONDS = 600
 
 
 def _next_proxy() -> str:
-    if not _PROXY_CYCLE:
+    """Next healthy proxy; if every one is benched, the least-recently benched."""
+    if not _PROXIES:
         return ""
+    now = time.time()
     with _PROXY_LOCK:
-        return next(_PROXY_CYCLE)
+        for _ in range(len(_PROXIES)):
+            proxy = _PROXIES[_PROXY_POS[0] % len(_PROXIES)]
+            _PROXY_POS[0] += 1
+            if _PROXY_BENCHED.get(proxy, 0) <= now:
+                return proxy
+        return min(_PROXIES, key=lambda p: _PROXY_BENCHED.get(p, 0))
+
+
+def _bench_proxy(proxy: str, why: str = "") -> None:
+    """Take a refused or timed-out proxy out of rotation for ten minutes."""
+    if not proxy:
+        return
+    with _PROXY_LOCK:
+        _PROXY_BENCHED[proxy] = time.time() + _PROXY_BENCH_SECONDS
+        idx = _PROXIES.index(proxy) + 1 if proxy in _PROXIES else "?"
+    # Never print the proxy URL: it carries credentials.
+    print(f"[media] benched proxy #{idx} for {_PROXY_BENCH_SECONDS // 60} min"
+          f"{' (' + why + ')' if why else ''}", flush=True)
+
+
+def _yt_network_args(proxy: Optional[str] = None) -> List[str]:
+    """Shared bounded network/runtime settings; never log credential values."""
+    args = ["--ignore-config", "--js-runtimes", "node",
+            "--socket-timeout", "20", "--retries", "2",
+            "--extractor-retries", "2", "--fragment-retries", "2",
+            "--concurrent-fragments", "1"]
+    proxy = _next_proxy() if proxy is None else proxy
+    if proxy:
+        args += ["--proxy", proxy]
+    if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
+        args += ["--cookies", config.YTDLP_COOKIES_FILE]
+    return args
 
 
 # How YouTube refuses a datacenter IP. It does not always use the famous
@@ -89,6 +126,13 @@ class MediaAsset:
     query: str = ""
     review_required: bool = False
     review_reason: str = ""
+    # VidRush-style match record, filled by the vision judge. `intent` is what
+    # the shot was supposed to show; `content_description` is what a vision
+    # model saw in the actual frames; `relevance_score` compares the two.
+    intent: str = ""
+    content_description: str = ""
+    relevance_score: Optional[float] = None
+    vision_model: str = ""
 
     @property
     def identity(self) -> str:
@@ -118,18 +162,93 @@ class MediaAsset:
         `type`, and that a downloaded local path always wins over the remote
         URL, because headless Chrome should read from disk rather than refetch.
         """
-        return {
+        media = {
             "type": self.kind,
             "url": self.local_path or self.url,
             "source": self.source,
             "attribution": self.attribution,
             "license": self.license,
         }
+        if self.relevance_score is not None:
+            media["relevanceScore"] = round(self.relevance_score, 3)
+        if self.content_description:
+            media["contentDescription"] = self.content_description
+        return media
+
+    def apply_verdict(self, verdict: Optional[dict], intent: str) -> "MediaAsset":
+        self.intent = intent or self.intent
+        if verdict:
+            self.content_description = verdict.get("description", "")
+            self.relevance_score = verdict.get("score")
+            self.vision_model = verdict.get("model", "")
+        return self
 
 
 # --------------------------------------------------------------------------- #
 # Real imagery: Wikimedia Commons + Openverse
 # --------------------------------------------------------------------------- #
+
+def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
+    """
+    Real photographs of the named subject from a general image search.
+
+    This is VidRush's `google_images` provider — 51 of the stills on one of
+    their timelines. Archives like Commons have the landscape but rarely the
+    specific press photo a documentary line is about. Serper (Google Images)
+    when SERPER_API_KEY is set, the keyless DuckDuckGo search otherwise.
+    Web results carry stock watermarks and unknown licences, so every one is
+    vision-checked for watermarks and flagged for review.
+    """
+    if not config.ALLOW_WEB_IMAGES or not query.strip():
+        return []
+    rows = []
+    if config.SERPER_API_KEY:
+        try:
+            r = requests.post("https://google.serper.dev/images",
+                              headers={"X-API-KEY": config.SERPER_API_KEY,
+                                       "Content-Type": "application/json"},
+                              json={"q": query, "num": limit * 2}, timeout=20)
+            r.raise_for_status()
+            for it in r.json().get("images", []):
+                rows.append((it.get("imageUrl"), it.get("imageWidth") or 0,
+                             it.get("imageHeight") or 0, it.get("title") or "",
+                             it.get("link") or ""))
+        except (requests.RequestException, ValueError):
+            rows = []
+    if not rows:
+        try:
+            from ddgs import DDGS  # keyless fallback
+            with DDGS() as ddg:
+                for it in ddg.images(query, max_results=limit * 2):
+                    rows.append((it.get("image"), it.get("width") or 0,
+                                 it.get("height") or 0, it.get("title") or "",
+                                 it.get("url") or ""))
+        except Exception:  # noqa: BLE001 — optional dependency / network
+            return []
+
+    out = []
+    for url, w, h, title, page in rows:
+        if not url or not url.startswith("http"):
+            continue
+        # DuckDuckGo reports sizes as strings, Serper as ints.
+        try:
+            w, h = int(w or 0), int(h or 0)
+        except (TypeError, ValueError):
+            w, h = 0, 0
+        # Thumbnails and icons are useless full-frame at 1080p.
+        if w and h and (w < 800 or h < 450):
+            continue
+        out.append(MediaAsset(
+            kind="image", source="web_image", url=url, width=int(w or 0),
+            height=int(h or 0),
+            attribution=(f"{title} — {page}" if page else title)[:300],
+            license="unverified — web image, confirm you hold the rights",
+            query=query, review_required=True,
+            review_reason="Web image: licence unverified"))
+        if len(out) >= limit:
+            break
+    return out
+
 
 def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
     """
@@ -578,6 +697,31 @@ def _longest_run(rows: list) -> int:
     return best
 
 
+def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
+    """
+    (keep, verdict) for a downloaded candidate.
+
+    No intent means nothing to judge against, and an unreachable model returns
+    None — both keep the candidate, so vision can only ever remove bad clips,
+    never empty a timeline because an API is down.
+    """
+    if not intent or not vision.enabled():
+        return True, None
+    verdict = vision.judge(path, intent, context)
+    keep = vision.acceptable(verdict)
+    if verdict is not None:
+        mark = "keep" if keep else "REJECT"
+        flags = []
+        if verdict["has_text_or_watermark"]:
+            flags.append("text/watermark")
+        if verdict["is_talking_head"]:
+            flags.append("talking head")
+        print(f"[vision] {mark} {verdict['score']:.2f} {label[:50]!r}"
+              f"{' (' + ', '.join(flags) + ')' if flags else ''}"
+              f" — {verdict['description'][:90]}", flush=True)
+    return keep, verdict
+
+
 def _score_candidate(title: str, duration: float, aspect: float,
                      seconds: float) -> float:
     """
@@ -623,18 +767,19 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
     if require_cc:
         cmd += ["--match-filter", "license *= Creative Commons"]
     proxy = _next_proxy()
-    if proxy:
-        cmd += ["--proxy", proxy]
-    if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
-        cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
+    cmd += _yt_network_args(proxy)
 
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except subprocess.TimeoutExpired:
+        _bench_proxy(proxy, "search timed out")
+        return []
+    except FileNotFoundError:
         return []
     if looks_blocked(p.stderr):
-        print("[media] YouTube refused this IP — set YTDLP_PROXY to a residential "
-              "proxy. RunPod workers have datacenter IPs and cannot download.",
+        _bench_proxy(proxy, "search refused")
+        print("[media] YouTube rejected this request. Check proxy health, "
+              "yt-dlp/runtime support, and source availability.",
               flush=True)
         return []
 
@@ -660,10 +805,38 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
     return out
 
 
+def _yt_info(video_id: str, timeout: int = 60) -> tuple:
+    """(full yt-dlp info dict, proxy used) for one video, or ({}, proxy).
+
+    Needed for moment selection: the flat search results carry no formats, and
+    the storyboard (`sb*`) formats are what map thumbnails to timestamps. The
+    proxy is returned because the storyboard sheets are fetched separately and
+    should leave from the same address.
+    """
+    proxy = _next_proxy()
+    cmd = ["yt-dlp", f"https://www.youtube.com/watch?v={video_id}", "-J",
+           "--no-warnings", "--ignore-config", "--socket-timeout", "20"]
+    if proxy:
+        cmd += ["--proxy", proxy]
+    if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
+        cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=timeout)
+        return (json.loads(p.stdout) if p.returncode == 0 and p.stdout else {}), proxy
+    except subprocess.TimeoutExpired:
+        _bench_proxy(proxy, "metadata timed out")
+        return {}, proxy
+    except (FileNotFoundError, ValueError):
+        return {}, proxy
+
+
 def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
               timeout: int = 300) -> str:
     """Download one section of one known video. Returns the local path or ''."""
-    out_tpl = os.path.join(out_dir, "yt_%(id)s.%(ext)s")
+    # Different ranges must not reuse a previous download of the same video.
+    range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
+    out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}.%(ext)s")
     cmd = [
         "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
         "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
@@ -674,28 +847,102 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         "-o", out_tpl, "--print", "after_move:filepath",
     ]
     proxy = _next_proxy()
-    if proxy:
-        cmd += ["--proxy", proxy]
-    if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
-        cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
+    cmd += _yt_network_args(proxy)
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except subprocess.TimeoutExpired:
+        _bench_proxy(proxy, "download timed out")
+        return ""
+    except FileNotFoundError:
         return ""
     if looks_blocked(p.stderr):
+        _bench_proxy(proxy, "download refused")
+        return ""
+    if p.returncode != 0:
         return ""
     for line in (p.stdout or "").splitlines():
         line = line.strip()
         if line and os.path.exists(line):
             return line
-    guess = os.path.join(out_dir, f"yt_{video_id}.mp4")
+    guess = os.path.join(out_dir, f"yt_{video_id}_{range_key}.mp4")
     return guess if os.path.exists(guess) else ""
+
+
+def _fixed_point(candidate: dict, grab: float, start_at: float) -> float:
+    """The old grab point: 35% in skips intros, clamped inside the video."""
+    duration = candidate.get("duration") or 0
+    point = max(5.0, duration * 0.35) if duration else start_at
+    if duration:
+        point = min(point, max(5.0, duration - grab - 2))
+    return point
+
+
+def _scout(candidate: dict, grab: float, intent: str, context: str) -> Optional[dict]:
+    """Storyboard moment for one candidate video, or None if unavailable."""
+    info, proxy = _yt_info(candidate["id"])
+    return moments.pick(info, intent, context, grab, proxy) if info else None
+
+
+def _plan_grabs(eligible: List[dict], grab: float, start_at: float,
+                intent: str, context: str) -> List[tuple]:
+    """
+    Ordered (candidate, start_seconds, moment) to try downloading.
+
+    Scouting reads each video's storyboard and asks the vision model where the
+    intent is on screen. Done one video at a time it made a single beat take
+    four and a half minutes; done in parallel the beat costs roughly the
+    slowest scout. Videos whose best moment scores under the floor are dropped
+    before any footage is downloaded. Videos with no readable storyboard keep
+    the old fixed grab point, ranked after every scored match.
+    """
+    if not (intent and config.MOMENT_SELECTION and vision.enabled()):
+        return [(c, _fixed_point(c, grab, start_at), None) for c in eligible]
+
+    scouts = eligible[:max(1, config.MOMENT_PARALLEL)]
+    results: Dict[str, Optional[dict]] = {}
+    with ThreadPoolExecutor(max_workers=len(scouts)) as pool:
+        futures = {pool.submit(_scout, c, grab, intent, context): c["id"] for c in scouts}
+        for fut in as_completed(futures):
+            try:
+                results[futures[fut]] = fut.result()
+            except Exception:  # noqa: BLE001 - a failed scout just loses its pick
+                results[futures[fut]] = None
+
+    scored, unscored = [], []
+    for c in scouts:
+        m = results.get(c["id"])
+        if m is None:
+            unscored.append((c, _fixed_point(c, grab, start_at), None))
+        elif m["score"] >= config.VISION_MIN_SCORE:
+            scored.append((c, m["start"], m))
+            print(f"[moment] {m['score']:.2f} @ {m['start']:.1f}s "
+                  f"{c['title'][:45]!r} - {m['description'][:70]}", flush=True)
+        else:
+            print(f"[moment] skip {m['score']:.2f} {c['title'][:50]!r} "
+                  f"- no matching moment", flush=True)
+    scored.sort(key=lambda x: x[2]["score"], reverse=True)
+    return scored + unscored
+
+
+def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float,
+                    title: str = "") -> str:
+    """_yt_fetch with one retry on the next proxy; logs a failure instead of
+    swallowing it. Under load a residential IP occasionally drops a download
+    that succeeds seconds later from another address."""
+    for attempt in (1, 2):
+        path = _yt_fetch(video_id, out_dir, start_at, seconds)
+        if path:
+            return path
+    print(f"[media] download failed twice, skipping: {title[:60] or video_id}",
+          flush=True)
+    return ""
 
 
 def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                  start_at: float = 30.0, require_cc: bool = True,
                  skip: int = 0, used: set = None,
-                 b_roll_intent: bool = True) -> Optional[MediaAsset]:
+                 b_roll_intent: bool = True, intent: str = "",
+                 context: str = "") -> Optional[MediaAsset]:
     """
     Find and download a clip that plausibly shows the subject.
 
@@ -729,7 +976,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         searches.append(f"{query_or_url} {B_ROLL_INTENT}")
     searches.append(query_or_url)
 
+    judged = 0
     for search in searches:
+        if judged >= config.VISION_MAX_CANDIDATES:
+            break
         if require_cc:
             # yt-dlp's flat search extractor reports license=NA for every hit,
             # so a CC match-filter over ytsearch rejects everything. YouTube's
@@ -747,6 +997,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                         key=lambda c: _score_candidate(c["title"], c["duration"],
                                                        c["aspect"], seconds),
                         reverse=True)
+        eligible = []
         for candidate in ranked[skip:] + ranked[:skip]:
             if used and f"yt:{candidate['id']}" in used:
                 continue
@@ -761,13 +1012,18 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                 continue
             if candidate["aspect"] and candidate["aspect"] < 1.2:
                 continue                       # vertical, unusable in 16:9
-            duration = candidate["duration"] or 0
-            grab = max(2.0, seconds + 1.5)
-            # 35% in skips intros and titles; clamp so we never run off the end.
-            point = max(5.0, duration * 0.35) if duration else start_at
-            if duration:
-                point = min(point, max(5.0, duration - grab - 2))
-            path = _yt_fetch(candidate["id"], out_dir, point, grab)
+            eligible.append(candidate)
+        if not eligible:
+            continue
+
+        grab = max(2.0, seconds + 1.5)
+        plan = _plan_grabs(eligible, grab, start_at, intent, context)
+
+        for candidate, point, moment in plan:
+            if judged >= config.VISION_MAX_CANDIDATES:
+                break
+            path = _yt_fetch_retry(candidate["id"], out_dir, point, grab,
+                                   candidate["title"])
             if not path:
                 continue
             # Burned-in subtitles only become visible after the download, and a
@@ -780,8 +1036,20 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                 except OSError:
                     pass
                 continue
-            return _asset_for(path, query_or_url, grab, require_cc,
-                              title=candidate["title"])
+            # The storyboard picked the moment; the full-resolution frames of
+            # the actual cut decide. Bounded per search so one bad query cannot
+            # spend a dozen model calls.
+            judged += 1
+            keep, verdict = _vision_gate(path, intent, context, candidate["title"])
+            if not keep:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                continue
+            asset = _asset_for(path, query_or_url, grab, require_cc,
+                               title=candidate["title"])
+            return asset.apply_verdict(verdict, intent)
     return None
 
 
@@ -948,14 +1216,23 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
 
 
 def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
-                 query: str, work_dir: str) -> Optional[MediaAsset]:
-    """First candidate whose identity hasn't been used yet, that also downloads."""
+                 query: str, work_dir: str, intent: str = "",
+                 context: str = "") -> Optional[MediaAsset]:
+    """First unused candidate that downloads and passes the vision gate."""
+    judged = 0
     for candidate in candidates:
         if used is not None and candidate.identity in used:
             continue
         got = _download(candidate, query, work_dir)
-        if got:
-            return got
+        if not got:
+            continue
+        judged += 1
+        keep, verdict = _vision_gate(got.local_path, intent, context,
+                                     got.attribution or got.url)
+        if keep:
+            return got.apply_verdict(verdict, intent)
+        if judged >= config.VISION_MAX_CANDIDATES:
+            break
     return None
 
 
@@ -964,7 +1241,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        used: set = None, fallbacks: List[str] = None,
                        prompt: str = "",
                        allow_youtube: bool = None, allow_stock: bool = None,
-                       require_cc: bool = None) -> Optional[MediaAsset]:
+                       require_cc: bool = None, intent: str = "",
+                       context: str = "") -> Optional[MediaAsset]:
     """
     Source one scene, relaxing the query until something is found.
 
@@ -977,7 +1255,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
         got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
                           nth=nth, used=used, prompt=prompt,
                           allow_youtube=allow_youtube,
-                          allow_stock=allow_stock, require_cc=require_cc)
+                          allow_stock=allow_stock, require_cc=require_cc,
+                          intent=intent or query, context=context)
         if got:
             return got
     return None
@@ -987,7 +1266,8 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
                 visual_type: str = "footage", nth: int = 0,
                 used: set = None, prompt: str = "",
                 allow_youtube: bool = None, allow_stock: bool = None,
-                require_cc: bool = None) -> Optional[MediaAsset]:
+                require_cc: bool = None, intent: str = "",
+                context: str = "") -> Optional[MediaAsset]:
     """
     Find and download one visual for a scene.
 
@@ -1011,7 +1291,8 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         # point so a repeat of the same subject is at least a different
         # moment of footage rather than the identical seconds again.
         asset = youtube_clip(query, work_dir, seconds=seconds, require_cc=require_cc,
-                             skip=nth, start_at=30.0 + 25.0 * nth, used=used)
+                             skip=nth, start_at=30.0 + 25.0 * nth, used=used,
+                             intent=intent, context=context)
         if asset:
             return asset
 
@@ -1022,7 +1303,7 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         for search in (search_nasa_video, search_wikimedia_video):
             found = _cached_search(search, query)
             ordered = found[nth:] + found[:nth] if found else []
-            got = _pick_unused(ordered, used, query, work_dir)
+            got = _pick_unused(ordered, used, query, work_dir, intent, context)
             if got:
                 return got
 
@@ -1030,7 +1311,7 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         for fn in (search_pexels, search_pixabay):
             clips = [c for c in _cached_search(lambda q: fn(q, kind="video"), query)
                      if c.duration >= seconds * 0.8]
-            asset = _pick_unused(clips[nth:] + clips[:nth], used, query, work_dir)
+            asset = _pick_unused(clips[nth:] + clips[:nth], used, query, work_dir, intent, context)
             if asset:
                 return asset
 
@@ -1046,19 +1327,21 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
                 return made
 
     # Real photographs of the named subject, before any generated impression.
-    for search in (search_wikimedia, search_nasa, search_openverse):
+    # A general web image search finds the specific press photo; the archives
+    # follow with cleaner licences but narrower coverage.
+    for search in (search_web_images, search_wikimedia, search_nasa, search_openverse):
         found = _cached_search(search, query)
         # Rotate the list so repeats start further down, but still fall back
         # to earlier entries rather than giving up and rendering black.
         ordered = found[nth:] + found[:nth] if found else []
-        asset = _pick_unused(ordered, used, query, work_dir)
+        asset = _pick_unused(ordered, used, query, work_dir, intent, context)
         if asset:
             return asset
 
     if allow_stock:
         for fn in (search_pexels, search_pixabay):
             found = _cached_search(lambda q: fn(q, kind="image"), query)
-            asset = _pick_unused(found[nth:] + found[:nth], used, query, work_dir)
+            asset = _pick_unused(found[nth:] + found[:nth], used, query, work_dir, intent, context)
             if asset:
                 return asset
 
@@ -1170,6 +1453,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 job["query"], float(job.get("seconds") or 0), work_dir,
                 visual_type=job.get("visual_type", "footage"), nth=nth,
                 fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
+                intent=job.get("intent", ""), context=job.get("context", ""),
                 **kwargs)
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{job['query']}' failed: {e}", flush=True)
@@ -1222,6 +1506,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     visual_type=job.get("visual_type", "footage"),
                     nth=nth + attempt, used=used,
                     fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
+                    intent=job.get("intent", ""), context=job.get("context", ""),
                     **kwargs)
             except Exception:  # noqa: BLE001
                 candidate = None

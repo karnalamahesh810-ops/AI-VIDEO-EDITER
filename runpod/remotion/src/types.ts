@@ -12,6 +12,25 @@ export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right";
 export type Treatment = "none" | "film" | "vintage" | "archival";
 
 /**
+ * How a scene enters. Most cuts are hard ("none"); real transitions are kept
+ * for section changes, the way VidRush uses them (~1 cut in 4).
+ * Must match TRANSITIONS in src/timeline.py; a test asserts they agree.
+ */
+export type SceneTransition = "none" | "fade" | "film-burn" | "zoom" | "glitch" | "slide";
+
+/**
+ * One effect per clip, so borrowed footage reads as designed.
+ * Must match EFFECTS in src/timeline.py; a test asserts they agree.
+ */
+export type SceneEffect =
+  | "none"
+  | "ken-burns"
+  | "light-leaks"
+  | "dust"
+  | "film-flicker"
+  | "color-shift";
+
+/**
  * Every animation template the renderer can draw.
  *
  * This list is the renderer's half of a three-way contract: it must match
@@ -61,7 +80,18 @@ export interface Scene {
   motion: Motion;
   /** Footage grade — film grain, vintage warmth, archival black and white. */
   treatment?: Treatment;
-  transition: "none" | "fade";
+  transition: SceneTransition;
+  /** Per-clip effect drawn over / applied to the media. */
+  effect?: SceneEffect;
+  /** Vision-model match record: what the frames actually show, and how well. */
+  semanticMetadata?: {
+    intent?: string;
+    subject?: string;
+    searchQuery?: string;
+    contentDescription?: string;
+    relevanceScore?: number;
+    provider?: string;
+  };
   words: SceneWord[];
   /** Set when the media is generated or unlicensed and a human should look. */
   reviewRequired?: boolean;

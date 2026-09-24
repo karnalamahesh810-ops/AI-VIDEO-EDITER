@@ -172,7 +172,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     jobs = [{"index": i, "query": shot["query"], "seconds": seg.duration,
              "visual_type": shot.get("visualType", "footage"),
              "fallbacks": shot.get("fallbacks") or [],
-             "prompt": shot.get("prompt") or ""}
+             "prompt": shot.get("prompt") or "",
+             "intent": shot.get("intent") or "",
+             "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 
     last_pct = [22]
