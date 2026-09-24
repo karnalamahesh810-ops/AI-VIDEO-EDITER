@@ -90,7 +90,7 @@ YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
 # time out, which reads as "sourcing is slow" with nothing to explain why.
 # Default tracks the proxy pool (one request per healthy IP), floor of 4 so
 # an unproxied dev box still gets some parallelism.
-NETWORK_CONCURRENCY = int(os.getenv("NETWORK_CONCURRENCY", "0")) or max(4, len(YTDLP_PROXIES))
+NETWORK_CONCURRENCY = int(os.getenv("NETWORK_CONCURRENCY", "0")) or max(4, 2 * len(YTDLP_PROXIES))
 
 # --- generated images --------------------------------------------------------
 # Any OpenAI-compatible /images/generations endpoint (OpenAI gpt-image-1, or a
@@ -142,6 +142,10 @@ VISION_FALLBACK_MODELS = [m.strip() for m in
                           os.getenv("VISION_FALLBACK_MODELS", "gemini-3-pro").split(",")
                           if m.strip()]
 VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
+# gpt-5-2 reasons before it answers. Measured on one real clip check: 32.5 s
+# at the default effort, 13.5 s at "low", same verdict (0.97 vs 0.98);
+# "minimal" is refused (code 500). Sent to gpt-* models only. Empty = default.
+VISION_REASONING_EFFORT = os.getenv("VISION_REASONING_EFFORT", "low").strip()
 VISION_FRAMES = int(os.getenv("VISION_FRAMES", "3"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
@@ -218,9 +222,13 @@ DEFAULT_HEIGHT = int(os.getenv("DEFAULT_HEIGHT", "1080"))
 # clean passthrough.
 SCENE_TREATMENT = os.getenv("SCENE_TREATMENT", "film").strip().lower()
 
-MIN_SCENE_SECONDS = float(os.getenv("MIN_SCENE_SECONDS", "5.0"))
-TARGET_SCENE_SECONDS = float(os.getenv("TARGET_SCENE_SECONDS", "7.0"))
-MAX_SCENE_SECONDS = float(os.getenv("MAX_SCENE_SECONDS", "9.0"))
+# VidRush's pacing, measured on four of their exports (first 8 min each):
+# median shot 3.3-3.7 s, middle half 2.3-5.2 s, 13.6-16.5 cuts/min, only
+# 2-10% of shots over 8 s. The earlier 5/7/9 (GoMotion's ~7 s) cut half as
+# often. Set 5/7/9 again for the slower GoMotion feel.
+MIN_SCENE_SECONDS = float(os.getenv("MIN_SCENE_SECONDS", "2.0"))
+TARGET_SCENE_SECONDS = float(os.getenv("TARGET_SCENE_SECONDS", "3.4"))
+MAX_SCENE_SECONDS = float(os.getenv("MAX_SCENE_SECONDS", "6.0"))
 
 # Contact address used in the User-Agent for Wikimedia/Nominatim, both of which
 # require identifying your client in their terms of use.

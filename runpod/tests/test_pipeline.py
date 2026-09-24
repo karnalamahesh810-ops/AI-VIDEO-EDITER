@@ -662,14 +662,17 @@ class Pacing(unittest.TestCase):
     ) * 4
 
     def test_cut_rate_matches_the_reference_band(self):
+        # VidRush, measured on four of their exports: 13.6-16.5 cuts/min for
+        # the three narrated-story videos (the fourth, all long drone shots,
+        # ran 6.9). A little margin either side.
         segments = segment_words(words_from(self.NARRATION))
         duration = segments[-1].end
         cpm = len(segments) / (duration / 60)
-        self.assertGreaterEqual(cpm, 6.0, f"too slow: {cpm:.1f} cuts/min")
-        self.assertLessEqual(cpm, 12.0, f"too fast: {cpm:.1f} cuts/min")
+        self.assertGreaterEqual(cpm, 11.0, f"too slow: {cpm:.1f} cuts/min")
+        self.assertLessEqual(cpm, 19.0, f"too fast: {cpm:.1f} cuts/min")
 
     def test_clips_cluster_around_the_target_length(self):
-        """GoMotion puts 92% of clips in a 6.5-7.5s band; aim near the target."""
+        """VidRush's median shot is 3.3-3.7 s; aim near the target."""
         segments = segment_words(words_from(self.NARRATION))
         import statistics
         median = statistics.median([s.duration for s in segments])

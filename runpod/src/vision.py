@@ -99,7 +99,10 @@ def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
                 headers={"Authorization": f"Bearer {config.VISION_API_KEY}",
                          "Content-Type": "application/json"},
                 json={"model": model, "messages": messages,
-                      "max_tokens": max_tokens, "stream": False},
+                      "max_tokens": max_tokens, "stream": False,
+                      **({"reasoning_effort": config.VISION_REASONING_EFFORT}
+                         if config.VISION_REASONING_EFFORT and model.startswith("gpt-")
+                         else {})},
                 timeout=90)
         except requests.RequestException as e:
             _fail(model, f"request failed: {type(e).__name__}")

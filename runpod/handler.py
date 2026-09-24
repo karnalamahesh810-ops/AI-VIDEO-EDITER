@@ -312,7 +312,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
 
     assets = media.source_many(
         jobs, work,
-        workers=int(inp.get("source_workers", 6)),
+        # 8: the per-scene work is mostly waiting on the vision model and the
+        # network, and the network side is capped separately (NETWORK_CONCURRENCY).
+        workers=int(inp.get("source_workers", 8)),
         allow_youtube=inp.get("allow_youtube"),
         allow_stock=inp.get("allow_stock"),
         require_cc=inp.get("require_cc"),
