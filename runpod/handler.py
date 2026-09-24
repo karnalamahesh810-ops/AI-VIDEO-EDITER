@@ -201,6 +201,42 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
     return len(published)
 
 
+def _fill_missing_media(doc: dict) -> int:
+    """
+    Give every scene something to render, for the `build` path only.
+
+    `build` sources and renders in one job with nothing shown to the user in
+    between, so a single scene nothing could be found for used to fail
+    `timeline.validate(require_media=True)` inside do_render and destroy the
+    whole job: the exception unwinds past the point where the work directory
+    is deleted, taking every other scene's already-downloaded clip with it.
+    Twenty minutes of sourcing was lost over one hard beat.
+
+    The scene_data already saved to the project (before this is ever called)
+    keeps the honest "no media found" / reviewRequired record, so the editor
+    and its readiness panel still show the real gap. This only patches the
+    throwaway render copy: it borrows the nearest scene that does have media
+    (search outward from it) and flags the borrow for review, the same
+    "a repeat is better than black" rule already used for duplicates.
+    Returns how many scenes were patched.
+    """
+    scenes = doc.get("scenes", [])
+    have = [i for i, s in enumerate(scenes)
+           if (s.get("media") or {}).get("type") != "color"]
+    if not have:
+        return 0  # nothing sourced anything; a strict failure is the honest answer
+    patched = 0
+    for i, s in enumerate(scenes):
+        if (s.get("media") or {}).get("type") == "color":
+            nearest = min(have, key=lambda h: abs(h - i))
+            s["media"] = dict(scenes[nearest]["media"])
+            s["motion"] = scenes[nearest].get("motion", "none")
+            s["reviewRequired"] = True
+            s["reviewReason"] = "No usable clip found — reused a nearby scene; use Find footage to replace it"
+            patched += 1
+    return patched
+
+
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     raw_audio = inp.get("audio_url") or inp.get("audio_path")
     if not raw_audio:
@@ -614,6 +650,10 @@ def handler(job):
             # Render from the local files (fast), THEN save the clips, so the
             # finished video opens in the editor with every scene replaceable.
             local_doc = copy.deepcopy(doc)
+            patched = _fill_missing_media(local_doc)
+            if patched:
+                print(f"[worker] {patched} scene(s) had no media; reused a "
+                     "nearby clip so the render could complete", flush=True)
             out = do_render(local_doc, inp, work, report)
             if project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,

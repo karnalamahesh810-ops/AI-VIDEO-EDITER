@@ -1535,14 +1535,17 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # Then replace in parallel, under a time budget. This pass used to run one
     # scene at a time with up to three full attempts each and no progress
     # report: on a 17-scene test it sat at "Sourced 17/17" for over ten
-    # minutes. A scene pass 1 could not fill at all gets one more reach, not
-    # three - it has already exhausted its first choices.
+    # minutes. Parallelising it, not shrinking it, is what fixes that - the
+    # wall-clock deadline below already bounds the worst case, so every kind
+    # of miss (empty, duplicate, rejected) still gets the full three reaches.
+    # A truly empty scene is the one most likely to need them: pass 1 found
+    # nothing at nth=0, which says nothing about nth=1..3.
     claim = threading.Lock()
     deadline = time.time() + config.REPLACE_BUDGET_SECONDS
     replaced = [0]
 
     def replace(job, nth, bad_reason, is_dup):
-        for attempt in range(1, (3 if (bad_reason or is_dup) else 1) + 1):
+        for attempt in range(1, 4):
             if time.time() >= deadline:
                 return None
             try:

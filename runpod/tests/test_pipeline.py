@@ -272,7 +272,10 @@ class SecondPass(unittest.TestCase):
         # Repeats are kept (better than black) but flagged for the editor.
         self.assertTrue(all(a.review_required for a in out[1:]))
 
-    def test_an_empty_scene_gets_one_more_reach_not_three(self):
+    def test_an_empty_scene_gets_the_full_three_reaches(self):
+        # A scene with nothing at nth=0 is not "exhausted" — nth=1..3 are
+        # unrelated candidates. Cutting this to one attempt is what let a
+        # real, findable scene end up empty and fail the whole render.
         calls = {"n": 0}
 
         def nothing(query, seconds, work_dir, *, nth=0, used=None, **kw):
@@ -280,7 +283,7 @@ class SecondPass(unittest.TestCase):
             return None
 
         self._run(nothing, n=2)
-        self.assertEqual(calls["n"], 2 + 2)  # pass 1 + one retry each
+        self.assertEqual(calls["n"], 2 + 2 * 3)  # pass 1 + three retries each
 
 
 class PipelineProgress(unittest.TestCase):
@@ -359,6 +362,43 @@ class PipelineProgress(unittest.TestCase):
             out = handler.handler({"id": "job-1", "input": {"action": "build", "project_id": "p1"}})
         self.assertTrue(out["ok"], out)
         self.assertEqual(order, ["render", "save"])
+
+    def test_a_scene_with_no_media_borrows_a_neighbour_instead_of_failing(self):
+        # A real job lost twenty minutes of sourcing this way: scene 6 of 17
+        # had no media, do_render raised, and the exception unwound past the
+        # point where the work directory (every other scene's clip) is
+        # deleted. build must never let one hard beat destroy the rest.
+        import handler
+        doc = build_doc(n=3, seconds=3.0)
+        doc["scenes"][1]["media"] = {"type": "color", "url": "", "source": "none"}
+        doc["scenes"][1]["reviewRequired"] = True
+        doc["scenes"][1]["reviewReason"] = "No media found for this beat"
+        seen = {}
+
+        def fake_render(d, inp, work, report):
+            seen["doc"] = d
+            return {"video_url": "https://v", "object_path": "p", "bucket": "renders", "duration": 6}
+
+        with mock.patch.object(handler, "do_plan", return_value=doc), \
+                mock.patch.object(handler, "do_render", side_effect=fake_render), \
+                mock.patch.object(handler, "publish_media"), \
+                mock.patch.object(handler.storage, "patch_project"):
+            out = handler.handler({"id": "job-1", "input": {"action": "build", "project_id": "p1"}})
+        self.assertTrue(out["ok"], out)
+        # The render copy was healed...
+        self.assertNotEqual(seen["doc"]["scenes"][1]["media"]["type"], "color")
+        self.assertTrue(seen["doc"]["scenes"][1]["reviewRequired"])
+        # ...but the saved timeline still tells the truth, so the editor's
+        # readiness panel and Find-footage flow see the real gap.
+        self.assertEqual(doc["scenes"][1]["media"]["type"], "color")
+
+    def test_fill_missing_media_gives_up_honestly_when_nothing_was_sourced(self):
+        import handler
+        doc = build_doc(n=2, seconds=3.0)
+        for s in doc["scenes"]:
+            s["media"] = {"type": "color", "url": "", "source": "none"}
+        self.assertEqual(handler._fill_missing_media(doc), 0)
+        self.assertTrue(all(s["media"]["type"] == "color" for s in doc["scenes"]))
 
 
 class VisionFailuresAreReported(unittest.TestCase):
