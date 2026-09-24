@@ -31,8 +31,10 @@ selftest: render the whole template library in-container, upload nothing.
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
 """
+import copy
 import os
 import shutil
+import subprocess
 import time
 import traceback
 import uuid
@@ -50,16 +52,38 @@ def _work_dir(job_id: str) -> str:
     return d
 
 
+# Pipeline phases, in order, for the app's progress screen. The key is sent as
+# `phase` (not `stage`: the app already reads `stage` as the display text).
+PHASES = ("narration", "transcribe", "plan", "source", "render", "upload", "save")
+_PHASE_BY_PREFIX = (
+    ("Downloading narration", "narration"),
+    ("Aligning narration", "transcribe"),
+    ("Planning", "plan"),
+    ("Sourcing", "source"), ("Sourced", "source"), ("Re-sourcing", "source"),
+    ("Rendering", "render"),
+    ("Uploading", "upload"),
+    ("Saving", "save"),
+)
+
+
 class Reporter:
     """Mirrors progress to RunPod's job status AND to the video_projects row."""
 
     def __init__(self, project_id: str = ""):
         self.project_id = project_id or ""
         self._last = None
+        self._started = time.time()
 
-    def __call__(self, step: str, progress: int = None, **fields):
+    def __call__(self, step: str, progress: int = None, *, done: int = None,
+                 total: int = None, **fields):
+        phase = next((p for prefix, p in _PHASE_BY_PREFIX if step.startswith(prefix)), "")
+        update = {"status": step, "progress": progress, "phase": phase,
+                  "phases": list(PHASES),
+                  "elapsed": round(time.time() - self._started)}
+        if done is not None and total is not None:
+            update.update(done=done, total=total)
         try:
-            runpod.serverless.progress_update({"status": step, "progress": progress})
+            runpod.serverless.progress_update(update)
         except Exception:
             pass
         print(f"[worker] {step}" + (f" ({progress}%)" if progress is not None else ""),
@@ -76,8 +100,29 @@ class Reporter:
         storage.patch_project(self.project_id, payload)
 
 
+def _thumbnail(path: str, work: str, scene_id: str) -> str:
+    """A 320px JPEG of the scene for the editor's filmstrip, or "" on failure."""
+    out = os.path.join(work, f"thumb_{scene_id}.jpg")
+    seek = []
+    if os.path.splitext(path)[1].lower() in (".mp4", ".webm", ".mov", ".m4v", ".mkv"):
+        dur = renderer.probe_duration(path) or 0
+        seek = ["-ss", f"{dur / 2:.2f}"]
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", *seek, "-i", path, "-frames:v", "1",
+                        "-vf", "scale=320:-2", "-q:v", "5", out],
+                       capture_output=True, timeout=60)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+    return out if os.path.isfile(out) else ""
+
+
+# Media links in a saved timeline. The editor can sit on a project for weeks;
+# the render step re-signs from media.storage regardless.
+_MEDIA_LINK_TTL = 60 * 60 * 24 * 30
+
+
 def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
-                  job_id: str = "") -> int:
+                  job_id: str = "", band: tuple = (66, 68)) -> int:
     """
     Upload sourced media to Supabase and point the timeline at it.
 
@@ -92,37 +137,57 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
     storage it never reads. Failures are logged per asset, not fatal: a scene
     that fails to publish keeps its local path and is flagged for review.
     """
-    published: Dict[str, str] = {}
+    published: Dict[str, tuple] = {}
     failures = 0
     scenes = doc.get("scenes", [])
+    lo, hi = band
+    last_pct = [None]
+    work = os.path.dirname(next((s["media"]["url"] for s in scenes
+                                 if os.path.isfile((s.get("media") or {}).get("url") or "")),
+                                "")) or config.WORK_DIR
+
+    def put(local: str, obj: str) -> str:
+        if storage.broker_enabled():
+            return storage.broker_upload(local, bucket, obj, project_id, job_id,
+                                         read_ttl=_MEDIA_LINK_TTL)
+        storage.upload_to_supabase(local, obj, bucket=bucket)
+        return storage.signed_url(obj, bucket=bucket, expires_in=_MEDIA_LINK_TTL)
+
     for i, scene in enumerate(scenes):
+        pct = lo + int((hi - lo) * i / max(len(scenes), 1))
+        if pct != last_pct[0]:
+            last_pct[0] = pct
+            report(f"Saving clips for editing {i}/{len(scenes)}", pct, done=i, total=len(scenes))
         media = scene.get("media") or {}
         path = media.get("url") or ""
         if not path or not os.path.isfile(path):
             continue
         if path in published:
-            media["url"] = published[path]
+            media.update(published[path][1])
             continue
         ext = os.path.splitext(path)[1] or ".bin"
         obj = f"projects/{project_id}/media/{scene['id']}{ext}"
         try:
-            if storage.broker_enabled():
-                url = storage.broker_upload(path, bucket, obj, project_id, job_id)
-            else:
-                storage.upload_to_supabase(path, obj, bucket=bucket)
-                url = storage.signed_url(obj, bucket=bucket, expires_in=60 * 60 * 24 * 7)
+            url = put(path, obj)
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not publish {obj}: {e}", flush=True)
             scene["reviewRequired"] = True
             scene["reviewReason"] = "Media could not be saved; re-source before rendering"
             failures += 1
             continue
-        published[path] = url
-        media["url"] = url
-        # The signed URL expires; the app re-signs from this before a render.
-        media["storage"] = {"bucket": bucket, "path": obj}
-        if i % 20 == 0:
-            report(f"Saving media {i + 1}/{len(scenes)}", 66)
+        fields = {"url": url,
+                  # The signed URL expires; the app re-signs from this before a render.
+                  "storage": {"bucket": bucket, "path": obj}}
+        thumb = _thumbnail(path, work, scene["id"])
+        if thumb:
+            tobj = f"projects/{project_id}/thumbs/{scene['id']}.jpg"
+            try:
+                fields["thumbnail"] = put(thumb, tobj)
+                fields["thumbStorage"] = {"bucket": bucket, "path": tobj}
+            except Exception as e:  # noqa: BLE001 — a missing thumb is cosmetic
+                print(f"[worker] could not save thumbnail {tobj}: {e}", flush=True)
+        media.update(fields)
+        published[path] = (url, fields)
     doc["meta"]["publishedMedia"] = len(published)
     if failures:
         doc["meta"]["warnings"].append(
@@ -173,7 +238,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             shots[idx]["query"] = str(query).strip()[:240]
 
     total = len(segments)
-    report(f"Sourcing media for {total} scenes", 22)
+    report(f"Sourcing media for {total} scenes", 22, done=0, total=total)
     media.reset_cache()
     jobs = [{"index": i, "query": shot["query"], "seconds": seg.duration,
              "visual_type": shot.get("visualType", "footage"),
@@ -190,7 +255,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         pct = 22 + int(43 * done / max(n, 1))
         if pct != last_pct[0]:
             last_pct[0] = pct
-            report(f"Sourced {done}/{n} scenes", pct)
+            report(f"Sourced {done}/{n} scenes", pct, done=done, total=n)
 
     assets = media.source_many(
         jobs, work,
@@ -289,7 +354,7 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
     if project_id and inp.get("publish_media", True):
         report("Saving replacement media", 70)
         publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
-                      report, job_id=inp.get("_job_id", ""))
+                      report, job_id=inp.get("_job_id", ""), band=(70, 72))
 
     meta = doc.setdefault("meta", {})
     meta["scenesWithoutMedia"] = sum(
@@ -361,16 +426,26 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
 
     report(f"Rendering {doc['meta'].get('sceneCount', len(doc['scenes']))} scenes", 70)
     out_path = os.path.join(work, "final.mp4")
+    last_pct = [70]
+
+    def on_render(frac: float):
+        # 70 -> 90%: Remotion's own progress, instead of a bar that sits at 70.
+        pct = 70 + int(20 * max(0.0, min(1.0, frac)))
+        if pct != last_pct[0]:
+            last_pct[0] = pct
+            report(f"Rendering video {int(frac * 100)}%", pct)
+
     renderer.render(
         doc, out_path,
         composition=inp.get("composition", "Main"),
         concurrency=inp.get("concurrency"),
+        on_progress=on_render,
         # Everything sourced for this job lives here; the renderer serves it
         # over loopback so headless Chrome can actually fetch it.
         serve_dir=work,
     )
 
-    report("Uploading video", 92)
+    report("Uploading video", 91)
     duration = doc["durationInFrames"] / doc["fps"]
 
     # Preferred: the caller pre-signed a destination for us, so this worker
@@ -529,7 +604,13 @@ def handler(job):
             doc = do_plan(inp, work, report)
             if project_id:
                 storage.patch_project(project_id, {"scene_data": doc})
-            out = do_render(doc, inp, work, report)
+            # Render from the local files (fast), THEN save the clips, so the
+            # finished video opens in the editor with every scene replaceable.
+            local_doc = copy.deepcopy(doc)
+            out = do_render(local_doc, inp, work, report)
+            if project_id and inp.get("publish_media", True):
+                publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
+                              report, job_id=job_id, band=(93, 99))
             if project_id:
                 storage.patch_project(project_id, _done_fields(out))
             return {"ok": True, "action": "build", "timeline": doc, **out,

@@ -228,6 +228,77 @@ class StorageBroker(unittest.TestCase):
         self.assertEqual(up.call_args[0][3:], ("p1", "job-9"))
 
 
+class PipelineProgress(unittest.TestCase):
+    """The app draws its pipeline screen from these progress updates."""
+
+    def _updates(self, calls):
+        import handler
+        sent = []
+        with mock.patch.object(handler.runpod.serverless, "progress_update", side_effect=sent.append):
+            rep = handler.Reporter("")
+            for args, kw in calls:
+                rep(*args, **kw)
+        return sent
+
+    def test_each_step_names_its_phase(self):
+        sent = self._updates([(("Downloading narration", 4), {}),
+                              (("Planning the visual story", 15), {}),
+                              (("Sourced 3/10 scenes", 30), {"done": 3, "total": 10}),
+                              (("Rendering video 40%", 78), {}),
+                              (("Saving clips for editing 2/10", 94), {"done": 2, "total": 10})])
+        self.assertEqual([u["phase"] for u in sent],
+                         ["narration", "plan", "source", "render", "save"])
+        self.assertEqual((sent[2]["done"], sent[2]["total"]), (3, 10))
+        self.assertTrue(all("elapsed" in u and u["phases"][0] == "narration" for u in sent))
+
+    def test_phase_key_does_not_collide_with_the_display_text(self):
+        # The app reads `stage` as the step label; sending a bare key there
+        # would show "render" instead of "Rendering video 40%".
+        sent = self._updates([(("Rendering video 40%", 78), {})])
+        self.assertNotIn("stage", sent[0])
+        self.assertEqual(sent[0]["status"], "Rendering video 40%")
+
+    def test_published_scenes_get_a_thumbnail(self):
+        import handler
+        import tempfile
+        doc = build_doc(n=1, seconds=3.0)
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fh:
+            fh.write(b"x")
+        doc["scenes"][0]["media"]["url"] = fh.name
+        try:
+            with mock.patch.object(config, "SUPABASE_SERVICE_KEY", ""), \
+                    mock.patch.object(config, "STORAGE_BROKER_URL", "https://x/worker-storage"), \
+                    mock.patch.object(handler, "_thumbnail", return_value=fh.name), \
+                    mock.patch.object(storage, "broker_upload",
+                                      side_effect=lambda l, b, obj, *a, **k: f"https://s/{obj}"):
+                handler.publish_media(doc, "p1", "video-media", handler.Reporter(""), job_id="j")
+        finally:
+            os.unlink(fh.name)
+        media = doc["scenes"][0]["media"]
+        sid = doc["scenes"][0]["id"]
+        self.assertEqual(media["thumbnail"], f"https://s/projects/p1/thumbs/{sid}.jpg")
+        self.assertEqual(media["thumbStorage"]["path"], f"projects/p1/thumbs/{sid}.jpg")
+
+    def test_build_renders_from_local_files_then_saves_the_clips(self):
+        import handler
+        order = []
+        doc = build_doc(n=2, seconds=3.0)
+
+        def fake_render(d, inp, work, report):
+            order.append("render")
+            self.assertIsNot(d, doc)  # render gets its own copy to rewrite
+            return {"video_url": "https://v", "object_path": "p", "bucket": "renders", "duration": 6}
+
+        with mock.patch.object(handler, "do_plan", return_value=doc), \
+                mock.patch.object(handler, "do_render", side_effect=fake_render), \
+                mock.patch.object(handler, "publish_media",
+                                  side_effect=lambda *a, **k: order.append("save")), \
+                mock.patch.object(handler.storage, "patch_project"):
+            out = handler.handler({"id": "job-1", "input": {"action": "build", "project_id": "p1"}})
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(order, ["render", "save"])
+
+
 class VisionFailuresAreReported(unittest.TestCase):
     """
     A failed vision call keeps the clip unjudged, which looks normal in the
