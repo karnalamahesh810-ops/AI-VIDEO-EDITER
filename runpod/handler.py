@@ -246,6 +246,11 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
     if not query:
         raise ValueError("this scene has nothing to search for — set a query first")
 
+    # The same matching as the plan: the vision model scores candidates
+    # against what the beat should show, not just the search words.
+    sem = scene.get("semanticMetadata") or {}
+    intent = str(inp.get("intent") or sem.get("intent") or "")[:300]
+
     report(f"Re-sourcing scene {idx + 1}", 20)
     media.reset_cache()
     asset = media.source_for_segment(
@@ -254,6 +259,7 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
         allow_youtube=inp.get("allow_youtube"),
         allow_stock=inp.get("allow_stock"),
         require_cc=inp.get("require_cc"),
+        intent=intent, context=str(scene.get("text") or ""),
     )
     if not asset:
         raise ValueError(f"no usable media found for '{query}' — try different wording")
@@ -264,6 +270,14 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
                        if asset.kind == "image" else "none")
     scene["reviewRequired"] = bool(asset.review_required)
     scene["reviewReason"] = asset.review_reason or ""
+    scene["semanticMetadata"] = {
+        **sem,
+        "intent": intent,
+        "searchQuery": query,
+        "contentDescription": asset.content_description or "",
+        "relevanceScore": asset.relevance_score,
+        "provider": asset.source or "",
+    }
 
     project_id = inp.get("project_id") or ""
     if project_id and inp.get("publish_media", True):

@@ -931,6 +931,35 @@ class ResourceAction(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no usable media"):
             self._run(asset=None)
 
+    def test_replacement_is_matched_against_the_scene_intent(self):
+        import handler
+        doc = build_doc(n=4, seconds=3.0)
+        doc["scenes"][1]["semanticMetadata"] = {"intent": "Aerial of the dry lakebed",
+                                                "subject": "Lake Mead"}
+        seen = {}
+        new = asset(kind="video", source="youtube", url="https://x/new.mp4")
+        new.content_description, new.relevance_score = "Cracked mud flats", 0.88
+
+        def fake(*a, **k):
+            seen.update(k)
+            return new
+
+        original = handler.media.source_for_segment
+        handler.media.source_for_segment = fake
+        try:
+            doc = handler.do_resource({"timeline": doc, "scene_index": 1},
+                                      os.path.join(ROOT, "out", "_t_res"),
+                                      handler.Reporter(""))
+        finally:
+            handler.media.source_for_segment = original
+        self.assertEqual(seen["intent"], "Aerial of the dry lakebed")
+        self.assertEqual(seen["context"], doc["scenes"][1].get("text", ""))
+        meta = doc["scenes"][1]["semanticMetadata"]
+        # The editor shows these; stale values would describe the old clip.
+        self.assertEqual(meta["contentDescription"], "Cracked mud flats")
+        self.assertEqual(meta["relevanceScore"], 0.88)
+        self.assertEqual(meta["subject"], "Lake Mead")
+
 
 class NoDuplicateShots(unittest.TestCase):
     """
