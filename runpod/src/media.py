@@ -102,6 +102,9 @@ BLOCK_SIGNS = (
     "please sign in",
     "http error 429",
     "too many requests",
+    # Search itself refused. A 403 on a single video can be a geo/age lock, but
+    # on the search API it is the IP: seen on a Webshare proxy YouTube had banned.
+    "unable to download api page: http error 403",
 )
 BOT_CHECK = BLOCK_SIGNS[0]  # kept for callers that check the classic wording
 

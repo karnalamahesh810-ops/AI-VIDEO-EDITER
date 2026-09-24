@@ -1327,6 +1327,12 @@ class BlockedIPDetection(unittest.TestCase):
                     "HTTP Error 429: Too Many Requests"):
             self.assertTrue(media.looks_blocked(msg), msg)
 
+    def test_a_refused_search_page_is_recognised(self):
+        # Verbatim from a banned Webshare IP; the search returned nothing.
+        self.assertTrue(media.looks_blocked(
+            'ERROR: query "Hoover Dam aerial drone" page 1: Unable to download '
+            "API page: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)"))
+
     def test_a_genuinely_empty_search_is_not_called_a_block(self):
         for msg in ("ERROR: no results found", "", None,
                     "ERROR: Unsupported URL"):
