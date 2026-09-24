@@ -69,8 +69,12 @@ _PHASE_BY_PREFIX = (
 class Reporter:
     """Mirrors progress to RunPod's job status AND to the video_projects row."""
 
-    def __init__(self, project_id: str = ""):
+    def __init__(self, project_id: str = "", job: dict = None):
         self.project_id = project_id or ""
+        # runpod's progress_update(job, progress) needs the job itself. It
+        # used to be called with the progress alone; the TypeError was
+        # swallowed below, so no progress ever reached RunPod or the app.
+        self.job = job
         self._last = None
         self._started = time.time()
 
@@ -82,10 +86,11 @@ class Reporter:
                   "elapsed": round(time.time() - self._started)}
         if done is not None and total is not None:
             update.update(done=done, total=total)
-        try:
-            runpod.serverless.progress_update(update)
-        except Exception:
-            pass
+        if self.job and self.job.get("id"):
+            try:
+                runpod.serverless.progress_update(self.job, update)
+            except Exception as e:  # noqa: BLE001 — progress must never kill a job
+                print(f"[worker] progress update failed: {e}", flush=True)
         print(f"[worker] {step}" + (f" ({progress}%)" if progress is not None else ""),
               flush=True)
         if not self.project_id:
@@ -529,7 +534,7 @@ def handler(job):
     inp["_job_id"] = job_id
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
-    report = Reporter(project_id)
+    report = Reporter(project_id, job=job)
     work = _work_dir(job_id)
 
     try:

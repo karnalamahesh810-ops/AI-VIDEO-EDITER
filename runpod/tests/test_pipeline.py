@@ -234,8 +234,15 @@ class PipelineProgress(unittest.TestCase):
     def _updates(self, calls):
         import handler
         sent = []
-        with mock.patch.object(handler.runpod.serverless, "progress_update", side_effect=sent.append):
-            rep = handler.Reporter("")
+        job = {"id": "job-1"}
+
+        def fake(j, update):
+            # Called as progress_update(job, progress) — the job first.
+            self.assertIs(j, job)
+            sent.append(update)
+
+        with mock.patch.object(handler.runpod.serverless, "progress_update", side_effect=fake):
+            rep = handler.Reporter("", job=job)
             for args, kw in calls:
                 rep(*args, **kw)
         return sent
