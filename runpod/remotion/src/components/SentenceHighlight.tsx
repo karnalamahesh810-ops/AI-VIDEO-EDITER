@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate } from "remotion";
 import { TEXT_SHADOW, useOverlayAnim, useScale } from "./layout";
+import { NARROW, SERIF_ITALIC } from "./fonts";
 import type { Overlay } from "../types";
 
 /**
@@ -11,8 +12,6 @@ import type { Overlay } from "../types";
  * sit in a red box in italic serif. `overlay.highlight` lists those words
  * (comma or space separated); matching ignores case and punctuation.
  */
-const NARROW = "'Liberation Sans Narrow', 'Arial Narrow', Inter, sans-serif";
-const SERIF = "'Liberation Serif', 'DejaVu Serif', Georgia, serif";
 
 function norm(w: string): string {
   return w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
@@ -60,7 +59,7 @@ export const SentenceHighlight: React.FC<{ overlay: Overlay; accent: string }> =
                 <span
                   style={{
                     background: accent || "#d62828",
-                    fontFamily: SERIF,
+                    fontFamily: SERIF_ITALIC,
                     fontStyle: "italic",
                     fontWeight: 700,
                     padding: "0 0.18em",

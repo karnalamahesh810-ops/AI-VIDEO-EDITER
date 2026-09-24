@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate } from "remotion";
 import { TEXT_SHADOW, useOverlayAnim, useScale } from "./layout";
+import { NARROW } from "./fonts";
 import type { Overlay } from "../types";
 
 /**
@@ -12,7 +13,6 @@ import type { Overlay } from "../types";
  * variant "title": the big spaced date card ("FEBRUARY 2" over "1961") laid
  * over desaturated footage at the start of a dated passage.
  */
-const NARROW = "'Liberation Sans Narrow', 'Arial Narrow', Inter, sans-serif";
 
 function typed(text: string, frame: number, end: number): string {
   const n = Math.floor(

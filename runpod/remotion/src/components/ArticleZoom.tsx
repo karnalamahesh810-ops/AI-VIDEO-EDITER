@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate } from "remotion";
 import { useOverlayAnim, useScale } from "./layout";
+import { TYPEWRITER as TYPE } from "./fonts";
 import type { Overlay } from "../types";
 
 /**
@@ -16,7 +17,6 @@ import type { Overlay } from "../types";
  * no body the page shows faint ruled lines — what a document reads as from a
  * distance — rather than made-up prose.
  */
-const TYPE = "'Liberation Mono', 'Courier New', 'DejaVu Sans Mono', monospace";
 
 function splitHighlight(text: string, highlight: string): [string, string, string] {
   const h = (highlight || "").trim();

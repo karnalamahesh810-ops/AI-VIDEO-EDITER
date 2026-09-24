@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { useScale } from "./layout";
+import { INTER } from "./fonts";
 import type { Scene, SceneWord, TimelineProps } from "../types";
 
 /**
@@ -102,7 +103,8 @@ export const Captions: React.FC<{
     >
       <div
         style={{
-          fontFamily: `${style.fontFamily}, Inter, system-ui, sans-serif`,
+          fontFamily: style.fontFamily && style.fontFamily !== "Inter"
+            ? `${style.fontFamily}, ${INTER}` : INTER,
           fontSize: s(64),
           fontWeight: 800,
           lineHeight: 1.18,

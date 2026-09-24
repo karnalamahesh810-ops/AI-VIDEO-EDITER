@@ -7,9 +7,10 @@
     "studio": "remotion studio src/index.ts",
     "render": "remotion render src/index.ts Main out/video.mp4"
   },
-  "comment": "Every version here is pinned EXACTLY, not caret-ranged, and the Docker build runs `npm install` with no lockfile \u2014 so a range would resolve fresh at build time and could differ from what was tested. Concretely: 4.0.512 of @remotion/cli depends on @remotion/studio@4.0.512, which was never published, and a caret range floats into it and kills the build.",
+  "comment": "Every version here is pinned EXACTLY, not caret-ranged, and the Docker build runs `npm install` with no lockfile — so a range would resolve fresh at build time and could differ from what was tested. Concretely: 4.0.512 of @remotion/cli depends on @remotion/studio@4.0.512, which was never published, and a caret range floats into it and kills the build.",
   "dependencies": {
     "@remotion/cli": "4.0.511",
+    "@remotion/google-fonts": "4.0.511",
     "@remotion/media-utils": "4.0.511",
     "d3-geo": "3.1.1",
     "react": "18.3.1",
