@@ -61,6 +61,9 @@ const renderOverlay = (ov: Overlay, accent: string) => {
 
 export const Main: React.FC<TimelineProps> = (props) => {
   const { scenes, overlays, audio, bgm, captions } = props;
+  // Track toggles from the editor. Absent means on, so older timelines
+  // render exactly as before.
+  const showOverlays = props.overlaysEnabled !== false;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -88,7 +91,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
         ))}
 
       {/* Overlay track — graphics sit on top of everything visual */}
-      {(overlays || []).map((ov, i) => (
+      {showOverlays && (overlays || []).map((ov, i) => (
         <Sequence
           key={`ov-${i}`}
           from={ov.startFrame}

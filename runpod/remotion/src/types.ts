@@ -149,6 +149,8 @@ export interface TimelineProps {
   };
   scenes: Scene[];
   overlays: Overlay[];
+  /** Editor track toggle for text animations / graphics. Absent = on. */
+  overlaysEnabled?: boolean;
   meta?: Record<string, unknown>;
   /**
    * Remotion requires composition props to be assignable to

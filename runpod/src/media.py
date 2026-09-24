@@ -156,7 +156,15 @@ class MediaAsset:
         if self.source == "youtube" and self.local_path:
             name = os.path.basename(self.local_path)
             if name.startswith("yt_"):
-                return f"yt:{name[3:].rsplit('.', 1)[0]}"
+                # Video id only. Files are named yt_<id>_<start>_<len>.mp4
+                # since per-range downloads were added, and taking everything
+                # before the extension made the identity range-specific: the
+                # "already used" check (`yt:<id>`) never matched, so one video
+                # was reused across many scenes a few seconds apart - near-
+                # identical shots again and again. YouTube ids are always 11
+                # characters and may themselves contain "_", so slice, don't
+                # split.
+                return f"yt:{name[3:14]}"
         return f"{self.source}:{self.url or self.local_path}"
 
     def dict(self) -> Dict[str, Any]:
@@ -224,14 +232,24 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
         except (requests.RequestException, ValueError):
             rows = []
     if not rows:
-        try:
-            from ddgs import DDGS  # keyless fallback
-            with DDGS() as ddg:
-                for it in ddg.images(query, max_results=limit * 2):
-                    rows.append((it.get("image"), it.get("width") or 0,
-                                 it.get("height") or 0, it.get("title") or "",
-                                 it.get("url") or ""))
-        except Exception:  # noqa: BLE001 — optional dependency / network
+        # Keyless fallback. Through the proxy pool when there is one: a real
+        # RunPod job returned no web images at all, consistent with the image
+        # search rate-limiting a datacenter address the way YouTube does.
+        # One direct attempt stays as the fallback for an unproxied box.
+        from_proxy = _next_proxy()
+        for proxy in ([from_proxy, None] if from_proxy else [None]):
+            try:
+                from ddgs import DDGS
+                with DDGS(proxy=proxy, timeout=15) as ddg:
+                    for it in ddg.images(query, max_results=limit * 2):
+                        rows.append((it.get("image"), it.get("width") or 0,
+                                     it.get("height") or 0, it.get("title") or "",
+                                     it.get("url") or ""))
+            except Exception:  # noqa: BLE001 — optional dependency / network
+                rows = []
+            if rows:
+                break
+        if not rows:
             return []
 
     out = []
@@ -1173,6 +1191,125 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     return None
 
 
+def search_dailymotion(query: str, limit: int = 12) -> List[dict]:
+    """
+    Dailymotion's public API: no key, ~1.5 s, and the dimensions come back
+    with the hit, so vertical uploads are filtered before any download.
+    Its catalogue is heavy on news-outlet clips - exactly the real-event
+    footage a flood or wildfire script needs when YouTube's top results miss.
+    """
+    try:
+        r = requests.get(
+            "https://api.dailymotion.com/videos",
+            headers={"User-Agent": config.USER_AGENT},
+            params={"search": query, "limit": limit, "sort": "relevance",
+                    "fields": "id,title,duration,width,height"},
+            timeout=20,
+        )
+        r.raise_for_status()
+        items = r.json().get("list") or []
+    except Exception:
+        return []
+    out = []
+    for it in items:
+        w, h = float(it.get("width") or 0), float(it.get("height") or 0)
+        out.append({"id": str(it.get("id") or ""), "title": str(it.get("title") or ""),
+                    "duration": float(it.get("duration") or 0),
+                    "aspect": (w / h) if h else 0.0})
+    return [c for c in out if c["id"]]
+
+
+def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
+              timeout: int = 240) -> str:
+    """
+    Download one section of a Dailymotion video. Direct first: in testing
+    Dailymotion served the HLS formats to a plain connection and "no video
+    formats" through the residential proxies, the reverse of YouTube. One
+    proxied retry covers a host that blocks the direct address instead.
+    Needs curl_cffi, which yt-dlp uses to impersonate Chrome for Dailymotion.
+    """
+    range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
+    out_tpl = os.path.join(out_dir, f"dm_%(id)s_{range_key}.%(ext)s")
+    base = ["yt-dlp", f"https://www.dailymotion.com/video/{video_id}",
+            "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
+            "--force-keyframes-at-cuts",
+            "-f", "b[height<=1080]/bv*[height<=1080]+ba",
+            "--merge-output-format", "mp4", "--no-playlist", "--no-warnings",
+            "--ignore-config", "--socket-timeout", "20", "--retries", "2",
+            "-o", out_tpl, "--print", "after_move:filepath"]
+    for proxy in ("", _next_proxy()):
+        cmd = base + (["--proxy", proxy] if proxy else [])
+        try:
+            with _NET_SEM:
+                p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                   errors="replace", timeout=timeout)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+        for line in (p.stdout or "").splitlines():
+            line = line.strip()
+            if line and os.path.exists(line):
+                return line
+        if not proxy and not _PROXIES:
+            break
+    return ""
+
+
+def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
+                     skip: int = 0, used: set = None, intent: str = "",
+                     context: str = "") -> Optional[MediaAsset]:
+    """
+    A second real-footage source after YouTube, held to the same rules: no
+    talking-head titles, no vertical uploads, no burned-in captions, and the
+    vision model must see the intent in the actual downloaded frames. There
+    is no storyboard to scout, so the grab point is the fixed 35% one.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    candidates = _cached_search(search_dailymotion, query)
+    if not candidates:
+        return None
+    ranked = sorted(candidates,
+                    key=lambda c: _score_candidate(c["title"], c["duration"],
+                                                   c["aspect"], seconds),
+                    reverse=True)
+    grab = max(2.0, seconds + 1.5)
+    judged = 0
+    for c in ranked[skip:] + ranked[:skip]:
+        if judged >= config.VISION_MAX_CANDIDATES:
+            break
+        page = f"https://www.dailymotion.com/video/{c['id']}"
+        if used and f"dailymotion:{page}" in used:
+            continue
+        if _TALKING_HEAD.search(c["title"]) or (c["aspect"] and c["aspect"] < 1.2):
+            continue
+        if c["duration"] and c["duration"] < grab + 4:
+            continue
+        path = _dm_fetch(c["id"], out_dir, _fixed_point(c, grab, 10.0), grab)
+        if not path:
+            continue
+        if has_burned_captions(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
+        judged += 1
+        keep, verdict = _vision_gate(path, intent, context, c["title"])
+        if not keep:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
+        return MediaAsset(
+            kind="video", source="dailymotion", url=page, local_path=path,
+            duration=grab, attribution=f"Dailymotion: {c['title']}"[:200],
+            license="unverified — you must hold the rights", query=query,
+            review_required=True,
+            review_reason="Licence unverified — confirm you hold the rights",
+        ).apply_verdict(verdict, intent)
+    return None
+
+
 def _asset_for(path: str, query: str, seconds: float, require_cc: bool,
                title: str = "") -> MediaAsset:
     return MediaAsset(
@@ -1421,11 +1558,18 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         if asset:
             return asset
 
+    if visual_type == "footage" and config.ALLOW_DAILYMOTION and not require_cc:
+        asset = dailymotion_clip(query, work_dir, seconds=seconds, skip=nth,
+                                 used=used, intent=intent, context=context)
+        if asset:
+            return asset
+
     # Free footage sources beyond YouTube. These carry clean licences, so
     # they are tried for motion before falling back to a Ken Burns still —
     # a real moving shot of the subject beats a panned photograph of it.
     if visual_type == "footage":
-        for search in (search_nasa_video, search_wikimedia_video, search_archive_org_video):
+        extra = (search_archive_org_video,) if config.ALLOW_ARCHIVE_ORG else ()
+        for search in (search_nasa_video, search_wikimedia_video) + extra:
             found = _cached_search(search, query)
             ordered = found[nth:] + found[:nth] if found else []
             got = _pick_unused(ordered, used, query, work_dir, intent, context)
@@ -1573,18 +1717,29 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
 
     done = 0
     lock = threading.Lock()
+    # Claimed as each scene finishes, so a scene that starts later skips a
+    # video an earlier one already took. Without it every parallel scene
+    # asking about the same subject grabbed the same top result, and pass 2
+    # had to re-source most of them. Races still happen (two scenes finishing
+    # at once); pass 2 below catches those.
+    live_used: set = set()
 
     def fetch(job, nth):
         try:
-            return source_for_segment(
+            got = source_for_segment(
                 job["query"], float(job.get("seconds") or 0), work_dir,
                 visual_type=job.get("visual_type", "footage"), nth=nth,
+                used=live_used,
                 fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
                 intent=job.get("intent", ""), context=job.get("context", ""),
                 **kwargs)
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{job['query']}' failed: {e}", flush=True)
             return None
+        if got:
+            with lock:
+                live_used.add(got.identity)
+        return got
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in plan}
@@ -1703,4 +1858,24 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     if todo:
         print(f"[media] second pass: {replaced[0]}/{len(todo)} scene(s) replaced "
               f"({empty} empty, {duplicates} repeats, {rejected} unusable)", flush=True)
+
+    # Last resort for whatever is still empty: one generated still each,
+    # within IMAGE_MAX_PER_VIDEO. Inside source_for_segment generation only
+    # happens at the very end of an attempt, which the pass-2 time budget
+    # often cut off before it was reached - a real 19-scene job ended with
+    # five black scenes and none of its six allowed images used.
+    empties = [job for job, _ in plan if results[job["index"]] is None]
+    if empties:
+        def gen(job):
+            if not _generation_budget_left():
+                return None
+            return generate_image(job.get("prompt") or job["query"], work_dir)
+
+        with ThreadPoolExecutor(max_workers=min(4, len(empties))) as pool:
+            for job, made in zip(empties, pool.map(gen, empties)):
+                if made:
+                    results[job["index"]] = made
+        filled = sum(1 for job in empties if results[job["index"]] is not None)
+        print(f"[media] generated stills for {filled}/{len(empties)} empty scene(s)",
+              flush=True)
     return results

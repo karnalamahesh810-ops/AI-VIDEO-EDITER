@@ -1329,14 +1329,16 @@ class NoDuplicateShots(unittest.TestCase):
         self.assertEqual(sorted(calls), [("a", 0), ("b", 0), ("c", 0)])
         self.assertEqual(len({a.identity for a in out}), 3)
 
-    def test_running_out_of_options_keeps_the_repeat_but_flags_it(self):
+    def test_running_out_of_options_never_repeats_a_clip(self):
         # Only two distinct assets exist for six scenes asking the same thing.
+        # Policy (the creator's, after seeing repeats in a real render): a
+        # clip never appears twice in the timeline. The other four stay empty
+        # for the later rescue steps (AI alternative queries, a generated
+        # still) and the editor's Find footage - not a silent repeat.
         out, _ = self._run(["the lake"] * 6, per_query=2)
         placed = [a for a in out if a]
-        self.assertEqual(len(placed), 6, "must not render black rather than repeat")
-        repeats = [a for a in placed if a.review_required]
-        self.assertTrue(repeats, "an unavoidable repeat must be flagged for review")
-        self.assertIn("Repeat", repeats[0].review_reason)
+        self.assertEqual(len(placed), 2)
+        self.assertEqual(len({a.identity for a in placed}), 2)
 
     def test_youtube_identity_is_the_video_not_the_query(self):
         # Two different searches landing on the same upload count as one.

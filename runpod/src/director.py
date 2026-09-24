@@ -122,6 +122,30 @@ def _clean(value, limit: int) -> str:
     return str(value if value is not None else "").strip()[:limit]
 
 
+def with_subject(subject: str, query: str, limit: int = 240) -> str:
+    """
+    The query with the subject's words in front - each word once.
+
+    Prepending the whole subject whenever the exact phrase was missing gave
+    searches like "Ohio Valley river data Ohio Valley river gauge flood":
+    the subject was "Ohio Valley river gauge", the query already said "Ohio
+    Valley river data", and the phrase check saw no match. Repeated words
+    make a video search worse, not more specific. Only the subject words the
+    query lacks are added, then any word repeated inside the result is
+    dropped (case-insensitive, first occurrence kept).
+    """
+    subject, query = (subject or "").strip(), (query or "").strip()
+    have = {w.lower() for w in query.split()}
+    missing = [w for w in subject.split() if w.lower() not in have]
+    words, seen = [], set()
+    for w in missing + query.split():
+        key = w.lower()
+        if key not in seen:
+            seen.add(key)
+            words.append(w)
+    return " ".join(words)[:limit]
+
+
 def _finite(value) -> Optional[float]:
     try:
         number = float(value)
@@ -352,8 +376,7 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
             # GoMotion's rule, enforced rather than requested: the named subject
             # is always in the search. "exposed ramps in drought" finds any
             # reservoir on Earth; with "Lake Mead" in front it finds this one.
-            if subject and subject.lower() not in query.lower():
-                query = f"{subject} {query}"[:240]
+            query = with_subject(subject, query)
             seen.add(idx)
             shots[idx] = {
                 "query": query,

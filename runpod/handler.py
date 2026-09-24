@@ -647,10 +647,17 @@ def handler(job):
             doc = inp.get("timeline")
             if not doc:
                 raise ValueError("render requires a `timeline` document")
+            # Export must not fail over one empty scene either: that was the
+            # "Scene 6 still needs media before it can render" a user hit
+            # pressing Render. The gap is filled and flagged in the render
+            # copy only; the saved timeline still shows it for Find footage.
+            doc = copy.deepcopy(doc)
+            patched = _fill_missing_media(doc)
             out = do_render(doc, inp, work, report)
             if project_id:
                 storage.patch_project(project_id, _done_fields(out))
             return {"ok": True, "action": "render", **out,
+                    "filledScenes": patched,
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "build":

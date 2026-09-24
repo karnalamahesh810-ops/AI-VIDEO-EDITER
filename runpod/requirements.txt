@@ -5,3 +5,5 @@ requests==2.32.3
 pydantic==2.9.2
 pillow==12.3.0
 ddgs==9.16.0
+# yt-dlp impersonates Chrome through curl_cffi; Dailymotion serves no formats without it.
+curl_cffi==0.13.0

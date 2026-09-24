@@ -131,7 +131,11 @@ def build(segments: List[Segment], shots: List[dict],
 
     scenes: List[Dict[str, Any]] = []
     overlays: List[Dict[str, Any]] = []
-    keep_captions = bool(inp.get("captions", True))
+    # Off unless asked for: captions are a choice made in the editor, and a
+    # burned-in default is the first thing a creator has to undo. Word
+    # timings are stored either way, so switching them on later gets real
+    # word-synced phrases instead of a scene's whole text at once.
+    keep_captions = bool(inp.get("captions", False))
 
     entrances = plan_transitions(list(shots) + [{}] * max(0, len(segments) - len(shots)))
 
@@ -170,8 +174,8 @@ def build(segments: List[Segment], shots: List[dict],
                 "relevanceScore": getattr(asset, "relevance_score", None),
                 "provider": getattr(asset, "source", "") or "",
             },
-            "words": ([{"text": w.text, "start": w.start, "end": w.end}
-                       for w in seg.words] if keep_captions else []),
+            "words": [{"text": w.text, "start": w.start, "end": w.end}
+                      for w in seg.words],
             "reviewRequired": bool(review),
             "reviewReason": reason or "",
         })

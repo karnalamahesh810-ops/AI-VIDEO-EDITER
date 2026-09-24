@@ -63,6 +63,12 @@ PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY", "")
 # Set REQUIRE_CC=1 for channels that must stay claim-free.
 ALLOW_YOUTUBE = _flag("ALLOW_YOUTUBE", True)
 REQUIRE_CC = _flag("REQUIRE_CC", False)
+# Second real-footage source after YouTube (news-outlet clips, keyless API).
+# Same licence posture as unfiltered YouTube: flagged reviewRequired, and
+# skipped entirely when REQUIRE_CC is on.
+ALLOW_DAILYMOTION = _flag("ALLOW_DAILYMOTION", True)
+# Internet Archive public-domain / CC-BY film (see search_archive_org_video).
+ALLOW_ARCHIVE_ORG = _flag("ALLOW_ARCHIVE_ORG", True)
 
 # Optional residential/ISP proxy for yt-dlp. Datacenter addresses may be
 # challenged by YouTube, but a proxy alone does not guarantee downloads.
