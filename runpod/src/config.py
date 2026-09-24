@@ -151,7 +151,11 @@ MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
 MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp
 # metadata call plus one vision call; the beat then costs about the slowest.
-MOMENT_PARALLEL = int(os.getenv("MOMENT_PARALLEL", "3"))
+# This is also the ONLY candidates a query ever gets: _plan_grabs slices the
+# search results to exactly this many before scouting, so raising it is what
+# lets a scene reach past the first few search results when none of them has
+# the right moment - a real limiter on match quality, not just a speed knob.
+MOMENT_PARALLEL = int(os.getenv("MOMENT_PARALLEL", "5"))
 
 # --- web image search ----------------------------------------------------------
 # Real photographs of named people, places and events. Serper (Google Images)

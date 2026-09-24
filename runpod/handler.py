@@ -215,9 +215,17 @@ def _fill_missing_media(doc: dict) -> int:
     The scene_data already saved to the project (before this is ever called)
     keeps the honest "no media found" / reviewRequired record, so the editor
     and its readiness panel still show the real gap. This only patches the
-    throwaway render copy: it borrows the nearest scene that does have media
-    (search outward from it) and flags the borrow for review, the same
-    "a repeat is better than black" rule already used for duplicates.
+    throwaway render copy: it borrows a scene that does have media and flags
+    the borrow for review, the same "a repeat is better than black" rule
+    already used for duplicates.
+
+    Borrows are spread across every available scene (least-borrowed first,
+    nearest as the tiebreak) rather than always the closest one. Several
+    empty scenes in a row are common — a hard subject is usually hard for
+    several consecutive beats, not one — and always reaching for "nearest"
+    means every one of them collapses onto the SAME single neighbour: a
+    visible run of the identical clip repeated back to back, which reads far
+    worse than the same clip appearing twice somewhere apart in the video.
     Returns how many scenes were patched.
     """
     scenes = doc.get("scenes", [])
@@ -225,14 +233,16 @@ def _fill_missing_media(doc: dict) -> int:
            if (s.get("media") or {}).get("type") != "color"]
     if not have:
         return 0  # nothing sourced anything; a strict failure is the honest answer
+    borrowed = {h: 0 for h in have}
     patched = 0
     for i, s in enumerate(scenes):
         if (s.get("media") or {}).get("type") == "color":
-            nearest = min(have, key=lambda h: abs(h - i))
-            s["media"] = dict(scenes[nearest]["media"])
-            s["motion"] = scenes[nearest].get("motion", "none")
+            pick = min(have, key=lambda h: (borrowed[h], abs(h - i)))
+            borrowed[pick] += 1
+            s["media"] = dict(scenes[pick]["media"])
+            s["motion"] = scenes[pick].get("motion", "none")
             s["reviewRequired"] = True
-            s["reviewReason"] = "No usable clip found — reused a nearby scene; use Find footage to replace it"
+            s["reviewReason"] = "No usable clip found — reused another scene; use Find footage to replace it"
             patched += 1
     return patched
 

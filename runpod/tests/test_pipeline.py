@@ -402,6 +402,25 @@ class PipelineProgress(unittest.TestCase):
         self.assertEqual(handler._fill_missing_media(doc), 0)
         self.assertTrue(all(s["media"]["type"] == "color" for s in doc["scenes"]))
 
+    def test_a_run_of_empty_scenes_does_not_collapse_onto_one_neighbour(self):
+        # A real job had several empty scenes in a row each independently
+        # pick their single nearest real neighbour, so all of them piled onto
+        # THAT one scene's clip - a visible run of the identical shot,
+        # repeated back to back. Reproduced here with one real scene sitting
+        # right next to a run of four empty ones and the only other real
+        # scene far away: "always nearest" would put all four on the close
+        # one every time. Spreading by least-borrowed-first must not.
+        import handler
+        doc = build_doc(n=101, seconds=3.0)
+        for i, s in enumerate(doc["scenes"]):
+            s["media"] = ({"type": "video", "source": "youtube", "url": f"https://x/real{i}.mp4"}
+                          if i in (0, 100) else {"type": "color", "url": "", "source": "none"})
+        patched = handler._fill_missing_media(doc)
+        self.assertEqual(patched, 99)
+        urls = [doc["scenes"][i]["media"]["url"] for i in range(1, 5)]  # right next to scene 0
+        self.assertLessEqual(urls.count("https://x/real0.mp4"), 2)
+        self.assertGreaterEqual(urls.count("https://x/real100.mp4"), 2)
+
 
 class VisionFailuresAreReported(unittest.TestCase):
     """
@@ -1839,6 +1858,66 @@ class ExtraSources(unittest.TestCase):
         self.assertEqual(media.search_nasa_video.__name__, "search_nasa_video")
         self.assertNotEqual(media.search_nasa.__name__,
                             media.search_nasa_video.__name__)
+
+    def _archive_org(self, docs, files_by_id):
+        class SearchR:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self_inner): return {"response": {"docs": docs}}
+
+        class MetaR:
+            def __init__(self_inner, ident): self_inner.ident = ident
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self_inner): return {"files": files_by_id.get(self_inner.ident, [])}
+
+        def fake_get(url, **k):
+            if "advancedsearch" in url:
+                return SearchR()
+            ident = url.rsplit("/", 1)[-1]
+            return MetaR(ident)
+
+        original = media.requests.get
+        media.requests.get = fake_get
+        try:
+            return media.search_archive_org_video("lake mead")
+        finally:
+            media.requests.get = original
+
+    def test_only_a_fully_open_licence_is_accepted(self):
+        docs = [
+            {"identifier": "safe1", "title": "Public domain newsreel",
+            "licenseurl": "https://creativecommons.org/publicdomain/mark/1.0/"},
+            {"identifier": "safe2", "title": "CC-BY clip",
+            "licenseurl": "http://creativecommons.org/licenses/by/3.0/"},
+            # Content ID risk this exists to keep out: research-only TV News
+            # Archive style items have no licenceurl at all...
+            {"identifier": "tv_news", "title": "Evening News broadcast"},
+            # ...and NC/ND uploads are not clear for a monetised, edited reuse.
+            {"identifier": "nc_nd", "title": "Personal upload",
+            "licenseurl": "https://creativecommons.org/licenses/by-nc-nd/3.0/us/"},
+        ]
+        files = {
+            "safe1": [{"name": "safe1.mp4", "format": "512Kb MPEG4", "size": "900000"},
+                     {"name": "safe1.thumbs/a.jpg", "format": "Thumbnail", "size": "800"}],
+            "safe2": [{"name": "safe2.ogv", "format": "Ogg Video", "size": "500000"}],
+        }
+        hits = self._archive_org(docs, files)
+        self.assertEqual({h.url.rsplit("/", 1)[-1] for h in hits}, {"safe1.mp4", "safe2.ogv"})
+        self.assertTrue(all(h.source == "archive_org" for h in hits))
+
+    def test_the_largest_real_video_file_is_picked_over_thumbnails(self):
+        docs = [{"identifier": "item1", "title": "Hoover Dam footage",
+                "licenseurl": "https://creativecommons.org/publicdomain/mark/1.0/"}]
+        files = {"item1": [
+            {"name": "item1.thumbs/f1.jpg", "format": "Thumbnail", "size": "9000"},
+            {"name": "item1_archive.torrent", "format": "Archive BitTorrent", "size": "8000"},
+            {"name": "item1.ogv", "format": "Ogg Video", "size": "500000"},
+            {"name": "item1_512kb.mp4", "format": "512Kb MPEG4", "size": "2000000"},
+        ]}
+        hits = self._archive_org(docs, files)
+        self.assertEqual(len(hits), 1)
+        self.assertTrue(hits[0].url.endswith("item1_512kb.mp4"))
 
 
 if __name__ == "__main__":

@@ -436,6 +436,76 @@ def search_nasa_video(query: str, limit: int = 5) -> List[MediaAsset]:
     return search_nasa(query, want_video=True, limit=limit)
 
 
+# Only a licence IA itself tags as fully open and commercial-safe: public
+# domain, CC0, plain CC-BY or CC-BY-SA. archive.org's `movies` mediatype is
+# mostly the TV News Archive (unedited broadcast captures kept for research
+# under fair use, not licensed for reuse) and NC/ND-licensed uploads, which
+# would be a worse Content ID risk on a monetised channel than YouTube - so
+# this is a strict allow-list, not a "looks free" guess.
+_ARCHIVE_ORG_OPEN_LICENCE = re.compile(
+    r"(publicdomain|/zero/1\.0|/by/\d|/by-sa/\d)", re.I)
+_ARCHIVE_ORG_VIDEO_EXT = (".mp4", ".ogv", ".webm")
+
+
+def search_archive_org_video(query: str, limit: int = 5) -> List[MediaAsset]:
+    """
+    Internet Archive's `movies` collection: real newsreels, ephemeral and US
+    government films — the same kind of documentary b-roll VidRush and
+    GoMotion draw on beyond YouTube, and a source this worker had none of.
+    Public-domain government footage is common here and licence-unambiguous.
+    """
+    try:
+        r = requests.get(
+            "https://archive.org/advancedsearch.php",
+            headers={"User-Agent": config.USER_AGENT},
+            params={
+                "q": f"mediatype:movies AND ({query}) AND licenseurl:*",
+                "fl[]": ["identifier", "title", "licenseurl"],
+                "rows": limit * 4, "output": "json",
+            },
+            timeout=25,
+        )
+        r.raise_for_status()
+        docs = (r.json().get("response") or {}).get("docs") or []
+    except Exception:
+        return []
+
+    out: List[MediaAsset] = []
+    for doc in docs:
+        if len(out) >= limit:
+            break
+        lic = doc.get("licenseurl") or ""
+        if not _ARCHIVE_ORG_OPEN_LICENCE.search(lic):
+            continue
+        ident = doc.get("identifier") or ""
+        if not ident:
+            continue
+        try:
+            m = requests.get(f"https://archive.org/metadata/{ident}",
+                             headers={"User-Agent": config.USER_AGENT}, timeout=25)
+            m.raise_for_status()
+            files = m.json().get("files") or []
+        except Exception:
+            continue
+        # The largest real video file - thumbnails, torrents and the XML
+        # sidecars are never candidates, and a bigger file is a better print.
+        vids = sorted(
+            (f for f in files if str(f.get("name", "")).lower().endswith(_ARCHIVE_ORG_VIDEO_EXT)),
+            key=lambda f: int(f.get("size") or 0), reverse=True)
+        if not vids:
+            continue
+        f = vids[0]
+        out.append(MediaAsset(
+            kind="video", source="archive_org",
+            url=f"https://archive.org/download/{ident}/{f['name']}",
+            width=int(f.get("width") or 0), height=int(f.get("height") or 0),
+            attribution=f"Internet Archive — {doc.get('title', ident)}"[:200],
+            license="CC/public domain (Internet Archive) — see item page",
+            query=query,
+        ))
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Generated images
 # --------------------------------------------------------------------------- #
@@ -1355,7 +1425,7 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
     # they are tried for motion before falling back to a Ken Burns still —
     # a real moving shot of the subject beats a panned photograph of it.
     if visual_type == "footage":
-        for search in (search_nasa_video, search_wikimedia_video):
+        for search in (search_nasa_video, search_wikimedia_video, search_archive_org_video):
             found = _cached_search(search, query)
             ordered = found[nth:] + found[:nth] if found else []
             got = _pick_unused(ordered, used, query, work_dir, intent, context)
