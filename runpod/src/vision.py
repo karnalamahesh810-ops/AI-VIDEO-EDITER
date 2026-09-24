@@ -274,11 +274,20 @@ def judge(path: str, intent: str, context: str = "") -> Optional[dict]:
     return verdict
 
 
-def acceptable(verdict: Optional[dict]) -> bool:
-    """Pass/fail for a verdict. Unknown (None) passes — see judge()."""
+def acceptable(verdict: Optional[dict], allow_people: bool = False) -> bool:
+    """
+    Pass/fail for a verdict. Unknown (None) passes — see judge().
+
+    allow_people: the line is about a named person, so a portrait or that
+    person speaking is the right shot, not a talking-head reject. The score
+    still has to clear the floor, which is what checks it is the RIGHT person
+    doing the right thing.
+    """
     if verdict is None:
         return True
-    if verdict["has_text_or_watermark"] or verdict["is_talking_head"]:
+    if verdict["has_text_or_watermark"]:
+        return False
+    if verdict["is_talking_head"] and not allow_people:
         return False
     return verdict["score"] >= config.VISION_MIN_SCORE
 

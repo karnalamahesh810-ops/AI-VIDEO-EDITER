@@ -16,6 +16,9 @@ import { TimelineOverlay } from "./components/TimelineOverlay";
 import { HighlightOverlay } from "./components/HighlightOverlay";
 import { LowerThird } from "./components/LowerThird";
 import { ArrowOverlay } from "./components/ArrowOverlay";
+import { SentenceHighlight } from "./components/SentenceHighlight";
+import { ArticleZoom } from "./components/ArticleZoom";
+import { DateStamp } from "./components/DateStamp";
 import type { Overlay, OverlayType, TimelineProps } from "./types";
 
 /**
@@ -43,6 +46,9 @@ const OVERLAYS: Record<
   highlight: HighlightOverlay,
   "lower-third": LowerThird,
   arrow: ArrowOverlay,
+  "sentence-highlight": SentenceHighlight,
+  "article-zoom": ArticleZoom,
+  "date-stamp": DateStamp,
   // Split takes its two media entries rather than a text payload, so it gets
   // a small adapter instead of the shared signature.
   split: ({ overlay, accent }) =>

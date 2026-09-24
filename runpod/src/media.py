@@ -20,6 +20,7 @@ Every asset carries its `source`, `license` and `attribution` so the UI can
 show where each clip came from and you can see your exposure per video.
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import contextvars
 from dataclasses import dataclass, asdict
 from typing import List, Optional, Dict, Any
 import base64
@@ -793,6 +794,13 @@ def _longest_run(rows: list) -> int:
     return best
 
 
+# Set by source_for_segment for the scene being sourced; read by the vision
+# gate deep in the call chain. A context variable rather than a parameter
+# threaded through every source function: each scene is sourced on one
+# thread, start to finish, so it cannot leak into another scene.
+_SUBJECT_TYPE: contextvars.ContextVar = contextvars.ContextVar("subject_type", default="")
+
+
 def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
     (keep, verdict) for a downloaded candidate.
@@ -804,7 +812,7 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     if not intent or not vision.enabled():
         return True, None
     verdict = vision.judge(path, intent, context)
-    keep = vision.acceptable(verdict)
+    keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person")
     if verdict is not None:
         mark = "keep" if keep else "REJECT"
         flags = []
@@ -1504,7 +1512,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        prompt: str = "",
                        allow_youtube: bool = None, allow_stock: bool = None,
                        require_cc: bool = None, intent: str = "",
-                       context: str = "") -> Optional[MediaAsset]:
+                       context: str = "", subject_type: str = "") -> Optional[MediaAsset]:
     """
     Source one scene, relaxing the query until something is found.
 
@@ -1512,16 +1520,24 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     visual; each fallback is broader. Without this a precise query that
     matches nothing leaves the scene black, which is far worse than a
     slightly more general shot of the right subject.
+
+    subject_type "person": the line is about a named person, so a portrait or
+    that person speaking passes the vision gate, and no image is ever
+    GENERATED - an invented photo of a real person is a fabrication.
     """
-    for attempt in [query] + list(fallbacks or []):
-        got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
-                          nth=nth, used=used, prompt=prompt,
-                          allow_youtube=allow_youtube,
-                          allow_stock=allow_stock, require_cc=require_cc,
-                          intent=intent or query, context=context)
-        if got:
-            return got
-    return None
+    token = _SUBJECT_TYPE.set(subject_type or "")
+    try:
+        for attempt in [query] + list(fallbacks or []):
+            got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
+                              nth=nth, used=used, prompt=prompt,
+                              allow_youtube=allow_youtube,
+                              allow_stock=allow_stock, require_cc=require_cc,
+                              intent=intent or query, context=context)
+            if got:
+                return got
+        return None
+    finally:
+        _SUBJECT_TYPE.reset(token)
 
 
 def _source_one(query: str, seconds: float, work_dir: str, *,
@@ -1588,7 +1604,8 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
     # line rather than the search keywords: "Lake Powell concrete ramp" is a
     # good thing to search for and a poor thing to describe to an image model.
     tried_generation = False
-    if config.PREFER_GENERATED_IMAGES:
+    person = _SUBJECT_TYPE.get() == "person"
+    if config.PREFER_GENERATED_IMAGES and not person:
         tried_generation = True
         if _generation_budget_left():
             made = generate_image(prompt or query, work_dir)
@@ -1620,7 +1637,7 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
     # `if PREFER_GENERATED or budget_left()` short-circuits past the check
     # whenever the preference is on, which silently disabled the spend cap
     # entirely — caught by the cap test, not by reading it.
-    if not tried_generation and _generation_budget_left():
+    if not tried_generation and not person and _generation_budget_left():
         return generate_image(prompt or query, work_dir)
     return None
 
@@ -1683,7 +1700,7 @@ def _asset_ok(asset) -> tuple:
 
 
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
-                workers: int = 6, on_done=None, on_review=None,
+                workers: int = 6, on_done=None, on_review=None, rescue=None,
                 **kwargs) -> List[Optional[MediaAsset]]:
     """
     Source visuals for many scenes, with no two scenes sharing a visual.
@@ -1732,6 +1749,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 used=live_used,
                 fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
                 intent=job.get("intent", ""), context=job.get("context", ""),
+                subject_type=job.get("subject_type", ""),
                 **kwargs)
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{job['query']}' failed: {e}", flush=True)
@@ -1805,6 +1823,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     nth=nth + attempt, used=used,
                     fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
                     intent=job.get("intent", ""), context=job.get("context", ""),
+                    subject_type=job.get("subject_type", ""),
                     **kwargs)
             except Exception:  # noqa: BLE001
                 candidate = None
@@ -1859,12 +1878,56 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         print(f"[media] second pass: {replaced[0]}/{len(todo)} scene(s) replaced "
               f"({empty} empty, {duplicates} repeats, {rejected} unusable)", flush=True)
 
+    # AI rescue: for scenes still empty, one model call proposes DIFFERENT
+    # things to show (a related place, object, document or era scene), and
+    # each is sourced like a normal scene. The planner's fallbacks only
+    # broaden the same idea, which cannot help a subject with no footage at
+    # all - the medieval-history test left 9 of 17 scenes empty that way.
+    empties = [job for job, _ in plan if results[job["index"]] is None]
+    if empties and rescue:
+        ideas = rescue([{"index": j["index"], "text": j.get("context", ""),
+                         "query": j["query"], "intent": j.get("intent", "")}
+                        for j in empties]) or {}
+        rescue_deadline = time.time() + config.RESCUE_BUDGET_SECONDS
+
+        def rescue_one(job):
+            alts = ideas.get(job["index"]) or []
+            if not alts or time.time() >= rescue_deadline:
+                return None
+            try:
+                got = source_for_segment(
+                    alts[0], float(job.get("seconds") or 0), work_dir,
+                    visual_type=job.get("visual_type", "footage"), used=used,
+                    fallbacks=alts[1:], prompt=job.get("prompt", ""),
+                    intent=job.get("intent", ""), context=job.get("context", ""),
+                    subject_type=job.get("subject_type", ""), **kwargs)
+            except Exception:  # noqa: BLE001
+                return None
+            if not got:
+                return None
+            with claim:
+                if got.identity in used:
+                    return None
+                used.add(got.identity)
+            return got
+
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            for job, got in zip(empties, pool.map(rescue_one, empties)):
+                if got:
+                    results[job["index"]] = got
+        filled_by_ai = sum(1 for j in empties if results[j["index"]] is not None)
+        print(f"[media] AI rescue filled {filled_by_ai}/{len(empties)} empty scene(s)",
+              flush=True)
+
     # Last resort for whatever is still empty: one generated still each,
     # within IMAGE_MAX_PER_VIDEO. Inside source_for_segment generation only
     # happens at the very end of an attempt, which the pass-2 time budget
     # often cut off before it was reached - a real 19-scene job ended with
     # five black scenes and none of its six allowed images used.
-    empties = [job for job, _ in plan if results[job["index"]] is None]
+    # Never for a person: an invented photograph of a real person is a
+    # fabrication, and the editor can Find footage for that scene instead.
+    empties = [job for job, _ in plan if results[job["index"]] is None
+               and job.get("subject_type") != "person"]
     if empties:
         def gen(job):
             if not _generation_budget_left():

@@ -52,7 +52,11 @@ export type OverlayType =
   | "lower-third"
   | "comparison"
   | "arrow"
-  | "split";
+  | "split"
+  // VidRush's own text animations, read off their exports.
+  | "sentence-highlight"
+  | "article-zoom"
+  | "date-stamp";
 
 export interface SceneWord {
   text: string;
@@ -81,6 +85,8 @@ export interface Scene {
   /** Footage grade — film grain, vintage warmth, archival black and white. */
   treatment?: Treatment;
   transition: SceneTransition;
+  /** "inset": media framed on a backdrop at its own shape (archival, low-res, 4:3). */
+  frame?: "full" | "inset";
   /** Per-clip effect drawn over / applied to the media. */
   effect?: SceneEffect;
   /** Vision-model match record: what the frames actually show, and how well. */
@@ -129,6 +135,10 @@ export interface Overlay {
   /** Only used by "split": the two visuals to show, top then bottom. */
   media?: SceneMedia[];
   variant?: string;
+  /** Words to emphasise (sentence-highlight) or the phrase to mark (article-zoom). */
+  highlight?: string;
+  /** Document body for article-zoom; only ever text taken from the plan. */
+  body?: string;
   startFrame: number;
   durationInFrames: number;
 }

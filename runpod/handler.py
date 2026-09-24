@@ -297,6 +297,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "fallbacks": shot.get("fallbacks") or [],
              "prompt": shot.get("prompt") or "",
              "intent": shot.get("intent") or "",
+             "subject_type": shot.get("subjectType") or "",
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 
@@ -317,6 +318,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         require_cc=inp.get("require_cc"),
         on_done=on_done,
         on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
+        rescue=director.rescue_queries,
     )
 
     doc = timeline.build(

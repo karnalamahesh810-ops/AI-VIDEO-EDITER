@@ -13,6 +13,8 @@ GPU time; failing here with a sentence the UI can show beats failing inside
 headless Chrome with a stack trace.
 """
 import math
+import os
+import subprocess
 from typing import Any, Dict, List, Optional
 
 from . import config
@@ -84,11 +86,54 @@ _OVERLAY_SECONDS = {
     "stat": 4.0, "bar-chart": 9.0, "map": 8.0, "quote": 5.0,
     "timeline": 8.0, "highlight": 3.0, "lower-third": 4.0,
     "comparison": 7.0, "arrow": 2.5, "split": 4.0,
+    "sentence-highlight": 5.0, "article-zoom": 7.0, "date-stamp": 3.5,
 }
 
 # Sources this workflow refuses. Kept as data so the check and the error
 # message can't drift apart.
 _STOCK_SOURCES = {"pexels", "pixabay", "stock", "shutterstock", "storyblocks"}
+
+
+def _media_dims(asset) -> tuple:
+    """(width, height) of an asset: from the source when it reported them,
+    else probed from the downloaded file. (0, 0) when neither is possible."""
+    w, h = int(getattr(asset, "width", 0) or 0), int(getattr(asset, "height", 0) or 0)
+    if w and h:
+        return w, h
+    path = getattr(asset, "local_path", "") or ""
+    if not path or not os.path.isfile(path):
+        return 0, 0
+    try:
+        p = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=20)
+        a, b = (p.stdout.strip().splitlines() or [""])[0].split(",")[:2]
+        return int(a), int(b)
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
+        return 0, 0
+
+
+def pick_frame(asset, treatment: str, subject_type: str) -> str:
+    """
+    "inset" or "full" for one scene.
+
+    VidRush frames old photos, documents and low-resolution or 4:3 footage
+    inset on a backdrop instead of cropping them to fill 16:9. Cropping a
+    portrait photo to 16:9 cuts the face off; upscaling a 320x240 newsreel to
+    1080p full-frame is a smear. Inset keeps the whole picture at a size it
+    can hold, and reads as a deliberate archival look.
+    """
+    if asset is None:
+        return "full"
+    if subject_type == "document":
+        return "inset"
+    w, h = _media_dims(asset)
+    if w and h and (w / h < 1.45 or h < 560):
+        return "inset"
+    if getattr(asset, "kind", "") == "image" and treatment in ("archival", "vintage"):
+        return "inset"
+    return "full"
 
 
 def _scene_bounds(segments: List[Segment], fps: int, total: int) -> List[int]:
@@ -164,11 +209,14 @@ def build(segments: List[Segment], shots: List[dict],
             "motion": motion,
             "treatment": shot.get("treatment", "film"),
             "transition": entrances[i] if i < len(entrances) else "none",
+            "frame": pick_frame(asset, shot.get("treatment", "film"),
+                                shot.get("subjectType", "")),
             "effect": ("none" if asset is None
                        else _EFFECT_CYCLE[i % len(_EFFECT_CYCLE)]),
             "semanticMetadata": {
                 "intent": shot.get("intent", ""),
                 "subject": shot.get("subject", ""),
+                "subjectType": shot.get("subjectType", ""),
                 "searchQuery": shot.get("query", ""),
                 "contentDescription": getattr(asset, "content_description", "") or "",
                 "relevanceScore": getattr(asset, "relevance_score", None),

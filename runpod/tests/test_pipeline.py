@@ -230,6 +230,95 @@ class StorageBroker(unittest.TestCase):
         self.assertEqual(up.call_args[0][3:], ("p1", "job-9"))
 
 
+class VidRushMatching(unittest.TestCase):
+    """Rules added after comparing real renders with VidRush's own exports."""
+
+    def test_two_ranges_of_one_youtube_video_are_the_same_clip(self):
+        # The duplicate-clip bug: per-range filenames made each range its own
+        # identity, so one video was reused across scenes seconds apart.
+        a = MediaAsset(kind="video", source="youtube", url="q1",
+                       local_path="/w/yt_EYV6zfZyDW0_143957_6500.mp4")
+        b = MediaAsset(kind="video", source="youtube", url="q2",
+                       local_path="/w/yt_EYV6zfZyDW0_812333_8240.mp4")
+        self.assertEqual(a.identity, "yt:EYV6zfZyDW0")
+        self.assertEqual(a.identity, b.identity)
+
+    def test_an_underscore_inside_a_video_id_is_kept(self):
+        a = MediaAsset(kind="video", source="youtube", url="q",
+                       local_path="/w/yt_a_b-cdefghi_1000_6000.mp4")
+        self.assertEqual(a.identity, "yt:a_b-cdefghi")
+
+    def test_query_gets_each_subject_word_once(self):
+        self.assertEqual(
+            director.with_subject("Ohio Valley river gauge", "Ohio Valley river data flood gauges"),
+            "gauge Ohio Valley river data flood gauges")
+        self.assertEqual(director.with_subject("Lake Mead", "exposed boat ramp drought"),
+                         "Lake Mead exposed boat ramp drought")
+        self.assertEqual(director.with_subject("", "Great Schism 1054 Great Schism"),
+                         "Great Schism 1054")
+
+    def test_a_person_may_be_a_talking_head_nothing_else_may(self):
+        from src import vision
+        v = {"score": 0.9, "has_text_or_watermark": False, "is_talking_head": True,
+             "description": ""}
+        self.assertFalse(vision.acceptable(v))
+        self.assertTrue(vision.acceptable(v, allow_people=True))
+        v["has_text_or_watermark"] = True
+        self.assertFalse(vision.acceptable(v, allow_people=True))
+
+    def _source_many(self, fake, jobs, rescue=None, gen=None):
+        with mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")), \
+                mock.patch.object(media, "generate_image", side_effect=gen or (lambda *a, **k: None)), \
+                mock.patch.object(config, "IMAGE_MAX_PER_VIDEO", 10):
+            media.reset_cache()
+            return media.source_many(jobs, "/tmp", workers=2, rescue=rescue)
+
+    def test_ai_rescue_fills_an_empty_scene_with_a_new_clip(self):
+        def fake(query, seconds, work_dir, **kw):
+            if query == "medieval cathedral interior":
+                return MediaAsset(kind="video", source="archive_org", url="https://x/cathedral.mp4")
+            return None
+        jobs = [{"index": 0, "query": "Humbert of Silva Candida", "seconds": 3.0,
+                 "context": "Humbert laid the bull on the altar."}]
+        asked = []
+
+        def rescue(items):
+            asked.append(items)
+            return {0: ["medieval cathedral interior", "papal bull document"]}
+
+        out = self._source_many(fake, jobs, rescue=rescue)
+        self.assertEqual(out[0].url, "https://x/cathedral.mp4")
+        self.assertEqual(asked[0][0]["query"], "Humbert of Silva Candida")
+
+    def test_a_real_person_is_never_given_a_generated_image(self):
+        made = []
+
+        def gen(prompt, work_dir, **k):
+            made.append(prompt)
+            return MediaAsset(kind="image", source="generated", url="", local_path=f"/w/g{len(made)}.png")
+
+        jobs = [{"index": 0, "query": "Barack Obama Sr. portrait", "seconds": 3.0,
+                 "subject_type": "person"},
+                {"index": 1, "query": "Honolulu airport 1971", "seconds": 3.0,
+                 "subject_type": "place"}]
+        out = self._source_many(lambda *a, **k: None, jobs, gen=gen)
+        self.assertIsNone(out[0], "no invented photo of a real person")
+        self.assertIsNotNone(out[1])
+        self.assertEqual(len(made), 1)
+
+    def test_inset_frame_for_portrait_low_res_and_documents(self):
+        def a(w, h, kind="video"):
+            return MediaAsset(kind=kind, source="youtube", url="u", width=w, height=h)
+        self.assertEqual(timeline.pick_frame(a(1920, 1080), "film", "place"), "full")
+        self.assertEqual(timeline.pick_frame(a(640, 480), "film", "place"), "inset")   # 4:3
+        self.assertEqual(timeline.pick_frame(a(854, 480), "film", "place"), "inset")   # low-res
+        self.assertEqual(timeline.pick_frame(a(1080, 1350, "image"), "film", "person"), "inset")
+        self.assertEqual(timeline.pick_frame(a(1920, 1080, "image"), "archival", "place"), "inset")
+        self.assertEqual(timeline.pick_frame(a(1920, 1080), "film", "document"), "inset")
+        self.assertEqual(timeline.pick_frame(None, "film", ""), "full")
+
+
 class SecondPass(unittest.TestCase):
     """The replace pass is parallel, reported and time-boxed."""
 

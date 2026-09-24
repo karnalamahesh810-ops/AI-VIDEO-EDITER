@@ -58,6 +58,15 @@ SAMPLES = [
         {"type": "color", "url": "", "source": "none"},
         {"type": "color", "url": "", "source": "none"},
     ]}),
+    # VidRush's own text animations.
+    ("sentence-highlight", {"text": "America saw a reunion. The record reveals a goodbye.",
+                            "highlight": "reunion, goodbye"}),
+    ("article-zoom", {"text": "Before Honolulu Knew, the File Named a Family in Kenya",
+                      "subtitle": "Archival Review", "highlight": "a Family in Kenya",
+                      "body": "The immigration file records what officials knew before "
+                              "the photograph was taken."}),
+    ("date-stamp", {"text": "Boston, July 27, 2004"}),
+    ("date-stamp", {"text": "February 2", "subtitle": "1961", "variant": "title"}),
 ]
 
 

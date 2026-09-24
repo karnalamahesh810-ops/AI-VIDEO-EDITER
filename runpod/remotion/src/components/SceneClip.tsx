@@ -52,6 +52,55 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
     filter: filters || undefined,
   };
 
+  if (scene.frame === "inset") {
+    // VidRush's framing for archival photos, documents and low-resolution or
+    // 4:3 footage: the media keeps its own shape, inset with a shadow on a
+    // grainy deep-green field, instead of being cropped or upscaled to fill
+    // 16:9. It is what makes a 320x240 newsreel look intentional.
+    const inset: React.CSSProperties = {
+      maxWidth: "74%",
+      maxHeight: "80%",
+      width: "auto",
+      height: "auto",
+      boxShadow: "0 22px 60px rgba(0,0,0,0.6)",
+      transform: `scale(${1 + progress * 0.05})`,
+      filter: filters || undefined,
+    };
+    return (
+      <AbsoluteFill
+        style={{
+          background: "radial-gradient(ellipse at 50% 45%, #145c46 0%, #0b3a2c 70%, #072a20 100%)",
+          justifyContent: "center",
+          alignItems: "center",
+          overflow: "hidden",
+        }}
+      >
+        <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.22 }}>
+          <filter id={`grain-${scene.id}`}>
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed={frame % 7} />
+          </filter>
+          <rect width="100%" height="100%" filter={`url(#grain-${scene.id})`} />
+        </svg>
+        <AbsoluteFill
+          style={{
+            justifyContent: "center",
+            alignItems: "center",
+            opacity: entrance.opacity ?? 1,
+            transform: entrance.transform,
+          }}
+        >
+          {media.type === "video" ? (
+            <OffthreadVideo src={media.url} style={inset} muted />
+          ) : (
+            <Img src={media.url} style={inset} />
+          )}
+        </AbsoluteFill>
+        <FilmLayer treatment={treatment} />
+        <TransitionLayer transition={transition} />
+      </AbsoluteFill>
+    );
+  }
+
   return (
     <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#000" }}>
       <AbsoluteFill

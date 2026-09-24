@@ -153,6 +153,8 @@ VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
 # Wall-clock cap on the second sourcing pass (repeats, rejected and empty
 # scenes). Attempts in flight finish; no new ones start after it.
 REPLACE_BUDGET_SECONDS = int(os.getenv("REPLACE_BUDGET_SECONDS", "240"))
+# Wall-clock cap on the AI-rescue pass for scenes still empty after pass 2.
+RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "180"))
 MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
 MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp
