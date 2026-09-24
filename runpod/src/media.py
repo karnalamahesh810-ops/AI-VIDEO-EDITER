@@ -1176,6 +1176,7 @@ def reset_cache():
     with _CACHE_LOCK:
         _SEARCH_CACHE.clear()
         _GENERATED[0] = 0
+    vision.reset()  # per-job call/failure counts for the job result
 
 
 def _generation_budget_left() -> bool:

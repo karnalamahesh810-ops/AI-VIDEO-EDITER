@@ -41,7 +41,7 @@ from typing import Dict
 import runpod
 
 from src import (config, director, geocode, media, render as renderer,
-                 selftest, storage, timeline, transcribe)
+                 selftest, storage, timeline, transcribe, vision)
 
 
 def _work_dir(job_id: str) -> str:
@@ -448,7 +448,9 @@ def handler(job):
                     "preferGenerated": config.PREFER_GENERATED_IMAGES,
                     "imageCapPerVideo": config.IMAGE_MAX_PER_VIDEO,
                     "storage": store,
-                    "readyToRender": store.get("ok", False)}
+                    "readyToRender": store.get("ok", False),
+                    # One real model call, so only on request: {"probe": true}.
+                    **({"vision": vision.probe()} if inp.get("probe") else {})}
 
         if project_id:
             storage.patch_project(project_id, {
@@ -470,6 +472,7 @@ def handler(job):
                     "current_step": "Timeline ready", "progress": 68,
                 })
             return {"ok": True, "action": "plan", "timeline": doc,
+                    "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "resource":
@@ -481,6 +484,7 @@ def handler(job):
                 })
             return {"ok": True, "action": "resource", "timeline": doc,
                     "scene_index": inp.get("scene_index"),
+                    "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "render":
@@ -501,6 +505,7 @@ def handler(job):
             if project_id:
                 storage.patch_project(project_id, _done_fields(out))
             return {"ok": True, "action": "build", "timeline": doc, **out,
+                    "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
         return {"ok": False, "error": f"unknown action '{action}'"}

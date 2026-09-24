@@ -25,7 +25,9 @@ import os
 import re
 import subprocess
 import threading
-from typing import Dict, List, Optional
+import time
+from collections import deque
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -34,6 +36,11 @@ from . import config
 _CACHE: Dict[str, dict] = {}
 _LOCK = threading.Lock()
 _CALLS = {"n": 0}
+# Why recent model calls failed. A failed call returns None and the clip is
+# kept unjudged, which is invisible in the timeline; the worker reports these
+# so a broken key or model shows up in the job result instead of as bad clips.
+_ERRORS: deque = deque(maxlen=8)
+_FAILS = {"n": 0}
 
 _SYSTEM = (
     "You check whether a video clip or photo is usable B-roll for one line of a "
@@ -63,6 +70,85 @@ def reset() -> None:
     with _LOCK:
         _CACHE.clear()
         _CALLS["n"] = 0
+        _FAILS["n"] = 0
+        _ERRORS.clear()
+
+
+def _fail(model: str, why: str) -> None:
+    with _LOCK:
+        _FAILS["n"] += 1
+        _ERRORS.append(f"{model}: {why}"[:240])
+
+
+def stats() -> dict:
+    """Calls, failures and the latest failure reasons, for the job result."""
+    with _LOCK:
+        return {"enabled": enabled(), "model": config.VISION_MODEL,
+                "calls": _CALLS["n"], "failures": _FAILS["n"],
+                "recentErrors": list(_ERRORS)}
+
+
+def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
+    """First model that answers: (text, model). (None, "") when none did."""
+    for model in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS):
+        if not model:
+            continue
+        try:
+            r = requests.post(
+                _endpoint(model),
+                headers={"Authorization": f"Bearer {config.VISION_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"model": model, "messages": messages,
+                      "max_tokens": max_tokens, "stream": False},
+                timeout=90)
+        except requests.RequestException as e:
+            _fail(model, f"request failed: {type(e).__name__}")
+            continue
+        try:
+            body = r.json()
+        except ValueError:
+            _fail(model, f"HTTP {r.status_code}, not JSON: {r.text[:120]!r}")
+            continue
+        # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
+        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
+            _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
+            continue
+        try:
+            text = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            _fail(model, f"HTTP {r.status_code}, no choices: {json.dumps(body)[:150]}")
+            continue
+        if isinstance(text, list):
+            text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
+        if not (text or "").strip():
+            # Reasoning models can spend max_tokens thinking and return nothing.
+            _fail(model, "empty answer")
+            continue
+        return text, model
+    return None, ""
+
+
+def probe() -> dict:
+    """One tiny real call, for the health action: is vision reachable here?"""
+    if not enabled():
+        return {"ok": False, "error": "no VISION_API_KEY / DIRECTOR_API_KEY"}
+    try:
+        import io as _io
+        from PIL import Image
+        buf = _io.BytesIO()
+        Image.new("RGB", (160, 90), (40, 110, 200)).save(buf, "JPEG")
+        img = base64.b64encode(buf.getvalue()).decode()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"could not build test image: {e}"}
+    t = time.time()
+    text, model = _ask([{"role": "user", "content": [
+        {"type": "text", "text": 'What colour is this image? Reply JSON {"colour": str}'},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}}]}], 400)
+    out = {"ok": bool(text), "model": model, "seconds": round(time.time() - t, 1),
+           "answer": (text or "")[:80]}
+    if not text:
+        out["recentErrors"] = list(_ERRORS)
+    return out
 
 
 def _fingerprint(path: str) -> str:
@@ -163,6 +249,7 @@ def judge(path: str, intent: str, context: str = "") -> Optional[dict]:
 
     frames = sample_frames(path, config.VISION_FRAMES)
     if not frames:
+        _fail("ffmpeg", f"no frames from {os.path.basename(path)}")
         return None
 
     content = [{"type": "text", "text":
@@ -173,34 +260,12 @@ def judge(path: str, intent: str, context: str = "") -> Optional[dict]:
     messages = [{"role": "system", "content": _SYSTEM},
                 {"role": "user", "content": content}]
 
-    verdict = None
-    for model in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS):
-        if not model:
-            continue
-        try:
-            r = requests.post(
-                _endpoint(model),
-                headers={"Authorization": f"Bearer {config.VISION_API_KEY}",
-                         "Content-Type": "application/json"},
-                json={"model": model, "messages": messages,
-                      "max_tokens": 400, "stream": False},
-                timeout=90)
-            body = r.json()
-        except (requests.RequestException, ValueError):
-            continue
-        # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
-        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-            continue
-        try:
-            text = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            continue
-        if isinstance(text, list):
-            text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
-        verdict = _parse(text)
-        if verdict:
-            verdict["model"] = model
-            break
+    text, model = _ask(messages, 400)
+    verdict = _parse(text) if text else None
+    if verdict:
+        verdict["model"] = model
+    elif text:
+        _fail(model, f"unparseable verdict: {text[:120]!r}")
 
     with _LOCK:
         _CALLS["n"] += 1
@@ -245,38 +310,18 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Opt
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},
         ]},
     ]
-    for model in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS):
-        if not model:
-            continue
-        try:
-            r = requests.post(_endpoint(model),
-                              headers={"Authorization": f"Bearer {config.VISION_API_KEY}",
-                                       "Content-Type": "application/json"},
-                              json={"model": model, "messages": messages,
-                                    "max_tokens": 300, "stream": False},
-                              timeout=90)
-            body = r.json()
-        except (requests.RequestException, ValueError):
-            continue
-        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-            continue
-        try:
-            text = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            continue
-        if isinstance(text, list):
-            text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
-        m = re.search(r"\{[\s\S]*\}", text or "")
-        if not m:
-            continue
-        try:
-            data = json.loads(m.group(0))
-            tile = int(data.get("tile"))
-            score = max(0.0, min(1.0, float(data.get("score", 0))))
-        except (ValueError, TypeError):
-            continue
-        with _LOCK:
-            _CALLS["n"] += 1
-        return {"tile": tile, "score": score,
-                "description": str(data.get("description") or "")[:400], "model": model}
-    return None
+    text, model = _ask(messages, 400)
+    with _LOCK:
+        _CALLS["n"] += 1
+    if not text:
+        return None
+    m = re.search(r"\{[\s\S]*\}", text)
+    try:
+        data = json.loads(m.group(0)) if m else {}
+        tile = int(data.get("tile"))
+        score = max(0.0, min(1.0, float(data.get("score", 0))))
+    except (ValueError, TypeError):
+        _fail(model, f"unparseable tile pick: {text[:120]!r}")
+        return None
+    return {"tile": tile, "score": score,
+            "description": str(data.get("description") or "")[:400], "model": model}

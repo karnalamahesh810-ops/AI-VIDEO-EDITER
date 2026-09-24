@@ -160,6 +160,51 @@ class DisqualifyingTitles(unittest.TestCase):
                 self.assertIsNone(media._TALKING_HEAD.search(title))
 
 
+class VisionFailuresAreReported(unittest.TestCase):
+    """
+    A failed vision call keeps the clip unjudged, which looks normal in the
+    timeline. On RunPod every call failed and nothing said so; the job result
+    now carries the reasons.
+    """
+
+    def _reply(self, status, body):
+        r = mock.Mock(status_code=status)
+        r.json.return_value = body
+        return r
+
+    def setUp(self):
+        from src import vision
+        self.vision = vision
+        vision.reset()
+        self.patches = [mock.patch.object(config, "VISION_API_KEY", "k"),
+                        mock.patch.object(config, "VISION_ENABLED", True),
+                        mock.patch.object(config, "VISION_FALLBACK_MODELS", ["backup"])]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.vision.reset()
+
+    def test_a_kie_wrapper_error_is_recorded(self):
+        with mock.patch.object(self.vision.requests, "post", return_value=self._reply(
+                200, {"code": 500, "msg": "server exception"})):
+            text, model = self.vision._ask([], 100)
+        self.assertIsNone(text)
+        stats = self.vision.stats()
+        self.assertEqual(stats["failures"], 2)  # main model and the fallback
+        self.assertIn("code 500: server exception", stats["recentErrors"][0])
+
+    def test_an_empty_answer_falls_through_to_the_fallback(self):
+        replies = [self._reply(200, {"choices": [{"message": {"content": ""}}]}),
+                   self._reply(200, {"choices": [{"message": {"content": '{"ok": 1}'}}]})]
+        with mock.patch.object(self.vision.requests, "post", side_effect=replies):
+            text, model = self.vision._ask([], 100)
+        self.assertEqual((text, model), ('{"ok": 1}', "backup"))
+        self.assertIn("empty answer", self.vision.stats()["recentErrors"][0])
+
+
 class TransitionsAndEffects(unittest.TestCase):
     """Scene entrances and per-clip effects: contract + placement rules."""
 
