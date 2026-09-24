@@ -232,7 +232,25 @@ def _fill_missing_media(doc: dict) -> int:
     have = [i for i, s in enumerate(scenes)
            if (s.get("media") or {}).get("type") != "color"]
     if not have:
-        return 0  # nothing sourced anything; a strict failure is the honest answer
+        # Nothing was sourced anywhere in the whole video - there is no clip
+        # to borrow. Never leave this as a black hole: give each empty scene
+        # a text card over its own narration line, the same fallback VidRush
+        # itself reaches for on an unfindable beat. SceneClip already draws a
+        # quiet gradient instead of flat black behind it.
+        overlays = doc.setdefault("overlays", [])
+        cards = 0
+        for s in scenes:
+            text = (s.get("text") or "").strip()
+            if not text:
+                continue
+            overlays.append({
+                "type": "highlight", "text": text[:180],
+                "startFrame": s["startFrame"], "durationInFrames": s["durationInFrames"],
+            })
+            s["reviewRequired"] = True
+            s["reviewReason"] = "No usable clip or image found — text card shown instead"
+            cards += 1
+        return cards
     borrowed = {h: 0 for h in have}
     patched = 0
     for i, s in enumerate(scenes):
@@ -298,6 +316,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "prompt": shot.get("prompt") or "",
              "intent": shot.get("intent") or "",
              "subject_type": shot.get("subjectType") or "",
+             "subject": shot.get("subject") or "",
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 

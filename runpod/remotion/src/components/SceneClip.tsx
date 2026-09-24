@@ -36,7 +36,17 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
   }
 
   if (media.type === "color" || !media.url) {
-    return <AbsoluteFill style={{ backgroundColor: "#0b0b0d" }} />;
+    // No clip and no image for this beat. Never a flat black hole: a subtle
+    // dark gradient reads as a deliberately quiet background rather than a
+    // broken frame, and lets a fallback text overlay (see
+    // handler._fill_missing_media) actually sit on something.
+    return (
+      <AbsoluteFill
+        style={{
+          background: "radial-gradient(ellipse at 50% 40%, #1b1c22 0%, #0a0a0d 75%)",
+        }}
+      />
+    );
   }
 
   const entrance = entranceStyle(transition, frame);

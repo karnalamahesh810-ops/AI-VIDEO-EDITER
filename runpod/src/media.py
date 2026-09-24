@@ -929,6 +929,20 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
     return out
 
 
+def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "") -> List[dict]:
+    """_yt_candidates, reused across every beat that shares a subject."""
+    key = f"ytc::{require_cc}::{(subject or target).strip().lower()}"
+    if subject:
+        with _CACHE_LOCK:
+            if key in _YT_CANDIDATES_CACHE:
+                return _YT_CANDIDATES_CACHE[key]
+    found = _yt_candidates(target, require_cc)
+    if subject:
+        with _CACHE_LOCK:
+            _YT_CANDIDATES_CACHE[key] = found
+    return found
+
+
 def _yt_info(video_id: str, timeout: int = 60) -> tuple:
     """(full yt-dlp info dict, proxy used) for one video, or ({}, proxy).
 
@@ -1088,7 +1102,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                  start_at: float = 30.0, require_cc: bool = True,
                  skip: int = 0, used: set = None,
                  b_roll_intent: bool = True, intent: str = "",
-                 context: str = "") -> Optional[MediaAsset]:
+                 context: str = "", subject: str = "") -> Optional[MediaAsset]:
     """
     Find and download a clip that plausibly shows the subject.
 
@@ -1135,7 +1149,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         else:
             target = f"ytsearch12:{search}"
 
-        candidates = _yt_candidates(target, require_cc)
+        candidates = _yt_candidates_cached(target, require_cc, subject)
         if not candidates:
             continue
 
@@ -1264,7 +1278,7 @@ def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
 
 def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
                      skip: int = 0, used: set = None, intent: str = "",
-                     context: str = "") -> Optional[MediaAsset]:
+                     context: str = "", subject: str = "") -> Optional[MediaAsset]:
     """
     A second real-footage source after YouTube, held to the same rules: no
     talking-head titles, no vertical uploads, no burned-in captions, and the
@@ -1272,7 +1286,7 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
     is no storyboard to scout, so the grab point is the fixed 35% one.
     """
     os.makedirs(out_dir, exist_ok=True)
-    candidates = _cached_search(search_dailymotion, query)
+    candidates = _cached_search(search_dailymotion, query, cache_key=subject)
     if not candidates:
         return None
     ranked = sorted(candidates,
@@ -1426,6 +1440,7 @@ def search_pixabay(query: str, kind: str = "video", per_page: int = 5) -> List[M
 # back a dozen times and the video looked broken. Caching the candidate LIST
 # keeps the API savings while still giving every scene its own visual.
 _SEARCH_CACHE: Dict[str, List[MediaAsset]] = {}
+_YT_CANDIDATES_CACHE: Dict[str, List[dict]] = {}
 _CACHE_LOCK = threading.Lock()
 
 # One yt-dlp -J extraction per video per job, however many scenes scout it.
@@ -1441,6 +1456,7 @@ def reset_cache():
     with _CACHE_LOCK:
         _SEARCH_CACHE.clear()
         _YT_INFO_CACHE.clear()
+        _YT_CANDIDATES_CACHE.clear()
         _GENERATED[0] = 0
     vision.reset()  # per-job call/failure counts for the job result
 
@@ -1458,8 +1474,21 @@ def generated_count() -> int:
         return _GENERATED[0]
 
 
-def _cached_search(fn, query: str) -> List[MediaAsset]:
-    key = f"{fn.__name__}::{query}"
+def _cached_search(fn, query: str, cache_key: str = "") -> List[MediaAsset]:
+    """
+    Cache `fn(query)` under `cache_key` (default: the query itself).
+
+    Sourcing passes `cache_key=subject` wherever a subject is known: a
+    passage that stays on one subject for several beats used to re-search
+    from scratch every beat, because each beat's query has different
+    wording (with_subject adds whatever detail that specific line needs).
+    Searching is the one part of sourcing that is genuinely the SAME
+    question for every beat on that subject - which candidates exist for
+    it - so the first beat's results are reused. Per-beat precision is
+    unaffected: which MOMENT of a candidate is used, and whether it passes
+    the vision judge, are still decided from that beat's own intent.
+    """
+    key = f"{fn.__name__}::{cache_key or query}"
     with _CACHE_LOCK:
         if key in _SEARCH_CACHE:
             return _SEARCH_CACHE[key]
@@ -1512,7 +1541,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        prompt: str = "",
                        allow_youtube: bool = None, allow_stock: bool = None,
                        require_cc: bool = None, intent: str = "",
-                       context: str = "", subject_type: str = "") -> Optional[MediaAsset]:
+                       context: str = "", subject_type: str = "",
+                       subject: str = "") -> Optional[MediaAsset]:
     """
     Source one scene, relaxing the query until something is found.
 
@@ -1532,7 +1562,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                               nth=nth, used=used, prompt=prompt,
                               allow_youtube=allow_youtube,
                               allow_stock=allow_stock, require_cc=require_cc,
-                              intent=intent or query, context=context)
+                              intent=intent or query, context=context,
+                              subject=subject)
             if got:
                 return got
         return None
@@ -1545,7 +1576,7 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
                 used: set = None, prompt: str = "",
                 allow_youtube: bool = None, allow_stock: bool = None,
                 require_cc: bool = None, intent: str = "",
-                context: str = "") -> Optional[MediaAsset]:
+                context: str = "", subject: str = "") -> Optional[MediaAsset]:
     """
     Find and download one visual for a scene.
 
@@ -1570,13 +1601,14 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         # moment of footage rather than the identical seconds again.
         asset = youtube_clip(query, work_dir, seconds=seconds, require_cc=require_cc,
                              skip=nth, start_at=30.0 + 25.0 * nth, used=used,
-                             intent=intent, context=context)
+                             intent=intent, context=context, subject=subject)
         if asset:
             return asset
 
     if visual_type == "footage" and config.ALLOW_DAILYMOTION and not require_cc:
         asset = dailymotion_clip(query, work_dir, seconds=seconds, skip=nth,
-                                 used=used, intent=intent, context=context)
+                                 used=used, intent=intent, context=context,
+                                 subject=subject)
         if asset:
             return asset
 
@@ -1749,7 +1781,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 used=live_used,
                 fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
                 intent=job.get("intent", ""), context=job.get("context", ""),
-                subject_type=job.get("subject_type", ""),
+                subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
                 **kwargs)
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{job['query']}' failed: {e}", flush=True)
@@ -1823,7 +1855,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     nth=nth + attempt, used=used,
                     fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
                     intent=job.get("intent", ""), context=job.get("context", ""),
-                    subject_type=job.get("subject_type", ""),
+                    subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
                     **kwargs)
             except Exception:  # noqa: BLE001
                 candidate = None

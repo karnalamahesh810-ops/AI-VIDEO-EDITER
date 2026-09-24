@@ -483,13 +483,26 @@ class PipelineProgress(unittest.TestCase):
         # readiness panel and Find-footage flow see the real gap.
         self.assertEqual(doc["scenes"][1]["media"]["type"], "color")
 
-    def test_fill_missing_media_gives_up_honestly_when_nothing_was_sourced(self):
+    def test_a_video_with_nothing_sourced_anywhere_gets_text_cards_not_black(self):
+        # No neighbour anywhere has real media to borrow. Never a black hole:
+        # every scene gets a text-card overlay of its own narration line,
+        # VidRush's own fallback for an unfindable beat.
         import handler
         doc = build_doc(n=2, seconds=3.0)
+        doc["scenes"][0]["text"] = "The river simply stopped arriving."
+        doc["scenes"][1]["text"] = "Nobody was told for eleven days."
         for s in doc["scenes"]:
             s["media"] = {"type": "color", "url": "", "source": "none"}
-        self.assertEqual(handler._fill_missing_media(doc), 0)
+        cards = handler._fill_missing_media(doc)
+        self.assertEqual(cards, 2)
         self.assertTrue(all(s["media"]["type"] == "color" for s in doc["scenes"]))
+        overlays = doc["overlays"]
+        self.assertEqual(len(overlays), 2)
+        self.assertTrue(all(o["type"] == "highlight" for o in overlays))
+        self.assertEqual(overlays[0]["text"], "The river simply stopped arriving.")
+        self.assertEqual((overlays[0]["startFrame"], overlays[0]["durationInFrames"]),
+                         (doc["scenes"][0]["startFrame"], doc["scenes"][0]["durationInFrames"]))
+        self.assertTrue(all(s["reviewRequired"] for s in doc["scenes"]))
 
     def test_a_run_of_empty_scenes_does_not_collapse_onto_one_neighbour(self):
         # A real job had several empty scenes in a row each independently
@@ -1838,6 +1851,96 @@ class BlockedIPDetection(unittest.TestCase):
             media._PROXIES[:] = saved[0]
             media._PROXY_BENCHED.clear()
             media._PROXY_BENCHED.update(saved[1])
+
+
+class SubjectLevelSearchCache(unittest.TestCase):
+    """
+    A real render spent a fresh yt-dlp search on every beat, even when five
+    beats in a row were about the same subject worded five different ways
+    (with_subject adds whatever detail that one line needs). The search
+    results ARE the same question for all of them - only which moment gets
+    used differs, and that still comes from each beat's own intent.
+    """
+
+    def setUp(self):
+        media.reset_cache()
+
+    def tearDown(self):
+        media.reset_cache()
+
+    def test_two_queries_on_one_subject_search_only_once(self):
+        calls = []
+
+        def fake_candidates(target, require_cc, limit=12, timeout=90):
+            calls.append(target)
+            return [{"id": "abc", "duration": 40.0, "aspect": 1.78, "title": "Lake Mead drone"}]
+
+        with mock.patch.object(media, "_yt_candidates", side_effect=fake_candidates):
+            a = media._yt_candidates_cached("ytsearch12:Lake Mead boat ramp", False, "Lake Mead")
+            b = media._yt_candidates_cached("ytsearch12:Lake Mead drought level", False, "Lake Mead")
+        self.assertEqual(len(calls), 1, "second beat on the same subject must not re-search")
+        self.assertEqual(a, b)
+
+    def test_a_different_subject_still_searches(self):
+        calls = []
+
+        def fake_candidates(target, require_cc, limit=12, timeout=90):
+            calls.append(target)
+            return []
+
+        with mock.patch.object(media, "_yt_candidates", side_effect=fake_candidates):
+            media._yt_candidates_cached("ytsearch12:Lake Mead", False, "Lake Mead")
+            media._yt_candidates_cached("ytsearch12:Hoover Dam", False, "Hoover Dam")
+        self.assertEqual(len(calls), 2)
+
+    def test_no_subject_never_shares_a_cache_entry(self):
+        # The rule planner (no AI director) has no subject; behaviour must be
+        # exactly as before - a fresh search for every distinct query text.
+        calls = []
+
+        def fake_candidates(target, require_cc, limit=12, timeout=90):
+            calls.append(target)
+            return []
+
+        with mock.patch.object(media, "_yt_candidates", side_effect=fake_candidates):
+            media._yt_candidates_cached("ytsearch12:the lake ramp", False, "")
+            media._yt_candidates_cached("ytsearch12:the lake ramp", False, "")
+        self.assertEqual(len(calls), 2)
+
+    def test_moment_selection_still_uses_each_beats_own_intent(self):
+        # The cached candidate list is shared; scouting and the vision judge
+        # are not - they must still be called once per beat.
+        seen_intents = []
+
+        def fake_scout(candidate, grab, intent, context):
+            seen_intents.append(intent)
+            return None
+
+        jobs = [{"index": 0, "query": "Lake Mead boat ramp", "subject": "Lake Mead",
+                 "intent": "exposed concrete ramp", "seconds": 3.0},
+                {"index": 1, "query": "Lake Mead water line", "subject": "Lake Mead",
+                 "intent": "white bathtub ring on the shoreline", "seconds": 3.0}]
+
+        def fake_candidates(target, require_cc, limit=12, timeout=90):
+            return [{"id": "abc", "duration": 40.0, "aspect": 1.78, "title": "Lake Mead"}]
+
+        with mock.patch.object(media, "_yt_candidates", side_effect=fake_candidates), \
+                mock.patch.object(media, "_scout", side_effect=fake_scout), \
+                mock.patch.object(media, "_yt_fetch_retry", return_value=""), \
+                mock.patch.object(config, "MOMENT_SELECTION", True), \
+                mock.patch.object(config, "VISION_ENABLED", True), \
+                mock.patch.object(config, "VISION_API_KEY", "k"):
+            for job in jobs:
+                media.youtube_clip(job["query"], "/tmp", seconds=job["seconds"],
+                                   require_cc=False, intent=job["intent"],
+                                   subject=job["subject"])
+        # youtube_clip tries a b-roll-decorated search then the plain one, so
+        # each beat scouts twice - the point is which INTENT it scouted with,
+        # and that the two beats' intents are never mixed up.
+        self.assertEqual(set(seen_intents), {"exposed concrete ramp",
+                                             "white bathtub ring on the shoreline"})
+        self.assertEqual(seen_intents[:2], ["exposed concrete ramp"] * 2)
+        self.assertEqual(seen_intents[2:], ["white bathtub ring on the shoreline"] * 2)
 
 
 class NetworkConcurrency(unittest.TestCase):
