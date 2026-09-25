@@ -205,3 +205,13 @@ class SoundEffects(unittest.TestCase):
         from src import timeline
         for name in timeline.SFX_NAMES:
             self.assertTrue(os.path.isfile(f"remotion/public/sfx/{name}.mp3"), name)
+
+
+class ImageShipsSounds(unittest.TestCase):
+    def test_dockerignore_keeps_the_sound_effects(self):
+        # remotion/public/ was ignored wholesale; every render with a sound
+        # effect then failed with a 404 for public/sfx/<name>.mp3.
+        rules = [l.strip() for l in open(".dockerignore", encoding="utf-8")
+                 if l.strip() and not l.startswith("#")]
+        self.assertNotIn("remotion/public/", rules)
+        self.assertIn("!remotion/public/sfx/", rules)

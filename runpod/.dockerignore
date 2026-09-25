@@ -11,7 +11,9 @@
 # Render output and local scratch.
 out/
 tmp/
-remotion/public/
+# Local scratch lands in public/, but the shipped sound effects live there too.
+remotion/public/*
+!remotion/public/sfx/
 
 .git
 .env
