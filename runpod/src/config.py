@@ -134,6 +134,12 @@ DIRECTOR_FALLBACK_MODELS = [m.strip() for m in
                            os.getenv("DIRECTOR_FALLBACK_MODELS", "gpt-5-2,gemini-3-pro").split(",")
                            if m.strip()]
 
+# Planning calls in flight at once. Each covers a batch of beats and already
+# carries the whole-story brief, so batches do not wait on each other: one at
+# a time, a 24-minute script's 12 batches took 12+ minutes before any clip
+# was searched.
+DIRECTOR_PARALLEL = max(1, int(os.getenv("DIRECTOR_PARALLEL", "6")))
+
 # --- vision verification -----------------------------------------------------
 # Every candidate clip/image is shown to a multimodal model, which describes
 # what is actually in the frames and scores it against the shot's intent.
@@ -197,6 +203,12 @@ RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "180"))
 # restores the strict "a clip never appears twice" rule, at the cost of
 # empty scenes on long videos about subjects with few real photos.
 REUSE_SHOTS_TO_FILL = _flag("REUSE_SHOTS_TO_FILL", True)
+# How many scenes one reused shot may cover before the fill spreads to other
+# shots: a clip, and a still (which reads as a repeat much sooner). A real
+# 293-scene job put one Facebook photo on 42 scenes. Past these caps the
+# least-used shot is taken, so no scene is left empty.
+REUSE_MAX_FOOTAGE = int(os.getenv("REUSE_MAX_FOOTAGE", "3"))
+REUSE_MAX_STILL = int(os.getenv("REUSE_MAX_STILL", "2"))
 # Source the video in sequences (runs of lines about one subject and setting,
 # each with one pool of shots laid out by an editor call) before the
 # line-by-line search. Off ("0") restores line-by-line sourcing only.
@@ -269,6 +281,13 @@ NEWS_CHANNELS = [c.strip() for c in os.getenv(
 ).split(",") if c.strip()]
 STRAGGLER_GRACE_SECONDS = float(os.getenv("STRAGGLER_GRACE_SECONDS", "75"))
 SEQUENCE_BUDGET_SECONDS = float(os.getenv("SEQUENCE_BUDGET_SECONDS", "300"))
+# The budgets above are floors, sized for a short narration. A long one gets
+# time in proportion to its work: seconds per sequence pool / per scene, for
+# each round of `workers` running at once. With fixed budgets a 39-sequence
+# news video finished 14 pools, left 271 scenes to the recheck, and the
+# abandoned pools kept downloading underneath it.
+SEQUENCE_SECONDS_PER_POOL = float(os.getenv("SEQUENCE_SECONDS_PER_POOL", "180"))
+PASS1_SECONDS_PER_SCENE = float(os.getenv("PASS1_SECONDS_PER_SCENE", "40"))
 
 RENDER_CONCURRENCY = int(os.getenv("RENDER_CONCURRENCY", "4"))
 # See render.render: the defaults size these from the host, not the container.

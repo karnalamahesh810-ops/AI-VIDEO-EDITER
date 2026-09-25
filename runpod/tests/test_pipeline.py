@@ -10,6 +10,7 @@ scene track that does not tile the narration, a document that reaches headless
 Chrome with no audio. Each of those has a test below.
 """
 import datetime
+from collections import Counter
 import json
 import os
 import re
@@ -2921,6 +2922,26 @@ class LongVideoCoverage(unittest.TestCase):
         self.assertIn("Ann Dunham", results[5].review_reason)
         self.assertEqual(results[4].url, "https://x/mad1.jpg")     # Madelyn's own, 3+ apart
 
+    def test_one_shot_is_not_spread_over_the_whole_video(self):
+        # A real 293-scene job put one Facebook photo on 42 scenes. Reuse
+        # spreads over every shot the story has instead.
+        photo = MediaAsset(kind="image", source="web", url="https://x/police.jpg")
+        clips = [MediaAsset(kind="video", source="youtube", url=f"q{n}",
+                            local_path=f"/w/yt_{n:011d}_0_1.mp4") for n in range(4)]
+        jobs = [{"index": i, "subject": "New Mexico flood", "subject_type": "event"}
+                for i in range(40)]
+        results = [None] * 40
+        results[0] = photo
+        for n, c in enumerate(clips):
+            results[5 + 9 * n] = c
+        media.fill_from_story(jobs, results)
+        counts = Counter(r.identity for r in results if r is not None)
+        # Past the caps the least-loaded shot fills in: the load spreads
+        # evenly, and a still (which reads as a repeat sooner) carries less.
+        self.assertLess(counts[photo.identity], min(counts[c.identity] for c in clips))
+        self.assertLessEqual(max(counts.values()), 12)
+        self.assertEqual(sum(1 for r in results if r is None), 0)
+
     def test_a_person_scene_is_never_given_a_stranger(self):
         jobs = [{"index": 0, "subject": "Lolo Soetoro", "subject_type": "person"},
                 {"index": 1, "subject": "Ann Dunham", "subject_type": "person"}]
@@ -3009,11 +3030,53 @@ class NoAIFallbacks(unittest.TestCase):
             shots, _, _ = director.plan(segs, title="1 (mp3cut.net)", allow_maps=False)
         q = [sh["query"] for sh in shots]
         self.assertEqual(q[1], "Honolulu Airport 1971")
-        self.assertIn("Barack Obama Sr", q[2])            # "A tall man..." is the story's lead
+        # "A tall man..." is at the airport; a name said once does not lead the story.
+        self.assertTrue(q[2].startswith("Honolulu Airport 1971"))
+        self.assertNotEqual(q[2], q[1])                   # the line's own words keep them apart
+        self.assertIn("Barack Obama Sr", q[4])
         self.assertNotIn("It", q[3].split())              # sentence-start words are not names
         self.assertTrue(q[5].startswith("Maui 1961"))
         self.assertTrue(all("mp3cut" not in x for x in q))
         self.assertEqual(shots[1]["subjectType"], "place")  # an airport is not a person
+
+    def test_a_place_named_once_does_not_become_the_whole_story(self):
+        # The real narration never names its man and names New York once, at
+        # the end; the rule planner put "New York" in front of 15 of 23 searches.
+        lines = ["One photograph gets used every time this story is told.",
+                 "Honolulu Airport, the last days of 1971.",
+                 "A tall man in a dark suit and heavy glasses.",
+                 "It was a goodbye.",
+                 "under one roof. The boy would not see that man again,",
+                 "not at twenty, not ever.",
+                 "He married an eighteen-year-old in a Maui courthouse anyway.",
+                 "No photograph of that day has ever surfaced.",
+                 "Within a year, a university in New York offered him money.",
+                 "Not prestige money, family money."]
+        segs = [seg(t, i * 4, i * 4 + 4) for i, t in enumerate(lines)]
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""), \
+                mock.patch.object(config, "AI_FALLBACK_API_KEY", ""):
+            brief = director.story_brief(segs, "", configured=False)
+            shots, _, _ = director.plan(segs, "", allow_maps=False, brief=brief)
+        q = [sh["query"] for sh in shots]
+        self.assertFalse(any(x.startswith("New York") for x in q[:8]), q)
+        self.assertTrue(q[0].startswith("Honolulu Airport"))   # the opening looks ahead
+        self.assertTrue(q[5].startswith("Honolulu Airport"))   # the scene holds until a new place
+        self.assertTrue(q[7].startswith("Maui"))
+        self.assertTrue(q[9].startswith("New York"))
+        self.assertEqual(shots[5]["subjectType"], "place")
+        self.assertEqual(len(set(q[2:6])), 4)                  # no two lines search the same thing
+
+    def test_a_place_named_twice_or_a_news_place_still_leads(self):
+        lines = ["Lake Powell is drying up.", "The water kept falling.",
+                 "Boats sat on the mud at Lake Powell.", "Nobody expected this."]
+        segs = [seg(t, i * 4, i * 4 + 4) for i, t in enumerate(lines)]
+        shots = [{"rule": True, "query": "", "subject": ""} for _ in segs]
+        director.story_rule_queries(segs, shots, {"places": ["Lake Powell"], "kind": "other"})
+        self.assertTrue(shots[3]["query"].startswith("Lake Powell"))
+        once = [seg("Flooding hit Davenport, Iowa today.", 0, 4), seg("The water kept rising.", 4, 8)]
+        shots = [{"rule": True, "query": "", "subject": ""} for _ in once]
+        director.story_rule_queries(once, shots, {"places": ["Davenport, Iowa"], "kind": "news"})
+        self.assertIn("Davenport", shots[1]["query"])
 
     def test_every_person_is_named_on_screen_the_first_time(self):
         segs = [seg("x", i, i + 1) for i in range(4)]
@@ -3192,6 +3255,27 @@ class SequenceEditing(unittest.TestCase):
         self.assertEqual(out[1].intent, "intent 1")
         self.assertEqual(len(used), 3)
 
+    def test_a_pool_stopped_at_the_budget_claims_nothing(self):
+        jobs = {0: {"index": 0, "seconds": 3.0, "visual_type": "footage", "context": "x"}}
+        pool_f = [{"kind": "footage", "video": "v1",
+                   "asset": MediaAsset(kind="video", source="youtube", url="https://y/v1")}]
+        seq = {"beats": [0], "subject": "Maui", "searches": [{"q": "Maui 1961", "kind": "footage"}]}
+        stop = threading.Event()
+        stop.set()
+        used = set()
+        with mock.patch.object(media, "_footage_pool", return_value=pool_f), \
+                mock.patch.object(media, "_image_pool", return_value=[]):
+            out = media.source_sequence(seq, jobs, "/w", used, threading.Lock(),
+                                        require_cc=False, allow_youtube=True, stop=stop)
+        self.assertEqual(out, {})
+        self.assertEqual(used, set())
+
+    def test_budgets_grow_with_the_video(self):
+        # A 1.5-minute narration keeps the floor; a 24-minute one gets time for its work.
+        self.assertEqual(media.scaled_budget(300, 180, 4, 8), 300)
+        self.assertEqual(media.scaled_budget(300, 180, 39, 8), 900)      # 5 rounds of 8 pools
+        self.assertEqual(media.scaled_budget(420, 40, 300, 8), 1520)     # 38 rounds of 8 scenes
+
     def test_lines_a_pool_cannot_fill_fall_back_to_per_line_search(self):
         jobs = [{"index": i, "query": f"q{i}", "seconds": 3.0, "subject": "Ann Dunham"}
                 for i in range(3)]
@@ -3278,6 +3362,124 @@ class VisionJudgeEventsAndQuality(unittest.TestCase):
         a = MediaAsset(kind="video", source="youtube", url="q").apply_verdict(
             {"description": "d", "score": 0.8, "quality": 0.66, "model": "m"}, "i")
         self.assertEqual(a.to_scene_media()["qualityScore"], 0.66)
+
+
+class NoAITitleRules(unittest.TestCase):
+    """Without the vision model, titles alone keep fiction and modern tours out."""
+
+    def tearDown(self):
+        media.set_story_era(0)
+
+    def test_fiction_promos_and_home_videos_are_rejected(self):
+        # Titles a real no-AI job put into a 1971 biography.
+        for title in ["You Will Meet a Tall Dark Stranger - Official Trailer - Woody Allen Movie",
+                      "You Will Meet a Tall Dark Stranger | Official Trailer (2010)",
+                      "THE PROMISE HE COULD NO LONGER HIDE | A Billionaire Lost Everything for Love (Full Movie)",
+                      "Best Things To Do in New York City 2026 4K",
+                      "Massachusetts: The Do's & Don'ts of Visiting Massachusetts",
+                      "NYC Wedding Videography - Aerial Drone Footage",
+                      "Our wedding Just Maui'd 10 26 18"]:
+            with self.subTest(title=title):
+                self.assertTrue(media._talking_head(title))
+        for title in ["1961 New York Street Scenes, Manhattan, Rare 8mm Colour Home Movie Footage",
+                      "Honolulu Flight 1973", "Boat trailer backing up at the ramp",
+                      "Kenya polygamy bill arouses fears"]:
+            with self.subTest(title=title):
+                self.assertFalse(media._talking_head(title))
+
+    def test_foreign_script_titles_and_other_trailers_are_rejected(self):
+        media.set_story_script("Three people are dead in New Mexico after flash floods.")
+        try:
+            self.assertTrue(media._talking_head(
+                "देश के नक्शे से कैसे गायब हुए मॉनसूनी बादल, देखें सैटेलाइट तस्वीरें"))
+            self.assertTrue(media._talking_head("The Chosen in the Wild with Bear Grylls Trailer"))
+            self.assertFalse(media._talking_head("Torrential rains prompt flood risk for millions"))
+            self.assertFalse(media._talking_head("Boat trailer backing up at the ramp"))
+            self.assertFalse(media._talking_head("Tractor trailer stuck in floodwater"))
+            media.set_story_script("देश के नक्शे से कैसे गायब हुए मॉनसूनी बादल")  # a Hindi story
+            self.assertFalse(media._talking_head("मॉनसूनी बादल सैटेलाइट तस्वीरें"))
+        finally:
+            media.reset_cache()
+
+    def test_a_historical_story_ranks_its_own_era_first(self):
+        titles = ["New York City 4K Drone Video | Manhattan, Central Park Aerials",
+                  "1961 New York Street Scenes, Manhattan, Rare 8mm Colour Home Movie Footage",
+                  "Here Comes the Drone | Vows | The New York Times",
+                  "Honolulu Flight 1973"]
+        media.set_story_era(1971)
+        ranked = sorted(titles, key=lambda t: media._score_candidate(t, 300, 1.78, 5),
+                        reverse=True)
+        self.assertEqual(set(ranked[:2]), {titles[1], titles[3]})
+        self.assertLess(media._score_candidate(titles[0], 300, 1.78, 5),
+                        media._score_candidate("Manhattan street", 300, 1.78, 5))
+
+    def test_present_day_stories_are_unchanged(self):
+        title = "New York City 4K Drone Video"
+        before = media._score_candidate(title, 300, 1.78, 5)
+        media.set_story_era(datetime.date.today().year - 1)   # a recent story: no era
+        self.assertEqual(media._score_candidate(title, 300, 1.78, 5), before)
+        media.set_story_era(1971)
+        media.reset_cache()                                    # cleared between jobs
+        self.assertEqual(media._score_candidate(title, 300, 1.78, 5), before)
+
+
+class JobTimings(unittest.TestCase):
+    """Every job records where its time went, stage by stage."""
+
+    def test_reporter_adds_up_time_per_stage(self):
+        import handler
+        clock = [1000.0]
+        with mock.patch.object(handler.time, "time", side_effect=lambda: clock[0]):
+            r = handler.Reporter("")
+            r("Aligning narration", 8)
+            clock[0] += 5
+            r("Sourcing media for 3 scenes", 22)
+            clock[0] += 10
+            r("Sourced 1/3 scenes", 30)              # same stage as "Sourcing"
+            clock[0] += 10
+            r("Rechecking 2 missing scenes against the story", 66)
+            clock[0] += 3
+            t = r.timings()
+        self.assertEqual(t["Aligning narration"], 5)
+        self.assertEqual(t["Sourcing"], 20)
+        self.assertEqual(t["Rechecking"], 3)
+        self.assertEqual(t["total"], 28)
+
+
+class ParallelPlanning(unittest.TestCase):
+    """Planning batches are asked at once and applied in order."""
+
+    def test_batches_run_in_parallel_and_land_on_their_own_beats(self):
+        segs = [seg(f"Line {i} about the river.", i, i + 1) for i in range(3 * director._BATCH)]
+
+        def fake(system, payload, timeout=120, errors=None):
+            time.sleep(0.3)
+            return {"shots": [{"index": b["index"], "query": f"q{b['index']}",
+                               "subject": "", "visualType": "footage"}
+                              for b in payload["beats"]]}
+        shots = [{"query": "", "fallbacks": []} for _ in segs]
+        with mock.patch.object(director, "_chat_json", side_effect=fake):
+            t0 = time.time()
+            n, warnings = director._ai_pass(segs, "", shots)
+            took = time.time() - t0
+        self.assertEqual(n, len(segs))
+        self.assertEqual([sh["query"] for sh in shots], [f"q{i}" for i in range(len(segs))])
+        self.assertLess(took, 0.8)                 # three 0.3 s calls at once, not 0.9 s
+        self.assertEqual(warnings, [])
+
+    def test_a_rate_limited_call_is_retried_once(self):
+        limited = mock.Mock(status_code=429)
+        ok = mock.Mock(status_code=200)
+        ok.json.return_value = {"choices": [{"message": {"content": '{"a": 1}'}}]}
+        with mock.patch.object(config, "DIRECTOR_API_BASE", "https://x/v1"), \
+                mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
+                mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
+                mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", []), \
+                mock.patch.object(config, "AI_FALLBACK_API_KEY", ""), \
+                mock.patch.object(director.time, "sleep"), \
+                mock.patch.object(director.requests, "post", side_effect=[limited, ok]) as post:
+            self.assertEqual(director._chat_json("s", {}), {"a": 1})
+        self.assertEqual(post.call_count, 2)
 
 
 if __name__ == "__main__":

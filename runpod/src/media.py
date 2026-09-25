@@ -23,11 +23,13 @@ from concurrent.futures import (FIRST_COMPLETED, ThreadPoolExecutor, as_complete
                                 wait)
 from concurrent.futures import TimeoutError as FuturesTimeout
 import contextvars
+from collections import Counter
 from dataclasses import dataclass, asdict, replace as _dc_replace
 from typing import List, Optional, Dict, Any
 import base64
 import datetime
 import json
+import math
 import os
 import re
 import subprocess
@@ -855,6 +857,93 @@ _B_ROLL = re.compile(
     r"flyover|tour|no commentary|ambience|cinematic|"
     r"raw video|caught on|satellite)\b", re.I)
 
+# Titles that are never documentary footage of anything: fiction, promos,
+# travel guides and home videos. A real no-AI job put a Woody Allen trailer
+# ("You Will Meet a Tall Dark Stranger") on six lines of a 1971 biography
+# because a line said "a tall man in a dark suit", and a romance "Full
+# Movie", "Best Things To Do in New York City 2026" and wedding videography
+# on others. "Home movie" footage is the opposite and stays.
+_NOT_FOOTAGE = re.compile(
+    r"\b(official (?:trailer|teaser|music video|video|audio|clip)|"
+    # Any other trailer is a promo too - but a boat or tractor trailer is a thing.
+    r"(?<!boat )(?<!travel )(?<!tractor )(?<!semi )(?<!utility )(?<!horse )(?<!camper )"
+    r"trailer(?! park| hitch| home| truck)|"
+    r"full (?:movie|film)|movie (?:clip|scene)|film clip|scene from|"
+    r"music video|lyrics?(?: video)?|short film|"
+    r"things to do|travel guide|do'?s (?:&|and) don'?ts|best places to|"
+    r"our wedding|wedding (?:video(?:graphy)?|film|highlights|teaser)|"
+    r"unboxing|prank|asmr)\b", re.I)
+
+# Titles that date a clip to the story's own time, for historical stories.
+_ARCHIVAL = re.compile(
+    r"\b(archival|archive|newsreel|rare|vintage|historic(?:al)?|home movies?|"
+    r"8 ?mm|16 ?mm|super ?8|old footage|colou?r film)\b", re.I)
+# Titles that date a clip to today: modern cameras and creators.
+_MODERN = re.compile(r"\b(4k|8k|uhd|hdr|drone|fpv|gopro|iphone|vlog)\b", re.I)
+_TITLE_YEAR = re.compile(r"\b(1[89]\d{2}|20\d{2})s?\b")
+
+# True for a job whose narration is in Latin script (English, Spanish...):
+# a title mostly in another script (Devanagari, Cyrillic, Arabic...) is then
+# almost never footage of this story. A real English news job put Hindi
+# bulletins about Uttar Pradesh and Cuba on its lines when the vision judge
+# timed out. Set per job by the handler; reset_cache clears it.
+_LATIN_STORY = [False]
+
+
+def set_story_script(text: str) -> None:
+    """Remember whether the narration is written in Latin script."""
+    letters = [c for c in text or "" if c.isalpha()]
+    _LATIN_STORY[0] = bool(letters) and sum(1 for c in letters if ord(c) <= 0x24F) \
+        >= 0.9 * len(letters)
+
+
+def _foreign_script(title: str) -> bool:
+    letters = [c for c in title or "" if c.isalpha()]
+    return _LATIN_STORY[0] and bool(letters) and \
+        sum(1 for c in letters if ord(c) > 0x24F) > 0.3 * len(letters)
+
+
+# The year a historical story happens in (the story brief's year), set once
+# per job by the handler: 0 for a present-day story. A worker runs one job at
+# a time, and reset_cache clears it between jobs.
+_STORY_ERA = [0]
+# Stories older than this many years get their footage ranked by era.
+ERA_MIN_AGE = 20
+
+
+def set_story_era(year) -> None:
+    """Rank footage by the story's era: `year` when it is ERA_MIN_AGE+ years ago."""
+    try:
+        year = int(year or 0)
+    except (TypeError, ValueError):
+        year = 0
+    now = datetime.date.today().year
+    _STORY_ERA[0] = year if 1800 <= year <= now - ERA_MIN_AGE else 0
+
+
+def _era_score(title: str) -> float:
+    """
+    How well a title fits a historical story's era: 0 for present-day stories.
+
+    Without the vision model nothing checks what is on screen, and "New York
+    1961" happily returned 4K drone tours and 2026 travel guides for a 1961
+    story. A title dated near the story (or archival) rises; one dated
+    decades later, or shot on a drone, sinks.
+    """
+    era = _STORY_ERA[0]
+    if not era:
+        return 0.0
+    years = [int(y) for y in _TITLE_YEAR.findall(title or "")]
+    if any(era - 15 <= y <= era + 10 for y in years) or _ARCHIVAL.search(title or ""):
+        return 3.0
+    score = 0.0
+    if years and all(y > era + 15 for y in years):
+        score -= 4.0
+    if _MODERN.search(title or ""):
+        score -= 5.0     # outweighs the b-roll bonus a drone title earns
+    return score
+
+
 # Search suffix that biases YouTube itself toward footage rather than people
 # discussing the subject. Tried first; the plain query remains the fallback.
 B_ROLL_INTENT = "drone aerial footage"
@@ -998,6 +1087,8 @@ def _talking_head(title: str) -> bool:
     press conferences, interviews and the rest still disqualify, and the vision
     judge still rejects an anchor desk or burned-in text on the actual frames.
     """
+    if _NOT_FOOTAGE.search(title or "") or _foreign_script(title):
+        return True
     hits = [m.group(1).lower() for m in _TALKING_HEAD.finditer(title or "")]
     if _EVENT_WINDOW.get():
         hits = [h for h in hits if h != "news"]
@@ -1057,7 +1148,7 @@ def _score_candidate(title: str, duration: float, aspect: float,
         score -= 5.0          # vertical; object-fit would crop it to nothing
     elif aspect and aspect >= 1.7:
         score += 1.0
-    return score
+    return score + _era_score(title)
 
 
 def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
@@ -1778,6 +1869,8 @@ def reset_cache():
         _YT_CANDIDATES_CACHE.clear()
         _SOURCE_STATS.clear()
         _GENERATED[0] = 0
+        _STORY_ERA[0] = 0
+        _LATIN_STORY[0] = False
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
 
@@ -2195,18 +2288,26 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 return source_sequence(
                     seq, by_index, work_dir, live_used, lock, assign=assign,
                     require_cc=kwargs.get("require_cc"),
-                    allow_youtube=kwargs.get("allow_youtube"), tag=str(n))
+                    allow_youtube=kwargs.get("allow_youtube"), tag=str(n), stop=stop)
             except Exception as e:  # noqa: BLE001 - its lines fall back to per-line search
                 print(f"[media] sequence {n + 1} failed: {e}", flush=True)
                 return {}
 
         # Same straggler rule as pass 1: a pool still running at the budget
         # is abandoned and its lines fall through to the one-by-one search.
+        # The budget grows with the number of pools, and an abandoned pool is
+        # told to stop so it does not keep downloading under the next pass.
+        # Set at the budget: pools still running stop downloading and return
+        # nothing, so they neither compete with the one-by-one search for the
+        # network nor claim clips it could use.
+        stop = threading.Event()
+        seq_budget = scaled_budget(config.SEQUENCE_BUDGET_SECONDS,
+                                   config.SEQUENCE_SECONDS_PER_POOL, len(sequences), workers)
         seq_pool = ThreadPoolExecutor(max_workers=max(1, workers))
         futures = [seq_pool.submit(contextvars.copy_context().run, run_sequence, n, seq)
                    for n, seq in enumerate(sequences)]
         try:
-            for fut in as_completed(futures, timeout=config.SEQUENCE_BUDGET_SECONDS):
+            for fut in as_completed(futures, timeout=seq_budget):
                 for idx, asset in (fut.result() or {}).items():
                     if 0 <= idx < len(results) and results[idx] is None:
                         results[idx] = asset
@@ -2218,6 +2319,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             print(f"[media] {sum(1 for f in futures if not f.done())} sequence pool(s) over "
                   f"budget; their lines go to the one-by-one search", flush=True)
         finally:
+            stop.set()
             seq_pool.shutdown(wait=False, cancel_futures=True)
         filled = sum(1 for r in results if r is not None)
         print(f"[media] sequence pools filled {filled}/{len(jobs)} scene(s) from "
@@ -2283,7 +2385,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     pool = ThreadPoolExecutor(max_workers=max(1, workers))
     futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
     started = time.time()
-    deadline = started + config.PASS1_BUDGET_SECONDS
+    deadline = started + scaled_budget(config.PASS1_BUDGET_SECONDS,
+                                       config.PASS1_SECONDS_PER_SCENE, len(pass1), workers)
     pending = set(futures)
     try:
         while pending:
@@ -2595,6 +2698,17 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
     """
     by_index = {j["index"]: j for j in jobs}
     order = sorted(by_index)
+    # How often each shot is on screen already; a shot at its cap is skipped
+    # while any other donor will do (see REUSE_MAX_FOOTAGE / REUSE_MAX_STILL).
+    uses = Counter(r.identity for r in results if r is not None)
+
+    def load(asset: MediaAsset) -> float:
+        """Uses as a share of the shot's cap: a still fills up faster than a clip."""
+        cap = config.REUSE_MAX_STILL if asset.kind == "image" else config.REUSE_MAX_FOOTAGE
+        return uses[asset.identity] / max(1, cap)
+
+    def at_cap(asset: MediaAsset) -> bool:
+        return load(asset) >= 1
 
     def placed_near(identity: str, i: int) -> bool:
         return any(results[k] is not None and results[k].identity == identity
@@ -2611,14 +2725,16 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
         # Nearest donors first; a donor is any scene that has media.
         donors = sorted((k for k in order if k != i and results[k] is not None),
                         key=lambda k: abs(k - i))
+        # Donors still under their reuse cap, nearest first.
+        fresh = [k for k in donors if not at_cap(results[k])]
         pick = None
-        for k in donors:                       # 1. the same subject
+        for k in fresh:                        # 1. the same subject
             if same_subject(subject, by_index[k].get("subject") or "") \
                     and not placed_near(results[k].identity, i):
                 pick = k
                 break
         if pick is None:                       # 2. a nearby scene, never another person
-            for k in donors:
+            for k in fresh:
                 other = by_index[k]
                 if other.get("subject_type") == "person" and not same_subject(
                         subject, other.get("subject") or ""):
@@ -2629,12 +2745,20 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
                     pick = k
                     break
         if pick is None:                       # 3. the same subject, closer in, never adjacent
-            same = [k for k in donors if abs(k - i) >= 2
+            same = [k for k in fresh if abs(k - i) >= 2
                     and same_subject(subject, by_index[k].get("subject") or "")]
             pick = same[-1] if same else None   # farthest of them
+        if pick is None:                       # 4. every shot at its cap: the least used
+            allowed = [k for k in donors if not placed_near(results[k].identity, i)
+                       and not (by_index[k].get("subject_type") == "person"
+                                and not same_subject(subject, by_index[k].get("subject") or ""))
+                       and not (person and results[k].kind == "image")]
+            if allowed:
+                pick = min(allowed, key=lambda k: (load(results[k]), abs(k - i)))
         if pick is None:
             continue
         donor = results[pick]
+        uses[donor.identity] += 1
         results[i] = _dc_replace(
             donor, review_required=True,
             review_reason=(f"Reused shot of {by_index[pick].get('subject') or 'another scene'}"
@@ -2687,7 +2811,7 @@ def split_window(path: str, key: str, lengths: List[float], out_dir: str) -> Lis
 
 def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
                   context: str, used: set, out_dir: str, require_cc: bool,
-                  tag: str) -> List[dict]:
+                  tag: str, stop: Optional[threading.Event] = None) -> List[dict]:
     """Shots for a sequence from one footage search: windows cut into several shots."""
     per = max(1, min(SEQ_SHOTS_PER_WINDOW, need))
     window = sum(lengths[:per]) + 1.0
@@ -2706,7 +2830,7 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
     shots: List[dict] = []
     videos = 0
     for cand, start, _moment in _plan_grabs(eligible, window, 30.0, intent, context):
-        if len(shots) >= need or videos >= SEQ_MAX_VIDEOS:
+        if len(shots) >= need or videos >= SEQ_MAX_VIDEOS or (stop is not None and stop.is_set()):
             break
         path = _yt_fetch_retry(cand["id"], out_dir, start, window, cand["title"])
         if not path:
@@ -2780,10 +2904,17 @@ def greedy_assign(beats: List[dict], shots: List[dict],
     return chosen
 
 
+def scaled_budget(floor: float, per_item: float, items: int, workers: int) -> float:
+    """A pass budget: `floor`, or per_item seconds for each round of `workers` items."""
+    rounds = math.ceil(max(0, items) / max(1, workers))
+    return max(floor, per_item * rounds)
+
+
 def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
                     used: set, claim: threading.Lock, assign=None,
                     require_cc: bool = None, allow_youtube: bool = None,
-                    tag: str = "0") -> Dict[int, MediaAsset]:
+                    tag: str = "0",
+                    stop: Optional[threading.Event] = None) -> Dict[int, MediaAsset]:
     """
     Gather one pool of shots for a sequence and lay its lines out across it.
 
@@ -2832,7 +2963,7 @@ def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
             share = [need_foot] + [max(1, (need_foot + 1) // 2)] * (len(first) - 1)
             foot_futs = [ex.submit(contextvars.copy_context().run, _footage_pool, q, share[n],
                                    lengths, intent, context, used, work_dir, require_cc,
-                                   f"{tag}_p{n}")
+                                   f"{tag}_p{n}", stop)
                          for n, q in enumerate(first)]
             for fut in foot_futs:
                 have = sum(1 for x in pool if x["kind"] == "footage")
@@ -2843,17 +2974,17 @@ def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
                 pool += got[:max(0, need_foot - have)]
             for q in rest:
                 have = sum(1 for x in pool if x["kind"] == "footage")
-                if have >= need_foot:
+                if have >= need_foot or (stop is not None and stop.is_set()):
                     break
                 pool += _footage_pool(q, need_foot - have, lengths, intent, context,
-                                      used, work_dir, require_cc, f"{tag}_{len(pool)}")
+                                      used, work_dir, require_cc, f"{tag}_{len(pool)}", stop)
             if img_fut is not None:
                 pool += img_fut.result() or []
     finally:
         _EVENT_WINDOW.reset(window_token)
         _SUBJECT_TYPE.reset(token)
-    if not pool:
-        return {}
+    if not pool or (stop is not None and stop.is_set()):
+        return {}      # abandoned at the budget: its lines are already being searched one by one
 
     for n, p in enumerate(pool):
         p["id"] = f"s{n}"
