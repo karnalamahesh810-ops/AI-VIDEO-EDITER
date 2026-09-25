@@ -1478,6 +1478,7 @@ def reset_cache():
         _YT_CANDIDATES_CACHE.clear()
         _GENERATED[0] = 0
     vision.reset()  # per-job call/failure counts for the job result
+    moments.reset_cache()  # storyboard sheets, cached per video across beats
 
 
 def _generation_budget_left() -> bool:

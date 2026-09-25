@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, interpolate } from "remotion";
-import { TEXT_SHADOW, useOverlayAnim, useScale } from "./layout";
+import { TEXT_SHADOW, useOverlayAnim, useOverlaySafeStyle, useScale } from "./layout";
 import { NARROW, SERIF_ITALIC } from "./fonts";
 import type { Overlay } from "../types";
 
@@ -21,15 +21,19 @@ export const SentenceHighlight: React.FC<{ overlay: Overlay; accent: string }> =
   overlay,
   accent,
 }) => {
-  const { frame, opacity, durationInFrames } = useOverlayAnim(10, 10);
+  const { frame, opacity } = useOverlayAnim(10, 10);
   const s = useScale();
+  const safe = useOverlaySafeStyle();
 
   const words = (overlay.text || "").split(/\s+/).filter(Boolean);
   const marked = new Set(
     (overlay.highlight || "").split(/[\s,]+/).map(norm).filter(Boolean),
   );
-  // Type across the first half, then hold the finished line.
-  const typeEnd = Math.max(1, Math.floor(durationInFrames * 0.5));
+  // A fixed, fast type-in (~0.5s) regardless of how long the card then holds
+  // - it used to take half the card's OWN duration, which read fine when a
+  // beat ran ~7s but left the text still assembling well after a ~3s beat's
+  // narration had already moved on to the next line.
+  const typeEnd = 16;
   const shown = Math.ceil(
     interpolate(frame, [0, typeEnd], [0, words.length], {
       extrapolateLeft: "clamp",
@@ -38,10 +42,10 @@ export const SentenceHighlight: React.FC<{ overlay: Overlay; accent: string }> =
   );
 
   return (
-    <AbsoluteFill style={{ justifyContent: "flex-end", opacity }}>
+    <AbsoluteFill style={{ ...safe, justifyContent: "flex-end", opacity }}>
       <div
         style={{
-          margin: `0 0 ${s(250)}px ${s(110)}px`,
+          margin: `0 0 ${s(56)}px ${s(110)}px`,
           maxWidth: "58%",
           fontFamily: NARROW,
           fontWeight: 700,

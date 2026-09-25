@@ -17,8 +17,11 @@ export const TypewriterTitle: React.FC<{ overlay: Overlay; accent: string }> = (
   const safe = useOverlaySafeStyle();
 
   const text = overlay.text || "";
-  // Finish typing by ~60% of the overlay so the finished line can breathe.
-  const typeFrames = Math.max(1, Math.floor(durationInFrames * 0.6));
+  // A fixed, fast type-in (~0.8s) rather than 60% of the overlay's own
+  // duration - at a fraction, a card that ended up spanning into a later
+  // cut was still typing after the beat that triggered it had already been
+  // narrated past.
+  const typeFrames = Math.min(24, Math.max(1, durationInFrames - 10));
   const shown = Math.floor(
     interpolate(frame, [0, typeFrames], [0, text.length], {
       extrapolateLeft: "clamp",

@@ -123,6 +123,13 @@ IMAGE_MAX_PER_VIDEO = int(os.getenv("IMAGE_MAX_PER_VIDEO", "80"))
 DIRECTOR_API_BASE = os.getenv("DIRECTOR_API_BASE", "").rstrip("/")
 DIRECTOR_API_KEY = os.getenv("DIRECTOR_API_KEY", "")
 DIRECTOR_MODEL = os.getenv("DIRECTOR_MODEL", "")
+# Tried in order if DIRECTOR_MODEL fails or times out. Verified working
+# through this key: 19s for a text plan call, 7.7s for a vision call, both
+# via https://api.kie.ai/v1 with "model" in the body (no per-model path
+# needed, unlike vision.py's endpoint). Empty entries are skipped.
+DIRECTOR_FALLBACK_MODELS = [m.strip() for m in
+                           os.getenv("DIRECTOR_FALLBACK_MODELS", "gemini-3-pro").split(",")
+                           if m.strip()]
 
 # --- vision verification -----------------------------------------------------
 # Every candidate clip/image is shown to a multimodal model, which describes

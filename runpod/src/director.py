@@ -366,23 +366,35 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
             "beats": [{"index": offset + i, "text": s.text, "seconds": round(s.duration, 2)}
                       for i, s in enumerate(batch)],
         }
-        try:
-            r = requests.post(
-                f"{config.DIRECTOR_API_BASE}/chat/completions",
-                headers={"Authorization": f"Bearer {config.DIRECTOR_API_KEY}",
-                         "Content-Type": "application/json"},
-                json={"model": config.DIRECTOR_MODEL,
-                      "messages": [{"role": "system", "content": _SYSTEM_PROMPT},
-                                   {"role": "user", "content": json.dumps(payload)}],
-                      "response_format": {"type": "json_object"}},
-                timeout=120,
-            )
-            r.raise_for_status()
-            data = json.loads(r.json()["choices"][0]["message"]["content"])
-        except (requests.RequestException, ValueError, KeyError, TypeError) as e:
+        data = None
+        tried_errors = []
+        for model in [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS:
+            if not model:
+                continue
+            try:
+                r = requests.post(
+                    f"{config.DIRECTOR_API_BASE}/chat/completions",
+                    headers={"Authorization": f"Bearer {config.DIRECTOR_API_KEY}",
+                             "Content-Type": "application/json"},
+                    json={"model": model,
+                          "messages": [{"role": "system", "content": _SYSTEM_PROMPT},
+                                       {"role": "user", "content": json.dumps(payload)}],
+                          "response_format": {"type": "json_object"}},
+                    timeout=120,
+                )
+                body = r.json()
+                # Kie wraps a failure in a 200: {"code": 422, "msg": ...}.
+                if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
+                    raise ValueError(f"{model}: code {body['code']} {body.get('msg', '')}")
+                data = json.loads(body["choices"][0]["message"]["content"])
+                break
+            except (requests.RequestException, ValueError, KeyError, TypeError) as e:
+                tried_errors.append(f"{model}: {type(e).__name__}")
+                continue
+        if data is None:
             warnings.append(
                 f"AI director unavailable for beats {offset + 1}-{offset + len(batch)} "
-                f"({type(e).__name__}); rule-based choices used.")
+                f"({'; '.join(tried_errors)}); rule-based choices used.")
             continue
 
         seen = set()

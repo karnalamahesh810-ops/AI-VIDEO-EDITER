@@ -17,13 +17,29 @@ before a single byte of footage is downloaded.
 """
 import base64
 import io
-from typing import List, Optional, Tuple
+import threading
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
 from . import config, vision
 
 _TILE_W, _TILE_H = 240, 135        # upscaled from 160x90 so the model can read it
+
+# The sheet itself (which tiles, at which timestamps) only depends on the
+# video and how long a clip needs to be, not on any one scene's intent - a
+# subject that repeats across several beats used to re-fetch and re-build it
+# from scratch for every beat that scouted the same candidate. Only the
+# vision judgement of that sheet (config.MOMENT_TILES tiles is scene-specific
+# and is never cached here.
+_SHEET_CACHE: Dict[str, Optional[Tuple[str, List[float]]]] = {}
+_SHEET_LOCK = threading.Lock()
+
+
+def reset_cache() -> None:
+    """Call between jobs, alongside media.reset_cache()."""
+    with _SHEET_LOCK:
+        _SHEET_CACHE.clear()
 
 
 def _storyboard_format(info: dict) -> Optional[dict]:
@@ -75,6 +91,21 @@ def _fetch(url: str, proxy: str) -> Optional[bytes]:
 def contact_sheet(info: dict, seconds: float, proxy: str = "",
                   tiles: int = 20) -> Optional[Tuple[str, List[float]]]:
     """(base64 JPEG of a numbered grid, timestamp of each number) or None."""
+    vid = info.get("id") or ""
+    key = f"{vid}::{round(seconds)}::{tiles}" if vid else ""
+    if key:
+        with _SHEET_LOCK:
+            if key in _SHEET_CACHE:
+                return _SHEET_CACHE[key]
+    made = _build_contact_sheet(info, seconds, proxy, tiles)
+    if key:
+        with _SHEET_LOCK:
+            _SHEET_CACHE[key] = made
+    return made
+
+
+def _build_contact_sheet(info: dict, seconds: float, proxy: str,
+                         tiles: int) -> Optional[Tuple[str, List[float]]]:
     try:
         from PIL import Image, ImageDraw
     except ImportError:

@@ -18,12 +18,15 @@ export const ChapterCard: React.FC<{ overlay: Overlay; accent: string }> = ({
   const { frame, enter, opacity, durationInFrames } = useOverlayAnim(20, 10);
   const s = useScale();
 
-  // The band wipes open, holds, then closes from the same edge.
-  const open = interpolate(enter, [0, 1], [0, 100]);
+  // The band wipes open, holds, then closes from the same edge. Capped
+  // under 100%: a long title used to get a band exactly as wide as the
+  // frame with its text held to one un-wrapping line, so it ran straight
+  // off the right edge instead of wrapping inside the band.
+  const open = interpolate(enter, [0, 1], [0, 82]);
   const close = interpolate(
     frame,
     [durationInFrames - 12, durationInFrames],
-    [100, 0],
+    [82, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
   const bandWidth = Math.min(open, close);
@@ -63,14 +66,17 @@ export const ChapterCard: React.FC<{ overlay: Overlay; accent: string }> = ({
         <div
           style={{
             fontFamily: SANS,
-            fontSize: s(82),
+            // Was 82 - the one outlier against every other template's body
+            // text (46-72) and, uncapped and non-wrapping, the reason a
+            // longer title ran straight off the right edge of the frame.
+            fontSize: s(64),
             fontWeight: 900,
-            lineHeight: 1.05,
+            lineHeight: 1.12,
             color: "#fff",
             letterSpacing: "-0.02em",
             opacity: textIn * opacity,
             transform: `translateX(${interpolate(textIn, [0, 1], [s(-40), 0])}px)`,
-            whiteSpace: "nowrap",
+            maxWidth: `${s(760)}px`,
           }}
         >
           {overlay.text}

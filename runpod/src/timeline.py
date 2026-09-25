@@ -82,11 +82,17 @@ def plan_transitions(shots: List[dict]) -> List[str]:
 # run 2-4s but an explanatory graphic holds far longer (bar chart 10.5s, city
 # map 9.0s, callout 3.5s). A chart cut after 2.6s is a chart nobody can read.
 _OVERLAY_SECONDS = {
-    "title": 3.5, "chapter": 2.5, "callout": 3.5, "typewriter": 3.0,
-    "stat": 4.0, "bar-chart": 9.0, "map": 8.0, "quote": 5.0,
-    "timeline": 8.0, "highlight": 3.0, "lower-third": 4.0,
-    "comparison": 7.0, "arrow": 2.5, "split": 4.0,
-    "sentence-highlight": 5.0, "article-zoom": 7.0, "date-stamp": 3.5,
+    # Tuned against the ~7s-beat GoMotion pacing; VidRush's own 3.3-3.7s
+    # median (now this worker's pacing too) made the longest of these span
+    # 2-3 beats of unrelated narration underneath a graphic that had already
+    # finished saying its piece. Trimmed toward roughly a beat and a half,
+    # kept longer only where there is genuinely more to read (a chart, a
+    # document, several dated events).
+    "title": 3.0, "chapter": 2.5, "callout": 3.0, "typewriter": 3.0,
+    "stat": 3.5, "bar-chart": 6.0, "map": 5.5, "quote": 4.0,
+    "timeline": 6.0, "highlight": 3.0, "lower-third": 3.5,
+    "comparison": 5.0, "arrow": 2.5, "split": 4.0,
+    "sentence-highlight": 4.0, "article-zoom": 5.0, "date-stamp": 3.0,
 }
 
 # Sources this workflow refuses. Kept as data so the check and the error

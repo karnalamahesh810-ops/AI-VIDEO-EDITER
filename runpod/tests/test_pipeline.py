@@ -20,7 +20,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src import config, director, geocode, media, storage, timeline  # noqa: E402
+import requests as requests_module  # noqa: E402
+from src import config, director, geocode, media, moments, storage, timeline  # noqa: E402
 from src.media import MediaAsset  # noqa: E402
 from src.transcribe import Segment, Word, keywords_for, segment_words, align_to_script  # noqa: E402
 
@@ -228,6 +229,138 @@ class StorageBroker(unittest.TestCase):
         self.assertEqual(media["storage"], {"bucket": "video-media",
                                             "path": f"projects/p1/media/{doc['scenes'][0]['id']}.mp4"})
         self.assertEqual(up.call_args[0][3:], ("p1", "job-9"))
+
+
+class ContactSheetCache(unittest.TestCase):
+    """
+    Several scenes scouting the same candidate video (common for a repeated
+    subject) each re-fetched and re-built its storyboard contact sheet from
+    scratch, even though the sheet itself doesn't depend on which scene is
+    asking - only the vision judgement of it does.
+    """
+
+    def setUp(self):
+        moments.reset_cache()
+
+    def tearDown(self):
+        moments.reset_cache()
+
+    def test_the_same_video_builds_its_sheet_once(self):
+        calls = []
+
+        def fake_build(info, seconds, proxy, tiles):
+            calls.append(info["id"])
+            return ("b64==", [1.0, 2.0, 3.0])
+
+        info = {"id": "abc123", "duration": 100}
+        with mock.patch.object(moments, "_build_contact_sheet", side_effect=fake_build):
+            a = moments.contact_sheet(info, 6.0, "", 20)
+            b = moments.contact_sheet(info, 6.0, "", 20)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(a, b)
+
+    def test_a_different_video_still_builds_its_own_sheet(self):
+        calls = []
+
+        def fake_build(info, seconds, proxy, tiles):
+            calls.append(info["id"])
+            return ("b64==", [1.0])
+
+        with mock.patch.object(moments, "_build_contact_sheet", side_effect=fake_build):
+            moments.contact_sheet({"id": "abc123", "duration": 100}, 6.0, "", 20)
+            moments.contact_sheet({"id": "xyz789", "duration": 100}, 6.0, "", 20)
+        self.assertEqual(calls, ["abc123", "xyz789"])
+
+    def test_reset_cache_clears_it(self):
+        calls = []
+
+        def fake_build(info, seconds, proxy, tiles):
+            calls.append(1)
+            return ("b64==", [1.0])
+
+        info = {"id": "abc123", "duration": 100}
+        with mock.patch.object(moments, "_build_contact_sheet", side_effect=fake_build):
+            moments.contact_sheet(info, 6.0, "", 20)
+            moments.reset_cache()
+            moments.contact_sheet(info, 6.0, "", 20)
+        self.assertEqual(len(calls), 2)
+
+
+class DirectorFallback(unittest.TestCase):
+    """
+    The director's own model call had no fallback: one failed request and a
+    whole batch of beats silently dropped to the rule planner. Vision already
+    retries with gemini-3-pro on failure; the director now does too -
+    verified working through this Kie key (19s for a text plan call).
+    """
+
+    def _reply(self, status, body):
+        r = mock.Mock(status_code=status)
+        r.json.return_value = body
+        return r
+
+    def setUp(self):
+        self.patches = [mock.patch.object(config, "DIRECTOR_API_KEY", "k"),
+                        mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"),
+                        mock.patch.object(config, "DIRECTOR_MODEL", "gpt-5-2"),
+                        mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", ["gemini-3-pro"])]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+
+    def _segments(self):
+        from src.transcribe import Word
+        return segment_words([Word(text=w, start=i * 0.3, end=i * 0.3 + 0.25)
+                              for i, w in enumerate("The lake dropped fast today".split())])
+
+    def test_falls_through_to_gemini_when_gpt_fails(self):
+        ok_body = {"choices": [{"message": {"content":
+            '{"shots":[{"index":0,"subject":"Lake Mead","subjectType":"place",'
+            '"intent":"dry lakebed","query":"Lake Mead dry lakebed","visualType":"footage","overlay":null}]}'}}]}
+        calls = []
+
+        def fake_post(url, **k):
+            calls.append(k["json"]["model"])
+            if k["json"]["model"] == "gpt-5-2":
+                raise requests_module.ConnectionError("boom")
+            return self._reply(200, ok_body)
+
+        with mock.patch.object(director.requests, "post", side_effect=fake_post):
+            enriched, warnings = director._ai_pass(self._segments(), "Lake Mead",
+                                                    [director._rule_shot(s, i, "Lake Mead")
+                                                     for i, s in enumerate(self._segments())])
+        self.assertEqual(calls, ["gpt-5-2", "gemini-3-pro"])
+        self.assertEqual(enriched, 1)
+        self.assertEqual(warnings, [])
+
+    def test_a_kie_wrapper_error_also_falls_through(self):
+        # Kie wraps a failure in a 200, not an HTTP error status.
+        calls = []
+
+        def fake_post(url, **k):
+            calls.append(k["json"]["model"])
+            if k["json"]["model"] == "gpt-5-2":
+                return self._reply(200, {"code": 422, "msg": "The channel is not supported"})
+            return self._reply(200, {"choices": [{"message": {"content": '{"shots":[]}'}}]})
+
+        with mock.patch.object(director.requests, "post", side_effect=fake_post):
+            director._ai_pass(self._segments(), "Lake Mead",
+                              [director._rule_shot(s, i, "Lake Mead")
+                               for i, s in enumerate(self._segments())])
+        self.assertEqual(calls, ["gpt-5-2", "gemini-3-pro"])
+
+    def test_both_models_down_falls_back_to_rules_with_a_clear_warning(self):
+        with mock.patch.object(director.requests, "post",
+                              side_effect=requests_module.ConnectionError("boom")):
+            enriched, warnings = director._ai_pass(self._segments(), "Lake Mead",
+                                                    [director._rule_shot(s, i, "Lake Mead")
+                                                     for i, s in enumerate(self._segments())])
+        self.assertEqual(enriched, 0)
+        self.assertIn("gpt-5-2", warnings[0])
+        self.assertIn("gemini-3-pro", warnings[0])
 
 
 class VidRushMatching(unittest.TestCase):

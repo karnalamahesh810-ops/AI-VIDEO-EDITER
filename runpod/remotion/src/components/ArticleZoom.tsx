@@ -34,8 +34,12 @@ export const ArticleZoom: React.FC<{ overlay: Overlay; accent: string }> = ({
   const s = useScale();
   const red = accent || "#d62828";
 
+  // Fixed, fast type-ins rather than a fraction of the card's own on-screen
+  // time: at a fraction, a longer hold (this card reads for a while - it's a
+  // document) meant the headline was still typing well after the beat that
+  // introduced it had already been narrated past.
   const headline = overlay.text || "";
-  const typeEnd = Math.max(1, Math.floor(durationInFrames * 0.35));
+  const typeEnd = 20;
   const shown = Math.floor(
     interpolate(frame, [0, typeEnd], [0, headline.length], {
       extrapolateLeft: "clamp",
@@ -45,13 +49,14 @@ export const ArticleZoom: React.FC<{ overlay: Overlay; accent: string }> = ({
   const [pre, hot, post] = splitHighlight(headline.slice(0, shown), overlay.highlight || "");
 
   const body = overlay.body || "";
+  const bodyTypeEnd = typeEnd + 40;
   const bodyShown = Math.floor(
-    interpolate(frame, [typeEnd, durationInFrames * 0.8], [0, body.length], {
+    interpolate(frame, [typeEnd, bodyTypeEnd], [0, body.length], {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
     }),
   );
-  const bodyLines = interpolate(frame, [typeEnd, durationInFrames * 0.8], [0, 14], {
+  const bodyLines = interpolate(frame, [typeEnd, bodyTypeEnd], [0, 14], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
