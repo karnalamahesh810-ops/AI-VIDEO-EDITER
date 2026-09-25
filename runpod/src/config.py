@@ -180,6 +180,10 @@ RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "180"))
 # restores the strict "a clip never appears twice" rule, at the cost of
 # empty scenes on long videos about subjects with few real photos.
 REUSE_SHOTS_TO_FILL = _flag("REUSE_SHOTS_TO_FILL", True)
+# Source the video in sequences (runs of lines about one subject and setting,
+# each with one pool of shots laid out by an editor call) before the
+# line-by-line search. Off ("0") restores line-by-line sourcing only.
+SEQUENCE_SOURCING = _flag("SEQUENCE_SOURCING", True)
 MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
 MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp

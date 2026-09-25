@@ -1712,7 +1712,8 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
     try:
         candidate.local_path = download(candidate.url, dest)
         return candidate
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error(f"download_{candidate.source}", e)
         return None
 
 
@@ -1967,7 +1968,8 @@ def _asset_ok(asset) -> tuple:
 
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
-                on_recheck=None, **kwargs) -> List[Optional[MediaAsset]]:
+                on_recheck=None, sequences: Optional[List[dict]] = None,
+                assign=None, on_pool=None, **kwargs) -> List[Optional[MediaAsset]]:
     """
     Source visuals for many scenes, with no two scenes sharing a visual.
 
@@ -2014,6 +2016,44 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # had to re-source most of them. Races still happen (two scenes finishing
     # at once); pass 2 below catches those.
     live_used: set = set()
+
+    # Sequence pools first: each run of lines about one subject and setting
+    # gathers its shots together and is laid out by the editor call. Lines a
+    # pool cannot fill fall through to the one-by-one search below, then the
+    # recheck and the story fill.
+    if sequences and config.SEQUENCE_SOURCING:
+        by_index = {j["index"]: j for j in ordered}
+        pooled = [0]
+        if on_pool:
+            on_pool(0, len(sequences))
+
+        def run_sequence(n, seq):
+            try:
+                return source_sequence(
+                    seq, by_index, work_dir, live_used, lock, assign=assign,
+                    require_cc=kwargs.get("require_cc"),
+                    allow_youtube=kwargs.get("allow_youtube"), tag=str(n))
+            except Exception as e:  # noqa: BLE001 - its lines fall back to per-line search
+                print(f"[media] sequence {n + 1} failed: {e}", flush=True)
+                return {}
+
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = [pool.submit(run_sequence, n, seq) for n, seq in enumerate(sequences)]
+            for fut in as_completed(futures):
+                for idx, asset in (fut.result() or {}).items():
+                    if 0 <= idx < len(results) and results[idx] is None:
+                        results[idx] = asset
+                with lock:
+                    pooled[0] += 1
+                    if on_pool:
+                        on_pool(pooled[0], len(sequences))
+        filled = sum(1 for r in results if r is not None)
+        print(f"[media] sequence pools filled {filled}/{len(jobs)} scene(s) from "
+              f"{len(sequences)} sequence(s)", flush=True)
+    # Only the lines still empty go to the one-by-one search; every line,
+    # pooled or not, still goes through the duplicate/quality pass below.
+    pass1 = [(j, nth) for j, nth in plan if results[j["index"]] is None]
+    done = len(plan) - len(pass1)
 
     def attempt(job, nth):
         return source_for_segment(
@@ -2064,7 +2104,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         return got
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in plan}
+        futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
         for fut in as_completed(futures):
             idx = futures[fut]
             try:
@@ -2377,3 +2417,216 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
                            " - no other footage found for this line"))
         filled += 1
     return filled
+
+
+# --------------------------------------------------------------------------- #
+# Sequence pools - source a run of lines together, as an editor does
+# --------------------------------------------------------------------------- #
+
+# Shots cut from one downloaded window of a video, and the most videos and
+# photos a sequence gathers. One window replaces up to three separate
+# searches + scouts + downloads + vision checks, and consecutive shots from it
+# play as one continuous moment across consecutive lines.
+SEQ_SHOTS_PER_WINDOW = 3
+SEQ_MAX_VIDEOS = 4
+SEQ_MAX_IMAGES = 6
+SEQ_SHOT_PAD = 0.5
+
+
+def _cut(src: str, out: str, start: float, seconds: float) -> str:
+    """Re-encode [start, start+seconds) of src to its own file; "" on failure."""
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.2f}", "-i", src,
+                        "-t", f"{seconds:.2f}", "-an", "-c:v", "libx264", "-preset",
+                        "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart", out],
+                       capture_output=True, timeout=120)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+    return out if os.path.isfile(out) and os.path.getsize(out) > 0 else ""
+
+
+def split_window(path: str, key: str, lengths: List[float], out_dir: str) -> List[tuple]:
+    """(file, offset) for consecutive shots of the given lengths cut from one window."""
+    shots, t = [], 0.0
+    for n, secs in enumerate(lengths):
+        out = os.path.join(out_dir, f"seq_{key}_{n}.mp4")
+        got = _cut(path, out, t, secs)
+        if not got:
+            break
+        shots.append((got, t))
+        t += secs
+    return shots
+
+
+def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
+                  context: str, used: set, out_dir: str, require_cc: bool,
+                  tag: str) -> List[dict]:
+    """Shots for a sequence from one footage search: windows cut into several shots."""
+    per = max(1, min(SEQ_SHOTS_PER_WINDOW, need))
+    window = sum(lengths[:per]) + 1.0
+    if require_cc:
+        target = ("https://www.youtube.com/results?search_query="
+                  + urllib.parse.quote_plus(query) + "&sp=EgIwAQ%3D%3D")
+    else:
+        target = f"ytsearch12:{query}"
+    cands = _yt_candidates_cached(target, require_cc, "", variant=f"seq:{query}")
+    eligible = [c for c in sorted(cands, key=lambda c: _score_candidate(
+                    c["title"], c["duration"], c["aspect"], window), reverse=True)
+                if not _talking_head(c["title"])
+                and not (c["aspect"] and c["aspect"] < 1.2)
+                and not (c["duration"] and c["duration"] < window + 10)
+                and f"yt:{c['id']}" not in used]
+    shots: List[dict] = []
+    videos = 0
+    for cand, start, _moment in _plan_grabs(eligible, window, 30.0, intent, context):
+        if len(shots) >= need or videos >= SEQ_MAX_VIDEOS:
+            break
+        path = _yt_fetch_retry(cand["id"], out_dir, start, window, cand["title"])
+        if not path:
+            continue
+        if has_burned_captions(path):
+            continue
+        keep, verdict = _vision_gate(path, intent, context, cand["title"])
+        if not keep:
+            continue
+        videos += 1
+        for n, (shot_path, offset) in enumerate(
+                split_window(path, f"{tag}_{cand['id']}", lengths[:per], out_dir)):
+            asset = MediaAsset(
+                kind="video", source="youtube",
+                url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(start + offset)}",
+                local_path=shot_path, duration=lengths[n],
+                attribution=f"YouTube: {cand['title']}",
+                license=("Creative Commons Attribution (CC BY)" if require_cc
+                         else "unverified — you must hold the rights"),
+                query=query, review_required=not require_cc,
+                review_reason=("" if require_cc
+                               else "Licence unverified — confirm you hold the rights"),
+            ).apply_verdict(verdict, intent)
+            shots.append({"kind": "footage", "video": cand["id"], "asset": asset})
+    return shots
+
+
+def _image_pool(queries: List[str], subject: str, subject_type: str, need: int,
+                intent: str, context: str, used: set, out_dir: str) -> List[dict]:
+    """Real photos for a sequence: the subject's own Wikipedia article, then searches."""
+    found: List[MediaAsset] = []
+    if subject and subject_type in ("person", "place", "event"):
+        found += _cached_search(search_wikipedia_article_images, subject)
+    for q in queries:
+        for search in (search_wikimedia, search_web_images, search_openverse):
+            found += _cached_search(search, q)
+    shots, seen = [], set()
+    for cand in found:
+        if len(shots) >= need:
+            break
+        if cand.identity in seen or cand.identity in used:
+            continue
+        seen.add(cand.identity)
+        got = _download(_dc_replace(cand), cand.query or subject, out_dir)
+        if not got:
+            continue
+        keep, verdict = _vision_gate(got.local_path, intent, context,
+                                     got.attribution or got.url)
+        if keep:
+            shots.append({"kind": "image", "video": "", "asset": got.apply_verdict(verdict, intent)})
+    return shots
+
+
+def greedy_assign(beats: List[dict], shots: List[dict],
+                  chosen: Optional[Dict[int, str]] = None) -> Dict[int, str]:
+    """
+    Lay beats out in order, each taking the best unused shot of its wanted
+    kind, else the best unused shot of any kind. Keeps what `chosen` already has.
+    """
+    chosen = dict(chosen or {})
+    taken = set(chosen.values())
+    free = sorted((s for s in shots if s["id"] not in taken),
+                  key=lambda s: -(s.get("score") if s.get("score") is not None else 0.5))
+    for b in beats:
+        if b["index"] in chosen or not free:
+            continue
+        want = b.get("want") or "footage"
+        pick = next((s for s in free if s["kind"] == want), free[0])
+        chosen[b["index"]] = pick["id"]
+        free.remove(pick)
+    return chosen
+
+
+def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
+                    used: set, claim: threading.Lock, assign=None,
+                    require_cc: bool = None, allow_youtube: bool = None,
+                    tag: str = "0") -> Dict[int, MediaAsset]:
+    """
+    Gather one pool of shots for a sequence and lay its lines out across it.
+
+    Returns beat index -> asset for the beats it could fill; the caller
+    sources the rest one by one. Footage searches download a window per video
+    and cut it into several shots; image searches (and the subject's own
+    Wikipedia article) supply real photos. Each window or photo is judged by
+    the vision model once, against the sequence's setting, then `assign`
+    (the director's editor call) or the greedy fallback gives every line the
+    shot that best shows it.
+    """
+    require_cc = config.REQUIRE_CC if require_cc is None else require_cc
+    allow_youtube = config.ALLOW_YOUTUBE if allow_youtube is None else allow_youtube
+    beats = [jobs[i] for i in seq.get("beats", []) if i in jobs]
+    if not beats:
+        return {}
+    subject = seq.get("subject") or beats[0].get("subject") or ""
+    subject_type = seq.get("subjectType") or beats[0].get("subject_type") or ""
+    intent = seq.get("setting") or subject or beats[0].get("intent") or ""
+    context = " ".join(b.get("context", "") for b in beats)[:600]
+    lengths = [float(b.get("seconds") or 3.0) + SEQ_SHOT_PAD for b in beats]
+    n_img = sum(1 for b in beats if b.get("visual_type") == "image")
+    n_foot = len(beats) - n_img
+
+    token = _SUBJECT_TYPE.set(subject_type)
+    window_token = _EVENT_WINDOW.set(beats[0].get("event_window") or "")
+    pool: List[dict] = []
+    try:
+        foot = [s["q"] for s in seq.get("searches", []) if s.get("kind") != "image"]
+        imgs = [s["q"] for s in seq.get("searches", []) if s.get("kind") == "image"]
+        # Spare footage for photo lines that find no photo, and vice versa.
+        need_foot = n_foot + (n_img + 1) // 2
+        if allow_youtube:
+            for q in foot:
+                have = sum(1 for p in pool if p["kind"] == "footage")
+                if have >= need_foot:
+                    break
+                pool += _footage_pool(q, need_foot - have, lengths, intent, context,
+                                      used, work_dir, require_cc, f"{tag}_{len(pool)}")
+        need_img = min(SEQ_MAX_IMAGES, n_img + (1 if n_foot else 0))
+        if need_img:
+            pool += _image_pool(imgs, subject, subject_type, need_img, intent, context,
+                                used, work_dir)
+    finally:
+        _EVENT_WINDOW.reset(window_token)
+        _SUBJECT_TYPE.reset(token)
+    if not pool:
+        return {}
+
+    for n, p in enumerate(pool):
+        p["id"] = f"s{n}"
+    shots = [{"id": p["id"], "kind": p["kind"], "video": p["video"],
+              "description": p["asset"].content_description,
+              "score": p["asset"].relevance_score} for p in pool]
+    lines = [{"index": b["index"], "text": b.get("context", ""),
+              "want": "image" if b.get("visual_type") == "image" else "footage"} for b in beats]
+    try:
+        chosen = assign(lines, shots) if assign else greedy_assign(lines, shots)
+    except Exception as e:  # noqa: BLE001
+        print(f"[media] sequence layout failed, using greedy: {e}", flush=True)
+        chosen = greedy_assign(lines, shots)
+    by_id = {p["id"]: p["asset"] for p in pool}
+    out: Dict[int, MediaAsset] = {}
+    with claim:
+        for idx, sid in chosen.items():
+            asset = by_id.get(sid)
+            if asset is None or asset.identity in used:
+                continue
+            asset = _dc_replace(asset, intent=jobs[idx].get("intent") or asset.intent)
+            used.add(asset.identity)
+            out[idx] = asset
+    return out

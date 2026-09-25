@@ -2972,6 +2972,121 @@ class LongVideoCoverage(unittest.TestCase):
         self.assertIn("429", media.source_stats()["wikimedia"]["recentErrors"][0])
 
 
+class SequenceEditing(unittest.TestCase):
+    """Plan and source runs of lines together, laid out by an editor call."""
+
+    def _shots(self, subjects, kind="image"):
+        return [{"subject": s, "subjectType": "person", "query": f"{s} photo",
+                 "visualType": kind, "intent": f"photo of {s}"} for s in subjects]
+
+    def test_model_sequences_are_kept_in_order_and_holes_are_filled(self):
+        shots = self._shots(["Ann Dunham"] * 4 + ["Jakarta"] * 4)
+        raw = {"sequences": [
+            {"start": 0, "end": 2, "subject": "Ann Dunham", "subjectType": "person",
+             "setting": "Ann Dunham, Hawaii 1960", "searches": [
+                 {"q": "Ann Dunham photo", "kind": "image"},
+                 {"q": "1960s Honolulu street footage", "kind": "footage"}]},
+            # 3..4 skipped by the model
+            {"start": 5, "end": 7, "subject": "Jakarta", "subjectType": "place",
+             "setting": "Jakarta 1967", "searches": [{"q": "Jakarta 1967 footage"}]}]}
+        seqs = director._validate_sequences(raw, 0, 8, shots)
+        covered = [i for s in seqs for i in s["beats"]]
+        self.assertEqual(covered, list(range(8)))
+        self.assertEqual(seqs[0]["searches"][1]["kind"], "footage")
+        self.assertEqual(seqs[-1]["searches"], [{"q": "Jakarta 1967 footage", "kind": "footage"}])
+
+    def test_a_model_sequence_longer_than_an_editor_would_cut_is_split(self):
+        shots = self._shots(["Barack Obama"] * 25)
+        raw = {"sequences": [{"start": 0, "end": 24, "subject": "Barack Obama",
+                              "searches": [{"q": "Barack Obama speech footage"}]}]}
+        seqs = director._validate_sequences(raw, 0, 25, shots)
+        self.assertEqual([len(s["beats"]) for s in seqs], [10, 10, 5])
+
+    def test_without_a_model_same_subject_lines_group_together(self):
+        segs = [seg(f"line {i}", i * 3, i * 3 + 3) for i in range(6)]
+        shots = self._shots(["Ann Dunham", "Anne Dunham", "Stanley Ann Dunham",
+                             "Madelyn Dunham", "Madelyn Dunham", "Jakarta"])
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""):
+            seqs = director.plan_sequences(segs, shots, {})
+        self.assertEqual([s["beats"] for s in seqs], [[0, 1, 2], [3, 4], [5]])
+        self.assertIn({"q": "Ann Dunham", "kind": "image"}, seqs[0]["searches"])
+
+    def test_greedy_layout_prefers_the_wanted_kind_and_uses_each_shot_once(self):
+        beats = [{"index": 0, "want": "image"}, {"index": 1, "want": "footage"},
+                 {"index": 2, "want": "footage"}]
+        shots = [{"id": "a", "kind": "footage", "score": 0.9},
+                 {"id": "b", "kind": "image", "score": 0.8},
+                 {"id": "c", "kind": "footage", "score": 0.7}]
+        self.assertEqual(media.greedy_assign(beats, shots), {0: "b", 1: "a", 2: "c"})
+
+    def test_the_model_layout_is_validated_and_topped_up(self):
+        beats = [{"index": 0, "text": "x", "want": "footage"},
+                 {"index": 1, "text": "y", "want": "footage"}]
+        shots = [{"id": "s0", "kind": "footage"}, {"id": "s1", "kind": "footage"}]
+        with mock.patch.object(director, "is_configured", return_value=True), \
+                mock.patch.object(director, "_chat_json", return_value={"assign": [
+                    {"index": 0, "shot": "s1"}, {"index": 1, "shot": "s1"},  # s1 twice
+                    {"index": 9, "shot": "s0"}]}):                            # unknown beat
+            self.assertEqual(director.assign_shots(beats, shots), {0: "s1", 1: "s0"})
+
+    def test_one_window_is_cut_into_consecutive_shots(self):
+        cuts = []
+
+        def cut(src, out, start, secs):
+            cuts.append((round(start, 2), round(secs, 2)))
+            return out
+
+        with mock.patch.object(media, "_cut", side_effect=cut):
+            shots = media.split_window("/w/win.mp4", "k", [3.5, 2.5, 4.0], "/w")
+        self.assertEqual(cuts, [(0.0, 3.5), (3.5, 2.5), (6.0, 4.0)])
+        self.assertEqual([o for _, o in shots], [0.0, 3.5, 6.0])
+
+    def test_a_sequence_pool_fills_its_lines(self):
+        jobs = {i: {"index": i, "seconds": 3.0, "visual_type": v, "context": f"line {i}",
+                    "intent": f"intent {i}", "subject": "Ann Dunham", "subject_type": "person"}
+                for i, v in enumerate(["image", "footage", "footage"])}
+        pool_f = [{"kind": "footage", "video": "v1",
+                   "asset": MediaAsset(kind="video", source="youtube",
+                                       url=f"https://y/v1&t={n}", local_path=f"/w/seq_{n}.mp4")}
+                  for n in range(2)]
+        pool_i = [{"kind": "image", "video": "",
+                   "asset": MediaAsset(kind="image", source="wikipedia", url="https://w/ann.jpg")}]
+        seq = {"beats": [0, 1, 2], "subject": "Ann Dunham", "subjectType": "person",
+               "setting": "Ann Dunham in Indonesia", "searches": [
+                   {"q": "Jakarta 1967 footage", "kind": "footage"},
+                   {"q": "Ann Dunham photo", "kind": "image"}]}
+        used = set()
+        with mock.patch.object(media, "_footage_pool", return_value=pool_f), \
+                mock.patch.object(media, "_image_pool", return_value=pool_i):
+            out = media.source_sequence(seq, jobs, "/w", used, threading.Lock(),
+                                        require_cc=False, allow_youtube=True)
+        self.assertEqual(out[0].url, "https://w/ann.jpg")
+        self.assertEqual({out[1].url, out[2].url}, {"https://y/v1&t=0", "https://y/v1&t=1"})
+        self.assertEqual(out[1].intent, "intent 1")
+        self.assertEqual(len(used), 3)
+
+    def test_lines_a_pool_cannot_fill_fall_back_to_per_line_search(self):
+        jobs = [{"index": i, "query": f"q{i}", "seconds": 3.0, "subject": "Ann Dunham"}
+                for i in range(3)]
+        per_line = []
+
+        def fake(query, seconds, work_dir, **kw):
+            per_line.append(query)
+            return MediaAsset(kind="image", source="wikimedia", url=f"https://x/{query}")
+
+        pooled = {0: MediaAsset(kind="video", source="youtube", url="https://y/a&t=0",
+                                local_path="/w/seq_a.mp4")}
+        with mock.patch.object(media, "source_sequence", return_value=pooled), \
+                mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")):
+            media.reset_cache()
+            out = media.source_many(jobs, "/tmp", workers=1,
+                                    sequences=[{"beats": [0, 1, 2], "searches": []}])
+        self.assertEqual(out[0].url, "https://y/a&t=0")
+        self.assertEqual(sorted(per_line), ["q1", "q2"])        # line 0 never searched alone
+        self.assertTrue(all(out))
+
+
 class VisionJudgeEventsAndQuality(unittest.TestCase):
     """The judge checks a news beat against its own event, and rates the footage."""
 

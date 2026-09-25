@@ -61,6 +61,7 @@ _PHASE_BY_PREFIX = (
     ("Reading the whole story", "plan"), ("Planning", "plan"),
     ("Sourcing", "source"), ("Sourced", "source"), ("Re-sourcing", "source"),
     ("Replacing", "source"), ("Rechecking", "source"),
+    ("Building shot pools", "source"),
     ("Rendering", "render"),
     ("Uploading", "upload"),
     ("Saving", "save"),
@@ -380,10 +381,24 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
 
     last_pct = [22]
 
+    # Plan the video in sequences: runs of lines about one subject and setting,
+    # each gathering one pool of shots that the editor call lays out.
+    sequences = []
+    if config.SEQUENCE_SOURCING:
+        report("Planning sequences", 22)
+        sequences = director.plan_sequences(segments, shots, brief)
+
+    def on_pool(done, n):
+        # 22% -> 50% while the sequence pools are built.
+        pct = 22 + int(28 * done / max(n, 1))
+        if pct > last_pct[0] or done == n:
+            last_pct[0] = max(last_pct[0], pct)
+            report(f"Building shot pools {done}/{n} sequences", last_pct[0], done=done, total=n)
+
     def on_done(done, n):
-        # 22% -> 65% across sourcing, the longest phase.
+        # Up to 65% across sourcing, the longest phase; never backwards after the pools.
         pct = 22 + int(43 * done / max(n, 1))
-        if pct != last_pct[0]:
+        if pct > last_pct[0]:
             last_pct[0] = pct
             report(f"Sourced {done}/{n} scenes", pct, done=done, total=n)
 
@@ -399,6 +414,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
         rescue=lambda items: director.rescue_queries(items, story=brief),
         on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
+        sequences=sequences,
+        assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
+        on_pool=on_pool,
     )
 
     doc = timeline.build(
