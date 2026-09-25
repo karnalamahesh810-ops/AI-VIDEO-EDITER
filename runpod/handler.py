@@ -738,6 +738,30 @@ def _sanitize_stills(doc: dict, work: str) -> int:
     return dropped
 
 
+# Contact sheets of the last render, for {"return_frames": true}. Kept at
+# module level so the job's error path can still return them when the upload
+# after the render fails.
+LAST_FRAMES: list = []
+
+
+def _contact_sheets(video: str, work: str, every: float = 3.0, per_sheet: int = 16) -> list:
+    """Base64 JPEG sheets (4x4 tiles, one frame every `every` seconds)."""
+    import base64
+    import glob
+    out = os.path.join(work, "sheet_%02d.jpg")
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", video,
+                        "-vf", f"fps=1/{every},scale=384:216,tile=4x4:padding=4",
+                        "-q:v", "5", out], capture_output=True, timeout=180)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+    sheets = []
+    for f in sorted(glob.glob(os.path.join(work, "sheet_*.jpg")))[:12]:
+        with open(f, "rb") as fh:
+            sheets.append(base64.b64encode(fh.read()).decode())
+    return sheets
+
+
 def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
     # The document may have come back from a browser, so validate before
     # spending GPU minutes on it.
@@ -793,6 +817,10 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
     # Preferred: the caller pre-signed a destination for us, so this worker
     # needs no Supabase credentials at all. The app's video-render edge
     # function already does this — it holds the service key, we do not.
+    LAST_FRAMES.clear()
+    if inp.get("return_frames"):
+        LAST_FRAMES.extend(_contact_sheets(out_path, work))
+
     upload_url = inp.get("upload_url")
     if upload_url:
         size = storage.upload_to_signed_url(out_path, upload_url)
@@ -973,6 +1001,7 @@ def handler(job):
             if project_id:
                 storage.patch_project(project_id, _done_fields(out))
             return {"ok": True, "action": "build", "timeline": doc, **out,
+                    **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") else {}),
                     "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
@@ -985,7 +1014,8 @@ def handler(job):
             storage.patch_project(project_id, {
                 "status": "failed", "error_message": msg, "current_step": "Failed",
             })
-        return {"ok": False, "error": msg, "elapsed": round(time.time() - started, 1)}
+        return {"ok": False, "error": msg, "elapsed": round(time.time() - started, 1),
+                **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {})}
     finally:
         # Serverless workers are reused; a 17-minute render leaves GBs behind.
         if not inp.get("keep_workdir"):
