@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, Sequence } from "remotion";
+import { AbsoluteFill, Audio, Sequence, useVideoConfig } from "remotion";
 import { SceneClip } from "./components/SceneClip";
 import { Captions } from "./components/Captions";
 import { TitleOverlay } from "./components/TitleOverlay";
@@ -74,6 +74,11 @@ export const Main: React.FC<TimelineProps> = (props) => {
   // Track toggles from the editor. Absent means on, so older timelines
   // render exactly as before.
   const showOverlays = props.overlaysEnabled !== false;
+  // In the editor's Player, mount each clip this long before it appears so its
+  // video has loaded by its first frame; without it every cut stalled on a
+  // fresh download. Rendering ignores premounting.
+  const { fps } = useVideoConfig();
+  const premount = Math.round(fps * 2);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -83,6 +88,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           key={scene.id}
           from={scene.startFrame}
           durationInFrames={scene.durationInFrames}
+          premountFor={premount}
         >
           <SceneClip scene={scene} />
         </Sequence>
@@ -106,6 +112,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           key={`ov-${i}`}
           from={ov.startFrame}
           durationInFrames={ov.durationInFrames}
+          premountFor={premount}
         >
           {renderOverlay(ov, captions.accent)}
         </Sequence>

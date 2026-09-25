@@ -11,7 +11,7 @@ def _shot(subject, stype="person", vtype="image", query="q"):
             "subject": subject, "subjectType": stype}
 
 
-STORY = {"kind": "history", "when": "1971", "where": ["Honolulu"],
+STORY = {"kind": "history", "year": 1971, "places": ["Honolulu"],
          "sections": [{"from": 0, "to": 9, "summary": "",
                        "footage": ["Honolulu 1960s archival footage",
                                    "Honolulu airport 1970s film"]}]}
@@ -75,5 +75,21 @@ class StillQuality(unittest.TestCase):
             self.assertEqual(media.clip_quality(path), (False, "near-black"))
 
 
-if __name__ == "__main__":
-    unittest.main()
+
+
+class BriefCast(unittest.TestCase):
+    def test_cast_names_join_people_and_sections_are_clamped(self):
+        fallback = {"kind": "other", "summary": "", "event": "", "year": None,
+                    "recent": False, "places": [], "people": [], "hookBeats": [0],
+                    "cast": [], "sections": []}
+        raw = {"kind": "biography",
+               "cast": [{"name": "Barack Obama Sr.", "aliases": ["his father", "the man"]},
+                        {"name": "", "aliases": ["a stranger"]}, "junk"],
+               "sections": [{"from": 0, "to": 99, "footage": ["Honolulu 1960s archival footage"]},
+                            {"from": "x", "to": 3, "footage": ["bad"]},
+                            {"from": 2, "to": 3, "footage": []}]}
+        out = director._validate_brief(raw, fallback, 10)
+        self.assertIn("Barack Obama Sr.", out["people"])
+        self.assertEqual(out["cast"][0]["aliases"], ["his father", "the man"])
+        self.assertEqual(out["sections"], [{"from": 0, "to": 9,
+                                            "footage": ["Honolulu 1960s archival footage"]}])

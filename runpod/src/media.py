@@ -21,9 +21,10 @@ show where each clip came from and you can see your exposure per video.
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextvars
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace as _dc_replace
 from typing import List, Optional, Dict, Any
 import base64
+import datetime
 import json
 import os
 import re
@@ -141,6 +142,9 @@ class MediaAsset:
     intent: str = ""
     content_description: str = ""
     relevance_score: Optional[float] = None
+    # The same judge's 0-1 rating of the footage itself (sharp, stable, lit,
+    # framed), whatever it shows. Used to pick between clips that both match.
+    quality: Optional[float] = None
     vision_model: str = ""
 
     @property
@@ -188,6 +192,8 @@ class MediaAsset:
         }
         if self.relevance_score is not None:
             media["relevanceScore"] = round(self.relevance_score, 3)
+        if self.quality is not None:
+            media["qualityScore"] = round(self.quality, 3)
         if self.content_description:
             media["contentDescription"] = self.content_description
         return media
@@ -197,7 +203,14 @@ class MediaAsset:
         if verdict:
             self.content_description = verdict.get("description", "")
             self.relevance_score = verdict.get("score")
+            self.quality = verdict.get("quality")
             self.vision_model = verdict.get("model", "")
+        elif intent and vision.enabled() and self.source != "generated":
+            # Vision is on but no model could judge this one: it is kept (an API
+            # outage must not empty the timeline) but must not pass silently.
+            self.review_required = True
+            self.review_reason = self.review_reason or \
+                "Not checked by the vision AI (model unavailable) - check it matches"
         return self
 
 
@@ -246,7 +259,8 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
                         rows.append((it.get("image"), it.get("width") or 0,
                                      it.get("height") or 0, it.get("title") or "",
                                      it.get("url") or ""))
-            except Exception:  # noqa: BLE001 — optional dependency / network
+            except Exception as e:  # noqa: BLE001 — optional dependency / network
+                _source_error("web_images_ddg", e)
                 rows = []
             if rows:
                 break
@@ -277,6 +291,70 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
     return out
 
 
+# File names on an article that are page furniture, not photographs.
+_NOT_A_PHOTO = ("logo", "icon", "flag of", "flag_of", "seal of", "seal_of", "signature",
+                "coat of arms", "coat_of_arms", "wikiquote", "wikisource", "commons-",
+                "symbol", "question_book", "edit-clear", "padlock", "ambox")
+
+
+def search_wikipedia_article_images(title: str, limit: int = 20) -> List[MediaAsset]:
+    """
+    The photographs on the subject's own English Wikipedia article.
+
+    For a named person this is the most reliable real photo source there is:
+    a keyword search such as "Anne Dunham young archival photograph" matches
+    nothing on Commons, while the "Ann Dunham" article carries several real
+    photos of her. One request lists every file the article uses, with its
+    image info (redirects resolve spelling variants). Logos, flags, icons,
+    signatures, SVGs and thumbnails are dropped.
+    """
+    title = (title or "").strip()
+    if not title:
+        return []
+    try:
+        r = requests.get(
+            "https://en.wikipedia.org/w/api.php",
+            headers={"User-Agent": config.USER_AGENT},
+            params={"action": "query", "format": "json", "redirects": 1,
+                    "titles": title, "generator": "images", "gimlimit": 50,
+                    "prop": "imageinfo", "iiprop": "url|size|mime|extmetadata",
+                    "iiurlwidth": 1280},
+            timeout=25,
+        )
+        r.raise_for_status()
+        pages = (r.json().get("query") or {}).get("pages") or {}
+    except Exception as e:  # noqa: BLE001
+        _source_error("wikipedia", e)
+        return []
+
+    out: List[MediaAsset] = []
+    for page in pages.values():
+        name = str(page.get("title") or "").lower()
+        if any(k in name for k in _NOT_A_PHOTO):
+            continue
+        info = (page.get("imageinfo") or [{}])[0]
+        if info.get("mime") not in ("image/jpeg", "image/png", "image/webp"):
+            continue
+        if (info.get("width") or 0) < 400 or (info.get("height") or 0) < 300:
+            continue
+        url = info.get("thumburl") or info.get("url")
+        if not url:
+            continue
+        meta = info.get("extmetadata") or {}
+        artist = re.sub(r"<[^>]+>", "", meta.get("Artist", {}).get("value", "") or "")
+        out.append(MediaAsset(
+            kind="image", source="wikipedia", url=url,
+            width=info.get("thumbwidth") or info.get("width") or 0,
+            height=info.get("thumbheight") or info.get("height") or 0,
+            attribution=artist.strip()[:200],
+            license=meta.get("LicenseShortName", {}).get("value", "") or "see Wikipedia",
+            query=title,
+        ))
+        if len(out) >= limit:
+            break
+    return out
+
+
 def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
     """
     Wikimedia Commons images — the source that actually has the *specific*
@@ -297,7 +375,8 @@ def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
         )
         r.raise_for_status()
         pages = (r.json().get("query") or {}).get("pages") or {}
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("wikimedia", e)
         return []
 
     out: List[MediaAsset] = []
@@ -330,7 +409,8 @@ def search_openverse(query: str, limit: int = 5) -> List[MediaAsset]:
         )
         r.raise_for_status()
         results = r.json().get("results", [])
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("openverse", e)
         return []
     return [
         MediaAsset(
@@ -366,7 +446,8 @@ def search_wikimedia_video(query: str, limit: int = 5) -> List[MediaAsset]:
         )
         r.raise_for_status()
         pages = (r.json().get("query") or {}).get("pages") or {}
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("wikimedia_video", e)
         return []
 
     out: List[MediaAsset] = []
@@ -413,7 +494,8 @@ def search_nasa(query: str, want_video: bool = False,
         )
         r.raise_for_status()
         items = ((r.json().get("collection") or {}).get("items") or [])[:limit]
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("nasa", e)
         return []
 
     out: List[MediaAsset] = []
@@ -483,7 +565,8 @@ def _archive_org_search(q: str, limit: int) -> List[dict]:
         )
         r.raise_for_status()
         return (r.json().get("response") or {}).get("docs") or []
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("archive_org", e)
         return []
 
 
@@ -608,6 +691,8 @@ def _kie_generate(full_prompt: str, timeout: int) -> Optional[str]:
         r.raise_for_status()
         body = r.json()
         if body.get("code") != 200:
+            if vision.is_credit_error(body.get("code"), body.get("msg")):
+                vision.note_out_of_credits()
             print(f"[media] kie createTask refused: {body.get('code')} "
                   f"{body.get('msg')}", flush=True)
             return None
@@ -655,6 +740,8 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
     which before publishing.
     """
     if not config.IMAGE_API_KEY:
+        return None
+    if "kie.ai" in config.IMAGE_API_BASE and vision.out_of_credits():
         return None
     os.makedirs(out_dir, exist_ok=True)
     full_prompt = f"{prompt}. {config.IMAGE_STYLE_SUFFIX}"[:3800]
@@ -852,6 +939,31 @@ def _longest_run(rows: list) -> int:
 # thread, start to finish, so it cannot leak into another scene.
 _SUBJECT_TYPE: contextvars.ContextVar = contextvars.ContextVar("subject_type", default="")
 
+# Set while sourcing a beat of a news/weather/disaster story (from the
+# director's story brief): "event", or "year" when the event is this year's.
+# News-outlet uploads - the main source of real event footage - are then no
+# longer rejected on the word "news", and for "year" searches try this year's
+# uploads first so a 2026 flood does not get 2019's.
+_EVENT_WINDOW: contextvars.ContextVar = contextvars.ContextVar("event_window", default="")
+
+# YouTube's own "Upload date: This year" filter, for the results page.
+_YT_THIS_YEAR = "EgIIBQ%3D%3D"
+
+
+def _talking_head(title: str) -> bool:
+    """
+    True when the title disqualifies a candidate.
+
+    For a recent event story the bare word "news" does not: "Drone video shows
+    flooding in Davenport | WQAD News 8" is exactly the footage wanted. Anchors,
+    press conferences, interviews and the rest still disqualify, and the vision
+    judge still rejects an anchor desk or burned-in text on the actual frames.
+    """
+    hits = [m.group(1).lower() for m in _TALKING_HEAD.finditer(title or "")]
+    if _EVENT_WINDOW.get():
+        hits = [h for h in hits if h != "news"]
+    return bool(hits)
+
 
 def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
@@ -863,7 +975,7 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
     if not intent or not vision.enabled():
         return True, None
-    verdict = vision.judge(path, intent, context)
+    verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()))
     keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person")
     if verdict is not None:
         mark = "keep" if keep else "REJECT"
@@ -872,6 +984,8 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
             flags.append("text/watermark")
         if verdict["is_talking_head"]:
             flags.append("talking head")
+        if verdict.get("quality") is not None:
+            flags.append(f"quality {verdict['quality']:.2f}")
         print(f"[vision] {mark} {verdict['score']:.2f} {label[:50]!r}"
               f"{' (' + ', '.join(flags) + ')' if flags else ''}"
               f" — {verdict['description'][:90]}", flush=True)
@@ -891,7 +1005,7 @@ def _score_candidate(title: str, duration: float, aspect: float,
     score = 0.0
     if _B_ROLL.search(title):
         score += 3.0
-    if _TALKING_HEAD.search(title):
+    if _talking_head(title):
         score -= 4.0
     # Too short to cut from, or so long it is a stream/compilation.
     if duration and duration < max(20.0, seconds + 8):
@@ -981,9 +1095,17 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
     return out
 
 
-def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "") -> List[dict]:
-    """_yt_candidates, reused across every beat that shares a subject."""
-    key = f"ytc::{require_cc}::{(subject or target).strip().lower()}"
+def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
+                          variant: str = "") -> List[dict]:
+    """
+    _yt_candidates, reused across every beat that shares a subject.
+
+    `variant` names which of a beat's searches this is (footage-biased,
+    plain, this-year-only). Keyed by subject alone, the second search of a
+    beat returned the first one's cached list, so the plain-query fallback
+    never actually ran once a subject was known.
+    """
+    key = f"ytc::{require_cc}::{variant}::{(subject or target).strip().lower()}"
     if subject:
         with _CACHE_LOCK:
             if key in _YT_CANDIDATES_CACHE:
@@ -1183,13 +1305,21 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         return _asset_for(path, query_or_url, seconds, require_cc)
 
     # Bias the search itself toward footage; fall back to the plain query.
+    # (search, variant, this-year-only)
     searches = []
-    if b_roll_intent:
-        searches.append(f"{query_or_url} {B_ROLL_INTENT}")
-    searches.append(query_or_url)
+    if _EVENT_WINDOW.get() == "year" and not require_cc:
+        # A recent event: this year's uploads first, so the flood on screen is
+        # the one being narrated. News titles rarely say "drone aerial", so
+        # the bias word is just "footage". The unfiltered plain query stays
+        # last for an event YouTube has little of yet.
+        searches += [(f"{query_or_url} footage", "recent-footage", True),
+                     (query_or_url, "recent", True)]
+    elif b_roll_intent:
+        searches.append((f"{query_or_url} {B_ROLL_INTENT}", "broll", False))
+    searches.append((query_or_url, "plain", False))
 
     judged = 0
-    for search in searches:
+    for search, variant, this_year in searches:
         if judged >= config.VISION_MAX_CANDIDATES:
             break
         if require_cc:
@@ -1198,10 +1328,13 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # own results page with its CC filter populates the field.
             target = ("https://www.youtube.com/results?search_query="
                       + urllib.parse.quote_plus(search) + "&sp=EgIwAQ%3D%3D")
+        elif this_year:
+            target = ("https://www.youtube.com/results?search_query="
+                      + urllib.parse.quote_plus(search) + "&sp=" + _YT_THIS_YEAR)
         else:
             target = f"ytsearch12:{search}"
 
-        candidates = _yt_candidates_cached(target, require_cc, subject)
+        candidates = _yt_candidates_cached(target, require_cc, subject, variant)
         if not candidates:
             continue
 
@@ -1220,7 +1353,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # documentary. No clip is better than the wrong clip - the caller
             # falls through to the next query, and the timeline holds the
             # previous shot.
-            if _TALKING_HEAD.search(candidate["title"] or ""):
+            if _talking_head(candidate["title"]):
                 continue
             if candidate["aspect"] and candidate["aspect"] < 1.2:
                 continue                       # vertical, unusable in 16:9
@@ -1265,24 +1398,28 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     return None
 
 
-def search_dailymotion(query: str, limit: int = 12) -> List[dict]:
+def search_dailymotion(query: str, limit: int = 12, created_after: int = 0) -> List[dict]:
     """
     Dailymotion's public API: no key, ~1.5 s, and the dimensions come back
     with the hit, so vertical uploads are filtered before any download.
     Its catalogue is heavy on news-outlet clips - exactly the real-event
     footage a flood or wildfire script needs when YouTube's top results miss.
     """
+    params = {"search": query, "limit": limit, "sort": "relevance",
+              "fields": "id,title,duration,width,height"}
+    if created_after:
+        params["created_after"] = created_after
     try:
         r = requests.get(
             "https://api.dailymotion.com/videos",
             headers={"User-Agent": config.USER_AGENT},
-            params={"search": query, "limit": limit, "sort": "relevance",
-                    "fields": "id,title,duration,width,height"},
+            params=params,
             timeout=20,
         )
         r.raise_for_status()
         items = r.json().get("list") or []
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("dailymotion", e)
         return []
     out = []
     for it in items:
@@ -1291,6 +1428,13 @@ def search_dailymotion(query: str, limit: int = 12) -> List[dict]:
                     "duration": float(it.get("duration") or 0),
                     "aspect": (w / h) if h else 0.0})
     return [c for c in out if c["id"]]
+
+
+def search_dailymotion_this_year(query: str) -> List[dict]:
+    """Uploads since 1 January: a named function so _cached_search keys it apart."""
+    start = datetime.datetime(datetime.date.today().year, 1, 1,
+                              tzinfo=datetime.timezone.utc)
+    return search_dailymotion(query, created_after=int(start.timestamp()))
 
 
 def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
@@ -1338,13 +1482,21 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
     is no storyboard to scout, so the grab point is the fixed 35% one.
     """
     os.makedirs(out_dir, exist_ok=True)
-    candidates = _cached_search(search_dailymotion, query, cache_key=subject)
-    if not candidates:
+
+    def rank(cands):
+        return sorted(cands, key=lambda c: _score_candidate(c["title"], c["duration"],
+                                                            c["aspect"], seconds),
+                      reverse=True)
+
+    ranked = rank(_cached_search(search_dailymotion, query, cache_key=subject))
+    if _EVENT_WINDOW.get() == "year":
+        # This year's uploads first, whatever their title score; the rest after.
+        recent = rank(_cached_search(search_dailymotion_this_year, query,
+                                     cache_key=subject))
+        ids = {c["id"] for c in recent}
+        ranked = recent + [c for c in ranked if c["id"] not in ids]
+    if not ranked:
         return None
-    ranked = sorted(candidates,
-                    key=lambda c: _score_candidate(c["title"], c["duration"],
-                                                   c["aspect"], seconds),
-                    reverse=True)
     grab = max(2.0, seconds + 1.5)
     judged = 0
     for c in ranked[skip:] + ranked[:skip]:
@@ -1353,7 +1505,7 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
         page = f"https://www.dailymotion.com/video/{c['id']}"
         if used and f"dailymotion:{page}" in used:
             continue
-        if _TALKING_HEAD.search(c["title"]) or (c["aspect"] and c["aspect"] < 1.2):
+        if _talking_head(c["title"]) or (c["aspect"] and c["aspect"] < 1.2):
             continue
         if c["duration"] and c["duration"] < grab + 4:
             continue
@@ -1502,6 +1654,30 @@ _YT_INFO_CACHE: Dict[str, tuple] = {}
 # than trusted to callers. Reset per job alongside the cache.
 _GENERATED = [0]
 
+# Per-source search outcomes for the job result. The search functions return
+# [] on any failure, so a source that was blocked, rate-limited or down looked
+# exactly like one with no matches: a 362-scene job lost 300 photo scenes and
+# nothing said which source failed or why.
+_SOURCE_STATS: Dict[str, Dict[str, Any]] = {}
+
+
+def _source_stat(name: str) -> Dict[str, Any]:
+    return _SOURCE_STATS.setdefault(name, {"searches": 0, "withResults": 0,
+                                           "errors": 0, "recentErrors": []})
+
+
+def _source_error(name: str, exc: Exception) -> None:
+    """Record why a source failed; never raises."""
+    with _CACHE_LOCK:
+        st = _source_stat(name)
+        st["errors"] += 1
+        st["recentErrors"] = (st["recentErrors"] + [f"{type(exc).__name__}: {str(exc)[:140]}"])[-4:]
+
+
+def source_stats() -> Dict[str, Any]:
+    with _CACHE_LOCK:
+        return {k: dict(v, recentErrors=list(v["recentErrors"])) for k, v in _SOURCE_STATS.items()}
+
 
 def reset_cache():
     """Call between jobs — serverless worker processes are reused across renders."""
@@ -1509,6 +1685,7 @@ def reset_cache():
         _SEARCH_CACHE.clear()
         _YT_INFO_CACHE.clear()
         _YT_CANDIDATES_CACHE.clear()
+        _SOURCE_STATS.clear()
         _GENERATED[0] = 0
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
@@ -1549,7 +1726,12 @@ def _cached_search(fn, query: str, cache_key: str = "") -> List[MediaAsset]:
         found = fn(query)
     except Exception as e:  # noqa: BLE001
         print(f"[media] {fn.__name__} '{query}' failed: {e}", flush=True)
+        _source_error(fn.__name__, e)
         found = []
+    with _CACHE_LOCK:
+        st = _source_stat(fn.__name__)
+        st["searches"] += 1
+        st["withResults"] += 1 if found else 0
     with _CACHE_LOCK:
         _SEARCH_CACHE[key] = found
     return found
@@ -1563,7 +1745,8 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
     try:
         candidate.local_path = download(candidate.url, dest)
         return candidate
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error(f"download_{candidate.source}", e)
         return None
 
 
@@ -1595,7 +1778,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        allow_youtube: bool = None, allow_stock: bool = None,
                        require_cc: bool = None, intent: str = "",
                        context: str = "", subject_type: str = "",
-                       subject: str = "") -> Optional[MediaAsset]:
+                       subject: str = "", event_window: str = "") -> Optional[MediaAsset]:
     """
     Source one scene, relaxing the query until something is found.
 
@@ -1608,7 +1791,10 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     that person speaking passes the vision gate, and no image is ever
     GENERATED - an invented photo of a real person is a fabrication.
     """
+    if config.REQUIRE_AI and vision.ai_exhausted():
+        return None   # the job is stopping; do not spend on searches it will discard
     token = _SUBJECT_TYPE.set(subject_type or "")
+    window_token = _EVENT_WINDOW.set(event_window or "")
     try:
         for attempt in [query] + list(fallbacks or []):
             got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
@@ -1621,6 +1807,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                 return got
         return None
     finally:
+        _EVENT_WINDOW.reset(window_token)
         _SUBJECT_TYPE.reset(token)
 
 
@@ -1697,6 +1884,16 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
             if made:
                 return made
 
+    # The subject's own Wikipedia article first: for a named person or place
+    # it holds real photos of exactly that subject, where keyword searches
+    # built from the line ("Anne Dunham teenage archival photo") match nothing.
+    if subject and _SUBJECT_TYPE.get() in ("person", "place", "event"):
+        found = _cached_search(search_wikipedia_article_images, subject)
+        ordered = found[nth:] + found[:nth] if found else []
+        asset = _pick_unused(ordered, used, subject, work_dir, intent, context)
+        if asset:
+            return asset
+
     # Real photographs of the named subject, before any generated impression.
     # A general web image search finds the specific press photo; the archives
     # follow with cleaner licences but narrower coverage.
@@ -1713,6 +1910,26 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         for fn in (search_pexels, search_pixabay):
             found = _cached_search(lambda q: fn(q, kind="image"), query)
             asset = _pick_unused(found[nth:] + found[:nth], used, query, work_dir, intent, context)
+            if asset:
+                return asset
+
+    # A still nothing was found for tries moving footage of the same thing.
+    # Footage already fell back to stills; stills never fell back to footage,
+    # and on a 362-scene biography the planner made 300 lines photos - photo
+    # search came back empty for nearly all of them while footage filled 94%
+    # of its scenes, so 86% of the video rendered black. For a person the
+    # vision gate already accepts footage of that person speaking.
+    if visual_type == "image":
+        if allow_youtube:
+            asset = youtube_clip(query, work_dir, seconds=seconds, require_cc=require_cc,
+                                 skip=nth, start_at=30.0 + 25.0 * nth, used=used,
+                                 intent=intent, context=context, subject=subject)
+            if asset:
+                return asset
+        if config.ALLOW_DAILYMOTION and not require_cc:
+            asset = dailymotion_clip(query, work_dir, seconds=seconds, skip=nth,
+                                     used=used, intent=intent, context=context,
+                                     subject=subject)
             if asset:
                 return asset
 
@@ -1800,7 +2017,8 @@ LAST_STATS: Dict[str, Any] = {}
 
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
-                **kwargs) -> List[Optional[MediaAsset]]:
+                on_recheck=None, sequences: Optional[List[dict]] = None,
+                assign=None, on_pool=None, **kwargs) -> List[Optional[MediaAsset]]:
     """
     Source visuals for many scenes, with no two scenes sharing a visual.
 
@@ -1851,26 +2069,94 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # at once); pass 2 below catches those.
     live_used: set = set()
 
+    # Sequence pools first: each run of lines about one subject and setting
+    # gathers its shots together and is laid out by the editor call. Lines a
+    # pool cannot fill fall through to the one-by-one search below, then the
+    # recheck and the story fill.
+    if sequences and config.SEQUENCE_SOURCING:
+        by_index = {j["index"]: j for j in ordered}
+        pooled = [0]
+        if on_pool:
+            on_pool(0, len(sequences))
+
+        def run_sequence(n, seq):
+            try:
+                return source_sequence(
+                    seq, by_index, work_dir, live_used, lock, assign=assign,
+                    require_cc=kwargs.get("require_cc"),
+                    allow_youtube=kwargs.get("allow_youtube"), tag=str(n))
+            except Exception as e:  # noqa: BLE001 - its lines fall back to per-line search
+                print(f"[media] sequence {n + 1} failed: {e}", flush=True)
+                return {}
+
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = [pool.submit(run_sequence, n, seq) for n, seq in enumerate(sequences)]
+            for fut in as_completed(futures):
+                for idx, asset in (fut.result() or {}).items():
+                    if 0 <= idx < len(results) and results[idx] is None:
+                        results[idx] = asset
+                with lock:
+                    pooled[0] += 1
+                    if on_pool:
+                        on_pool(pooled[0], len(sequences))
+        filled = sum(1 for r in results if r is not None)
+        print(f"[media] sequence pools filled {filled}/{len(jobs)} scene(s) from "
+              f"{len(sequences)} sequence(s)", flush=True)
+    # Only the lines still empty go to the one-by-one search; every line,
+    # pooled or not, still goes through the duplicate/quality pass below.
+    pass1 = [(j, nth) for j, nth in plan if results[j["index"]] is None]
+    done = len(plan) - len(pass1)
+
+    def attempt(job, nth):
+        return source_for_segment(
+            job["query"], float(job.get("seconds") or 0), work_dir,
+            visual_type=job.get("visual_type", "footage"), nth=nth,
+            used=live_used,
+            fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
+            intent=job.get("intent", ""), context=job.get("context", ""),
+            subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
+            event_window=job.get("event_window", ""),
+            **kwargs)
+
+    def stronger_hook(job, nth, got):
+        # The opening beats decide whether a viewer stays, so they do not take
+        # the first clip that merely passes: one more candidate is judged and
+        # the one with more appeal (relevance first, footage quality second)
+        # opens the video.
+        try:
+            alt = attempt(job, nth + 1)
+        except Exception:  # noqa: BLE001
+            return got
+        if alt is None or alt.relevance_score is None:
+            return got
+        before = vision.appeal(got.relevance_score, got.quality)
+        after = vision.appeal(alt.relevance_score, alt.quality)
+        if after <= before:
+            return got
+        with lock:
+            if alt.identity in live_used:
+                return got
+            live_used.discard(got.identity)
+            live_used.add(alt.identity)
+        print(f"[media] scene {job['index'] + 1}: stronger hook shot "
+              f"{before:.2f} -> {after:.2f}", flush=True)
+        return alt
+
     def fetch(job, nth):
         try:
-            got = source_for_segment(
-                job["query"], float(job.get("seconds") or 0), work_dir,
-                visual_type=job.get("visual_type", "footage"), nth=nth,
-                used=live_used,
-                fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
-                intent=job.get("intent", ""), context=job.get("context", ""),
-                subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
-                **kwargs)
+            got = attempt(job, nth)
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{job['query']}' failed: {e}", flush=True)
             return None
         if got:
             with lock:
                 live_used.add(got.identity)
+            if job.get("hook") and got.relevance_score is not None:
+                got = stronger_hook(job, nth, got)
         return got
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in plan}
+        futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
         for fut in as_completed(futures):
             idx = futures[fut]
             try:
@@ -1935,6 +2221,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
                     intent=job.get("intent", ""), context=job.get("context", ""),
                     subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
+                    event_window=job.get("event_window", ""),
                     **kwargs)
             except Exception:  # noqa: BLE001
                 candidate = None
@@ -1993,16 +2280,37 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                       pass1_empty=empty, pass1_repeats=duplicates,
                       pass1_unusable=rejected, pass2_replaced=replaced[0])
 
-    # AI rescue: for scenes still empty, one model call proposes DIFFERENT
-    # things to show (a related place, object, document or era scene), and
-    # each is sourced like a normal scene. The planner's fallbacks only
-    # broaden the same idea, which cannot help a subject with no footage at
-    # all - the medieval-history test left 9 of 17 scenes empty that way.
-    empties = [job for job, _ in plan if results[job["index"]] is None]
+    # Recheck with AI: every scene still without a shot of its own - empty, or
+    # holding only a copy of another scene's clip, which on screen reads as a
+    # missing shot just the same - goes to one model call that proposes
+    # DIFFERENT things to show, knowing the lines around it and what the
+    # neighbouring scenes already show. Each idea is sourced like a normal
+    # scene. The planner's fallbacks only broaden the same idea, which cannot
+    # help a subject with no footage at all - the medieval-history test left 9
+    # of 17 scenes empty that way.
+    def is_repeat(asset):
+        return bool(asset and asset.review_reason.startswith("Repeat of an earlier shot"))
+
+    by_index = {job["index"]: job for job, _ in plan}
+
+    def recheck_item(job):
+        i = job["index"]
+        near = [by_index.get(i - 1), by_index.get(i + 1)]
+        shows = [results[n["index"]].content_description for n in near
+                 if n and results[n["index"]] is not None
+                 and results[n["index"]].content_description]
+        return {"index": i, "text": job.get("context", ""), "query": job["query"],
+                "intent": job.get("intent", ""),
+                "before": near[0].get("context", "") if near[0] else "",
+                "after": near[1].get("context", "") if near[1] else "",
+                "shows": shows, "repeat": is_repeat(results[i])}
+
+    empties = [job for job, _ in plan
+               if results[job["index"]] is None or is_repeat(results[job["index"]])]
     if empties and rescue:
-        ideas = rescue([{"index": j["index"], "text": j.get("context", ""),
-                         "query": j["query"], "intent": j.get("intent", "")}
-                        for j in empties]) or {}
+        if on_recheck:
+            on_recheck(len(empties))
+        ideas = rescue([recheck_item(j) for j in empties]) or {}
         rescue_deadline = time.time() + config.RESCUE_BUDGET_SECONDS
 
         def rescue_one(job):
@@ -2015,7 +2323,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     visual_type=job.get("visual_type", "footage"), used=used,
                     fallbacks=alts[1:], prompt=job.get("prompt", ""),
                     intent=job.get("intent", ""), context=job.get("context", ""),
-                    subject_type=job.get("subject_type", ""), **kwargs)
+                    subject_type=job.get("subject_type", ""),
+                    event_window=job.get("event_window", ""), **kwargs)
             except Exception:  # noqa: BLE001
                 return None
             if not got:
@@ -2026,13 +2335,14 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 used.add(got.identity)
             return got
 
+        filled_by_ai = 0
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             for job, got in zip(empties, pool.map(rescue_one, empties)):
                 if got:
                     results[job["index"]] = got
-        filled_by_ai = sum(1 for j in empties if results[j["index"]] is not None)
-        print(f"[media] AI rescue filled {filled_by_ai}/{len(empties)} empty scene(s)",
-              flush=True)
+                    filled_by_ai += 1
+        print(f"[media] AI recheck gave {filled_by_ai}/{len(empties)} missing or "
+              f"repeated scene(s) a shot of their own", flush=True)
         LAST_STATS.update(rescue_tried=len(empties), rescue_filled=filled_by_ai)
 
     # Last resort for whatever is still empty: one generated still each,
@@ -2058,10 +2368,331 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         print(f"[media] generated stills for {filled}/{len(empties)} empty scene(s)",
               flush=True)
         LAST_STATS.update(generated_tried=len(empties), generated_filled=filled)
+
+    reused = fill_from_story(ordered, results) if config.REUSE_SHOTS_TO_FILL else 0
+    if reused:
+        print(f"[media] reused a shot from elsewhere in the story for {reused} "
+              f"scene(s) nothing else could fill", flush=True)
     LAST_STATS.update(total_seconds=round(time.time() - t_start, 1),
+                      reused_to_fill=reused,
                       still_empty=sum(1 for r in results if r is None),
                       by_source=dict(sorted(
                           ((src, sum(1 for r in results if r and r.source == src))
                            for src in {r.source for r in results if r}),
                           key=lambda kv: -kv[1])))
     return results
+
+
+# Tokens that do not identify a person on their own.
+_NAME_SUFFIX = {"sr", "jr", "ii", "iii", "iv"}
+# Scenes on either side where a reused shot must not already appear.
+REUSE_MIN_GAP = 3
+
+
+def _name_tokens(subject: str) -> tuple:
+    """(surname, suffix, given-name tokens) with "Anne" and "Ann" folded together."""
+    words = [w.strip(".,'’\"()").lower() for w in (subject or "").split()]
+    words = [w for w in words if w]
+    suffix = words.pop() if words and words[-1] in _NAME_SUFFIX else ""
+    if not words:
+        return "", suffix, frozenset()
+    fold = lambda w: w[:-1] if len(w) > 3 and w.endswith("e") else w  # noqa: E731
+    return words[-1], suffix, frozenset(fold(w) for w in words[:-1])
+
+
+def same_subject(a: str, b: str) -> bool:
+    """
+    True when two subject labels name the same thing.
+
+    The planner writes one person several ways across a long script ("Anne
+    Dunham", "Ann Dunham", "Stanley Ann Dunham"); those must pool their shots.
+    "Madelyn Dunham" is a different person, and "Barack Obama Sr." is not
+    "Barack Obama": the surname alone is never enough.
+    """
+    if not a or not b:
+        return False
+    if a.strip().lower() == b.strip().lower():
+        return True
+    sa, xa, ga = _name_tokens(a)
+    sb, xb, gb = _name_tokens(b)
+    if not sa or sa != sb or xa != xb:
+        return False
+    if not ga or not gb:
+        return ga == gb
+    return bool(ga & gb)
+
+
+def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]) -> int:
+    """
+    Give every scene still empty a real shot from elsewhere in the same story.
+
+    The last step, after searching, the AI recheck and generation. A real
+    person may have five photos online and forty lines in a biography; with
+    each shot usable once, the other thirty-five scenes rendered black. First
+    choice is a shot of the same subject placed more than REUSE_MIN_GAP scenes
+    away, then a shot from a nearby scene - never a photo of a different
+    person, which would put the wrong face on screen - and last the same
+    subject's farthest shot, never on the scene right next to it. Every reuse
+    is flagged for review. Returns how many scenes were filled.
+    """
+    by_index = {j["index"]: j for j in jobs}
+    order = sorted(by_index)
+
+    def placed_near(identity: str, i: int) -> bool:
+        return any(results[k] is not None and results[k].identity == identity
+                   for k in range(i - REUSE_MIN_GAP, i + REUSE_MIN_GAP + 1)
+                   if k != i and 0 <= k < len(results))
+
+    filled = 0
+    for i in order:
+        if results[i] is not None:
+            continue
+        job = by_index[i]
+        subject = job.get("subject") or ""
+        person = job.get("subject_type") == "person"
+        # Nearest donors first; a donor is any scene that has media.
+        donors = sorted((k for k in order if k != i and results[k] is not None),
+                        key=lambda k: abs(k - i))
+        pick = None
+        for k in donors:                       # 1. the same subject
+            if same_subject(subject, by_index[k].get("subject") or "") \
+                    and not placed_near(results[k].identity, i):
+                pick = k
+                break
+        if pick is None:                       # 2. a nearby scene, never another person
+            for k in donors:
+                other = by_index[k]
+                if other.get("subject_type") == "person" and not same_subject(
+                        subject, other.get("subject") or ""):
+                    continue
+                if person and results[k].kind == "image":
+                    continue
+                if not placed_near(results[k].identity, i):
+                    pick = k
+                    break
+        if pick is None:                       # 3. the same subject, closer in, never adjacent
+            same = [k for k in donors if abs(k - i) >= 2
+                    and same_subject(subject, by_index[k].get("subject") or "")]
+            pick = same[-1] if same else None   # farthest of them
+        if pick is None:
+            continue
+        donor = results[pick]
+        results[i] = _dc_replace(
+            donor, review_required=True,
+            review_reason=(f"Reused shot of {by_index[pick].get('subject') or 'another scene'}"
+                           " - no other footage found for this line"))
+        filled += 1
+    return filled
+
+
+# --------------------------------------------------------------------------- #
+# Sequence pools - source a run of lines together, as an editor does
+# --------------------------------------------------------------------------- #
+
+# Shots cut from one downloaded window of a video, and the most videos and
+# photos a sequence gathers. One window replaces up to three separate
+# searches + scouts + downloads + vision checks, and consecutive shots from it
+# play as one continuous moment across consecutive lines.
+SEQ_SHOTS_PER_WINDOW = 3
+SEQ_MAX_VIDEOS = 4
+SEQ_MAX_IMAGES = 6
+SEQ_SHOT_PAD = 0.5
+
+
+def _cut(src: str, out: str, start: float, seconds: float) -> str:
+    """Re-encode [start, start+seconds) of src to its own file; "" on failure."""
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.2f}", "-i", src,
+                        "-t", f"{seconds:.2f}", "-an", "-c:v", "libx264", "-preset",
+                        "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart", out],
+                       capture_output=True, timeout=120)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+    return out if os.path.isfile(out) and os.path.getsize(out) > 0 else ""
+
+
+def split_window(path: str, key: str, lengths: List[float], out_dir: str) -> List[tuple]:
+    """(file, offset) for consecutive shots of the given lengths cut from one window."""
+    shots, t = [], 0.0
+    for n, secs in enumerate(lengths):
+        out = os.path.join(out_dir, f"seq_{key}_{n}.mp4")
+        got = _cut(path, out, t, secs)
+        if not got:
+            break
+        shots.append((got, t))
+        t += secs
+    return shots
+
+
+def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
+                  context: str, used: set, out_dir: str, require_cc: bool,
+                  tag: str) -> List[dict]:
+    """Shots for a sequence from one footage search: windows cut into several shots."""
+    per = max(1, min(SEQ_SHOTS_PER_WINDOW, need))
+    window = sum(lengths[:per]) + 1.0
+    if require_cc:
+        target = ("https://www.youtube.com/results?search_query="
+                  + urllib.parse.quote_plus(query) + "&sp=EgIwAQ%3D%3D")
+    else:
+        target = f"ytsearch12:{query}"
+    cands = _yt_candidates_cached(target, require_cc, "", variant=f"seq:{query}")
+    eligible = [c for c in sorted(cands, key=lambda c: _score_candidate(
+                    c["title"], c["duration"], c["aspect"], window), reverse=True)
+                if not _talking_head(c["title"])
+                and not (c["aspect"] and c["aspect"] < 1.2)
+                and not (c["duration"] and c["duration"] < window + 10)
+                and f"yt:{c['id']}" not in used]
+    shots: List[dict] = []
+    videos = 0
+    for cand, start, _moment in _plan_grabs(eligible, window, 30.0, intent, context):
+        if len(shots) >= need or videos >= SEQ_MAX_VIDEOS:
+            break
+        path = _yt_fetch_retry(cand["id"], out_dir, start, window, cand["title"])
+        if not path:
+            continue
+        if has_burned_captions(path):
+            continue
+        keep, verdict = _vision_gate(path, intent, context, cand["title"])
+        if not keep:
+            continue
+        videos += 1
+        for n, (shot_path, offset) in enumerate(
+                split_window(path, f"{tag}_{cand['id']}", lengths[:per], out_dir)):
+            asset = MediaAsset(
+                kind="video", source="youtube",
+                url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(start + offset)}",
+                local_path=shot_path, duration=lengths[n],
+                attribution=f"YouTube: {cand['title']}",
+                license=("Creative Commons Attribution (CC BY)" if require_cc
+                         else "unverified — you must hold the rights"),
+                query=query, review_required=not require_cc,
+                review_reason=("" if require_cc
+                               else "Licence unverified — confirm you hold the rights"),
+            ).apply_verdict(verdict, intent)
+            shots.append({"kind": "footage", "video": cand["id"], "asset": asset})
+    return shots
+
+
+def _image_pool(queries: List[str], subject: str, subject_type: str, need: int,
+                intent: str, context: str, used: set, out_dir: str) -> List[dict]:
+    """Real photos for a sequence: the subject's own Wikipedia article, then searches."""
+    found: List[MediaAsset] = []
+    if subject and subject_type in ("person", "place", "event"):
+        found += _cached_search(search_wikipedia_article_images, subject)
+    for q in queries:
+        for search in (search_wikimedia, search_web_images, search_openverse):
+            found += _cached_search(search, q)
+    shots, seen = [], set()
+    for cand in found:
+        if len(shots) >= need:
+            break
+        if cand.identity in seen or cand.identity in used:
+            continue
+        seen.add(cand.identity)
+        got = _download(_dc_replace(cand), cand.query or subject, out_dir)
+        if not got:
+            continue
+        keep, verdict = _vision_gate(got.local_path, intent, context,
+                                     got.attribution or got.url)
+        if keep:
+            shots.append({"kind": "image", "video": "", "asset": got.apply_verdict(verdict, intent)})
+    return shots
+
+
+def greedy_assign(beats: List[dict], shots: List[dict],
+                  chosen: Optional[Dict[int, str]] = None) -> Dict[int, str]:
+    """
+    Lay beats out in order, each taking the best unused shot of its wanted
+    kind, else the best unused shot of any kind. Keeps what `chosen` already has.
+    """
+    chosen = dict(chosen or {})
+    taken = set(chosen.values())
+    free = sorted((s for s in shots if s["id"] not in taken),
+                  key=lambda s: -(s.get("score") if s.get("score") is not None else 0.5))
+    for b in beats:
+        if b["index"] in chosen or not free:
+            continue
+        want = b.get("want") or "footage"
+        pick = next((s for s in free if s["kind"] == want), free[0])
+        chosen[b["index"]] = pick["id"]
+        free.remove(pick)
+    return chosen
+
+
+def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
+                    used: set, claim: threading.Lock, assign=None,
+                    require_cc: bool = None, allow_youtube: bool = None,
+                    tag: str = "0") -> Dict[int, MediaAsset]:
+    """
+    Gather one pool of shots for a sequence and lay its lines out across it.
+
+    Returns beat index -> asset for the beats it could fill; the caller
+    sources the rest one by one. Footage searches download a window per video
+    and cut it into several shots; image searches (and the subject's own
+    Wikipedia article) supply real photos. Each window or photo is judged by
+    the vision model once, against the sequence's setting, then `assign`
+    (the director's editor call) or the greedy fallback gives every line the
+    shot that best shows it.
+    """
+    require_cc = config.REQUIRE_CC if require_cc is None else require_cc
+    allow_youtube = config.ALLOW_YOUTUBE if allow_youtube is None else allow_youtube
+    beats = [jobs[i] for i in seq.get("beats", []) if i in jobs]
+    if not beats or (config.REQUIRE_AI and vision.ai_exhausted()):
+        return {}
+    subject = seq.get("subject") or beats[0].get("subject") or ""
+    subject_type = seq.get("subjectType") or beats[0].get("subject_type") or ""
+    intent = seq.get("setting") or subject or beats[0].get("intent") or ""
+    context = " ".join(b.get("context", "") for b in beats)[:600]
+    lengths = [float(b.get("seconds") or 3.0) + SEQ_SHOT_PAD for b in beats]
+    n_img = sum(1 for b in beats if b.get("visual_type") == "image")
+    n_foot = len(beats) - n_img
+
+    token = _SUBJECT_TYPE.set(subject_type)
+    window_token = _EVENT_WINDOW.set(beats[0].get("event_window") or "")
+    pool: List[dict] = []
+    try:
+        foot = [s["q"] for s in seq.get("searches", []) if s.get("kind") != "image"]
+        imgs = [s["q"] for s in seq.get("searches", []) if s.get("kind") == "image"]
+        # Spare footage for photo lines that find no photo, and vice versa.
+        need_foot = n_foot + (n_img + 1) // 2
+        if allow_youtube:
+            for q in foot:
+                have = sum(1 for p in pool if p["kind"] == "footage")
+                if have >= need_foot:
+                    break
+                pool += _footage_pool(q, need_foot - have, lengths, intent, context,
+                                      used, work_dir, require_cc, f"{tag}_{len(pool)}")
+        need_img = min(SEQ_MAX_IMAGES, n_img + (1 if n_foot else 0))
+        if need_img:
+            pool += _image_pool(imgs, subject, subject_type, need_img, intent, context,
+                                used, work_dir)
+    finally:
+        _EVENT_WINDOW.reset(window_token)
+        _SUBJECT_TYPE.reset(token)
+    if not pool:
+        return {}
+
+    for n, p in enumerate(pool):
+        p["id"] = f"s{n}"
+    shots = [{"id": p["id"], "kind": p["kind"], "video": p["video"],
+              "description": p["asset"].content_description,
+              "score": p["asset"].relevance_score} for p in pool]
+    lines = [{"index": b["index"], "text": b.get("context", ""),
+              "want": "image" if b.get("visual_type") == "image" else "footage"} for b in beats]
+    try:
+        chosen = assign(lines, shots) if assign else greedy_assign(lines, shots)
+    except Exception as e:  # noqa: BLE001
+        print(f"[media] sequence layout failed, using greedy: {e}", flush=True)
+        chosen = greedy_assign(lines, shots)
+    by_id = {p["id"]: p["asset"] for p in pool}
+    out: Dict[int, MediaAsset] = {}
+    with claim:
+        for idx, sid in chosen.items():
+            asset = by_id.get(sid)
+            if asset is None or asset.identity in used:
+                continue
+            asset = _dc_replace(asset, intent=jobs[idx].get("intent") or asset.intent)
+            used.add(asset.identity)
+            out[idx] = asset
+    return out

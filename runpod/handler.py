@@ -58,9 +58,10 @@ PHASES = ("narration", "transcribe", "plan", "source", "render", "upload", "save
 _PHASE_BY_PREFIX = (
     ("Downloading narration", "narration"),
     ("Aligning narration", "transcribe"),
-    ("Planning", "plan"),
+    ("Reading the whole story", "plan"), ("Planning", "plan"),
     ("Sourcing", "source"), ("Sourced", "source"), ("Re-sourcing", "source"),
-    ("Replacing", "source"),
+    ("Replacing", "source"), ("Rechecking", "source"),
+    ("Building shot pools", "source"),
     ("Rendering", "render"),
     ("Uploading", "upload"),
     ("Saving", "save"),
@@ -154,6 +155,35 @@ def _thumbnail(path: str, work: str, scene_id: str) -> str:
     return out if os.path.isfile(out) else ""
 
 
+_VIDEO_EXTS = (".mp4", ".webm", ".mov", ".m4v", ".mkv")
+
+
+def _preview_proxy(path: str, work: str, scene_id: str) -> str:
+    """
+    A light copy of a video clip for the editor's live preview, or "".
+
+    The editor's player streamed every scene's full source clip (up to 1080p,
+    whatever bitrate the upload had) the moment the scene started, so each cut
+    waited on a fresh multi-megabyte download and the preview buffered. This
+    is 640px wide, silent (the narration is its own track), with the index at
+    the front (+faststart) so it starts on the first bytes, and a keyframe
+    every half second so scrubbing lands instantly. The render always uses the
+    full clip.
+    """
+    if os.path.splitext(path)[1].lower() not in _VIDEO_EXTS:
+        return ""
+    out = os.path.join(work, f"preview_{scene_id}.mp4")
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, "-an",
+                        "-vf", "scale='min(640,iw)':-2", "-c:v", "libx264",
+                        "-preset", "veryfast", "-crf", "30", "-g", "15",
+                        "-pix_fmt", "yuv420p", "-movflags", "+faststart", out],
+                       capture_output=True, timeout=120)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+    return out if os.path.isfile(out) and os.path.getsize(out) > 0 else ""
+
+
 # Media links in a saved timeline. The editor can sit on a project for weeks;
 # the render step re-signs from media.storage regardless.
 _MEDIA_LINK_TTL = 60 * 60 * 24 * 30
@@ -224,6 +254,14 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                 fields["thumbStorage"] = {"bucket": bucket, "path": tobj}
             except Exception as e:  # noqa: BLE001 — a missing thumb is cosmetic
                 print(f"[worker] could not save thumbnail {tobj}: {e}", flush=True)
+        preview = _preview_proxy(path, work, scene["id"])
+        if preview:
+            pobj = f"projects/{project_id}/preview/{scene['id']}.mp4"
+            try:
+                fields["previewUrl"] = put(preview, pobj)
+                fields["previewStorage"] = {"bucket": bucket, "path": pobj}
+            except Exception as e:  # noqa: BLE001 — the editor falls back to the full clip
+                print(f"[worker] could not save preview {pobj}: {e}", flush=True)
         media.update(fields)
         published[path] = (url, fields)
     doc["meta"]["publishedMedia"] = len(published)
@@ -333,14 +371,23 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if not audio_duration:
         audio_duration = segments[-1].end
 
+    # Read the whole story once: it steers every beat's plan, and after
+    # sourcing it steers the recheck of scenes still missing a shot.
+    title = director.clean_title(inp.get("title") or inp.get("title_overlay") or "")
+    report("Reading the whole story", 13)
+    brief = director.story_brief(segments, title, configured=director.is_configured())
+
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
     shots, planner, warnings = director.plan(
         segments,
-        title=inp.get("title") or inp.get("title_overlay") or "",
+        title=title,
         report=report,
         allow_maps=bool(inp.get("maps", True)),
+        brief=brief,
     )
+    # Out of AI credits already: stop before a single footage search is paid for.
+    vision.require_credits()
 
     # Per-scene overrides from the editor win over the director's choice.
     for key, query in (inp.get("scene_queries") or {}).items():
@@ -361,15 +408,31 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "intent": shot.get("intent") or "",
              "subject_type": shot.get("subjectType") or "",
              "subject": shot.get("subject") or "",
+             "event_window": shot.get("eventWindow") or "",
+             "hook": bool(shot.get("hook")),
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 
     last_pct = [22]
 
+    # Plan the video in sequences: runs of lines about one subject and setting,
+    # each gathering one pool of shots that the editor call lays out.
+    sequences = []
+    if config.SEQUENCE_SOURCING:
+        report("Planning sequences", 22)
+        sequences = director.plan_sequences(segments, shots, brief)
+
+    def on_pool(done, n):
+        # 22% -> 50% while the sequence pools are built.
+        pct = 22 + int(28 * done / max(n, 1))
+        if pct > last_pct[0] or done == n:
+            last_pct[0] = max(last_pct[0], pct)
+            report(f"Building shot pools {done}/{n} sequences", last_pct[0], done=done, total=n)
+
     def on_done(done, n):
-        # 22% -> 65% across sourcing, the longest phase.
+        # Up to 65% across sourcing, the longest phase; never backwards after the pools.
         pct = 22 + int(43 * done / max(n, 1))
-        if pct != last_pct[0]:
+        if pct > last_pct[0]:
             last_pct[0] = pct
             report(f"Sourced {done}/{n} scenes", pct, done=done, total=n)
 
@@ -383,8 +446,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         require_cc=inp.get("require_cc"),
         on_done=on_done,
         on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
-        rescue=director.rescue_queries,
+        rescue=lambda items: director.rescue_queries(items, story=brief),
+        on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
+        sequences=sequences,
+        assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
+        on_pool=on_pool,
     )
+    vision.require_credits()
 
     doc = timeline.build(
         segments, shots, assets,
@@ -403,11 +471,20 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         doc["meta"]["warnings"].append(
             f"Requested source mode '{inp.get('source')}' is not implemented yet; "
             f"sourced from Creative Commons YouTube and Commons instead.")
+    # Which image/footage sources answered, came back empty, or failed, and why.
+    doc["meta"]["sourceStats"] = media.source_stats()
+    doc["meta"]["vision"] = vision.stats()
+    if vision.out_of_credits():
+        doc["meta"]["warnings"].insert(0, (
+            "The AI account (Kie) ran out of credits during this job, so vision "
+            "checks, AI rescue and AI images stopped partway. Top up Kie and "
+            "re-run for full quality."))
     doc["meta"]["audioSource"] = raw_audio
     # Where the sourcing time actually went, visible from outside the worker.
     doc["meta"]["sourcing"] = dict(media.LAST_STATS)
-    # The whole-story read the plan was built on (cast, sections, footage).
-    doc["meta"]["story"] = dict(director.LAST_STORY)
+    # What the AI understood the video to be about (kind, event, places, cast
+    # with aliases, per-section footage), for the editor to show.
+    doc["meta"]["story"] = dict(director.LAST_STORY) or dict(brief)
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for.
@@ -455,6 +532,8 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
         allow_stock=inp.get("allow_stock"),
         require_cc=inp.get("require_cc"),
         intent=intent, context=str(scene.get("text") or ""),
+        subject_type=str(sem.get("subjectType") or ""),
+        event_window=str(sem.get("eventWindow") or ""),
     )
     if not asset:
         raise ValueError(f"no usable media found for '{query}' — try different wording")

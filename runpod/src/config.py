@@ -141,6 +141,16 @@ DIRECTOR_FALLBACK_MODELS = [m.strip() for m in
 # is VidRush's own floor: across 325 scored items on one of their timelines the
 # minimum was exactly 0.70. Defaults reuse the director's key, so a Kie key
 # configured once powers both.
+# Backup AI provider (any OpenAI-compatible API), used for planning and vision
+# whenever the main one fails - including when the Kie account is out of
+# credits. Google Gemini, for example: base
+# https://generativelanguage.googleapis.com/v1beta/openai, model gemini-2.5-flash,
+# key from Google AI Studio. Empty = no backup.
+AI_FALLBACK_API_BASE = os.getenv("AI_FALLBACK_API_BASE", "").rstrip("/")
+AI_FALLBACK_API_KEY = os.getenv("AI_FALLBACK_API_KEY", "")
+AI_FALLBACK_MODEL = os.getenv("AI_FALLBACK_MODEL", "gemini-2.5-flash")
+AI_FALLBACK_VISION_MODEL = os.getenv("AI_FALLBACK_VISION_MODEL", "") or AI_FALLBACK_MODEL
+
 VISION_ENABLED = _flag("VISION_ENABLED", True)
 VISION_API_BASE = os.getenv("VISION_API_BASE", "") or DIRECTOR_API_BASE or "https://api.kie.ai/v1"
 VISION_API_KEY = (os.getenv("VISION_API_KEY", "") or DIRECTOR_API_KEY
@@ -156,11 +166,19 @@ VISION_FALLBACK_MODELS = [m.strip() for m in
                           os.getenv("VISION_FALLBACK_MODELS", "gpt-5-2,gemini-3-pro").split(",")
                           if m.strip()]
 VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
+# Footage quality floor (sharpness, stability, light, framing), judged in the
+# same call. Low on purpose: it only removes clips that are plainly unwatchable,
+# since rejecting more leaves scenes empty; quality otherwise ranks hook shots.
+VISION_MIN_QUALITY = float(os.getenv("VISION_MIN_QUALITY", "0.30"))
 # gpt-5-2 reasons before it answers. Measured on one real clip check: 32.5 s
 # at the default effort, 13.5 s at "low", same verdict (0.97 vs 0.98);
 # "minimal" is refused (code 500). Sent to gpt-* models only. Empty = default.
 VISION_REASONING_EFFORT = os.getenv("VISION_REASONING_EFFORT", "low").strip()
 VISION_FRAMES = int(os.getenv("VISION_FRAMES", "3"))
+# Retries per model on a transient failure (timeout, 5xx, 429), before the
+# fallback model is tried, and the pause before each.
+VISION_RETRIES = int(os.getenv("VISION_RETRIES", "1"))
+VISION_RETRY_WAIT = float(os.getenv("VISION_RETRY_WAIT", "2"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
@@ -173,6 +191,21 @@ VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
 REPLACE_BUDGET_SECONDS = int(os.getenv("REPLACE_BUDGET_SECONDS", "240"))
 # Wall-clock cap on the AI-rescue pass for scenes still empty after pass 2.
 RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "180"))
+# Last resort for a scene nothing could fill: reuse a real shot of the same
+# subject (or a nearby scene) from elsewhere in the video, never within
+# REUSE_MIN_GAP scenes of itself and always flagged for review. Off ("0")
+# restores the strict "a clip never appears twice" rule, at the cost of
+# empty scenes on long videos about subjects with few real photos.
+REUSE_SHOTS_TO_FILL = _flag("REUSE_SHOTS_TO_FILL", True)
+# Source the video in sequences (runs of lines about one subject and setting,
+# each with one pool of shots laid out by an editor call) before the
+# line-by-line search. Off ("0") restores line-by-line sourcing only.
+SEQUENCE_SOURCING = _flag("SEQUENCE_SOURCING", True)
+# When the AI account reports it is out of credits. Off (the default, the
+# creator's call): keep going - plan from the story rules, source from every
+# free source, and flag the timeline so the gap is visible. On ("1"): stop
+# the job with a clear "top up" error before spending on footage.
+REQUIRE_AI = _flag("REQUIRE_AI", False)
 MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
 MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp

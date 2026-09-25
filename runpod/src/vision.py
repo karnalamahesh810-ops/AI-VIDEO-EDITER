@@ -41,25 +41,103 @@ _CALLS = {"n": 0}
 # so a broken key or model shows up in the job result instead of as bad clips.
 _ERRORS: deque = deque(maxlen=8)
 _FAILS = {"n": 0}
+# Candidates no model could judge at all (all attempts failed, or no frames):
+# kept unscored, so the job result reports how many reached the timeline that way.
+_UNJUDGED = {"n": 0}
 
 _SYSTEM = (
     "You check whether a video clip or photo is usable B-roll for one line of a "
     "documentary narration. You are shown frames from the candidate. Describe "
     "literally what is visible, then score how well it fits the INTENT.\n"
-    "Scoring: 0.9-1.0 shows the intended subject or an unmistakable stand-in; "
-    "0.7-0.89 clearly fits the topic, era and mood even if not the exact subject; "
-    "0.4-0.69 loosely related; below 0.4 wrong subject.\n"
+    "First check every NAMED thing in the INTENT - a person, a place, a year or era. "
+    "These are hard limits, not preferences:\n"
+    "- A named PERSON: above 0.7 only if the frames plausibly show THAT person (a "
+    "recognisable public figure, or a period photo consistent with who they are). "
+    "A different person, an anonymous stand-in, a stock model, a wedding or family "
+    "photo of strangers: at most 0.3.\n"
+    "- A named PLACE: footage recognisably from somewhere else (another city, country, "
+    "landscape or architecture - Berlin for a line about Honolulu): at most 0.3.\n"
+    "- A YEAR or ERA: footage clearly from another era (1940s film for a 1970s line, "
+    "modern HD streets, cars or phones for a line about the past): at most 0.4.\n"
+    "Then: 0.9-1.0 clearly shows the intended subject; 0.7-0.89 consistent with every "
+    "named person, place and era and shows what the line is about; 0.4-0.69 loosely "
+    "related; below 0.4 wrong. Never reward mood alone.\n"
     "Score 0 and set has_text_or_watermark true if the frames show a screen "
     "recording, software UI, a video game, a news desk or presenter talking to "
-    "camera, a thumbnail/title card, burned-in subtitles, a channel logo, or a "
-    "stock-photo watermark. Small incidental real-world text (a street sign) is fine.\n"
-    "Reply with JSON only: {\"description\": str, \"score\": number, "
+    "camera, a thumbnail/title card, burned-in subtitles, a channel logo, a "
+    "stock-photo watermark, a product listing or poster for sale, a website "
+    "screenshot, or a meme or collage with text. Small incidental real-world text "
+    "(a street sign) is fine.\n"
+    "Separately rate quality 0-1 as documentary footage, whatever the subject: sharp, "
+    "stable, well lit, well composed, filling a 16:9 frame, with motion or visual "
+    "interest is high; blurry, blocky compression, shaky, very dark, a vertical phone "
+    "video with bars or blur down the sides, or a flat uninteresting frame is low.\n"
+    "Reply with JSON only: {\"description\": str, \"score\": number, \"quality\": number, "
     "\"has_text_or_watermark\": bool, \"is_talking_head\": bool}"
 )
 
+# Added for a beat of a news, weather or disaster story. Without it "clearly fits
+# the topic ... even if not the exact subject" scored any flooded street 0.7+ for
+# a line about one particular flood, which is how random footage passed.
+_EVENT_RULE = (
+    "\nTHIS LINE IS ABOUT ONE SPECIFIC REAL EVENT at a real place, named in the "
+    "INTENT. Footage of the same kind of thing somewhere else is the wrong shot. "
+    "Score instead: 0.9-1.0 recognisably that event or place (matching landmarks, "
+    "signage, terrain, river, architecture); 0.7-0.89 consistent with that place and "
+    "event with nothing contradicting it; below 0.7 generic or stock-looking footage, "
+    "or anything from another country, climate, season or era than the one named. "
+    "A news outlet's aerial or on-the-ground footage of the event is ideal; the news "
+    "desk or a reporter talking to camera is still a talking head."
+)
+
+
+# Kie shares one balance across vision, the director and image generation.
+# When it answers "402 Credits insufficient" every later call fails the same
+# way: a 362-scene job made 2,631 failed calls after its balance ran out.
+_OUT_OF_CREDITS = {"hit": False}
+
+
+def is_credit_error(code, msg: str = "") -> bool:
+    return code == 402 or "credits insufficient" in str(msg or "").lower()
+
+
+def note_out_of_credits() -> None:
+    with _LOCK:
+        _OUT_OF_CREDITS["hit"] = True
+
+
+def out_of_credits() -> bool:
+    return _OUT_OF_CREDITS["hit"]
+
+
+OUT_OF_CREDITS_MESSAGE = (
+    "The AI account (Kie) is out of credits, so shots could not be planned or "
+    "checked and the video would be random clips. Top up the Kie account whose "
+    "key is set on the RunPod endpoint (DIRECTOR_API_KEY), then run it again.")
+
+
+class OutOfCredits(RuntimeError):
+    """The AI account ran dry and REQUIRE_AI is on: stop the job, say why."""
+
+
+def require_credits() -> None:
+    if config.REQUIRE_AI and ai_exhausted():
+        raise OutOfCredits(OUT_OF_CREDITS_MESSAGE)
+
+
+def fallback_configured() -> bool:
+    return bool(config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY
+                and config.AI_FALLBACK_VISION_MODEL)
+
+
+def ai_exhausted() -> bool:
+    """The main AI account is out of credits and there is no backup provider."""
+    return _OUT_OF_CREDITS["hit"] and not fallback_configured()
+
 
 def enabled() -> bool:
-    return bool(config.VISION_ENABLED and config.VISION_API_KEY)
+    main = bool(config.VISION_API_KEY) and not _OUT_OF_CREDITS["hit"]
+    return bool(config.VISION_ENABLED and (main or fallback_configured()))
 
 
 def calls_made() -> int:
@@ -71,6 +149,8 @@ def reset() -> None:
         _CACHE.clear()
         _CALLS["n"] = 0
         _FAILS["n"] = 0
+        _UNJUDGED["n"] = 0
+        _OUT_OF_CREDITS["hit"] = False
         _ERRORS.clear()
 
 
@@ -85,49 +165,82 @@ def stats() -> dict:
     with _LOCK:
         return {"enabled": enabled(), "model": config.VISION_MODEL,
                 "calls": _CALLS["n"], "failures": _FAILS["n"],
+                "unjudged": _UNJUDGED["n"],
+                "outOfCredits": _OUT_OF_CREDITS["hit"],
                 "recentErrors": list(_ERRORS)}
 
 
+def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
+              key: str = "", main: bool = True) -> Tuple[Optional[str], bool]:
+    """(text, retryable): one call to one model; retryable when the failure was transient."""
+    try:
+        r = requests.post(
+            url or _endpoint(model),
+            headers={"Authorization": f"Bearer {key or config.VISION_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={"model": model, "messages": messages,
+                  "max_tokens": max_tokens, "stream": False,
+                  **({"reasoning_effort": config.VISION_REASONING_EFFORT}
+                     if config.VISION_REASONING_EFFORT and model.startswith("gpt-")
+                     else {})},
+            timeout=90)
+    except requests.RequestException as e:
+        _fail(model, f"request failed: {type(e).__name__}")
+        return None, True
+    try:
+        body = r.json()
+    except ValueError:
+        _fail(model, f"HTTP {r.status_code}, not JSON: {r.text[:120]!r}")
+        return None, r.status_code >= 500 or r.status_code == 429
+    # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
+    if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
+        _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
+        if is_credit_error(body["code"], body.get("msg")):
+            if main:
+                note_out_of_credits()
+            return None, False
+        return None, body["code"] >= 500 or body["code"] == 429
+    try:
+        text = body["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        _fail(model, f"HTTP {r.status_code}, no choices: {json.dumps(body)[:150]}")
+        return None, r.status_code >= 500
+    if isinstance(text, list):
+        text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
+    if not (text or "").strip():
+        # Reasoning models can spend max_tokens thinking and return nothing.
+        _fail(model, "empty answer")
+        return None, False
+    return text, False
+
+
 def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
-    """First model that answers: (text, model). (None, "") when none did."""
-    for model in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS):
-        if not model:
+    """
+    First model that answers: (text, model). (None, "") when none did.
+
+    A transient failure (timeout, HTTP/Kie 5xx, 429) is retried once on the
+    same model before moving on. Kie's gpt-5-2 answers "code 500: Server
+    exception, please try again later" in bursts - 116 of 609 calls on one
+    real job - and moving straight on meant a burst on the fallback too left
+    clips on the timeline that no model had ever looked at.
+    """
+    routes = [(m, "", "", True) for m in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS)
+              if m and config.VISION_API_KEY]
+    if fallback_configured():
+        routes.append((config.AI_FALLBACK_VISION_MODEL,
+                       f"{config.AI_FALLBACK_API_BASE}/chat/completions",
+                       config.AI_FALLBACK_API_KEY, False))
+    for model, url, key, main in routes:
+        if main and _OUT_OF_CREDITS["hit"]:
             continue
-        try:
-            r = requests.post(
-                _endpoint(model),
-                headers={"Authorization": f"Bearer {config.VISION_API_KEY}",
-                         "Content-Type": "application/json"},
-                json={"model": model, "messages": messages,
-                      "max_tokens": max_tokens, "stream": False,
-                      **({"reasoning_effort": config.VISION_REASONING_EFFORT}
-                         if config.VISION_REASONING_EFFORT and model.startswith("gpt-")
-                         else {})},
-                timeout=90)
-        except requests.RequestException as e:
-            _fail(model, f"request failed: {type(e).__name__}")
-            continue
-        try:
-            body = r.json()
-        except ValueError:
-            _fail(model, f"HTTP {r.status_code}, not JSON: {r.text[:120]!r}")
-            continue
-        # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
-        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-            _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
-            continue
-        try:
-            text = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            _fail(model, f"HTTP {r.status_code}, no choices: {json.dumps(body)[:150]}")
-            continue
-        if isinstance(text, list):
-            text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
-        if not (text or "").strip():
-            # Reasoning models can spend max_tokens thinking and return nothing.
-            _fail(model, "empty answer")
-            continue
-        return text, model
+        for attempt in range(1 + config.VISION_RETRIES):
+            if attempt:
+                time.sleep(config.VISION_RETRY_WAIT)
+            text, retryable = _ask_once(model, messages, max_tokens, url, key, main)
+            if text:
+                return text, model
+            if not retryable:
+                break
     return None, ""
 
 
@@ -228,24 +341,31 @@ def _parse(text: str) -> Optional[dict]:
         score = float(data.get("score", 0))
     except (TypeError, ValueError):
         score = 0.0
+    try:
+        quality = max(0.0, min(1.0, float(data["quality"])))
+    except (KeyError, TypeError, ValueError):
+        quality = None      # not rated: unknown, never a reason to reject
     return {
         "description": str(data.get("description") or "")[:600],
         "score": max(0.0, min(1.0, score)),
+        "quality": quality,
         "has_text_or_watermark": bool(data.get("has_text_or_watermark")),
         "is_talking_head": bool(data.get("is_talking_head")),
     }
 
 
-def judge(path: str, intent: str, context: str = "") -> Optional[dict]:
+def judge(path: str, intent: str, context: str = "", event: bool = False) -> Optional[dict]:
     """
     Verdict for one candidate file, or None when no model could be reached.
 
     None means "unknown", not "bad": the caller keeps its pre-vision behaviour
-    rather than rejecting every clip because an API is down.
+    rather than rejecting every clip because an API is down. `event`: the beat
+    belongs to a news/weather/disaster story, so the footage must be of that
+    specific event and place, not the same kind of thing elsewhere.
     """
     if not enabled() or not path or not os.path.exists(path):
         return None
-    key = f"{_fingerprint(path)}|{intent}"
+    key = f"{_fingerprint(path)}|{int(event)}|{intent}"
     with _LOCK:
         if key in _CACHE:
             return _CACHE[key]
@@ -253,6 +373,8 @@ def judge(path: str, intent: str, context: str = "") -> Optional[dict]:
     frames = sample_frames(path, config.VISION_FRAMES)
     if not frames:
         _fail("ffmpeg", f"no frames from {os.path.basename(path)}")
+        with _LOCK:
+            _UNJUDGED["n"] += 1
         return None
 
     content = [{"type": "text", "text":
@@ -260,7 +382,7 @@ def judge(path: str, intent: str, context: str = "") -> Optional[dict]:
                 f"These are {len(frames)} frames from the candidate."}]
     content += [{"type": "image_url",
                  "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames]
-    messages = [{"role": "system", "content": _SYSTEM},
+    messages = [{"role": "system", "content": _SYSTEM + (_EVENT_RULE if event else "")},
                 {"role": "user", "content": content}]
 
     text, model = _ask(messages, 400)
@@ -274,6 +396,8 @@ def judge(path: str, intent: str, context: str = "") -> Optional[dict]:
         _CALLS["n"] += 1
         if verdict:
             _CACHE[key] = verdict
+        else:
+            _UNJUDGED["n"] += 1
     return verdict
 
 
@@ -292,7 +416,20 @@ def acceptable(verdict: Optional[dict], allow_people: bool = False) -> bool:
         return False
     if verdict["is_talking_head"] and not allow_people:
         return False
+    quality = verdict.get("quality")
+    if quality is not None and quality < config.VISION_MIN_QUALITY:
+        return False
     return verdict["score"] >= config.VISION_MIN_SCORE
+
+
+def appeal(relevance: Optional[float], quality: Optional[float]) -> float:
+    """
+    How strongly a clip that already passed would open or carry a beat.
+
+    Relevance leads - the right subject in fair footage beats a gorgeous wrong
+    one - and quality breaks near-ties. Unrated quality counts as middling.
+    """
+    return (relevance or 0.0) + 0.5 * (0.5 if quality is None else quality)
 
 
 _PICK_SYSTEM = (
@@ -301,8 +438,10 @@ _PICK_SYSTEM = (
     "top-left of each tile). Choose the single tile that best SHOWS the intent. "
     "Never choose a tile showing a presenter talking to camera, a title card, "
     "on-screen text, a graphic, a map or a logo unless the intent asks for it.\n"
-    "Scoring: 0.9-1.0 the tile clearly shows the intended subject; 0.7-0.89 fits "
-    "the topic, era and mood; below 0.7 nothing in the grid really fits.\n"
+    "Scoring: 0.9-1.0 the tile clearly shows the intended subject; 0.7-0.89 is "
+    "consistent with every person, place and era the intent names; below 0.7 nothing "
+    "in the grid really fits. A tile from a different named place, person or era "
+    "than the intent's is never a match, however well it fits the mood.\n"
     "The tiles are small, low-resolution thumbnails. Only score above 0.7 when you "
     "can actually make out the subject. If a tile is too blurry to identify, do not "
     "guess from the video's topic - score it low. A wrong pick costs a download.\n"

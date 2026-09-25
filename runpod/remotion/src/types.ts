@@ -96,8 +96,12 @@ export interface Scene {
     intent?: string;
     subject?: string;
     searchQuery?: string;
+    /** "event" / "year" for a news-type story's beats: re-sourcing keeps them on that event. */
+    eventWindow?: string;
     contentDescription?: string;
     relevanceScore?: number;
+    /** The vision judge's 0-1 rating of the footage itself: sharp, stable, lit, framed. */
+    qualityScore?: number;
     provider?: string;
   };
   words: SceneWord[];
