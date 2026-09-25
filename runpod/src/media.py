@@ -2017,6 +2017,26 @@ def _asset_ok(asset) -> tuple:
 LAST_STATS: Dict[str, Any] = {}
 
 
+def _until(futures, deadline: float):
+    """
+    Yield futures as they finish, stopping at `deadline`.
+
+    The pass budgets used to be checked only between attempts, and every pass
+    ended in a `with ThreadPoolExecutor` block that waits for all threads -
+    so one slow attempt ran as long as it liked and held the video: a real
+    job's 240 s replacement pass took 525 s for six scenes. The caller shuts
+    its pool down with wait=False; late threads finish in the background and
+    their results are ignored.
+    """
+    pending = set(futures)
+    while pending:
+        left = deadline - time.time()
+        if left <= 0:
+            return
+        finished, pending = wait(pending, timeout=min(left, 5), return_when=FIRST_COMPLETED)
+        yield from finished
+
+
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
                 on_recheck=None, sequences: Optional[List[dict]] = None,
@@ -2282,9 +2302,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     if todo:
         if on_review:
             on_review(0, len(todo))
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            futures = {pool.submit(replace, *t): t for t in todo}
-            for n, fut in enumerate(as_completed(futures), 1):
+        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        futures = {pool.submit(contextvars.copy_context().run, replace, *t): t for t in todo}
+        try:
+            for n, fut in enumerate(_until(futures, deadline + 15), 1):
                 job, nth, bad_reason, is_dup = futures[fut]
                 i = job["index"]
                 try:
@@ -2307,6 +2328,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     results[i].review_reason = "Repeat of an earlier shot — no other match found"
                 if on_review:
                     on_review(n, len(todo))
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
 
     if duplicates:
         print(f"[media] resolved {duplicates} duplicate shot(s)", flush=True)
@@ -2376,11 +2399,17 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             return got
 
         filled_by_ai = 0
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            for job, got in zip(empties, pool.map(rescue_one, empties)):
+        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        futures = {pool.submit(contextvars.copy_context().run, rescue_one, job): job
+                   for job in empties}
+        try:
+            for fut in _until(futures, rescue_deadline + 15):
+                got = fut.result() if not fut.exception() else None
                 if got:
-                    results[job["index"]] = got
+                    results[futures[fut]["index"]] = got
                     filled_by_ai += 1
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
         print(f"[media] AI recheck gave {filled_by_ai}/{len(empties)} missing or "
               f"repeated scene(s) a shot of their own", flush=True)
         LAST_STATS.update(rescue_tried=len(empties), rescue_filled=filled_by_ai)
