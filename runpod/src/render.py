@@ -37,12 +37,23 @@ _PCT = re.compile(r"(\d{1,3})\s*%")
 
 
 def _render_progress(line: str):
-    """0..1 out of a Remotion progress line, or None when it isn't one."""
+    """
+    0..1 out of a Remotion progress line, or None when it isn't one.
+
+    Remotion reports two passes, "Rendered x/y" (frames) then "Encoded x/y" /
+    "Stitched x/y". Read as one bar they made it run to ~80% and drop back to
+    0 - the user saw the video's progress "go back". Frames map to 0-0.8,
+    encoding to 0.8-1.0.
+    """
     m = _FRAC.search(line)
     if m:
         done, total = int(m.group(1)), int(m.group(2))
         if total > 0 and done <= total:
-            return done / total
+            frac = done / total
+            low = line.lower()
+            if "encod" in low or "stitch" in low or "mux" in low:
+                return 0.8 + 0.2 * frac
+            return 0.8 * frac
     m = _PCT.search(line)
     if m:
         v = int(m.group(1))
@@ -136,13 +147,15 @@ def _run_streaming(cmd, timeout, on_progress) -> "_Completed":
         bufsize=1,
     )
     lines, deadline = [], time.time() + timeout
+    best = [0.0]   # progress only ever moves forward
     try:
         for line in proc.stdout:
             lines.append(line)
             if len(lines) > 400:          # keep the tail, not the whole log
                 del lines[:200]
             frac = _render_progress(line)
-            if frac is not None:
+            if frac is not None and frac > best[0]:
+                best[0] = frac
                 try:
                     on_progress(frac)
                 except Exception:
