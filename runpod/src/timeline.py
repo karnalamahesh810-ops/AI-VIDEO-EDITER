@@ -169,6 +169,53 @@ def _scene_bounds(segments: List[Segment], fps: int, total: int) -> List[int]:
     return bounds
 
 
+# Which animation moments carry a sound, and at what level - read off
+# VidRush's own Obama-family project: 9 sounds in 25 minutes, each tied to an
+# animation (typewriter title 25-30%, timeline / map / year stamp / article
+# zoom 35%, image highlight 20%), transitions silent. Files: remotion/public/sfx.
+_SFX_FOR = {
+    "typewriter": ("typewriter", 0.28), "memo-box": ("typewriter", 0.25),
+    "bar-title": ("typewriter", 0.25), "word-type": ("typewriter", 0.25),
+    "timeline": ("pop", 0.35), "span": ("pop", 0.35), "path-steps": ("pop", 0.35),
+    "map": ("whoosh", 0.35), "date-stamp": ("impact", 0.3),
+    "article-zoom": ("paper", 0.35), "chapter": ("impact", 0.3),
+    "swoosh-title": ("whoosh", 0.3), "red-strip": ("impact", 0.3),
+    "icon-pop": ("pop", 0.3), "ring-stat": ("pop", 0.3), "kicker": ("typewriter", 0.25),
+}
+SFX_NAMES = {name for name, _ in _SFX_FOR.values()} | {"glitch", "bell", "page"}
+
+
+def plan_sfx(overlays: List[dict], fps: int, min_gap_seconds: float) -> List[dict]:
+    """
+    Sounds for the biggest animation moments, sparsely.
+
+    One per min_gap_seconds at most (VidRush: ~1 per 2-3 minutes); chapter
+    breaks and date titles first when two compete, then the order they appear.
+    """
+    rank = {"chapter": 0, "date-stamp": 1, "map": 2, "timeline": 2, "article-zoom": 3}
+    picks, last = [], -1e9
+    for ov in sorted(overlays, key=lambda o: o.get("startFrame", 0)):
+        kind = ov.get("type")
+        if kind not in _SFX_FOR:
+            continue
+        if kind == "date-stamp" and ov.get("variant") != "title":
+            continue            # the small corner stamp stays silent
+        at = ov.get("startFrame", 0) / fps
+        if at - last < min_gap_seconds:
+            # A higher-ranked moment inside the gap replaces the last pick.
+            if picks and rank.get(kind, 9) < rank.get(picks[-1]["_kind"], 9):
+                picks.pop()
+            else:
+                continue
+        name, vol = _SFX_FOR[kind]
+        picks.append({"name": name, "startFrame": int(ov.get("startFrame", 0)),
+                      "volume": vol, "_kind": kind})
+        last = at
+    for p in picks:
+        p.pop("_kind", None)
+    return picks
+
+
 def build(segments: List[Segment], shots: List[dict],
           assets: List[Optional[MediaAsset]], *,
           audio_url: str, audio_duration: float, inp: Dict[str, Any],
@@ -282,6 +329,10 @@ def build(segments: List[Segment], shots: List[dict],
         },
         "scenes": scenes,
         "overlays": overlays,
+        "sfx": (plan_sfx(overlays, fps, config.SFX_MIN_GAP_SECONDS)
+                if inp.get("sfx", config.SFX_ENABLED) else []),
+        "sfxVolume": float(inp.get("sfx_volume", config.SFX_VOLUME)),
+        "sfxEnabled": bool(inp.get("sfx", config.SFX_ENABLED)),
         "meta": {
             "schemaVersion": SCHEMA_VERSION,
             "sceneCount": len(scenes),

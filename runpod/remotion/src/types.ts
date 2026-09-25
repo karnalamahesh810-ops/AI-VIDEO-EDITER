@@ -190,6 +190,14 @@ export interface TimelineProps {
   overlays: Overlay[];
   /** Editor track toggle for text animations / graphics. Absent = on. */
   overlaysEnabled?: boolean;
+  /**
+   * Sound effects, each tied to an animation moment (VidRush: ~1 per 2-3 min,
+   * 20-35% volume). `name` is a file in public/sfx/. sfxVolume scales them all
+   * (the editor's slider); sfxEnabled false mutes the track. Absent = on, 1.
+   */
+  sfx?: { name: string; startFrame: number; volume: number }[];
+  sfxVolume?: number;
+  sfxEnabled?: boolean;
   meta?: Record<string, unknown>;
   /**
    * Remotion requires composition props to be assignable to

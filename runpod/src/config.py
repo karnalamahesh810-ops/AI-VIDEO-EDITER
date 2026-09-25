@@ -250,6 +250,11 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # short grace for the rest. One stalled download used to hold a job for
 # 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
 PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+# Sound effects on big animation moments (timeline.plan_sfx). SFX_VOLUME
+# scales every sound (each already sits at 20-35%); 0.0 silences them.
+SFX_ENABLED = os.getenv("SFX_ENABLED", "1").strip().lower() not in ("0", "false", "no")
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "1.0"))
+SFX_MIN_GAP_SECONDS = float(os.getenv("SFX_MIN_GAP_SECONDS", "75"))
 # Scenes sourced at once. 8 suited the old 8-vCPU GPU pods; the 32-vCPU CPU
 # workers carry 16 (the work is mostly waiting on network and vision calls).
 SOURCE_WORKERS = int(os.getenv("SOURCE_WORKERS", "16"))

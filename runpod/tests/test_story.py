@@ -185,3 +185,23 @@ class StoryTimeline(unittest.TestCase):
         shots = [{"query": "river flooding", "intent": "flood"}]
         self.assertEqual(director.date_shots(shots, {"kind": "news", "sections": [
             {"from": 0, "to": 0, "when": "2026", "where": "Ohio", "footage": []}]}), 0)
+
+
+class SoundEffects(unittest.TestCase):
+    def test_sounds_are_sparse_and_tied_to_animations(self):
+        from src import timeline
+        fps = 30
+        ovs = [{"type": "typewriter", "startFrame": 0},
+               {"type": "lower-third", "startFrame": 300},          # no sound
+               {"type": "map", "startFrame": 600},                  # 20 s: too close
+               {"type": "chapter", "startFrame": 900},              # outranks the typewriter
+               {"type": "article-zoom", "startFrame": 4 * 60 * fps}]
+        sfx = timeline.plan_sfx(ovs, fps, 75)
+        self.assertEqual([s["name"] for s in sfx], ["impact", "paper"])
+        self.assertTrue(all(0.2 <= s["volume"] <= 0.35 for s in sfx))
+
+    def test_every_sound_file_exists(self):
+        import os
+        from src import timeline
+        for name in timeline.SFX_NAMES:
+            self.assertTrue(os.path.isfile(f"remotion/public/sfx/{name}.mp3"), name)

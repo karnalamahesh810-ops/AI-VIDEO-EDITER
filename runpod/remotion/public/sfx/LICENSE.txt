@@ -1,0 +1,4 @@
+Sound effects from Mixkit (https://mixkit.co), used under the Mixkit License
+(free for commercial and personal use in video projects). IDs: typewriter 1372,
+whoosh 1489, paper 1530, impact 1143, pop 2358, glitch 2595, bell 933, page 1101.
+Trimmed to 2.5 s and loudness-normalised (-16 LUFS).
