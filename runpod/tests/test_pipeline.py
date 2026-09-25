@@ -2056,11 +2056,12 @@ class ExtraSources(unittest.TestCase):
         self.assertNotEqual(media.search_nasa.__name__,
                             media.search_nasa_video.__name__)
 
-    def _archive_org(self, docs, files_by_id):
+    def _archive_org(self, docs, files_by_id, safe_docs=()):
         class SearchR:
+            def __init__(self_inner, rows): self_inner.rows = rows
             status_code = 200
             def raise_for_status(self): pass
-            def json(self_inner): return {"response": {"docs": docs}}
+            def json(self_inner): return {"response": {"docs": self_inner.rows}}
 
         class MetaR:
             def __init__(self_inner, ident): self_inner.ident = ident
@@ -2068,9 +2069,10 @@ class ExtraSources(unittest.TestCase):
             def raise_for_status(self): pass
             def json(self_inner): return {"files": files_by_id.get(self_inner.ident, [])}
 
-        def fake_get(url, **k):
+        def fake_get(url, params=None, **k):
             if "advancedsearch" in url:
-                return SearchR()
+                q = (params or {}).get("q", "")
+                return SearchR(list(safe_docs) if "collection:prelinger" in q else docs)
             ident = url.rsplit("/", 1)[-1]
             return MetaR(ident)
 
@@ -2115,6 +2117,24 @@ class ExtraSources(unittest.TestCase):
         hits = self._archive_org(docs, files)
         self.assertEqual(len(hits), 1)
         self.assertTrue(hits[0].url.endswith("item1_512kb.mp4"))
+
+    def test_a_known_safe_collection_is_trusted_without_a_licenceurl(self):
+        # Prelinger / US government film is public domain by law, not by an
+        # explicit CC tag - many real items (Universal Newsreel, gov.archives.
+        # arc.*) carry no licenseurl at all despite being unambiguously free.
+        safe = [{"identifier": "newsreel1", "title": "Universal Newsreel Volume 23"}]
+        files = {"newsreel1": [{"name": "newsreel1.mp4", "format": "512Kb MPEG4", "size": "700000"}]}
+        hits = self._archive_org(docs=[], files_by_id=files, safe_docs=safe)
+        self.assertEqual(len(hits), 1)
+        self.assertTrue(hits[0].url.endswith("newsreel1.mp4"))
+
+    def test_the_general_search_still_needs_a_licenceurl_even_alongside_safe_hits(self):
+        safe = [{"identifier": "gov1", "title": "Flood Weather"}]
+        general = [{"identifier": "tv_news", "title": "Evening News broadcast"}]  # no licenceurl
+        files = {"gov1": [{"name": "gov1.mp4", "format": "512Kb MPEG4", "size": "700000"}],
+                 "tv_news": [{"name": "tv_news.mp4", "format": "512Kb MPEG4", "size": "700000"}]}
+        hits = self._archive_org(docs=general, files_by_id=files, safe_docs=safe)
+        self.assertEqual({h.url.rsplit("/", 1)[-1] for h in hits}, {"gov1.mp4"})
 
 
 if __name__ == "__main__":

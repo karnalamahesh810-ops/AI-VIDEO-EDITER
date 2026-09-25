@@ -465,6 +465,27 @@ _ARCHIVE_ORG_OPEN_LICENCE = re.compile(
     r"(publicdomain|/zero/1\.0|/by/\d|/by-sa/\d)", re.I)
 _ARCHIVE_ORG_VIDEO_EXT = (".mp4", ".ogv", ".webm")
 
+# Collections IA itself curates as public-domain film: Prelinger (industrial,
+# educational and ephemeral film) and every US federal government production
+# (federal works carry no copyright at all). Searched first, narrower but
+# reliably clean; the general query below is the fallback for what they miss.
+_ARCHIVE_ORG_SAFE_COLLECTIONS = "(collection:prelinger OR collection:usgovfilms)"
+
+
+def _archive_org_search(q: str, limit: int) -> List[dict]:
+    try:
+        r = requests.get(
+            "https://archive.org/advancedsearch.php",
+            headers={"User-Agent": config.USER_AGENT},
+            params={"q": q, "fl[]": ["identifier", "title", "licenseurl"],
+                    "rows": limit, "output": "json"},
+            timeout=25,
+        )
+        r.raise_for_status()
+        return (r.json().get("response") or {}).get("docs") or []
+    except Exception:
+        return []
+
 
 def search_archive_org_video(query: str, limit: int = 5) -> List[MediaAsset]:
     """
@@ -472,29 +493,27 @@ def search_archive_org_video(query: str, limit: int = 5) -> List[MediaAsset]:
     government films — the same kind of documentary b-roll VidRush and
     GoMotion draw on beyond YouTube, and a source this worker had none of.
     Public-domain government footage is common here and licence-unambiguous.
+
+    The known-safe collections are tried first (narrower, but everything in
+    them is public domain by construction) and topped up from the general
+    movies search, which needs each hit's licence checked individually.
     """
-    try:
-        r = requests.get(
-            "https://archive.org/advancedsearch.php",
-            headers={"User-Agent": config.USER_AGENT},
-            params={
-                "q": f"mediatype:movies AND ({query}) AND licenseurl:*",
-                "fl[]": ["identifier", "title", "licenseurl"],
-                "rows": limit * 4, "output": "json",
-            },
-            timeout=25,
-        )
-        r.raise_for_status()
-        docs = (r.json().get("response") or {}).get("docs") or []
-    except Exception:
-        return []
+    # Membership in a known-safe collection is trusted on its own - US federal
+    # works are public domain by law, whether or not this item also carries a
+    # licenceurl tag. Anything from the general search still needs one.
+    safe = _archive_org_search(f"mediatype:movies AND {_ARCHIVE_ORG_SAFE_COLLECTIONS} "
+                               f"AND ({query})", limit * 3)
+    docs = [(d, True) for d in safe]
+    if len(docs) < limit:
+        general = _archive_org_search(
+            f"mediatype:movies AND ({query}) AND licenseurl:*", limit * 4)
+        docs += [(d, False) for d in general]
 
     out: List[MediaAsset] = []
-    for doc in docs:
+    for doc, trusted in docs:
         if len(out) >= limit:
             break
-        lic = doc.get("licenseurl") or ""
-        if not _ARCHIVE_ORG_OPEN_LICENCE.search(lic):
+        if not trusted and not _ARCHIVE_ORG_OPEN_LICENCE.search(doc.get("licenseurl") or ""):
             continue
         ident = doc.get("identifier") or ""
         if not ident:
