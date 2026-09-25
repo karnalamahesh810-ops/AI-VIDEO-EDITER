@@ -1051,7 +1051,7 @@ _SYSTEM_PROMPT = (
     "analogy or general explainer line (\"Picture rail cars on a track\"): show what "
     "it names (a freight train), not the event, and set anchor false.\n"
     "Return JSON: {\"shots\":[{\"index\":int,\"subject\":str,\"subjectType\":str,"
-    "\"intent\":str,\"query\":str,\"visualType\":str,\"anchor\":bool,"
+    "\"entity\":str,\"intent\":str,\"query\":str,\"visualType\":str,\"anchor\":bool,"
     "\"overlay\":obj|null}]}.\n"
     "- anchor: false only for a metaphor, analogy or general explainer shot that is "
     "not the story's own event or place; true otherwise.\n"
@@ -1060,6 +1060,16 @@ _SYSTEM_PROMPT = (
     "\"Lake Mead\"). Always concrete and searchable. Reuse the same subject across "
     "consecutive lines about the same thing.\n"
     "- subjectType: one of person, place, event, object, document.\n"
+    "- entity: what KIND of thing the subject is, which decides where its real "
+    "footage lives: public-figure (president, politician, celebrity, athlete - "
+    "speeches and news footage exist), historical-person (archival photos, "
+    "newsreel), private-person (a named non-famous person: only their real "
+    "photo), natural-feature (mountain, volcano, river, lake, coast, desert - "
+    "aerial/drone footage), landmark (famous structure, bridge, dam, monument), "
+    "building (a home, school, courthouse, hospital - exterior), city-region "
+    "(a city, state, county - aerial and street footage), institution (agency, "
+    "university, company), event, object, document, concept (an idea or feeling "
+    "- era-accurate footage of the action).\n"
     "- intent: one sentence saying literally what the camera should SHOW, with the "
     "era for historical lines (\"1971 Honolulu airport terminal, archival colour photo\").\n"
     "- query: 3-7 search words containing the subject plus the visual detail "
@@ -1161,6 +1171,41 @@ _SYSTEM_PROMPT = (
 )
 
 SUBJECT_TYPES = {"person", "place", "event", "object", "document"}
+
+# Where each kind of subject's real footage lives: the words a search needs so
+# it finds that rather than something merely related. Appended only when the
+# query has none of the words already; for images the photo form is used.
+_ENTITY_FOOTAGE = {
+    "public-figure": ("speech footage", "photo"),
+    "historical-person": ("archival footage", "archival photo"),
+    "private-person": ("", "photo"),
+    "natural-feature": ("aerial drone footage", "photo"),
+    "landmark": ("aerial footage", "photo"),
+    "building": ("exterior footage", "exterior photo"),
+    "city-region": ("aerial footage", "photo"),
+    "institution": ("exterior footage", "photo"),
+    "event": ("news footage", "photo"),
+    "object": ("close up footage", "photo"),
+    "document": ("", "document scan"),
+    "concept": ("", ""),
+}
+ENTITY_KINDS = set(_ENTITY_FOOTAGE)
+_MEDIA_WORDS = {"footage", "film", "video", "aerial", "drone", "newsreel", "photo",
+                "photograph", "archival", "scan", "b-roll", "clip", "interview", "speech"}
+
+
+def shape_query(shot: dict) -> None:
+    """Add the entity's footage words to a query that names none."""
+    entity = shot.get("entity") or ""
+    footage, still = _ENTITY_FOOTAGE.get(entity, ("", ""))
+    words = still if shot.get("visualType") == "image" else footage
+    q = shot.get("query") or ""
+    if words and not ({w.lower() for w in q.split()} & _MEDIA_WORDS):
+        shot["query"] = f"{q} {words}"[:240]
+    # A named private person has no footage anywhere: their real photo or the
+    # setting, never a stranger. A public figure speaking is the right shot.
+    if entity == "private-person" and shot.get("visualType") == "footage":
+        shot["subjectType"] = shot.get("subjectType") or "person"
 
 _BATCH = 32
 
@@ -1310,7 +1355,9 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                 "subjectType": (shot.get("subjectType")
                                 if shot.get("subjectType") in SUBJECT_TYPES
                                 else shots[idx].get("subjectType", "")),
+                "entity": shot.get("entity") if shot.get("entity") in ENTITY_KINDS else "",
             }
+            shape_query(shots[idx])
             # The subject alone is the last fallback: broad, but always on topic.
             if subject and subject not in shots[idx]["fallbacks"]:
                 shots[idx]["fallbacks"] = shots[idx]["fallbacks"] + [subject]

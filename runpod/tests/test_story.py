@@ -142,3 +142,22 @@ class Variety(unittest.TestCase):
         main = open("remotion/src/Main.tsx", encoding="utf-8").read()
         for kind in director.TEMPLATES:
             self.assertTrue(re.search(r'(^|\s)"?%s"?\s*:' % re.escape(kind), main, re.M), kind)
+
+
+class EntityQueries(unittest.TestCase):
+    def test_entity_adds_where_its_footage_lives(self):
+        volcano = {"query": "Kilauea eruption", "visualType": "footage", "entity": "natural-feature"}
+        director.shape_query(volcano)
+        self.assertEqual(volcano["query"], "Kilauea eruption aerial drone footage")
+        pres = {"query": "Barack Obama 2008", "visualType": "footage", "entity": "public-figure"}
+        director.shape_query(pres)
+        self.assertTrue(pres["query"].endswith("speech footage"))
+        house = {"query": "Obama childhood home Honolulu", "visualType": "image", "entity": "building"}
+        director.shape_query(house)
+        self.assertTrue(house["query"].endswith("exterior photo"))
+
+    def test_existing_media_words_are_left_alone(self):
+        q = {"query": "Mount St Helens archival footage", "visualType": "footage",
+             "entity": "natural-feature"}
+        director.shape_query(q)
+        self.assertEqual(q["query"], "Mount St Helens archival footage")

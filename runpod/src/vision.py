@@ -482,8 +482,9 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Opt
     messages = [
         {"role": "system", "content": _PICK_SYSTEM},
         {"role": "user", "content": [
-            {"type": "text", "text": f"INTENT: {intent}\nNARRATION: {context}\n"
-                                     f"There are {count} tiles, numbered 1-{count}."},
+            {"type": "text", "text": (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
+             + f"INTENT: {intent}\nNARRATION: {context}\n"
+             f"There are {count} tiles, numbered 1-{count}."},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},
         ]},
     ]
