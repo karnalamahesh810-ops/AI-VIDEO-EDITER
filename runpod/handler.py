@@ -190,6 +190,44 @@ def _preview_proxy(path: str, work: str, scene_id: str) -> str:
 _MEDIA_LINK_TTL = 60 * 60 * 24 * 30
 
 
+def _kie_credit() -> float:
+    """
+    The Kie account balance, or +inf when it cannot be read (not Kie, no key,
+    network hiccup) - an unknown balance never blocks a job.
+    """
+    base = (config.DIRECTOR_API_BASE or "") + (config.VISION_API_BASE or "")
+    key = config.DIRECTOR_API_KEY or config.VISION_API_KEY
+    if "kie.ai" not in base or not key:
+        return float("inf")
+    try:
+        import requests
+        r = requests.get("https://api.kie.ai/api/v1/chat/credit",
+                         headers={"Authorization": f"Bearer {key}"}, timeout=15)
+        return float(r.json().get("data"))
+    except Exception:  # noqa: BLE001
+        return float("inf")
+
+
+def _require_ai_credit() -> None:
+    """
+    Refuse to start a sourcing job with an empty AI account.
+
+    With no Kie credit the story director falls back to rules and vision is
+    off, so nothing checks what the clips show: a real 95 s job came out as a
+    lyric video, a singer, strangers' weddings and glitch art - ten minutes
+    spent producing a video nobody would publish. Failing in a second with
+    the reason is better. REQUIRE_AI_CREDIT=0 turns this off.
+    """
+    if not config.REQUIRE_AI_CREDIT:
+        return
+    credit = _kie_credit()
+    if credit < config.MIN_AI_CREDIT:
+        raise RuntimeError(
+            f"The AI account (Kie) is out of credit (balance {credit:.2f}). Without it the "
+            "director cannot read the story and nothing checks the clips, so the video "
+            "would be random footage. Top up at kie.ai, then run this again.")
+
+
 def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                   job_id: str = "", band: tuple = (66, 68)) -> int:
     """
@@ -866,6 +904,9 @@ def handler(job):
                 "status": "rendering", "job_id": job_id,
                 "progress": 0, "error_message": None,
             })
+
+        if action in ("plan", "build", "resource"):
+            _require_ai_credit()
 
         if action == "plan":
             doc = do_plan(inp, work, report)
