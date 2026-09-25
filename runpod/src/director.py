@@ -1283,7 +1283,10 @@ def _balance_visuals(shots: List[dict], story: dict) -> int:
 
     stills = [i for i, s in enumerate(shots)
               if s.get("visualType") == "image" and s.get("subjectType") != "document"]
-    over = len(stills) - int(MAX_STILL_SHARE * len(shots))
+    # VidRush's biography of Obama's parents is about half real photos of the
+    # named people and documents; a news story is mostly footage.
+    share = 0.55 if story.get("kind") in ("biography", "history") else MAX_STILL_SHARE
+    over = len(stills) - int(share * len(shots))
     for i in reversed(stills):
         if over <= 0:
             break

@@ -43,7 +43,11 @@ class BalanceVisuals(unittest.TestCase):
         shots = [_shot(f"Person Number{i}") for i in range(10)]
         director._balance_visuals(shots, STORY)
         stills = sum(1 for s in shots if s["visualType"] == "image")
-        self.assertLessEqual(stills, int(director.MAX_STILL_SHARE * 10))
+        self.assertLessEqual(stills, int(0.55 * 10))      # history: photo-led
+        news = [_shot(f"Person Number{i}") for i in range(10)]
+        director._balance_visuals(news, dict(STORY, kind="news"))
+        self.assertLessEqual(sum(1 for s in news if s["visualType"] == "image"),
+                             int(director.MAX_STILL_SHARE * 10))
 
     def test_no_story_changes_nothing(self):
         shots = [_shot("a man")]
