@@ -19,7 +19,9 @@ shots are illustrations rather than records.
 Every asset carries its `source`, `license` and `attribution` so the UI can
 show where each clip came from and you can see your exposure per video.
 """
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (FIRST_COMPLETED, ThreadPoolExecutor, as_completed,
+                                wait)
+from concurrent.futures import TimeoutError as FuturesTimeout
 import contextvars
 from dataclasses import dataclass, asdict, replace as _dc_replace
 from typing import List, Optional, Dict, Any
@@ -43,6 +45,12 @@ from .storage import download
 # timed out. Blind rotation meant every third request went to an IP YouTube
 # had already started refusing, costing a failed search plus a retry each time.
 _PROXIES = list(config.YTDLP_PROXIES)
+# "" is the worker's own address. Proxies are only worth it while YouTube has
+# not flagged them; when it has (2026-09-25: every proxy answered "Sign in to
+# confirm you're not a bot" to downloads while searches still worked), the
+# machine's own IP may be the better route. YTDLP_DIRECT=1 adds it.
+if config.YTDLP_DIRECT and "" not in _PROXIES:
+    _PROXIES.insert(0, "")
 _PROXY_LOCK = threading.Lock()
 _PROXY_POS = [0]
 _PROXY_BENCHED: Dict[str, float] = {}
@@ -66,6 +74,37 @@ def _next_proxy() -> str:
             if _PROXY_BENCHED.get(proxy, 0) <= now:
                 return proxy
         return min(_PROXIES, key=lambda p: _PROXY_BENCHED.get(p, 0))
+
+
+def probe_youtube(video_id: str = "ka2S39HhLsM") -> List[dict]:
+    """
+    Can this worker actually download from YouTube, directly and per proxy?
+
+    Metadata for one known video (the step that gets refused - searches keep
+    working from flagged IPs, which hid the block). Routes are reported by
+    number only; a proxy URL carries credentials.
+    """
+    routes = [("direct", "")] + [(f"proxy#{i + 1}", p) for i, p in enumerate(config.YTDLP_PROXIES)]
+
+    def one(route):
+        name, proxy = route
+        cmd = ["yt-dlp", "--skip-download", "--print", "%(id)s",
+               f"https://www.youtube.com/watch?v={video_id}"] + _yt_network_args(proxy)
+        t = time.time()
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=60)
+            ok = video_id in (p.stdout or "")
+            why = "" if ok else ("bot check" if looks_blocked(p.stderr) else
+                                 ((p.stderr or "").strip().splitlines() or ["no output"])[-1][:80])
+        except subprocess.TimeoutExpired:
+            ok, why = False, "timeout"
+        # Never echo anything that could contain the proxy URL.
+        why = re.sub(r"https?://\S+", "<url>", why)
+        return {"route": name, "ok": ok, "seconds": round(time.time() - t, 1), "why": why}
+
+    with ThreadPoolExecutor(max_workers=len(routes)) as ex:
+        return list(ex.map(one, routes))
 
 
 def _bench_proxy(proxy: str, why: str = "") -> None:
@@ -885,16 +924,49 @@ def _era_score(title: str) -> float:
 B_ROLL_INTENT = "drone aerial footage"
 
 
+_STILL_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+
+def _is_still(path: str) -> bool:
+    return os.path.splitext(path or "")[1].lower() in _STILL_EXTS
+
+
+def _video_seconds(path: str) -> float:
+    try:
+        p = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", path],
+            capture_output=True, text=True, timeout=30)
+        return max(0.0, float((p.stdout or "0").strip() or 0))
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return 0.0
+
+
 def _gray_frames(path: str, count: int = 4, w: int = 320, h: int = 180):
-    """`count` evenly spaced frames as (h, w) uint8 arrays, [] if unreadable."""
+    """
+    `count` evenly spaced frames as (h, w) uint8 arrays, [] if unreadable.
+
+    A still yields its one frame. The old filter (`fps=N/N`) produced ZERO
+    frames from a single image - ffmpeg's fps filter drops a lone frame with
+    no duration - so every web photo and archive still was judged
+    "unreadable" and thrown away after passing vision. That one bug sent
+    18 of 23 beats of an image-heavy story into the slow replacement pass,
+    where every replacement photo failed the same way. For video it also
+    sampled only the first `count` seconds rather than across the clip.
+    """
     try:
         import numpy as np
     except ImportError:
         return []
+    if _is_still(path):
+        vf, frames = f"scale={w}:{h},format=gray", 1
+    else:
+        seconds = _video_seconds(path)
+        rate = f"{count}/{seconds:.3f}" if seconds > count else "1"
+        vf, frames = f"fps={rate},scale={w}:{h},format=gray", count
     p = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", path,
-         "-vf", f"fps={count}/max(1\\,{max(1, count)}),scale={w}:{h},format=gray",
-         "-frames:v", str(count), "-f", "rawvideo", "-"],
+        ["ffmpeg", "-v", "error", "-i", path, "-vf", vf,
+         "-frames:v", str(frames), "-f", "rawvideo", "-"],
         capture_output=True, timeout=90)
     buf = p.stdout or b""
     n = len(buf) // (w * h)
@@ -1128,6 +1200,51 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
     return out
 
 
+# Where VidRush-grade footage actually lives. A plain YouTube search for
+# "Honolulu 1960s" returns vlogs and slideshows; British Pathé and Periscope
+# Film return "A Trip To Honolulu (1966)" and "HONOLULU HAWAII 1969
+# TRAVELOGUE". The story kind (set per job) picks the channel set.
+_STORY_KIND = {"kind": ""}
+
+
+def set_story_kind(kind: str) -> None:
+    _STORY_KIND["kind"] = (kind or "").strip().lower()
+
+
+def _story_channels() -> List[str]:
+    kind = _STORY_KIND["kind"]
+    if kind in ("history", "biography"):
+        return config.ARCHIVE_CHANNELS
+    if kind in ("news", "weather", "disaster"):
+        return config.NEWS_CHANNELS
+    return []
+
+
+def _channel_candidates(query: str, channels: List[str], subject: str = "") -> List[dict]:
+    """
+    One search inside each channel, in parallel, results interleaved so the
+    best hit of every channel comes before the second of any. Cached like
+    the plain search. Channels that time out or have nothing are skipped.
+    """
+    key = f"ytch::{','.join(channels)}::{(subject or query).strip().lower()}::{query.lower()}"
+    with _CACHE_LOCK:
+        if key in _YT_CANDIDATES_CACHE:
+            return _YT_CANDIDATES_CACHE[key]
+    targets = [f"https://www.youtube.com/{ch}/search?query={urllib.parse.quote_plus(query)}"
+               for ch in channels]
+    with ThreadPoolExecutor(max_workers=max(1, len(targets))) as ex:
+        lists = list(ex.map(lambda t: _yt_candidates(t, False, limit=6, timeout=45), targets))
+    merged, seen = [], set()
+    for rank in range(max((len(x) for x in lists), default=0)):
+        for found in lists:
+            if rank < len(found) and found[rank]["id"] not in seen:
+                seen.add(found[rank]["id"])
+                merged.append(found[rank])
+    with _CACHE_LOCK:
+        _YT_CANDIDATES_CACHE[key] = merged
+    return merged
+
+
 def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
                           variant: str = "") -> List[dict]:
     """
@@ -1350,6 +1467,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     elif b_roll_intent:
         searches.append((f"{query_or_url} {B_ROLL_INTENT}", "broll", False))
     searches.append((query_or_url, "plain", False))
+    # The archive / news channels first: that is where the real footage of
+    # an era or an event is, ahead of general uploads.
+    if _story_channels() and not require_cc:
+        searches.insert(0, (query_or_url, "channels", False))
 
     judged = 0
     for search, variant, this_year in searches:
@@ -1367,7 +1488,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         else:
             target = f"ytsearch12:{search}"
 
-        candidates = _yt_candidates_cached(target, require_cc, subject, variant)
+        if variant == "channels":
+            candidates = _channel_candidates(search, _story_channels(), subject)
+        else:
+            candidates = _yt_candidates_cached(target, require_cc, subject, variant)
         if not candidates:
             continue
 
@@ -2001,6 +2125,12 @@ def clip_quality(path: str) -> tuple:
     if not frames:
         return False, "unreadable"
 
+    if _is_still(path):
+        # Text on a still was already judged by vision, and a document photo
+        # is text by design - the caption detector would reject every one.
+        # Frozen means nothing for a photo. Only a black frame is a failure.
+        return (False, "near-black") if float(frames[0].mean()) < 26 else (True, "")
+
     if has_burned_captions(path):
         return False, "burned-in text or UI"
 
@@ -2035,6 +2165,34 @@ def _asset_ok(asset) -> tuple:
     return clip_quality(path)
 
 
+# What the last source_many() did, phase by phase, for the job result. The
+# worker's own log shows this, but RunPod doesn't expose that log - without
+# it, "why is this slow" was guesswork: a real job sent 19-21 of 23 beats to
+# the slow replacement pass and there was no way to see which of empty /
+# repeat / rejected was the cause.
+LAST_STATS: Dict[str, Any] = {}
+
+
+def _until(futures, deadline: float):
+    """
+    Yield futures as they finish, stopping at `deadline`.
+
+    The pass budgets used to be checked only between attempts, and every pass
+    ended in a `with ThreadPoolExecutor` block that waits for all threads -
+    so one slow attempt ran as long as it liked and held the video: a real
+    job's 240 s replacement pass took 525 s for six scenes. The caller shuts
+    its pool down with wait=False; late threads finish in the background and
+    their results are ignored.
+    """
+    pending = set(futures)
+    while pending:
+        left = deadline - time.time()
+        if left <= 0:
+            return
+        finished, pending = wait(pending, timeout=min(left, 5), return_when=FIRST_COMPLETED)
+        yield from finished
+
+
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
                 on_recheck=None, sequences: Optional[List[dict]] = None,
@@ -2060,6 +2218,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     """
     results: List[Optional[MediaAsset]] = [None] * len(jobs)
     ordered = sorted(jobs, key=lambda j: j["index"])
+    t_start = time.time()
+    LAST_STATS.clear()
+    LAST_STATS.update(scenes=len(jobs))
 
     # How many earlier scenes already drew from the same candidate list, so
     # each reaches a different entry of it. Keyed on the SUBJECT when there is
@@ -2106,9 +2267,13 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 print(f"[media] sequence {n + 1} failed: {e}", flush=True)
                 return {}
 
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            futures = [pool.submit(run_sequence, n, seq) for n, seq in enumerate(sequences)]
-            for fut in as_completed(futures):
+        # Same straggler rule as pass 1: a pool still running at the budget
+        # is abandoned and its lines fall through to the one-by-one search.
+        seq_pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        futures = [seq_pool.submit(contextvars.copy_context().run, run_sequence, n, seq)
+                   for n, seq in enumerate(sequences)]
+        try:
+            for fut in as_completed(futures, timeout=config.SEQUENCE_BUDGET_SECONDS):
                 for idx, asset in (fut.result() or {}).items():
                     if 0 <= idx < len(results) and results[idx] is None:
                         results[idx] = asset
@@ -2116,6 +2281,11 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     pooled[0] += 1
                     if on_pool:
                         on_pool(pooled[0], len(sequences))
+        except FuturesTimeout:
+            print(f"[media] {sum(1 for f in futures if not f.done())} sequence pool(s) over "
+                  f"budget; their lines go to the one-by-one search", flush=True)
+        finally:
+            seq_pool.shutdown(wait=False, cancel_futures=True)
         filled = sum(1 for r in results if r is not None)
         print(f"[media] sequence pools filled {filled}/{len(jobs)} scene(s) from "
               f"{len(sequences)} sequence(s)", flush=True)
@@ -2172,19 +2342,49 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 got = stronger_hook(job, nth, got)
         return got
 
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
-        for fut in as_completed(futures):
-            idx = futures[fut]
-            try:
-                results[idx] = fut.result()
-            except Exception as e:  # noqa: BLE001
-                print(f"[media] worker error on scene {idx}: {e}", flush=True)
+    # Not a `with` block: its exit waits for every thread, and one hung
+    # download then holds the whole video. A real job sat at "Sourced 22/23"
+    # for over ten minutes on a single stalled scene. Stragglers are left
+    # running in the background and their scenes fall through to the
+    # recheck / fill steps below, which exist for exactly that.
+    pool = ThreadPoolExecutor(max_workers=max(1, workers))
+    futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
+    started = time.time()
+    deadline = started + config.PASS1_BUDGET_SECONDS
+    pending = set(futures)
+    try:
+        while pending:
+            left = deadline - time.time()
+            if left <= 0:
+                break
+            finished, pending = wait(pending, timeout=min(left, 5), return_when=FIRST_COMPLETED)
+            for fut in finished:
+                idx = futures[fut]
+                try:
+                    results[idx] = fut.result()
+                except Exception as e:  # noqa: BLE001
+                    print(f"[media] worker error on scene {idx}: {e}", flush=True)
+                with lock:
+                    done += 1
+                    if on_done:
+                        on_done(done, len(jobs))
+            # Once nearly everything is in, the last few get a short grace
+            # period rather than the whole budget.
+            if pending and len(pending) <= max(1, len(futures) // 10):
+                deadline = min(deadline, time.time() + config.STRAGGLER_GRACE_SECONDS)
+        if pending:
+            stuck = sorted(futures[f] + 1 for f in pending)
+            print(f"[media] gave up waiting on scene(s) {stuck}; they go to the recheck",
+                  flush=True)
+            LAST_STATS["pass1_stragglers"] = len(stuck)
             with lock:
-                done += 1
+                done += len(pending)
                 if on_done:
                     on_done(done, len(jobs))
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
+    t_pass2 = time.time()
     # Pass 2: nothing may appear twice, and nothing unusable may stay.
     #
     # Both failures want the same repair - reach further down the same result
@@ -2258,9 +2458,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     if todo:
         if on_review:
             on_review(0, len(todo))
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            futures = {pool.submit(replace, *t): t for t in todo}
-            for n, fut in enumerate(as_completed(futures), 1):
+        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        futures = {pool.submit(contextvars.copy_context().run, replace, *t): t for t in todo}
+        try:
+            for n, fut in enumerate(_until(futures, deadline + 15), 1):
                 job, nth, bad_reason, is_dup = futures[fut]
                 i = job["index"]
                 try:
@@ -2283,6 +2484,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     results[i].review_reason = "Repeat of an earlier shot — no other match found"
                 if on_review:
                     on_review(n, len(todo))
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
 
     if duplicates:
         print(f"[media] resolved {duplicates} duplicate shot(s)", flush=True)
@@ -2291,6 +2494,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     if todo:
         print(f"[media] second pass: {replaced[0]}/{len(todo)} scene(s) replaced "
               f"({empty} empty, {duplicates} repeats, {rejected} unusable)", flush=True)
+    LAST_STATS.update(pass1_seconds=round(t_pass2 - t_start, 1),
+                      pass2_seconds=round(time.time() - t_pass2, 1),
+                      pass1_empty=empty, pass1_repeats=duplicates,
+                      pass1_unusable=rejected, pass2_replaced=replaced[0])
 
     # Recheck with AI: every scene still without a shot of its own - empty, or
     # holding only a copy of another scene's clip, which on screen reads as a
@@ -2348,13 +2555,20 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             return got
 
         filled_by_ai = 0
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            for job, got in zip(empties, pool.map(rescue_one, empties)):
+        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        futures = {pool.submit(contextvars.copy_context().run, rescue_one, job): job
+                   for job in empties}
+        try:
+            for fut in _until(futures, rescue_deadline + 15):
+                got = fut.result() if not fut.exception() else None
                 if got:
-                    results[job["index"]] = got
+                    results[futures[fut]["index"]] = got
                     filled_by_ai += 1
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
         print(f"[media] AI recheck gave {filled_by_ai}/{len(empties)} missing or "
               f"repeated scene(s) a shot of their own", flush=True)
+        LAST_STATS.update(rescue_tried=len(empties), rescue_filled=filled_by_ai)
 
     # Last resort for whatever is still empty: one generated still each,
     # within IMAGE_MAX_PER_VIDEO. Inside source_for_segment generation only
@@ -2378,11 +2592,19 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         filled = sum(1 for job in empties if results[job["index"]] is not None)
         print(f"[media] generated stills for {filled}/{len(empties)} empty scene(s)",
               flush=True)
+        LAST_STATS.update(generated_tried=len(empties), generated_filled=filled)
 
     reused = fill_from_story(ordered, results) if config.REUSE_SHOTS_TO_FILL else 0
     if reused:
         print(f"[media] reused a shot from elsewhere in the story for {reused} "
               f"scene(s) nothing else could fill", flush=True)
+    LAST_STATS.update(total_seconds=round(time.time() - t_start, 1),
+                      reused_to_fill=reused,
+                      still_empty=sum(1 for r in results if r is None),
+                      by_source=dict(sorted(
+                          ((src, sum(1 for r in results if r and r.source == src))
+                           for src in {r.source for r in results if r}),
+                          key=lambda kv: -kv[1])))
     return results
 
 
@@ -2500,6 +2722,8 @@ SEQ_SHOTS_PER_WINDOW = 3
 SEQ_MAX_VIDEOS = 4
 SEQ_MAX_IMAGES = 6
 SEQ_SHOT_PAD = 0.5
+# Footage searches per sequence run concurrently (see source_sequence).
+SEQ_PARALLEL_SEARCHES = 3
 
 
 def _cut(src: str, out: str, start: float, seconds: float) -> str:
@@ -2659,17 +2883,39 @@ def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
         imgs = [s["q"] for s in seq.get("searches", []) if s.get("kind") == "image"]
         # Spare footage for photo lines that find no photo, and vice versa.
         need_foot = n_foot + (n_img + 1) // 2
-        if allow_youtube:
-            for q in foot:
-                have = sum(1 for p in pool if p["kind"] == "footage")
+        need_img = min(SEQ_MAX_IMAGES, n_img + (1 if n_foot else 0))
+        # The first searches and the photo search run AT THE SAME TIME. Run
+        # one after another they made each sequence wait on every download
+        # and vision check in turn (a 23-line job spent ~6 minutes here).
+        # Each task gets its own copy of this thread's context: the subject
+        # type and event window are context variables, and a pool thread
+        # does not inherit them.
+        first = foot[:SEQ_PARALLEL_SEARCHES] if allow_youtube else []
+        rest = foot[SEQ_PARALLEL_SEARCHES:] if allow_youtube else []
+        with ThreadPoolExecutor(max_workers=len(first) + 1) as ex:
+            img_fut = (ex.submit(contextvars.copy_context().run, _image_pool, imgs, subject,
+                                 subject_type, need_img, intent, context, used, work_dir)
+                       if need_img else None)
+            share = [need_foot] + [max(1, (need_foot + 1) // 2)] * (len(first) - 1)
+            foot_futs = [ex.submit(contextvars.copy_context().run, _footage_pool, q, share[n],
+                                   lengths, intent, context, used, work_dir, require_cc,
+                                   f"{tag}_p{n}")
+                         for n, q in enumerate(first)]
+            for fut in foot_futs:
+                have = sum(1 for x in pool if x["kind"] == "footage")
+                # Concurrent searches can land on the same video; the earlier
+                # search keeps it (one window, several shots is by design).
+                taken = {x.get("video") for x in pool if x.get("video")}
+                got = [x for x in (fut.result() or []) if not x.get("video") or x["video"] not in taken]
+                pool += got[:max(0, need_foot - have)]
+            for q in rest:
+                have = sum(1 for x in pool if x["kind"] == "footage")
                 if have >= need_foot:
                     break
                 pool += _footage_pool(q, need_foot - have, lengths, intent, context,
                                       used, work_dir, require_cc, f"{tag}_{len(pool)}")
-        need_img = min(SEQ_MAX_IMAGES, n_img + (1 if n_foot else 0))
-        if need_img:
-            pool += _image_pool(imgs, subject, subject_type, need_img, intent, context,
-                                used, work_dir)
+            if img_fut is not None:
+                pool += img_fut.result() or []
     finally:
         _EVENT_WINDOW.reset(window_token)
         _SUBJECT_TYPE.reset(token)

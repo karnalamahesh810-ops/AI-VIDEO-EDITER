@@ -68,6 +68,13 @@ _SYSTEM = (
     "stock-photo watermark, a product listing or poster for sale, a website "
     "screenshot, or a meme or collage with text. Small incidental real-world text "
     "(a street sign) is fine.\n"
+    "STORY is the whole video's subject. A shot that contradicts it (another "
+    "person, another event, another era) is wrong even if it fits the line's "
+    "words. For an abstract line (a feeling, a decision, a record), era-accurate "
+    "footage of the ACTION in the story's setting - hands on a typewriter for a "
+    "1960s file, airmail letters for letters, an archive box for a record - is "
+    "what a documentary editor uses: 0.7-0.85. Modern generic stock for a "
+    "historical story: at most 0.4.\n"
     "Separately rate quality 0-1 as documentary footage, whatever the subject: sharp, "
     "stable, well lit, well composed, filling a 16:9 frame, with motion or visual "
     "interest is high; blurry, blocky compression, shaky, very dark, a vertical phone "
@@ -354,6 +361,24 @@ def _parse(text: str) -> Optional[dict]:
     }
 
 
+# One line describing the whole video (who, what, when, where), set once per
+# job from the director's story brief and shown with every judgement.
+_STORY = {"line": ""}
+
+
+def set_story(brief: Optional[dict]) -> None:
+    """Give the judge the whole-story brief; None or {} clears it."""
+    b = brief or {}
+    cast = [c.get("name") for c in (b.get("cast") or []) if c.get("name")]
+    people = cast or list(b.get("people") or [])
+    parts = [b.get("summary") or b.get("event") or "",
+             f"people: {', '.join(people[:5])}" if people else "",
+             f"places: {', '.join((b.get('places') or [])[:4])}" if b.get("places") else "",
+             f"year: {b.get('year')}" if b.get("year") else "",
+             f"kind: {b.get('kind')}" if b.get("kind") else ""]
+    _STORY["line"] = " | ".join(p for p in parts if p)[:500]
+
+
 def judge(path: str, intent: str, context: str = "", event: bool = False) -> Optional[dict]:
     """
     Verdict for one candidate file, or None when no model could be reached.
@@ -365,7 +390,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False) -> Opt
     """
     if not enabled() or not path or not os.path.exists(path):
         return None
-    key = f"{_fingerprint(path)}|{int(event)}|{intent}"
+    key = f"{_fingerprint(path)}|{int(event)}|{intent}|{_STORY['line'][:80]}"
     with _LOCK:
         if key in _CACHE:
             return _CACHE[key]
@@ -378,7 +403,8 @@ def judge(path: str, intent: str, context: str = "", event: bool = False) -> Opt
         return None
 
     content = [{"type": "text", "text":
-                f"INTENT: {intent}\nNARRATION: {context}\n"
+                (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
+                + f"INTENT: {intent}\nNARRATION: {context}\n"
                 f"These are {len(frames)} frames from the candidate."}]
     content += [{"type": "image_url",
                  "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames]
@@ -456,8 +482,9 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Opt
     messages = [
         {"role": "system", "content": _PICK_SYSTEM},
         {"role": "user", "content": [
-            {"type": "text", "text": f"INTENT: {intent}\nNARRATION: {context}\n"
-                                     f"There are {count} tiles, numbered 1-{count}."},
+            {"type": "text", "text": (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
+             + f"INTENT: {intent}\nNARRATION: {context}\n"
+             f"There are {count} tiles, numbered 1-{count}."},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},
         ]},
     ]

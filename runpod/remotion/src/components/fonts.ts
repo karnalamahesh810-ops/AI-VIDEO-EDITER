@@ -18,4 +18,5 @@ const latin = { subsets: ["latin" as const] };
 export const NARROW = `${loadOswald("normal", { ...latin, weights: ["500", "700"] }).fontFamily}, 'Arial Narrow', sans-serif`;
 export const TYPEWRITER = `${loadCourierPrime("normal", { ...latin, weights: ["400", "700"] }).fontFamily}, 'Courier New', monospace`;
 export const SERIF_ITALIC = `${loadPlayfair("italic", { ...latin, weights: ["700"] }).fontFamily}, Georgia, serif`;
+export const SERIF = `${loadPlayfair("normal", { ...latin, weights: ["400"] }).fontFamily}, Georgia, serif`;
 export const INTER = `${loadInter("normal", { ...latin, weights: ["400", "700", "800"] }).fontFamily}, system-ui, sans-serif`;

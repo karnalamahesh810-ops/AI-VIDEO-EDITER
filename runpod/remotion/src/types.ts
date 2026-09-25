@@ -16,7 +16,9 @@ export type Treatment = "none" | "film" | "vintage" | "archival";
  * for section changes, the way VidRush uses them (~1 cut in 4).
  * Must match TRANSITIONS in src/timeline.py; a test asserts they agree.
  */
-export type SceneTransition = "none" | "fade" | "film-burn" | "zoom" | "glitch" | "slide";
+export type SceneTransition =
+  | "none" | "fade" | "film-burn" | "zoom" | "glitch" | "slide"
+  | "whip" | "flash" | "light-leak" | "dip" | "blur" | "punch";
 
 /**
  * One effect per clip, so borrowed footage reads as designed.
@@ -51,12 +53,32 @@ export type OverlayType =
   | "highlight"
   | "lower-third"
   | "comparison"
+  | "stat-tag"
+  | "label-boxes"
+  | "ring-stat"
+  | "bullets"
+  | "swoosh-title"
+  | "kicker"
+  | "memo-box"
+  | "word-type"
+  | "underline-title"
+  | "bar-title"
+  | "age-tag"
+  | "clock-badge"
+  | "red-strip"
+  | "line-chart"
+  | "path-steps"
+  | "progress-steps"
+  | "span"
+  | "icon-pop"
   | "arrow"
   | "split"
   // VidRush's own text animations, read off their exports.
   | "sentence-highlight"
   | "article-zoom"
-  | "date-stamp";
+  | "date-stamp"
+  | "photo-card"
+  | "name-card";
 
 export interface SceneWord {
   text: string;
@@ -143,6 +165,9 @@ export interface Overlay {
   highlight?: string;
   /** Document body for article-zoom; only ever text taken from the plan. */
   body?: string;
+  /** Normalized frame positions, supplied after visual review, not guessed. */
+  anchor?: { x: number; y: number };
+  labelPosition?: { x: number; y: number };
   startFrame: number;
   durationInFrames: number;
 }

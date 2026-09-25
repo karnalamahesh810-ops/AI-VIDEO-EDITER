@@ -31,12 +31,17 @@ _IMAGE_MOTIONS = ["zoom-in", "pan-left", "zoom-out", "pan-right"]
 # Scene entrances and per-clip effects. Both lists are a contract with
 # remotion/src/types.ts (SceneTransition / SceneEffect) and SceneEffects.tsx;
 # a test asserts they agree.
-TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide"}
+TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide",
+               "whip", "flash", "light-leak", "dip", "blur", "punch"}
 EFFECTS = {"none", "ken-burns", "light-leaks", "dust", "film-flicker", "color-shift"}
 
 # Rotation for the strong transitions at section changes. Film burn leads
 # because it is VidRush's most-used transition (24 of 61 on one timeline).
-_TRANSITION_CYCLE = ["film-burn", "zoom", "glitch", "film-burn", "slide", "zoom"]
+# Every entrance VidRush uses, in an order where neighbours never look alike
+# (a warm burst is never followed by another warm burst, a motion move by a
+# motion move).
+_TRANSITION_CYCLE = ["film-burn", "whip", "flash", "zoom", "light-leak", "slide",
+                     "dip", "punch", "glitch", "blur", "fade"]
 
 # One effect per clip, weighted roughly like VidRush's own distribution
 # (colour 37, Ken Burns 34, light leaks 29, flicker 21, dust 15 per 160 clips).
@@ -93,6 +98,14 @@ _OVERLAY_SECONDS = {
     "timeline": 6.0, "highlight": 3.0, "lower-third": 3.5,
     "comparison": 5.0, "arrow": 2.5, "split": 4.0,
     "sentence-highlight": 4.0, "article-zoom": 5.0, "date-stamp": 3.0,
+    "photo-card": 4.0, "name-card": 3.5,
+    # Footage tags ride on a playing shot; VidRush holds them 4-5.5 s.
+    "stat-tag": 4.0, "label-boxes": 4.0, "ring-stat": 4.5, "bullets": 5.5,
+    "swoosh-title": 3.0, "kicker": 3.0, "memo-box": 3.5, "word-type": 2.5,
+    "underline-title": 3.5, "bar-title": 3.5, "age-tag": 3.0, "clock-badge": 3.5,
+    "red-strip": 3.0,
+    "line-chart": 5.5, "path-steps": 5.5, "progress-steps": 4.5, "span": 4.5,
+    "icon-pop": 3.0,
 }
 
 # Sources this workflow refuses. Kept as data so the check and the error
@@ -226,6 +239,13 @@ def build(segments: List[Segment], shots: List[dict],
         })
 
         overlay = shot.get("overlay")
+        if overlay and overlay["type"] in {"photo-card", "name-card"}:
+            # Bind only this beat's sourced, reviewed image. Never substitute a
+            # previous scene's person or generate a portrait to fill a card.
+            if asset is not None and asset.kind == "image" and not review:
+                overlay = {**overlay, "media": [media]}
+            else:
+                overlay = None
         if overlay:
             # A graphic runs for as long as it needs to be read, not for as
             # long as the beat that introduced it — so it can span later cuts.
@@ -318,10 +338,15 @@ def _validate_overlay(ov: Any, index: int, total: int) -> None:
             for key, limit in (("lat", 90), ("lon", 180)):
                 if abs(_number(p.get(key), f"{where} {key}")) > limit:
                     raise ValueError(f"{where}: {key} is out of range")
-    elif kind == "split":
+    elif kind in {"split", "photo-card", "name-card"}:
         media = ov.get("media")
-        if not isinstance(media, list) or len(media) < 2:
-            raise ValueError(f"{where}: a split screen needs two media assets")
+        minimum = 2 if kind == "split" else 1
+        if not isinstance(media, list) or len(media) < minimum:
+            raise ValueError(f"{where}: a split screen needs two media assets"
+                             if kind == "split" else
+                             f"{where}: {kind} needs a real image asset")
+        if kind != "split" and any(not isinstance(m, dict) or m.get("type") != "image" or not m.get("url") for m in media):
+            raise ValueError(f"{where}: image cards need real image assets")
     elif kind == "stat":
         _number(ov.get("value"), f"{where} value")
     elif kind in {"bar-chart", "comparison"}:

@@ -37,12 +37,23 @@ _PCT = re.compile(r"(\d{1,3})\s*%")
 
 
 def _render_progress(line: str):
-    """0..1 out of a Remotion progress line, or None when it isn't one."""
+    """
+    0..1 out of a Remotion progress line, or None when it isn't one.
+
+    Remotion reports two passes, "Rendered x/y" (frames) then "Encoded x/y" /
+    "Stitched x/y". Read as one bar they made it run to ~80% and drop back to
+    0 - the user saw the video's progress "go back". Frames map to 0-0.8,
+    encoding to 0.8-1.0.
+    """
     m = _FRAC.search(line)
     if m:
         done, total = int(m.group(1)), int(m.group(2))
         if total > 0 and done <= total:
-            return done / total
+            frac = done / total
+            low = line.lower()
+            if "encod" in low or "stitch" in low or "mux" in low:
+                return 0.8 + 0.2 * frac
+            return 0.8 * frac
     m = _PCT.search(line)
     if m:
         v = int(m.group(1))
@@ -89,16 +100,30 @@ def render(props: dict, out_path: str, composition: str = "Main",
             # somebody is listening.
             "--log=info" if on_progress else "--log=error",
         ]
-        if concurrency:
-            cmd.append(f"--concurrency={concurrency}")
+        # A container sees the HOST's memory and cores. Remotion sizes its
+        # frame cache at half of "system memory" and the compositor's decoders
+        # scale with cores, so on a RunPod worker both overshoot the cgroup
+        # until the compositor can no longer start a thread - the render dies
+        # with "thread::unix::Thread::new::thread_start" partway through.
+        # Fixed caps keep it inside the container.
+        cmd += [f"--offthreadvideo-cache-size-in-bytes={config.RENDER_FRAME_CACHE_BYTES}",
+                f"--offthreadvideo-video-threads={config.RENDER_VIDEO_THREADS}"]
 
-        if on_progress is None:
-            p = subprocess.run(
-                cmd, cwd=config.REMOTION_DIR, capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=timeout,
-            )
-        else:
-            p = _run_streaming(cmd, timeout, on_progress)
+        def run(argv):
+            if on_progress is None:
+                return subprocess.run(
+                    argv, cwd=config.REMOTION_DIR, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=timeout,
+                )
+            return _run_streaming(argv, timeout, on_progress)
+
+        p = run(cmd + ([f"--concurrency={concurrency}"] if concurrency else []))
+        tail = (p.stderr or p.stdout or "")[-3000:]
+        if p.returncode != 0 and ("thread_start" in tail or "Resource temporarily" in tail):
+            # Still out of threads: one slower, single-tab retry beats losing
+            # a whole job that already spent minutes sourcing.
+            print("[render] out of threads - retrying at concurrency 1", flush=True)
+            p = run(cmd + ["--concurrency=1"])
 
     if p.returncode != 0 or not os.path.exists(out_path):
         tail = (p.stderr or p.stdout or "")[-1500:]
@@ -122,13 +147,15 @@ def _run_streaming(cmd, timeout, on_progress) -> "_Completed":
         bufsize=1,
     )
     lines, deadline = [], time.time() + timeout
+    best = [0.0]   # progress only ever moves forward
     try:
         for line in proc.stdout:
             lines.append(line)
             if len(lines) > 400:          # keep the tail, not the whole log
                 del lines[:200]
             frac = _render_progress(line)
-            if frac is not None:
+            if frac is not None and frac > best[0]:
+                best[0] = frac
                 try:
                     on_progress(frac)
                 except Exception:

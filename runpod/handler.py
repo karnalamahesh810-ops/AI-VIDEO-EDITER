@@ -130,6 +130,38 @@ class Reporter:
         storage.patch_project(self.project_id, payload)
 
 
+def _machine() -> dict:
+    """
+    What this worker can actually use, as the container sees it.
+
+    os.cpu_count() reports the HOST; the cgroup files say what this container
+    is allowed. Render concurrency and the thread-spawn crash both depend on
+    the real limits, not the host's.
+    """
+    def read(path):
+        try:
+            with open(path) as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+    info = {"hostCpus": os.cpu_count()}
+    try:
+        info["usableCpus"] = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        pass
+    quota = read("/sys/fs/cgroup/cpu.max").split()
+    if len(quota) == 2 and quota[0] != "max":
+        info["cgroupCpus"] = round(int(quota[0]) / int(quota[1]), 2)
+    mem = read("/sys/fs/cgroup/memory.max")
+    if mem.isdigit():
+        info["memoryGb"] = round(int(mem) / 2 ** 30, 1)
+    for line in read("/proc/meminfo").splitlines()[:1]:
+        info["hostMemoryGb"] = round(int(line.split()[1]) / 2 ** 20, 1)
+    info["pidsMax"] = read("/sys/fs/cgroup/pids.max") or None
+    info["gpu"] = bool(os.path.exists("/dev/nvidia0"))
+    return info
+
+
 def _thumbnail(path: str, work: str, scene_id: str) -> str:
     """A 320px JPEG of the scene for the editor's filmstrip, or "" on failure."""
     out = os.path.join(work, f"thumb_{scene_id}.jpg")
@@ -367,6 +399,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     title = director.clean_title(inp.get("title") or inp.get("title_overlay") or "")
     report("Reading the whole story", 13)
     brief = director.story_brief(segments, title, configured=director.is_configured())
+    # Every vision judgement sees the whole story, not just its own line.
+    vision.set_story(brief)
+    # And YouTube searches the archive or news channels for this kind of story.
+    media.set_story_kind(brief.get("kind", ""))
 
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
@@ -465,9 +501,6 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         doc["meta"]["warnings"].append(
             f"Requested source mode '{inp.get('source')}' is not implemented yet; "
             f"sourced from Creative Commons YouTube and Commons instead.")
-    # What the AI understood the video to be about, for the editor to show.
-    doc["meta"]["story"] = {k: brief.get(k) for k in
-                            ("kind", "summary", "event", "year", "places", "people")}
     # Which image/footage sources answered, came back empty, or failed, and why.
     doc["meta"]["sourceStats"] = media.source_stats()
     doc["meta"]["vision"] = vision.stats()
@@ -477,6 +510,16 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             "checks, AI rescue and AI images stopped partway. Top up Kie and "
             "re-run for full quality."))
     doc["meta"]["audioSource"] = raw_audio
+    # Where the sourcing time actually went, visible from outside the worker.
+    doc["meta"]["sourcing"] = dict(media.LAST_STATS)
+    # What the AI understood the video to be about (kind, event, places, cast
+    # with aliases, per-section footage), for the editor to show.
+    doc["meta"]["story"] = dict(director.LAST_STORY) or dict(brief)
+    # The editor's story card reads startBeat/endBeat/queries; keep both spellings.
+    doc["meta"]["story"]["sections"] = [
+        {**sec, "startBeat": sec.get("from"), "endBeat": sec.get("to"),
+         "queries": sec.get("footage", [])}
+        for sec in (doc["meta"]["story"].get("sections") or [])]
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for.
@@ -603,6 +646,56 @@ def _sign_supabase_urls(doc: dict):
                 m["url"] = resign(m["url"])
 
 
+def _sanitize_stills(doc: dict, work: str) -> int:
+    """
+    Re-encode every still to a real JPEG before Chrome sees it.
+
+    Web image search saves whatever the server sent under the name it asked
+    for: a WebP, an AVIF or an HTML error page named ".jpg". Chrome refuses to
+    decode it and Remotion fails the WHOLE render - a real 23-scene job died at
+    frame 356 on one airport photo. Each still is decoded by ffmpeg into a
+    clean JPEG (remote ones are fetched first); one that cannot be decoded is
+    turned into an empty scene, which _fill_missing_media then covers with a
+    matching shot. Returns how many stills were dropped.
+    """
+    from src.assetserver import is_local
+    dropped = 0
+    medias = [s.get("media") for s in doc.get("scenes", [])]
+    medias += [m for o in doc.get("overlays", []) for m in (o.get("media") or [])]
+    for n, media in enumerate(medias):
+        if not isinstance(media, dict) or media.get("type") != "image" or not media.get("url"):
+            continue
+        url = media["url"]
+        src = url if is_local(url) and os.path.isfile(url) else ""
+        if not src and url.startswith("http"):
+            src = os.path.join(work, f"still_src_{n}")
+            try:
+                storage.download(url, src)
+            except Exception:  # noqa: BLE001
+                src = ""
+        out = os.path.join(work, f"still_{n}_{uuid.uuid4().hex[:6]}.jpg")
+        ok = False
+        if src and os.path.isfile(src):
+            try:
+                subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-frames:v", "1",
+                                "-vf", "scale='min(2560,iw)':-2", "-q:v", "3", out],
+                               capture_output=True, timeout=60)
+                ok = os.path.isfile(out) and os.path.getsize(out) > 2000
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                ok = False
+        if ok:
+            media["url"] = out
+        else:
+            dropped += 1
+            media.clear()
+            media.update({"type": "color", "url": "", "source": "none"})
+    if dropped:
+        print(f"[worker] {dropped} still(s) could not be decoded; covered by other shots",
+              flush=True)
+        _fill_missing_media(doc)
+    return dropped
+
+
 def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
     # The document may have come back from a browser, so validate before
     # spending GPU minutes on it.
@@ -621,6 +714,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not refresh narration url: {e}", flush=True)
     _sign_supabase_urls(doc)
+    _sanitize_stills(doc, work)
 
     report(f"Rendering {doc['meta'].get('sceneCount', len(doc['scenes']))} scenes", 70)
     out_path = os.path.join(work, "final.mp4")
@@ -757,6 +851,9 @@ def handler(job):
                     "imageCapPerVideo": config.IMAGE_MAX_PER_VIDEO,
                     "storage": store,
                     "readyToRender": store.get("ok", False),
+                    "machine": _machine(),
+                    # Real download check per route: {"probe_youtube": true}.
+                    **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),
                     # One real model call, so only on request: {"probe": true}.
                     **({"vision": vision.probe()} if inp.get("probe") else {})}
 
