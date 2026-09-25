@@ -3322,5 +3322,50 @@ class VisionJudgeEventsAndQuality(unittest.TestCase):
         self.assertEqual(a.to_scene_media()["qualityScore"], 0.66)
 
 
+class NoAITitleRules(unittest.TestCase):
+    """Without the vision model, titles alone keep fiction and modern tours out."""
+
+    def tearDown(self):
+        media.set_story_era(0)
+
+    def test_fiction_promos_and_home_videos_are_rejected(self):
+        # Titles a real no-AI job put into a 1971 biography.
+        for title in ["You Will Meet a Tall Dark Stranger - Official Trailer - Woody Allen Movie",
+                      "You Will Meet a Tall Dark Stranger | Official Trailer (2010)",
+                      "THE PROMISE HE COULD NO LONGER HIDE | A Billionaire Lost Everything for Love (Full Movie)",
+                      "Best Things To Do in New York City 2026 4K",
+                      "Massachusetts: The Do's & Don'ts of Visiting Massachusetts",
+                      "NYC Wedding Videography - Aerial Drone Footage",
+                      "Our wedding Just Maui'd 10 26 18"]:
+            with self.subTest(title=title):
+                self.assertTrue(media._talking_head(title))
+        for title in ["1961 New York Street Scenes, Manhattan, Rare 8mm Colour Home Movie Footage",
+                      "Honolulu Flight 1973", "Boat trailer backing up at the ramp",
+                      "Kenya polygamy bill arouses fears"]:
+            with self.subTest(title=title):
+                self.assertFalse(media._talking_head(title))
+
+    def test_a_historical_story_ranks_its_own_era_first(self):
+        titles = ["New York City 4K Drone Video | Manhattan, Central Park Aerials",
+                  "1961 New York Street Scenes, Manhattan, Rare 8mm Colour Home Movie Footage",
+                  "Here Comes the Drone | Vows | The New York Times",
+                  "Honolulu Flight 1973"]
+        media.set_story_era(1971)
+        ranked = sorted(titles, key=lambda t: media._score_candidate(t, 300, 1.78, 5),
+                        reverse=True)
+        self.assertEqual(set(ranked[:2]), {titles[1], titles[3]})
+        self.assertLess(media._score_candidate(titles[0], 300, 1.78, 5),
+                        media._score_candidate("Manhattan street", 300, 1.78, 5))
+
+    def test_present_day_stories_are_unchanged(self):
+        title = "New York City 4K Drone Video"
+        before = media._score_candidate(title, 300, 1.78, 5)
+        media.set_story_era(datetime.date.today().year - 1)   # a recent story: no era
+        self.assertEqual(media._score_candidate(title, 300, 1.78, 5), before)
+        media.set_story_era(1971)
+        media.reset_cache()                                    # cleared between jobs
+        self.assertEqual(media._score_candidate(title, 300, 1.78, 5), before)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

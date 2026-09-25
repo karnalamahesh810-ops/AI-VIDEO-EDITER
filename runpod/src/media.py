@@ -816,6 +816,70 @@ _B_ROLL = re.compile(
     r"flyover|tour|no commentary|ambience|cinematic|"
     r"raw video|caught on|satellite)\b", re.I)
 
+# Titles that are never documentary footage of anything: fiction, promos,
+# travel guides and home videos. A real no-AI job put a Woody Allen trailer
+# ("You Will Meet a Tall Dark Stranger") on six lines of a 1971 biography
+# because a line said "a tall man in a dark suit", and a romance "Full
+# Movie", "Best Things To Do in New York City 2026" and wedding videography
+# on others. "Home movie" footage is the opposite and stays.
+_NOT_FOOTAGE = re.compile(
+    r"\b(official (?:trailer|teaser|music video|video|audio|clip)|"
+    r"(?:movie|film|teaser) trailer|trailer (?:#?\d|\(\d{4}\))|"
+    r"full (?:movie|film)|movie (?:clip|scene)|film clip|scene from|"
+    r"music video|lyrics?(?: video)?|short film|"
+    r"things to do|travel guide|do'?s (?:&|and) don'?ts|best places to|"
+    r"our wedding|wedding (?:video(?:graphy)?|film|highlights|teaser)|"
+    r"unboxing|prank|asmr)\b", re.I)
+
+# Titles that date a clip to the story's own time, for historical stories.
+_ARCHIVAL = re.compile(
+    r"\b(archival|archive|newsreel|rare|vintage|historic(?:al)?|home movies?|"
+    r"8 ?mm|16 ?mm|super ?8|old footage|colou?r film)\b", re.I)
+# Titles that date a clip to today: modern cameras and creators.
+_MODERN = re.compile(r"\b(4k|8k|uhd|hdr|drone|fpv|gopro|iphone|vlog)\b", re.I)
+_TITLE_YEAR = re.compile(r"\b(1[89]\d{2}|20\d{2})s?\b")
+
+# The year a historical story happens in (the story brief's year), set once
+# per job by the handler: 0 for a present-day story. A worker runs one job at
+# a time, and reset_cache clears it between jobs.
+_STORY_ERA = [0]
+# Stories older than this many years get their footage ranked by era.
+ERA_MIN_AGE = 20
+
+
+def set_story_era(year) -> None:
+    """Rank footage by the story's era: `year` when it is ERA_MIN_AGE+ years ago."""
+    try:
+        year = int(year or 0)
+    except (TypeError, ValueError):
+        year = 0
+    now = datetime.date.today().year
+    _STORY_ERA[0] = year if 1800 <= year <= now - ERA_MIN_AGE else 0
+
+
+def _era_score(title: str) -> float:
+    """
+    How well a title fits a historical story's era: 0 for present-day stories.
+
+    Without the vision model nothing checks what is on screen, and "New York
+    1961" happily returned 4K drone tours and 2026 travel guides for a 1961
+    story. A title dated near the story (or archival) rises; one dated
+    decades later, or shot on a drone, sinks.
+    """
+    era = _STORY_ERA[0]
+    if not era:
+        return 0.0
+    years = [int(y) for y in _TITLE_YEAR.findall(title or "")]
+    if any(era - 15 <= y <= era + 10 for y in years) or _ARCHIVAL.search(title or ""):
+        return 3.0
+    score = 0.0
+    if years and all(y > era + 15 for y in years):
+        score -= 4.0
+    if _MODERN.search(title or ""):
+        score -= 5.0     # outweighs the b-roll bonus a drone title earns
+    return score
+
+
 # Search suffix that biases YouTube itself toward footage rather than people
 # discussing the subject. Tried first; the plain query remains the fallback.
 B_ROLL_INTENT = "drone aerial footage"
@@ -926,6 +990,8 @@ def _talking_head(title: str) -> bool:
     press conferences, interviews and the rest still disqualify, and the vision
     judge still rejects an anchor desk or burned-in text on the actual frames.
     """
+    if _NOT_FOOTAGE.search(title or ""):
+        return True
     hits = [m.group(1).lower() for m in _TALKING_HEAD.finditer(title or "")]
     if _EVENT_WINDOW.get():
         hits = [h for h in hits if h != "news"]
@@ -985,7 +1051,7 @@ def _score_candidate(title: str, duration: float, aspect: float,
         score -= 5.0          # vertical; object-fit would crop it to nothing
     elif aspect and aspect >= 1.7:
         score += 1.0
-    return score
+    return score + _era_score(title)
 
 
 def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
@@ -1654,6 +1720,7 @@ def reset_cache():
         _YT_CANDIDATES_CACHE.clear()
         _SOURCE_STATS.clear()
         _GENERATED[0] = 0
+        _STORY_ERA[0] = 0
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
 
