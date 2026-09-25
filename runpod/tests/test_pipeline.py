@@ -799,7 +799,8 @@ class VisionFailuresAreReported(unittest.TestCase):
         vision.reset()
         self.patches = [mock.patch.object(config, "VISION_API_KEY", "k"),
                         mock.patch.object(config, "VISION_ENABLED", True),
-                        mock.patch.object(config, "VISION_FALLBACK_MODELS", ["backup"])]
+                        mock.patch.object(config, "VISION_FALLBACK_MODELS", ["backup"]),
+                        mock.patch.object(config, "VISION_RETRY_WAIT", 0)]
         for p in self.patches:
             p.start()
 
@@ -814,8 +815,34 @@ class VisionFailuresAreReported(unittest.TestCase):
             text, model = self.vision._ask([], 100)
         self.assertIsNone(text)
         stats = self.vision.stats()
-        self.assertEqual(stats["failures"], 2)  # main model and the fallback
+        self.assertEqual(stats["failures"], 4)  # main model and fallback, each retried once
         self.assertIn("code 500: server exception", stats["recentErrors"][0])
+
+    def test_a_transient_server_error_is_retried_on_the_same_model(self):
+        replies = [self._reply(200, {"code": 500, "msg": "try again later"}),
+                   self._reply(200, {"choices": [{"message": {"content": '{"ok": 1}'}}]})]
+        with mock.patch.object(self.vision.requests, "post", side_effect=replies):
+            text, model = self.vision._ask([], 100)
+        self.assertEqual((text, model), ('{"ok": 1}', config.VISION_MODEL))
+
+    def test_a_refusal_is_not_retried(self):
+        replies = [self._reply(200, {"code": 422, "msg": "bad request"}),
+                   self._reply(200, {"choices": [{"message": {"content": '{"ok": 1}'}}]})]
+        with mock.patch.object(self.vision.requests, "post", side_effect=replies):
+            text, model = self.vision._ask([], 100)
+        self.assertEqual(model, "backup")
+
+    def test_a_clip_no_model_could_judge_is_counted_and_flagged(self):
+        with mock.patch.object(self.vision.os.path, "exists", return_value=True), \
+                mock.patch.object(self.vision, "_fingerprint", return_value="fp"), \
+                mock.patch.object(self.vision, "sample_frames", return_value=["AAAA"]), \
+                mock.patch.object(self.vision, "_ask", return_value=(None, "")):
+            verdict = self.vision.judge("/w/a.mp4", "flood", "")
+        self.assertIsNone(verdict)
+        self.assertEqual(self.vision.stats()["unjudged"], 1)
+        a = MediaAsset(kind="video", source="youtube", url="q").apply_verdict(None, "flood")
+        self.assertTrue(a.review_required)
+        self.assertIn("Not checked by the vision AI", a.review_reason)
 
     def test_an_empty_answer_falls_through_to_the_fallback(self):
         replies = [self._reply(200, {"choices": [{"message": {"content": ""}}]}),
@@ -2671,7 +2698,57 @@ class HookShots(unittest.TestCase):
         self.assertEqual(out[0].url, "https://x/1")
 
 
-class RecheckMissingScenes(unittest.TestCase):
+class MetaphorsAndMaps(unittest.TestCase):
+    """A metaphor shows what it names; a news story is located on a map early."""
+
+    BRIEF = {"kind": "weather", "places": ["Ohio Valley", "Indiana", "West Virginia"],
+             "year": 2026, "recent": True, "event": "2026 Ohio Valley flooding",
+             "hookBeats": [0, 1]}
+
+    def _segs(self, texts, step=4.0):
+        return [seg(t, i * step, (i + 1) * step) for i, t in enumerate(texts)]
+
+    def test_a_metaphor_shot_is_not_pinned_to_the_event(self):
+        shots = [{"query": "freight train moving along track", "subjectType": "object",
+                  "visualType": "footage", "intent": "", "anchor": False},
+                 {"query": "flooded street", "subjectType": "", "visualType": "footage",
+                  "intent": ""}]
+        segs = self._segs(["Picture rail cars on a track.", "The water rose."])
+        with mock.patch.object(director, "_today", return_value=TODAY):
+            director.anchor_to_story(shots, segs, self.BRIEF)
+        self.assertEqual(shots[0]["query"], "freight train moving along track")
+        self.assertNotIn("eventWindow", shots[0])
+        self.assertIn("Ohio Valley", shots[1]["query"])
+
+    def test_an_event_story_gets_an_early_map_on_the_line_naming_a_place(self):
+        segs = self._segs(["A flood emergency.", "It is not over.", "Rain keeps falling.",
+                           "Roughly 40 counties in West Virginia sit under a watch.",
+                           "More is coming."])
+        shots = [{"overlay": None} for _ in segs]
+        self.assertTrue(director.establishing_map(segs, shots, self.BRIEF))
+        self.assertEqual(shots[3]["overlay"]["type"], "map")
+        self.assertEqual(shots[3]["overlay"]["places"], self.BRIEF["places"])
+        self.assertIsNone(shots[0]["overlay"])  # not on the hook
+
+    def test_no_map_is_forced_when_one_is_already_early_or_the_story_is_not_news(self):
+        segs = self._segs(["a", "b", "c", "d"])
+        shots = [{"overlay": None} for _ in segs]
+        shots[2]["overlay"] = {"type": "map", "places": ["Ohio"]}
+        self.assertFalse(director.establishing_map(segs, shots, self.BRIEF))
+        shots = [{"overlay": None} for _ in segs]
+        self.assertFalse(director.establishing_map(
+            segs, shots, dict(self.BRIEF, kind="history")))
+
+    def test_the_map_waits_until_it_would_survive_overlay_thinning(self):
+        segs = self._segs(list("abcdefgh"), step=3.0)
+        shots = [{"overlay": None} for _ in segs]
+        shots[2]["overlay"] = {"type": "callout", "text": "x"}   # ends at 9 s
+        director.establishing_map(segs, shots, self.BRIEF)
+        placed = [i for i, s in enumerate(shots) if (s["overlay"] or {}).get("type") == "map"]
+        self.assertEqual(placed, [6])                            # first line starting 9 s after it
+        director._thin_overlays(segs, shots)
+        self.assertEqual(shots[6]["overlay"]["type"], "map")     # and thinning keeps it
+
     """After sourcing, every scene without a shot of its own is rechecked with the story."""
 
     def _run(self, fake, jobs, rescue, on_recheck=None):

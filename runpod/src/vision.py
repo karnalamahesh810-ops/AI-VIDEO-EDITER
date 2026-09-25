@@ -41,6 +41,9 @@ _CALLS = {"n": 0}
 # so a broken key or model shows up in the job result instead of as bad clips.
 _ERRORS: deque = deque(maxlen=8)
 _FAILS = {"n": 0}
+# Candidates no model could judge at all (all attempts failed, or no frames):
+# kept unscored, so the job result reports how many reached the timeline that way.
+_UNJUDGED = {"n": 0}
 
 _SYSTEM = (
     "You check whether a video clip or photo is usable B-roll for one line of a "
@@ -89,6 +92,7 @@ def reset() -> None:
         _CACHE.clear()
         _CALLS["n"] = 0
         _FAILS["n"] = 0
+        _UNJUDGED["n"] = 0
         _ERRORS.clear()
 
 
@@ -103,49 +107,70 @@ def stats() -> dict:
     with _LOCK:
         return {"enabled": enabled(), "model": config.VISION_MODEL,
                 "calls": _CALLS["n"], "failures": _FAILS["n"],
+                "unjudged": _UNJUDGED["n"],
                 "recentErrors": list(_ERRORS)}
 
 
+def _ask_once(model: str, messages: list, max_tokens: int) -> Tuple[Optional[str], bool]:
+    """(text, retryable): one call to one model; retryable when the failure was transient."""
+    try:
+        r = requests.post(
+            _endpoint(model),
+            headers={"Authorization": f"Bearer {config.VISION_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={"model": model, "messages": messages,
+                  "max_tokens": max_tokens, "stream": False,
+                  **({"reasoning_effort": config.VISION_REASONING_EFFORT}
+                     if config.VISION_REASONING_EFFORT and model.startswith("gpt-")
+                     else {})},
+            timeout=90)
+    except requests.RequestException as e:
+        _fail(model, f"request failed: {type(e).__name__}")
+        return None, True
+    try:
+        body = r.json()
+    except ValueError:
+        _fail(model, f"HTTP {r.status_code}, not JSON: {r.text[:120]!r}")
+        return None, r.status_code >= 500 or r.status_code == 429
+    # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
+    if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
+        _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
+        return None, body["code"] >= 500 or body["code"] == 429
+    try:
+        text = body["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        _fail(model, f"HTTP {r.status_code}, no choices: {json.dumps(body)[:150]}")
+        return None, r.status_code >= 500
+    if isinstance(text, list):
+        text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
+    if not (text or "").strip():
+        # Reasoning models can spend max_tokens thinking and return nothing.
+        _fail(model, "empty answer")
+        return None, False
+    return text, False
+
+
 def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
-    """First model that answers: (text, model). (None, "") when none did."""
+    """
+    First model that answers: (text, model). (None, "") when none did.
+
+    A transient failure (timeout, HTTP/Kie 5xx, 429) is retried once on the
+    same model before moving on. Kie's gpt-5-2 answers "code 500: Server
+    exception, please try again later" in bursts - 116 of 609 calls on one
+    real job - and moving straight on meant a burst on the fallback too left
+    clips on the timeline that no model had ever looked at.
+    """
     for model in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS):
         if not model:
             continue
-        try:
-            r = requests.post(
-                _endpoint(model),
-                headers={"Authorization": f"Bearer {config.VISION_API_KEY}",
-                         "Content-Type": "application/json"},
-                json={"model": model, "messages": messages,
-                      "max_tokens": max_tokens, "stream": False,
-                      **({"reasoning_effort": config.VISION_REASONING_EFFORT}
-                         if config.VISION_REASONING_EFFORT and model.startswith("gpt-")
-                         else {})},
-                timeout=90)
-        except requests.RequestException as e:
-            _fail(model, f"request failed: {type(e).__name__}")
-            continue
-        try:
-            body = r.json()
-        except ValueError:
-            _fail(model, f"HTTP {r.status_code}, not JSON: {r.text[:120]!r}")
-            continue
-        # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
-        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-            _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
-            continue
-        try:
-            text = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            _fail(model, f"HTTP {r.status_code}, no choices: {json.dumps(body)[:150]}")
-            continue
-        if isinstance(text, list):
-            text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
-        if not (text or "").strip():
-            # Reasoning models can spend max_tokens thinking and return nothing.
-            _fail(model, "empty answer")
-            continue
-        return text, model
+        for attempt in range(1 + config.VISION_RETRIES):
+            if attempt:
+                time.sleep(config.VISION_RETRY_WAIT)
+            text, retryable = _ask_once(model, messages, max_tokens)
+            if text:
+                return text, model
+            if not retryable:
+                break
     return None, ""
 
 
@@ -278,6 +303,8 @@ def judge(path: str, intent: str, context: str = "", event: bool = False) -> Opt
     frames = sample_frames(path, config.VISION_FRAMES)
     if not frames:
         _fail("ffmpeg", f"no frames from {os.path.basename(path)}")
+        with _LOCK:
+            _UNJUDGED["n"] += 1
         return None
 
     content = [{"type": "text", "text":
@@ -299,6 +326,8 @@ def judge(path: str, intent: str, context: str = "", event: bool = False) -> Opt
         _CALLS["n"] += 1
         if verdict:
             _CACHE[key] = verdict
+        else:
+            _UNJUDGED["n"] += 1
     return verdict
 
 

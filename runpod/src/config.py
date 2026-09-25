@@ -158,6 +158,10 @@ VISION_MIN_QUALITY = float(os.getenv("VISION_MIN_QUALITY", "0.30"))
 # "minimal" is refused (code 500). Sent to gpt-* models only. Empty = default.
 VISION_REASONING_EFFORT = os.getenv("VISION_REASONING_EFFORT", "low").strip()
 VISION_FRAMES = int(os.getenv("VISION_FRAMES", "3"))
+# Retries per model on a transient failure (timeout, 5xx, 429), before the
+# fallback model is tried, and the pause before each.
+VISION_RETRIES = int(os.getenv("VISION_RETRIES", "1"))
+VISION_RETRY_WAIT = float(os.getenv("VISION_RETRY_WAIT", "2"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))

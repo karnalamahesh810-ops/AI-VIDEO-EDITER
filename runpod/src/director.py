@@ -589,7 +589,9 @@ def anchor_to_story(shots: List[dict], segments: List[Segment], brief: dict) -> 
     range over many places. A photo of a person is left alone, a beat about
     its own named place keeps that place, and a beat that talks about a
     different year (the 1993 flood a 2026 story compares itself to) keeps
-    that year. Returns how many shots were changed.
+    that year. A metaphor or explainer shot the director marked anchor=false
+    ("Picture rail cars on a track") shows what it names, unpinned. Returns
+    how many shots were changed.
     """
     if brief.get("kind") not in EVENT_KINDS:
         return 0
@@ -604,6 +606,8 @@ def anchor_to_story(shots: List[dict], segments: List[Segment], brief: dict) -> 
         # not: the governor AT the flood is the shot - and the rule pass tags
         # "person" loosely (any Name-Name title), which must not unanchor it.
         if shot.get("subjectType") == "person" and shot.get("visualType") == "image":
+            continue
+        if shot.get("anchor") is False:
             continue
         own_year = _mentions_other_year(f"{seg.text} {shot.get('query', '')}", year)
         before = shot["query"]
@@ -622,6 +626,50 @@ def anchor_to_story(shots: List[dict], segments: List[Segment], brief: dict) -> 
     return changed
 
 
+# When an event story's opening has no map, the first line after the hook that
+# names one of its places gets one (else the first free line after the hook).
+ESTABLISHING_MAP_BY_SECONDS = 60.0
+
+
+def establishing_map(segments: List[Segment], shots: List[dict], brief: dict) -> bool:
+    """
+    Put a map of where it happened near the top of a news-type story.
+
+    A real flood job named the Ohio Valley, Indiana, West Virginia and "seven
+    states" in its first minute and got no map at all: the planner only
+    proposes one from a "in <Place Name>" phrase or when the model thinks of
+    it. Locating the story is the first thing a news edit does. The places
+    come from the brief and go through the same gazetteer check as any other
+    map, so a place that does not geocode still drops it. Returns True when
+    one was added.
+    """
+    places = (brief.get("places") or [])[:4]
+    if brief.get("kind") not in EVENT_KINDS or not places:
+        return False
+    if any((shot.get("overlay") or {}).get("type") == "map"
+           and seg.start < ESTABLISHING_MAP_BY_SECONDS
+           for shot, seg in zip(shots, segments)):
+        return False
+    hooks = set(brief.get("hookBeats") or [])
+
+    def clear(i):
+        # _thin_overlays would drop a map this close behind another overlay.
+        ends = [segments[j].end for j in range(i) if shots[j].get("overlay")]
+        return not ends or segments[i].start - max(ends) >= MIN_OVERLAY_GAP_SECONDS
+
+    after_hook = [i for i, seg in enumerate(segments)
+                  if i not in hooks and seg.start < ESTABLISHING_MAP_BY_SECONDS
+                  and not shots[i].get("overlay") and clear(i)]
+    if not after_hook:
+        return False
+    names = {p.split(",")[0].strip().lower() for p in places}
+    naming = [i for i in after_hook
+              if any(n and n in segments[i].text.lower() for n in names)]
+    i = (naming or after_hook)[0]
+    shots[i]["overlay"] = {"type": "map", "text": "", "places": places}
+    return True
+
+
 # --------------------------------------------------------------------------- #
 # AI pass — optional enrichment on top of the rules
 # --------------------------------------------------------------------------- #
@@ -638,9 +686,14 @@ _SYSTEM_PROMPT = (
     "event at THAT place (\"Davenport Iowa flooding 2026 aerial\", never just "
     "\"flooded street\"), and its intent names the place and year so the footage "
     "can be checked against them. Hook beats open the video: give them the most "
-    "dramatic, unmistakable footage of the story.\n"
+    "dramatic, unmistakable footage of the story. The one exception is a metaphor, "
+    "analogy or general explainer line (\"Picture rail cars on a track\"): show what "
+    "it names (a freight train), not the event, and set anchor false.\n"
     "Return JSON: {\"shots\":[{\"index\":int,\"subject\":str,\"subjectType\":str,"
-    "\"intent\":str,\"query\":str,\"visualType\":str,\"overlay\":obj|null}]}.\n"
+    "\"intent\":str,\"query\":str,\"visualType\":str,\"anchor\":bool,"
+    "\"overlay\":obj|null}]}.\n"
+    "- anchor: false only for a metaphor, analogy or general explainer shot that is "
+    "not the story's own event or place; true otherwise.\n"
     "- subject: the NAMED real thing the line is about - a person, place, event, "
     "object, organisation or document (\"Barack Obama Sr.\", \"Honolulu Airport\", "
     "\"Lake Mead\"). Always concrete and searchable. Reuse the same subject across "
@@ -761,6 +814,9 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                 "overlay": validate_overlay(shot.get("overlay")),
                 "intent": intent or shots[idx].get("intent", ""),
                 "subject": subject or shots[idx].get("subject", ""),
+                # False for a metaphor/explainer shot: it must not be pinned to
+                # the story's place and year ("freight train Ohio Valley 2026").
+                "anchor": shot.get("anchor") is not False,
                 # The model's own tag wins when valid; when it omits one or
                 # gives something outside the enum, fall back to the rule
                 # shot's own heuristic guess rather than blanking it - losing
@@ -962,6 +1018,7 @@ def plan(segments: List[Segment], title: str = "", report=None,
             if shot.get("overlay") and shot["overlay"]["type"] == "map":
                 shot["overlay"] = None
     else:
+        establishing_map(segments, shots, brief)
         warnings.extend(_resolve_maps(segments, shots))
 
     _thin_overlays(segments, shots)

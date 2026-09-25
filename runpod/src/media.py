@@ -205,6 +205,12 @@ class MediaAsset:
             self.relevance_score = verdict.get("score")
             self.quality = verdict.get("quality")
             self.vision_model = verdict.get("model", "")
+        elif intent and vision.enabled() and self.source != "generated":
+            # Vision is on but no model could judge this one: it is kept (an API
+            # outage must not empty the timeline) but must not pass silently.
+            self.review_required = True
+            self.review_reason = self.review_reason or \
+                "Not checked by the vision AI (model unavailable) - check it matches"
         return self
 
 
