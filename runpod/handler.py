@@ -772,6 +772,8 @@ def handler(job):
                     "storage": store,
                     "readyToRender": store.get("ok", False),
                     "machine": _machine(),
+                    # Real download check per route: {"probe_youtube": true}.
+                    **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),
                     # One real model call, so only on request: {"probe": true}.
                     **({"vision": vision.probe()} if inp.get("probe") else {})}
 

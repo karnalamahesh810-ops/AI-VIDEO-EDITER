@@ -45,6 +45,12 @@ from .storage import download
 # timed out. Blind rotation meant every third request went to an IP YouTube
 # had already started refusing, costing a failed search plus a retry each time.
 _PROXIES = list(config.YTDLP_PROXIES)
+# "" is the worker's own address. Proxies are only worth it while YouTube has
+# not flagged them; when it has (2026-09-25: every proxy answered "Sign in to
+# confirm you're not a bot" to downloads while searches still worked), the
+# machine's own IP may be the better route. YTDLP_DIRECT=1 adds it.
+if config.YTDLP_DIRECT and "" not in _PROXIES:
+    _PROXIES.insert(0, "")
 _PROXY_LOCK = threading.Lock()
 _PROXY_POS = [0]
 _PROXY_BENCHED: Dict[str, float] = {}
@@ -68,6 +74,37 @@ def _next_proxy() -> str:
             if _PROXY_BENCHED.get(proxy, 0) <= now:
                 return proxy
         return min(_PROXIES, key=lambda p: _PROXY_BENCHED.get(p, 0))
+
+
+def probe_youtube(video_id: str = "ka2S39HhLsM") -> List[dict]:
+    """
+    Can this worker actually download from YouTube, directly and per proxy?
+
+    Metadata for one known video (the step that gets refused - searches keep
+    working from flagged IPs, which hid the block). Routes are reported by
+    number only; a proxy URL carries credentials.
+    """
+    routes = [("direct", "")] + [(f"proxy#{i + 1}", p) for i, p in enumerate(config.YTDLP_PROXIES)]
+
+    def one(route):
+        name, proxy = route
+        cmd = ["yt-dlp", "--skip-download", "--print", "%(id)s",
+               f"https://www.youtube.com/watch?v={video_id}"] + _yt_network_args(proxy)
+        t = time.time()
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=60)
+            ok = video_id in (p.stdout or "")
+            why = "" if ok else ("bot check" if looks_blocked(p.stderr) else
+                                 ((p.stderr or "").strip().splitlines() or ["no output"])[-1][:80])
+        except subprocess.TimeoutExpired:
+            ok, why = False, "timeout"
+        # Never echo anything that could contain the proxy URL.
+        why = re.sub(r"https?://\S+", "<url>", why)
+        return {"route": name, "ok": ok, "seconds": round(time.time() - t, 1), "why": why}
+
+    with ThreadPoolExecutor(max_workers=len(routes)) as ex:
+        return list(ex.map(one, routes))
 
 
 def _bench_proxy(proxy: str, why: str = "") -> None:

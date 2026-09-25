@@ -250,6 +250,8 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # short grace for the rest. One stalled download used to hold a job for
 # 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
 PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+# Include the worker's own IP in the YouTube route rotation (media._PROXIES).
+YTDLP_DIRECT = os.getenv("YTDLP_DIRECT", "0").strip().lower() in ("1", "true", "yes")
 
 # YouTube channels searched first, by story kind (media._story_channels).
 # Archive channels hold newsreels and travelogues of every era; the news set
