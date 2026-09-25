@@ -16,7 +16,9 @@ export type Treatment = "none" | "film" | "vintage" | "archival";
  * for section changes, the way VidRush uses them (~1 cut in 4).
  * Must match TRANSITIONS in src/timeline.py; a test asserts they agree.
  */
-export type SceneTransition = "none" | "fade" | "film-burn" | "zoom" | "glitch" | "slide";
+export type SceneTransition =
+  | "none" | "fade" | "film-burn" | "zoom" | "glitch" | "slide"
+  | "whip" | "flash" | "light-leak" | "dip" | "blur" | "punch";
 
 /**
  * One effect per clip, so borrowed footage reads as designed.
@@ -55,6 +57,20 @@ export type OverlayType =
   | "label-boxes"
   | "ring-stat"
   | "bullets"
+  | "swoosh-title"
+  | "kicker"
+  | "memo-box"
+  | "word-type"
+  | "underline-title"
+  | "bar-title"
+  | "age-tag"
+  | "clock-badge"
+  | "red-strip"
+  | "line-chart"
+  | "path-steps"
+  | "progress-steps"
+  | "span"
+  | "icon-pop"
   | "arrow"
   | "split"
   // VidRush's own text animations, read off their exports.

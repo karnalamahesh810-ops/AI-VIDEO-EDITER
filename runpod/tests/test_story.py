@@ -119,3 +119,26 @@ class FootageTags(unittest.TestCase):
         self.assertIsNone(director.validate_overlay({"type": "bullets", "items": [{"text": "one"}]}))
         ok = director.validate_overlay({"type": "bullets", "items": [{"text": f"p{i}"} for i in range(6)]})
         self.assertEqual(len(ok["items"]), 4)
+
+
+class Variety(unittest.TestCase):
+    def test_a_look_repeated_within_a_minute_moves_to_a_sibling(self):
+        from src.transcribe import Segment
+        segs = [Segment(text="x", start=i * 10.0, end=i * 10.0 + 3) for i in range(4)]
+        shots = [{"overlay": {"type": "sentence-highlight", "text": "a"}} for _ in range(4)]
+        changed = director.diversify_overlays(segs, shots)
+        kinds = [s["overlay"]["type"] for s in shots]
+        self.assertEqual(changed, 3)
+        self.assertEqual(kinds[:3], ["sentence-highlight", "red-strip", "underline-title"])
+
+    def test_far_apart_repeats_are_left_alone(self):
+        from src.transcribe import Segment
+        segs = [Segment(text="x", start=i * 90.0, end=i * 90.0 + 3) for i in range(3)]
+        shots = [{"overlay": {"type": "lower-third", "text": "A"}} for _ in range(3)]
+        self.assertEqual(director.diversify_overlays(segs, shots), 0)
+
+    def test_every_template_is_renderable(self):
+        import re
+        main = open("remotion/src/Main.tsx", encoding="utf-8").read()
+        for kind in director.TEMPLATES:
+            self.assertTrue(re.search(r'(^|\s)"?%s"?\s*:' % re.escape(kind), main, re.M), kind)

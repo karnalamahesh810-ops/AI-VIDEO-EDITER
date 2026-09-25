@@ -22,6 +22,11 @@ import { DateStamp } from "./components/DateStamp";
 import { DocumentaryMap } from "./components/DocumentaryMap";
 import { PhotoCard, NameCard, TimeRuler, ObjectCallout, EditorialChapter } from "./components/ReferenceGraphics";
 import { Bullets, LabelBoxes, RingStat, StatTag } from "./components/FootageTags";
+import { AgeTag, BarTitle, ClockBadge, Kicker, MemoBox, PersonTag, RedStrip, SwooshTitle, UnderlineTitle, WordType } from "./components/TextGraphics";
+
+import { IconPop, LineChart, PathSteps, ProgressSteps, Span } from "./components/DataGraphics";
+
+const PERSON_TAGS = new Set(["tag", "line", "serif", "chyron"]);
 import type { Overlay, OverlayType, TimelineProps } from "./types";
 
 /**
@@ -47,7 +52,7 @@ const OVERLAYS: Record<
   quote: QuoteOverlay,
   timeline: (p) => p.overlay.variant === 'ruler' ? <TimeRuler {...p}/> : <TimelineOverlay {...p}/>,
   highlight: HighlightOverlay,
-  "lower-third": LowerThird,
+  "lower-third": (p) => PERSON_TAGS.has(p.overlay.variant || "") ? <PersonTag {...p}/> : <LowerThird {...p}/>,
   arrow: (p) => p.overlay.anchor ? <ObjectCallout {...p}/> : <ArrowOverlay {...p}/>,
   "sentence-highlight": SentenceHighlight,
   "article-zoom": ArticleZoom,
@@ -58,6 +63,20 @@ const OVERLAYS: Record<
   "label-boxes": LabelBoxes,
   "ring-stat": RingStat,
   bullets: Bullets,
+  "swoosh-title": SwooshTitle,
+  kicker: Kicker,
+  "memo-box": MemoBox,
+  "word-type": WordType,
+  "underline-title": UnderlineTitle,
+  "bar-title": BarTitle,
+  "age-tag": AgeTag,
+  "clock-badge": ClockBadge,
+  "red-strip": RedStrip,
+  "line-chart": LineChart,
+  "path-steps": PathSteps,
+  "progress-steps": ProgressSteps,
+  span: Span,
+  "icon-pop": IconPop,
   // Split takes its two media entries rather than a text payload, so it gets
   // a small adapter instead of the shared signature.
   split: ({ overlay, accent }) =>

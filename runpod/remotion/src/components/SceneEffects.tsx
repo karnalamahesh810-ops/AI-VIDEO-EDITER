@@ -39,6 +39,19 @@ export const entranceStyle = (
       };
     case "slide":
       return { transform: `translateX(${(1 - p) * 100}%)` };
+    case "whip":
+      // A fast horizontal whip: the frame arrives smeared and settles.
+      return {
+        transform: `translateX(${(1 - p) * 35}%)`,
+        filter: p < 1 ? `blur(${(1 - p) * 18}px)` : undefined,
+      };
+    case "dip":
+      return { opacity: interpolate(frame, [0, 3, IN], [0, 0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) };
+    case "blur":
+      return { filter: p < 1 ? `blur(${(1 - p) * 14}px) brightness(${1 + (1 - p) * 0.25})` : undefined };
+    case "punch":
+      // A quick punch-in that lands on the beat.
+      return { transform: `scale(${1.12 - 0.12 * p})` };
     case "glitch": {
       if (frame >= IN) return {};
       const jitter = (random(`gx${frame}`) - 0.5) * 60 * (1 - p);
@@ -70,6 +83,27 @@ export const TransitionLayer: React.FC<{ transition?: SceneTransition }> = ({ tr
           background:
             "radial-gradient(ellipse at 30% 50%, rgba(255,240,200,1) 0%, " +
             "rgba(255,140,40,0.95) 30%, rgba(200,40,0,0.6) 60%, rgba(0,0,0,0) 85%)",
+        }}
+      />
+    );
+  }
+
+  if (transition === "flash") {
+    const o = interpolate(frame, [0, 2, IN], [1, 0.9, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    return <AbsoluteFill style={{ background: "#fff", opacity: o, pointerEvents: "none" }} />;
+  }
+
+  if (transition === "light-leak") {
+    const o = interpolate(frame, [0, 4, IN + 4], [0.9, 0.75, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    const x = interpolate(frame, [0, IN + 4], [85, 30], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    return (
+      <AbsoluteFill
+        style={{
+          opacity: o,
+          mixBlendMode: "screen",
+          pointerEvents: "none",
+          background: `radial-gradient(ellipse at ${x}% 40%, rgba(255,210,150,1) 0%, ` +
+            "rgba(255,120,50,0.8) 28%, rgba(230,60,30,0.35) 55%, rgba(0,0,0,0) 80%)",
         }}
       />
     );

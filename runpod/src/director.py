@@ -43,7 +43,14 @@ TEMPLATES = {
     "photo-card", "name-card",
     # Tags that ride on playing footage - VidRush's most frequent graphics.
     "stat-tag", "label-boxes", "ring-stat", "bullets",
+    # Text looks read off VidRush's exports (docs/vidrush-graphics.md).
+    "swoosh-title", "kicker", "memo-box", "word-type", "underline-title",
+    "bar-title", "age-tag", "clock-badge", "red-strip",
+    "line-chart", "path-steps", "progress-steps", "span", "icon-pop",
 }
+
+# Pictograms the icon-pop template can draw (DataGraphics.tsx ICONS).
+ICON_NAMES = {"fuel", "water", "home", "warning", "fire", "car", "money", "school", "hospital", "phone", "clock", "thermometer", "document", "people"}
 
 # Footage grades the renderer can apply. Kept in sync with `Treatment` in
 # remotion/src/types.ts and the switch in FilmLayer.tsx; a test asserts they
@@ -213,7 +220,10 @@ def validate_overlay(raw) -> Optional[dict]:
         # rejected on sight by the creator: clips and photos play full screen.
         # Component kept for a possible editor-only use; never auto-planned.
         return None
-    variants = {"date-stamp": {"title"}, "map": {"paper", "dark", "route-paper", "route-dark"},
+    variants = {"lower-third": {"tag", "line", "serif", "chyron"},
+                "kicker": {"top-left"}, "word-type": {"caps"}, "age-tag": {"bottom"},
+                "icon-pop": ICON_NAMES,
+                "date-stamp": {"title"}, "map": {"paper", "dark", "route-paper", "route-dark", "region", "marker", "pulse"},
                 "chapter": {"editorial", "echo"}, "timeline": {"ruler"},
                 "photo-card": {"grid", "archive"}, "article-zoom": {"paper"}}
     if raw.get("variant") in variants.get(kind, set()):
@@ -282,6 +292,21 @@ def validate_overlay(raw) -> Optional[dict]:
         out["items"] = labels
         if raw.get("variant") == "linked" and len(labels) == 2:
             out["variant"] = "linked"
+    if kind == "line-chart":
+        if len(out.get("items", [])) < 3 or not all("value" in x for x in out["items"]):
+            return None
+    if kind in ("path-steps", "progress-steps"):
+        steps = [x for x in out.get("items", []) if x.get("label") or x.get("text")][:4]
+        if len(steps) < 2:
+            return None
+        out["items"] = steps
+    if kind == "span":
+        ends = out.get("items", [])[:2]
+        if len(ends) < 2 or not all(x.get("label") for x in ends):
+            return None
+        out["items"] = ends
+    if kind == "icon-pop" and out.get("variant") not in ICON_NAMES:
+        return None
     if kind == "bullets":
         points = [x for x in out.get("items", []) if x.get("text") or x.get("label")][:4]
         if len(points) < 2:
@@ -1089,16 +1114,48 @@ _SYSTEM_PROMPT = (
     "section breaks, quote for a quotation copied verbatim, stat / bar-chart / "
     "comparison only with numbers copied from the narration, typewriter for a "
     "rhetorical question, callout for one striking fact.\n"
-    "REFERENCE MOTION LIBRARY: map variant paper or dark for a location; "
-    "route-paper or route-dark ONLY for a journey explicitly described between "
-    "two or more places (not a weather boundary or a road route). chapter variant "
-    "editorial for restrained serif titles, echo for a major dramatic section. "
-    "timeline variant ruler for an explicitly dated sequence. Never use photo-card: "
-    "photos and clips always play full screen. Never use name-card (it hides the "
-    "footage behind a framed photo); a named person's introduction is a lower-third. "
-    "article-zoom variant paper for an editorial summary of source text; never "
-    "present narration as a scanned original record. Never choose graphics in a "
-    "rotation. State the visual purpose through the scene intent.\n"
+    "GRAPHICS LIBRARY - every look below was read off VidRush exports; USE THE WHOLE "
+    "LIBRARY, never the same look twice within a minute:\n"
+    "  TEXT: sentence-highlight (key sentence, red-boxed words, bottom-left); "
+    "red-strip (4-6 word verdict across a red band, centre); underline-title (a "
+    "short serif line low on screen, thin red rule); swoosh-title (2-3 word "
+    "section title, serif, red hand-drawn swoosh); kicker (2-3 short blunt "
+    "sentences in red typewriter boxes: \"No interview.|No line.\"; variant top-left "
+    "or default bottom-centre); memo-box (an official-sounding phrase: "
+    "\"Administrative Exclusion\"); bar-title (a claim typed into a dark side bar); "
+    "word-type (1-3 words typed large over the shot; variant caps for one word); "
+    "typewriter (a rhetorical question); quote (verbatim quotation).\n"
+    "  PEOPLE: lower-third default (name + role, first appearance); variants tag "
+    "(\"OBAMA SR.\" typewriter box), line (name + year: text name, subtitle "
+    "\"1964\"), serif (quiet name for an interviewee or writer), chyron (news: "
+    "text headline, subtitle place); age-tag (\"AGE 18\", \"ANN, AGE 25\" when the "
+    "narration gives an age; variant bottom).\n"
+    "  PLACE & TIME: map variants paper / dark (a location), route-paper / "
+    "route-dark (ONLY a journey between named places), region (a named area with "
+    "2-3 sub-areas as tape labels: places = those areas), marker (a hazard at one "
+    "place), pulse (breaking news at one place); date-stamp (\"Boston, July 27, "
+    "2004\") or variant title (\"FEBRUARY 2\" / \"1961\"); clock-badge (news "
+    "time: text \"09:08\", subtitle place); span (two dated ends: items "
+    "[{label \"1961\", text \"Maui marriage\"}, {label \"1962\", text \"Seattle\"}], "
+    "text = the gap \"NEARLY 1 YEAR\"); timeline variant ruler (3+ dated events).\n"
+    "  NUMBERS: stat-tag (number + unit on the footage, a corner); ring-stat "
+    "(a percentage); label-boxes (1-2 named things, variant linked); bullets "
+    "(3-4 parallel points); line-chart (a trend with 3+ values from the "
+    "narration: items {label, value}); bar-chart / comparison (numbers to "
+    "compare); stat (one big number).\n"
+    "  SEQUENCE & IDEAS: path-steps (a life or process in 2-4 numbered stages: "
+    "items {label}); progress-steps (a change from A to B: text \"Schoolhouse to "
+    "Outhouse\", items [{label A}, {label B}]); icon-pop (one concept as a "
+    "pictogram: variant one of fuel, water, home, warning, fire, car, money, "
+    "school, hospital, phone, clock, thermometer, document, people; text = 1-3 "
+    "word caption); chapter (default, variant editorial or echo) for section "
+    "breaks; article-zoom variant paper for a cited record, report or article.\n"
+    "  NEVER: photo-card, name-card, split (media is always full screen).\n"
+    "Pick the look whose SHAPE fits the line (a number -> stat-tag, a list -> "
+    "bullets, an age -> age-tag, a verdict -> red-strip or kicker, a stage in a "
+    "life -> path-steps), place it where the reference places it, and spread "
+    "the families across the video. State the visual purpose through the "
+    "scene intent.\n"
     "RULES: Never invent facts, statistics, quotations, dates or places. Copy numbers "
     "and dates verbatim from the narration. Keep overlay text short."
 )
@@ -1381,6 +1438,57 @@ def _resolve_maps(segments: List[Segment], shots: List[dict]) -> List[str]:
     return warnings
 
 
+# Interchangeable looks: same payload, different animation. When the model
+# repeats a look inside REPEAT_WINDOW_SECONDS, the overlay moves to the
+# least-recently-used sibling, so a whole video never leans on one template
+# (the "you literally use one template" failure).
+_SIBLINGS = [
+    [("sentence-highlight", None), ("red-strip", None), ("underline-title", None)],
+    [("typewriter", None), ("word-type", None), ("bar-title", None), ("memo-box", None)],
+    [("chapter", None), ("chapter", "editorial"), ("chapter", "echo"), ("swoosh-title", None)],
+    [("lower-third", None), ("lower-third", "tag"), ("lower-third", "line"),
+     ("lower-third", "serif")],
+    [("map", "paper"), ("map", "dark"), ("map", "pulse"), ("map", "marker")],
+    [("stat-tag", "bottom-left"), ("stat-tag", "top-right"), ("stat-tag", "bottom-right")],
+    [("callout", None), ("kicker", None), ("kicker", "top-left")],
+]
+REPEAT_WINDOW_SECONDS = 60.0
+
+
+def _look(overlay: dict) -> tuple:
+    return (overlay.get("type"), overlay.get("variant"))
+
+
+def diversify_overlays(segments: List[Segment], shots: List[dict]) -> int:
+    """Swap repeated looks for an unused sibling. Returns how many changed."""
+    family = {look: fam for fam in _SIBLINGS for look in fam}
+    last_used: Dict[tuple, float] = {}
+    changed = 0
+    for i, shot in enumerate(shots):
+        overlay = shot.get("overlay")
+        if not overlay:
+            continue
+        now = segments[i].start
+        look = _look(overlay)
+        fam = family.get(look)
+        if fam and now - last_used.get(look, -1e9) < REPEAT_WINDOW_SECONDS:
+            # Least recently used sibling; a map sibling must suit one place.
+            options = [x for x in fam if x != look]
+            if look[0] == "map" and len(overlay.get("places") or overlay.get("locations") or []) > 1:
+                options = []
+            if options:
+                pick = min(options, key=lambda x: last_used.get(x, -1e9))
+                overlay["type"] = pick[0]
+                if pick[1]:
+                    overlay["variant"] = pick[1]
+                else:
+                    overlay.pop("variant", None)
+                look = pick
+                changed += 1
+        last_used[look] = now
+    return changed
+
+
 def _thin_overlays(segments: List[Segment], shots: List[dict]) -> int:
     """
     Drop overlays that crowd the one before them.
@@ -1463,6 +1571,7 @@ def plan(segments: List[Segment], title: str = "", report=None,
     story_rule_queries(segments, shots, brief, title)
     name_people(segments, shots)
     _thin_overlays(segments, shots)
+    diversify_overlays(segments, shots)
 
     vary_person_stills(shots)
     anchor_to_story(shots, segments, brief)

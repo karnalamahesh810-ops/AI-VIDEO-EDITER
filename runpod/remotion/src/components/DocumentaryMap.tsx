@@ -18,7 +18,10 @@ export const DocumentaryMap: React.FC<{overlay: Overlay; accent: string}> = ({ov
   const {width, height, fps} = useVideoConfig();
   const places = (overlay.locations || []).filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon));
   if (!places.length) return null;
-  const paper = overlay.variant === 'paper' || overlay.variant === 'route-paper';
+  // VidRush's map looks: paper/dark locator, arc routes, a gold region with
+  // tape labels, a warning marker, and a pulsing alert point for news.
+  const v = overlay.variant || '';
+  const paper = ['paper', 'route-paper', 'region', 'marker'].includes(v);
   const route = overlay.variant?.startsWith('route') && places.length > 1;
   const ink = paper ? '#28251e' : '#eee';
   const land = paper ? '#e4d7b2' : '#292a2c';
@@ -37,6 +40,10 @@ export const DocumentaryMap: React.FC<{overlay: Overlay; accent: string}> = ({ov
   const points = places.map(p => projection([p.lon, p.lat])!);
   const reveal = interpolate(frame,[fps*.3,fps*2.3],[0,1],clamp);
   const caption = overlay.text.slice(0,Math.floor(interpolate(frame,[fps*1.7,fps*3.1],[0,overlay.text.length],clamp)));
+  const pad = 90*s;
+  const xs = points.map(p=>p[0]), ys = points.map(p=>p[1]);
+  const box = {x: Math.min(...xs)-pad*1.6, y: Math.min(...ys)-pad, w: Math.max(...xs)-Math.min(...xs)+pad*3.2, h: Math.max(...ys)-Math.min(...ys)+pad*2};
+  const outline = interpolate(frame,[fps*.4,fps*1.6],[0,1],clamp);
   return <AbsoluteFill style={{background:water, overflow:'hidden'}}>
     <svg width={width} height={height}>
       <path d={path(world as never)||''} fill={land} stroke={paper?'#c0b99e':'#47484a'} strokeWidth={s*1.4}/>
@@ -45,11 +52,32 @@ export const DocumentaryMap: React.FC<{overlay: Overlay; accent: string}> = ({ov
         const a=points[i]; const progress=Math.max(0,Math.min(1,reveal*(points.length-1)-i));
         return <path key={i} d={`M ${a[0]} ${a[1]} Q ${(a[0]+p[0])/2} ${(a[1]+p[1])/2-Math.min(110*s,Math.abs(a[0]-p[0])*.16)} ${p[0]} ${p[1]}`} fill="none" stroke={accent} strokeWidth={5*s} pathLength={1} strokeDasharray={1} strokeDashoffset={1-progress}/>;
       })}
+      {v==='region' && <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={14*s} fill="rgba(214,168,60,.10)"
+        stroke="#d6a83c" strokeWidth={9*s} strokeLinejoin="round" pathLength={1} strokeDasharray={1} strokeDashoffset={1-outline}/>}
+      {v==='pulse' && points.map(([x,y],i)=>[0,1,2].map(k=>{
+        const t=((frame+k*fps*.5)%(fps*1.5))/(fps*1.5);
+        return <circle key={`${i}-${k}`} cx={x} cy={y} r={(20+120*t)*s} fill="none" stroke={accent} strokeWidth={4*s} opacity={1-t}/>;
+      }))}
+      {v==='marker' && points.map(([x,y],i)=>{
+        const pop=interpolate(frame,[fps*(.5+i*.3),fps*(.8+i*.3)],[0,1],clamp);
+        return <g key={`m${i}`} transform={`translate(${x} ${y-40*s}) scale(${pop*s})`}>
+          <path d="M0 -52 L46 30 L-46 30 Z" fill="#f3e7c9" stroke="#d6a83c" strokeWidth={6} strokeLinejoin="round"/>
+          <path d="M0 -22 V6 M0 16 V20" stroke="#8a5a12" strokeWidth={8} strokeLinecap="round"/>
+        </g>;
+      })}
       {points.map(([x,y],i)=>{
         const show=interpolate(frame,[fps*(.5+i*.35),fps*(1+i*.35)],[0,1],clamp);
         const label=places[i].label.split(',').slice(0,2).join(',');
         const labelWidth=Math.min(width*.38,Math.max(120*s,label.length*15*s));
         const lx=Math.min(width-labelWidth-30*s,Math.max(30*s,x-labelWidth/2));
+        if (v==='region') {
+          const tilt=(i%2?7:-6);
+          return <g key={i} opacity={show} transform={`rotate(${tilt} ${x} ${y})`}>
+            <rect x={x-labelWidth/2} y={y-22*s} width={labelWidth} height={44*s} fill="#f4f0e6" stroke="#d8d2c2" strokeWidth={s}/>
+            <text x={x} y={y+8*s} textAnchor="middle" fontFamily={INTER} fontWeight={800} fontSize={20*s} letterSpacing={1.5*s} fill="#222">{label.toUpperCase()}</text>
+          </g>;
+        }
+        if (v==='marker') return null;
         return <g key={i} opacity={show}>
           <circle cx={x} cy={y} r={22*s} fill={accent} opacity={.2}/><circle cx={x} cy={y} r={7*s} fill={accent}/>
           <rect x={lx} y={y+25*s} width={labelWidth} height={44*s} rx={paper?18*s:3*s} fill={paper?'#f5efdf':'#eee'}/>

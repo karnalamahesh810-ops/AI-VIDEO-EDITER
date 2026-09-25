@@ -31,12 +31,17 @@ _IMAGE_MOTIONS = ["zoom-in", "pan-left", "zoom-out", "pan-right"]
 # Scene entrances and per-clip effects. Both lists are a contract with
 # remotion/src/types.ts (SceneTransition / SceneEffect) and SceneEffects.tsx;
 # a test asserts they agree.
-TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide"}
+TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide",
+               "whip", "flash", "light-leak", "dip", "blur", "punch"}
 EFFECTS = {"none", "ken-burns", "light-leaks", "dust", "film-flicker", "color-shift"}
 
 # Rotation for the strong transitions at section changes. Film burn leads
 # because it is VidRush's most-used transition (24 of 61 on one timeline).
-_TRANSITION_CYCLE = ["film-burn", "zoom", "glitch", "film-burn", "slide", "zoom"]
+# Every entrance VidRush uses, in an order where neighbours never look alike
+# (a warm burst is never followed by another warm burst, a motion move by a
+# motion move).
+_TRANSITION_CYCLE = ["film-burn", "whip", "flash", "zoom", "light-leak", "slide",
+                     "dip", "punch", "glitch", "blur", "fade"]
 
 # One effect per clip, weighted roughly like VidRush's own distribution
 # (colour 37, Ken Burns 34, light leaks 29, flicker 21, dust 15 per 160 clips).
@@ -96,6 +101,11 @@ _OVERLAY_SECONDS = {
     "photo-card": 4.0, "name-card": 3.5,
     # Footage tags ride on a playing shot; VidRush holds them 4-5.5 s.
     "stat-tag": 4.0, "label-boxes": 4.0, "ring-stat": 4.5, "bullets": 5.5,
+    "swoosh-title": 3.0, "kicker": 3.0, "memo-box": 3.5, "word-type": 2.5,
+    "underline-title": 3.5, "bar-title": 3.5, "age-tag": 3.0, "clock-badge": 3.5,
+    "red-strip": 3.0,
+    "line-chart": 5.5, "path-steps": 5.5, "progress-steps": 4.5, "span": 4.5,
+    "icon-pop": 3.0,
 }
 
 # Sources this workflow refuses. Kept as data so the check and the error
