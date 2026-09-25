@@ -122,23 +122,12 @@ def _media_dims(asset) -> tuple:
 
 def pick_frame(asset, treatment: str, subject_type: str) -> str:
     """
-    "inset" or "full" for one scene.
-
-    VidRush frames old photos, documents and low-resolution or 4:3 footage
-    inset on a backdrop instead of cropping them to fill 16:9. Cropping a
-    portrait photo to 16:9 cuts the face off; upscaling a 320x240 newsreel to
-    1080p full-frame is a smear. Inset keeps the whole picture at a size it
-    can hold, and reads as a deliberate archival look.
+    "inset" or "full" for one scene. Always "full" - VidRush's own inset-on-a-
+    backdrop archival look (see SceneClip.tsx, still there) turned out to read
+    as a bug, not a style, once watched in a real render: told directly to
+    stop, on sight, no exceptions. `asset`/`treatment`/`subject_type` are
+    still accepted so nothing upstream needs to change if this is revisited.
     """
-    if asset is None:
-        return "full"
-    if subject_type == "document":
-        return "inset"
-    w, h = _media_dims(asset)
-    if w and h and (w / h < 1.45 or h < 560):
-        return "inset"
-    if getattr(asset, "kind", "") == "image" and treatment in ("archival", "vintage"):
-        return "inset"
     return "full"
 
 

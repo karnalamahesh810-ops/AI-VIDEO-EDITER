@@ -200,6 +200,13 @@ STORAGE_BROKER_URL = os.getenv("STORAGE_BROKER_URL", "") or (
 # --- paths -------------------------------------------------------------------
 WORK_DIR = os.getenv("WORK_DIR", "/tmp/work")
 REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
+# Left unset, Remotion auto-detects concurrency from the host's real CPU
+# count, not what this container is actually allowed to spawn threads for.
+# A real render crashed (a Rust panic failing to spawn an OS thread) partway
+# through, on a GPU pod, right after the heaviest point of the parallel
+# sourcing phase. 4 is conservative; raise it only after confirming a higher
+# value survives a real render on this same pod type.
+RENDER_CONCURRENCY = int(os.getenv("RENDER_CONCURRENCY", "4"))
 
 # --- whisper -----------------------------------------------------------------
 # "base" is the sweet spot for narration alignment on CPU; bump to "small" on GPU.

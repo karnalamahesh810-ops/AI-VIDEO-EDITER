@@ -440,15 +440,19 @@ class VidRushMatching(unittest.TestCase):
         self.assertIsNotNone(out[1])
         self.assertEqual(len(made), 1)
 
-    def test_inset_frame_for_portrait_low_res_and_documents(self):
+    def test_frame_is_always_full(self):
+        # The inset-on-a-backdrop archival look read as a bug, not a style,
+        # in a real render: told directly to stop, on sight. pick_frame keeps
+        # its signature (still called from every scene build) so nothing
+        # upstream has to change if this is ever revisited.
         def a(w, h, kind="video"):
             return MediaAsset(kind=kind, source="youtube", url="u", width=w, height=h)
         self.assertEqual(timeline.pick_frame(a(1920, 1080), "film", "place"), "full")
-        self.assertEqual(timeline.pick_frame(a(640, 480), "film", "place"), "inset")   # 4:3
-        self.assertEqual(timeline.pick_frame(a(854, 480), "film", "place"), "inset")   # low-res
-        self.assertEqual(timeline.pick_frame(a(1080, 1350, "image"), "film", "person"), "inset")
-        self.assertEqual(timeline.pick_frame(a(1920, 1080, "image"), "archival", "place"), "inset")
-        self.assertEqual(timeline.pick_frame(a(1920, 1080), "film", "document"), "inset")
+        self.assertEqual(timeline.pick_frame(a(640, 480), "film", "place"), "full")
+        self.assertEqual(timeline.pick_frame(a(854, 480), "film", "place"), "full")
+        self.assertEqual(timeline.pick_frame(a(1080, 1350, "image"), "film", "person"), "full")
+        self.assertEqual(timeline.pick_frame(a(1920, 1080, "image"), "archival", "place"), "full")
+        self.assertEqual(timeline.pick_frame(a(1920, 1080), "film", "document"), "full")
         self.assertEqual(timeline.pick_frame(None, "film", ""), "full")
 
 
@@ -508,6 +512,35 @@ class SecondPass(unittest.TestCase):
 
         self._run(nothing, n=2)
         self.assertEqual(calls["n"], 2 + 2 * 3)  # pass 1 + three retries each
+
+
+class RenderConcurrency(unittest.TestCase):
+    """
+    Left unset, Remotion auto-detects concurrency from the host's real CPU
+    count, not what the container is actually allowed to spawn threads for -
+    a real render crashed this way (a Rust panic failing to spawn a thread)
+    partway through a render. do_render must always pass an explicit value.
+    """
+
+    def _run(self, inp):
+        import handler
+        doc = build_doc(n=1, seconds=3.0)
+        seen = {}
+        with mock.patch.object(handler.renderer, "render",
+                              side_effect=lambda *a, **k: seen.update(k) or a[1]), \
+                mock.patch.object(handler.storage, "upload_to_signed_url", return_value=123):
+            handler.do_render(doc, {"upload_url": "https://x/put", **inp}, "/tmp/x", handler.Reporter(""))
+        return seen
+
+    def test_defaults_to_the_configured_conservative_value(self):
+        with mock.patch.object(config, "RENDER_CONCURRENCY", 4):
+            seen = self._run({})
+        self.assertEqual(seen["concurrency"], 4)
+
+    def test_an_explicit_caller_value_still_wins(self):
+        with mock.patch.object(config, "RENDER_CONCURRENCY", 4):
+            seen = self._run({"concurrency": 8})
+        self.assertEqual(seen["concurrency"], 8)
 
 
 class PipelineProgress(unittest.TestCase):

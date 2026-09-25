@@ -514,7 +514,15 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
     renderer.render(
         doc, out_path,
         composition=inp.get("composition", "Main"),
-        concurrency=inp.get("concurrency"),
+        # Left unset, Remotion auto-detects concurrency from the host's CPU
+        # count, which is a GPU pod's real vCPU count - not what a Docker
+        # container is actually allowed to spawn threads for. A real render
+        # crashed at 4% ("thread::unix::Thread::new::thread_start", a Rust
+        # panic in the compositor failing to spawn a new OS thread) right
+        # after the heaviest-possible run of the memory/thread-heavy parallel
+        # sourcing phase. RENDER_CONCURRENCY caps it to a value verified safe
+        # in this container instead.
+        concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY,
         on_progress=on_render,
         # Everything sourced for this job lives here; the renderer serves it
         # over loopback so headless Chrome can actually fetch it.
