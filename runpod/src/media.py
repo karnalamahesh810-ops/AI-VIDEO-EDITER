@@ -1826,7 +1826,7 @@ def _asset_ok(asset) -> tuple:
 
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
-                **kwargs) -> List[Optional[MediaAsset]]:
+                on_recheck=None, **kwargs) -> List[Optional[MediaAsset]]:
     """
     Source visuals for many scenes, with no two scenes sharing a visual.
 
@@ -2042,16 +2042,37 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         print(f"[media] second pass: {replaced[0]}/{len(todo)} scene(s) replaced "
               f"({empty} empty, {duplicates} repeats, {rejected} unusable)", flush=True)
 
-    # AI rescue: for scenes still empty, one model call proposes DIFFERENT
-    # things to show (a related place, object, document or era scene), and
-    # each is sourced like a normal scene. The planner's fallbacks only
-    # broaden the same idea, which cannot help a subject with no footage at
-    # all - the medieval-history test left 9 of 17 scenes empty that way.
-    empties = [job for job, _ in plan if results[job["index"]] is None]
+    # Recheck with AI: every scene still without a shot of its own - empty, or
+    # holding only a copy of another scene's clip, which on screen reads as a
+    # missing shot just the same - goes to one model call that proposes
+    # DIFFERENT things to show, knowing the lines around it and what the
+    # neighbouring scenes already show. Each idea is sourced like a normal
+    # scene. The planner's fallbacks only broaden the same idea, which cannot
+    # help a subject with no footage at all - the medieval-history test left 9
+    # of 17 scenes empty that way.
+    def is_repeat(asset):
+        return bool(asset and asset.review_reason.startswith("Repeat of an earlier shot"))
+
+    by_index = {job["index"]: job for job, _ in plan}
+
+    def recheck_item(job):
+        i = job["index"]
+        near = [by_index.get(i - 1), by_index.get(i + 1)]
+        shows = [results[n["index"]].content_description for n in near
+                 if n and results[n["index"]] is not None
+                 and results[n["index"]].content_description]
+        return {"index": i, "text": job.get("context", ""), "query": job["query"],
+                "intent": job.get("intent", ""),
+                "before": near[0].get("context", "") if near[0] else "",
+                "after": near[1].get("context", "") if near[1] else "",
+                "shows": shows, "repeat": is_repeat(results[i])}
+
+    empties = [job for job, _ in plan
+               if results[job["index"]] is None or is_repeat(results[job["index"]])]
     if empties and rescue:
-        ideas = rescue([{"index": j["index"], "text": j.get("context", ""),
-                         "query": j["query"], "intent": j.get("intent", "")}
-                        for j in empties]) or {}
+        if on_recheck:
+            on_recheck(len(empties))
+        ideas = rescue([recheck_item(j) for j in empties]) or {}
         rescue_deadline = time.time() + config.RESCUE_BUDGET_SECONDS
 
         def rescue_one(job):
@@ -2076,13 +2097,14 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 used.add(got.identity)
             return got
 
+        filled_by_ai = 0
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             for job, got in zip(empties, pool.map(rescue_one, empties)):
                 if got:
                     results[job["index"]] = got
-        filled_by_ai = sum(1 for j in empties if results[j["index"]] is not None)
-        print(f"[media] AI rescue filled {filled_by_ai}/{len(empties)} empty scene(s)",
-              flush=True)
+                    filled_by_ai += 1
+        print(f"[media] AI recheck gave {filled_by_ai}/{len(empties)} missing or "
+              f"repeated scene(s) a shot of their own", flush=True)
 
     # Last resort for whatever is still empty: one generated still each,
     # within IMAGE_MAX_PER_VIDEO. Inside source_for_segment generation only

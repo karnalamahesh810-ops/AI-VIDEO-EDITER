@@ -2671,6 +2671,85 @@ class HookShots(unittest.TestCase):
         self.assertEqual(out[0].url, "https://x/1")
 
 
+class RecheckMissingScenes(unittest.TestCase):
+    """After sourcing, every scene without a shot of its own is rechecked with the story."""
+
+    def _run(self, fake, jobs, rescue, on_recheck=None):
+        with mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")), \
+                mock.patch.object(media, "generate_image", return_value=None), \
+                mock.patch.object(config, "REPLACE_BUDGET_SECONDS", 0):
+            media.reset_cache()
+            return media.source_many(jobs, "/tmp", workers=1, rescue=rescue,
+                                     on_recheck=on_recheck)
+
+    def test_a_repeated_clip_is_rechecked_and_given_its_own_shot(self):
+        def fake(query, seconds, work_dir, **kw):
+            if query == "sandbag wall Davenport 2026":
+                return MediaAsset(kind="video", source="youtube", url="https://x/sandbags")
+            a = MediaAsset(kind="video", source="youtube", url="https://x/flood")
+            a.content_description = "aerial of a flooded downtown"
+            return a
+
+        jobs = [{"index": 0, "query": "Davenport flood", "seconds": 3.0,
+                 "context": "The river broke through."},
+                {"index": 1, "query": "Davenport flood", "seconds": 3.0,
+                 "context": "Volunteers fought back."}]
+        asked, counted = [], []
+
+        def rescue(items):
+            asked.extend(items)
+            return {1: ["sandbag wall Davenport 2026"]}
+
+        out = self._run(fake, jobs, rescue, on_recheck=counted.append)
+        self.assertEqual(out[0].url, "https://x/flood")
+        self.assertEqual(out[1].url, "https://x/sandbags")
+        self.assertEqual(counted, [1])
+        item = asked[0]
+        self.assertEqual(item["index"], 1)
+        self.assertTrue(item["repeat"])
+        self.assertEqual(item["before"], "The river broke through.")
+        self.assertEqual(item["shows"], ["aerial of a flooded downtown"])
+
+    def test_a_repeat_nothing_better_was_found_for_is_kept_over_black(self):
+        def fake(query, seconds, work_dir, **kw):
+            return MediaAsset(kind="video", source="youtube", url="https://x/flood")
+
+        jobs = [{"index": i, "query": "flood", "seconds": 3.0} for i in range(2)]
+        out = self._run(fake, jobs, lambda items: {})
+        self.assertIsNotNone(out[1])
+        self.assertTrue(out[1].review_required)
+
+    def test_rescue_ideas_see_the_story_and_stay_on_the_event(self):
+        sent = {}
+
+        def chat(system, payload, timeout=120):
+            sent.update(payload)
+            return {"items": [{"index": 3, "queries": ["sandbag wall", "rescue boats downtown"]}]}
+
+        story = {"kind": "disaster", "event": "2026 Midwest flooding Iowa", "year": 2026,
+                 "places": ["Davenport, Iowa"], "hookBeats": [0]}
+        items = [{"index": 3, "text": "Volunteers fought back.", "query": "volunteers",
+                  "before": "The river broke through.", "shows": ["aerial flood"],
+                  "repeat": True}]
+        with mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
+                mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
+                mock.patch.object(director, "_chat_json", side_effect=chat):
+            ideas = director.rescue_queries(items, story=story)
+        self.assertEqual(sent["story"]["event"], "2026 Midwest flooding Iowa")
+        self.assertNotIn("hookBeats", sent["story"])
+        self.assertEqual(sent["items"][0]["before"], "The river broke through.")
+        self.assertTrue(sent["items"][0]["repeat"])
+        self.assertEqual(ideas[3], ["Davenport Iowa sandbag wall 2026",
+                                    "Davenport Iowa rescue boats downtown 2026"])
+
+    def test_the_recheck_shows_as_part_of_sourcing(self):
+        import handler
+        phase = next(p for prefix, p in handler._PHASE_BY_PREFIX
+                     if "Rechecking 3 missing scenes against the story".startswith(prefix))
+        self.assertEqual(phase, "source")
+
+
 class VisionJudgeEventsAndQuality(unittest.TestCase):
     """The judge checks a news beat against its own event, and rates the footage."""
 

@@ -58,9 +58,9 @@ PHASES = ("narration", "transcribe", "plan", "source", "render", "upload", "save
 _PHASE_BY_PREFIX = (
     ("Downloading narration", "narration"),
     ("Aligning narration", "transcribe"),
-    ("Planning", "plan"),
+    ("Reading the whole story", "plan"), ("Planning", "plan"),
     ("Sourcing", "source"), ("Sourced", "source"), ("Re-sourcing", "source"),
-    ("Replacing", "source"),
+    ("Replacing", "source"), ("Rechecking", "source"),
     ("Rendering", "render"),
     ("Uploading", "upload"),
     ("Saving", "save"),
@@ -301,13 +301,20 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if not audio_duration:
         audio_duration = segments[-1].end
 
+    # Read the whole story once: it steers every beat's plan, and after
+    # sourcing it steers the recheck of scenes still missing a shot.
+    title = inp.get("title") or inp.get("title_overlay") or ""
+    report("Reading the whole story", 13)
+    brief = director.story_brief(segments, title, configured=director.is_configured())
+
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
     shots, planner, warnings = director.plan(
         segments,
-        title=inp.get("title") or inp.get("title_overlay") or "",
+        title=title,
         report=report,
         allow_maps=bool(inp.get("maps", True)),
+        brief=brief,
     )
 
     # Per-scene overrides from the editor win over the director's choice.
@@ -353,7 +360,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         require_cc=inp.get("require_cc"),
         on_done=on_done,
         on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
-        rescue=director.rescue_queries,
+        rescue=lambda items: director.rescue_queries(items, story=brief),
+        on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
     )
 
     doc = timeline.build(
@@ -373,6 +381,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         doc["meta"]["warnings"].append(
             f"Requested source mode '{inp.get('source')}' is not implemented yet; "
             f"sourced from Creative Commons YouTube and Commons instead.")
+    # What the AI understood the video to be about, for the editor to show.
+    doc["meta"]["story"] = {k: brief.get(k) for k in
+                            ("kind", "summary", "event", "year", "places", "people")}
     doc["meta"]["audioSource"] = raw_audio
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
