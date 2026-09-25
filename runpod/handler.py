@@ -421,6 +421,14 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # What the AI understood the video to be about, for the editor to show.
     doc["meta"]["story"] = {k: brief.get(k) for k in
                             ("kind", "summary", "event", "year", "places", "people")}
+    # Which image/footage sources answered, came back empty, or failed, and why.
+    doc["meta"]["sourceStats"] = media.source_stats()
+    doc["meta"]["vision"] = vision.stats()
+    if vision.out_of_credits():
+        doc["meta"]["warnings"].insert(0, (
+            "The AI account (Kie) ran out of credits during this job, so vision "
+            "checks, AI rescue and AI images stopped partway. Top up Kie and "
+            "re-run for full quality."))
     doc["meta"]["audioSource"] = raw_audio
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may

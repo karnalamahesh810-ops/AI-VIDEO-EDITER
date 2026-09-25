@@ -21,7 +21,7 @@ show where each clip came from and you can see your exposure per video.
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextvars
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace as _dc_replace
 from typing import List, Optional, Dict, Any
 import base64
 import datetime
@@ -259,7 +259,8 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
                         rows.append((it.get("image"), it.get("width") or 0,
                                      it.get("height") or 0, it.get("title") or "",
                                      it.get("url") or ""))
-            except Exception:  # noqa: BLE001 — optional dependency / network
+            except Exception as e:  # noqa: BLE001 — optional dependency / network
+                _source_error("web_images_ddg", e)
                 rows = []
             if rows:
                 break
@@ -290,6 +291,70 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
     return out
 
 
+# File names on an article that are page furniture, not photographs.
+_NOT_A_PHOTO = ("logo", "icon", "flag of", "flag_of", "seal of", "seal_of", "signature",
+                "coat of arms", "coat_of_arms", "wikiquote", "wikisource", "commons-",
+                "symbol", "question_book", "edit-clear", "padlock", "ambox")
+
+
+def search_wikipedia_article_images(title: str, limit: int = 20) -> List[MediaAsset]:
+    """
+    The photographs on the subject's own English Wikipedia article.
+
+    For a named person this is the most reliable real photo source there is:
+    a keyword search such as "Anne Dunham young archival photograph" matches
+    nothing on Commons, while the "Ann Dunham" article carries several real
+    photos of her. One request lists every file the article uses, with its
+    image info (redirects resolve spelling variants). Logos, flags, icons,
+    signatures, SVGs and thumbnails are dropped.
+    """
+    title = (title or "").strip()
+    if not title:
+        return []
+    try:
+        r = requests.get(
+            "https://en.wikipedia.org/w/api.php",
+            headers={"User-Agent": config.USER_AGENT},
+            params={"action": "query", "format": "json", "redirects": 1,
+                    "titles": title, "generator": "images", "gimlimit": 50,
+                    "prop": "imageinfo", "iiprop": "url|size|mime|extmetadata",
+                    "iiurlwidth": 1280},
+            timeout=25,
+        )
+        r.raise_for_status()
+        pages = (r.json().get("query") or {}).get("pages") or {}
+    except Exception as e:  # noqa: BLE001
+        _source_error("wikipedia", e)
+        return []
+
+    out: List[MediaAsset] = []
+    for page in pages.values():
+        name = str(page.get("title") or "").lower()
+        if any(k in name for k in _NOT_A_PHOTO):
+            continue
+        info = (page.get("imageinfo") or [{}])[0]
+        if info.get("mime") not in ("image/jpeg", "image/png", "image/webp"):
+            continue
+        if (info.get("width") or 0) < 400 or (info.get("height") or 0) < 300:
+            continue
+        url = info.get("thumburl") or info.get("url")
+        if not url:
+            continue
+        meta = info.get("extmetadata") or {}
+        artist = re.sub(r"<[^>]+>", "", meta.get("Artist", {}).get("value", "") or "")
+        out.append(MediaAsset(
+            kind="image", source="wikipedia", url=url,
+            width=info.get("thumbwidth") or info.get("width") or 0,
+            height=info.get("thumbheight") or info.get("height") or 0,
+            attribution=artist.strip()[:200],
+            license=meta.get("LicenseShortName", {}).get("value", "") or "see Wikipedia",
+            query=title,
+        ))
+        if len(out) >= limit:
+            break
+    return out
+
+
 def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
     """
     Wikimedia Commons images — the source that actually has the *specific*
@@ -310,7 +375,8 @@ def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
         )
         r.raise_for_status()
         pages = (r.json().get("query") or {}).get("pages") or {}
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("wikimedia", e)
         return []
 
     out: List[MediaAsset] = []
@@ -343,7 +409,8 @@ def search_openverse(query: str, limit: int = 5) -> List[MediaAsset]:
         )
         r.raise_for_status()
         results = r.json().get("results", [])
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("openverse", e)
         return []
     return [
         MediaAsset(
@@ -379,7 +446,8 @@ def search_wikimedia_video(query: str, limit: int = 5) -> List[MediaAsset]:
         )
         r.raise_for_status()
         pages = (r.json().get("query") or {}).get("pages") or {}
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("wikimedia_video", e)
         return []
 
     out: List[MediaAsset] = []
@@ -426,7 +494,8 @@ def search_nasa(query: str, want_video: bool = False,
         )
         r.raise_for_status()
         items = ((r.json().get("collection") or {}).get("items") or [])[:limit]
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("nasa", e)
         return []
 
     out: List[MediaAsset] = []
@@ -496,7 +565,8 @@ def _archive_org_search(q: str, limit: int) -> List[dict]:
         )
         r.raise_for_status()
         return (r.json().get("response") or {}).get("docs") or []
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("archive_org", e)
         return []
 
 
@@ -621,6 +691,8 @@ def _kie_generate(full_prompt: str, timeout: int) -> Optional[str]:
         r.raise_for_status()
         body = r.json()
         if body.get("code") != 200:
+            if vision.is_credit_error(body.get("code"), body.get("msg")):
+                vision.note_out_of_credits()
             print(f"[media] kie createTask refused: {body.get('code')} "
                   f"{body.get('msg')}", flush=True)
             return None
@@ -668,6 +740,8 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
     which before publishing.
     """
     if not config.IMAGE_API_KEY:
+        return None
+    if "kie.ai" in config.IMAGE_API_BASE and vision.out_of_credits():
         return None
     os.makedirs(out_dir, exist_ok=True)
     full_prompt = f"{prompt}. {config.IMAGE_STYLE_SUFFIX}"[:3800]
@@ -1311,7 +1385,8 @@ def search_dailymotion(query: str, limit: int = 12, created_after: int = 0) -> L
         )
         r.raise_for_status()
         items = r.json().get("list") or []
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        _source_error("dailymotion", e)
         return []
     out = []
     for it in items:
@@ -1546,6 +1621,30 @@ _YT_INFO_CACHE: Dict[str, tuple] = {}
 # than trusted to callers. Reset per job alongside the cache.
 _GENERATED = [0]
 
+# Per-source search outcomes for the job result. The search functions return
+# [] on any failure, so a source that was blocked, rate-limited or down looked
+# exactly like one with no matches: a 362-scene job lost 300 photo scenes and
+# nothing said which source failed or why.
+_SOURCE_STATS: Dict[str, Dict[str, Any]] = {}
+
+
+def _source_stat(name: str) -> Dict[str, Any]:
+    return _SOURCE_STATS.setdefault(name, {"searches": 0, "withResults": 0,
+                                           "errors": 0, "recentErrors": []})
+
+
+def _source_error(name: str, exc: Exception) -> None:
+    """Record why a source failed; never raises."""
+    with _CACHE_LOCK:
+        st = _source_stat(name)
+        st["errors"] += 1
+        st["recentErrors"] = (st["recentErrors"] + [f"{type(exc).__name__}: {str(exc)[:140]}"])[-4:]
+
+
+def source_stats() -> Dict[str, Any]:
+    with _CACHE_LOCK:
+        return {k: dict(v, recentErrors=list(v["recentErrors"])) for k, v in _SOURCE_STATS.items()}
+
 
 def reset_cache():
     """Call between jobs — serverless worker processes are reused across renders."""
@@ -1553,6 +1652,7 @@ def reset_cache():
         _SEARCH_CACHE.clear()
         _YT_INFO_CACHE.clear()
         _YT_CANDIDATES_CACHE.clear()
+        _SOURCE_STATS.clear()
         _GENERATED[0] = 0
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
@@ -1593,7 +1693,12 @@ def _cached_search(fn, query: str, cache_key: str = "") -> List[MediaAsset]:
         found = fn(query)
     except Exception as e:  # noqa: BLE001
         print(f"[media] {fn.__name__} '{query}' failed: {e}", flush=True)
+        _source_error(fn.__name__, e)
         found = []
+    with _CACHE_LOCK:
+        st = _source_stat(fn.__name__)
+        st["searches"] += 1
+        st["withResults"] += 1 if found else 0
     with _CACHE_LOCK:
         _SEARCH_CACHE[key] = found
     return found
@@ -1743,6 +1848,16 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
             if made:
                 return made
 
+    # The subject's own Wikipedia article first: for a named person or place
+    # it holds real photos of exactly that subject, where keyword searches
+    # built from the line ("Anne Dunham teenage archival photo") match nothing.
+    if subject and _SUBJECT_TYPE.get() in ("person", "place", "event"):
+        found = _cached_search(search_wikipedia_article_images, subject)
+        ordered = found[nth:] + found[:nth] if found else []
+        asset = _pick_unused(ordered, used, subject, work_dir, intent, context)
+        if asset:
+            return asset
+
     # Real photographs of the named subject, before any generated impression.
     # A general web image search finds the specific press photo; the archives
     # follow with cleaner licences but narrower coverage.
@@ -1759,6 +1874,26 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         for fn in (search_pexels, search_pixabay):
             found = _cached_search(lambda q: fn(q, kind="image"), query)
             asset = _pick_unused(found[nth:] + found[:nth], used, query, work_dir, intent, context)
+            if asset:
+                return asset
+
+    # A still nothing was found for tries moving footage of the same thing.
+    # Footage already fell back to stills; stills never fell back to footage,
+    # and on a 362-scene biography the planner made 300 lines photos - photo
+    # search came back empty for nearly all of them while footage filled 94%
+    # of its scenes, so 86% of the video rendered black. For a person the
+    # vision gate already accepts footage of that person speaking.
+    if visual_type == "image":
+        if allow_youtube:
+            asset = youtube_clip(query, work_dir, seconds=seconds, require_cc=require_cc,
+                                 skip=nth, start_at=30.0 + 25.0 * nth, used=used,
+                                 intent=intent, context=context, subject=subject)
+            if asset:
+                return asset
+        if config.ALLOW_DAILYMOTION and not require_cc:
+            asset = dailymotion_clip(query, work_dir, seconds=seconds, skip=nth,
+                                     used=used, intent=intent, context=context,
+                                     subject=subject)
             if asset:
                 return asset
 
@@ -2134,4 +2269,111 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         filled = sum(1 for job in empties if results[job["index"]] is not None)
         print(f"[media] generated stills for {filled}/{len(empties)} empty scene(s)",
               flush=True)
+
+    reused = fill_from_story(ordered, results) if config.REUSE_SHOTS_TO_FILL else 0
+    if reused:
+        print(f"[media] reused a shot from elsewhere in the story for {reused} "
+              f"scene(s) nothing else could fill", flush=True)
     return results
+
+
+# Tokens that do not identify a person on their own.
+_NAME_SUFFIX = {"sr", "jr", "ii", "iii", "iv"}
+# Scenes on either side where a reused shot must not already appear.
+REUSE_MIN_GAP = 3
+
+
+def _name_tokens(subject: str) -> tuple:
+    """(surname, suffix, given-name tokens) with "Anne" and "Ann" folded together."""
+    words = [w.strip(".,'’\"()").lower() for w in (subject or "").split()]
+    words = [w for w in words if w]
+    suffix = words.pop() if words and words[-1] in _NAME_SUFFIX else ""
+    if not words:
+        return "", suffix, frozenset()
+    fold = lambda w: w[:-1] if len(w) > 3 and w.endswith("e") else w  # noqa: E731
+    return words[-1], suffix, frozenset(fold(w) for w in words[:-1])
+
+
+def same_subject(a: str, b: str) -> bool:
+    """
+    True when two subject labels name the same thing.
+
+    The planner writes one person several ways across a long script ("Anne
+    Dunham", "Ann Dunham", "Stanley Ann Dunham"); those must pool their shots.
+    "Madelyn Dunham" is a different person, and "Barack Obama Sr." is not
+    "Barack Obama": the surname alone is never enough.
+    """
+    if not a or not b:
+        return False
+    if a.strip().lower() == b.strip().lower():
+        return True
+    sa, xa, ga = _name_tokens(a)
+    sb, xb, gb = _name_tokens(b)
+    if not sa or sa != sb or xa != xb:
+        return False
+    if not ga or not gb:
+        return ga == gb
+    return bool(ga & gb)
+
+
+def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]) -> int:
+    """
+    Give every scene still empty a real shot from elsewhere in the same story.
+
+    The last step, after searching, the AI recheck and generation. A real
+    person may have five photos online and forty lines in a biography; with
+    each shot usable once, the other thirty-five scenes rendered black. First
+    choice is a shot of the same subject placed more than REUSE_MIN_GAP scenes
+    away, then a shot from a nearby scene - never a photo of a different
+    person, which would put the wrong face on screen - and last the same
+    subject's farthest shot, never on the scene right next to it. Every reuse
+    is flagged for review. Returns how many scenes were filled.
+    """
+    by_index = {j["index"]: j for j in jobs}
+    order = sorted(by_index)
+
+    def placed_near(identity: str, i: int) -> bool:
+        return any(results[k] is not None and results[k].identity == identity
+                   for k in range(i - REUSE_MIN_GAP, i + REUSE_MIN_GAP + 1)
+                   if k != i and 0 <= k < len(results))
+
+    filled = 0
+    for i in order:
+        if results[i] is not None:
+            continue
+        job = by_index[i]
+        subject = job.get("subject") or ""
+        person = job.get("subject_type") == "person"
+        # Nearest donors first; a donor is any scene that has media.
+        donors = sorted((k for k in order if k != i and results[k] is not None),
+                        key=lambda k: abs(k - i))
+        pick = None
+        for k in donors:                       # 1. the same subject
+            if same_subject(subject, by_index[k].get("subject") or "") \
+                    and not placed_near(results[k].identity, i):
+                pick = k
+                break
+        if pick is None:                       # 2. a nearby scene, never another person
+            for k in donors:
+                other = by_index[k]
+                if other.get("subject_type") == "person" and not same_subject(
+                        subject, other.get("subject") or ""):
+                    continue
+                if person and results[k].kind == "image":
+                    continue
+                if not placed_near(results[k].identity, i):
+                    pick = k
+                    break
+        if pick is None:                       # 3. the same subject, closer in, never adjacent
+            same = [k for k in donors if abs(k - i) >= 2
+                    and same_subject(subject, by_index[k].get("subject") or "")]
+            pick = same[-1] if same else None   # farthest of them
+        if pick is None:
+            continue
+        donor = results[pick]
+        results[i] = _dc_replace(
+            donor, review_required=True,
+            review_reason=(f"Reused shot of {by_index[pick].get('subject') or 'another scene'}"
+                           " - no other footage found for this line"))
+        filled += 1
+    return filled

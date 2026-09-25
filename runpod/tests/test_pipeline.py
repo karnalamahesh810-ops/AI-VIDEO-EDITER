@@ -859,6 +859,28 @@ class VisionFailuresAreReported(unittest.TestCase):
             text, model = self.vision._ask([], 100)
         self.assertEqual(model, "backup")
 
+    def test_running_out_of_credits_stops_all_ai_calls_for_the_job(self):
+        calls = []
+
+        def post(*a, **k):
+            calls.append(1)
+            return self._reply(200, {"code": 402, "msg": "Credits insufficient : top up"})
+
+        with mock.patch.object(self.vision.requests, "post", side_effect=post):
+            self.assertEqual(self.vision._ask([], 100), (None, ""))
+            self.assertEqual(len(calls), 1)            # no retry, no fallback
+            self.assertTrue(self.vision.out_of_credits())
+            self.assertFalse(self.vision.enabled())    # later clips skip vision fast
+            self.assertEqual(self.vision._ask([], 100), (None, ""))
+            self.assertEqual(len(calls), 1)
+        self.assertTrue(self.vision.stats()["outOfCredits"])
+        with mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
+                mock.patch.object(director.requests, "post") as dpost:
+            self.assertIsNone(director._chat_json("sys", {}))
+            dpost.assert_not_called()
+        self.vision.reset()
+        self.assertFalse(self.vision.out_of_credits())
+
     def test_a_clip_no_model_could_judge_is_counted_and_flagged(self):
         with mock.patch.object(self.vision.os.path, "exists", return_value=True), \
                 mock.patch.object(self.vision, "_fingerprint", return_value="fp"), \
@@ -1748,16 +1770,30 @@ class NoDuplicateShots(unittest.TestCase):
         self.assertEqual(sorted(calls), [("a", 0), ("b", 0), ("c", 0)])
         self.assertEqual(len({a.identity for a in out}), 3)
 
-    def test_running_out_of_options_never_repeats_a_clip(self):
-        # Only two distinct assets exist for six scenes asking the same thing.
-        # Policy (the creator's, after seeing repeats in a real render): a
-        # clip never appears twice in the timeline. The other four stay empty
-        # for the later rescue steps (AI alternative queries, a generated
-        # still) and the editor's Find footage - not a silent repeat.
-        out, _ = self._run(["the lake"] * 6, per_query=2)
+    def test_with_reuse_off_a_clip_never_repeats(self):
+        # The strict rule, still available: a clip never appears twice, and
+        # the other four scenes stay empty for the editor's Find footage.
+        with mock.patch.object(config, "REUSE_SHOTS_TO_FILL", False):
+            out, _ = self._run(["the lake"] * 6, per_query=2)
         placed = [a for a in out if a]
         self.assertEqual(len(placed), 2)
         self.assertEqual(len({a.identity for a in placed}), 2)
+
+    def test_running_out_of_options_reuses_only_spaced_out_and_flagged(self):
+        # Two distinct assets, eight scenes. No scene may render black (the
+        # creator's rule after a long biography came out 86% empty), but a
+        # repeat never lands within REUSE_MIN_GAP scenes of the same shot and
+        # is always flagged - the original complaint was silent, close repeats.
+        out, _ = self._run(["the lake"] * 8, per_query=2)
+        placed = [(i, a) for i, a in enumerate(out) if a]
+        self.assertGreater(len(placed), 2)
+        for i, a in placed:
+            for j, b in placed:
+                if i != j and a.identity == b.identity:
+                    self.assertGreater(abs(i - j), media.REUSE_MIN_GAP)
+        reused = [a for _, a in placed if a.review_reason.startswith("Reused")]
+        self.assertTrue(reused)
+        self.assertTrue(all(a.review_required for a in reused))
 
     def test_youtube_identity_is_the_video_not_the_query(self):
         # Two different searches landing on the same upload count as one.
@@ -2852,6 +2888,88 @@ class MetaphorsAndMaps(unittest.TestCase):
         phase = next(p for prefix, p in handler._PHASE_BY_PREFIX
                      if "Rechecking 3 missing scenes against the story".startswith(prefix))
         self.assertEqual(phase, "source")
+
+
+class LongVideoCoverage(unittest.TestCase):
+    """A 362-scene biography rendered 86% black: photo scenes, one person, few photos."""
+
+    def test_person_name_variants_pool_but_different_people_do_not(self):
+        self.assertTrue(media.same_subject("Anne Dunham", "Ann Dunham"))
+        self.assertTrue(media.same_subject("Stanley Ann Dunham", "Ann Dunham"))
+        self.assertFalse(media.same_subject("Madelyn Dunham", "Ann Dunham"))
+        self.assertFalse(media.same_subject("Barack Obama Sr.", "Barack Obama"))
+        self.assertTrue(media.same_subject("University of Hawaii", "university of hawaii"))
+
+    def test_an_empty_scene_reuses_its_own_subject_never_another_persons_photo(self):
+        def a(url, kind="image"):
+            return MediaAsset(kind=kind, source="wikipedia", url=url)
+        jobs = [{"index": 0, "subject": "Ann Dunham", "subject_type": "person"},
+                {"index": 1, "subject": "Madelyn Dunham", "subject_type": "person"},
+                {"index": 2, "subject": "Madelyn Dunham", "subject_type": "person"},
+                {"index": 3, "subject": "Madelyn Dunham", "subject_type": "person"},
+                {"index": 4, "subject": "Madelyn Dunham", "subject_type": "person"},
+                {"index": 5, "subject": "Anne Dunham", "subject_type": "person"}]
+        results = [a("https://x/ann.jpg"), a("https://x/mad1.jpg"), a("https://x/mad2.jpg"),
+                   a("https://x/mad3.jpg"), None, None]
+        media.fill_from_story(jobs, results)
+        self.assertEqual(results[5].url, "https://x/ann.jpg")      # her own photo, 5 apart
+        self.assertTrue(results[5].review_required)
+        self.assertIn("Ann Dunham", results[5].review_reason)
+        self.assertEqual(results[4].url, "https://x/mad1.jpg")     # Madelyn's own, 3+ apart
+
+    def test_a_person_scene_is_never_given_a_stranger(self):
+        jobs = [{"index": 0, "subject": "Lolo Soetoro", "subject_type": "person"},
+                {"index": 1, "subject": "Ann Dunham", "subject_type": "person"}]
+        results = [MediaAsset(kind="image", source="wikipedia", url="https://x/lolo.jpg"), None]
+        media.fill_from_story(jobs, results)
+        self.assertIsNone(results[1])
+
+    def test_a_photo_scene_with_no_photo_falls_back_to_footage(self):
+        clip = MediaAsset(kind="video", source="youtube", url="q", local_path="/w/yt_abcdefghijk_0_1.mp4")
+        with mock.patch.object(media, "_cached_search", return_value=[]), \
+                mock.patch.object(media, "youtube_clip", return_value=clip) as yt, \
+                mock.patch.object(media, "generate_image", return_value=None):
+            got = media._source_one("Anne Dunham teaching Indonesia", 3.0, "/tmp",
+                                    visual_type="image", allow_youtube=True,
+                                    allow_stock=False, require_cc=False)
+        self.assertIs(got, clip)
+        yt.assert_called_once()
+
+    def test_wikipedia_keeps_real_photos_and_drops_page_furniture(self):
+        def img(title, mime="image/jpeg", w=1200, h=900):
+            return {"title": title, "imageinfo": [{"mime": mime, "width": w, "height": h,
+                                                   "url": f"https://u/{title}", "thumburl": f"https://t/{title}",
+                                                   "thumbwidth": 1280, "thumbheight": 960,
+                                                   "extmetadata": {"Artist": {"value": "<a>Someone</a>"}}}]}
+        pages = {str(i): p for i, p in enumerate([
+            img("File:Ann Dunham with son.jpg"),
+            img("File:Flag of Indonesia.svg", mime="image/svg+xml"),
+            img("File:Commons-logo.png", mime="image/png"),
+            img("File:Tiny.jpg", w=120, h=90),
+            img("File:Ann Dunham 1965.png", mime="image/png")])}
+        r = mock.Mock()
+        r.raise_for_status = lambda: None
+        r.json.return_value = {"query": {"pages": pages}}
+        with mock.patch.object(media.requests, "get", return_value=r):
+            got = media.search_wikipedia_article_images("Anne Dunham")
+        self.assertEqual([a.url for a in got], ["https://t/File:Ann Dunham with son.jpg",
+                                               "https://t/File:Ann Dunham 1965.png"])
+        self.assertEqual(got[0].attribution, "Someone")
+
+    def test_no_more_than_two_person_photos_in_a_row(self):
+        shots = [{"subjectType": "person", "visualType": "image"} for _ in range(7)]
+        shots.insert(3, {"subjectType": "place", "visualType": "footage"})
+        director.vary_person_stills(shots)
+        kinds = [s["visualType"][0] for s in shots]   # i=image, f=footage
+        self.assertEqual("".join(kinds), "iiffiifi")
+
+    def test_a_failing_source_is_recorded_not_hidden(self):
+        media.reset_cache()
+        with mock.patch.object(media.requests, "get", side_effect=OSError("429 Too Many Requests")):
+            self.assertEqual(media._cached_search(media.search_wikimedia, "Barack Obama"), [])
+        st = media.source_stats()["search_wikimedia"]
+        self.assertEqual((st["searches"], st["withResults"]), (1, 0))
+        self.assertIn("429", media.source_stats()["wikimedia"]["recentErrors"][0])
 
 
 class VisionJudgeEventsAndQuality(unittest.TestCase):

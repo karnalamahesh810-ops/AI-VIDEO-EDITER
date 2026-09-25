@@ -174,6 +174,12 @@ VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
 REPLACE_BUDGET_SECONDS = int(os.getenv("REPLACE_BUDGET_SECONDS", "240"))
 # Wall-clock cap on the AI-rescue pass for scenes still empty after pass 2.
 RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "180"))
+# Last resort for a scene nothing could fill: reuse a real shot of the same
+# subject (or a nearby scene) from elsewhere in the video, never within
+# REUSE_MIN_GAP scenes of itself and always flagged for review. Off ("0")
+# restores the strict "a clip never appears twice" rule, at the cost of
+# empty scenes on long videos about subjects with few real photos.
+REUSE_SHOTS_TO_FILL = _flag("REUSE_SHOTS_TO_FILL", True)
 MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
 MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp

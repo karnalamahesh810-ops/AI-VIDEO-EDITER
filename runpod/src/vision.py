@@ -79,8 +79,27 @@ _EVENT_RULE = (
 )
 
 
+# Kie shares one balance across vision, the director and image generation.
+# When it answers "402 Credits insufficient" every later call fails the same
+# way: a 362-scene job made 2,631 failed calls after its balance ran out.
+_OUT_OF_CREDITS = {"hit": False}
+
+
+def is_credit_error(code, msg: str = "") -> bool:
+    return code == 402 or "credits insufficient" in str(msg or "").lower()
+
+
+def note_out_of_credits() -> None:
+    with _LOCK:
+        _OUT_OF_CREDITS["hit"] = True
+
+
+def out_of_credits() -> bool:
+    return _OUT_OF_CREDITS["hit"]
+
+
 def enabled() -> bool:
-    return bool(config.VISION_ENABLED and config.VISION_API_KEY)
+    return bool(config.VISION_ENABLED and config.VISION_API_KEY) and not _OUT_OF_CREDITS["hit"]
 
 
 def calls_made() -> int:
@@ -93,6 +112,7 @@ def reset() -> None:
         _CALLS["n"] = 0
         _FAILS["n"] = 0
         _UNJUDGED["n"] = 0
+        _OUT_OF_CREDITS["hit"] = False
         _ERRORS.clear()
 
 
@@ -108,6 +128,7 @@ def stats() -> dict:
         return {"enabled": enabled(), "model": config.VISION_MODEL,
                 "calls": _CALLS["n"], "failures": _FAILS["n"],
                 "unjudged": _UNJUDGED["n"],
+                "outOfCredits": _OUT_OF_CREDITS["hit"],
                 "recentErrors": list(_ERRORS)}
 
 
@@ -135,6 +156,9 @@ def _ask_once(model: str, messages: list, max_tokens: int) -> Tuple[Optional[str
     # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
     if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
         _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
+        if is_credit_error(body["code"], body.get("msg")):
+            note_out_of_credits()
+            return None, False
         return None, body["code"] >= 500 or body["code"] == 429
     try:
         text = body["choices"][0]["message"]["content"]
@@ -161,7 +185,7 @@ def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
     clips on the timeline that no model had ever looked at.
     """
     for model in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS):
-        if not model:
+        if not model or _OUT_OF_CREDITS["hit"]:
             continue
         for attempt in range(1 + config.VISION_RETRIES):
             if attempt:

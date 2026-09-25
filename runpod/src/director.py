@@ -28,7 +28,7 @@ from collections import Counter
 from typing import List, Optional, Tuple
 import requests
 
-from . import config, geocode
+from . import config, geocode, vision
 from .transcribe import Segment, keywords_for
 
 # Templates the renderer can draw. Kept in sync with Main.tsx's overlay router
@@ -505,7 +505,7 @@ def _validate_brief(raw, fallback: dict, n_beats: int,
 def _chat_json(system: str, payload: dict, timeout: int = 120) -> Optional[dict]:
     """One JSON completion from the director model or its fallbacks, or None."""
     for model in [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS:
-        if not model:
+        if not model or vision.out_of_credits():
             continue
         try:
             r = requests.post(
@@ -520,6 +520,8 @@ def _chat_json(system: str, payload: dict, timeout: int = 120) -> Optional[dict]
             )
             body = r.json()
             if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
+                if vision.is_credit_error(body["code"], body.get("msg")):
+                    vision.note_out_of_credits()
                 raise ValueError(f"{model}: code {body['code']}")
             data = json.loads(body["choices"][0]["message"]["content"])
             if isinstance(data, dict):
@@ -626,6 +628,34 @@ def anchor_to_story(shots: List[dict], segments: List[Segment], brief: dict) -> 
     return changed
 
 
+# Person photos allowed back to back before the next one becomes footage.
+MAX_PERSON_STILLS_IN_A_ROW = 2
+
+
+def vary_person_stills(shots: List[dict]) -> int:
+    """
+    Turn every third person photo in a row into footage of that person.
+
+    Told "a line about a person gets a photograph", the planner made 225 of a
+    362-line biography person stills. A real person has a handful of photos
+    online, so most of those scenes could never be filled, and a run of stills
+    reads as a slideshow. Footage of the person (a speech, an interview,
+    archive film) is plentiful and the vision gate accepts it for a person.
+    Returns how many shots were changed.
+    """
+    changed = run = 0
+    for shot in shots:
+        if shot.get("subjectType") == "person" and shot.get("visualType") == "image":
+            run += 1
+            if run > MAX_PERSON_STILLS_IN_A_ROW:
+                shot["visualType"] = "footage"
+                changed += 1
+                run = 0
+        else:
+            run = 0
+    return changed
+
+
 # When an event story's opening has no map, the first line after the hook that
 # names one of its places gets one (else the first free line after the hook).
 ESTABLISHING_MAP_BY_SECONDS = 60.0
@@ -704,10 +734,17 @@ _SYSTEM_PROMPT = (
     "- query: 3-7 search words containing the subject plus the visual detail "
     "(\"Lake Mead boat ramp dry\"). Prefer footage words (aerial, drone, archival, "
     "footage, photo). No URLs, no code.\n"
-    "- visualType: \"footage\" for moving pictures, \"image\" for a still. A line "
-    "about a PERSON gets \"image\" (a real photograph of that person) unless it "
-    "describes them at a filmed event. Documents, letters, records and anything "
-    "before film existed get \"image\".\n"
+    "- visualType: \"footage\" for moving pictures, \"image\" for a still. Vary the "
+    "shots like a documentary editor. A real photograph of a PERSON (subject = that "
+    "person, visualType \"image\") only where the line is about who they are or how "
+    "they looked - about one line in four about them, never more than two person "
+    "photos in a row. Every other line about a person shows what the line describes "
+    "as footage: the place, era, event or institution (\"1960s Honolulu street\", "
+    "\"University of Hawaii campus\", \"Jakarta 1967 archival footage\"), and then "
+    "`subject` is that place or event - the thing the camera shows - not the "
+    "person. A person at a filmed event (a speech, an interview) is footage of "
+    "them. Documents, letters, records and anything before film existed get "
+    "\"image\".\n"
     "- overlay: null, or {type,text,subtitle,highlight,body,value,suffix,variant,"
     "items:[{label,value,text}],places:[str]}.\n"
     "EDITING GRAMMAR (VidRush): about one graphic every 15-20 seconds of narration, "
@@ -757,7 +794,7 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
         data = None
         tried_errors = []
         for model in [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS:
-            if not model:
+            if not model or vision.out_of_credits():
                 continue
             try:
                 r = requests.post(
@@ -773,6 +810,8 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                 body = r.json()
                 # Kie wraps a failure in a 200: {"code": 422, "msg": ...}.
                 if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
+                    if vision.is_credit_error(body["code"], body.get("msg")):
+                        vision.note_out_of_credits()
                     raise ValueError(f"{model}: code {body['code']} {body.get('msg', '')}")
                 data = json.loads(body["choices"][0]["message"]["content"])
                 break
@@ -1023,6 +1062,7 @@ def plan(segments: List[Segment], title: str = "", report=None,
 
     _thin_overlays(segments, shots)
 
+    vary_person_stills(shots)
     anchor_to_story(shots, segments, brief)
     for i in brief.get("hookBeats") or []:
         shots[i]["hook"] = True
