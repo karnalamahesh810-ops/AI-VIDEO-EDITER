@@ -58,9 +58,9 @@ PHASES = ("narration", "transcribe", "plan", "source", "render", "upload", "save
 _PHASE_BY_PREFIX = (
     ("Downloading narration", "narration"),
     ("Aligning narration", "transcribe"),
-    ("Planning", "plan"),
+    ("Reading the whole story", "plan"), ("Planning", "plan"),
     ("Sourcing", "source"), ("Sourced", "source"), ("Re-sourcing", "source"),
-    ("Replacing", "source"),
+    ("Replacing", "source"), ("Rechecking", "source"),
     ("Rendering", "render"),
     ("Uploading", "upload"),
     ("Saving", "save"),
@@ -120,6 +120,35 @@ def _thumbnail(path: str, work: str, scene_id: str) -> str:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return ""
     return out if os.path.isfile(out) else ""
+
+
+_VIDEO_EXTS = (".mp4", ".webm", ".mov", ".m4v", ".mkv")
+
+
+def _preview_proxy(path: str, work: str, scene_id: str) -> str:
+    """
+    A light copy of a video clip for the editor's live preview, or "".
+
+    The editor's player streamed every scene's full source clip (up to 1080p,
+    whatever bitrate the upload had) the moment the scene started, so each cut
+    waited on a fresh multi-megabyte download and the preview buffered. This
+    is 640px wide, silent (the narration is its own track), with the index at
+    the front (+faststart) so it starts on the first bytes, and a keyframe
+    every half second so scrubbing lands instantly. The render always uses the
+    full clip.
+    """
+    if os.path.splitext(path)[1].lower() not in _VIDEO_EXTS:
+        return ""
+    out = os.path.join(work, f"preview_{scene_id}.mp4")
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, "-an",
+                        "-vf", "scale='min(640,iw)':-2", "-c:v", "libx264",
+                        "-preset", "veryfast", "-crf", "30", "-g", "15",
+                        "-pix_fmt", "yuv420p", "-movflags", "+faststart", out],
+                       capture_output=True, timeout=120)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+    return out if os.path.isfile(out) and os.path.getsize(out) > 0 else ""
 
 
 # Media links in a saved timeline. The editor can sit on a project for weeks;
@@ -192,6 +221,14 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                 fields["thumbStorage"] = {"bucket": bucket, "path": tobj}
             except Exception as e:  # noqa: BLE001 — a missing thumb is cosmetic
                 print(f"[worker] could not save thumbnail {tobj}: {e}", flush=True)
+        preview = _preview_proxy(path, work, scene["id"])
+        if preview:
+            pobj = f"projects/{project_id}/preview/{scene['id']}.mp4"
+            try:
+                fields["previewUrl"] = put(preview, pobj)
+                fields["previewStorage"] = {"bucket": bucket, "path": pobj}
+            except Exception as e:  # noqa: BLE001 — the editor falls back to the full clip
+                print(f"[worker] could not save preview {pobj}: {e}", flush=True)
         media.update(fields)
         published[path] = (url, fields)
     doc["meta"]["publishedMedia"] = len(published)
@@ -301,13 +338,20 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if not audio_duration:
         audio_duration = segments[-1].end
 
+    # Read the whole story once: it steers every beat's plan, and after
+    # sourcing it steers the recheck of scenes still missing a shot.
+    title = inp.get("title") or inp.get("title_overlay") or ""
+    report("Reading the whole story", 13)
+    brief = director.story_brief(segments, title, configured=director.is_configured())
+
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
     shots, planner, warnings = director.plan(
         segments,
-        title=inp.get("title") or inp.get("title_overlay") or "",
+        title=title,
         report=report,
         allow_maps=bool(inp.get("maps", True)),
+        brief=brief,
     )
 
     # Per-scene overrides from the editor win over the director's choice.
@@ -329,6 +373,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "intent": shot.get("intent") or "",
              "subject_type": shot.get("subjectType") or "",
              "subject": shot.get("subject") or "",
+             "event_window": shot.get("eventWindow") or "",
+             "hook": bool(shot.get("hook")),
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 
@@ -351,7 +397,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         require_cc=inp.get("require_cc"),
         on_done=on_done,
         on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
-        rescue=director.rescue_queries,
+        rescue=lambda items: director.rescue_queries(items, story=brief),
+        on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
     )
 
     doc = timeline.build(
@@ -371,6 +418,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         doc["meta"]["warnings"].append(
             f"Requested source mode '{inp.get('source')}' is not implemented yet; "
             f"sourced from Creative Commons YouTube and Commons instead.")
+    # What the AI understood the video to be about, for the editor to show.
+    doc["meta"]["story"] = {k: brief.get(k) for k in
+                            ("kind", "summary", "event", "year", "places", "people")}
     doc["meta"]["audioSource"] = raw_audio
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
@@ -419,6 +469,8 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
         allow_stock=inp.get("allow_stock"),
         require_cc=inp.get("require_cc"),
         intent=intent, context=str(scene.get("text") or ""),
+        subject_type=str(sem.get("subjectType") or ""),
+        event_window=str(sem.get("eventWindow") or ""),
     )
     if not asset:
         raise ValueError(f"no usable media found for '{query}' — try different wording")
