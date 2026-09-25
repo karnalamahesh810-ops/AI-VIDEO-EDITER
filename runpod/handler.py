@@ -61,6 +61,7 @@ _PHASE_BY_PREFIX = (
     ("Reading the whole story", "plan"), ("Planning", "plan"),
     ("Sourcing", "source"), ("Sourced", "source"), ("Re-sourcing", "source"),
     ("Replacing", "source"), ("Rechecking", "source"),
+    ("Building shot pools", "source"),
     ("Rendering", "render"),
     ("Uploading", "upload"),
     ("Saving", "save"),
@@ -340,7 +341,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
 
     # Read the whole story once: it steers every beat's plan, and after
     # sourcing it steers the recheck of scenes still missing a shot.
-    title = inp.get("title") or inp.get("title_overlay") or ""
+    title = director.clean_title(inp.get("title") or inp.get("title_overlay") or "")
     report("Reading the whole story", 13)
     brief = director.story_brief(segments, title, configured=director.is_configured())
 
@@ -353,6 +354,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         allow_maps=bool(inp.get("maps", True)),
         brief=brief,
     )
+    # Out of AI credits already: stop before a single footage search is paid for.
+    vision.require_credits()
 
     # Per-scene overrides from the editor win over the director's choice.
     for key, query in (inp.get("scene_queries") or {}).items():
@@ -380,10 +383,24 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
 
     last_pct = [22]
 
+    # Plan the video in sequences: runs of lines about one subject and setting,
+    # each gathering one pool of shots that the editor call lays out.
+    sequences = []
+    if config.SEQUENCE_SOURCING:
+        report("Planning sequences", 22)
+        sequences = director.plan_sequences(segments, shots, brief)
+
+    def on_pool(done, n):
+        # 22% -> 50% while the sequence pools are built.
+        pct = 22 + int(28 * done / max(n, 1))
+        if pct > last_pct[0] or done == n:
+            last_pct[0] = max(last_pct[0], pct)
+            report(f"Building shot pools {done}/{n} sequences", last_pct[0], done=done, total=n)
+
     def on_done(done, n):
-        # 22% -> 65% across sourcing, the longest phase.
+        # Up to 65% across sourcing, the longest phase; never backwards after the pools.
         pct = 22 + int(43 * done / max(n, 1))
-        if pct != last_pct[0]:
+        if pct > last_pct[0]:
             last_pct[0] = pct
             report(f"Sourced {done}/{n} scenes", pct, done=done, total=n)
 
@@ -399,7 +416,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
         rescue=lambda items: director.rescue_queries(items, story=brief),
         on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
+        sequences=sequences,
+        assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
+        on_pool=on_pool,
     )
+    vision.require_credits()
 
     doc = timeline.build(
         segments, shots, assets,
@@ -421,6 +442,14 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # What the AI understood the video to be about, for the editor to show.
     doc["meta"]["story"] = {k: brief.get(k) for k in
                             ("kind", "summary", "event", "year", "places", "people")}
+    # Which image/footage sources answered, came back empty, or failed, and why.
+    doc["meta"]["sourceStats"] = media.source_stats()
+    doc["meta"]["vision"] = vision.stats()
+    if vision.out_of_credits():
+        doc["meta"]["warnings"].insert(0, (
+            "The AI account (Kie) ran out of credits during this job, so vision "
+            "checks, AI rescue and AI images stopped partway. Top up Kie and "
+            "re-run for full quality."))
     doc["meta"]["audioSource"] = raw_audio
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may

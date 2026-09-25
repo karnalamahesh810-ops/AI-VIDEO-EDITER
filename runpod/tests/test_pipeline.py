@@ -859,6 +859,28 @@ class VisionFailuresAreReported(unittest.TestCase):
             text, model = self.vision._ask([], 100)
         self.assertEqual(model, "backup")
 
+    def test_running_out_of_credits_stops_all_ai_calls_for_the_job(self):
+        calls = []
+
+        def post(*a, **k):
+            calls.append(1)
+            return self._reply(200, {"code": 402, "msg": "Credits insufficient : top up"})
+
+        with mock.patch.object(self.vision.requests, "post", side_effect=post):
+            self.assertEqual(self.vision._ask([], 100), (None, ""))
+            self.assertEqual(len(calls), 1)            # no retry, no fallback
+            self.assertTrue(self.vision.out_of_credits())
+            self.assertFalse(self.vision.enabled())    # later clips skip vision fast
+            self.assertEqual(self.vision._ask([], 100), (None, ""))
+            self.assertEqual(len(calls), 1)
+        self.assertTrue(self.vision.stats()["outOfCredits"])
+        with mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
+                mock.patch.object(director.requests, "post") as dpost:
+            self.assertIsNone(director._chat_json("sys", {}))
+            dpost.assert_not_called()
+        self.vision.reset()
+        self.assertFalse(self.vision.out_of_credits())
+
     def test_a_clip_no_model_could_judge_is_counted_and_flagged(self):
         with mock.patch.object(self.vision.os.path, "exists", return_value=True), \
                 mock.patch.object(self.vision, "_fingerprint", return_value="fp"), \
@@ -1748,16 +1770,30 @@ class NoDuplicateShots(unittest.TestCase):
         self.assertEqual(sorted(calls), [("a", 0), ("b", 0), ("c", 0)])
         self.assertEqual(len({a.identity for a in out}), 3)
 
-    def test_running_out_of_options_never_repeats_a_clip(self):
-        # Only two distinct assets exist for six scenes asking the same thing.
-        # Policy (the creator's, after seeing repeats in a real render): a
-        # clip never appears twice in the timeline. The other four stay empty
-        # for the later rescue steps (AI alternative queries, a generated
-        # still) and the editor's Find footage - not a silent repeat.
-        out, _ = self._run(["the lake"] * 6, per_query=2)
+    def test_with_reuse_off_a_clip_never_repeats(self):
+        # The strict rule, still available: a clip never appears twice, and
+        # the other four scenes stay empty for the editor's Find footage.
+        with mock.patch.object(config, "REUSE_SHOTS_TO_FILL", False):
+            out, _ = self._run(["the lake"] * 6, per_query=2)
         placed = [a for a in out if a]
         self.assertEqual(len(placed), 2)
         self.assertEqual(len({a.identity for a in placed}), 2)
+
+    def test_running_out_of_options_reuses_only_spaced_out_and_flagged(self):
+        # Two distinct assets, eight scenes. No scene may render black (the
+        # creator's rule after a long biography came out 86% empty), but a
+        # repeat never lands within REUSE_MIN_GAP scenes of the same shot and
+        # is always flagged - the original complaint was silent, close repeats.
+        out, _ = self._run(["the lake"] * 8, per_query=2)
+        placed = [(i, a) for i, a in enumerate(out) if a]
+        self.assertGreater(len(placed), 2)
+        for i, a in placed:
+            for j, b in placed:
+                if i != j and a.identity == b.identity:
+                    self.assertGreater(abs(i - j), media.REUSE_MIN_GAP)
+        reused = [a for _, a in placed if a.review_reason.startswith("Reused")]
+        self.assertTrue(reused)
+        self.assertTrue(all(a.review_required for a in reused))
 
     def test_youtube_identity_is_the_video_not_the_query(self):
         # Two different searches landing on the same upload count as one.
@@ -2772,9 +2808,12 @@ class MetaphorsAndMaps(unittest.TestCase):
         shots[2]["overlay"] = {"type": "callout", "text": "x"}   # ends at 9 s
         director.establishing_map(segs, shots, self.BRIEF)
         placed = [i for i, s in enumerate(shots) if (s["overlay"] or {}).get("type") == "map"]
-        self.assertEqual(placed, [6])                            # first line starting 9 s after it
+        # First line starting at least MIN_OVERLAY_GAP_SECONDS after it ends (9 s).
+        first_clear = next(i for i, sg in enumerate(segs)
+                           if i > 2 and sg.start - 9.0 >= director.MIN_OVERLAY_GAP_SECONDS)
+        self.assertEqual(placed, [first_clear])
         director._thin_overlays(segs, shots)
-        self.assertEqual(shots[6]["overlay"]["type"], "map")     # and thinning keeps it
+        self.assertEqual(shots[first_clear]["overlay"]["type"], "map")   # thinning keeps it
 
     """After sourcing, every scene without a shot of its own is rechecked with the story."""
 
@@ -2837,6 +2876,7 @@ class MetaphorsAndMaps(unittest.TestCase):
                   "before": "The river broke through.", "shows": ["aerial flood"],
                   "repeat": True}]
         with mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
+                mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
                 mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
                 mock.patch.object(director, "_chat_json", side_effect=chat):
             ideas = director.rescue_queries(items, story=story)
@@ -2852,6 +2892,326 @@ class MetaphorsAndMaps(unittest.TestCase):
         phase = next(p for prefix, p in handler._PHASE_BY_PREFIX
                      if "Rechecking 3 missing scenes against the story".startswith(prefix))
         self.assertEqual(phase, "source")
+
+
+class LongVideoCoverage(unittest.TestCase):
+    """A 362-scene biography rendered 86% black: photo scenes, one person, few photos."""
+
+    def test_person_name_variants_pool_but_different_people_do_not(self):
+        self.assertTrue(media.same_subject("Anne Dunham", "Ann Dunham"))
+        self.assertTrue(media.same_subject("Stanley Ann Dunham", "Ann Dunham"))
+        self.assertFalse(media.same_subject("Madelyn Dunham", "Ann Dunham"))
+        self.assertFalse(media.same_subject("Barack Obama Sr.", "Barack Obama"))
+        self.assertTrue(media.same_subject("University of Hawaii", "university of hawaii"))
+
+    def test_an_empty_scene_reuses_its_own_subject_never_another_persons_photo(self):
+        def a(url, kind="image"):
+            return MediaAsset(kind=kind, source="wikipedia", url=url)
+        jobs = [{"index": 0, "subject": "Ann Dunham", "subject_type": "person"},
+                {"index": 1, "subject": "Madelyn Dunham", "subject_type": "person"},
+                {"index": 2, "subject": "Madelyn Dunham", "subject_type": "person"},
+                {"index": 3, "subject": "Madelyn Dunham", "subject_type": "person"},
+                {"index": 4, "subject": "Madelyn Dunham", "subject_type": "person"},
+                {"index": 5, "subject": "Anne Dunham", "subject_type": "person"}]
+        results = [a("https://x/ann.jpg"), a("https://x/mad1.jpg"), a("https://x/mad2.jpg"),
+                   a("https://x/mad3.jpg"), None, None]
+        media.fill_from_story(jobs, results)
+        self.assertEqual(results[5].url, "https://x/ann.jpg")      # her own photo, 5 apart
+        self.assertTrue(results[5].review_required)
+        self.assertIn("Ann Dunham", results[5].review_reason)
+        self.assertEqual(results[4].url, "https://x/mad1.jpg")     # Madelyn's own, 3+ apart
+
+    def test_a_person_scene_is_never_given_a_stranger(self):
+        jobs = [{"index": 0, "subject": "Lolo Soetoro", "subject_type": "person"},
+                {"index": 1, "subject": "Ann Dunham", "subject_type": "person"}]
+        results = [MediaAsset(kind="image", source="wikipedia", url="https://x/lolo.jpg"), None]
+        media.fill_from_story(jobs, results)
+        self.assertIsNone(results[1])
+
+    def test_a_photo_scene_with_no_photo_falls_back_to_footage(self):
+        clip = MediaAsset(kind="video", source="youtube", url="q", local_path="/w/yt_abcdefghijk_0_1.mp4")
+        with mock.patch.object(media, "_cached_search", return_value=[]), \
+                mock.patch.object(media, "youtube_clip", return_value=clip) as yt, \
+                mock.patch.object(media, "generate_image", return_value=None):
+            got = media._source_one("Anne Dunham teaching Indonesia", 3.0, "/tmp",
+                                    visual_type="image", allow_youtube=True,
+                                    allow_stock=False, require_cc=False)
+        self.assertIs(got, clip)
+        yt.assert_called_once()
+
+    def test_wikipedia_keeps_real_photos_and_drops_page_furniture(self):
+        def img(title, mime="image/jpeg", w=1200, h=900):
+            return {"title": title, "imageinfo": [{"mime": mime, "width": w, "height": h,
+                                                   "url": f"https://u/{title}", "thumburl": f"https://t/{title}",
+                                                   "thumbwidth": 1280, "thumbheight": 960,
+                                                   "extmetadata": {"Artist": {"value": "<a>Someone</a>"}}}]}
+        pages = {str(i): p for i, p in enumerate([
+            img("File:Ann Dunham with son.jpg"),
+            img("File:Flag of Indonesia.svg", mime="image/svg+xml"),
+            img("File:Commons-logo.png", mime="image/png"),
+            img("File:Tiny.jpg", w=120, h=90),
+            img("File:Ann Dunham 1965.png", mime="image/png")])}
+        r = mock.Mock()
+        r.raise_for_status = lambda: None
+        r.json.return_value = {"query": {"pages": pages}}
+        with mock.patch.object(media.requests, "get", return_value=r):
+            got = media.search_wikipedia_article_images("Anne Dunham")
+        self.assertEqual([a.url for a in got], ["https://t/File:Ann Dunham with son.jpg",
+                                               "https://t/File:Ann Dunham 1965.png"])
+        self.assertEqual(got[0].attribution, "Someone")
+
+    def test_no_more_than_two_person_photos_in_a_row(self):
+        shots = [{"subjectType": "person", "visualType": "image"} for _ in range(7)]
+        shots.insert(3, {"subjectType": "place", "visualType": "footage"})
+        director.vary_person_stills(shots)
+        kinds = [s["visualType"][0] for s in shots]   # i=image, f=footage
+        self.assertEqual("".join(kinds), "iiffiifi")
+
+    def test_a_failing_source_is_recorded_not_hidden(self):
+        media.reset_cache()
+        with mock.patch.object(media.requests, "get", side_effect=OSError("429 Too Many Requests")):
+            self.assertEqual(media._cached_search(media.search_wikimedia, "Barack Obama"), [])
+        st = media.source_stats()["search_wikimedia"]
+        self.assertEqual((st["searches"], st["withResults"]), (1, 0))
+        self.assertIn("429", media.source_stats()["wikimedia"]["recentErrors"][0])
+
+
+class ProjectTitles(unittest.TestCase):
+    def test_file_name_debris_never_reaches_a_search(self):
+        self.assertEqual(director.clean_title("1 (mp3cut.net)"), "")
+        self.assertEqual(director.clean_title("1"), "")
+        self.assertEqual(director.clean_title("Midwest Floods (mp3cut.net)"), "Midwest Floods")
+        self.assertEqual(director.clean_title("obama_family_story.mp3"), "obama family story")
+        self.assertEqual(director.clean_title("The Obama Family"), "The Obama Family")
+
+    def test_rule_searches_use_the_line_not_the_file_name(self):
+        segs = [seg("His father left for Harvard when he was two.", 0, 3)]
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""):
+            shots, _, _ = director.plan(segs, title="1 (mp3cut.net)", allow_maps=False)
+        self.assertNotIn("mp3cut", shots[0]["query"])
+        self.assertNotIn("(", shots[0]["query"])
+
+
+class NoAIFallbacks(unittest.TestCase):
+    """The job keeps going without the main AI account, and plans sensibly."""
+
+    OBAMA = ["One photograph gets used every time this story is told.",
+             "Honolulu Airport, the last days of 1971.",
+             "A tall man in a dark suit and heavy glasses, standing straight.",
+             "It was a goodbye. It was the end of the only month those two people lived together.",
+             "He was one year old when his father left, two when Barack Obama Sr. left the country.",
+             "He married an eighteen-year-old in a Maui courthouse anyway, in February 1961."]
+
+    def test_rule_searches_come_from_names_places_and_years(self):
+        segs = [seg(t, i * 4, i * 4 + 4) for i, t in enumerate(self.OBAMA)]
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""), \
+                mock.patch.object(config, "AI_FALLBACK_API_KEY", ""):
+            shots, _, _ = director.plan(segs, title="1 (mp3cut.net)", allow_maps=False)
+        q = [sh["query"] for sh in shots]
+        self.assertEqual(q[1], "Honolulu Airport 1971")
+        self.assertIn("Barack Obama Sr", q[2])            # "A tall man..." is the story's lead
+        self.assertNotIn("It", q[3].split())              # sentence-start words are not names
+        self.assertTrue(q[5].startswith("Maui 1961"))
+        self.assertTrue(all("mp3cut" not in x for x in q))
+        self.assertEqual(shots[1]["subjectType"], "place")  # an airport is not a person
+
+    def test_every_person_is_named_on_screen_the_first_time(self):
+        segs = [seg("x", i, i + 1) for i in range(4)]
+        shots = [{"subject": "Ann Dunham", "subjectType": "person", "overlay": None},
+                 {"subject": "Anne Dunham", "subjectType": "person", "overlay": None},
+                 {"subject": "Lolo Soetoro", "subjectType": "person",
+                  "overlay": {"type": "stat", "value": 1}},
+                 {"subject": "Lolo Soetoro", "subjectType": "person", "overlay": None}]
+        director.name_people(segs, shots)
+        self.assertEqual(shots[0]["overlay"], {"type": "lower-third", "text": "Ann Dunham"})
+        self.assertIsNone(shots[1]["overlay"])            # same person, already named
+        self.assertEqual(shots[2]["overlay"]["type"], "stat")
+        self.assertEqual(shots[3]["overlay"], {"type": "lower-third", "text": "Lolo Soetoro"})
+
+    def test_out_of_credits_keeps_the_job_going_by_default(self):
+        from src import vision
+        vision.reset()
+        vision.note_out_of_credits()
+        try:
+            vision.require_credits()                      # no raise: REQUIRE_AI is off
+            with mock.patch.object(config, "REQUIRE_AI", True), \
+                    mock.patch.object(config, "AI_FALLBACK_API_KEY", ""):
+                with self.assertRaises(vision.OutOfCredits):
+                    vision.require_credits()
+        finally:
+            vision.reset()
+
+    def test_the_backup_provider_takes_over_when_the_main_account_is_dry(self):
+        from src import vision
+        vision.reset()
+        urls = []
+
+        def post(url, **kw):
+            urls.append(url)
+            r = mock.Mock(status_code=200)
+            if "kie.ai" in url:
+                r.json.return_value = {"code": 402, "msg": "Credits insufficient"}
+            else:
+                r.json.return_value = {"choices": [{"message": {"content": '{"ok": 1}'}}]}
+            return r
+
+        try:
+            with mock.patch.object(config, "VISION_API_KEY", "kie"), \
+                    mock.patch.object(config, "VISION_API_BASE", "https://api.kie.ai/v1"), \
+                    mock.patch.object(config, "VISION_FALLBACK_MODELS", ["gemini-3-pro"]), \
+                    mock.patch.object(config, "AI_FALLBACK_API_BASE", "https://gen.example/openai"), \
+                    mock.patch.object(config, "AI_FALLBACK_API_KEY", "g"), \
+                    mock.patch.object(config, "AI_FALLBACK_VISION_MODEL", "gemini-2.5-flash"), \
+                    mock.patch.object(vision.requests, "post", side_effect=post):
+                self.assertEqual(vision._ask([], 100), ('{"ok": 1}', "gemini-2.5-flash"))
+                self.assertTrue(vision.out_of_credits())
+                self.assertTrue(vision.enabled())         # vision stays on through the backup
+                self.assertFalse(vision.ai_exhausted())
+                urls.clear()
+                vision._ask([], 100)
+                self.assertEqual(urls, ["https://gen.example/openai/chat/completions"])
+        finally:
+            vision.reset()
+
+    def test_the_planner_uses_the_backup_provider_too(self):
+        from src import vision
+        vision.reset()
+        vision.note_out_of_credits()
+        r = mock.Mock(status_code=200)
+        r.json.return_value = {"choices": [{"message": {"content": '{"sequences": []}'}}]}
+        try:
+            with mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
+                    mock.patch.object(config, "DIRECTOR_API_KEY", "kie"), \
+                    mock.patch.object(config, "DIRECTOR_MODEL", "gpt-5-2"), \
+                    mock.patch.object(config, "AI_FALLBACK_API_BASE", "https://gen.example/openai"), \
+                    mock.patch.object(config, "AI_FALLBACK_API_KEY", "g"), \
+                    mock.patch.object(director.requests, "post", return_value=r) as post:
+                self.assertEqual(director._chat_json("sys", {}), {"sequences": []})
+            self.assertEqual(post.call_args[0][0], "https://gen.example/openai/chat/completions")
+        finally:
+            vision.reset()
+
+    def test_the_vision_judge_rejects_stand_ins_and_wrong_places(self):
+        from src import vision
+        self.assertNotIn("stand-in;", vision._SYSTEM)
+        self.assertIn("A named PERSON", vision._SYSTEM)
+        self.assertIn("A named PLACE", vision._SYSTEM)
+        self.assertIn("product listing", vision._SYSTEM)
+
+
+class SequenceEditing(unittest.TestCase):
+    """Plan and source runs of lines together, laid out by an editor call."""
+
+    def _shots(self, subjects, kind="image"):
+        return [{"subject": s, "subjectType": "person", "query": f"{s} photo",
+                 "visualType": kind, "intent": f"photo of {s}"} for s in subjects]
+
+    def test_model_sequences_are_kept_in_order_and_holes_are_filled(self):
+        shots = self._shots(["Ann Dunham"] * 4 + ["Jakarta"] * 4)
+        raw = {"sequences": [
+            {"start": 0, "end": 2, "subject": "Ann Dunham", "subjectType": "person",
+             "setting": "Ann Dunham, Hawaii 1960", "searches": [
+                 {"q": "Ann Dunham photo", "kind": "image"},
+                 {"q": "1960s Honolulu street footage", "kind": "footage"}]},
+            # 3..4 skipped by the model
+            {"start": 5, "end": 7, "subject": "Jakarta", "subjectType": "place",
+             "setting": "Jakarta 1967", "searches": [{"q": "Jakarta 1967 footage"}]}]}
+        seqs = director._validate_sequences(raw, 0, 8, shots)
+        covered = [i for s in seqs for i in s["beats"]]
+        self.assertEqual(covered, list(range(8)))
+        self.assertEqual(seqs[0]["searches"][1]["kind"], "footage")
+        self.assertEqual(seqs[-1]["searches"], [{"q": "Jakarta 1967 footage", "kind": "footage"}])
+
+    def test_a_model_sequence_longer_than_an_editor_would_cut_is_split(self):
+        shots = self._shots(["Barack Obama"] * 25)
+        raw = {"sequences": [{"start": 0, "end": 24, "subject": "Barack Obama",
+                              "searches": [{"q": "Barack Obama speech footage"}]}]}
+        seqs = director._validate_sequences(raw, 0, 25, shots)
+        self.assertEqual([len(s["beats"]) for s in seqs], [10, 10, 5])
+
+    def test_without_a_model_same_subject_lines_group_together(self):
+        segs = [seg(f"line {i}", i * 3, i * 3 + 3) for i in range(6)]
+        shots = self._shots(["Ann Dunham", "Anne Dunham", "Stanley Ann Dunham",
+                             "Madelyn Dunham", "Madelyn Dunham", "Jakarta"])
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""):
+            seqs = director.plan_sequences(segs, shots, {})
+        self.assertEqual([s["beats"] for s in seqs], [[0, 1, 2], [3, 4], [5]])
+        self.assertIn({"q": "Ann Dunham", "kind": "image"}, seqs[0]["searches"])
+
+    def test_greedy_layout_prefers_the_wanted_kind_and_uses_each_shot_once(self):
+        beats = [{"index": 0, "want": "image"}, {"index": 1, "want": "footage"},
+                 {"index": 2, "want": "footage"}]
+        shots = [{"id": "a", "kind": "footage", "score": 0.9},
+                 {"id": "b", "kind": "image", "score": 0.8},
+                 {"id": "c", "kind": "footage", "score": 0.7}]
+        self.assertEqual(media.greedy_assign(beats, shots), {0: "b", 1: "a", 2: "c"})
+
+    def test_the_model_layout_is_validated_and_topped_up(self):
+        beats = [{"index": 0, "text": "x", "want": "footage"},
+                 {"index": 1, "text": "y", "want": "footage"}]
+        shots = [{"id": "s0", "kind": "footage"}, {"id": "s1", "kind": "footage"}]
+        with mock.patch.object(director, "is_configured", return_value=True), \
+                mock.patch.object(director, "_chat_json", return_value={"assign": [
+                    {"index": 0, "shot": "s1"}, {"index": 1, "shot": "s1"},  # s1 twice
+                    {"index": 9, "shot": "s0"}]}):                            # unknown beat
+            self.assertEqual(director.assign_shots(beats, shots), {0: "s1", 1: "s0"})
+
+    def test_one_window_is_cut_into_consecutive_shots(self):
+        cuts = []
+
+        def cut(src, out, start, secs):
+            cuts.append((round(start, 2), round(secs, 2)))
+            return out
+
+        with mock.patch.object(media, "_cut", side_effect=cut):
+            shots = media.split_window("/w/win.mp4", "k", [3.5, 2.5, 4.0], "/w")
+        self.assertEqual(cuts, [(0.0, 3.5), (3.5, 2.5), (6.0, 4.0)])
+        self.assertEqual([o for _, o in shots], [0.0, 3.5, 6.0])
+
+    def test_a_sequence_pool_fills_its_lines(self):
+        jobs = {i: {"index": i, "seconds": 3.0, "visual_type": v, "context": f"line {i}",
+                    "intent": f"intent {i}", "subject": "Ann Dunham", "subject_type": "person"}
+                for i, v in enumerate(["image", "footage", "footage"])}
+        pool_f = [{"kind": "footage", "video": "v1",
+                   "asset": MediaAsset(kind="video", source="youtube",
+                                       url=f"https://y/v1&t={n}", local_path=f"/w/seq_{n}.mp4")}
+                  for n in range(2)]
+        pool_i = [{"kind": "image", "video": "",
+                   "asset": MediaAsset(kind="image", source="wikipedia", url="https://w/ann.jpg")}]
+        seq = {"beats": [0, 1, 2], "subject": "Ann Dunham", "subjectType": "person",
+               "setting": "Ann Dunham in Indonesia", "searches": [
+                   {"q": "Jakarta 1967 footage", "kind": "footage"},
+                   {"q": "Ann Dunham photo", "kind": "image"}]}
+        used = set()
+        with mock.patch.object(media, "_footage_pool", return_value=pool_f), \
+                mock.patch.object(media, "_image_pool", return_value=pool_i):
+            out = media.source_sequence(seq, jobs, "/w", used, threading.Lock(),
+                                        require_cc=False, allow_youtube=True)
+        self.assertEqual(out[0].url, "https://w/ann.jpg")
+        self.assertEqual({out[1].url, out[2].url}, {"https://y/v1&t=0", "https://y/v1&t=1"})
+        self.assertEqual(out[1].intent, "intent 1")
+        self.assertEqual(len(used), 3)
+
+    def test_lines_a_pool_cannot_fill_fall_back_to_per_line_search(self):
+        jobs = [{"index": i, "query": f"q{i}", "seconds": 3.0, "subject": "Ann Dunham"}
+                for i in range(3)]
+        per_line = []
+
+        def fake(query, seconds, work_dir, **kw):
+            per_line.append(query)
+            return MediaAsset(kind="image", source="wikimedia", url=f"https://x/{query}")
+
+        pooled = {0: MediaAsset(kind="video", source="youtube", url="https://y/a&t=0",
+                                local_path="/w/seq_a.mp4")}
+        with mock.patch.object(media, "source_sequence", return_value=pooled), \
+                mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")):
+            media.reset_cache()
+            out = media.source_many(jobs, "/tmp", workers=1,
+                                    sequences=[{"beats": [0, 1, 2], "searches": []}])
+        self.assertEqual(out[0].url, "https://y/a&t=0")
+        self.assertEqual(sorted(per_line), ["q1", "q2"])        # line 0 never searched alone
+        self.assertTrue(all(out))
 
 
 class VisionJudgeEventsAndQuality(unittest.TestCase):
