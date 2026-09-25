@@ -286,6 +286,96 @@ class ContactSheetCache(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
 
+class PersonSafetyNet(unittest.TestCase):
+    """
+    subjectType "person" is what stops a fabricated photo of a real person:
+    it blocks image GENERATION and lets a real portrait pass the vision
+    gate. It was only ever set by the AI director pass - a rule-only beat
+    (no API key, or both director models down) had no signal at all, so a
+    real person could reach the generation fallback unflagged. A generated
+    photo of a real, named person shipped once already before this net.
+    """
+
+    def test_a_plain_name_marks_the_rule_shot_as_a_person(self):
+        seg = Segment(text="Barack Obama Sr. arrived at the airport that morning.",
+                      start=0, end=3, words=[])
+        shot = director._rule_shot(seg, 1, "The Obama Family")
+        self.assertEqual(shot["subjectType"], "person")
+
+    def test_an_honorific_marks_it_too(self):
+        seg = Segment(text="Dr. Chen reviewed the file the next week.", start=0, end=3, words=[])
+        shot = director._rule_shot(seg, 1, "")
+        self.assertEqual(shot["subjectType"], "person")
+
+    def test_a_place_is_not_mistaken_for_a_person(self):
+        seg = Segment(text="Lake Mead dropped to a record low that August.",
+                      start=0, end=3, words=[])
+        shot = director._rule_shot(seg, 1, "Lake Mead")
+        self.assertEqual(shot["subjectType"], "")
+
+    def test_the_project_title_alone_can_signal_a_person(self):
+        # A beat that never re-says the name, in a project ABOUT that person.
+        seg = Segment(text="He never spoke of it again.", start=0, end=3, words=[])
+        shot = director._rule_shot(seg, 1, "Barack Obama Sr.")
+        self.assertEqual(shot["subjectType"], "person")
+
+    def test_ai_pass_falls_back_to_the_rule_shots_own_tag_when_the_model_omits_one(self):
+        person_shot = director._rule_shot(
+            Segment(text="Barack Obama Sr. smiled for the camera.", start=0, end=3, words=[]),
+            0, "The Obama Family")
+        self.assertEqual(person_shot["subjectType"], "person")
+        body = {"choices": [{"message": {"content":
+            '{"shots":[{"index":0,"subject":"Barack Obama Sr.","intent":"a warm portrait",'
+            '"query":"Barack Obama Sr. portrait","visualType":"image","overlay":null}]}'}}]}
+        # No subjectType key at all in the model's own answer.
+        r = mock.Mock(status_code=200)
+        r.json.return_value = body
+        with mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
+                mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
+                mock.patch.object(config, "DIRECTOR_MODEL", "gpt-5-2"), \
+                mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", []), \
+                mock.patch.object(director.requests, "post", return_value=r):
+            director._ai_pass([Segment(text="Barack Obama Sr. smiled for the camera.",
+                                       start=0, end=3, words=[])],
+                              "The Obama Family", [person_shot])
+        self.assertEqual(person_shot["subjectType"], "person")
+
+    def test_generation_is_refused_for_a_person_even_via_the_rule_path(self):
+        made = []
+
+        def gen(prompt, work_dir, **k):
+            made.append(prompt)
+            return MediaAsset(kind="image", source="generated", url="",
+                              local_path=f"/w/g{len(made)}.png")
+
+        jobs = [{"index": 0, "query": "Barack Obama Sr. portrait", "seconds": 3.0,
+                 "subject_type": director._rule_shot(
+                     Segment(text="Barack Obama Sr. smiled.", start=0, end=3, words=[]),
+                     0, "").get("subjectType", "")}]
+        self.assertEqual(jobs[0]["subject_type"], "person")
+        with mock.patch.object(media, "source_for_segment", return_value=None), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")), \
+                mock.patch.object(media, "generate_image", side_effect=gen), \
+                mock.patch.object(config, "IMAGE_MAX_PER_VIDEO", 10):
+            media.reset_cache()
+            media.source_many(jobs, "/tmp", workers=1)
+        self.assertEqual(made, [])
+
+    def test_borrowing_prefers_the_same_subject_over_the_nearest_scene(self):
+        import handler
+        doc = build_doc(n=5, seconds=3.0)
+        for i, subj in ((0, "Lake Mead"), (4, "Hoover Dam")):
+            doc["scenes"][i]["media"] = {"type": "video", "source": "youtube",
+                                         "url": f"https://x/{i}.mp4"}
+            doc["scenes"][i]["semanticMetadata"] = {"subject": subj}
+        for i in (1, 2, 3):
+            doc["scenes"][i]["media"] = {"type": "color", "url": "", "source": "none"}
+        doc["scenes"][2]["semanticMetadata"] = {"subject": "Hoover Dam"}
+        handler._fill_missing_media(doc)
+        self.assertEqual(doc["scenes"][2]["media"]["url"], "https://x/4.mp4")
+        self.assertIn("same subject", doc["scenes"][2]["reviewReason"])
+
+
 class DirectorFallback(unittest.TestCase):
     """
     The director's own model call had no fallback: one failed request and a

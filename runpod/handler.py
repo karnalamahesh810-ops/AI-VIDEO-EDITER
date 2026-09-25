@@ -219,13 +219,16 @@ def _fill_missing_media(doc: dict) -> int:
     the borrow for review, the same "a repeat is better than black" rule
     already used for duplicates.
 
-    Borrows are spread across every available scene (least-borrowed first,
-    nearest as the tiebreak) rather than always the closest one. Several
-    empty scenes in a row are common — a hard subject is usually hard for
-    several consecutive beats, not one — and always reaching for "nearest"
-    means every one of them collapses onto the SAME single neighbour: a
-    visible run of the identical clip repeated back to back, which reads far
-    worse than the same clip appearing twice somewhere apart in the video.
+    Borrows prefer a scene about the SAME subject first (matching the story,
+    not just filling the frame - a shot of the actual thing being narrated
+    beats a shot of whatever else happened to be nearby), then spread across
+    every available scene (least-borrowed first, nearest as the tiebreak)
+    rather than always the closest one. Several empty scenes in a row are
+    common — a hard subject is usually hard for several consecutive beats,
+    not one — and always reaching for "nearest" means every one of them
+    collapses onto the SAME single neighbour: a visible run of the identical
+    clip repeated back to back, which reads far worse than the same clip
+    appearing twice somewhere apart in the video.
     Returns how many scenes were patched.
     """
     scenes = doc.get("scenes", [])
@@ -251,16 +254,25 @@ def _fill_missing_media(doc: dict) -> int:
             s["reviewReason"] = "No usable clip or image found — text card shown instead"
             cards += 1
         return cards
+    def subject_of(idx: int) -> str:
+        return ((scenes[idx].get("semanticMetadata") or {}).get("subject") or "").strip().lower()
+
     borrowed = {h: 0 for h in have}
     patched = 0
     for i, s in enumerate(scenes):
         if (s.get("media") or {}).get("type") == "color":
-            pick = min(have, key=lambda h: (borrowed[h], abs(h - i)))
+            want = subject_of(i)
+            same_subject = [h for h in have if want and subject_of(h) == want]
+            pool = same_subject or have
+            pick = min(pool, key=lambda h: (borrowed[h], abs(h - i)))
             borrowed[pick] += 1
             s["media"] = dict(scenes[pick]["media"])
             s["motion"] = scenes[pick].get("motion", "none")
             s["reviewRequired"] = True
-            s["reviewReason"] = "No usable clip found — reused another scene; use Find footage to replace it"
+            reason = ("No usable clip found — reused a shot of the same subject; use Find footage to replace it"
+                     if pool is same_subject else
+                     "No usable clip found — reused another scene; use Find footage to replace it")
+            s["reviewReason"] = reason
             patched += 1
     return patched
 

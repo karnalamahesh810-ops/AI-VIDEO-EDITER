@@ -234,6 +234,44 @@ def validate_overlay(raw) -> Optional[dict]:
 # Rule pass — always runs, so every beat has a plan even with no API key
 # --------------------------------------------------------------------------- #
 
+# A safety net, not a classifier: the AI pass tags subjectType from real
+# understanding, but every beat starts as a rule shot, and the director's
+# fallback chain can still leave a whole batch on rules alone (both models
+# down, or no key configured). Without SOME person signal here, that path
+# had no way to know a beat was about a real, named person - and the "never
+# generate a photo of a real person" gate reads subjectType, so a beat that
+# never got tagged could get a fabricated face. False positives here (a
+# place or organisation misread as a person) only cost a little image
+# variety; a missed real person is the fabrication this exists to prevent -
+# so this deliberately over-triggers rather than under-triggers.
+_HONORIFIC_NAME = re.compile(
+    r"\b(?:Mr|Mrs|Ms|Miss|Dr|Sir|Rev|Fr|President|Senator|Governor|Mayor|Judge|"
+    r"Captain|General|Colonel|Sergeant|Professor|King|Queen|Prince|Princess|"
+    r"Pope|Rabbi|Sheikh)\.?\s+[A-Z][\w'’-]+")
+_PLAIN_NAME = re.compile(r"\b[A-Z][a-z]+\s+(?:[A-Z]\.\s+)?[A-Z][a-z'’-]+\b")
+# Capitalised bigrams that are NOT a person's name, common in this niche
+# (places, agencies) - excluded so most beats about a place don't wrongly
+# lose their real footage/photo to the person-only fallback chain.
+_NOT_A_PERSON_START = {
+    "lake", "mount", "mt", "new", "united", "white", "north", "south", "east",
+    "west", "saint", "san", "los", "las", "fort", "national", "federal",
+    "state", "county", "city", "river", "valley", "ocean", "gulf", "cape",
+    "hurricane", "storm", "tropical",
+}
+
+
+def _mentions_a_person(*texts: str) -> bool:
+    for text in texts:
+        if not text:
+            continue
+        if _HONORIFIC_NAME.search(text):
+            return True
+        for m in _PLAIN_NAME.finditer(text):
+            if m.group(0).split()[0].lower() not in _NOT_A_PERSON_START:
+                return True
+    return False
+
+
 def _rule_shot(seg: Segment, index: int, title: str) -> dict:
     """
     One beat's plan from the text alone.
@@ -270,7 +308,8 @@ def _rule_shot(seg: Segment, index: int, title: str) -> dict:
             "visualType": "footage", "overlay": None,
             # What the shot should SHOW, for the vision judge. Without a model
             # the best available description is the line itself.
-            "intent": prompt[:300], "subject": title[:120]}
+            "intent": prompt[:300], "subject": title[:120],
+            "subjectType": "person" if _mentions_a_person(text, title) else ""}
 
     if index == 0 and title:
         shot["overlay"] = {"type": "chapter", "text": title[:90]}
@@ -426,8 +465,14 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                 "overlay": validate_overlay(shot.get("overlay")),
                 "intent": intent or shots[idx].get("intent", ""),
                 "subject": subject or shots[idx].get("subject", ""),
+                # The model's own tag wins when valid; when it omits one or
+                # gives something outside the enum, fall back to the rule
+                # shot's own heuristic guess rather than blanking it - losing
+                # a valid "person" signal here is exactly the gap that let a
+                # generated photo of a real person through once already.
                 "subjectType": (shot.get("subjectType")
-                                if shot.get("subjectType") in SUBJECT_TYPES else ""),
+                                if shot.get("subjectType") in SUBJECT_TYPES
+                                else shots[idx].get("subjectType", "")),
             }
             # The subject alone is the last fallback: broad, but always on topic.
             if subject and subject not in shots[idx]["fallbacks"]:
