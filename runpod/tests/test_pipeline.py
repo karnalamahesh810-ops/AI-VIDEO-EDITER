@@ -2658,6 +2658,84 @@ class HookShots(unittest.TestCase):
     def test_other_beats_take_the_first_clip_that_passes(self):
         self.assertEqual(self._run(False)[0].url, "https://x/0")
 
+    def test_between_equally_relevant_clips_the_sharper_one_opens(self):
+        def fake(query, seconds, work_dir, *, nth=0, used=None, **kw):
+            return MediaAsset(kind="video", source="youtube", url=f"https://x/{nth}",
+                              relevance_score=0.8, quality=0.4 + 0.4 * nth)
+
+        jobs = [{"index": 0, "query": "flood", "seconds": 3.0, "hook": True}]
+        with mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")):
+            media.reset_cache()
+            out = media.source_many(jobs, "/tmp", workers=1)
+        self.assertEqual(out[0].url, "https://x/1")
+
+
+class VisionJudgeEventsAndQuality(unittest.TestCase):
+    """The judge checks a news beat against its own event, and rates the footage."""
+
+    def _judge(self, reply, event):
+        from src import vision
+        sent = []
+
+        def ask(messages, max_tokens):
+            sent.append(messages[0]["content"])
+            return reply, "m"
+
+        vision.reset()
+        with mock.patch.object(vision, "enabled", return_value=True), \
+                mock.patch.object(vision.os.path, "exists", return_value=True), \
+                mock.patch.object(vision, "_fingerprint", return_value="fp"), \
+                mock.patch.object(vision, "sample_frames", return_value=["AAAA"]), \
+                mock.patch.object(vision, "_ask", side_effect=ask):
+            verdict = vision.judge("/w/a.mp4", "Davenport Iowa flood 2026", "", event=event)
+        return verdict, sent
+
+    def test_an_event_beat_is_judged_against_that_event(self):
+        reply = '{"description":"flood","score":0.8,"quality":0.7}'
+        _, plain = self._judge(reply, event=False)
+        _, event = self._judge(reply, event=True)
+        self.assertNotIn("ONE SPECIFIC REAL EVENT", plain[0])
+        self.assertIn("ONE SPECIFIC REAL EVENT", event[0])
+
+    def test_quality_is_read_clamped_and_optional(self):
+        from src import vision
+        v, _ = self._judge('{"description":"x","score":0.9,"quality":1.7}', event=False)
+        self.assertEqual(v["quality"], 1.0)
+        v, _ = self._judge('{"description":"x","score":0.9}', event=False)
+        self.assertIsNone(v["quality"])
+        self.assertTrue(vision.acceptable(v))
+
+    def test_unwatchable_footage_is_rejected_even_when_it_matches(self):
+        from src import vision
+        v = {"score": 0.95, "quality": 0.1, "has_text_or_watermark": False,
+             "is_talking_head": False, "description": ""}
+        self.assertFalse(vision.acceptable(v))
+        v["quality"] = 0.6
+        self.assertTrue(vision.acceptable(v))
+
+    def test_the_gate_tells_the_judge_when_a_beat_is_an_event(self):
+        seen = []
+
+        def judge(path, intent, context, event=False):
+            seen.append(event)
+            return None
+
+        with mock.patch.object(media.vision, "enabled", return_value=True), \
+                mock.patch.object(media.vision, "judge", side_effect=judge):
+            media._vision_gate("/w/a.mp4", "flood", "", "t")
+            tok = media._EVENT_WINDOW.set("event")
+            try:
+                media._vision_gate("/w/a.mp4", "flood", "", "t")
+            finally:
+                media._EVENT_WINDOW.reset(tok)
+        self.assertEqual(seen, [False, True])
+
+    def test_quality_reaches_the_scene(self):
+        a = MediaAsset(kind="video", source="youtube", url="q").apply_verdict(
+            {"description": "d", "score": 0.8, "quality": 0.66, "model": "m"}, "i")
+        self.assertEqual(a.to_scene_media()["qualityScore"], 0.66)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

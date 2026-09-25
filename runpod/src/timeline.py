@@ -216,6 +216,7 @@ def build(segments: List[Segment], shots: List[dict],
                 "eventWindow": shot.get("eventWindow", ""),
                 "contentDescription": getattr(asset, "content_description", "") or "",
                 "relevanceScore": getattr(asset, "relevance_score", None),
+                "qualityScore": getattr(asset, "quality", None),
                 "provider": getattr(asset, "source", "") or "",
             },
             "words": [{"text": w.text, "start": w.start, "end": w.end}

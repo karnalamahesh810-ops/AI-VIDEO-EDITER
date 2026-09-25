@@ -149,6 +149,10 @@ VISION_FALLBACK_MODELS = [m.strip() for m in
                           os.getenv("VISION_FALLBACK_MODELS", "gemini-3-pro").split(",")
                           if m.strip()]
 VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
+# Footage quality floor (sharpness, stability, light, framing), judged in the
+# same call. Low on purpose: it only removes clips that are plainly unwatchable,
+# since rejecting more leaves scenes empty; quality otherwise ranks hook shots.
+VISION_MIN_QUALITY = float(os.getenv("VISION_MIN_QUALITY", "0.30"))
 # gpt-5-2 reasons before it answers. Measured on one real clip check: 32.5 s
 # at the default effort, 13.5 s at "low", same verdict (0.97 vs 0.98);
 # "minimal" is refused (code 500). Sent to gpt-* models only. Empty = default.

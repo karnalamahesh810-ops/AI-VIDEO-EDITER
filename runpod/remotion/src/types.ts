@@ -98,6 +98,8 @@ export interface Scene {
     eventWindow?: string;
     contentDescription?: string;
     relevanceScore?: number;
+    /** The vision judge's 0-1 rating of the footage itself: sharp, stable, lit, framed. */
+    qualityScore?: number;
     provider?: string;
   };
   words: SceneWord[];

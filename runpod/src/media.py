@@ -142,6 +142,9 @@ class MediaAsset:
     intent: str = ""
     content_description: str = ""
     relevance_score: Optional[float] = None
+    # The same judge's 0-1 rating of the footage itself (sharp, stable, lit,
+    # framed), whatever it shows. Used to pick between clips that both match.
+    quality: Optional[float] = None
     vision_model: str = ""
 
     @property
@@ -189,6 +192,8 @@ class MediaAsset:
         }
         if self.relevance_score is not None:
             media["relevanceScore"] = round(self.relevance_score, 3)
+        if self.quality is not None:
+            media["qualityScore"] = round(self.quality, 3)
         if self.content_description:
             media["contentDescription"] = self.content_description
         return media
@@ -198,6 +203,7 @@ class MediaAsset:
         if verdict:
             self.content_description = verdict.get("description", "")
             self.relevance_score = verdict.get("score")
+            self.quality = verdict.get("quality")
             self.vision_model = verdict.get("model", "")
         return self
 
@@ -856,7 +862,7 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
     if not intent or not vision.enabled():
         return True, None
-    verdict = vision.judge(path, intent, context)
+    verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()))
     keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person")
     if verdict is not None:
         mark = "keep" if keep else "REJECT"
@@ -865,6 +871,8 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
             flags.append("text/watermark")
         if verdict["is_talking_head"]:
             flags.append("talking head")
+        if verdict.get("quality") is not None:
+            flags.append(f"quality {verdict['quality']:.2f}")
         print(f"[vision] {mark} {verdict['score']:.2f} {label[:50]!r}"
               f"{' (' + ', '.join(flags) + ')' if flags else ''}"
               f" — {verdict['description'][:90]}", flush=True)
@@ -1880,13 +1888,17 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     def stronger_hook(job, nth, got):
         # The opening beats decide whether a viewer stays, so they do not take
         # the first clip that merely passes: one more candidate is judged and
-        # the one the vision model scored higher opens the video.
+        # the one with more appeal (relevance first, footage quality second)
+        # opens the video.
         try:
             alt = attempt(job, nth + 1)
         except Exception:  # noqa: BLE001
             return got
-        if alt is None or alt.relevance_score is None \
-                or alt.relevance_score <= got.relevance_score:
+        if alt is None or alt.relevance_score is None:
+            return got
+        before = vision.appeal(got.relevance_score, got.quality)
+        after = vision.appeal(alt.relevance_score, alt.quality)
+        if after <= before:
             return got
         with lock:
             if alt.identity in live_used:
@@ -1894,7 +1906,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             live_used.discard(got.identity)
             live_used.add(alt.identity)
         print(f"[media] scene {job['index'] + 1}: stronger hook shot "
-              f"{got.relevance_score:.2f} -> {alt.relevance_score:.2f}", flush=True)
+              f"{before:.2f} -> {after:.2f}", flush=True)
         return alt
 
     def fetch(job, nth):
