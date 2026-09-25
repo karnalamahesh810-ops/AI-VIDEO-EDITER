@@ -376,6 +376,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     title = director.clean_title(inp.get("title") or inp.get("title_overlay") or "")
     report("Reading the whole story", 13)
     brief = director.story_brief(segments, title, configured=director.is_configured())
+    # Every vision judgement sees the whole story, not just its own line.
+    vision.set_story(brief)
 
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
