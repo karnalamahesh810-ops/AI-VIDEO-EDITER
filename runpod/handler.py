@@ -617,6 +617,56 @@ def _sign_supabase_urls(doc: dict):
                 m["url"] = resign(m["url"])
 
 
+def _sanitize_stills(doc: dict, work: str) -> int:
+    """
+    Re-encode every still to a real JPEG before Chrome sees it.
+
+    Web image search saves whatever the server sent under the name it asked
+    for: a WebP, an AVIF or an HTML error page named ".jpg". Chrome refuses to
+    decode it and Remotion fails the WHOLE render - a real 23-scene job died at
+    frame 356 on one airport photo. Each still is decoded by ffmpeg into a
+    clean JPEG (remote ones are fetched first); one that cannot be decoded is
+    turned into an empty scene, which _fill_missing_media then covers with a
+    matching shot. Returns how many stills were dropped.
+    """
+    from src.assetserver import is_local
+    dropped = 0
+    medias = [s.get("media") for s in doc.get("scenes", [])]
+    medias += [m for o in doc.get("overlays", []) for m in (o.get("media") or [])]
+    for n, media in enumerate(medias):
+        if not isinstance(media, dict) or media.get("type") != "image" or not media.get("url"):
+            continue
+        url = media["url"]
+        src = url if is_local(url) and os.path.isfile(url) else ""
+        if not src and url.startswith("http"):
+            src = os.path.join(work, f"still_src_{n}")
+            try:
+                storage.download(url, src)
+            except Exception:  # noqa: BLE001
+                src = ""
+        out = os.path.join(work, f"still_{n}_{uuid.uuid4().hex[:6]}.jpg")
+        ok = False
+        if src and os.path.isfile(src):
+            try:
+                subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-frames:v", "1",
+                                "-vf", "scale='min(2560,iw)':-2", "-q:v", "3", out],
+                               capture_output=True, timeout=60)
+                ok = os.path.isfile(out) and os.path.getsize(out) > 2000
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                ok = False
+        if ok:
+            media["url"] = out
+        else:
+            dropped += 1
+            media.clear()
+            media.update({"type": "color", "url": "", "source": "none"})
+    if dropped:
+        print(f"[worker] {dropped} still(s) could not be decoded; covered by other shots",
+              flush=True)
+        _fill_missing_media(doc)
+    return dropped
+
+
 def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
     # The document may have come back from a browser, so validate before
     # spending GPU minutes on it.
@@ -635,6 +685,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not refresh narration url: {e}", flush=True)
     _sign_supabase_urls(doc)
+    _sanitize_stills(doc, work)
 
     report(f"Rendering {doc['meta'].get('sceneCount', len(doc['scenes']))} scenes", 70)
     out_path = os.path.join(work, "final.mp4")
