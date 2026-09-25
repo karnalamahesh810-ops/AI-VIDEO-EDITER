@@ -9,6 +9,7 @@ silent ones: a template the director emits that the renderer does not draw, a
 scene track that does not tile the narration, a document that reaches headless
 Chrome with no audio. Each of those has a test below.
 """
+import datetime
 import json
 import os
 import re
@@ -2436,6 +2437,226 @@ class ExtraSources(unittest.TestCase):
                  "tv_news": [{"name": "tv_news.mp4", "format": "512Kb MPEG4", "size": "700000"}]}
         hits = self._archive_org(docs=general, files_by_id=files, safe_docs=safe)
         self.assertEqual({h.url.rsplit("/", 1)[-1] for h in hits}, {"gov1.mp4"})
+
+
+TODAY = datetime.date(2026, 9, 25)
+FLOOD = [
+    seg("In June 2026 the Mississippi River broke through a levee in Davenport, Iowa.", 0, 5),
+    seg("Floodwaters poured into downtown streets overnight.", 5, 9),
+    seg("Residents were told to evacuate by the National Weather Service.", 9, 14),
+    seg("The water kept rising for three more days.", 14, 18),
+    seg("It was the worst flooding since 1993.", 18, 22),
+]
+
+
+class StoryBrief(unittest.TestCase):
+    """The whole narration is read once, before any beat is planned."""
+
+    def test_rules_recognise_a_recent_flood_story_and_where_it_happened(self):
+        b = director._rule_brief(FLOOD, "Midwest Floods", today=TODAY)
+        self.assertIn(b["kind"], director.EVENT_KINDS)
+        self.assertTrue(b["recent"])
+        self.assertEqual(b["year"], 2026)
+        self.assertEqual(b["places"][0], "Davenport, Iowa")
+        self.assertIn(0, b["hookBeats"])
+
+    def test_rules_leave_a_history_story_unanchored(self):
+        segs = [seg("In 1911 the Hotel Roosevelt opened its doors.", 0, 4),
+                seg("It was the tallest building in town.", 4, 8)]
+        b = director._rule_brief(segs, "The Old Hotel", today=TODAY)
+        self.assertEqual(b["kind"], "history")
+        self.assertFalse(b["recent"])
+
+    def test_a_model_brief_is_coerced_field_by_field(self):
+        fallback = director._rule_brief(FLOOD, "Midwest Floods", today=TODAY)
+        raw = {"kind": "not-a-kind", "year": 3050, "recent": "yes",
+               "places": ["Davenport, Iowa", 7, ""], "hookBeats": [0, 2, 99, True],
+               "event": "2026 Midwest flooding Iowa"}
+        b = director._validate_brief(raw, fallback, len(FLOOD), today=TODAY)
+        self.assertEqual(b["kind"], fallback["kind"])
+        self.assertEqual(b["year"], fallback["year"])
+        self.assertEqual(b["recent"], fallback["recent"])
+        self.assertEqual(b["places"], ["Davenport, Iowa"])
+        self.assertEqual(b["hookBeats"], [0, 2])
+        self.assertEqual(b["event"], "2026 Midwest flooding Iowa")
+
+    def test_only_an_event_story_can_be_recent(self):
+        fallback = director._rule_brief(FLOOD, "", today=TODAY)
+        b = director._validate_brief({"kind": "history", "recent": True}, fallback,
+                                     len(FLOOD), today=TODAY)
+        self.assertFalse(b["recent"])
+
+    def test_a_failed_model_call_falls_back_to_the_rules(self):
+        with mock.patch.object(director, "_chat_json", return_value=None), \
+                mock.patch.object(director, "_today", return_value=TODAY):
+            b = director.story_brief(FLOOD, "Midwest Floods", configured=True)
+        self.assertEqual(b, director._rule_brief(FLOOD, "Midwest Floods", today=TODAY))
+
+    def test_every_planning_batch_sees_the_whole_story(self):
+        payloads = []
+        brief = {"kind": "disaster", "summary": "A levee fails.",
+                 "event": "2026 Midwest flooding Iowa", "year": 2026, "recent": True,
+                 "places": ["Davenport, Iowa"], "people": [], "hookBeats": [0, 1]}
+
+        def post(url, **kw):
+            system = kw["json"]["messages"][0]["content"]
+            payloads.append(json.loads(kw["json"]["messages"][1]["content"]))
+            content = brief if system == director._BRIEF_PROMPT else {"shots": []}
+            r = mock.Mock(status_code=200)
+            r.json.return_value = {"choices": [{"message": {"content": json.dumps(content)}}]}
+            return r
+
+        with mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
+                mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
+                mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
+                mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", []), \
+                mock.patch.object(director, "_today", return_value=TODAY), \
+                mock.patch.object(director.requests, "post", side_effect=post):
+            shots, _, _ = director.plan(FLOOD, "Midwest Floods", allow_maps=False)
+
+        batch = [p for p in payloads if "story" in p][0]
+        self.assertEqual(batch["story"]["event"], "2026 Midwest flooding Iowa")
+        self.assertTrue(batch["beats"][0].get("hook"))
+        self.assertFalse(batch["beats"][3].get("hook"))
+        self.assertTrue(shots[0]["hook"])
+        # A line that never names the place or year is still searched as this flood.
+        self.assertIn("Davenport", shots[3]["query"])
+        self.assertIn("2026", shots[3]["query"])
+        self.assertIn("Davenport, Iowa, 2026", shots[3]["intent"])
+        self.assertEqual(shots[3]["eventWindow"], "year")
+        self.assertEqual(shots[3]["fallbacks"][0], "2026 Midwest flooding Iowa")
+        # The line about 1993 keeps its own year.
+        self.assertNotIn("2026", shots[4]["query"])
+        self.assertEqual(shots[4]["eventWindow"], "event")
+
+
+class StoryAnchoring(unittest.TestCase):
+    BRIEF = {"kind": "news", "places": ["Davenport, Iowa"], "year": 2026, "recent": True,
+             "event": "2026 Midwest flooding Iowa"}
+
+    def _anchor(self, shots, brief=None):
+        segs = [seg("A line.", i, i + 1) for i in range(len(shots))]
+        with mock.patch.object(director, "_today", return_value=TODAY):
+            return director.anchor_to_story(shots, segs, brief or self.BRIEF)
+
+    def test_portraits_and_separately_named_places_keep_their_own_anchor(self):
+        shots = [{"query": "Governor Kim Reynolds", "subjectType": "person",
+                  "visualType": "image", "intent": ""},
+                 {"query": "St. Louis riverfront flooding", "subjectType": "place",
+                  "visualType": "footage", "intent": ""}]
+        self._anchor(shots)
+        self.assertEqual(shots[0]["query"], "Governor Kim Reynolds")
+        self.assertNotIn("Davenport", shots[1]["query"])
+        self.assertIn("2026", shots[1]["query"])
+
+    def test_footage_of_a_person_is_pinned_to_the_event(self):
+        shots = [{"query": "Governor Kim Reynolds", "subjectType": "person",
+                  "visualType": "footage", "intent": ""}]
+        self._anchor(shots)
+        self.assertEqual(shots[0]["query"], "Davenport Iowa Governor Kim Reynolds 2026")
+
+    def test_a_query_that_already_names_the_place_is_not_padded(self):
+        shots = [{"query": "Davenport riverfront flood", "subjectType": "", "intent": ""}]
+        self._anchor(shots)
+        self.assertEqual(shots[0]["query"], "Davenport riverfront flood 2026")
+
+    def test_a_last_year_event_is_not_limited_to_this_years_uploads(self):
+        shots = [{"query": "flooded street", "subjectType": "", "intent": ""}]
+        self._anchor(shots, dict(self.BRIEF, year=2025))
+        self.assertEqual(shots[0]["eventWindow"], "event")
+
+    def test_a_history_story_is_left_alone(self):
+        shots = [{"query": "old hotel lobby", "subjectType": "", "intent": ""}]
+        self.assertEqual(self._anchor(shots, dict(self.BRIEF, kind="history")), 0)
+        self.assertEqual(shots[0]["query"], "old hotel lobby")
+        self.assertNotIn("eventWindow", shots[0])
+
+
+class EventFootage(unittest.TestCase):
+    """A news story needs footage of THAT event, which news outlets upload."""
+
+    def _in_window(self, window, fn):
+        tok = media._EVENT_WINDOW.set(window)
+        try:
+            return fn()
+        finally:
+            media._EVENT_WINDOW.reset(tok)
+
+    def test_news_outlet_titles_pass_only_for_event_stories(self):
+        title = "Drone video shows flooding in Davenport | WQAD News 8"
+        self.assertTrue(media._talking_head(title))
+        self.assertFalse(self._in_window("event", lambda: media._talking_head(title)))
+        self.assertTrue(self._in_window("event", lambda: media._talking_head(
+            "Governor press conference on flood news")))
+
+    def test_a_recent_event_searches_this_years_uploads_first(self):
+        searched = []
+        with mock.patch.object(media, "_yt_candidates",
+                               side_effect=lambda target, *a, **k: searched.append(target) or []), \
+                mock.patch.object(media, "_yt_fetch", return_value=""):
+            media.reset_cache()
+            self._in_window("year", lambda: media.youtube_clip(
+                "Davenport Iowa flooding 2026", "/tmp/x", seconds=3.0,
+                require_cc=False, subject="Davenport flood"))
+        self.assertEqual(len(searched), 3)
+        self.assertIn("sp=" + media._YT_THIS_YEAR, searched[0])
+        self.assertIn("sp=" + media._YT_THIS_YEAR, searched[1])
+        self.assertTrue(searched[2].startswith("ytsearch"))
+
+    def test_every_search_of_a_beat_runs_even_when_a_subject_is_cached(self):
+        # Keyed on the subject alone, the plain-query fallback got the
+        # footage-biased search's cached list back and never searched.
+        searched = []
+        with mock.patch.object(media, "_yt_candidates",
+                               side_effect=lambda target, *a, **k: searched.append(target) or []), \
+                mock.patch.object(media, "_yt_fetch", return_value=""):
+            media.reset_cache()
+            media.youtube_clip("lake powell", "/tmp/x", seconds=3.0,
+                               require_cc=False, subject="Lake Powell")
+        self.assertEqual(len(searched), 2)
+
+    def test_dailymotion_tries_this_years_uploads_first(self):
+        calls, fetched = [], []
+
+        def fake_get(url, params=None, **k):
+            calls.append(params)
+            ids = ["new"] if params.get("created_after") else ["old", "new"]
+            r = mock.Mock()
+            r.raise_for_status = lambda: None
+            r.json.return_value = {"list": [
+                {"id": i, "title": "flood footage", "duration": 120,
+                 "width": 1920, "height": 1080} for i in ids]}
+            return r
+
+        with mock.patch.object(media.requests, "get", side_effect=fake_get), \
+                mock.patch.object(media, "_dm_fetch",
+                                  side_effect=lambda vid, *a, **k: fetched.append(vid) or ""):
+            media.reset_cache()
+            self._in_window("year", lambda: media.dailymotion_clip(
+                "Davenport flood", "/tmp/x", seconds=3.0))
+        self.assertTrue(any(p.get("created_after") for p in calls))
+        self.assertEqual(fetched, ["new", "old"])
+
+
+class HookShots(unittest.TestCase):
+    """The opening beats open on the best clip found, not the first that passed."""
+
+    def _run(self, hook):
+        def fake(query, seconds, work_dir, *, nth=0, used=None, **kw):
+            return MediaAsset(kind="video", source="youtube", url=f"https://x/{nth}",
+                              relevance_score=0.5 + 0.2 * nth)
+
+        jobs = [{"index": 0, "query": "flood", "seconds": 3.0, "hook": hook}]
+        with mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")):
+            media.reset_cache()
+            return media.source_many(jobs, "/tmp", workers=1)
+
+    def test_a_hook_beat_opens_on_the_higher_scoring_clip(self):
+        self.assertEqual(self._run(True)[0].url, "https://x/1")
+
+    def test_other_beats_take_the_first_clip_that_passes(self):
+        self.assertEqual(self._run(False)[0].url, "https://x/0")
 
 
 if __name__ == "__main__":

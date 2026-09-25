@@ -24,6 +24,7 @@ import contextvars
 from dataclasses import dataclass, asdict
 from typing import List, Optional, Dict, Any
 import base64
+import datetime
 import json
 import os
 import re
@@ -819,6 +820,31 @@ def _longest_run(rows: list) -> int:
 # thread, start to finish, so it cannot leak into another scene.
 _SUBJECT_TYPE: contextvars.ContextVar = contextvars.ContextVar("subject_type", default="")
 
+# Set while sourcing a beat of a news/weather/disaster story (from the
+# director's story brief): "event", or "year" when the event is this year's.
+# News-outlet uploads - the main source of real event footage - are then no
+# longer rejected on the word "news", and for "year" searches try this year's
+# uploads first so a 2026 flood does not get 2019's.
+_EVENT_WINDOW: contextvars.ContextVar = contextvars.ContextVar("event_window", default="")
+
+# YouTube's own "Upload date: This year" filter, for the results page.
+_YT_THIS_YEAR = "EgIIBQ%3D%3D"
+
+
+def _talking_head(title: str) -> bool:
+    """
+    True when the title disqualifies a candidate.
+
+    For a recent event story the bare word "news" does not: "Drone video shows
+    flooding in Davenport | WQAD News 8" is exactly the footage wanted. Anchors,
+    press conferences, interviews and the rest still disqualify, and the vision
+    judge still rejects an anchor desk or burned-in text on the actual frames.
+    """
+    hits = [m.group(1).lower() for m in _TALKING_HEAD.finditer(title or "")]
+    if _EVENT_WINDOW.get():
+        hits = [h for h in hits if h != "news"]
+    return bool(hits)
+
 
 def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
@@ -858,7 +884,7 @@ def _score_candidate(title: str, duration: float, aspect: float,
     score = 0.0
     if _B_ROLL.search(title):
         score += 3.0
-    if _TALKING_HEAD.search(title):
+    if _talking_head(title):
         score -= 4.0
     # Too short to cut from, or so long it is a stream/compilation.
     if duration and duration < max(20.0, seconds + 8):
@@ -948,9 +974,17 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
     return out
 
 
-def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "") -> List[dict]:
-    """_yt_candidates, reused across every beat that shares a subject."""
-    key = f"ytc::{require_cc}::{(subject or target).strip().lower()}"
+def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
+                          variant: str = "") -> List[dict]:
+    """
+    _yt_candidates, reused across every beat that shares a subject.
+
+    `variant` names which of a beat's searches this is (footage-biased,
+    plain, this-year-only). Keyed by subject alone, the second search of a
+    beat returned the first one's cached list, so the plain-query fallback
+    never actually ran once a subject was known.
+    """
+    key = f"ytc::{require_cc}::{variant}::{(subject or target).strip().lower()}"
     if subject:
         with _CACHE_LOCK:
             if key in _YT_CANDIDATES_CACHE:
@@ -1150,13 +1184,21 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         return _asset_for(path, query_or_url, seconds, require_cc)
 
     # Bias the search itself toward footage; fall back to the plain query.
+    # (search, variant, this-year-only)
     searches = []
-    if b_roll_intent:
-        searches.append(f"{query_or_url} {B_ROLL_INTENT}")
-    searches.append(query_or_url)
+    if _EVENT_WINDOW.get() == "year" and not require_cc:
+        # A recent event: this year's uploads first, so the flood on screen is
+        # the one being narrated. News titles rarely say "drone aerial", so
+        # the bias word is just "footage". The unfiltered plain query stays
+        # last for an event YouTube has little of yet.
+        searches += [(f"{query_or_url} footage", "recent-footage", True),
+                     (query_or_url, "recent", True)]
+    elif b_roll_intent:
+        searches.append((f"{query_or_url} {B_ROLL_INTENT}", "broll", False))
+    searches.append((query_or_url, "plain", False))
 
     judged = 0
-    for search in searches:
+    for search, variant, this_year in searches:
         if judged >= config.VISION_MAX_CANDIDATES:
             break
         if require_cc:
@@ -1165,10 +1207,13 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # own results page with its CC filter populates the field.
             target = ("https://www.youtube.com/results?search_query="
                       + urllib.parse.quote_plus(search) + "&sp=EgIwAQ%3D%3D")
+        elif this_year:
+            target = ("https://www.youtube.com/results?search_query="
+                      + urllib.parse.quote_plus(search) + "&sp=" + _YT_THIS_YEAR)
         else:
             target = f"ytsearch12:{search}"
 
-        candidates = _yt_candidates_cached(target, require_cc, subject)
+        candidates = _yt_candidates_cached(target, require_cc, subject, variant)
         if not candidates:
             continue
 
@@ -1187,7 +1232,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # documentary. No clip is better than the wrong clip - the caller
             # falls through to the next query, and the timeline holds the
             # previous shot.
-            if _TALKING_HEAD.search(candidate["title"] or ""):
+            if _talking_head(candidate["title"]):
                 continue
             if candidate["aspect"] and candidate["aspect"] < 1.2:
                 continue                       # vertical, unusable in 16:9
@@ -1232,19 +1277,22 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     return None
 
 
-def search_dailymotion(query: str, limit: int = 12) -> List[dict]:
+def search_dailymotion(query: str, limit: int = 12, created_after: int = 0) -> List[dict]:
     """
     Dailymotion's public API: no key, ~1.5 s, and the dimensions come back
     with the hit, so vertical uploads are filtered before any download.
     Its catalogue is heavy on news-outlet clips - exactly the real-event
     footage a flood or wildfire script needs when YouTube's top results miss.
     """
+    params = {"search": query, "limit": limit, "sort": "relevance",
+              "fields": "id,title,duration,width,height"}
+    if created_after:
+        params["created_after"] = created_after
     try:
         r = requests.get(
             "https://api.dailymotion.com/videos",
             headers={"User-Agent": config.USER_AGENT},
-            params={"search": query, "limit": limit, "sort": "relevance",
-                    "fields": "id,title,duration,width,height"},
+            params=params,
             timeout=20,
         )
         r.raise_for_status()
@@ -1258,6 +1306,13 @@ def search_dailymotion(query: str, limit: int = 12) -> List[dict]:
                     "duration": float(it.get("duration") or 0),
                     "aspect": (w / h) if h else 0.0})
     return [c for c in out if c["id"]]
+
+
+def search_dailymotion_this_year(query: str) -> List[dict]:
+    """Uploads since 1 January: a named function so _cached_search keys it apart."""
+    start = datetime.datetime(datetime.date.today().year, 1, 1,
+                              tzinfo=datetime.timezone.utc)
+    return search_dailymotion(query, created_after=int(start.timestamp()))
 
 
 def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
@@ -1305,13 +1360,21 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
     is no storyboard to scout, so the grab point is the fixed 35% one.
     """
     os.makedirs(out_dir, exist_ok=True)
-    candidates = _cached_search(search_dailymotion, query, cache_key=subject)
-    if not candidates:
+
+    def rank(cands):
+        return sorted(cands, key=lambda c: _score_candidate(c["title"], c["duration"],
+                                                            c["aspect"], seconds),
+                      reverse=True)
+
+    ranked = rank(_cached_search(search_dailymotion, query, cache_key=subject))
+    if _EVENT_WINDOW.get() == "year":
+        # This year's uploads first, whatever their title score; the rest after.
+        recent = rank(_cached_search(search_dailymotion_this_year, query,
+                                     cache_key=subject))
+        ids = {c["id"] for c in recent}
+        ranked = recent + [c for c in ranked if c["id"] not in ids]
+    if not ranked:
         return None
-    ranked = sorted(candidates,
-                    key=lambda c: _score_candidate(c["title"], c["duration"],
-                                                   c["aspect"], seconds),
-                    reverse=True)
     grab = max(2.0, seconds + 1.5)
     judged = 0
     for c in ranked[skip:] + ranked[:skip]:
@@ -1320,7 +1383,7 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
         page = f"https://www.dailymotion.com/video/{c['id']}"
         if used and f"dailymotion:{page}" in used:
             continue
-        if _TALKING_HEAD.search(c["title"]) or (c["aspect"] and c["aspect"] < 1.2):
+        if _talking_head(c["title"]) or (c["aspect"] and c["aspect"] < 1.2):
             continue
         if c["duration"] and c["duration"] < grab + 4:
             continue
@@ -1562,7 +1625,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        allow_youtube: bool = None, allow_stock: bool = None,
                        require_cc: bool = None, intent: str = "",
                        context: str = "", subject_type: str = "",
-                       subject: str = "") -> Optional[MediaAsset]:
+                       subject: str = "", event_window: str = "") -> Optional[MediaAsset]:
     """
     Source one scene, relaxing the query until something is found.
 
@@ -1576,6 +1639,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     GENERATED - an invented photo of a real person is a fabrication.
     """
     token = _SUBJECT_TYPE.set(subject_type or "")
+    window_token = _EVENT_WINDOW.set(event_window or "")
     try:
         for attempt in [query] + list(fallbacks or []):
             got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
@@ -1588,6 +1652,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                 return got
         return None
     finally:
+        _EVENT_WINDOW.reset(window_token)
         _SUBJECT_TYPE.reset(token)
 
 
@@ -1801,22 +1866,48 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # at once); pass 2 below catches those.
     live_used: set = set()
 
+    def attempt(job, nth):
+        return source_for_segment(
+            job["query"], float(job.get("seconds") or 0), work_dir,
+            visual_type=job.get("visual_type", "footage"), nth=nth,
+            used=live_used,
+            fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
+            intent=job.get("intent", ""), context=job.get("context", ""),
+            subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
+            event_window=job.get("event_window", ""),
+            **kwargs)
+
+    def stronger_hook(job, nth, got):
+        # The opening beats decide whether a viewer stays, so they do not take
+        # the first clip that merely passes: one more candidate is judged and
+        # the one the vision model scored higher opens the video.
+        try:
+            alt = attempt(job, nth + 1)
+        except Exception:  # noqa: BLE001
+            return got
+        if alt is None or alt.relevance_score is None \
+                or alt.relevance_score <= got.relevance_score:
+            return got
+        with lock:
+            if alt.identity in live_used:
+                return got
+            live_used.discard(got.identity)
+            live_used.add(alt.identity)
+        print(f"[media] scene {job['index'] + 1}: stronger hook shot "
+              f"{got.relevance_score:.2f} -> {alt.relevance_score:.2f}", flush=True)
+        return alt
+
     def fetch(job, nth):
         try:
-            got = source_for_segment(
-                job["query"], float(job.get("seconds") or 0), work_dir,
-                visual_type=job.get("visual_type", "footage"), nth=nth,
-                used=live_used,
-                fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
-                intent=job.get("intent", ""), context=job.get("context", ""),
-                subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
-                **kwargs)
+            got = attempt(job, nth)
         except Exception as e:  # noqa: BLE001
             print(f"[media] '{job['query']}' failed: {e}", flush=True)
             return None
         if got:
             with lock:
                 live_used.add(got.identity)
+            if job.get("hook") and got.relevance_score is not None:
+                got = stronger_hook(job, nth, got)
         return got
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
@@ -1884,6 +1975,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     fallbacks=job.get("fallbacks"), prompt=job.get("prompt", ""),
                     intent=job.get("intent", ""), context=job.get("context", ""),
                     subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
+                    event_window=job.get("event_window", ""),
                     **kwargs)
             except Exception:  # noqa: BLE001
                 candidate = None
@@ -1960,7 +2052,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     visual_type=job.get("visual_type", "footage"), used=used,
                     fallbacks=alts[1:], prompt=job.get("prompt", ""),
                     intent=job.get("intent", ""), context=job.get("context", ""),
-                    subject_type=job.get("subject_type", ""), **kwargs)
+                    subject_type=job.get("subject_type", ""),
+                    event_window=job.get("event_window", ""), **kwargs)
             except Exception:  # noqa: BLE001
                 return None
             if not got:

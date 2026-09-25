@@ -329,6 +329,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "intent": shot.get("intent") or "",
              "subject_type": shot.get("subjectType") or "",
              "subject": shot.get("subject") or "",
+             "event_window": shot.get("eventWindow") or "",
+             "hook": bool(shot.get("hook")),
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 
@@ -419,6 +421,8 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
         allow_stock=inp.get("allow_stock"),
         require_cc=inp.get("require_cc"),
         intent=intent, context=str(scene.get("text") or ""),
+        subject_type=str(sem.get("subjectType") or ""),
+        event_window=str(sem.get("eventWindow") or ""),
     )
     if not asset:
         raise ValueError(f"no usable media found for '{query}' — try different wording")

@@ -94,6 +94,8 @@ export interface Scene {
     intent?: string;
     subject?: string;
     searchQuery?: string;
+    /** "event" / "year" for a news-type story's beats: re-sourcing keeps them on that event. */
+    eventWindow?: string;
     contentDescription?: string;
     relevanceScore?: number;
     provider?: string;
