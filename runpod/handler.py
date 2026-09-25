@@ -428,6 +428,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     total = len(segments)
     report(f"Sourcing media for {total} scenes", 22, done=0, total=total)
     media.reset_cache()
+    media.set_story_script(" ".join(seg.text for seg in segments))
     # A 1961 story ranks 1961 footage above 4K drone tours of today.
     if brief.get("kind") in ("history", "biography"):
         media.set_story_era(brief.get("year"))
@@ -560,6 +561,7 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
 
     report(f"Re-sourcing scene {idx + 1}", 20)
     media.reset_cache()
+    media.set_story_script(" ".join(str(s.get("text") or "") for s in scenes))
     story = (doc.get("meta") or {}).get("story") or {}
     if story.get("kind") in ("history", "biography"):
         media.set_story_era(story.get("year"))

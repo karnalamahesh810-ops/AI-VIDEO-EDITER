@@ -10,6 +10,7 @@ scene track that does not tile the narration, a document that reaches headless
 Chrome with no audio. Each of those has a test below.
 """
 import datetime
+from collections import Counter
 import json
 import os
 import re
@@ -2921,6 +2922,26 @@ class LongVideoCoverage(unittest.TestCase):
         self.assertIn("Ann Dunham", results[5].review_reason)
         self.assertEqual(results[4].url, "https://x/mad1.jpg")     # Madelyn's own, 3+ apart
 
+    def test_one_shot_is_not_spread_over_the_whole_video(self):
+        # A real 293-scene job put one Facebook photo on 42 scenes. Reuse
+        # spreads over every shot the story has instead.
+        photo = MediaAsset(kind="image", source="web", url="https://x/police.jpg")
+        clips = [MediaAsset(kind="video", source="youtube", url=f"q{n}",
+                            local_path=f"/w/yt_{n:011d}_0_1.mp4") for n in range(4)]
+        jobs = [{"index": i, "subject": "New Mexico flood", "subject_type": "event"}
+                for i in range(40)]
+        results = [None] * 40
+        results[0] = photo
+        for n, c in enumerate(clips):
+            results[5 + 9 * n] = c
+        media.fill_from_story(jobs, results)
+        counts = Counter(r.identity for r in results if r is not None)
+        # Past the caps the least-loaded shot fills in: the load spreads
+        # evenly, and a still (which reads as a repeat sooner) carries less.
+        self.assertLess(counts[photo.identity], min(counts[c.identity] for c in clips))
+        self.assertLessEqual(max(counts.values()), 12)
+        self.assertEqual(sum(1 for r in results if r is None), 0)
+
     def test_a_person_scene_is_never_given_a_stranger(self):
         jobs = [{"index": 0, "subject": "Lolo Soetoro", "subject_type": "person"},
                 {"index": 1, "subject": "Ann Dunham", "subject_type": "person"}]
@@ -3365,6 +3386,20 @@ class NoAITitleRules(unittest.TestCase):
                       "Kenya polygamy bill arouses fears"]:
             with self.subTest(title=title):
                 self.assertFalse(media._talking_head(title))
+
+    def test_foreign_script_titles_and_other_trailers_are_rejected(self):
+        media.set_story_script("Three people are dead in New Mexico after flash floods.")
+        try:
+            self.assertTrue(media._talking_head(
+                "देश के नक्शे से कैसे गायब हुए मॉनसूनी बादल, देखें सैटेलाइट तस्वीरें"))
+            self.assertTrue(media._talking_head("The Chosen in the Wild with Bear Grylls Trailer"))
+            self.assertFalse(media._talking_head("Torrential rains prompt flood risk for millions"))
+            self.assertFalse(media._talking_head("Boat trailer backing up at the ramp"))
+            self.assertFalse(media._talking_head("Tractor trailer stuck in floodwater"))
+            media.set_story_script("देश के नक्शे से कैसे गायब हुए मॉनसूनी बादल")  # a Hindi story
+            self.assertFalse(media._talking_head("मॉनसूनी बादल सैटेलाइट तस्वीरें"))
+        finally:
+            media.reset_cache()
 
     def test_a_historical_story_ranks_its_own_era_first(self):
         titles = ["New York City 4K Drone Video | Manhattan, Central Park Aerials",

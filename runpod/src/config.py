@@ -203,6 +203,12 @@ RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "180"))
 # restores the strict "a clip never appears twice" rule, at the cost of
 # empty scenes on long videos about subjects with few real photos.
 REUSE_SHOTS_TO_FILL = _flag("REUSE_SHOTS_TO_FILL", True)
+# How many scenes one reused shot may cover before the fill spreads to other
+# shots: a clip, and a still (which reads as a repeat much sooner). A real
+# 293-scene job put one Facebook photo on 42 scenes. Past these caps the
+# least-used shot is taken, so no scene is left empty.
+REUSE_MAX_FOOTAGE = int(os.getenv("REUSE_MAX_FOOTAGE", "3"))
+REUSE_MAX_STILL = int(os.getenv("REUSE_MAX_STILL", "2"))
 # Source the video in sequences (runs of lines about one subject and setting,
 # each with one pool of shots laid out by an editor call) before the
 # line-by-line search. Off ("0") restores line-by-line sourcing only.
