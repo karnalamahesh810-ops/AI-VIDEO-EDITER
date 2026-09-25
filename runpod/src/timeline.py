@@ -94,6 +94,8 @@ _OVERLAY_SECONDS = {
     "comparison": 5.0, "arrow": 2.5, "split": 4.0,
     "sentence-highlight": 4.0, "article-zoom": 5.0, "date-stamp": 3.0,
     "photo-card": 4.0, "name-card": 3.5,
+    # Footage tags ride on a playing shot; VidRush holds them 4-5.5 s.
+    "stat-tag": 4.0, "label-boxes": 4.0, "ring-stat": 4.5, "bullets": 5.5,
 }
 
 # Sources this workflow refuses. Kept as data so the check and the error

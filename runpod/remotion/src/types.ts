@@ -51,6 +51,10 @@ export type OverlayType =
   | "highlight"
   | "lower-third"
   | "comparison"
+  | "stat-tag"
+  | "label-boxes"
+  | "ring-stat"
+  | "bullets"
   | "arrow"
   | "split"
   // VidRush's own text animations, read off their exports.

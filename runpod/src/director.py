@@ -41,6 +41,8 @@ TEMPLATES = {
     # VidRush's own text animations, read off their exports.
     "sentence-highlight", "article-zoom", "date-stamp",
     "photo-card", "name-card",
+    # Tags that ride on playing footage - VidRush's most frequent graphics.
+    "stat-tag", "label-boxes", "ring-stat", "bullets",
 }
 
 # Footage grades the renderer can apply. Kept in sync with `Treatment` in
@@ -180,6 +182,9 @@ def _finite(value) -> Optional[float]:
     return number if math.isfinite(number) else None
 
 
+_CORNERS = {"bottom-left", "bottom-right", "top-right", "top-left"}
+
+
 def validate_overlay(raw) -> Optional[dict]:
     """
     Coerce a model-proposed overlay into something the renderer can draw, or
@@ -259,6 +264,29 @@ def validate_overlay(raw) -> Optional[dict]:
                 return None
     if kind == "timeline" and len(out.get("items", [])) < 2:
         return None
+    if kind == "stat-tag":
+        # "107 • DEGREES": a number from the narration and a short unit.
+        if "value" not in out or not out["text"] or len(out["text"]) > 24:
+            return None
+        out["variant"] = raw.get("variant") if raw.get("variant") in _CORNERS else "bottom-left"
+    if kind == "ring-stat":
+        if "value" not in out or not 0 <= out["value"] <= 100:
+            return None
+        out["text"] = out["text"][:28]
+    if kind == "label-boxes":
+        labels = [x for x in out.get("items", []) if x.get("label") or x.get("text")][:2]
+        if not labels and out["text"]:
+            labels = [{"label": out["text"][:28], "text": ""}]
+        if not labels or any(len(x.get("label") or x.get("text")) > 28 for x in labels):
+            return None
+        out["items"] = labels
+        if raw.get("variant") == "linked" and len(labels) == 2:
+            out["variant"] = "linked"
+    if kind == "bullets":
+        points = [x for x in out.get("items", []) if x.get("text") or x.get("label")][:4]
+        if len(points) < 2:
+            return None
+        out["items"] = points
     if kind not in {"map", "split"} and not out["text"] and not out.get("items"):
         return None
     return out
@@ -1025,10 +1053,27 @@ _SYSTEM_PROMPT = (
     "\"image\".\n"
     "- overlay: null, or {type,text,subtitle,highlight,body,value,suffix,variant,"
     "items:[{label,value,text}],places:[str]}.\n"
-    "EDITING GRAMMAR (VidRush): about one graphic every 8-12 seconds of narration, "
-    "never on two lines in a row. Every named person gets a lower-third the first "
-    "time they appear; every jump in time or place gets a date-stamp; numbers get a "
-    "stat; the key line of each passage gets a sentence-highlight.\n"
+    "EDITING GRAMMAR (VidRush, measured on four of their exports: a graphic on "
+    "screen in 53% of frames, about one every 10 seconds, held 4-6 s). Most "
+    "graphics RIDE ON THE FOOTAGE; full-frame cards are the minority. Every named "
+    "person gets a lower-third the first time they appear; every jump in time or "
+    "place gets a date-stamp; the key line of each passage gets a "
+    "sentence-highlight. Never two full-frame graphics on consecutive lines.\n"
+    "  FOOTAGE TAGS (the most frequent, ~11 per 10 minutes - use them freely):\n"
+    "  stat-tag: the line states a number with a unit about what is on screen "
+    "(\"107 degrees\", \"1,000 feet high\", \"26 square miles\", \"40 counties\"). "
+    "value = the number, text = the unit in 1-3 words (\"DEGREES\"), suffix only "
+    "for \"%\"; variant = the corner that is emptiest in a typical shot: "
+    "bottom-left (default), bottom-right or top-right.\n"
+    "  label-boxes: the line names one or two concrete things the shot shows or "
+    "contrasts (\"engine plants\" and \"employer first\"; \"constant water level\" "
+    "linked to \"submerged pump intake\"). items = 1-2 {label} of 1-3 words each; "
+    "variant \"linked\" when one causes or feeds the other.\n"
+    "  ring-stat: a percentage that is the point of the line (\"75% of the "
+    "structure is buried\"). value = 0-100, text = 1-3 word label.\n"
+    "  bullets: the narration lists three or four parallel points (effects, "
+    "reasons, industries). items = 2-4 {text} of at most 6 words each, in the "
+    "narration's order and words.\n"
     "  sentence-highlight: the key sentence of a passage. text = that sentence, "
     "verbatim, under 14 words; highlight = the 1-3 words that carry it.\n"
     "  article-zoom: the narration cites a record, file, report, letter, article or "

@@ -93,3 +93,29 @@ class BriefCast(unittest.TestCase):
         self.assertEqual(out["cast"][0]["aliases"], ["his father", "the man"])
         self.assertEqual(out["sections"], [{"from": 0, "to": 9,
                                             "footage": ["Honolulu 1960s archival footage"]}])
+
+
+class FootageTags(unittest.TestCase):
+    def test_stat_tag_needs_a_number_and_short_unit(self):
+        ok = director.validate_overlay({"type": "stat-tag", "value": 107, "text": "DEGREES",
+                                        "variant": "top-right"})
+        self.assertEqual((ok["value"], ok["variant"]), (107, "top-right"))
+        self.assertIsNone(director.validate_overlay({"type": "stat-tag", "text": "DEGREES"}))
+        odd = director.validate_overlay({"type": "stat-tag", "value": 5, "text": "X", "variant": "middle"})
+        self.assertEqual(odd["variant"], "bottom-left")
+
+    def test_ring_stat_is_a_percentage(self):
+        self.assertIsNotNone(director.validate_overlay({"type": "ring-stat", "value": 75, "text": "BURIED"}))
+        self.assertIsNone(director.validate_overlay({"type": "ring-stat", "value": 180, "text": "x"}))
+
+    def test_label_boxes_take_one_or_two_short_labels(self):
+        ok = director.validate_overlay({"type": "label-boxes", "variant": "linked", "items": [
+            {"label": "CONSTANT WATER LEVEL"}, {"label": "SUBMERGED PUMP INTAKE"}, {"label": "EXTRA"}]})
+        self.assertEqual((len(ok["items"]), ok["variant"]), (2, "linked"))
+        self.assertIsNone(director.validate_overlay({"type": "label-boxes", "items": [
+            {"label": "a label that is far too long to fit inside a box"}]}))
+
+    def test_bullets_need_two_points(self):
+        self.assertIsNone(director.validate_overlay({"type": "bullets", "items": [{"text": "one"}]}))
+        ok = director.validate_overlay({"type": "bullets", "items": [{"text": f"p{i}"} for i in range(6)]})
+        self.assertEqual(len(ok["items"]), 4)

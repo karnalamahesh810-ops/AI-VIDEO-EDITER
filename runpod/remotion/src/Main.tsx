@@ -21,6 +21,7 @@ import { ArticleZoom } from "./components/ArticleZoom";
 import { DateStamp } from "./components/DateStamp";
 import { DocumentaryMap } from "./components/DocumentaryMap";
 import { PhotoCard, NameCard, TimeRuler, ObjectCallout, EditorialChapter } from "./components/ReferenceGraphics";
+import { Bullets, LabelBoxes, RingStat, StatTag } from "./components/FootageTags";
 import type { Overlay, OverlayType, TimelineProps } from "./types";
 
 /**
@@ -53,6 +54,10 @@ const OVERLAYS: Record<
   "date-stamp": DateStamp,
   "photo-card": PhotoCard,
   "name-card": NameCard,
+  "stat-tag": StatTag,
+  "label-boxes": LabelBoxes,
+  "ring-stat": RingStat,
+  bullets: Bullets,
   // Split takes its two media entries rather than a text payload, so it gets
   // a small adapter instead of the shared signature.
   split: ({ overlay, accent }) =>
