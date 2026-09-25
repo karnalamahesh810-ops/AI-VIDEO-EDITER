@@ -131,6 +131,12 @@ DIRECTOR_FALLBACK_MODELS = [m.strip() for m in
                            os.getenv("DIRECTOR_FALLBACK_MODELS", "gemini-3-pro").split(",")
                            if m.strip()]
 
+# Planning calls in flight at once. Each covers a batch of beats and already
+# carries the whole-story brief, so batches do not wait on each other: one at
+# a time, a 24-minute script's 12 batches took 12+ minutes before any clip
+# was searched.
+DIRECTOR_PARALLEL = max(1, int(os.getenv("DIRECTOR_PARALLEL", "6")))
+
 # --- vision verification -----------------------------------------------------
 # Every candidate clip/image is shown to a multimodal model, which describes
 # what is actually in the frames and scores it against the shot's intent.

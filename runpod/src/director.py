@@ -24,7 +24,9 @@ import datetime
 import json
 import math
 import re
+import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 import requests
 
@@ -722,31 +724,51 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
     None. `errors`, when given, collects "model: reason" for each failed try.
     """
     for base, key, model, main in _routes():
-        if main and vision.out_of_credits():
-            continue
-        try:
-            r = requests.post(
-                f"{base}/chat/completions",
-                headers={"Authorization": f"Bearer {key}",
-                         "Content-Type": "application/json"},
-                json={"model": model,
-                      "messages": [{"role": "system", "content": system},
-                                   {"role": "user", "content": json.dumps(payload)}],
-                      "response_format": {"type": "json_object"}},
-                timeout=timeout,
-            )
-            body = r.json()
-            if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-                if main and vision.is_credit_error(body["code"], body.get("msg")):
-                    vision.note_out_of_credits()
-                raise ValueError(f"{model}: code {body['code']}")
-            data = json.loads(body["choices"][0]["message"]["content"])
-            if isinstance(data, dict):
-                return data
-        except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
-            if errors is not None:
-                errors.append(f"{model}: {type(e).__name__}")
-            continue
+        for attempt in range(2):
+            if main and vision.out_of_credits():
+                break
+            got = _chat_once(base, key, model, main, system, payload, timeout, errors,
+                             retry=attempt == 0)
+            if got is _RETRY:
+                time.sleep(3.0)      # rate limited: planning calls run in parallel
+                continue
+            if got is not None:
+                return got
+            break
+    return None
+
+
+_RETRY = object()
+
+
+def _chat_once(base, key, model, main, system, payload, timeout, errors, retry):
+    """One completion: the JSON dict, None on failure, or _RETRY when rate limited."""
+    try:
+        r = requests.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json"},
+            json={"model": model,
+                  "messages": [{"role": "system", "content": system},
+                               {"role": "user", "content": json.dumps(payload)}],
+                  "response_format": {"type": "json_object"}},
+            timeout=timeout,
+        )
+        if r.status_code == 429 and retry:
+            return _RETRY
+        body = r.json()
+        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
+            if body["code"] == 429 and retry:
+                return _RETRY
+            if main and vision.is_credit_error(body["code"], body.get("msg")):
+                vision.note_out_of_credits()
+            raise ValueError(f"{model}: code {body['code']}")
+        data = json.loads(body["choices"][0]["message"]["content"])
+        if isinstance(data, dict):
+            return data
+    except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
+        if errors is not None:
+            errors.append(f"{model}: {type(e).__name__}")
     return None
 
 
@@ -1035,7 +1057,7 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
     story = {k: v for k, v in (brief or {}).items() if k != "hookBeats"}
     hooks = set((brief or {}).get("hookBeats") or [])
 
-    for offset in range(0, total, _BATCH):
+    def ask(offset: int):
         batch = segments[offset:offset + _BATCH]
         payload = {
             "title": title,
@@ -1045,7 +1067,17 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                       for i, s in enumerate(batch)],
         }
         tried: List[str] = []
-        data = _chat_json(_SYSTEM_PROMPT, payload, timeout=120, errors=tried)
+        return _chat_json(_SYSTEM_PROMPT, payload, timeout=120, errors=tried), tried
+
+    # The batches are independent (each carries the whole-story brief), so
+    # they are asked in parallel and applied in order.
+    answers = _in_parallel(ask, list(range(0, total, _BATCH)),
+                           on_each=(lambda done, n: report(
+                               "Planning the visual story", 12 + int(8 * done / n)))
+                           if report else None)
+    for offset in range(0, total, _BATCH):
+        batch = segments[offset:offset + _BATCH]
+        data, tried = answers[offset]
         if data is None:
             warnings.append(
                 f"AI director unavailable for beats {offset + 1}-{offset + len(batch)} "
@@ -1102,10 +1134,21 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
             warnings.append(
                 f"Director skipped {len(batch) - len(seen)} beats around "
                 f"{offset + 1}; rules filled the gaps.")
-        if report:
-            done = min(offset + _BATCH, total)
-            report("Planning the visual story", 12 + int(8 * done / total))
     return enriched, warnings
+
+
+def _in_parallel(fn, keys: list, on_each=None) -> dict:
+    """{key: fn(key)} with up to DIRECTOR_PARALLEL calls in flight; on_each(done, n)."""
+    out = {}
+    if not keys:
+        return out
+    with ThreadPoolExecutor(max_workers=min(config.DIRECTOR_PARALLEL, len(keys))) as pool:
+        futures = {pool.submit(fn, k): k for k in keys}
+        for fut in as_completed(futures):
+            out[futures[fut]] = fut.result()
+            if on_each:
+                on_each(len(out), len(keys))
+    return out
 
 
 _RESCUE_PROMPT = (
@@ -1423,14 +1466,19 @@ def plan_sequences(segments: List[Segment], shots: List[dict],
     brief = brief or {}
     story = {k: v for k, v in brief.items() if k != "hookBeats"}
     out: List[dict] = []
-    for lo in range(0, len(segments), _SEQ_CHUNK):
+    chunks = list(range(0, len(segments), _SEQ_CHUNK))
+
+    def ask(lo: int):
         hi = min(lo + _SEQ_CHUNK, len(segments))
-        raw = None
-        if is_configured():
-            raw = _chat_json(_SEQUENCE_PROMPT, {
-                "story": story,
-                "beats": [{"index": i, "text": segments[i].text,
-                           "subject": shots[i].get("subject") or ""} for i in range(lo, hi)]})
+        return _chat_json(_SEQUENCE_PROMPT, {
+            "story": story,
+            "beats": [{"index": i, "text": segments[i].text,
+                       "subject": shots[i].get("subject") or ""} for i in range(lo, hi)]})
+
+    answers = _in_parallel(ask, chunks) if is_configured() else {}
+    for lo in chunks:
+        hi = min(lo + _SEQ_CHUNK, len(segments))
+        raw = answers.get(lo)
         out.extend(_validate_sequences(raw, lo, hi, shots) if raw
                    else _rule_sequences(shots, lo, hi))
     for seq in out:

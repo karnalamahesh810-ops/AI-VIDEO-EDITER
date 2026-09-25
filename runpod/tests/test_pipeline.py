@@ -3390,5 +3390,41 @@ class JobTimings(unittest.TestCase):
         self.assertEqual(t["total"], 28)
 
 
+class ParallelPlanning(unittest.TestCase):
+    """Planning batches are asked at once and applied in order."""
+
+    def test_batches_run_in_parallel_and_land_on_their_own_beats(self):
+        segs = [seg(f"Line {i} about the river.", i, i + 1) for i in range(3 * director._BATCH)]
+
+        def fake(system, payload, timeout=120, errors=None):
+            time.sleep(0.3)
+            return {"shots": [{"index": b["index"], "query": f"q{b['index']}",
+                               "subject": "", "visualType": "footage"}
+                              for b in payload["beats"]]}
+        shots = [{"query": "", "fallbacks": []} for _ in segs]
+        with mock.patch.object(director, "_chat_json", side_effect=fake):
+            t0 = time.time()
+            n, warnings = director._ai_pass(segs, "", shots)
+            took = time.time() - t0
+        self.assertEqual(n, len(segs))
+        self.assertEqual([sh["query"] for sh in shots], [f"q{i}" for i in range(len(segs))])
+        self.assertLess(took, 0.8)                 # three 0.3 s calls at once, not 0.9 s
+        self.assertEqual(warnings, [])
+
+    def test_a_rate_limited_call_is_retried_once(self):
+        limited = mock.Mock(status_code=429)
+        ok = mock.Mock(status_code=200)
+        ok.json.return_value = {"choices": [{"message": {"content": '{"a": 1}'}}]}
+        with mock.patch.object(config, "DIRECTOR_API_BASE", "https://x/v1"), \
+                mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
+                mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
+                mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", []), \
+                mock.patch.object(config, "AI_FALLBACK_API_KEY", ""), \
+                mock.patch.object(director.time, "sleep"), \
+                mock.patch.object(director.requests, "post", side_effect=[limited, ok]) as post:
+            self.assertEqual(director._chat_json("s", {}), {"a": 1})
+        self.assertEqual(post.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
