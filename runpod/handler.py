@@ -489,6 +489,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # What the AI understood the video to be about (kind, event, places, cast
     # with aliases, per-section footage), for the editor to show.
     doc["meta"]["story"] = dict(director.LAST_STORY) or dict(brief)
+    # The editor's story card reads startBeat/endBeat/queries; keep both spellings.
+    doc["meta"]["story"]["sections"] = [
+        {**sec, "startBeat": sec.get("from"), "endBeat": sec.get("to"),
+         "queries": sec.get("footage", [])}
+        for sec in (doc["meta"]["story"].get("sections") or [])]
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for.
