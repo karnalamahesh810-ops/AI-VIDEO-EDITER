@@ -3234,6 +3234,27 @@ class SequenceEditing(unittest.TestCase):
         self.assertEqual(out[1].intent, "intent 1")
         self.assertEqual(len(used), 3)
 
+    def test_a_pool_stopped_at_the_budget_claims_nothing(self):
+        jobs = {0: {"index": 0, "seconds": 3.0, "visual_type": "footage", "context": "x"}}
+        pool_f = [{"kind": "footage", "video": "v1",
+                   "asset": MediaAsset(kind="video", source="youtube", url="https://y/v1")}]
+        seq = {"beats": [0], "subject": "Maui", "searches": [{"q": "Maui 1961", "kind": "footage"}]}
+        stop = threading.Event()
+        stop.set()
+        used = set()
+        with mock.patch.object(media, "_footage_pool", return_value=pool_f), \
+                mock.patch.object(media, "_image_pool", return_value=[]):
+            out = media.source_sequence(seq, jobs, "/w", used, threading.Lock(),
+                                        require_cc=False, allow_youtube=True, stop=stop)
+        self.assertEqual(out, {})
+        self.assertEqual(used, set())
+
+    def test_budgets_grow_with_the_video(self):
+        # A 1.5-minute narration keeps the floor; a 24-minute one gets time for its work.
+        self.assertEqual(media.scaled_budget(300, 180, 4, 8), 300)
+        self.assertEqual(media.scaled_budget(300, 180, 39, 8), 900)      # 5 rounds of 8 pools
+        self.assertEqual(media.scaled_budget(420, 40, 300, 8), 1520)     # 38 rounds of 8 scenes
+
     def test_lines_a_pool_cannot_fill_fall_back_to_per_line_search(self):
         jobs = [{"index": i, "query": f"q{i}", "seconds": 3.0, "subject": "Ann Dunham"}
                 for i in range(3)]

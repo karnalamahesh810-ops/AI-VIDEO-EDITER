@@ -28,6 +28,7 @@ from typing import List, Optional, Dict, Any
 import base64
 import datetime
 import json
+import math
 import os
 import re
 import subprocess
@@ -2262,18 +2263,26 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 return source_sequence(
                     seq, by_index, work_dir, live_used, lock, assign=assign,
                     require_cc=kwargs.get("require_cc"),
-                    allow_youtube=kwargs.get("allow_youtube"), tag=str(n))
+                    allow_youtube=kwargs.get("allow_youtube"), tag=str(n), stop=stop)
             except Exception as e:  # noqa: BLE001 - its lines fall back to per-line search
                 print(f"[media] sequence {n + 1} failed: {e}", flush=True)
                 return {}
 
         # Same straggler rule as pass 1: a pool still running at the budget
         # is abandoned and its lines fall through to the one-by-one search.
+        # The budget grows with the number of pools, and an abandoned pool is
+        # told to stop so it does not keep downloading under the next pass.
+        # Set at the budget: pools still running stop downloading and return
+        # nothing, so they neither compete with the one-by-one search for the
+        # network nor claim clips it could use.
+        stop = threading.Event()
+        seq_budget = scaled_budget(config.SEQUENCE_BUDGET_SECONDS,
+                                   config.SEQUENCE_SECONDS_PER_POOL, len(sequences), workers)
         seq_pool = ThreadPoolExecutor(max_workers=max(1, workers))
         futures = [seq_pool.submit(contextvars.copy_context().run, run_sequence, n, seq)
                    for n, seq in enumerate(sequences)]
         try:
-            for fut in as_completed(futures, timeout=config.SEQUENCE_BUDGET_SECONDS):
+            for fut in as_completed(futures, timeout=seq_budget):
                 for idx, asset in (fut.result() or {}).items():
                     if 0 <= idx < len(results) and results[idx] is None:
                         results[idx] = asset
@@ -2285,6 +2294,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             print(f"[media] {sum(1 for f in futures if not f.done())} sequence pool(s) over "
                   f"budget; their lines go to the one-by-one search", flush=True)
         finally:
+            stop.set()
             seq_pool.shutdown(wait=False, cancel_futures=True)
         filled = sum(1 for r in results if r is not None)
         print(f"[media] sequence pools filled {filled}/{len(jobs)} scene(s) from "
@@ -2350,7 +2360,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     pool = ThreadPoolExecutor(max_workers=max(1, workers))
     futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
     started = time.time()
-    deadline = started + config.PASS1_BUDGET_SECONDS
+    deadline = started + scaled_budget(config.PASS1_BUDGET_SECONDS,
+                                       config.PASS1_SECONDS_PER_SCENE, len(pass1), workers)
     pending = set(futures)
     try:
         while pending:
@@ -2754,7 +2765,7 @@ def split_window(path: str, key: str, lengths: List[float], out_dir: str) -> Lis
 
 def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
                   context: str, used: set, out_dir: str, require_cc: bool,
-                  tag: str) -> List[dict]:
+                  tag: str, stop: Optional[threading.Event] = None) -> List[dict]:
     """Shots for a sequence from one footage search: windows cut into several shots."""
     per = max(1, min(SEQ_SHOTS_PER_WINDOW, need))
     window = sum(lengths[:per]) + 1.0
@@ -2773,7 +2784,7 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
     shots: List[dict] = []
     videos = 0
     for cand, start, _moment in _plan_grabs(eligible, window, 30.0, intent, context):
-        if len(shots) >= need or videos >= SEQ_MAX_VIDEOS:
+        if len(shots) >= need or videos >= SEQ_MAX_VIDEOS or (stop is not None and stop.is_set()):
             break
         path = _yt_fetch_retry(cand["id"], out_dir, start, window, cand["title"])
         if not path:
@@ -2847,10 +2858,17 @@ def greedy_assign(beats: List[dict], shots: List[dict],
     return chosen
 
 
+def scaled_budget(floor: float, per_item: float, items: int, workers: int) -> float:
+    """A pass budget: `floor`, or per_item seconds for each round of `workers` items."""
+    rounds = math.ceil(max(0, items) / max(1, workers))
+    return max(floor, per_item * rounds)
+
+
 def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
                     used: set, claim: threading.Lock, assign=None,
                     require_cc: bool = None, allow_youtube: bool = None,
-                    tag: str = "0") -> Dict[int, MediaAsset]:
+                    tag: str = "0",
+                    stop: Optional[threading.Event] = None) -> Dict[int, MediaAsset]:
     """
     Gather one pool of shots for a sequence and lay its lines out across it.
 
@@ -2899,7 +2917,7 @@ def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
             share = [need_foot] + [max(1, (need_foot + 1) // 2)] * (len(first) - 1)
             foot_futs = [ex.submit(contextvars.copy_context().run, _footage_pool, q, share[n],
                                    lengths, intent, context, used, work_dir, require_cc,
-                                   f"{tag}_p{n}")
+                                   f"{tag}_p{n}", stop)
                          for n, q in enumerate(first)]
             for fut in foot_futs:
                 have = sum(1 for x in pool if x["kind"] == "footage")
@@ -2910,17 +2928,17 @@ def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
                 pool += got[:max(0, need_foot - have)]
             for q in rest:
                 have = sum(1 for x in pool if x["kind"] == "footage")
-                if have >= need_foot:
+                if have >= need_foot or (stop is not None and stop.is_set()):
                     break
                 pool += _footage_pool(q, need_foot - have, lengths, intent, context,
-                                      used, work_dir, require_cc, f"{tag}_{len(pool)}")
+                                      used, work_dir, require_cc, f"{tag}_{len(pool)}", stop)
             if img_fut is not None:
                 pool += img_fut.result() or []
     finally:
         _EVENT_WINDOW.reset(window_token)
         _SUBJECT_TYPE.reset(token)
-    if not pool:
-        return {}
+    if not pool or (stop is not None and stop.is_set()):
+        return {}      # abandoned at the budget: its lines are already being searched one by one
 
     for n, p in enumerate(pool):
         p["id"] = f"s{n}"

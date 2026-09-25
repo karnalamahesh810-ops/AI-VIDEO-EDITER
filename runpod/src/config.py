@@ -272,6 +272,13 @@ NEWS_CHANNELS = [c.strip() for c in os.getenv(
 ).split(",") if c.strip()]
 STRAGGLER_GRACE_SECONDS = float(os.getenv("STRAGGLER_GRACE_SECONDS", "75"))
 SEQUENCE_BUDGET_SECONDS = float(os.getenv("SEQUENCE_BUDGET_SECONDS", "300"))
+# The budgets above are floors, sized for a short narration. A long one gets
+# time in proportion to its work: seconds per sequence pool / per scene, for
+# each round of `workers` running at once. With fixed budgets a 39-sequence
+# news video finished 14 pools, left 271 scenes to the recheck, and the
+# abandoned pools kept downloading underneath it.
+SEQUENCE_SECONDS_PER_POOL = float(os.getenv("SEQUENCE_SECONDS_PER_POOL", "180"))
+PASS1_SECONDS_PER_SCENE = float(os.getenv("PASS1_SECONDS_PER_SCENE", "40"))
 
 RENDER_CONCURRENCY = int(os.getenv("RENDER_CONCURRENCY", "4"))
 # See render.render: the defaults size these from the host, not the container.
