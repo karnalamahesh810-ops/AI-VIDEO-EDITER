@@ -95,7 +95,7 @@ class BriefCast(unittest.TestCase):
         out = director._validate_brief(raw, fallback, 10)
         self.assertIn("Barack Obama Sr.", out["people"])
         self.assertEqual(out["cast"][0]["aliases"], ["his father", "the man"])
-        self.assertEqual(out["sections"], [{"from": 0, "to": 9,
+        self.assertEqual(out["sections"], [{"from": 0, "to": 9, "when": "", "where": "",
                                             "footage": ["Honolulu 1960s archival footage"]}])
 
 
@@ -165,3 +165,23 @@ class EntityQueries(unittest.TestCase):
              "entity": "natural-feature"}
         director.shape_query(q)
         self.assertEqual(q["query"], "Mount St Helens archival footage")
+
+
+class StoryTimeline(unittest.TestCase):
+    def test_history_shots_get_their_sections_year(self):
+        story = {"kind": "biography", "sections": [
+            {"from": 0, "to": 1, "when": "1962", "where": "Honolulu", "footage": ["x"]},
+            {"from": 2, "to": 2, "when": "1964", "where": "Maui", "footage": ["y"]}]}
+        shots = [{"query": "Barack Obama toddler family photograph", "intent": "toddler photo"},
+                 {"query": "Obama Sr. 1961 portrait", "intent": "portrait 1961"},
+                 {"query": "family court clerk typing docket", "intent": "clerk typing"}]
+        director.date_shots(shots, story)
+        self.assertTrue(shots[0]["query"].endswith("1962"))
+        self.assertEqual(shots[1]["query"], "Obama Sr. 1961 portrait")   # had a year
+        self.assertTrue(shots[2]["query"].endswith("1964"))
+        self.assertIn("Maui", shots[2]["intent"])
+
+    def test_news_is_left_to_the_event_anchor(self):
+        shots = [{"query": "river flooding", "intent": "flood"}]
+        self.assertEqual(director.date_shots(shots, {"kind": "news", "sections": [
+            {"from": 0, "to": 0, "when": "2026", "where": "Ohio", "footage": []}]}), 0)

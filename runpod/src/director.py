@@ -24,6 +24,7 @@ import datetime
 import json
 import math
 import re
+import time
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 import requests
@@ -622,7 +623,7 @@ _BRIEF_PROMPT = (
     "Return JSON: {\"kind\":str,\"summary\":str,\"event\":str,\"year\":int|null,"
     "\"recent\":bool,\"places\":[str],\"people\":[str],\"hookBeats\":[int],"
     "\"cast\":[{\"name\":str,\"aliases\":[str]}],"
-    "\"sections\":[{\"from\":int,\"to\":int,\"footage\":[str]}]}.\n"
+    "\"sections\":[{\"from\":int,\"to\":int,\"when\":str,\"where\":str,\"footage\":[str]}]}.\n"
     "- kind: one of news, weather, disaster, history, biography, science, nature, "
     "explainer, other.\n"
     "- summary: two sentences: what the video is about and how it unfolds.\n"
@@ -643,7 +644,12 @@ _BRIEF_PROMPT = (
     "his ten-year-old son is about Barack Obama Sr. and Barack Obama). aliases = "
     "how the narration refers to them (\"his father\", \"the boy\"). Unknown "
     "identity: name \"\" - never guess. Put these names in people too.\n"
-    "- sections: split the beats (by index, inclusive) into 3-8 story sections; "
+    "- sections: split the beats (by index, inclusive) into story sections, one per "
+    "time and place the story moves through (a biography jumps 1971 -> 1962 -> 1964; "
+    "split at every jump, 3-12 sections). when = the year or range that section is "
+    "ABOUT, worked out from the whole story even when its lines never say it (\"He "
+    "was one year old when his father left\" in a story of a boy born 1961 = 1962); "
+    "where = its place (\"Honolulu, Hawaii\"). "
     "footage = 3-5 DIFFERENT YouTube searches (4-7 words) for real moving footage "
     "of that section's actual place, event and era - never generic stock. News: "
     "place + event + month/year (\"Ohio River flooding Cincinnati April 2026\"). "
@@ -756,7 +762,9 @@ def _validate_brief(raw, fallback: dict, n_beats: int,
         footage = [_clean(q, 120) for q in (sec.get("footage") or [])[:6] if isinstance(q, str)]
         footage = [q for q in footage if q]
         if lo <= hi and footage:
-            sections.append({"from": lo, "to": hi, "footage": footage})
+            sections.append({"from": lo, "to": hi, "footage": footage,
+                             "when": _clean(sec.get("when"), 30),
+                             "where": _clean(sec.get("where"), 80)})
     out["sections"] = sections
     if out["kind"] not in EVENT_KINDS:
         out["recent"] = False
@@ -805,8 +813,16 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
     One JSON completion from the director models, then the backup provider, or
     None. `errors`, when given, collects "model: reason" for each failed try.
     """
-    for base, key, model, main in _routes():
+    # Each model gets a second try on a transient failure (Kie answers
+    # "internal error, please try again later" to Gemini Flash on long
+    # requests); a flaky first call used to drop the whole batch to rule
+    # shots, i.e. searches built from the subtitle words.
+    attempts = [(b, k, m, main, n) for (b, k, m, main) in _routes() for n in (1, 2)]
+    transient: set = set()
+    for base, key, model, main, attempt in attempts:
         if main and vision.out_of_credits():
+            continue
+        if attempt == 2 and model not in transient:
             continue
         try:
             r = requests.post(
@@ -823,14 +839,19 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
             if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
                 if main and vision.is_credit_error(body["code"], body.get("msg")):
                     vision.note_out_of_credits()
+                if attempt == 1 and body["code"] >= 500:
+                    transient.add(model)
+                    time.sleep(3)
                 raise ValueError(f"{model}: code {body['code']}")
             data = _json_reply(body["choices"][0]["message"]["content"])
             if isinstance(data, dict):
                 CHAT_CALLS["n"] += 1
                 return data
         except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
+            if isinstance(e, requests.RequestException):
+                transient.add(model)          # timeout / connection: worth one more go
             if errors is not None:
-                errors.append(f"{model}: {type(e).__name__}")
+                errors.append(f"{model}#{attempt}: {type(e).__name__}")
             continue
     return None
 
@@ -1075,8 +1096,29 @@ _SYSTEM_PROMPT = (
     "(a city, state, county - aerial and street footage), institution (agency, "
     "university, company), event, object, document, concept (an idea or feeling "
     "- era-accurate footage of the action).\n"
-    "- intent: one sentence saying literally what the camera should SHOW, with the "
-    "era for historical lines (\"1971 Honolulu airport terminal, archival colour photo\").\n"
+    "- intent: the exact shot, written the way VidRush's director writes it: NAMED "
+    "person or thing + YEAR + PLACE + concrete visual + MEDIUM. Take the year and "
+    "place from the beat's story section (story.sections when/where), never only "
+    "from the line's own words. MEDIUM is one of: archival photograph, archival "
+    "footage, news footage, studio portrait, document photograph, exterior "
+    "photograph, aerial footage, reconstruction footage (an era-accurate "
+    "re-enactment of an unfilmed private moment). Real examples from their "
+    "Obama-family documentary:\n"
+    "    \"He was one year old when his father left the state\" -> \"Barack Obama 1962 "
+    "toddler Hawaii family photograph\"\n"
+    "    \"American officials write down...\" -> \"1960s INS records office clerk "
+    "archival footage\"\n"
+    "    \"When the divorce was filed in January 1964\" -> \"January 1964 Hawaii family "
+    "court clerk typing docket archival footage\"\n"
+    "    \"A tall man in a dark suit and heavy glasses\" -> \"Barack Obama Sr. 1960s "
+    "black-and-white studio portrait\"\n"
+    "    \"the only month those two people ever spent under one roof\" -> \"1971 "
+    "Honolulu child bedroom basketball reconstruction footage\"\n"
+    "    \"Her legal name was Stanley Ann Dunham\" -> \"Stanley Ann Dunham 1942 Wichita "
+    "Kansas birth record\"\n"
+    "  A person line shows THAT person (their real photo) or their documented world "
+    "at that year - never a stranger. An abstract line shows the concrete object or "
+    "place of the story at that moment (a file, a letter, a courthouse).\n"
     "- query: 3-7 search words containing the subject plus the visual detail "
     "(\"Lake Mead boat ramp dry\"). Prefer footage words (aerial, drone, archival, "
     "footage, photo). No URLs, no code.\n"
@@ -1212,7 +1254,8 @@ def shape_query(shot: dict) -> None:
     if entity == "private-person" and shot.get("visualType") == "footage":
         shot["subjectType"] = shot.get("subjectType") or "person"
 
-_BATCH = 32
+# 16, not 32: long requests are where Flash fails (see _chat_json).
+_BATCH = 16
 
 
 def _section_footage(story: dict, index: int) -> List[str]:
@@ -1233,6 +1276,35 @@ def _looks_named(subject: str) -> bool:
     words = [w for w in re.findall(r"[A-Za-z][\w.'’-]*", subject or "")
              if w.lower() not in {"and", "of", "the", "de", "van", "von", "jr", "sr"}]
     return bool(words) and sum(1 for w in words if w[0].isupper()) >= max(1, len(words) - 1)
+
+
+def date_shots(shots: List[dict], story: dict) -> int:
+    """
+    Give every history/biography shot its section's year when it has none.
+
+    VidRush's intents all carry the moment's year ("Barack Obama 1962 toddler
+    Hawaii family photograph") because the year is what makes a search return
+    that era and not today. The director is asked for it; this makes sure.
+    """
+    if story.get("kind") not in ("history", "biography"):
+        return 0
+    changed = 0
+    for sec in story.get("sections") or []:
+        when = (sec.get("when") or "").strip()
+        if not when:
+            continue
+        for i in range(sec["from"], min(sec["to"], len(shots) - 1) + 1):
+            shot = shots[i]
+            if shot.get("anchor") is False:
+                continue
+            q = shot.get("query") or ""
+            if not _YEAR.search(q) and not re.search(r"\b(1[89]|20)\d0s\b", q):
+                shot["query"] = f"{q} {when}"[:240]
+                changed += 1
+            intent = shot.get("intent") or ""
+            if intent and not _YEAR.search(intent):
+                shot["intent"] = f"{intent} ({when}, {sec.get('where') or ''})".replace(", )", ")")
+    return changed
 
 
 def _balance_visuals(shots: List[dict], story: dict) -> int:
@@ -1316,6 +1388,9 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
         }
         tried: List[str] = []
         data = _chat_json(_SYSTEM_PROMPT, payload, timeout=120, errors=tried)
+        if data is None and not vision.out_of_credits():
+            time.sleep(10)
+            data = _chat_json(_SYSTEM_PROMPT, payload, timeout=150, errors=tried)
         if data is None:
             warnings.append(
                 f"AI director unavailable for beats {offset + 1}-{offset + len(batch)} "
@@ -1608,6 +1683,7 @@ def plan(segments: List[Segment], title: str = "", report=None,
                                          brief=brief)
         warnings.extend(ai_warnings)
         changed = _balance_visuals(shots, brief)
+        date_shots(shots, brief)
         if changed:
             LAST_STORY["stillsToFootage"] = changed
     else:

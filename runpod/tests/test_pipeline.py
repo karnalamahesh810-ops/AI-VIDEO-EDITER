@@ -423,7 +423,8 @@ class DirectorFallback(unittest.TestCase):
             enriched, warnings = director._ai_pass(self._segments(), "Lake Mead",
                                                     [director._rule_shot(s, i, "Lake Mead")
                                                      for i, s in enumerate(self._segments())])
-        self.assertEqual(calls, ["gpt-5-2", "gemini-3-pro"])
+        # A connection error is transient: one retry, then the next model.
+        self.assertEqual(calls, ["gpt-5-2", "gpt-5-2", "gemini-3-pro"])
         self.assertEqual(enriched, 1)
         self.assertEqual(warnings, [])
 
