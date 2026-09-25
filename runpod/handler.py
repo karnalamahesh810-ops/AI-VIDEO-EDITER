@@ -122,6 +122,35 @@ def _thumbnail(path: str, work: str, scene_id: str) -> str:
     return out if os.path.isfile(out) else ""
 
 
+_VIDEO_EXTS = (".mp4", ".webm", ".mov", ".m4v", ".mkv")
+
+
+def _preview_proxy(path: str, work: str, scene_id: str) -> str:
+    """
+    A light copy of a video clip for the editor's live preview, or "".
+
+    The editor's player streamed every scene's full source clip (up to 1080p,
+    whatever bitrate the upload had) the moment the scene started, so each cut
+    waited on a fresh multi-megabyte download and the preview buffered. This
+    is 640px wide, silent (the narration is its own track), with the index at
+    the front (+faststart) so it starts on the first bytes, and a keyframe
+    every half second so scrubbing lands instantly. The render always uses the
+    full clip.
+    """
+    if os.path.splitext(path)[1].lower() not in _VIDEO_EXTS:
+        return ""
+    out = os.path.join(work, f"preview_{scene_id}.mp4")
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, "-an",
+                        "-vf", "scale='min(640,iw)':-2", "-c:v", "libx264",
+                        "-preset", "veryfast", "-crf", "30", "-g", "15",
+                        "-pix_fmt", "yuv420p", "-movflags", "+faststart", out],
+                       capture_output=True, timeout=120)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+    return out if os.path.isfile(out) and os.path.getsize(out) > 0 else ""
+
+
 # Media links in a saved timeline. The editor can sit on a project for weeks;
 # the render step re-signs from media.storage regardless.
 _MEDIA_LINK_TTL = 60 * 60 * 24 * 30
@@ -192,6 +221,14 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                 fields["thumbStorage"] = {"bucket": bucket, "path": tobj}
             except Exception as e:  # noqa: BLE001 — a missing thumb is cosmetic
                 print(f"[worker] could not save thumbnail {tobj}: {e}", flush=True)
+        preview = _preview_proxy(path, work, scene["id"])
+        if preview:
+            pobj = f"projects/{project_id}/preview/{scene['id']}.mp4"
+            try:
+                fields["previewUrl"] = put(preview, pobj)
+                fields["previewStorage"] = {"bucket": bucket, "path": pobj}
+            except Exception as e:  # noqa: BLE001 — the editor falls back to the full clip
+                print(f"[worker] could not save preview {pobj}: {e}", flush=True)
         media.update(fields)
         published[path] = (url, fields)
     doc["meta"]["publishedMedia"] = len(published)

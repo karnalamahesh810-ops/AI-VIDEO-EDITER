@@ -692,6 +692,33 @@ class PipelineProgress(unittest.TestCase):
         self.assertEqual(media["thumbnail"], f"https://s/projects/p1/thumbs/{sid}.jpg")
         self.assertEqual(media["thumbStorage"]["path"], f"projects/p1/thumbs/{sid}.jpg")
 
+    def test_published_video_scenes_get_a_light_preview_copy(self):
+        import handler
+        import tempfile
+        doc = build_doc(n=1, seconds=3.0)
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fh:
+            fh.write(b"x")
+        doc["scenes"][0]["media"]["url"] = fh.name
+        try:
+            with mock.patch.object(config, "SUPABASE_SERVICE_KEY", ""), \
+                    mock.patch.object(config, "STORAGE_BROKER_URL", "https://x/worker-storage"), \
+                    mock.patch.object(handler, "_thumbnail", return_value=""), \
+                    mock.patch.object(handler, "_preview_proxy", return_value=fh.name), \
+                    mock.patch.object(storage, "broker_upload",
+                                      side_effect=lambda l, b, obj, *a, **k: f"https://s/{obj}"):
+                handler.publish_media(doc, "p1", "video-media", handler.Reporter(""), job_id="j")
+        finally:
+            os.unlink(fh.name)
+        media = doc["scenes"][0]["media"]
+        sid = doc["scenes"][0]["id"]
+        self.assertEqual(media["previewUrl"], f"https://s/projects/p1/preview/{sid}.mp4")
+        self.assertEqual(media["previewStorage"]["path"], f"projects/p1/preview/{sid}.mp4")
+        self.assertTrue(media["url"].endswith(f"/media/{sid}.mp4"))  # the render keeps the full clip
+
+    def test_a_still_gets_no_preview_copy(self):
+        import handler
+        self.assertEqual(handler._preview_proxy("/w/photo.jpg", "/w", "s1"), "")
+
     def test_build_renders_from_local_files_then_saves_the_clips(self):
         import handler
         order = []
