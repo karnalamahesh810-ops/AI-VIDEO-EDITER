@@ -135,7 +135,19 @@ def _machine() -> dict:
         info["memoryGb"] = round(int(mem) / 2 ** 30, 1)
     for line in read("/proc/meminfo").splitlines()[:1]:
         info["hostMemoryGb"] = round(int(line.split()[1]) / 2 ** 20, 1)
-    info["pidsMax"] = read("/sys/fs/cgroup/pids.max") or None
+    info["pidsMax"] = (read("/sys/fs/cgroup/pids.max")
+                       or read("/sys/fs/cgroup/pids/pids.max") or None)
+    info["pidsCurrent"] = (read("/sys/fs/cgroup/pids.current")
+                           or read("/sys/fs/cgroup/pids/pids.current") or None)
+    mem1 = read("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+    if mem1.isdigit() and int(mem1) < 2 ** 50:
+        info["memoryGb"] = round(int(mem1) / 2 ** 30, 1)
+    try:
+        import resource
+        info["nprocLimit"] = resource.getrlimit(resource.RLIMIT_NPROC)[0]
+    except Exception:  # noqa: BLE001
+        pass
+    info["threadsMax"] = read("/proc/sys/kernel/threads-max") or None
     info["gpu"] = bool(os.path.exists("/dev/nvidia0"))
     return info
 
