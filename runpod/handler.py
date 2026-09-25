@@ -79,9 +79,32 @@ class Reporter:
         self.job = job
         self._last = None
         self._started = time.time()
+        # Seconds spent per stage, so a slow job says where its time went.
+        self._stage = ("", self._started)
+        self._timings: dict = {}
+
+    def _clock(self, stage: str) -> None:
+        name, since = self._stage
+        if stage == name:
+            return
+        now = time.time()
+        if name:
+            self._timings[name] = round(self._timings.get(name, 0.0) + now - since, 1)
+        self._stage = (stage, now)
+
+    def timings(self) -> dict:
+        """{stage: seconds} so far, the current stage included, plus the total."""
+        name, since = self._stage
+        out = dict(self._timings)
+        if name:
+            out[name] = round(out.get(name, 0.0) + time.time() - since, 1)
+        out["total"] = round(time.time() - self._started, 1)
+        return out
 
     def __call__(self, step: str, progress: int = None, *, done: int = None,
                  total: int = None, **fields):
+        prefix = next((p for p, _ in _PHASE_BY_PREFIX if step.startswith(p)), step[:40])
+        self._clock("Sourcing" if prefix == "Sourced" else prefix)
         phase = next((p for prefix, p in _PHASE_BY_PREFIX if step.startswith(prefix)), "")
         update = {"status": step, "progress": progress, "phase": phase,
                   "phases": list(PHASES),
@@ -752,6 +775,8 @@ def handler(job):
                 publish_media(doc, project_id,
                               inp.get("media_bucket") or config.MEDIA_BUCKET, report,
                               job_id=job_id)
+            doc.setdefault("meta", {})["timings"] = report.timings()
+            print(f"[worker] timings {doc['meta']['timings']}", flush=True)
             if project_id:
                 storage.patch_project(project_id, {
                     "scene_data": doc, "status": "editing",
@@ -805,8 +830,10 @@ def handler(job):
             if project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))
+            doc.setdefault("meta", {})["timings"] = report.timings()
+            print(f"[worker] timings {doc['meta']['timings']}", flush=True)
             if project_id:
-                storage.patch_project(project_id, _done_fields(out))
+                storage.patch_project(project_id, {**_done_fields(out), "scene_data": doc})
             return {"ok": True, "action": "build", "timeline": doc, **out,
                     "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}

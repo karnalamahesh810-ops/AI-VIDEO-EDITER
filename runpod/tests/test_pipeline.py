@@ -3367,5 +3367,28 @@ class NoAITitleRules(unittest.TestCase):
         self.assertEqual(media._score_candidate(title, 300, 1.78, 5), before)
 
 
+class JobTimings(unittest.TestCase):
+    """Every job records where its time went, stage by stage."""
+
+    def test_reporter_adds_up_time_per_stage(self):
+        import handler
+        clock = [1000.0]
+        with mock.patch.object(handler.time, "time", side_effect=lambda: clock[0]):
+            r = handler.Reporter("")
+            r("Aligning narration", 8)
+            clock[0] += 5
+            r("Sourcing media for 3 scenes", 22)
+            clock[0] += 10
+            r("Sourced 1/3 scenes", 30)              # same stage as "Sourcing"
+            clock[0] += 10
+            r("Rechecking 2 missing scenes against the story", 66)
+            clock[0] += 3
+            t = r.timings()
+        self.assertEqual(t["Aligning narration"], 5)
+        self.assertEqual(t["Sourcing"], 20)
+        self.assertEqual(t["Rechecking"], 3)
+        self.assertEqual(t["total"], 28)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
