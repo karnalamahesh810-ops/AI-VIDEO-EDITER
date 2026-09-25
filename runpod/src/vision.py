@@ -49,13 +49,25 @@ _SYSTEM = (
     "You check whether a video clip or photo is usable B-roll for one line of a "
     "documentary narration. You are shown frames from the candidate. Describe "
     "literally what is visible, then score how well it fits the INTENT.\n"
-    "Scoring: 0.9-1.0 shows the intended subject or an unmistakable stand-in; "
-    "0.7-0.89 clearly fits the topic, era and mood even if not the exact subject; "
-    "0.4-0.69 loosely related; below 0.4 wrong subject.\n"
+    "First check every NAMED thing in the INTENT - a person, a place, a year or era. "
+    "These are hard limits, not preferences:\n"
+    "- A named PERSON: above 0.7 only if the frames plausibly show THAT person (a "
+    "recognisable public figure, or a period photo consistent with who they are). "
+    "A different person, an anonymous stand-in, a stock model, a wedding or family "
+    "photo of strangers: at most 0.3.\n"
+    "- A named PLACE: footage recognisably from somewhere else (another city, country, "
+    "landscape or architecture - Berlin for a line about Honolulu): at most 0.3.\n"
+    "- A YEAR or ERA: footage clearly from another era (1940s film for a 1970s line, "
+    "modern HD streets, cars or phones for a line about the past): at most 0.4.\n"
+    "Then: 0.9-1.0 clearly shows the intended subject; 0.7-0.89 consistent with every "
+    "named person, place and era and shows what the line is about; 0.4-0.69 loosely "
+    "related; below 0.4 wrong. Never reward mood alone.\n"
     "Score 0 and set has_text_or_watermark true if the frames show a screen "
     "recording, software UI, a video game, a news desk or presenter talking to "
-    "camera, a thumbnail/title card, burned-in subtitles, a channel logo, or a "
-    "stock-photo watermark. Small incidental real-world text (a street sign) is fine.\n"
+    "camera, a thumbnail/title card, burned-in subtitles, a channel logo, a "
+    "stock-photo watermark, a product listing or poster for sale, a website "
+    "screenshot, or a meme or collage with text. Small incidental real-world text "
+    "(a street sign) is fine.\n"
     "Separately rate quality 0-1 as documentary footage, whatever the subject: sharp, "
     "stable, well lit, well composed, filling a 16:9 frame, with motion or visual "
     "interest is high; blurry, blocky compression, shaky, very dark, a vertical phone "
@@ -98,8 +110,34 @@ def out_of_credits() -> bool:
     return _OUT_OF_CREDITS["hit"]
 
 
+OUT_OF_CREDITS_MESSAGE = (
+    "The AI account (Kie) is out of credits, so shots could not be planned or "
+    "checked and the video would be random clips. Top up the Kie account whose "
+    "key is set on the RunPod endpoint (DIRECTOR_API_KEY), then run it again.")
+
+
+class OutOfCredits(RuntimeError):
+    """The AI account ran dry and REQUIRE_AI is on: stop the job, say why."""
+
+
+def require_credits() -> None:
+    if config.REQUIRE_AI and ai_exhausted():
+        raise OutOfCredits(OUT_OF_CREDITS_MESSAGE)
+
+
+def fallback_configured() -> bool:
+    return bool(config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY
+                and config.AI_FALLBACK_VISION_MODEL)
+
+
+def ai_exhausted() -> bool:
+    """The main AI account is out of credits and there is no backup provider."""
+    return _OUT_OF_CREDITS["hit"] and not fallback_configured()
+
+
 def enabled() -> bool:
-    return bool(config.VISION_ENABLED and config.VISION_API_KEY) and not _OUT_OF_CREDITS["hit"]
+    main = bool(config.VISION_API_KEY) and not _OUT_OF_CREDITS["hit"]
+    return bool(config.VISION_ENABLED and (main or fallback_configured()))
 
 
 def calls_made() -> int:
@@ -132,12 +170,13 @@ def stats() -> dict:
                 "recentErrors": list(_ERRORS)}
 
 
-def _ask_once(model: str, messages: list, max_tokens: int) -> Tuple[Optional[str], bool]:
+def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
+              key: str = "", main: bool = True) -> Tuple[Optional[str], bool]:
     """(text, retryable): one call to one model; retryable when the failure was transient."""
     try:
         r = requests.post(
-            _endpoint(model),
-            headers={"Authorization": f"Bearer {config.VISION_API_KEY}",
+            url or _endpoint(model),
+            headers={"Authorization": f"Bearer {key or config.VISION_API_KEY}",
                      "Content-Type": "application/json"},
             json={"model": model, "messages": messages,
                   "max_tokens": max_tokens, "stream": False,
@@ -157,7 +196,8 @@ def _ask_once(model: str, messages: list, max_tokens: int) -> Tuple[Optional[str
     if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
         _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
         if is_credit_error(body["code"], body.get("msg")):
-            note_out_of_credits()
+            if main:
+                note_out_of_credits()
             return None, False
         return None, body["code"] >= 500 or body["code"] == 429
     try:
@@ -184,13 +224,19 @@ def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
     real job - and moving straight on meant a burst on the fallback too left
     clips on the timeline that no model had ever looked at.
     """
-    for model in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS):
-        if not model or _OUT_OF_CREDITS["hit"]:
+    routes = [(m, "", "", True) for m in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS)
+              if m and config.VISION_API_KEY]
+    if fallback_configured():
+        routes.append((config.AI_FALLBACK_VISION_MODEL,
+                       f"{config.AI_FALLBACK_API_BASE}/chat/completions",
+                       config.AI_FALLBACK_API_KEY, False))
+    for model, url, key, main in routes:
+        if main and _OUT_OF_CREDITS["hit"]:
             continue
         for attempt in range(1 + config.VISION_RETRIES):
             if attempt:
                 time.sleep(config.VISION_RETRY_WAIT)
-            text, retryable = _ask_once(model, messages, max_tokens)
+            text, retryable = _ask_once(model, messages, max_tokens, url, key, main)
             if text:
                 return text, model
             if not retryable:
@@ -392,8 +438,10 @@ _PICK_SYSTEM = (
     "top-left of each tile). Choose the single tile that best SHOWS the intent. "
     "Never choose a tile showing a presenter talking to camera, a title card, "
     "on-screen text, a graphic, a map or a logo unless the intent asks for it.\n"
-    "Scoring: 0.9-1.0 the tile clearly shows the intended subject; 0.7-0.89 fits "
-    "the topic, era and mood; below 0.7 nothing in the grid really fits.\n"
+    "Scoring: 0.9-1.0 the tile clearly shows the intended subject; 0.7-0.89 is "
+    "consistent with every person, place and era the intent names; below 0.7 nothing "
+    "in the grid really fits. A tile from a different named place, person or era "
+    "than the intent's is never a match, however well it fits the mood.\n"
     "The tiles are small, low-resolution thumbnails. Only score above 0.7 when you "
     "can actually make out the subject. If a tile is too blurry to identify, do not "
     "guess from the video's topic - score it low. A wrong pick costs a download.\n"

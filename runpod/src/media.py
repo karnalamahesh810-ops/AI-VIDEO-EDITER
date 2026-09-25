@@ -1758,6 +1758,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     that person speaking passes the vision gate, and no image is ever
     GENERATED - an invented photo of a real person is a fabrication.
     """
+    if config.REQUIRE_AI and vision.ai_exhausted():
+        return None   # the job is stopping; do not spend on searches it will discard
     token = _SUBJECT_TYPE.set(subject_type or "")
     window_token = _EVENT_WINDOW.set(event_window or "")
     try:
@@ -2572,7 +2574,7 @@ def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
     require_cc = config.REQUIRE_CC if require_cc is None else require_cc
     allow_youtube = config.ALLOW_YOUTUBE if allow_youtube is None else allow_youtube
     beats = [jobs[i] for i in seq.get("beats", []) if i in jobs]
-    if not beats:
+    if not beats or (config.REQUIRE_AI and vision.ai_exhausted()):
         return {}
     subject = seq.get("subject") or beats[0].get("subject") or ""
     subject_type = seq.get("subjectType") or beats[0].get("subject_type") or ""

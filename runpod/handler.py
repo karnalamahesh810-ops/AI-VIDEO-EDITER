@@ -354,6 +354,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         allow_maps=bool(inp.get("maps", True)),
         brief=brief,
     )
+    # Out of AI credits already: stop before a single footage search is paid for.
+    vision.require_credits()
 
     # Per-scene overrides from the editor win over the director's choice.
     for key, query in (inp.get("scene_queries") or {}).items():
@@ -418,6 +420,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
         on_pool=on_pool,
     )
+    vision.require_credits()
 
     doc = timeline.build(
         segments, shots, assets,

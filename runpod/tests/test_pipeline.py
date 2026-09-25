@@ -2808,9 +2808,12 @@ class MetaphorsAndMaps(unittest.TestCase):
         shots[2]["overlay"] = {"type": "callout", "text": "x"}   # ends at 9 s
         director.establishing_map(segs, shots, self.BRIEF)
         placed = [i for i, s in enumerate(shots) if (s["overlay"] or {}).get("type") == "map"]
-        self.assertEqual(placed, [6])                            # first line starting 9 s after it
+        # First line starting at least MIN_OVERLAY_GAP_SECONDS after it ends (9 s).
+        first_clear = next(i for i, sg in enumerate(segs)
+                           if i > 2 and sg.start - 9.0 >= director.MIN_OVERLAY_GAP_SECONDS)
+        self.assertEqual(placed, [first_clear])
         director._thin_overlays(segs, shots)
-        self.assertEqual(shots[6]["overlay"]["type"], "map")     # and thinning keeps it
+        self.assertEqual(shots[first_clear]["overlay"]["type"], "map")   # thinning keeps it
 
     """After sourcing, every scene without a shot of its own is rechecked with the story."""
 
@@ -2873,6 +2876,7 @@ class MetaphorsAndMaps(unittest.TestCase):
                   "before": "The river broke through.", "shows": ["aerial flood"],
                   "repeat": True}]
         with mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
+                mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
                 mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
                 mock.patch.object(director, "_chat_json", side_effect=chat):
             ideas = director.rescue_queries(items, story=story)
@@ -2986,6 +2990,113 @@ class ProjectTitles(unittest.TestCase):
             shots, _, _ = director.plan(segs, title="1 (mp3cut.net)", allow_maps=False)
         self.assertNotIn("mp3cut", shots[0]["query"])
         self.assertNotIn("(", shots[0]["query"])
+
+
+class NoAIFallbacks(unittest.TestCase):
+    """The job keeps going without the main AI account, and plans sensibly."""
+
+    OBAMA = ["One photograph gets used every time this story is told.",
+             "Honolulu Airport, the last days of 1971.",
+             "A tall man in a dark suit and heavy glasses, standing straight.",
+             "It was a goodbye. It was the end of the only month those two people lived together.",
+             "He was one year old when his father left, two when Barack Obama Sr. left the country.",
+             "He married an eighteen-year-old in a Maui courthouse anyway, in February 1961."]
+
+    def test_rule_searches_come_from_names_places_and_years(self):
+        segs = [seg(t, i * 4, i * 4 + 4) for i, t in enumerate(self.OBAMA)]
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""), \
+                mock.patch.object(config, "AI_FALLBACK_API_KEY", ""):
+            shots, _, _ = director.plan(segs, title="1 (mp3cut.net)", allow_maps=False)
+        q = [sh["query"] for sh in shots]
+        self.assertEqual(q[1], "Honolulu Airport 1971")
+        self.assertIn("Barack Obama Sr", q[2])            # "A tall man..." is the story's lead
+        self.assertNotIn("It", q[3].split())              # sentence-start words are not names
+        self.assertTrue(q[5].startswith("Maui 1961"))
+        self.assertTrue(all("mp3cut" not in x for x in q))
+        self.assertEqual(shots[1]["subjectType"], "place")  # an airport is not a person
+
+    def test_every_person_is_named_on_screen_the_first_time(self):
+        segs = [seg("x", i, i + 1) for i in range(4)]
+        shots = [{"subject": "Ann Dunham", "subjectType": "person", "overlay": None},
+                 {"subject": "Anne Dunham", "subjectType": "person", "overlay": None},
+                 {"subject": "Lolo Soetoro", "subjectType": "person",
+                  "overlay": {"type": "stat", "value": 1}},
+                 {"subject": "Lolo Soetoro", "subjectType": "person", "overlay": None}]
+        director.name_people(segs, shots)
+        self.assertEqual(shots[0]["overlay"], {"type": "lower-third", "text": "Ann Dunham"})
+        self.assertIsNone(shots[1]["overlay"])            # same person, already named
+        self.assertEqual(shots[2]["overlay"]["type"], "stat")
+        self.assertEqual(shots[3]["overlay"], {"type": "lower-third", "text": "Lolo Soetoro"})
+
+    def test_out_of_credits_keeps_the_job_going_by_default(self):
+        from src import vision
+        vision.reset()
+        vision.note_out_of_credits()
+        try:
+            vision.require_credits()                      # no raise: REQUIRE_AI is off
+            with mock.patch.object(config, "REQUIRE_AI", True), \
+                    mock.patch.object(config, "AI_FALLBACK_API_KEY", ""):
+                with self.assertRaises(vision.OutOfCredits):
+                    vision.require_credits()
+        finally:
+            vision.reset()
+
+    def test_the_backup_provider_takes_over_when_the_main_account_is_dry(self):
+        from src import vision
+        vision.reset()
+        urls = []
+
+        def post(url, **kw):
+            urls.append(url)
+            r = mock.Mock(status_code=200)
+            if "kie.ai" in url:
+                r.json.return_value = {"code": 402, "msg": "Credits insufficient"}
+            else:
+                r.json.return_value = {"choices": [{"message": {"content": '{"ok": 1}'}}]}
+            return r
+
+        try:
+            with mock.patch.object(config, "VISION_API_KEY", "kie"), \
+                    mock.patch.object(config, "VISION_API_BASE", "https://api.kie.ai/v1"), \
+                    mock.patch.object(config, "VISION_FALLBACK_MODELS", ["gemini-3-pro"]), \
+                    mock.patch.object(config, "AI_FALLBACK_API_BASE", "https://gen.example/openai"), \
+                    mock.patch.object(config, "AI_FALLBACK_API_KEY", "g"), \
+                    mock.patch.object(config, "AI_FALLBACK_VISION_MODEL", "gemini-2.5-flash"), \
+                    mock.patch.object(vision.requests, "post", side_effect=post):
+                self.assertEqual(vision._ask([], 100), ('{"ok": 1}', "gemini-2.5-flash"))
+                self.assertTrue(vision.out_of_credits())
+                self.assertTrue(vision.enabled())         # vision stays on through the backup
+                self.assertFalse(vision.ai_exhausted())
+                urls.clear()
+                vision._ask([], 100)
+                self.assertEqual(urls, ["https://gen.example/openai/chat/completions"])
+        finally:
+            vision.reset()
+
+    def test_the_planner_uses_the_backup_provider_too(self):
+        from src import vision
+        vision.reset()
+        vision.note_out_of_credits()
+        r = mock.Mock(status_code=200)
+        r.json.return_value = {"choices": [{"message": {"content": '{"sequences": []}'}}]}
+        try:
+            with mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
+                    mock.patch.object(config, "DIRECTOR_API_KEY", "kie"), \
+                    mock.patch.object(config, "DIRECTOR_MODEL", "gpt-5-2"), \
+                    mock.patch.object(config, "AI_FALLBACK_API_BASE", "https://gen.example/openai"), \
+                    mock.patch.object(config, "AI_FALLBACK_API_KEY", "g"), \
+                    mock.patch.object(director.requests, "post", return_value=r) as post:
+                self.assertEqual(director._chat_json("sys", {}), {"sequences": []})
+            self.assertEqual(post.call_args[0][0], "https://gen.example/openai/chat/completions")
+        finally:
+            vision.reset()
+
+    def test_the_vision_judge_rejects_stand_ins_and_wrong_places(self):
+        from src import vision
+        self.assertNotIn("stand-in;", vision._SYSTEM)
+        self.assertIn("A named PERSON", vision._SYSTEM)
+        self.assertIn("A named PLACE", vision._SYSTEM)
+        self.assertIn("product listing", vision._SYSTEM)
 
 
 class SequenceEditing(unittest.TestCase):

@@ -94,7 +94,7 @@ _NUMERIC = {"stat", "bar-chart", "comparison"}
 # Graphics are punctuation, not wallpaper. The reference renders hold a chart
 # for 10s and then run plain footage for a minute; an overlay on every beat
 # reads as a slideshow. Keep at least this many seconds between overlays.
-MIN_OVERLAY_GAP_SECONDS = 9.0
+MIN_OVERLAY_GAP_SECONDS = 6.0
 
 # Geocoding is rate-limited to ~1 req/s by Nominatim's terms, and a map on
 # every other beat is bad editing anyway.
@@ -328,7 +328,7 @@ def _rule_shot(seg: Segment, index: int, title: str) -> dict:
     # subject for context.
     prompt = f"{title}. {text}".strip(". ")[:600] if title else text[:600]
     shot = {"query": query, "fallbacks": fallbacks, "prompt": prompt,
-            "visualType": "footage", "overlay": None,
+            "visualType": "footage", "overlay": None, "rule": True,
             # What the shot should SHOW, for the vision judge. Without a model
             # the best available description is the line itself.
             "intent": prompt[:300], "subject": title[:120],
@@ -413,6 +413,140 @@ def _city_states(text: str) -> List[str]:
     return out
 
 
+# Capitalised words that start sentences or carry no subject of their own.
+_NOT_A_NAME = {
+    "a", "an", "the", "he", "she", "it", "they", "we", "i", "his", "her", "their",
+    "and", "but", "or", "so", "then", "now", "not", "no", "yes", "one", "this",
+    "that", "these", "those", "there", "here", "when", "while", "within", "hold",
+    "what", "who", "why", "how", "after", "before", "in", "on", "at", "of", "for",
+    "to", "by", "with", "from", "as", "if", "every", "each", "some", "all", "just",
+    "only", "even", "still", "also", "later", "january", "february", "march",
+    "april", "may", "june", "july", "august", "september", "october", "november",
+    "december", "monday", "tuesday", "wednesday", "thursday", "friday",
+    "saturday", "sunday", "mr", "mrs", "ms", "dr",
+}
+_CAP_RUN = re.compile(r"\b[A-Z][\w'’.-]*(?:\s+(?:of|de|del|la|the|and)?\s*[A-Z][\w'’.-]*)*")
+_PRONOUN = re.compile(r"\b(he|she|him|her|his|hers)\b", re.I)
+
+
+def _sentence_start(text: str, at: int) -> bool:
+    before = text[:at].rstrip()
+    return not before or before[-1] in ".!?\"“”:;"
+
+
+def _known_names(text: str) -> set:
+    """Words capitalised somewhere other than a sentence start: real names."""
+    return {m.group(0) for m in re.finditer(r"\b[A-Z][\w'’-]+", text or "")
+            if not _sentence_start(text, m.start())}
+
+
+def _proper_phrases(text: str, known: Optional[set] = None) -> List[str]:
+    """
+    Runs of capitalised words that name something: "Honolulu Airport",
+    "Barack Obama Sr.". A lone word that is only capitalised because it starts
+    a sentence ("Beside him...", "Within a year...") is not a name, unless it
+    appears capitalised mid-sentence somewhere in `known`.
+    """
+    known = _known_names(text) if known is None else known
+    out = []
+    for m in _CAP_RUN.finditer(text or ""):
+        words = [w for w in m.group(0).split() if w.strip(".,'’").lower() not in _NOT_A_NAME]
+        phrase = " ".join(words).strip(" .,'’")
+        if not phrase or len(phrase) <= 2 or phrase in out:
+            continue
+        if len(words) == 1 and _sentence_start(text, m.start()) \
+                and words[0].strip(".,'’") not in known:
+            continue
+        out.append(phrase)
+    return out
+
+
+# Last words that make a capitalised name a place or institution, not a person.
+_PLACE_NOUNS = {
+    "airport", "university", "college", "school", "academy", "institute", "street",
+    "avenue", "road", "river", "lake", "valley", "mountain", "mountains", "county",
+    "state", "states", "city", "town", "island", "islands", "bay", "harbor",
+    "harbour", "beach", "park", "station", "hospital", "court", "courthouse",
+    "church", "cathedral", "temple", "museum", "hall", "house", "bridge", "dam",
+    "canyon", "desert", "ocean", "sea", "gulf", "coast", "republic", "kingdom",
+    "empire", "department", "office", "agency", "service", "company", "corporation",
+    "center", "centre", "building", "tower", "palace", "square", "district",
+}
+
+
+def _named_people(text: str) -> List[str]:
+    """Every two-word-or-longer name in the text that looks like a person."""
+    out = []
+    for p in _proper_phrases(text):
+        words = [w.strip(".,'’").lower() for w in p.split()]
+        if len(words) >= 2 and words[0] not in _NOT_A_PERSON_START \
+                and words[-1] not in _PLACE_NOUNS:
+            out.append(p)
+    return out
+
+
+def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
+                       title: str = "") -> int:
+    """
+    Search queries for rule-planned beats from the names, places and years in
+    the line - never from the file title or stray words.
+
+    The AI planner writes "Honolulu Airport 1971 archival footage"; when it is
+    unavailable, the rules used to take the project title plus four keywords,
+    and a real job searched "1 (mp3cut.net) It goodbye month people". Now a
+    beat searches what it names; a beat that names nothing ("He married an
+    eighteen-year-old...") inherits the last person named, else the story's
+    main subject (a real project title, else its main person or place); a year in the line is kept. Only shots still marked
+    as rule shots are touched. Returns how many were rewritten.
+    """
+    # A real title names the story's subject ("Lake Powell"); file-name debris
+    # was already removed by clean_title, so what is left is worth searching.
+    script = " ".join(seg.text for seg in segments)
+    known = _known_names(script)
+    # The person the story is about: the most-named person in the script.
+    named = Counter(n for seg in segments for n in _proper_phrases(seg.text, known)
+                    if n in _named_people(n))
+    lead = [n for n, _ in named.most_common(1)]
+    main = (([title] if title else []) + (brief.get("people") or []) + lead
+            + (brief.get("places") or []) + [""])[0]
+    carry = main
+    changed = 0
+    for shot, seg in zip(shots, segments):
+        text = seg.text
+        names = _proper_phrases(text, known)
+        people = [n for n in names if n in _named_people(n)]
+        if people:
+            carry = people[0]
+        if not shot.get("rule"):
+            continue
+        years = _YEAR.findall(text)
+        subject = names[0] if names else (carry if _PRONOUN.search(text) or not main else main)
+        words = list(dict.fromkeys(names[:2] + ([subject] if subject and subject not in names else [])))
+        words += years[:1]
+        if len(" ".join(words).split()) < 3:
+            have = " ".join(words).lower()
+            extra = [w for w in keywords_for(seg, max_terms=6).split()
+                     if w.lower() not in have and w.lower() not in _NOT_A_NAME
+                     and not w[0].isupper()][:2]
+            words += extra
+        query = " ".join(words).strip()[:240]
+        if not query:
+            continue
+        shot["query"] = query
+        shot["subject"] = subject or shot.get("subject", "")
+        # Person whenever the line or its subject names one (the no-invented-faces
+        # gate reads this); a named place otherwise. The rule shot's own tag
+        # over-triggers on any Name-Name pair, "Honolulu Airport" included.
+        if people or (subject and subject in named):
+            shot["subjectType"] = "person"
+        elif names:          # the line names its own place; an inherited subject keeps its tag
+            shot["subjectType"] = "place"
+        shot["fallbacks"] = [q for q in dict.fromkeys(
+            [" ".join(names[:1] + years[:1]).strip(), subject, main]) if q and q != query]
+        changed += 1
+    return changed
+
+
 # Opening beats that must grab the viewer, when no model picks them.
 HOOK_SECONDS = 15.0
 MAX_HOOK_BEATS = 6
@@ -480,9 +614,10 @@ def _rule_brief(segments: List[Segment], title: str,
     for place in _city_states(blob):
         counts[place] += 2
     places = [p for p, _ in counts.most_common(5)]
+    people = [n for n, c in Counter(_named_people(blob)).most_common(5) if c >= 2]
 
     return {"kind": kind, "summary": "", "event": (title or "")[:120] if is_event else "",
-            "year": year, "recent": recent, "places": places, "people": [],
+            "year": year, "recent": recent, "places": places, "people": people,
             "hookBeats": _hook_beats(segments)}
 
 
@@ -523,15 +658,31 @@ def _validate_brief(raw, fallback: dict, n_beats: int,
     return out
 
 
-def _chat_json(system: str, payload: dict, timeout: int = 120) -> Optional[dict]:
-    """One JSON completion from the director model or its fallbacks, or None."""
-    for model in [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS:
-        if not model or vision.out_of_credits():
+def _routes() -> List[tuple]:
+    """(base, key, model, is_main) to try in order: the director, then the backup provider."""
+    out = []
+    if config.DIRECTOR_API_BASE and config.DIRECTOR_API_KEY:
+        out += [(config.DIRECTOR_API_BASE, config.DIRECTOR_API_KEY, m, True)
+                for m in [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS if m]
+    if config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY and config.AI_FALLBACK_MODEL:
+        out.append((config.AI_FALLBACK_API_BASE, config.AI_FALLBACK_API_KEY,
+                    config.AI_FALLBACK_MODEL, False))
+    return out
+
+
+def _chat_json(system: str, payload: dict, timeout: int = 120,
+               errors: Optional[List[str]] = None) -> Optional[dict]:
+    """
+    One JSON completion from the director models, then the backup provider, or
+    None. `errors`, when given, collects "model: reason" for each failed try.
+    """
+    for base, key, model, main in _routes():
+        if main and vision.out_of_credits():
             continue
         try:
             r = requests.post(
-                f"{config.DIRECTOR_API_BASE}/chat/completions",
-                headers={"Authorization": f"Bearer {config.DIRECTOR_API_KEY}",
+                f"{base}/chat/completions",
+                headers={"Authorization": f"Bearer {key}",
                          "Content-Type": "application/json"},
                 json={"model": model,
                       "messages": [{"role": "system", "content": system},
@@ -541,13 +692,15 @@ def _chat_json(system: str, payload: dict, timeout: int = 120) -> Optional[dict]
             )
             body = r.json()
             if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-                if vision.is_credit_error(body["code"], body.get("msg")):
+                if main and vision.is_credit_error(body["code"], body.get("msg")):
                     vision.note_out_of_credits()
                 raise ValueError(f"{model}: code {body['code']}")
             data = json.loads(body["choices"][0]["message"]["content"])
             if isinstance(data, dict):
                 return data
-        except (requests.RequestException, ValueError, KeyError, TypeError, IndexError):
+        except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
+            if errors is not None:
+                errors.append(f"{model}: {type(e).__name__}")
             continue
     return None
 
@@ -647,6 +800,38 @@ def anchor_to_story(shots: List[dict], segments: List[Segment], brief: dict) -> 
         if shot["query"] != before:
             changed += 1
     return changed
+
+
+def name_people(segments: List[Segment], shots: List[dict]) -> int:
+    """
+    A lower-third naming each person the first time they are on screen.
+
+    Documentary grammar, and the most-missed graphic in real runs: a 23-line
+    biography of Barack Obama Sr. named nobody. The first line whose subject is
+    a person (name variants count as one) and has no graphic of its own gets
+    one - a later line of theirs if the first is taken; a person the model
+    already introduced with a lower-third is skipped.
+    Returns how many were added.
+    """
+    from .media import same_subject
+    introduced: List[str] = []
+    added = 0
+    for shot in shots:
+        ov = shot.get("overlay") or {}
+        if ov.get("type") == "lower-third" and ov.get("text"):
+            introduced.append(ov["text"])
+    for shot in shots:
+        name = (shot.get("subject") or "").strip()
+        if shot.get("subjectType") != "person" or not name:
+            continue
+        if any(same_subject(name, seen) for seen in introduced):
+            continue
+        if shot.get("overlay"):
+            continue            # this line's graphic is taken; name them on their next line
+        introduced.append(name)
+        shot["overlay"] = {"type": "lower-third", "text": name[:70]}
+        added += 1
+    return added
 
 
 # Person photos allowed back to back before the next one becomes footage.
@@ -768,8 +953,10 @@ _SYSTEM_PROMPT = (
     "\"image\".\n"
     "- overlay: null, or {type,text,subtitle,highlight,body,value,suffix,variant,"
     "items:[{label,value,text}],places:[str]}.\n"
-    "EDITING GRAMMAR (VidRush): about one graphic every 15-20 seconds of narration, "
-    "never on two lines in a row, most lines null.\n"
+    "EDITING GRAMMAR (VidRush): about one graphic every 8-12 seconds of narration, "
+    "never on two lines in a row. Every named person gets a lower-third the first "
+    "time they appear; every jump in time or place gets a date-stamp; numbers get a "
+    "stat; the key line of each passage gets a sentence-highlight.\n"
     "  sentence-highlight: the key sentence of a passage. text = that sentence, "
     "verbatim, under 14 words; highlight = the 1-3 words that carry it.\n"
     "  article-zoom: the narration cites a record, file, report, letter, article or "
@@ -812,37 +999,13 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                        **({"hook": True} if offset + i in hooks else {})}
                       for i, s in enumerate(batch)],
         }
-        data = None
-        tried_errors = []
-        for model in [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS:
-            if not model or vision.out_of_credits():
-                continue
-            try:
-                r = requests.post(
-                    f"{config.DIRECTOR_API_BASE}/chat/completions",
-                    headers={"Authorization": f"Bearer {config.DIRECTOR_API_KEY}",
-                             "Content-Type": "application/json"},
-                    json={"model": model,
-                          "messages": [{"role": "system", "content": _SYSTEM_PROMPT},
-                                       {"role": "user", "content": json.dumps(payload)}],
-                          "response_format": {"type": "json_object"}},
-                    timeout=120,
-                )
-                body = r.json()
-                # Kie wraps a failure in a 200: {"code": 422, "msg": ...}.
-                if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-                    if vision.is_credit_error(body["code"], body.get("msg")):
-                        vision.note_out_of_credits()
-                    raise ValueError(f"{model}: code {body['code']} {body.get('msg', '')}")
-                data = json.loads(body["choices"][0]["message"]["content"])
-                break
-            except (requests.RequestException, ValueError, KeyError, TypeError) as e:
-                tried_errors.append(f"{model}: {type(e).__name__}")
-                continue
+        tried: List[str] = []
+        data = _chat_json(_SYSTEM_PROMPT, payload, timeout=120, errors=tried)
         if data is None:
             warnings.append(
                 f"AI director unavailable for beats {offset + 1}-{offset + len(batch)} "
-                f"({'; '.join(tried_errors)}); rule-based choices used.")
+                f"({'; '.join(tried) or 'no model configured or out of credits'}); "
+                "rule-based choices used.")
             continue
 
         seen = set()
@@ -921,8 +1084,9 @@ _RESCUE_PROMPT = (
 
 
 def is_configured() -> bool:
-    return bool(config.DIRECTOR_API_BASE and config.DIRECTOR_API_KEY
-                and config.DIRECTOR_MODEL)
+    return bool((config.DIRECTOR_API_BASE and config.DIRECTOR_API_KEY and config.DIRECTOR_MODEL)
+                or (config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY
+                    and config.AI_FALLBACK_MODEL))
 
 
 def rescue_queries(items: List[dict], story: Optional[dict] = None) -> dict:
@@ -943,7 +1107,7 @@ def rescue_queries(items: List[dict], story: Optional[dict] = None) -> dict:
     when no model is configured or it fails, and the caller falls through to
     its next rescue step.
     """
-    if not items or not (config.DIRECTOR_API_KEY and config.DIRECTOR_MODEL):
+    if not items or not is_configured():
         return {}
     story = story or {}
     payload = []
@@ -1082,6 +1246,8 @@ def plan(segments: List[Segment], title: str = "", report=None,
         establishing_map(segments, shots, brief)
         warnings.extend(_resolve_maps(segments, shots))
 
+    story_rule_queries(segments, shots, brief, title)
+    name_people(segments, shots)
     _thin_overlays(segments, shots)
 
     vary_person_stills(shots)
