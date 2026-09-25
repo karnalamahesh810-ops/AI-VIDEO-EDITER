@@ -162,6 +162,8 @@ def calls_made() -> int:
 
 def reset() -> None:
     with _LOCK:
+        _MODEL_FAILS.clear()
+        _MODEL_DOWN_UNTIL.clear()
         _CACHE.clear()
         _CALLS["n"] = 0
         _FAILS["n"] = 0
@@ -230,6 +232,37 @@ def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
     return text, False
 
 
+# Circuit breaker shared with the director. On 2026-09-26 Kie's Gemini
+# channels answered every call with "internal error" after ~35 s; each vision
+# check waited out two of those before falling back to gpt-5-2, and a 23-scene
+# job crawled at one scene a minute. Two consecutive failures now take a
+# model out of rotation for MODEL_COOLDOWN_SECONDS.
+_MODEL_FAILS: Dict[str, int] = {}
+_MODEL_DOWN_UNTIL: Dict[str, float] = {}
+MODEL_COOLDOWN_SECONDS = 300
+
+
+def model_available(model: str) -> bool:
+    import time as _t
+    with _LOCK:
+        return _MODEL_DOWN_UNTIL.get(model, 0) <= _t.time()
+
+
+def model_result(model: str, ok: bool) -> None:
+    """Record one call; the second failure in a row benches the model."""
+    import time as _t
+    with _LOCK:
+        if ok:
+            _MODEL_FAILS[model] = 0
+            return
+        _MODEL_FAILS[model] = _MODEL_FAILS.get(model, 0) + 1
+        if _MODEL_FAILS[model] >= 2:
+            _MODEL_DOWN_UNTIL[model] = _t.time() + MODEL_COOLDOWN_SECONDS
+            _MODEL_FAILS[model] = 0
+            print(f"[ai] {model} failing - skipped for {MODEL_COOLDOWN_SECONDS // 60} min",
+                  flush=True)
+
+
 def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
     """
     First model that answers: (text, model). (None, "") when none did.
@@ -249,13 +282,20 @@ def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
     for model, url, key, main in routes:
         if main and _OUT_OF_CREDITS["hit"]:
             continue
+        if not model_available(model):
+            continue
         for attempt in range(1 + config.VISION_RETRIES):
             if attempt:
                 time.sleep(config.VISION_RETRY_WAIT)
             text, retryable = _ask_once(model, messages, max_tokens, url, key, main)
             if text:
+                model_result(model, True)
                 return text, model
-            if not retryable:
+            if retryable:
+                model_result(model, False)
+                if not model_available(model):
+                    break
+            else:
                 break
     return None, ""
 

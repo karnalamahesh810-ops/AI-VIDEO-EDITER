@@ -824,6 +824,8 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
             continue
         if attempt == 2 and model not in transient:
             continue
+        if not vision.model_available(model):
+            continue
         try:
             r = requests.post(
                 _chat_url(model, base),
@@ -839,6 +841,8 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
             if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
                 if main and vision.is_credit_error(body["code"], body.get("msg")):
                     vision.note_out_of_credits()
+                if body["code"] >= 500:
+                    vision.model_result(model, False)
                 if attempt == 1 and body["code"] >= 500:
                     transient.add(model)
                     time.sleep(3)
@@ -846,6 +850,7 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
             data = _json_reply(body["choices"][0]["message"]["content"])
             if isinstance(data, dict):
                 CHAT_CALLS["n"] += 1
+                vision.model_result(model, True)
                 return data
         except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
             if isinstance(e, requests.RequestException):
