@@ -19,7 +19,9 @@ shots are illustrations rather than records.
 Every asset carries its `source`, `license` and `attribution` so the UI can
 show where each clip came from and you can see your exposure per video.
 """
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (FIRST_COMPLETED, ThreadPoolExecutor, as_completed,
+                                wait)
+from concurrent.futures import TimeoutError as FuturesTimeout
 import contextvars
 from dataclasses import dataclass, asdict, replace as _dc_replace
 from typing import List, Optional, Dict, Any
@@ -2089,9 +2091,13 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 print(f"[media] sequence {n + 1} failed: {e}", flush=True)
                 return {}
 
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            futures = [pool.submit(run_sequence, n, seq) for n, seq in enumerate(sequences)]
-            for fut in as_completed(futures):
+        # Same straggler rule as pass 1: a pool still running at the budget
+        # is abandoned and its lines fall through to the one-by-one search.
+        seq_pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        futures = [seq_pool.submit(contextvars.copy_context().run, run_sequence, n, seq)
+                   for n, seq in enumerate(sequences)]
+        try:
+            for fut in as_completed(futures, timeout=config.SEQUENCE_BUDGET_SECONDS):
                 for idx, asset in (fut.result() or {}).items():
                     if 0 <= idx < len(results) and results[idx] is None:
                         results[idx] = asset
@@ -2099,6 +2105,11 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     pooled[0] += 1
                     if on_pool:
                         on_pool(pooled[0], len(sequences))
+        except FuturesTimeout:
+            print(f"[media] {sum(1 for f in futures if not f.done())} sequence pool(s) over "
+                  f"budget; their lines go to the one-by-one search", flush=True)
+        finally:
+            seq_pool.shutdown(wait=False, cancel_futures=True)
         filled = sum(1 for r in results if r is not None)
         print(f"[media] sequence pools filled {filled}/{len(jobs)} scene(s) from "
               f"{len(sequences)} sequence(s)", flush=True)
@@ -2155,18 +2166,47 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 got = stronger_hook(job, nth, got)
         return got
 
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
-        for fut in as_completed(futures):
-            idx = futures[fut]
-            try:
-                results[idx] = fut.result()
-            except Exception as e:  # noqa: BLE001
-                print(f"[media] worker error on scene {idx}: {e}", flush=True)
+    # Not a `with` block: its exit waits for every thread, and one hung
+    # download then holds the whole video. A real job sat at "Sourced 22/23"
+    # for over ten minutes on a single stalled scene. Stragglers are left
+    # running in the background and their scenes fall through to the
+    # recheck / fill steps below, which exist for exactly that.
+    pool = ThreadPoolExecutor(max_workers=max(1, workers))
+    futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
+    started = time.time()
+    deadline = started + config.PASS1_BUDGET_SECONDS
+    pending = set(futures)
+    try:
+        while pending:
+            left = deadline - time.time()
+            if left <= 0:
+                break
+            finished, pending = wait(pending, timeout=min(left, 5), return_when=FIRST_COMPLETED)
+            for fut in finished:
+                idx = futures[fut]
+                try:
+                    results[idx] = fut.result()
+                except Exception as e:  # noqa: BLE001
+                    print(f"[media] worker error on scene {idx}: {e}", flush=True)
+                with lock:
+                    done += 1
+                    if on_done:
+                        on_done(done, len(jobs))
+            # Once nearly everything is in, the last few get a short grace
+            # period rather than the whole budget.
+            if pending and len(pending) <= max(1, len(futures) // 10):
+                deadline = min(deadline, time.time() + config.STRAGGLER_GRACE_SECONDS)
+        if pending:
+            stuck = sorted(futures[f] + 1 for f in pending)
+            print(f"[media] gave up waiting on scene(s) {stuck}; they go to the recheck",
+                  flush=True)
+            LAST_STATS["pass1_stragglers"] = len(stuck)
             with lock:
-                done += 1
+                done += len(pending)
                 if on_done:
                     on_done(done, len(jobs))
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     t_pass2 = time.time()
     # Pass 2: nothing may appear twice, and nothing unusable may stay.
@@ -2497,6 +2537,8 @@ SEQ_SHOTS_PER_WINDOW = 3
 SEQ_MAX_VIDEOS = 4
 SEQ_MAX_IMAGES = 6
 SEQ_SHOT_PAD = 0.5
+# Footage searches per sequence run concurrently (see source_sequence).
+SEQ_PARALLEL_SEARCHES = 3
 
 
 def _cut(src: str, out: str, start: float, seconds: float) -> str:
@@ -2656,17 +2698,39 @@ def source_sequence(seq: dict, jobs: Dict[int, Dict[str, Any]], work_dir: str,
         imgs = [s["q"] for s in seq.get("searches", []) if s.get("kind") == "image"]
         # Spare footage for photo lines that find no photo, and vice versa.
         need_foot = n_foot + (n_img + 1) // 2
-        if allow_youtube:
-            for q in foot:
-                have = sum(1 for p in pool if p["kind"] == "footage")
+        need_img = min(SEQ_MAX_IMAGES, n_img + (1 if n_foot else 0))
+        # The first searches and the photo search run AT THE SAME TIME. Run
+        # one after another they made each sequence wait on every download
+        # and vision check in turn (a 23-line job spent ~6 minutes here).
+        # Each task gets its own copy of this thread's context: the subject
+        # type and event window are context variables, and a pool thread
+        # does not inherit them.
+        first = foot[:SEQ_PARALLEL_SEARCHES] if allow_youtube else []
+        rest = foot[SEQ_PARALLEL_SEARCHES:] if allow_youtube else []
+        with ThreadPoolExecutor(max_workers=len(first) + 1) as ex:
+            img_fut = (ex.submit(contextvars.copy_context().run, _image_pool, imgs, subject,
+                                 subject_type, need_img, intent, context, used, work_dir)
+                       if need_img else None)
+            share = [need_foot] + [max(1, (need_foot + 1) // 2)] * (len(first) - 1)
+            foot_futs = [ex.submit(contextvars.copy_context().run, _footage_pool, q, share[n],
+                                   lengths, intent, context, used, work_dir, require_cc,
+                                   f"{tag}_p{n}")
+                         for n, q in enumerate(first)]
+            for fut in foot_futs:
+                have = sum(1 for x in pool if x["kind"] == "footage")
+                # Concurrent searches can land on the same video; the earlier
+                # search keeps it (one window, several shots is by design).
+                taken = {x.get("video") for x in pool if x.get("video")}
+                got = [x for x in (fut.result() or []) if not x.get("video") or x["video"] not in taken]
+                pool += got[:max(0, need_foot - have)]
+            for q in rest:
+                have = sum(1 for x in pool if x["kind"] == "footage")
                 if have >= need_foot:
                     break
                 pool += _footage_pool(q, need_foot - have, lengths, intent, context,
                                       used, work_dir, require_cc, f"{tag}_{len(pool)}")
-        need_img = min(SEQ_MAX_IMAGES, n_img + (1 if n_foot else 0))
-        if need_img:
-            pool += _image_pool(imgs, subject, subject_type, need_img, intent, context,
-                                used, work_dir)
+            if img_fut is not None:
+                pool += img_fut.result() or []
     finally:
         _EVENT_WINDOW.reset(window_token)
         _SUBJECT_TYPE.reset(token)

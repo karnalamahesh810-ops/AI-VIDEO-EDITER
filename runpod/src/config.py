@@ -246,6 +246,13 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # through, on a GPU pod, right after the heaviest point of the parallel
 # sourcing phase. 4 is conservative; raise it only after confirming a higher
 # value survives a real render on this same pod type.
+# Sourcing pass 1: a whole-pass budget, and once 90% of scenes are in, a
+# short grace for the rest. One stalled download used to hold a job for
+# 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
+PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+STRAGGLER_GRACE_SECONDS = float(os.getenv("STRAGGLER_GRACE_SECONDS", "75"))
+SEQUENCE_BUDGET_SECONDS = float(os.getenv("SEQUENCE_BUDGET_SECONDS", "300"))
+
 RENDER_CONCURRENCY = int(os.getenv("RENDER_CONCURRENCY", "4"))
 # See render.render: the defaults size these from the host, not the container.
 RENDER_FRAME_CACHE_BYTES = int(os.getenv("RENDER_FRAME_CACHE_BYTES", str(1536 * 1024 * 1024)))
