@@ -250,6 +250,9 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # short grace for the rest. One stalled download used to hold a job for
 # 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
 PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+# Scenes sourced at once. 8 suited the old 8-vCPU GPU pods; the 32-vCPU CPU
+# workers carry 16 (the work is mostly waiting on network and vision calls).
+SOURCE_WORKERS = int(os.getenv("SOURCE_WORKERS", "16"))
 # Refuse to source a video with an empty AI account (handler._require_ai_credit).
 REQUIRE_AI_CREDIT = os.getenv("REQUIRE_AI_CREDIT", "1").strip().lower() not in ("0", "false", "no")
 MIN_AI_CREDIT = float(os.getenv("MIN_AI_CREDIT", "5"))

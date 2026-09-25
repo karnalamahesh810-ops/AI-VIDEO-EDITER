@@ -2106,6 +2106,21 @@ def _asset_ok(asset) -> tuple:
 LAST_STATS: Dict[str, Any] = {}
 
 
+def _budget(base: float, per_item: float, n: int) -> float:
+    """
+    A pass budget that grows with the video.
+
+    Fixed budgets were sized on a 95 s test (23 scenes). A 23-minute video
+    has ~400 scenes: the same 420 s cut most of them off, and the empties were
+    covered with repeats and generated stills - "the same clips over and
+    over, a lot of AI images". The base stays the floor; each scene adds
+    per_item seconds (measured ~40 s of search per scene across 16 threads).
+    """
+    if base <= 0:
+        return 0.0       # an explicit 0 turns the pass off
+    return max(base, per_item * n)
+
+
 def _until(futures, deadline: float):
     """
     Yield futures as they finish, stopping at `deadline`.
@@ -2206,7 +2221,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         futures = [seq_pool.submit(contextvars.copy_context().run, run_sequence, n, seq)
                    for n, seq in enumerate(sequences)]
         try:
-            for fut in as_completed(futures, timeout=config.SEQUENCE_BUDGET_SECONDS):
+            for fut in as_completed(futures, timeout=_budget(
+                    config.SEQUENCE_BUDGET_SECONDS, 2.0, len(jobs))):
                 for idx, asset in (fut.result() or {}).items():
                     if 0 <= idx < len(results) and results[idx] is None:
                         results[idx] = asset
@@ -2283,7 +2299,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     pool = ThreadPoolExecutor(max_workers=max(1, workers))
     futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
     started = time.time()
-    deadline = started + config.PASS1_BUDGET_SECONDS
+    deadline = started + _budget(config.PASS1_BUDGET_SECONDS, 3.0, len(pass1))
     pending = set(futures)
     try:
         while pending:
@@ -2355,7 +2371,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # A truly empty scene is the one most likely to need them: pass 1 found
     # nothing at nth=0, which says nothing about nth=1..3.
     claim = threading.Lock()
-    deadline = time.time() + config.REPLACE_BUDGET_SECONDS
+    deadline = time.time() + _budget(config.REPLACE_BUDGET_SECONDS, 3.0, len(todo))
     replaced = [0]
 
     def replace(job, nth, bad_reason, is_dup):
@@ -2463,7 +2479,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         if on_recheck:
             on_recheck(len(empties))
         ideas = rescue([recheck_item(j) for j in empties]) or {}
-        rescue_deadline = time.time() + config.RESCUE_BUDGET_SECONDS
+        rescue_deadline = time.time() + _budget(config.RESCUE_BUDGET_SECONDS, 3.0, len(empties))
 
         def rescue_one(job):
             alts = ideas.get(job["index"]) or []
