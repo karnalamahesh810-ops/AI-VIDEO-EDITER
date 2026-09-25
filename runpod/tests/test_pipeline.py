@@ -2972,6 +2972,22 @@ class LongVideoCoverage(unittest.TestCase):
         self.assertIn("429", media.source_stats()["wikimedia"]["recentErrors"][0])
 
 
+class ProjectTitles(unittest.TestCase):
+    def test_file_name_debris_never_reaches_a_search(self):
+        self.assertEqual(director.clean_title("1 (mp3cut.net)"), "")
+        self.assertEqual(director.clean_title("1"), "")
+        self.assertEqual(director.clean_title("Midwest Floods (mp3cut.net)"), "Midwest Floods")
+        self.assertEqual(director.clean_title("obama_family_story.mp3"), "obama family story")
+        self.assertEqual(director.clean_title("The Obama Family"), "The Obama Family")
+
+    def test_rule_searches_use_the_line_not_the_file_name(self):
+        segs = [seg("His father left for Harvard when he was two.", 0, 3)]
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""):
+            shots, _, _ = director.plan(segs, title="1 (mp3cut.net)", allow_maps=False)
+        self.assertNotIn("mp3cut", shots[0]["query"])
+        self.assertNotIn("(", shots[0]["query"])
+
+
 class SequenceEditing(unittest.TestCase):
     """Plan and source runs of lines together, laid out by an editor call."""
 

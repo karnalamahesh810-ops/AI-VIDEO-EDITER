@@ -126,6 +126,27 @@ def _clean(value, limit: int) -> str:
     return str(value if value is not None else "").strip()[:limit]
 
 
+_FILE_JUNK = re.compile(
+    r"\((?:[^)]*\.(?:net|com|org|io)|[^)]*mp3cut[^)]*|\d+)\)"   # "(mp3cut.net)", "(2)"
+    r"|\.(?:mp3|wav|m4a|aac|ogg|flac|mp4|mov)\b"                   # file extensions
+    r"|\b(?:mp3cut|copy|final|audio|voiceover|narration)\b", re.I)
+
+
+def clean_title(title: str) -> str:
+    """
+    A project title fit to search with, or "".
+
+    The app names a project after its uploaded audio file, and the rule
+    planner puts the title in front of every search - a real job titled
+    "1 (mp3cut.net)" searched "1 (mp3cut.net) boy airport father" for every
+    scene and filled 4 of 23. File-name debris is removed, and what is left
+    only counts if it has at least one real word.
+    """
+    text = _FILE_JUNK.sub(" ", title or "").replace("_", " ")
+    text = " ".join(text.split()).strip(" -.,")
+    return text if re.search(r"[A-Za-z]{3,}", text) else ""
+
+
 def with_subject(subject: str, query: str, limit: int = 240) -> str:
     """
     The query with the subject's words in front - each word once.
@@ -1027,6 +1048,7 @@ def plan(segments: List[Segment], title: str = "", report=None,
     if not segments:
         return [], "rules", []
 
+    title = clean_title(title)
     shots = [_rule_shot(seg, i, title) for i, seg in enumerate(segments)]
     warnings: List[str] = []
 

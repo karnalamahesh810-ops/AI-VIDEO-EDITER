@@ -341,7 +341,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
 
     # Read the whole story once: it steers every beat's plan, and after
     # sourcing it steers the recheck of scenes still missing a shot.
-    title = inp.get("title") or inp.get("title_overlay") or ""
+    title = director.clean_title(inp.get("title") or inp.get("title_overlay") or "")
     report("Reading the whole story", 13)
     brief = director.story_brief(segments, title, configured=director.is_configured())
 
