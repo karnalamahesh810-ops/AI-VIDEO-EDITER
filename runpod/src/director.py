@@ -24,6 +24,7 @@ import datetime
 import json
 import math
 import re
+import threading
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -842,6 +843,11 @@ def _json_reply(content):
     return json.loads(text)
 
 
+# Model calls this job made (successful ones), for the job's AI cost line.
+CHAT_CALLS = {"n": 0}
+_CALLS_LOCK = threading.Lock()
+
+
 def _chat_json(system: str, payload: dict, timeout: int = 120,
                errors: Optional[List[str]] = None) -> Optional[dict]:
     """
@@ -890,6 +896,8 @@ def _chat_once(base, key, model, main, system, payload, timeout, errors, retry):
             raise ValueError(f"{model}: code {body['code']}")
         data = _json_reply(body["choices"][0]["message"]["content"])
         if isinstance(data, dict):
+            with _CALLS_LOCK:     # planning calls run in parallel
+                CHAT_CALLS["n"] += 1
             return data
     except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
         if errors is not None:

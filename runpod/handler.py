@@ -32,6 +32,7 @@ Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
 """
 import copy
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import shutil
 import subprocess
@@ -212,6 +213,44 @@ def _preview_proxy(path: str, work: str, scene_id: str) -> str:
 _MEDIA_LINK_TTL = 60 * 60 * 24 * 30
 
 
+def _kie_credit() -> float:
+    """
+    The Kie account balance, or +inf when it cannot be read (not Kie, no key,
+    network hiccup) - an unknown balance never blocks a job.
+    """
+    base = (config.DIRECTOR_API_BASE or "") + (config.VISION_API_BASE or "")
+    key = config.DIRECTOR_API_KEY or config.VISION_API_KEY
+    if "kie.ai" not in base or not key:
+        return float("inf")
+    try:
+        import requests
+        r = requests.get("https://api.kie.ai/api/v1/chat/credit",
+                         headers={"Authorization": f"Bearer {key}"}, timeout=15)
+        return float(r.json().get("data"))
+    except Exception:  # noqa: BLE001
+        return float("inf")
+
+
+def _require_ai_credit() -> None:
+    """
+    Refuse to start a sourcing job with an empty AI account.
+
+    With no Kie credit the story director falls back to rules and vision is
+    off, so nothing checks what the clips show: a real 95 s job came out as a
+    lyric video, a singer, strangers' weddings and glitch art - ten minutes
+    spent producing a video nobody would publish. Failing in a second with
+    the reason is better. REQUIRE_AI_CREDIT=0 turns this off.
+    """
+    if not config.REQUIRE_AI_CREDIT:
+        return
+    credit = _kie_credit()
+    if credit < config.MIN_AI_CREDIT:
+        raise RuntimeError(
+            f"The AI account (Kie) is out of credit (balance {credit:.2f}). Without it the "
+            "director cannot read the story and nothing checks the clips, so the video "
+            "would be random footage. Top up at kie.ai, then run this again.")
+
+
 def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                   job_id: str = "", band: tuple = (66, 68)) -> int:
     """
@@ -244,28 +283,23 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
         storage.upload_to_supabase(local, obj, bucket=bucket)
         return storage.signed_url(obj, bucket=bucket, expires_in=_MEDIA_LINK_TTL)
 
-    for i, scene in enumerate(scenes):
-        pct = lo + int((hi - lo) * i / max(len(scenes), 1))
-        if pct != last_pct[0]:
-            last_pct[0] = pct
-            report(f"Saving clips for editing {i}/{len(scenes)}", pct, done=i, total=len(scenes))
-        media = scene.get("media") or {}
-        path = media.get("url") or ""
-        if not path or not os.path.isfile(path):
-            continue
-        if path in published:
-            media.update(published[path][1])
-            continue
+    # One job per distinct file, run 8 at a time: every clip is an upload, a
+    # thumbnail and a re-encoded preview copy, and doing 23 of those one after
+    # another made "Saving clips for editing" take 320 s of a 600 s job.
+    first_scene: Dict[str, dict] = {}
+    for scene in scenes:
+        path = (scene.get("media") or {}).get("url") or ""
+        if path and os.path.isfile(path) and path not in first_scene:
+            first_scene[path] = scene
+
+    def publish_one(path: str, scene: dict):
         ext = os.path.splitext(path)[1] or ".bin"
         obj = f"projects/{project_id}/media/{scene['id']}{ext}"
         try:
             url = put(path, obj)
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not publish {obj}: {e}", flush=True)
-            scene["reviewRequired"] = True
-            scene["reviewReason"] = "Media could not be saved; re-source before rendering"
-            failures += 1
-            continue
+            return None
         fields = {"url": url,
                   # The signed URL expires; the app re-signs from this before a render.
                   "storage": {"bucket": bucket, "path": obj}}
@@ -285,8 +319,33 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                 fields["previewStorage"] = {"bucket": bucket, "path": pobj}
             except Exception as e:  # noqa: BLE001 — the editor falls back to the full clip
                 print(f"[worker] could not save preview {pobj}: {e}", flush=True)
-        media.update(fields)
-        published[path] = (url, fields)
+        return url, fields
+
+    total = len(first_scene)
+    report(f"Saving clips for editing 0/{total}", lo, done=0, total=total)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(publish_one, path, scene): path
+                   for path, scene in first_scene.items()}
+        for n, fut in enumerate(as_completed(futures), 1):
+            got = fut.result()
+            if got:
+                published[futures[fut]] = got
+            pct = lo + int((hi - lo) * n / max(total, 1))
+            if pct != last_pct[0]:
+                last_pct[0] = pct
+                report(f"Saving clips for editing {n}/{total}", pct, done=n, total=total)
+
+    for scene in scenes:
+        media = scene.get("media") or {}
+        path = media.get("url") or ""
+        if not path or not os.path.isfile(path):
+            continue
+        if path in published:
+            media.update(published[path][1])
+        else:
+            scene["reviewRequired"] = True
+            scene["reviewReason"] = "Media could not be saved; re-source before rendering"
+            failures += 1
     doc["meta"]["publishedMedia"] = len(published)
     if failures:
         doc["meta"]["warnings"].append(
@@ -406,6 +465,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
 
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
+    director.CHAT_CALLS["n"] = 0   # per-job AI usage count
     shots, planner, warnings = director.plan(
         segments,
         title=title,
@@ -513,6 +573,17 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     doc["meta"]["audioSource"] = raw_audio
     # Where the sourcing time actually went, visible from outside the worker.
     doc["meta"]["sourcing"] = dict(media.LAST_STATS)
+    # What this video cost on the AI account (Kie credits), estimated from
+    # measured per-call prices (2026-09-25, Gemini 3.8 Flash): vision ~0.08
+    # per check, a planning call ~0.15, gpt-image-2 ~4 per image. A key that
+    # drained 900 credits in an afternoon needs a per-job number to find why.
+    vstats = vision.stats()
+    usage = {"visionCalls": vstats.get("calls", 0),
+             "directorCalls": director.CHAT_CALLS["n"],
+             "imagesGenerated": media.generated_count()}
+    usage["estimatedCredits"] = round(0.08 * usage["visionCalls"] + 0.15 * usage["directorCalls"]
+                                      + 4.0 * usage["imagesGenerated"], 1)
+    doc["meta"]["aiUsage"] = usage
     # What the AI understood the video to be about (kind, event, places, cast
     # with aliases, per-section footage), for the editor to show.
     doc["meta"]["story"] = dict(director.LAST_STORY) or dict(brief)
@@ -864,6 +935,9 @@ def handler(job):
                 "status": "rendering", "job_id": job_id,
                 "progress": 0, "error_message": None,
             })
+
+        if action in ("plan", "build", "resource"):
+            _require_ai_credit()
 
         if action == "plan":
             doc = do_plan(inp, work, report)
