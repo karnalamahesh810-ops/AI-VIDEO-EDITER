@@ -126,7 +126,13 @@ def render(props: dict, out_path: str, composition: str = "Main",
             p = run(cmd + ["--concurrency=1"])
 
     if p.returncode != 0 or not os.path.exists(out_path):
-        tail = (p.stderr or p.stdout or "")[-1500:]
+        # Drop the progress chatter: 1500 characters of "Rendered 906/2861,
+        # time remaining" is all a real failure reported, hiding the error.
+        lines = [l for l in (p.stderr or p.stdout or "").splitlines()
+                 if l.strip() and not l.lstrip().startswith(("Rendered ", "Encoded ", "Stitched "))
+                 and "time remaining" not in l]
+        tail = "
+".join(lines)[-2000:]
         raise RenderError(f"remotion render failed (exit {p.returncode}): {tail}")
     return out_path
 
