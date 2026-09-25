@@ -111,7 +111,8 @@ export const effectFilter = (e: SceneEffect | undefined, frame: number): string 
     return `hue-rotate(${hue.toFixed(2)}deg) saturate(1.08)`;
   }
   if (e === "film-flicker") {
-    const b = 0.94 + random(`fl${Math.floor(frame / 2)}`) * 0.1;
+    // Flicker around full brightness, never below it.
+    const b = 1.0 + random(`fl${Math.floor(frame / 2)}`) * 0.05;
     return `brightness(${b.toFixed(3)})`;
   }
   return "";

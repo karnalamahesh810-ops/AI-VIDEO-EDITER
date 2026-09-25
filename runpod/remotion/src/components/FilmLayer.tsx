@@ -23,27 +23,31 @@ import type { Treatment } from "../types";
 
 export const cssFilterFor = (t: Treatment | undefined): string => {
   switch (t) {
+    // Deliberately light. The first version stacked contrast, a brightness
+    // cut and a heavy vignette, and real renders read as "low light" -
+    // VidRush's own exports are clean, bright, full-colour footage.
     case "film":
-      return "contrast(1.06) saturate(1.04)";
+      return "saturate(1.03)";
     case "vintage":
-      return "sepia(0.34) contrast(1.12) saturate(0.86) brightness(1.02)";
+      return "sepia(0.22) saturate(0.92) brightness(1.04)";
     case "archival":
-      return "grayscale(1) contrast(1.22) brightness(0.96)";
+      return "grayscale(0.85) contrast(1.05) brightness(1.06)";
     default:
       return "none";
   }
 };
 
 const GRAIN_OPACITY: Record<string, number> = {
-  film: 0.055,
-  vintage: 0.11,
-  archival: 0.17,
+  film: 0.03,
+  vintage: 0.06,
+  archival: 0.09,
 };
 
+// Was 0.24 / 0.42 / 0.5 - the main reason footage looked dark.
 const VIGNETTE: Record<string, number> = {
-  film: 0.24,
-  vintage: 0.42,
-  archival: 0.5,
+  film: 0,
+  vintage: 0.14,
+  archival: 0.18,
 };
 
 export const FilmLayer: React.FC<{ treatment?: Treatment }> = ({ treatment }) => {

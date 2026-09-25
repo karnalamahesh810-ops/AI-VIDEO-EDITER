@@ -70,7 +70,7 @@ def pick_treatment(text: str, base: str = "") -> str:
     """
     base = base or config.SCENE_TREATMENT
     if base not in TREATMENTS:
-        base = "film"
+        base = "none"
 
     years = [int(y) for y in _YEAR.findall(text or "")]
     if years:

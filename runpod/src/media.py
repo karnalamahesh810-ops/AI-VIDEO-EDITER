@@ -1776,11 +1776,19 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     results: List[Optional[MediaAsset]] = [None] * len(jobs)
     ordered = sorted(jobs, key=lambda j: j["index"])
 
-    # How many earlier scenes already asked this exact question.
+    # How many earlier scenes already drew from the same candidate list, so
+    # each reaches a different entry of it. Keyed on the SUBJECT when there is
+    # one, because that is what the candidate search is cached on
+    # (_yt_candidates_cached / _cached_search). Keyed on the exact query, every
+    # same-subject beat got nth=0 - their wording differs - so all of them,
+    # running in parallel, picked the same top video from the shared list, and
+    # all but one were thrown out as duplicates: a real 23-beat job sent 21 to
+    # the slow one-by-one replacement pass.
     seen: Dict[tuple, int] = {}
     plan = []
     for j in ordered:
-        key = (j["query"], j.get("visual_type", "footage"))
+        who = (j.get("subject") or "").strip().lower() or j["query"]
+        key = (who, j.get("visual_type", "footage"))
         plan.append((j, seen.get(key, 0)))
         seen[key] = seen.get(key, 0) + 1
 

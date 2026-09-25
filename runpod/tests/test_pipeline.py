@@ -879,9 +879,12 @@ class Treatments(unittest.TestCase):
             "archival")
 
     def test_a_recent_year_keeps_the_base_grade(self):
+        # Base grade is "none" now: modern footage shown as shot. The old
+        # "film" default added a vignette that made real renders look dark.
         self.assertEqual(
             director.pick_treatment("On a Sunday night in November of 2024."),
-            "film")
+            config.SCENE_TREATMENT)
+        self.assertEqual(config.SCENE_TREATMENT, "none")
 
     def test_the_older_year_wins_when_a_beat_spans_eras(self):
         # "from 1996 to 2021" is a beat about the past, not the present.
@@ -2107,6 +2110,48 @@ class BlockedIPDetection(unittest.TestCase):
             media._PROXIES[:] = saved[0]
             media._PROXY_BENCHED.clear()
             media._PROXY_BENCHED.update(saved[1])
+
+
+class SameSubjectBeatsSpreadAcrossTheList(unittest.TestCase):
+    """
+    A real 23-beat job sent 21 beats to the slow replacement pass: beats on
+    one subject share a candidate list (cached by subject) but their `nth`
+    was keyed on the exact query wording, so every one got nth=0 and they all
+    grabbed the same top video in parallel.
+    """
+
+    def test_nth_counts_per_subject_not_per_query_wording(self):
+        nths = []
+
+        def fake(query, seconds, work_dir, *, nth=0, **kw):
+            nths.append((query, nth))
+            return MediaAsset(kind="video", source="youtube", url=query,
+                              local_path=f"/w/yt_{query[:11]:_<11}_0_1000.mp4")
+
+        jobs = [{"index": i, "query": q, "subject": "Ohio Valley", "seconds": 3.0}
+                for i, q in enumerate(["Ohio Valley flood aerial",
+                                       "Ohio Valley river gauge",
+                                       "Ohio Valley rain radar"])]
+        with mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")):
+            media.reset_cache()
+            media.source_many(jobs, "/tmp", workers=1)
+        self.assertEqual(sorted(n for _, n in nths[:3]), [0, 1, 2])
+
+    def test_no_subject_still_counts_by_query(self):
+        nths = []
+
+        def fake(query, seconds, work_dir, *, nth=0, **kw):
+            nths.append(nth)
+            return MediaAsset(kind="image", source="wikimedia", url=f"https://x/{query}{nth}")
+
+        jobs = [{"index": i, "query": q, "seconds": 3.0}
+                for i, q in enumerate(["a", "b", "a"])]
+        with mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")):
+            media.reset_cache()
+            media.source_many(jobs, "/tmp", workers=1)
+        self.assertEqual(nths[:3], [0, 0, 1])
 
 
 class SubjectLevelSearchCache(unittest.TestCase):
