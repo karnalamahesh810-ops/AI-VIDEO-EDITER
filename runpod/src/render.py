@@ -131,8 +131,7 @@ def render(props: dict, out_path: str, composition: str = "Main",
         lines = [l for l in (p.stderr or p.stdout or "").splitlines()
                  if l.strip() and not l.lstrip().startswith(("Rendered ", "Encoded ", "Stitched "))
                  and "time remaining" not in l]
-        tail = "
-".join(lines)[-2000:]
+        tail = "\n".join(lines)[-2000:]
         raise RenderError(f"remotion render failed (exit {p.returncode}): {tail}")
     return out_path
 
