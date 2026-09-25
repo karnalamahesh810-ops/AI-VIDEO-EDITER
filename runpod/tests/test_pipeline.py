@@ -3009,11 +3009,53 @@ class NoAIFallbacks(unittest.TestCase):
             shots, _, _ = director.plan(segs, title="1 (mp3cut.net)", allow_maps=False)
         q = [sh["query"] for sh in shots]
         self.assertEqual(q[1], "Honolulu Airport 1971")
-        self.assertIn("Barack Obama Sr", q[2])            # "A tall man..." is the story's lead
+        # "A tall man..." is at the airport; a name said once does not lead the story.
+        self.assertTrue(q[2].startswith("Honolulu Airport 1971"))
+        self.assertNotEqual(q[2], q[1])                   # the line's own words keep them apart
+        self.assertIn("Barack Obama Sr", q[4])
         self.assertNotIn("It", q[3].split())              # sentence-start words are not names
         self.assertTrue(q[5].startswith("Maui 1961"))
         self.assertTrue(all("mp3cut" not in x for x in q))
         self.assertEqual(shots[1]["subjectType"], "place")  # an airport is not a person
+
+    def test_a_place_named_once_does_not_become_the_whole_story(self):
+        # The real narration never names its man and names New York once, at
+        # the end; the rule planner put "New York" in front of 15 of 23 searches.
+        lines = ["One photograph gets used every time this story is told.",
+                 "Honolulu Airport, the last days of 1971.",
+                 "A tall man in a dark suit and heavy glasses.",
+                 "It was a goodbye.",
+                 "under one roof. The boy would not see that man again,",
+                 "not at twenty, not ever.",
+                 "He married an eighteen-year-old in a Maui courthouse anyway.",
+                 "No photograph of that day has ever surfaced.",
+                 "Within a year, a university in New York offered him money.",
+                 "Not prestige money, family money."]
+        segs = [seg(t, i * 4, i * 4 + 4) for i, t in enumerate(lines)]
+        with mock.patch.object(config, "DIRECTOR_API_KEY", ""), \
+                mock.patch.object(config, "AI_FALLBACK_API_KEY", ""):
+            brief = director.story_brief(segs, "", configured=False)
+            shots, _, _ = director.plan(segs, "", allow_maps=False, brief=brief)
+        q = [sh["query"] for sh in shots]
+        self.assertFalse(any(x.startswith("New York") for x in q[:8]), q)
+        self.assertTrue(q[0].startswith("Honolulu Airport"))   # the opening looks ahead
+        self.assertTrue(q[5].startswith("Honolulu Airport"))   # the scene holds until a new place
+        self.assertTrue(q[7].startswith("Maui"))
+        self.assertTrue(q[9].startswith("New York"))
+        self.assertEqual(shots[5]["subjectType"], "place")
+        self.assertEqual(len(set(q[2:6])), 4)                  # no two lines search the same thing
+
+    def test_a_place_named_twice_or_a_news_place_still_leads(self):
+        lines = ["Lake Powell is drying up.", "The water kept falling.",
+                 "Boats sat on the mud at Lake Powell.", "Nobody expected this."]
+        segs = [seg(t, i * 4, i * 4 + 4) for i, t in enumerate(lines)]
+        shots = [{"rule": True, "query": "", "subject": ""} for _ in segs]
+        director.story_rule_queries(segs, shots, {"places": ["Lake Powell"], "kind": "other"})
+        self.assertTrue(shots[3]["query"].startswith("Lake Powell"))
+        once = [seg("Flooding hit Davenport, Iowa today.", 0, 4), seg("The water kept rising.", 4, 8)]
+        shots = [{"rule": True, "query": "", "subject": ""} for _ in once]
+        director.story_rule_queries(once, shots, {"places": ["Davenport, Iowa"], "kind": "news"})
+        self.assertIn("Davenport", shots[1]["query"])
 
     def test_every_person_is_named_on_screen_the_first_time(self):
         segs = [seg("x", i, i + 1) for i in range(4)]

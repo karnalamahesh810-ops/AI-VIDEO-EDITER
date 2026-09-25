@@ -485,6 +485,11 @@ def _named_people(text: str) -> List[str]:
     return out
 
 
+# How many lines a named year still dates the scene when nothing new is named.
+# A place stays the scene until the narration names another.
+SETTING_SPAN = 4
+
+
 def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
                        title: str = "") -> int:
     """
@@ -496,8 +501,18 @@ def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
     and a real job searched "1 (mp3cut.net) It goodbye month people". Now a
     beat searches what it names; a beat that names nothing ("He married an
     eighteen-year-old...") inherits the last person named, else the story's
-    main subject (a real project title, else its main person or place); a year in the line is kept. Only shots still marked
-    as rule shots are touched. Returns how many were rewritten.
+    main subject (a real project title, else its main person or place), else
+    the place it last named (the opening lines: the first place it names) and
+    the year named in the last few lines; a year in the line is kept.
+    Only shots still marked as rule shots are touched. Returns how many were
+    rewritten.
+
+    A main subject has to earn it. A biography that never names its man ("a
+    tall man in a dark suit", "the father") names New York once, in its last
+    minute; taking that as the main subject put "New York" in front of 15 of
+    23 searches. A place leads only if the brief came from the model, the
+    story is news-type (one mention of the flooded town is enough), or the
+    script names it at least twice; a person only if named at least twice.
     """
     # A real title names the story's subject ("Lake Powell"); file-name debris
     # was already removed by clean_title, so what is left is worth searching.
@@ -506,24 +521,54 @@ def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
     # The person the story is about: the most-named person in the script.
     named = Counter(n for seg in segments for n in _proper_phrases(seg.text, known)
                     if n in _named_people(n))
-    lead = [n for n, _ in named.most_common(1)]
+    lead = [n for n, c in named.most_common(1) if c >= 2]
+    trusted = bool(brief.get("summary")) or brief.get("kind") in EVENT_KINDS
+    lower = script.lower()
+    places = [p for p in (brief.get("places") or [])
+              if trusted or lower.count(p.split(",")[0].strip().lower()) >= 2]
     main = (([title] if title else []) + (brief.get("people") or []) + lead
-            + (brief.get("places") or []) + [""])[0]
+            + places + [""])[0]
     carry = main
+    # The scene the narration is in: the last place and year it named, for
+    # lines that name nothing while there is no main subject to fall back on.
+    # Before any place is named, the opening lines look ahead to the first one.
+    setting = next((n for seg in segments[:SETTING_SPAN + 1]
+                    for n in _proper_phrases(seg.text, known)
+                    if n not in _named_people(n)), "")
+    setting_year, since_year = "", SETTING_SPAN + 1
     changed = 0
     for shot, seg in zip(shots, segments):
         text = seg.text
         names = _proper_phrases(text, known)
         people = [n for n in names if n in _named_people(n)]
+        years = _YEAR.findall(text)
         if people:
             carry = people[0]
+        here = [n for n in names if n not in people]
+        if here:
+            setting = here[0]
+        setting_year, since_year = (years[0], 0) if years else (setting_year, since_year + 1)
         if not shot.get("rule"):
             continue
-        years = _YEAR.findall(text)
-        subject = names[0] if names else (carry if _PRONOUN.search(text) or not main else main)
+        in_setting = False
+        if names:
+            subject = names[0]
+        elif carry and (_PRONOUN.search(text) or not main):
+            subject = carry
+        elif main:
+            subject = main
+        elif setting:
+            subject, in_setting = setting, True
+        else:
+            subject = ""
+        if not names and not years and not main and setting_year \
+                and since_year <= SETTING_SPAN:
+            years = [setting_year]
         words = list(dict.fromkeys(names[:2] + ([subject] if subject and subject not in names else [])))
         words += years[:1]
-        if len(" ".join(words).split()) < 3:
+        # A carried place is the same for several lines; the line's own words
+        # keep their searches (and so their shots) apart.
+        if len(" ".join(words).split()) < 3 or in_setting:
             have = " ".join(words).lower()
             extra = [w for w in keywords_for(seg, max_terms=6).split()
                      if w.lower() not in have and w.lower() not in _NOT_A_NAME
@@ -539,7 +584,7 @@ def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
         # over-triggers on any Name-Name pair, "Honolulu Airport" included.
         if people or (subject and subject in named):
             shot["subjectType"] = "person"
-        elif names:          # the line names its own place; an inherited subject keeps its tag
+        elif names or in_setting:   # a named or carried place; an inherited subject keeps its tag
             shot["subjectType"] = "place"
         shot["fallbacks"] = [q for q in dict.fromkeys(
             [" ".join(names[:1] + years[:1]).strip(), subject, main]) if q and q != query]
