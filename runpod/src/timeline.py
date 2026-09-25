@@ -93,6 +93,7 @@ _OVERLAY_SECONDS = {
     "timeline": 6.0, "highlight": 3.0, "lower-third": 3.5,
     "comparison": 5.0, "arrow": 2.5, "split": 4.0,
     "sentence-highlight": 4.0, "article-zoom": 5.0, "date-stamp": 3.0,
+    "photo-card": 4.0, "name-card": 3.5,
 }
 
 # Sources this workflow refuses. Kept as data so the check and the error
@@ -224,6 +225,13 @@ def build(segments: List[Segment], shots: List[dict],
         })
 
         overlay = shot.get("overlay")
+        if overlay and overlay["type"] in {"photo-card", "name-card"}:
+            # Bind only this beat's sourced, reviewed image. Never substitute a
+            # previous scene's person or generate a portrait to fill a card.
+            if asset is not None and asset.kind == "image" and not review:
+                overlay = {**overlay, "media": [media]}
+            else:
+                overlay = None
         if overlay:
             # A graphic runs for as long as it needs to be read, not for as
             # long as the beat that introduced it — so it can span later cuts.
@@ -316,10 +324,15 @@ def _validate_overlay(ov: Any, index: int, total: int) -> None:
             for key, limit in (("lat", 90), ("lon", 180)):
                 if abs(_number(p.get(key), f"{where} {key}")) > limit:
                     raise ValueError(f"{where}: {key} is out of range")
-    elif kind == "split":
+    elif kind in {"split", "photo-card", "name-card"}:
         media = ov.get("media")
-        if not isinstance(media, list) or len(media) < 2:
-            raise ValueError(f"{where}: a split screen needs two media assets")
+        minimum = 2 if kind == "split" else 1
+        if not isinstance(media, list) or len(media) < minimum:
+            raise ValueError(f"{where}: a split screen needs two media assets"
+                             if kind == "split" else
+                             f"{where}: {kind} needs a real image asset")
+        if kind != "split" and any(not isinstance(m, dict) or m.get("type") != "image" or not m.get("url") for m in media):
+            raise ValueError(f"{where}: image cards need real image assets")
     elif kind == "stat":
         _number(ov.get("value"), f"{where} value")
     elif kind in {"bar-chart", "comparison"}:

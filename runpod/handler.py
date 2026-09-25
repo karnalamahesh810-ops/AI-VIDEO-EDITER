@@ -106,6 +106,38 @@ class Reporter:
         storage.patch_project(self.project_id, payload)
 
 
+def _machine() -> dict:
+    """
+    What this worker can actually use, as the container sees it.
+
+    os.cpu_count() reports the HOST; the cgroup files say what this container
+    is allowed. Render concurrency and the thread-spawn crash both depend on
+    the real limits, not the host's.
+    """
+    def read(path):
+        try:
+            with open(path) as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+    info = {"hostCpus": os.cpu_count()}
+    try:
+        info["usableCpus"] = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        pass
+    quota = read("/sys/fs/cgroup/cpu.max").split()
+    if len(quota) == 2 and quota[0] != "max":
+        info["cgroupCpus"] = round(int(quota[0]) / int(quota[1]), 2)
+    mem = read("/sys/fs/cgroup/memory.max")
+    if mem.isdigit():
+        info["memoryGb"] = round(int(mem) / 2 ** 30, 1)
+    for line in read("/proc/meminfo").splitlines()[:1]:
+        info["hostMemoryGb"] = round(int(line.split()[1]) / 2 ** 20, 1)
+    info["pidsMax"] = read("/sys/fs/cgroup/pids.max") or None
+    info["gpu"] = bool(os.path.exists("/dev/nvidia0"))
+    return info
+
+
 def _thumbnail(path: str, work: str, scene_id: str) -> str:
     """A 320px JPEG of the scene for the editor's filmstrip, or "" on failure."""
     out = os.path.join(work, f"thumb_{scene_id}.jpg")
@@ -372,6 +404,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             f"Requested source mode '{inp.get('source')}' is not implemented yet; "
             f"sourced from Creative Commons YouTube and Commons instead.")
     doc["meta"]["audioSource"] = raw_audio
+    # Where the sourcing time actually went, visible from outside the worker.
+    doc["meta"]["sourcing"] = dict(media.LAST_STATS)
+    # The whole-story read the plan was built on (cast, sections, footage).
+    doc["meta"]["story"] = dict(director.LAST_STORY)
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for.
@@ -647,6 +683,7 @@ def handler(job):
                     "imageCapPerVideo": config.IMAGE_MAX_PER_VIDEO,
                     "storage": store,
                     "readyToRender": store.get("ok", False),
+                    "machine": _machine(),
                     # One real model call, so only on request: {"probe": true}.
                     **({"vision": vision.probe()} if inp.get("probe") else {})}
 

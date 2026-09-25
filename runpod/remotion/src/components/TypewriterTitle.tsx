@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { fadeRange, useOverlaySafeStyle, useScale } from "./layout";
+import { TYPEWRITER } from "./fonts";
 import type { Overlay } from "../types";
 
 /**
@@ -21,7 +22,7 @@ export const TypewriterTitle: React.FC<{ overlay: Overlay; accent: string }> = (
   // duration - at a fraction, a card that ended up spanning into a later
   // cut was still typing after the beat that triggered it had already been
   // narrated past.
-  const typeFrames = Math.min(24, Math.max(1, durationInFrames - 10));
+  const typeFrames = Math.max(1, Math.min(fps * 1.6, durationInFrames * .45));
   const shown = Math.floor(
     interpolate(frame, [0, typeFrames], [0, text.length], {
       extrapolateLeft: "clamp",
@@ -45,7 +46,7 @@ export const TypewriterTitle: React.FC<{ overlay: Overlay; accent: string }> = (
     >
       <div
         style={{
-          fontFamily: "'DejaVu Sans Mono', ui-monospace, monospace",
+          fontFamily: TYPEWRITER,
           fontSize: s(64),
           fontWeight: 700,
           color: "#fff",

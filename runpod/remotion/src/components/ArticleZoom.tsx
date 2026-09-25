@@ -33,6 +33,7 @@ export const ArticleZoom: React.FC<{ overlay: Overlay; accent: string }> = ({
   const { frame, enter, opacity, durationInFrames } = useOverlayAnim(14, 10);
   const s = useScale();
   const red = accent || "#d62828";
+  const paper = overlay.variant === "paper";
 
   // Fixed, fast type-ins rather than a fraction of the card's own on-screen
   // time: at a fraction, a longer hold (this card reads for a while - it's a
@@ -88,7 +89,7 @@ export const ArticleZoom: React.FC<{ overlay: Overlay; accent: string }> = ({
         {overlay.subtitle ? (
           <div
             style={{
-              fontFamily: TYPE,
+              fontFamily: paper ? "Georgia, serif" : TYPE,
               fontSize: s(20),
               letterSpacing: "0.16em",
               textTransform: "uppercase",
@@ -101,7 +102,7 @@ export const ArticleZoom: React.FC<{ overlay: Overlay; accent: string }> = ({
         ) : null}
         <div
           style={{
-            fontFamily: TYPE,
+            fontFamily: paper ? "Georgia, serif" : TYPE,
             fontWeight: 700,
             fontSize: s(58),
             lineHeight: 1.15,
@@ -111,15 +112,16 @@ export const ArticleZoom: React.FC<{ overlay: Overlay; accent: string }> = ({
         >
           {pre}
           {hot ? (
-            <span style={{ background: red, color: "#fff", padding: "0 0.12em" }}>{hot}</span>
+            <span style={{ background: paper ? "#d7be62" : red, color: paper ? "#1d1c1a" : "#fff", padding: "0 0.12em" }}>{hot}</span>
           ) : null}
           {post}
         </div>
         <div style={{ height: 1, background: "#c9c4bb", margin: `${s(22)}px 0` }} />
+        <div style={{fontFamily:TYPE,fontSize:s(16),color:"#6b6760",marginBottom:s(14)}}>EDITORIAL SUMMARY</div>
         {body ? (
           <div
             style={{
-              fontFamily: TYPE,
+              fontFamily: paper ? "Georgia, serif" : TYPE,
               fontSize: s(24),
               lineHeight: 1.55,
               color: "#2b2926",

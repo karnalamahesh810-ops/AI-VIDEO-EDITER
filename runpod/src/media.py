@@ -734,16 +734,49 @@ _B_ROLL = re.compile(
 B_ROLL_INTENT = "drone aerial footage"
 
 
+_STILL_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+
+def _is_still(path: str) -> bool:
+    return os.path.splitext(path or "")[1].lower() in _STILL_EXTS
+
+
+def _video_seconds(path: str) -> float:
+    try:
+        p = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", path],
+            capture_output=True, text=True, timeout=30)
+        return max(0.0, float((p.stdout or "0").strip() or 0))
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return 0.0
+
+
 def _gray_frames(path: str, count: int = 4, w: int = 320, h: int = 180):
-    """`count` evenly spaced frames as (h, w) uint8 arrays, [] if unreadable."""
+    """
+    `count` evenly spaced frames as (h, w) uint8 arrays, [] if unreadable.
+
+    A still yields its one frame. The old filter (`fps=N/N`) produced ZERO
+    frames from a single image - ffmpeg's fps filter drops a lone frame with
+    no duration - so every web photo and archive still was judged
+    "unreadable" and thrown away after passing vision. That one bug sent
+    18 of 23 beats of an image-heavy story into the slow replacement pass,
+    where every replacement photo failed the same way. For video it also
+    sampled only the first `count` seconds rather than across the clip.
+    """
     try:
         import numpy as np
     except ImportError:
         return []
+    if _is_still(path):
+        vf, frames = f"scale={w}:{h},format=gray", 1
+    else:
+        seconds = _video_seconds(path)
+        rate = f"{count}/{seconds:.3f}" if seconds > count else "1"
+        vf, frames = f"fps={rate},scale={w}:{h},format=gray", count
     p = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", path,
-         "-vf", f"fps={count}/max(1\\,{max(1, count)}),scale={w}:{h},format=gray",
-         "-frames:v", str(count), "-f", "rawvideo", "-"],
+        ["ffmpeg", "-v", "error", "-i", path, "-vf", vf,
+         "-frames:v", str(frames), "-f", "rawvideo", "-"],
         capture_output=True, timeout=90)
     buf = p.stdout or b""
     n = len(buf) // (w * h)
@@ -1717,6 +1750,12 @@ def clip_quality(path: str) -> tuple:
     if not frames:
         return False, "unreadable"
 
+    if _is_still(path):
+        # Text on a still was already judged by vision, and a document photo
+        # is text by design - the caption detector would reject every one.
+        # Frozen means nothing for a photo. Only a black frame is a failure.
+        return (False, "near-black") if float(frames[0].mean()) < 26 else (True, "")
+
     if has_burned_captions(path):
         return False, "burned-in text or UI"
 
@@ -1751,6 +1790,14 @@ def _asset_ok(asset) -> tuple:
     return clip_quality(path)
 
 
+# What the last source_many() did, phase by phase, for the job result. The
+# worker's own log shows this, but RunPod doesn't expose that log - without
+# it, "why is this slow" was guesswork: a real job sent 19-21 of 23 beats to
+# the slow replacement pass and there was no way to see which of empty /
+# repeat / rejected was the cause.
+LAST_STATS: Dict[str, Any] = {}
+
+
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
                 **kwargs) -> List[Optional[MediaAsset]]:
@@ -1775,6 +1822,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     """
     results: List[Optional[MediaAsset]] = [None] * len(jobs)
     ordered = sorted(jobs, key=lambda j: j["index"])
+    t_start = time.time()
+    LAST_STATS.clear()
+    LAST_STATS.update(scenes=len(jobs))
 
     # How many earlier scenes already drew from the same candidate list, so
     # each reaches a different entry of it. Keyed on the SUBJECT when there is
@@ -1832,6 +1882,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 if on_done:
                     on_done(done, len(jobs))
 
+    t_pass2 = time.time()
     # Pass 2: nothing may appear twice, and nothing unusable may stay.
     #
     # Both failures want the same repair - reach further down the same result
@@ -1937,6 +1988,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     if todo:
         print(f"[media] second pass: {replaced[0]}/{len(todo)} scene(s) replaced "
               f"({empty} empty, {duplicates} repeats, {rejected} unusable)", flush=True)
+    LAST_STATS.update(pass1_seconds=round(t_pass2 - t_start, 1),
+                      pass2_seconds=round(time.time() - t_pass2, 1),
+                      pass1_empty=empty, pass1_repeats=duplicates,
+                      pass1_unusable=rejected, pass2_replaced=replaced[0])
 
     # AI rescue: for scenes still empty, one model call proposes DIFFERENT
     # things to show (a related place, object, document or era scene), and
@@ -1978,6 +2033,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         filled_by_ai = sum(1 for j in empties if results[j["index"]] is not None)
         print(f"[media] AI rescue filled {filled_by_ai}/{len(empties)} empty scene(s)",
               flush=True)
+        LAST_STATS.update(rescue_tried=len(empties), rescue_filled=filled_by_ai)
 
     # Last resort for whatever is still empty: one generated still each,
     # within IMAGE_MAX_PER_VIDEO. Inside source_for_segment generation only
@@ -2001,4 +2057,11 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         filled = sum(1 for job in empties if results[job["index"]] is not None)
         print(f"[media] generated stills for {filled}/{len(empties)} empty scene(s)",
               flush=True)
+        LAST_STATS.update(generated_tried=len(empties), generated_filled=filled)
+    LAST_STATS.update(total_seconds=round(time.time() - t_start, 1),
+                      still_empty=sum(1 for r in results if r is None),
+                      by_source=dict(sorted(
+                          ((src, sum(1 for r in results if r and r.source == src))
+                           for src in {r.source for r in results if r}),
+                          key=lambda kv: -kv[1])))
     return results

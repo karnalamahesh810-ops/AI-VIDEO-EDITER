@@ -89,16 +89,30 @@ def render(props: dict, out_path: str, composition: str = "Main",
             # somebody is listening.
             "--log=info" if on_progress else "--log=error",
         ]
-        if concurrency:
-            cmd.append(f"--concurrency={concurrency}")
+        # A container sees the HOST's memory and cores. Remotion sizes its
+        # frame cache at half of "system memory" and the compositor's decoders
+        # scale with cores, so on a RunPod worker both overshoot the cgroup
+        # until the compositor can no longer start a thread - the render dies
+        # with "thread::unix::Thread::new::thread_start" partway through.
+        # Fixed caps keep it inside the container.
+        cmd += [f"--offthreadvideo-cache-size-in-bytes={config.RENDER_FRAME_CACHE_BYTES}",
+                f"--offthreadvideo-video-threads={config.RENDER_VIDEO_THREADS}"]
 
-        if on_progress is None:
-            p = subprocess.run(
-                cmd, cwd=config.REMOTION_DIR, capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=timeout,
-            )
-        else:
-            p = _run_streaming(cmd, timeout, on_progress)
+        def run(argv):
+            if on_progress is None:
+                return subprocess.run(
+                    argv, cwd=config.REMOTION_DIR, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=timeout,
+                )
+            return _run_streaming(argv, timeout, on_progress)
+
+        p = run(cmd + ([f"--concurrency={concurrency}"] if concurrency else []))
+        tail = (p.stderr or p.stdout or "")[-3000:]
+        if p.returncode != 0 and ("thread_start" in tail or "Resource temporarily" in tail):
+            # Still out of threads: one slower, single-tab retry beats losing
+            # a whole job that already spent minutes sourcing.
+            print("[render] out of threads - retrying at concurrency 1", flush=True)
+            p = run(cmd + ["--concurrency=1"])
 
     if p.returncode != 0 or not os.path.exists(out_path):
         tail = (p.stderr or p.stdout or "")[-1500:]

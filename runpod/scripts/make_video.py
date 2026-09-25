@@ -196,6 +196,8 @@ def main() -> int:
     ap.add_argument("--width", type=int, default=1920)
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--out", default="")
+    ap.add_argument("--work-dir", default="",
+                    help="isolated directory for this test's media and progress")
     ap.add_argument("--no-maps", action="store_true")
     ap.add_argument("--any-licence", action="store_true",
                     help="drop the Creative Commons filter — far better footage, "
@@ -205,7 +207,7 @@ def main() -> int:
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     config.REMOTION_DIR = os.path.join(root, "remotion")
-    work = os.path.join(root, "out", "make")
+    work = os.path.abspath(args.work_dir) if args.work_dir else os.path.join(root, "out", "make")
     os.makedirs(work, exist_ok=True)
 
     source = os.path.abspath(args.audio)

@@ -56,7 +56,9 @@ export type OverlayType =
   // VidRush's own text animations, read off their exports.
   | "sentence-highlight"
   | "article-zoom"
-  | "date-stamp";
+  | "date-stamp"
+  | "photo-card"
+  | "name-card";
 
 export interface SceneWord {
   text: string;
@@ -139,6 +141,9 @@ export interface Overlay {
   highlight?: string;
   /** Document body for article-zoom; only ever text taken from the plan. */
   body?: string;
+  /** Normalized frame positions, supplied after visual review, not guessed. */
+  anchor?: { x: number; y: number };
+  labelPosition?: { x: number; y: number };
   startFrame: number;
   durationInFrames: number;
 }

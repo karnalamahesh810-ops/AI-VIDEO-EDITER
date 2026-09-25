@@ -123,12 +123,15 @@ IMAGE_MAX_PER_VIDEO = int(os.getenv("IMAGE_MAX_PER_VIDEO", "80"))
 DIRECTOR_API_BASE = os.getenv("DIRECTOR_API_BASE", "").rstrip("/")
 DIRECTOR_API_KEY = os.getenv("DIRECTOR_API_KEY", "")
 DIRECTOR_MODEL = os.getenv("DIRECTOR_MODEL", "")
-# Tried in order if DIRECTOR_MODEL fails or times out. Verified working
-# through this key: 19s for a text plan call, 7.7s for a vision call, both
-# via https://api.kie.ai/v1 with "model" in the body (no per-model path
-# needed, unlike vision.py's endpoint). Empty entries are skipped.
+# Tried in order if DIRECTOR_MODEL fails or times out. Empty entries are
+# skipped. Measured 2026-09-25 on a real 95s narration, whole-story pass:
+#   gemini-3-8-flash-openai  8.9s  0.13 credits
+#   gpt-5-2                 18.4s  0.69 credits
+#   gemini-3-pro            21.2s  0.55 credits
+# All three named the unnamed cast correctly from context. Kie serves the
+# Flash models on their own path only; director._chat_url handles that.
 DIRECTOR_FALLBACK_MODELS = [m.strip() for m in
-                           os.getenv("DIRECTOR_FALLBACK_MODELS", "gemini-3-pro").split(",")
+                           os.getenv("DIRECTOR_FALLBACK_MODELS", "gpt-5-2,gemini-3-pro").split(",")
                            if m.strip()]
 
 # --- vision verification -----------------------------------------------------
@@ -142,11 +145,15 @@ VISION_ENABLED = _flag("VISION_ENABLED", True)
 VISION_API_BASE = os.getenv("VISION_API_BASE", "") or DIRECTOR_API_BASE or "https://api.kie.ai/v1"
 VISION_API_KEY = (os.getenv("VISION_API_KEY", "") or DIRECTOR_API_KEY
                   or os.getenv("KIE_API_KEY", ""))
-# gpt-5-2 is the model verified to accept images on the Kie account (Gemini
-# Flash answers "channel is not supported" there).
-VISION_MODEL = os.getenv("VISION_MODEL", "gpt-5-2")
+# Measured on 8 real candidates, cache cleared per model (2026-09-25):
+#   gemini-3-8-flash-openai  7.2s/img  0.080 credits
+#   gpt-5-2                 14.5s/img  0.085 credits
+#   gemini-3-pro            11.3s/img  0.198 credits
+# Flash was also the stricter judge: it saw that an "immigration file" was a
+# modern 3D illustration (0.40) where gpt-5-2 passed it (0.82).
+VISION_MODEL = os.getenv("VISION_MODEL", "gemini-3-8-flash-openai")
 VISION_FALLBACK_MODELS = [m.strip() for m in
-                          os.getenv("VISION_FALLBACK_MODELS", "gemini-3-pro").split(",")
+                          os.getenv("VISION_FALLBACK_MODELS", "gpt-5-2,gemini-3-pro").split(",")
                           if m.strip()]
 VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
 # gpt-5-2 reasons before it answers. Measured on one real clip check: 32.5 s
@@ -207,6 +214,9 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # sourcing phase. 4 is conservative; raise it only after confirming a higher
 # value survives a real render on this same pod type.
 RENDER_CONCURRENCY = int(os.getenv("RENDER_CONCURRENCY", "4"))
+# See render.render: the defaults size these from the host, not the container.
+RENDER_FRAME_CACHE_BYTES = int(os.getenv("RENDER_FRAME_CACHE_BYTES", str(1536 * 1024 * 1024)))
+RENDER_VIDEO_THREADS = int(os.getenv("RENDER_VIDEO_THREADS", "1"))
 
 # --- whisper -----------------------------------------------------------------
 # "base" is the sweet spot for narration alignment on CPU; bump to "small" on GPU.

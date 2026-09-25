@@ -21,7 +21,7 @@ export const SentenceHighlight: React.FC<{ overlay: Overlay; accent: string }> =
   overlay,
   accent,
 }) => {
-  const { frame, opacity } = useOverlayAnim(10, 10);
+  const { frame, opacity, fps, durationInFrames } = useOverlayAnim(10, 10);
   const s = useScale();
   const safe = useOverlaySafeStyle();
 
@@ -33,7 +33,7 @@ export const SentenceHighlight: React.FC<{ overlay: Overlay; accent: string }> =
   // - it used to take half the card's OWN duration, which read fine when a
   // beat ran ~7s but left the text still assembling well after a ~3s beat's
   // narration had already moved on to the next line.
-  const typeEnd = 16;
+  const typeEnd = Math.max(1, Math.min(fps * 2, durationInFrames * .45));
   const shown = Math.ceil(
     interpolate(frame, [0, typeEnd], [0, words.length], {
       extrapolateLeft: "clamp",
@@ -42,11 +42,22 @@ export const SentenceHighlight: React.FC<{ overlay: Overlay; accent: string }> =
   );
 
   return (
-    <AbsoluteFill style={{ ...safe, justifyContent: "flex-end", opacity }}>
+    <AbsoluteFill
+      style={{
+        ...safe,
+        justifyContent: "flex-end",
+        opacity,
+        // Readability without dimming the footage: a soft shade only in the
+        // lower-left where the text sits. A full-frame 36% scrim here made
+        // every card read as "low light".
+        background:
+          "radial-gradient(ellipse at 18% 82%, rgba(0,0,0,.42) 0%, rgba(0,0,0,0) 55%)",
+      }}
+    >
       <div
         style={{
-          margin: `0 0 ${s(56)}px ${s(110)}px`,
-          maxWidth: "58%",
+          margin: `0 0 ${s(110)}px ${s(76)}px`,
+          maxWidth: "48%",
           fontFamily: NARROW,
           fontWeight: 700,
           fontSize: s(54),
