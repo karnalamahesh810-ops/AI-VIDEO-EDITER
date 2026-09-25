@@ -250,6 +250,18 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # short grace for the rest. One stalled download used to hold a job for
 # 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
 PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+
+# YouTube channels searched first, by story kind (media._story_channels).
+# Archive channels hold newsreels and travelogues of every era; the news set
+# holds footage of this week's floods and storms.
+ARCHIVE_CHANNELS = [c.strip() for c in os.getenv(
+    "ARCHIVE_CHANNELS",
+    "@BritishPathe,@PeriscopeFilm,@APArchive,@HuntleyFilmArchives,@britishmovietone"
+).split(",") if c.strip()]
+NEWS_CHANNELS = [c.strip() for c in os.getenv(
+    "NEWS_CHANNELS",
+    "@Reuters,@AssociatedPress,@NBCNews,@weatherchannel,@FOXWeather,@ABCNews"
+).split(",") if c.strip()]
 STRAGGLER_GRACE_SECONDS = float(os.getenv("STRAGGLER_GRACE_SECONDS", "75"))
 SEQUENCE_BUDGET_SECONDS = float(os.getenv("SEQUENCE_BUDGET_SECONDS", "300"))
 

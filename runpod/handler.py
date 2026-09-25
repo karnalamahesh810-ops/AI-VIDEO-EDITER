@@ -378,6 +378,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     brief = director.story_brief(segments, title, configured=director.is_configured())
     # Every vision judgement sees the whole story, not just its own line.
     vision.set_story(brief)
+    # And YouTube searches the archive or news channels for this kind of story.
+    media.set_story_kind(brief.get("kind", ""))
 
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()

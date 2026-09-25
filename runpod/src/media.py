@@ -1097,6 +1097,51 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
     return out
 
 
+# Where VidRush-grade footage actually lives. A plain YouTube search for
+# "Honolulu 1960s" returns vlogs and slideshows; British Pathé and Periscope
+# Film return "A Trip To Honolulu (1966)" and "HONOLULU HAWAII 1969
+# TRAVELOGUE". The story kind (set per job) picks the channel set.
+_STORY_KIND = {"kind": ""}
+
+
+def set_story_kind(kind: str) -> None:
+    _STORY_KIND["kind"] = (kind or "").strip().lower()
+
+
+def _story_channels() -> List[str]:
+    kind = _STORY_KIND["kind"]
+    if kind in ("history", "biography"):
+        return config.ARCHIVE_CHANNELS
+    if kind in ("news", "weather", "disaster"):
+        return config.NEWS_CHANNELS
+    return []
+
+
+def _channel_candidates(query: str, channels: List[str], subject: str = "") -> List[dict]:
+    """
+    One search inside each channel, in parallel, results interleaved so the
+    best hit of every channel comes before the second of any. Cached like
+    the plain search. Channels that time out or have nothing are skipped.
+    """
+    key = f"ytch::{','.join(channels)}::{(subject or query).strip().lower()}::{query.lower()}"
+    with _CACHE_LOCK:
+        if key in _YT_CANDIDATES_CACHE:
+            return _YT_CANDIDATES_CACHE[key]
+    targets = [f"https://www.youtube.com/{ch}/search?query={urllib.parse.quote_plus(query)}"
+               for ch in channels]
+    with ThreadPoolExecutor(max_workers=max(1, len(targets))) as ex:
+        lists = list(ex.map(lambda t: _yt_candidates(t, False, limit=6, timeout=45), targets))
+    merged, seen = [], set()
+    for rank in range(max((len(x) for x in lists), default=0)):
+        for found in lists:
+            if rank < len(found) and found[rank]["id"] not in seen:
+                seen.add(found[rank]["id"])
+                merged.append(found[rank])
+    with _CACHE_LOCK:
+        _YT_CANDIDATES_CACHE[key] = merged
+    return merged
+
+
 def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
                           variant: str = "") -> List[dict]:
     """
@@ -1319,6 +1364,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     elif b_roll_intent:
         searches.append((f"{query_or_url} {B_ROLL_INTENT}", "broll", False))
     searches.append((query_or_url, "plain", False))
+    # The archive / news channels first: that is where the real footage of
+    # an era or an event is, ahead of general uploads.
+    if _story_channels() and not require_cc:
+        searches.insert(0, (query_or_url, "channels", False))
 
     judged = 0
     for search, variant, this_year in searches:
@@ -1336,7 +1385,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         else:
             target = f"ytsearch12:{search}"
 
-        candidates = _yt_candidates_cached(target, require_cc, subject, variant)
+        if variant == "channels":
+            candidates = _channel_candidates(search, _story_channels(), subject)
+        else:
+            candidates = _yt_candidates_cached(target, require_cc, subject, variant)
         if not candidates:
             continue
 
