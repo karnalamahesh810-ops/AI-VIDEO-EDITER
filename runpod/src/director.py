@@ -795,6 +795,10 @@ def _json_reply(content):
     return json.loads(text)
 
 
+# Model calls this job made (successful ones), for the job's AI cost line.
+CHAT_CALLS = {"n": 0}
+
+
 def _chat_json(system: str, payload: dict, timeout: int = 120,
                errors: Optional[List[str]] = None) -> Optional[dict]:
     """
@@ -822,6 +826,7 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
                 raise ValueError(f"{model}: code {body['code']}")
             data = _json_reply(body["choices"][0]["message"]["content"])
             if isinstance(data, dict):
+                CHAT_CALLS["n"] += 1
                 return data
         except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
             if errors is not None:
