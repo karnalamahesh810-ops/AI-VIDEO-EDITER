@@ -754,6 +754,9 @@ def _sanitize_stills(doc: dict, work: str) -> int:
 # module level so the job's error path can still return them when the upload
 # after the render fails.
 LAST_FRAMES: list = []
+# The planned timeline of the current build, returned on failure in QA mode
+# (return_frames) so a failed render can be reproduced locally.
+LAST_TIMELINE: dict = {}
 
 
 def _contact_sheets(video: str, work: str, every: float = 3.0, per_sheet: int = 16) -> list:
@@ -1002,6 +1005,8 @@ def handler(job):
             # Render from the local files (fast), THEN save the clips, so the
             # finished video opens in the editor with every scene replaceable.
             local_doc = copy.deepcopy(doc)
+            LAST_TIMELINE.clear()
+            LAST_TIMELINE.update(doc)
             patched = _fill_missing_media(local_doc)
             if patched:
                 print(f"[worker] {patched} scene(s) had no media; reused a "
@@ -1027,7 +1032,8 @@ def handler(job):
                 "status": "failed", "error_message": msg, "current_step": "Failed",
             })
         return {"ok": False, "error": msg, "elapsed": round(time.time() - started, 1),
-                **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {})}
+                **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {}),
+                **({"timeline": dict(LAST_TIMELINE)} if inp.get("return_frames") and LAST_TIMELINE else {})}
     finally:
         # Serverless workers are reused; a 17-minute render leaves GBs behind.
         if not inp.get("keep_workdir"):
