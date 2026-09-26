@@ -1203,10 +1203,21 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 20,
 # Film return "A Trip To Honolulu (1966)" and "HONOLULU HAWAII 1969
 # TRAVELOGUE". The story kind (set per job) picks the channel set.
 _STORY_KIND = {"kind": ""}
+# Job option youtube_only: every scene is a footage search and nothing but
+# YouTube may fill it - no Dailymotion, archive, stills, photos or images.
+_YOUTUBE_ONLY = {"on": False}
 
 
 def set_story_kind(kind: str) -> None:
     _STORY_KIND["kind"] = (kind or "").strip().lower()
+
+
+def set_youtube_only(on: bool) -> None:
+    _YOUTUBE_ONLY["on"] = bool(on)
+
+
+def youtube_only() -> bool:
+    return _YOUTUBE_ONLY["on"]
 
 
 def _story_channels() -> List[str]:
@@ -2012,6 +2023,8 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
     allow_youtube = config.ALLOW_YOUTUBE if allow_youtube is None else allow_youtube
     allow_stock = config.ALLOW_STOCK if allow_stock is None else allow_stock
     require_cc = config.REQUIRE_CC if require_cc is None else require_cc
+    if youtube_only():
+        visual_type, allow_youtube, allow_stock = "footage", True, False
 
     if visual_type == "footage" and allow_youtube:
         # Skip past results earlier scenes already took, and offset the grab
@@ -2022,6 +2035,8 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
                              intent=intent, context=context, subject=subject)
         if asset:
             return asset
+    if youtube_only():
+        return None
 
     if visual_type == "footage" and config.ALLOW_DAILYMOTION and not require_cc:
         asset = dailymotion_clip(query, work_dir, seconds=seconds, skip=nth,

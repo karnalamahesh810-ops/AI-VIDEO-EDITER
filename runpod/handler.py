@@ -537,7 +537,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             report(f"Sourced {done}/{n} scenes", pct, done=done, total=n)
 
     flags = {"allow_youtube": inp.get("allow_youtube"), "allow_stock": inp.get("allow_stock"),
-             "require_cc": inp.get("require_cc")}
+             "require_cc": inp.get("require_cc"), "youtube_only": bool(inp.get("youtube_only"))}
+    media.set_youtube_only(flags["youtube_only"])
+    if flags["youtube_only"]:
+        for j in jobs:
+            j["visual_type"] = "footage"
 
     def local(some_jobs, exclude, seqs=None, progress=True):
         """Source some jobs on this worker; results aligned to their order."""
@@ -561,7 +565,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             sequences=local_seqs or None,
             assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
             on_pool=on_pool if progress else None,
-            exclude=exclude, **flags)
+            exclude=exclude, **{k: v for k, v in flags.items() if k != "youtube_only"})
 
     project_id = inp.get("project_id") or ""
     # GoMotion's method first: a few long videos per subject, judged once,
@@ -1025,6 +1029,7 @@ def handler(job):
                     pass
 
             media.reset_cache()
+            media.set_youtube_only(bool(inp.get("youtube_only")))
             if inp.get("allow_youtube") is not False:
                 _require_youtube()      # a blocked machine fails fast; the parent redoes its part
             media.limit_generation(inp.get("image_budget", config.IMAGE_MAX_PER_VIDEO))
