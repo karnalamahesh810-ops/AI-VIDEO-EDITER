@@ -562,7 +562,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             # network, and the network side is capped separately (NETWORK_CONCURRENCY).
             workers=int(inp.get("source_workers", config.SOURCE_WORKERS)),
             on_done=on_done if progress else None,
-            on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
+            on_review=lambda d, n: report(f"Filling empty or repeated scenes {d}/{n}", 65, done=d, total=n),
             rescue=lambda items: director.rescue_queries(items, story=brief),
             on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
             sequences=local_seqs or None,
