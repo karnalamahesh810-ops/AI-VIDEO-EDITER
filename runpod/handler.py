@@ -578,6 +578,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         require_cc = flags["require_cc"] if flags["require_cc"] is not None else config.REQUIRE_CC
         pooled = pools.source_by_subject(jobs, work, require_cc=bool(require_cc), report=report)
         print(f"[worker] subject pools covered {len(pooled)}/{len(jobs)} lines", flush=True)
+    pool_stats = dict(media.LAST_STATS.get("pools") or {}, covered_lines=len(pooled))
     taken = {a.identity for a in pooled.values()} | pools.video_ids(pooled)
     rest = [j for j in jobs if j["index"] not in pooled]
     assets = [pooled.get(j["index"]) for j in jobs]
@@ -597,6 +598,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         got = local(rest, set(taken), seqs=sequences)
         for j, a in zip(sorted(rest, key=lambda j: j["index"]), got):
             assets[j["index"]] = a
+    media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     vision.require_credits()
 
     doc = timeline.build(
@@ -767,6 +769,34 @@ def _sign_supabase_urls(doc: dict):
         for m in (ov.get("media") or []):
             if isinstance(m, dict) and m.get("url"):
                 m["url"] = resign(m["url"])
+
+
+def _sanitize_videos(doc: dict) -> int:
+    """
+    Blank every scene whose local clip is not a playable video, then cover it.
+
+    A download can come back as a frameless MP4 shell; published and rendered
+    as-is it produced an empty editor tile and a render that died on frame 0
+    ("Is this a video file?"). Runs before publishing, so a stub never reaches
+    storage. Returns how many scenes were blanked.
+    """
+    from src.assetserver import is_local
+    dropped = 0
+    for s in doc.get("scenes", []):
+        m = s.get("media") or {}
+        url = m.get("url") or ""
+        if m.get("type") != "video" or not (is_local(url) and os.path.isfile(url)):
+            continue
+        if not media.playable_video(url):
+            m.clear()
+            m.update({"type": "color", "url": "", "source": "none"})
+            s["reviewRequired"] = True
+            s["reviewReason"] = "The downloaded clip was empty - covered by another shot; use Find footage"
+            dropped += 1
+    if dropped:
+        print(f"[worker] {dropped} empty clip(s) dropped before publishing", flush=True)
+        _fill_missing_media(doc)
+    return dropped
 
 
 def _sanitize_stills(doc: dict, work: str) -> int:
@@ -1109,6 +1139,7 @@ def handler(job):
 
         if action == "plan":
             doc = do_plan(inp, work, report)
+            _sanitize_videos(doc)
             # Without this the timeline points at files this job is about to
             # delete. See publish_media().
             if project_id and inp.get("publish_media", True):
@@ -1156,6 +1187,7 @@ def handler(job):
 
         if action == "build":
             doc = do_plan(inp, work, report)
+            _sanitize_videos(doc)
             if project_id:
                 storage.patch_project(project_id, {"scene_data": doc})
             # Render from the local files (fast), THEN save the clips, so the

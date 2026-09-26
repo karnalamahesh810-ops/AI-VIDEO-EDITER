@@ -1366,12 +1366,48 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
         print(f"[media] yt-dlp failed ({video_id}, exit {p.returncode}): {reason[-240:] or 'no diagnostic'}", flush=True)
         return ""
+    found = ""
     for line in (p.stdout or "").splitlines():
         line = line.strip()
         if line and os.path.exists(line):
-            return line
-    guess = os.path.join(out_dir, f"yt_{video_id}_{range_key}_{fetch_id}.mp4")
-    return guess if os.path.exists(guess) else ""
+            found = line
+            break
+    if not found:
+        guess = os.path.join(out_dir, f"yt_{video_id}_{range_key}_{fetch_id}.mp4")
+        found = guess if os.path.exists(guess) else ""
+    if found and not playable_video(found):
+        # yt-dlp exited 0 but the section has no frames: a 262-byte MP4 shell
+        # (seen when a proxy dropped the stream mid-section). Uploaded as-is it
+        # killed a whole render ("Is this a video file?"). Drop it so the
+        # retry goes through another proxy.
+        reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
+        print(f"[media] empty download ({video_id} @{start_at:.0f}s, "
+              f"{os.path.getsize(found)} bytes) via proxy #{_PROXIES.index(proxy) + 1 if proxy in _PROXIES else 0}: "
+              f"{reason[-160:] or 'no diagnostic'}", flush=True)
+        try:
+            os.remove(found)
+        except OSError:
+            pass
+        _bench_proxy(proxy, "empty download")
+        return ""
+    return found
+
+
+def playable_video(path: str, min_seconds: float = 0.5) -> bool:
+    """A real, decodable video: a video stream at least min_seconds long."""
+    try:
+        if os.path.getsize(path) < 20_000:
+            return False
+        p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "stream=codec_name:format=duration",
+                            "-of", "csv=p=0", path],
+                           capture_output=True, text=True, timeout=30)
+        lines = [l.strip() for l in (p.stdout or "").splitlines() if l.strip()]
+        codec = next((l for l in lines if not re.fullmatch(r"[\d.]+", l)), "")
+        seconds = max((float(l) for l in lines if re.fullmatch(r"[\d.]+", l)), default=0.0)
+        return bool(codec) and seconds >= min_seconds
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return False
 
 
 def _fixed_point(candidate: dict, grab: float, start_at: float) -> float:
