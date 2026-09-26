@@ -240,8 +240,8 @@ BRIGHTDATA_SERP_ZONE = os.getenv("BRIGHTDATA_SERP_ZONE", "serp_api1")
 # storyboard, many different moments cut from them. Lines whose subject pool
 # runs dry fall back to per-scene sourcing.
 SUBJECT_POOLS = _flag("SUBJECT_POOLS", True)
-POOL_MIN_SCENES = int(os.getenv("POOL_MIN_SCENES", "2"))
-POOL_MAX_VIDEOS = int(os.getenv("POOL_MAX_VIDEOS", "6"))
+POOL_MIN_SCENES = int(os.getenv("POOL_MIN_SCENES", "1"))
+POOL_MAX_VIDEOS = int(os.getenv("POOL_MAX_VIDEOS", "8"))
 POOL_PARALLEL_SUBJECTS = int(os.getenv("POOL_PARALLEL_SUBJECTS", "4"))
 POOL_MIN_GAP_SECONDS = float(os.getenv("POOL_MIN_GAP_SECONDS", "8"))
 

@@ -63,5 +63,32 @@ class SourceBySubject(unittest.TestCase):
         self.assertEqual(pools.video_ids(got), {"yt:AAAAAAAAAAA", "yt:BBBBBBBBBBB"})
 
 
+class Reserve(unittest.TestCase):
+    def test_spare_moments_fill_empty_or_repeated_lines_same_subject_first(self):
+        jobs = [job(0, "Lake Mead"), job(1, "Lake Mead"), job(2, "Hoover Dam"), job(3, "Lake Mead"), job(4, "Hoover Dam")]
+        cands = {"Lake Mead": [{"id": "AAAAAAAAAAA", "title": "Lake Mead 4k"}],
+                 "Hoover Dam": [{"id": "HHHHHHHHHHH", "title": "Hoover Dam drone"}]}
+        rated = {"AAAAAAAAAAA": [{"start": 10.0 * k, "score": 0.9, "description": f"mead {k}"} for k in range(1, 6)],
+                 "HHHHHHHHHHH": [{"start": 10.0 * k, "score": 0.9, "description": f"dam {k}"} for k in range(1, 4)]}
+
+        def fake_fetch(job_, cand, m, work, require_cc, subject):
+            return media.MediaAsset(kind="video", source="youtube",
+                                    url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(m['start'])}",
+                                    local_path="/w/x.mp4", moment_key=f"yt:{cand['id']}@{int(m['start'] // 10)}")
+        with mock.patch.object(pools, "candidates", lambda s, cc, skip: cands.get(s, [])), \
+                mock.patch.object(pools, "rate_video", lambda c, s, ctx, sec: rated[c["id"]]), \
+                mock.patch.object(pools, "_fetch", fake_fetch), \
+                mock.patch.object(config, "POOL_MIN_SCENES", 1):
+            got = pools.source_by_subject(jobs, "/w")
+            self.assertEqual(sorted(got), [0, 1, 2, 3, 4])
+            # Suppose per-scene sourcing later left line 3 empty and line 4 a repeat:
+            extra = pools.fill_from_reserve(jobs, [3, 4], "/w")
+        self.assertEqual(sorted(extra), [3, 4])
+        self.assertIn("AAAAAAAAAAA", extra[3].url)          # Lake Mead line -> a spare Lake Mead moment
+        self.assertIn("HHHHHHHHHHH", extra[4].url)          # Hoover Dam line -> a spare Hoover Dam moment
+        all_ids = {a.identity for a in got.values()} | {a.identity for a in extra.values()}
+        self.assertEqual(len(all_ids), 7)                   # never the same moment twice
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -130,8 +130,13 @@ def spaced(found: List[dict], gap: float) -> List[dict]:
 
 
 def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Set[str],
-                 claim: Callable[[str], bool]) -> List[tuple]:
-    """[(job, candidate, moment)] for as many of the subject's lines as the pool covers."""
+                 claim: Callable[[str], bool]) -> tuple:
+    """
+    ([(job, candidate, moment)] for the subject's lines, spare (candidate, moment)s).
+
+    Spares are approved moments beyond what the lines need; fill_from_reserve
+    hands them to lines that ended up empty or repeated.
+    """
     need = len(sjobs)
     seconds = max(j.get("seconds") or 6.0 for j in sjobs) + media.SEQ_SHOT_PAD
     context = " ".join((j.get("context") or "") for j in sjobs[:4])
@@ -144,7 +149,38 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
         if len(pool) >= need:
             break
     # Story order: consecutive lines take consecutive moments of one video.
-    return [(job, cand, m) for job, (cand, m) in zip(sjobs, pool)]
+    return [(job, cand, m) for job, (cand, m) in zip(sjobs, pool)], pool[need:]
+
+
+# Spare approved moments of this job's pools: (subject key, candidate, moment).
+_RESERVE: List[tuple] = []
+_RESERVE_LOCK = threading.Lock()
+
+
+def fill_from_reserve(jobs: List[dict], indices: List[int], work: str,
+                      require_cc: bool = False) -> Dict[int, media.MediaAsset]:
+    """
+    Real, distinct footage for lines left empty or repeated, from the pools'
+    spare moments - the line's own subject first, then any story subject.
+    """
+    by_index = {j["index"]: j for j in jobs}
+    with _RESERVE_LOCK:
+        spare = list(_RESERVE)
+        _RESERVE.clear()
+    out: Dict[int, media.MediaAsset] = {}
+    for i in sorted(indices):
+        job = by_index.get(i)
+        if job is None or not spare:
+            continue
+        key = subject_key(job.get("subject") or "")
+        pick = next((s for s in spare if s[0] == key), None) or spare[0]
+        spare.remove(pick)
+        asset = _fetch(job, pick[1], pick[2], work, require_cc, job.get("subject") or pick[0])
+        if asset is not None:
+            out[i] = asset
+    with _RESERVE_LOCK:
+        _RESERVE.extend(spare)
+    return out
 
 
 def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
@@ -175,6 +211,8 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
     need_min = config.POOL_MIN_SCENES if min_scenes is None else min_scenes
     todo = {k: v for k, v in groups(jobs).items() if len(v) >= need_min}
     results: Dict[int, media.MediaAsset] = {}
+    with _RESERVE_LOCK:
+        _RESERVE.clear()
     if not todo:
         return results
     lock = threading.Lock()
@@ -193,10 +231,12 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
         sjobs = todo[key]
         name = display_name(sjobs)
         try:
-            plan = plan_subject(name, sjobs, require_cc, set(), claim)
+            plan, spare = plan_subject(name, sjobs, require_cc, set(), claim)
             with ThreadPoolExecutor(max_workers=6) as ex:
                 got = list(ex.map(lambda p: (p[0], _fetch(p[0], p[1], p[2], work, require_cc, name)),
                                   plan))
+            with _RESERVE_LOCK:
+                _RESERVE.extend((key, c, m) for c, m in spare)
         except Exception as e:  # noqa: BLE001 - its lines fall back to per-scene sourcing
             print(f"[pools] {name}: {type(e).__name__}: {e}", flush=True)
             got = []

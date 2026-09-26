@@ -518,7 +518,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Plan the video in sequences: runs of lines about one subject and setting,
     # each gathering one pool of shots that the editor call lays out.
     sequences = []
-    if config.SEQUENCE_SOURCING:
+    # Subject pools (src/pools.py) do this job better and cheaper; the old
+    # sequence pools on top of them cost ~4 minutes and hundreds of vision
+    # calls on a 3-minute video for nothing new.
+    if config.SEQUENCE_SOURCING and not config.SUBJECT_POOLS:
         report("Planning sequences", 22)
         sequences = director.plan_sequences(segments, shots, brief)
 
@@ -573,10 +576,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # cover - people, stills, one-off subjects - goes to per-scene sourcing,
     # which is told to leave the pool videos alone.
     pooled: dict = {}
+    require_cc = bool(flags["require_cc"] if flags["require_cc"] is not None else config.REQUIRE_CC)
     if config.SUBJECT_POOLS and inp.get("allow_youtube") is not False:
         report("Finding footage by subject", 22, done=0, total=len(jobs))
-        require_cc = flags["require_cc"] if flags["require_cc"] is not None else config.REQUIRE_CC
-        pooled = pools.source_by_subject(jobs, work, require_cc=bool(require_cc), report=report)
+        pooled = pools.source_by_subject(jobs, work, require_cc=require_cc, report=report)
         print(f"[worker] subject pools covered {len(pooled)}/{len(jobs)} lines", flush=True)
     pool_stats = dict(media.LAST_STATS.get("pools") or {}, covered_lines=len(pooled))
     taken = {a.identity for a in pooled.values()} | pools.video_ids(pooled)
@@ -598,6 +601,25 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         got = local(rest, set(taken), seqs=sequences)
         for j, a in zip(sorted(rest, key=lambda j: j["index"]), got):
             assets[j["index"]] = a
+    # Lines the per-scene path left empty, or filled with a clip already on the
+    # timeline, get the pools' spare approved moments: real, distinct footage of
+    # the story's subjects instead of a black hole or a repeat.
+    if pooled:
+        seen_ids: set = set()
+        redo = []
+        for j in jobs:
+            a = assets[j["index"]]
+            if a is None or a.identity in seen_ids:
+                redo.append(j["index"])
+            else:
+                seen_ids.add(a.identity)
+        if redo:
+            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc)
+            for i, a in extra.items():
+                assets[i] = a
+            pool_stats["reserve_filled"] = len(extra)
+            print(f"[worker] {len(extra)}/{len(redo)} empty or repeated line(s) filled from "
+                  "spare pool moments", flush=True)
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     vision.require_credits()
 
