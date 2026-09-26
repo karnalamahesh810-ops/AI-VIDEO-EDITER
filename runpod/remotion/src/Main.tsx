@@ -25,6 +25,13 @@ import { Bullets, LabelBoxes, RingStat, StatTag } from "./components/FootageTags
 import { AgeTag, BarTitle, ClockBadge, Kicker, MemoBox, PersonTag, RedStrip, SwooshTitle, UnderlineTitle, WordType } from "./components/TextGraphics";
 
 import { IconPop, LineChart, PathSteps, ProgressSteps, Span } from "./components/DataGraphics";
+import { AreaChart, Banner, Counter, Donut, IconArray, NumberRoll, ProgressBar, Ranking, ScaleCompare, Trend, YearRoll } from "./components/MotionGraphics";
+import { SatelliteMap, SpreadMap } from "./components/MapLooks";
+import { MotionWrap } from "./components/MotionWrap";
+
+const THEMES: Record<string, string> = {
+  gold: "#d6a83c", red: "#e63946", teal: "#2ec4b6", blue: "#2f80ed", white: "#f4f1ea", amber: "#f4a100",
+};
 
 const PERSON_TAGS = new Set(["tag", "line", "serif", "chyron"]);
 import type { Overlay, OverlayType, TimelineProps } from "./types";
@@ -48,7 +55,12 @@ const OVERLAYS: Record<
   stat: StatOverlay,
   "bar-chart": BarChartOverlay,
   comparison: ComparisonOverlay,
-  map: (p) => p.overlay.variant ? <DocumentaryMap {...p}/> : <MapOverlay {...p}/>,
+  map: (p) => {
+    const v = p.overlay.variant || "";
+    if (v.startsWith("satellite")) return <SatelliteMap {...p}/>;
+    if (v.startsWith("spread")) return <SpreadMap {...p}/>;
+    return v ? <DocumentaryMap {...p}/> : <MapOverlay {...p}/>;
+  },
   quote: QuoteOverlay,
   timeline: (p) => p.overlay.variant === 'ruler' ? <TimeRuler {...p}/> : <TimelineOverlay {...p}/>,
   highlight: HighlightOverlay,
@@ -77,6 +89,17 @@ const OVERLAYS: Record<
   "progress-steps": ProgressSteps,
   span: Span,
   "icon-pop": IconPop,
+  donut: Donut,
+  "area-chart": AreaChart,
+  "progress-bar": ProgressBar,
+  "icon-array": IconArray,
+  ranking: Ranking,
+  counter: Counter,
+  "number-roll": NumberRoll,
+  trend: Trend,
+  "year-roll": YearRoll,
+  banner: Banner,
+  "scale-compare": ScaleCompare,
   // Split takes its two media entries rather than a text payload, so it gets
   // a small adapter instead of the shared signature.
   split: ({ overlay, accent }) =>
@@ -90,7 +113,11 @@ const renderOverlay = (ov: Overlay, accent: string) => {
   // A document can arrive from the editor or an older schema, so an unknown
   // type is possible at runtime even though it is not at compile time.
   if (!Component) return null;
-  return <Component overlay={ov} accent={accent} />;
+  return (
+    <MotionWrap motion={ov.motion}>
+      <Component overlay={ov} accent={THEMES[ov.theme || ""] || accent} />
+    </MotionWrap>
+  );
 };
 
 export const Main: React.FC<TimelineProps> = (props) => {

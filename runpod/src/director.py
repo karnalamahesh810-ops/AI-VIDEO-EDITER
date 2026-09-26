@@ -2,8 +2,8 @@
 Narration-led shot planning: what should be on screen while this is said.
 
 Segmentation is NOT done here. `transcribe.segment_words` already cuts the
-narration into clause-length beats at the measured VidRush rate (16.8-21.8
-cuts/min, median ~3s), and that pacing is the whole editing signature we are
+narration into natural beats around the measured GoMotion rate (about 8.7
+cuts/min, median 7s), and that pacing is the editing signature we are
 reproducing. The director takes those beats as given and decides, per beat:
 
     query       what to go and find
@@ -48,6 +48,9 @@ TEMPLATES = {
     "swoosh-title", "kicker", "memo-box", "word-type", "underline-title",
     "bar-title", "age-tag", "clock-badge", "red-strip",
     "line-chart", "path-steps", "progress-steps", "span", "icon-pop",
+    # Broadcast motion-graphic family (remotion/components/MotionGraphics.tsx).
+    "donut", "area-chart", "progress-bar", "icon-array", "ranking",
+    "counter", "number-roll", "trend", "year-roll", "banner", "scale-compare",
 }
 
 # Pictograms the icon-pop template can draw (DataGraphics.tsx ICONS).
@@ -231,11 +234,21 @@ def validate_overlay(raw) -> Optional[dict]:
     variants = {"lower-third": {"tag", "line", "serif", "chyron"},
                 "kicker": {"top-left"}, "word-type": {"caps"}, "age-tag": {"bottom"},
                 "icon-pop": ICON_NAMES,
-                "date-stamp": {"title"}, "map": {"paper", "dark", "route-paper", "route-dark", "region", "marker", "pulse"},
+                "date-stamp": {"title"}, "map": {"paper", "dark", "route-paper", "route-dark", "region", "marker", "pulse",
+                                                       "satellite", "satellite-pulse", "satellite-dark", "satellite-tilt",
+                                                       "satellite-route", "satellite-distance", "satellite-inset",
+                                                       "spread", "spread-dark"},
                 "chapter": {"editorial", "echo"}, "timeline": {"ruler"},
                 "photo-card": {"grid", "archive"}, "article-zoom": {"paper"}}
     if raw.get("variant") in variants.get(kind, set()):
         out["variant"] = raw["variant"]
+    motions = {"fade", "rise", "drop", "slide-left", "slide-right", "zoom-in", "zoom-out",
+               "blur", "wipe", "wipe-up", "flip", "glitch"}
+    themes = {"gold", "red", "teal", "blue", "white", "amber"}
+    if raw.get("motion") in motions:
+        out["motion"] = raw["motion"]
+    if raw.get("theme") in themes:
+        out["theme"] = raw["theme"]
     # The model can request a real portrait card, but cannot invent image URLs
     # or positions for a callout. Media binding happens after sourcing.
 
@@ -260,7 +273,7 @@ def validate_overlay(raw) -> Optional[dict]:
     # Place NAMES only. Coordinates are resolved later by the gazetteer; a
     # model-supplied lat/lon is discarded here rather than trusted.
     if kind == "map":
-        places = [_clean(p, 120) for p in (raw.get("places") or [])[:4]]
+        places = [_clean(p, 120) for p in (raw.get("places") or [])[:8]]
         places = [p for p in places if p]
         if not places:
             return None
@@ -315,12 +328,60 @@ def validate_overlay(raw) -> Optional[dict]:
         out["items"] = ends
     if kind == "icon-pop" and out.get("variant") not in ICON_NAMES:
         return None
+    motion_variants = {
+        "donut": {"donut", "pie", "gauge", "rings"},
+        "area-chart": {"area", "step", "glow", "bars"},
+        "progress-bar": {"bar", "tank", "battery", "thermometer", "segments", "circle-fill"},
+        "icon-array": ICON_NAMES,
+        "ranking": {"list", "bars", "podium"},
+        "counter": {"split", "arrow", "drop"},
+        "number-roll": {"odometer", "stamp", "ticker", "glitch"},
+        "trend": {"neutral"},
+        "year-roll": set(),
+        "banner": {"breaking", "alert", "update", "live"},
+        "scale-compare": {"circles", "squares", "columns"},
+    }
+    if kind in motion_variants:
+        allowed = motion_variants[kind]
+        if kind == "icon-array":
+            out["variant"] = raw.get("variant") if raw.get("variant") in allowed else "people"
+        elif raw.get("variant") in allowed:
+            out["variant"] = raw["variant"]
+        if kind in {"donut", "scale-compare"}:
+            if len(out.get("items", [])) < (2 if kind == "scale-compare" else 2) or not all(
+                    "value" in x for x in out["items"]):
+                return None
+        elif kind == "area-chart":
+            if len(out.get("items", [])) < 3 or not all("value" in x for x in out["items"]):
+                return None
+        elif kind == "progress-bar":
+            if "value" not in out or not 0 <= out["value"] <= 100:
+                return None
+        elif kind == "icon-array":
+            if "value" not in out or out["value"] < 0:
+                return None
+        elif kind == "ranking":
+            ranked = [x for x in out.get("items", []) if x.get("label") or x.get("text")][:5]
+            if len(ranked) < 2:
+                return None
+            out["items"] = ranked
+        elif kind == "counter":
+            if len(out.get("items", [])) < 2 or not all("value" in x for x in out["items"][:2]):
+                return None
+            out["items"] = out["items"][:2]
+        elif kind in {"number-roll", "trend"} and "value" not in out:
+            return None
+        elif kind == "year-roll":
+            if len(out.get("items", [])) < 2 or not all(x.get("label", "").isdigit() for x in out["items"][:2]):
+                return None
+            out["items"] = out["items"][:2]
     if kind == "bullets":
         points = [x for x in out.get("items", []) if x.get("text") or x.get("label")][:4]
         if len(points) < 2:
             return None
         out["items"] = points
-    if kind not in {"map", "split"} and not out["text"] and not out.get("items"):
+    if kind not in {"map", "split"} and not out["text"] and not out.get("items") \
+            and "value" not in out:
         return None
     return out
 
@@ -1214,7 +1275,7 @@ _SYSTEM_PROMPT = (
     "place \"Ruidoso, a mountain town in southern New Mexico\") gets a map. A line "
     "whose point is WHAT is happening there (\"Florida's water is turning green\", "
     "\"the Southeast water crisis\", \"Lake Mead is drying up\") gets FOOTAGE of that "
-    "thing, never a map - the place name is just context. map variants paper / dark (a location), route-paper / "
+    "thing, never a map - the place name is just context. Maps are drawn on real satellite imagery. map variants: satellite (zoom onto one place), satellite-pulse (breaking news at a place), satellite-dark (disaster/night), spread (\"across seven states\": places = every state/country named), satellite-distance (\"300 miles from X to Y\"), paper / dark (a location), route-paper / "
     "route-dark (ONLY a journey between named places), region (a named area with "
     "2-3 sub-areas as tape labels: places = those areas), marker (a hazard at one "
     "place), pulse (breaking news at one place); date-stamp (\"Boston, July 27, "
@@ -1227,6 +1288,13 @@ _SYSTEM_PROMPT = (
     "(3-4 parallel points); line-chart (a trend with 3+ values from the "
     "narration: items {label, value}); bar-chart / comparison (numbers to "
     "compare); stat (one big number).\n"
+    "  MOTION GRAPHICS: donut (a narrated share/breakdown, items with label/value); "
+    "area-chart (3+ narrated trend points); progress-bar (a narrated percentage); "
+    "icon-array (a narrated count and a matching pictogram); ranking (2-5 named "
+    "ranked items); counter (two narrated values); number-roll or trend (one "
+    "narrated value); year-roll (two narrated years); banner (a breaking-news "
+    "headline); scale-compare (two narrated values). Never invent data: every "
+    "number and label must come from the narration.\n"
     "  SEQUENCE & IDEAS: path-steps (a life or process in 2-4 numbered stages: "
     "items {label}); progress-steps (a change from A to B: text \"Schoolhouse to "
     "Outhouse\", items [{label A}, {label B}]); icon-pop (one concept as a "
@@ -1564,6 +1632,30 @@ def rescue_queries(items: List[dict], story: Optional[dict] = None) -> dict:
 # Post-passes: verify maps, thin out overlays
 # --------------------------------------------------------------------------- #
 
+_AREA_KINDS = {"state", "country", "province", "region", "territory"}
+_SATELLITE_TURNS = ["satellite", "satellite-inset", "satellite-tilt", "satellite", "satellite-pulse"]
+
+
+def realistic_map(variant: Optional[str], locations: List[dict], n: int) -> str:
+    """
+    The map look for verified places: real satellite imagery wherever a flat
+    illustration was asked for (the creator's "realistic, not fake" maps).
+    3+ states/countries light up as a spread; a journey draws a satellite route.
+    """
+    v = variant or ""
+    if len(locations) >= 3 and all((l.get("kind") or "") in _AREA_KINDS for l in locations):
+        return "spread-dark" if v in ("dark", "spread-dark", "satellite-dark") else "spread"
+    if v in ("satellite-route", "satellite-distance") or v.startswith("route"):
+        return "satellite-route" if v.startswith("route") else v if len(locations) > 1 else "satellite"
+    if v.startswith("satellite") or v == "region":
+        return v
+    if v == "pulse":
+        return "satellite-pulse"
+    if v == "dark":
+        return "satellite-dark"
+    return _SATELLITE_TURNS[n % len(_SATELLITE_TURNS)]
+
+
 def _resolve_maps(segments: List[Segment], shots: List[dict]) -> List[str]:
     """
     Turn proposed place names into gazetteer coordinates, or drop the map.
@@ -1594,6 +1686,9 @@ def _resolve_maps(segments: List[Segment], shots: List[dict]) -> List[str]:
             shot["overlay"] = None
             continue
         overlay["locations"] = locations
+        overlay["variant"] = realistic_map(overlay.get("variant"), locations, placed)
+        if not overlay["variant"].startswith("spread"):
+            overlay["locations"] = locations[:4]
         if not overlay.get("text"):
             overlay["text"] = locations[0]["label"]
         placed += 1
@@ -1612,7 +1707,7 @@ _SIBLINGS = [
     [("chapter", None), ("chapter", "editorial"), ("chapter", "echo"), ("swoosh-title", None)],
     [("lower-third", None), ("lower-third", "tag"), ("lower-third", "line"),
      ("lower-third", "serif")],
-    [("map", "paper"), ("map", "dark"), ("map", "pulse"), ("map", "marker")],
+    [("map", "satellite"), ("map", "satellite-inset"), ("map", "satellite-tilt"), ("map", "satellite-dark")],
     [("stat-tag", "bottom-left"), ("stat-tag", "top-right"), ("stat-tag", "bottom-right")],
     [("callout", None), ("kicker", None), ("kicker", "top-left")],
 ]

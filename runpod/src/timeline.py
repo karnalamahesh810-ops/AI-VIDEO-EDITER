@@ -106,11 +106,36 @@ _OVERLAY_SECONDS = {
     "red-strip": 3.0,
     "line-chart": 5.5, "path-steps": 5.5, "progress-steps": 4.5, "span": 4.5,
     "icon-pop": 3.0,
+    "donut": 5.0, "area-chart": 6.0, "progress-bar": 4.5, "icon-array": 4.0,
+    "ranking": 5.5, "counter": 4.5, "number-roll": 3.5, "trend": 4.0,
+    "year-roll": 5.0, "banner": 4.0, "scale-compare": 5.0,
 }
 
 # Sources this workflow refuses. Kept as data so the check and the error
 # message can't drift apart.
 _STOCK_SOURCES = {"pexels", "pixabay", "stock", "shutterstock", "storyblocks"}
+
+
+# How graphics move in (MotionWrap.tsx), varied the way an editor varies
+# them: charts rise or zoom in, number punches slam or glitch, tags slide.
+# Full-screen graphics (maps, documents, chapter cards) carry their own move.
+_FULL_SCREEN = {"map", "article-zoom", "chapter", "split", "photo-card", "name-card", "banner"}
+_DATA = {"donut", "area-chart", "progress-bar", "icon-array", "ranking", "counter", "bar-chart",
+         "line-chart", "comparison", "scale-compare", "stat", "timeline", "year-roll"}
+_PUNCH = {"number-roll", "trend", "stat-tag", "ring-stat", "red-strip", "kicker", "callout", "icon-pop"}
+_MOTION_TURNS = {
+    "data": ["rise", "zoom-in", "wipe-up", "blur", "flip"],
+    "punch": ["zoom-out", "glitch", "drop", "slide-left", "wipe"],
+    "text": ["rise", "slide-left", "wipe", "blur", "slide-right", "zoom-in"],
+}
+
+
+def with_motion(overlay: dict, n: int) -> dict:
+    if overlay.get("motion") or overlay["type"] in _FULL_SCREEN:
+        return overlay
+    family = "data" if overlay["type"] in _DATA else "punch" if overlay["type"] in _PUNCH else "text"
+    turns = _MOTION_TURNS[family]
+    return {**overlay, "motion": turns[n % len(turns)]}
 
 
 def _media_dims(asset) -> tuple:
@@ -319,6 +344,7 @@ def build(segments: List[Segment], shots: List[dict],
             # A graphic runs for as long as it needs to be read, not for as
             # long as the beat that introduced it — so it can span later cuts.
             want = int(round(_OVERLAY_SECONDS.get(overlay["type"], 3.5) * fps))
+            overlay = with_motion(overlay, len(overlays))
             overlays.append({**overlay,
                              "startFrame": start,
                              "durationInFrames": min(max(duration, want), total - start)})

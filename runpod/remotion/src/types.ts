@@ -78,7 +78,19 @@ export type OverlayType =
   | "article-zoom"
   | "date-stamp"
   | "photo-card"
-  | "name-card";
+  | "name-card"
+  // Broadcast data graphics and motion graphics (MotionGraphics.tsx).
+  | "donut"
+  | "area-chart"
+  | "progress-bar"
+  | "icon-array"
+  | "ranking"
+  | "counter"
+  | "number-roll"
+  | "trend"
+  | "year-roll"
+  | "banner"
+  | "scale-compare";
 
 export interface SceneWord {
   text: string;
@@ -170,6 +182,10 @@ export interface Overlay {
   /** Normalized frame positions, supplied after visual review, not guessed. */
   anchor?: { x: number; y: number };
   labelPosition?: { x: number; y: number };
+  /** Entrance/exit move (MotionWrap.tsx): rise, drop, slide-left, zoom-in, glitch... */
+  motion?: string;
+  /** Colour theme replacing the brand accent: gold, red, teal, blue, white, amber. */
+  theme?: string;
   startFrame: number;
   durationInFrames: number;
 }

@@ -176,7 +176,7 @@ export const Span: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, 
 };
 
 /** Simple line pictograms, drawn in-house so no icon font or network is needed. */
-const ICONS: Record<string, string> = {
+export const ICONS: Record<string, string> = {
   fuel: "M14 10h26v44H14z M14 26h26 M40 18l10 8v22a4 4 0 0 1-8 0V36h-2",
   water: "M32 8C22 24 16 32 16 40a16 16 0 0 0 32 0c0-8-6-16-16-32z",
   home: "M10 30L32 12l22 18 M16 26v28h32V26 M27 54V40h10v14",
