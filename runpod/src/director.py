@@ -109,8 +109,15 @@ MIN_OVERLAY_GAP_SECONDS = 6.0
 
 # Geocoding is rate-limited to ~1 req/s by Nominatim's terms, and a map on
 # every other beat is bad editing anyway.
-MAX_MAPS_PER_VIDEO = 12
-MIN_MAP_GAP_SECONDS = 60.0
+# Every new place the story moves to gets a map. The old fixed cap (12 per
+# video, one per 60 s) left a 30-minute story about many states with maps on
+# a fraction of them. Now: at least MIN_MAP_GAP_SECONDS apart, one per
+# MAP_EVERY_SECONDS of narration at most, and the same place is not mapped
+# again within SAME_PLACE_GAP_SECONDS.
+MAX_MAPS_PER_VIDEO = 12          # floor for short videos
+MAP_EVERY_SECONDS = 40.0
+MIN_MAP_GAP_SECONDS = 25.0
+SAME_PLACE_GAP_SECONDS = 180.0
 
 _NUMBER = re.compile(
     r"\b\d[\d,.]*\s*(?:%|percent|million|billion|thousand|degrees|miles|km|"
@@ -1201,7 +1208,9 @@ _SYSTEM_PROMPT = (
     "\"1964\"), serif (quiet name for an interviewee or writer), chyron (news: "
     "text headline, subtitle place); age-tag (\"AGE 18\", \"ANN, AGE 25\" when the "
     "narration gives an age; variant bottom).\n"
-    "  PLACE & TIME: map variants paper / dark (a location), route-paper / "
+    "  PLACE & TIME: EVERY time the story moves to a new state, country, city, "
+    "river or region, that line gets a map (a real place name in places) - this is "
+    "how a viewer keeps track of where they are. map variants paper / dark (a location), route-paper / "
     "route-dark (ONLY a journey between named places), region (a named area with "
     "2-3 sub-areas as tape labels: places = those areas), marker (a hazard at one "
     "place), pulse (breaking news at one place); date-stamp (\"Boston, July 27, "
@@ -1561,11 +1570,17 @@ def _resolve_maps(segments: List[Segment], shots: List[dict]) -> List[str]:
     warnings: List[str] = []
     placed = 0
     last_at = -MIN_MAP_GAP_SECONDS
+    total = segments[-1].end if segments else 0.0
+    cap = max(MAX_MAPS_PER_VIDEO, int(total / MAP_EVERY_SECONDS))
+    mapped_at: Dict[str, float] = {}
     for i, shot in enumerate(shots):
         overlay = shot.get("overlay")
         if not overlay or overlay.get("type") != "map":
             continue
-        if placed >= MAX_MAPS_PER_VIDEO or segments[i].start - last_at < MIN_MAP_GAP_SECONDS:
+        key = " | ".join(sorted(p.lower() for p in overlay.get("places", [])))
+        now = segments[i].start
+        if (placed >= cap or now - last_at < MIN_MAP_GAP_SECONDS
+                or now - mapped_at.get(key, -1e9) < SAME_PLACE_GAP_SECONDS):
             shot["overlay"] = None
             continue
         locations = geocode.resolve_all(overlay.pop("places", []))
@@ -1578,7 +1593,8 @@ def _resolve_maps(segments: List[Segment], shots: List[dict]) -> List[str]:
         if not overlay.get("text"):
             overlay["text"] = locations[0]["label"]
         placed += 1
-        last_at = segments[i].start
+        last_at = now
+        mapped_at[key] = now
     return warnings
 
 
