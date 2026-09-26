@@ -1088,9 +1088,11 @@ def handler(job):
 
             def source_part(jobs, w, seqs, exclude):
                 b = inp.get("brief") or {}
+                # A part only finds; the parent fills gaps (spare pool moments,
+                # then its own pass), so no rescue or refill time box here.
                 return media.source_many(
                     jobs, w, workers=config.SOURCE_WORKERS, on_done=part_progress,
-                    rescue=lambda items: director.rescue_queries(items, story=b),
+                    rescue=None, refill=False,
                     sequences=seqs or None,
                     assign=lambda lines, pool: director.assign_shots(lines, pool, story=b),
                     exclude=exclude, allow_youtube=inp.get("allow_youtube"),

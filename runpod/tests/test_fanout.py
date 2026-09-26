@@ -185,5 +185,10 @@ class FanoutRender(unittest.TestCase):
         self.assertEqual(media.LAST_STATS["render_fanout"]["rendered_here_after"], 1)
 
 
+class PartsOnlyFind(unittest.TestCase):
+    def test_source_many_accepts_refill_false(self):
+        self.assertEqual(media.source_many([], tempfile.mkdtemp(), refill=False), [])
+
+
 if __name__ == "__main__":
     unittest.main()

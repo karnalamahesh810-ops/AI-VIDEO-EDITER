@@ -2297,7 +2297,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
                 on_recheck=None, sequences: Optional[List[dict]] = None,
                 assign=None, on_pool=None, exclude: Optional[set] = None,
-                **kwargs) -> List[Optional[MediaAsset]]:
+                refill: bool = True, **kwargs) -> List[Optional[MediaAsset]]:
     """
     Source visuals for many scenes, with no two scenes sharing a visual.
 
@@ -2525,7 +2525,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # A truly empty scene is the one most likely to need them: pass 1 found
     # nothing at nth=0, which says nothing about nth=1..3.
     claim = threading.Lock()
-    deadline = time.time() + _budget(config.REPLACE_BUDGET_SECONDS, 3.0, len(todo))
+    # refill=False (a fan-out part): classify only. The parent de-duplicates
+    # across parts and fills gaps from the pools' spare moments; a part
+    # spending its own time box here held the whole video for minutes.
+    deadline = time.time() + (_budget(config.REPLACE_BUDGET_SECONDS, 3.0, len(todo)) if refill else 0.0)
     replaced = [0]
 
     def replace(job, nth, bad_reason, is_dup):
