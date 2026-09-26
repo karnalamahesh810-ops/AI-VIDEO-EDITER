@@ -197,6 +197,14 @@ class MediaAsset:
         and for a generated image the local file, since each generation is
         unique by construction.
         """
+        if self.source == "youtube":
+            # The video id from the watch URL first: sequence-pool shots are
+            # named seq_<tag>_<id>_<n>.mp4 and their URL carries "&t=<start>",
+            # so two shots of one video at different times used to count as
+            # two different clips - one more way the same video repeated.
+            m = re.search(r"[?&]v=([\w-]{11})", self.url or "")
+            if m:
+                return f"yt:{m.group(1)}"
         if self.source == "youtube" and self.local_path:
             name = os.path.basename(self.local_path)
             if name.startswith("yt_"):
@@ -2163,7 +2171,8 @@ def _until(futures, deadline: float):
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
                 on_recheck=None, sequences: Optional[List[dict]] = None,
-                assign=None, on_pool=None, **kwargs) -> List[Optional[MediaAsset]]:
+                assign=None, on_pool=None, exclude: Optional[set] = None,
+                **kwargs) -> List[Optional[MediaAsset]]:
     """
     Source visuals for many scenes, with no two scenes sharing a visual.
 
@@ -2212,7 +2221,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # asking about the same subject grabbed the same top result, and pass 2
     # had to re-source most of them. Races still happen (two scenes finishing
     # at once); pass 2 below catches those.
-    live_used: set = set()
+    live_used: set = set(exclude or ())   # clips another part already took
 
     # Sequence pools first: each run of lines about one subject and setting
     # gathers its shots together and is laid out by the editor call. Lines a
@@ -2360,7 +2369,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # than black; a clip covered in somebody else's subtitles is not, so an
     # unusable shot is dropped even when there is nothing to put in its place.
     # Classify first (no network): the first scene to claim a clip keeps it.
-    used: set = set()
+    # A clip another part of the same video already took counts as claimed.
+    used: set = set(exclude or ())
     duplicates = rejected = empty = 0
     todo = []  # (job, nth, bad_reason, is_duplicate)
     for job, nth in plan:

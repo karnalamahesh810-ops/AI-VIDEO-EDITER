@@ -250,6 +250,14 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # short grace for the rest. One stalled download used to hold a job for
 # 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
 PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+# Split one long video's sourcing across workers (src/fanout.py). RunPod
+# injects RUNPOD_ENDPOINT_ID into its workers; the API key is set on the
+# template (FANOUT_API_KEY) so a worker can queue parts on its own endpoint.
+FANOUT_PARTS = int(os.getenv("FANOUT_PARTS", "8"))
+FANOUT_MIN_SCENES = int(os.getenv("FANOUT_MIN_SCENES", "60"))
+FANOUT_API_KEY = os.getenv("FANOUT_API_KEY", "")
+FANOUT_ENDPOINT_ID = os.getenv("FANOUT_ENDPOINT_ID", "") or os.getenv("RUNPOD_ENDPOINT_ID", "")
+FANOUT_TIMEOUT_SECONDS = float(os.getenv("FANOUT_TIMEOUT_SECONDS", "1500"))
 # A candidate no vision model could judge is rejected (vision.acceptable).
 ACCEPT_UNJUDGED = os.getenv("ACCEPT_UNJUDGED", "0").strip().lower() in ("1", "true", "yes")
 # Sound effects on big animation moments (timeline.plan_sfx). SFX_VOLUME

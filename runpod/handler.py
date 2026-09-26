@@ -43,7 +43,7 @@ from typing import Dict
 
 import runpod
 
-from src import (config, director, geocode, media, render as renderer,
+from src import (config, director, fanout, geocode, media, render as renderer,
                  selftest, storage, timeline, transcribe, vision)
 
 
@@ -512,22 +512,46 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             last_pct[0] = pct
             report(f"Sourced {done}/{n} scenes", pct, done=done, total=n)
 
-    assets = media.source_many(
-        jobs, work,
-        # 8: the per-scene work is mostly waiting on the vision model and the
-        # network, and the network side is capped separately (NETWORK_CONCURRENCY).
-        workers=int(inp.get("source_workers", config.SOURCE_WORKERS)),
-        allow_youtube=inp.get("allow_youtube"),
-        allow_stock=inp.get("allow_stock"),
-        require_cc=inp.get("require_cc"),
-        on_done=on_done,
-        on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
-        rescue=lambda items: director.rescue_queries(items, story=brief),
-        on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
-        sequences=sequences,
-        assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
-        on_pool=on_pool,
-    )
+    flags = {"allow_youtube": inp.get("allow_youtube"), "allow_stock": inp.get("allow_stock"),
+             "require_cc": inp.get("require_cc")}
+
+    def local(some_jobs, exclude, seqs=None, progress=True):
+        """Source some jobs on this worker; results aligned to their order."""
+        ordered_jobs = sorted(some_jobs, key=lambda j: j["index"])
+        re_index = {j["index"]: k for k, j in enumerate(ordered_jobs)}
+        local_jobs = [dict(j, index=re_index[j["index"]]) for j in ordered_jobs]
+        local_seqs = []
+        for s in seqs or []:
+            beats = [re_index[b] for b in (s.get("beats") or []) if b in re_index]
+            if beats:
+                local_seqs.append(dict(s, beats=beats))
+        return media.source_many(
+            local_jobs, work,
+            # The per-scene work is mostly waiting on the vision model and the
+            # network, and the network side is capped separately (NETWORK_CONCURRENCY).
+            workers=int(inp.get("source_workers", config.SOURCE_WORKERS)),
+            on_done=on_done if progress else None,
+            on_review=lambda d, n: report(f"Replacing weak clips {d}/{n}", 65, done=d, total=n),
+            rescue=lambda items: director.rescue_queries(items, story=brief),
+            on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
+            sequences=local_seqs or None,
+            assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
+            on_pool=on_pool if progress else None,
+            exclude=exclude, **flags)
+
+    project_id = inp.get("project_id") or ""
+    if fanout.enabled_for(len(jobs), project_id):
+        # Long video: each part is found, vision-checked and repaired on its
+        # own worker at the same time; the parent fills whatever comes back
+        # missing and resolves clips two parts both picked.
+        assets = fanout.source(
+            jobs, sequences or [], brief,
+            parent_job_id=(report.job or {}).get("id", ""), project_id=project_id,
+            bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
+            flags=flags, report=report,
+            local=lambda some, exclude: local(some, exclude, progress=False))
+    else:
+        assets = local(jobs, set(), seqs=sequences)
     vision.require_credits()
 
     doc = timeline.build(
@@ -918,6 +942,25 @@ def handler(job):
     work = _work_dir(job_id)
 
     try:
+        if action == "source_part":
+            # One part of a long video, queued by its parent job (src/fanout.py).
+            def set_story(brief):
+                vision.set_story(brief)
+                media.set_story_kind((brief or {}).get("kind", ""))
+
+            def source_part(jobs, w, seqs, exclude):
+                b = inp.get("brief") or {}
+                return media.source_many(
+                    jobs, w, workers=config.SOURCE_WORKERS,
+                    rescue=lambda items: director.rescue_queries(items, story=b),
+                    sequences=seqs or None,
+                    assign=lambda lines, pool: director.assign_shots(lines, pool, story=b),
+                    exclude=exclude, allow_youtube=inp.get("allow_youtube"),
+                    allow_stock=inp.get("allow_stock"), require_cc=inp.get("require_cc"))
+            out = fanout.run_part(inp, work, source_part, set_story)
+            return {"ok": True, "action": "source_part", **out,
+                    "elapsed": round(time.time() - started, 1)}
+
         if action == "selftest":
             out = selftest.run(work, width=int(inp.get("width", 854)), report=report)
             return {"ok": out.get("ok", False), "action": "selftest", **out,
