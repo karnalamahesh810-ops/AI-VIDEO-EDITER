@@ -476,7 +476,21 @@ class VidRushMatching(unittest.TestCase):
     def test_query_gets_each_subject_word_once(self):
         self.assertEqual(
             director.with_subject("Ohio Valley river gauge", "Ohio Valley river data flood gauges"),
-            "gauge Ohio Valley river data flood gauges")
+            "Ohio Valley river gauge data flood gauges")
+        # A name goes in whole, not word by word, and "Sr." is "Sr".
+        self.assertEqual(director.with_subject("Barack Obama Sr.", "Obama father son 1971"),
+                         "Barack Obama Sr. father son 1971")
+        self.assertEqual(director.with_subject("Barack Obama Sr.", "Barack Obama Sr Nairobi"),
+                         "Barack Obama Sr Nairobi")
+        self.assertEqual(director.with_subject("Honolulu, Hawaii", "Honolulu, Honolulu Hawaii 1971"),
+                         "Honolulu Hawaii 1971")
+        self.assertEqual(director.with_subject("between Ann Dunham and", "letters 1964"),
+                         "Ann Dunham letters 1964")
+
+    def test_empty_searches_broaden_before_giving_up(self):
+        self.assertEqual(director.relaxed_queries("Honolulu Airport 1971 father son archival footage"),
+                         ["Honolulu Airport 1970s archival footage", "Honolulu 1970s footage"])
+        self.assertEqual(director.relaxed_queries("dry cracked lakebed"), [])
         self.assertEqual(director.with_subject("Lake Mead", "exposed boat ramp drought"),
                          "Lake Mead exposed boat ramp drought")
         self.assertEqual(director.with_subject("", "Great Schism 1054 Great Schism"),

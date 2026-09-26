@@ -1914,7 +1914,9 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     token = _SUBJECT_TYPE.set(subject_type or "")
     window_token = _EVENT_WINDOW.set(event_window or "")
     try:
-        for attempt in [query] + list(fallbacks or []):
+        from .director import relaxed_queries
+        attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
+        for attempt in attempts:
             got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
                               nth=nth, used=used, prompt=prompt,
                               allow_youtube=allow_youtube,

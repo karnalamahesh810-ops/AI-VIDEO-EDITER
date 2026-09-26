@@ -180,16 +180,56 @@ def with_subject(subject: str, query: str, limit: int = 240) -> str:
     query lacks are added, then any word repeated inside the result is
     dropped (case-insensitive, first occurrence kept).
     """
-    subject, query = (subject or "").strip(), (query or "").strip()
-    have = {w.lower() for w in query.split()}
-    missing = [w for w in subject.split() if w.lower() not in have]
+    # A name is added whole, never word by word: prepending only the missing
+    # words of "Barack Obama Sr." to "Obama father son" searched for "Barack
+    # Sr. Obama father son". Punctuation does not make a word new ("Sr." is
+    # "Sr"), and joining words ("and", "between") are not part of a subject.
+    name = [w for w in (subject or "").replace(",", " ").split()]
+    while name and _key(name[0]) in _JOINERS:
+        name.pop(0)
+    while name and _key(name[-1]) in _JOINERS:
+        name.pop()
+    query_words = (query or "").replace(",", " ").split()
+    name_keys = {_key(w) for w in name if _key(w)}
+    have = {_key(w) for w in query_words}
+    if name_keys and not name_keys <= have:
+        query_words = name + [w for w in query_words if _key(w) not in name_keys]
     words, seen = [], set()
-    for w in missing + query.split():
-        key = w.lower()
-        if key not in seen:
+    for w in query_words:
+        key = _key(w)
+        if key and key not in seen:
             seen.add(key)
             words.append(w)
     return " ".join(words)[:limit]
+
+
+_JOINERS = {"and", "or", "on", "of", "the", "a", "an", "between", "with", "to", "in", "for", "from", "at"}
+_MEDIUM = {"archival", "archive", "footage", "news", "newsreel", "aerial", "drone", "photo",
+           "photograph", "video", "documentary", "interview", "speech"}
+
+
+def _key(word: str) -> str:
+    return re.sub(r"[^\w']", "", word).lower()
+
+
+def relaxed_queries(query: str) -> List[str]:
+    """
+    Broader searches for a scene whose own searches all came back empty:
+    "Honolulu Airport 1971 father son archival footage" ->
+    "Honolulu Airport 1970s archival footage" -> "Honolulu 1970s footage".
+    Names (capitalised words) and the medium are kept, an exact year becomes
+    its decade, and the narrow details that matched nothing are dropped.
+    """
+    words = (query or "").replace(",", " ").split()
+    names = [w for i, w in enumerate(words) if w[:1].isupper() and _key(w) not in _JOINERS]
+    years = [w for w in words if re.fullmatch(r"(1[89]|20)\d\d", _key(w))]
+    decade = f"{years[0][:3]}0s" if years else ""
+    medium = [w for w in words if _key(w) in _MEDIUM][:2] or ["footage"]
+    out = []
+    if names:
+        out.append(" ".join(names[:4] + ([decade] if decade else []) + medium))
+        out.append(" ".join(names[:1] + ([decade] if decade else []) + ["footage"]))
+    return [q for q in dict.fromkeys(out) if q and q.lower() != (query or "").lower()]
 
 
 def _finite(value) -> Optional[float]:
