@@ -85,6 +85,15 @@ def pot_provider_alive() -> bool:
         return False
 
 
+def pot_provider_log(lines: int = 8) -> List[str]:
+    """The server's last log lines, for a health probe when it is not answering."""
+    try:
+        with open("/tmp/bgutil.log", encoding="utf-8", errors="replace") as fh:
+            return [l.rstrip()[:200] for l in fh.readlines()[-lines:]]
+    except OSError:
+        return ["(no /tmp/bgutil.log - server never started)"]
+
+
 def probe_youtube(video_id: str = "ka2S39HhLsM") -> List[dict]:
     """
     Can this worker actually download from YouTube, directly and per proxy?
