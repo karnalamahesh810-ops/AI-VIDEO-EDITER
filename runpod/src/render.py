@@ -64,7 +64,8 @@ def _render_progress(line: str):
 
 def render(props: dict, out_path: str, composition: str = "Main",
            concurrency: int = None, timeout: int = 5400,
-           serve_dir: str = None, on_progress=None) -> str:
+           serve_dir: str = None, on_progress=None, frames: tuple = None,
+           muted: bool = False, codec: str = None) -> str:
     """
     Render `props` to `out_path` with Remotion.
 
@@ -84,7 +85,8 @@ def render(props: dict, out_path: str, composition: str = "Main",
     """
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     work = serve_dir or os.path.dirname(out_path)
-    props_path = os.path.join(os.path.dirname(out_path), "props.json")
+    # One props file per output: chunk and audio renders can share a job dir.
+    props_path = os.path.splitext(out_path)[0] + ".props.json"
 
     with AssetServer(work) as assets:
         # Rewrite a copy: the caller keeps the document it passed in, which is
@@ -100,6 +102,14 @@ def render(props: dict, out_path: str, composition: str = "Main",
             # somebody is listening.
             "--log=info" if on_progress else "--log=error",
         ]
+        # A frame chunk of a split render, silent (the audio is rendered once,
+        # whole), or the audio track alone (codec "aac").
+        if frames:
+            cmd.append(f"--frames={int(frames[0])}-{int(frames[1])}")
+        if muted:
+            cmd.append("--muted")
+        if codec:
+            cmd.append(f"--codec={codec}")
         # A container sees the HOST's memory and cores. Remotion sizes its
         # frame cache at half of "system memory" and the compositor's decoders
         # scale with cores, so on a RunPod worker both overshoot the cgroup

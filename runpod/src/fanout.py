@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import math
 import os
+import subprocess
 import threading
 import time
 from dataclasses import asdict, fields
@@ -115,6 +116,126 @@ def _cancel(job_id: str) -> None:
         pass
 
 
+class _Units:
+    """
+    Run units of work across the endpoint's workers, one of them here.
+
+    The parent takes the first unit itself instead of waiting idle, takes back
+    any unit no machine has started once it is free (RunPod wakes stopped
+    workers slowly), and hands every failed, lost or timed-out unit back to
+    the caller. `payload(unit)` is the remote job's input; `local(unit)` does
+    the unit here and returns its result; `accept(unit, result, remote)`
+    stores a result and says whether it was usable; `progress(unit, output)`
+    reads a running child's progress in the unit's own weight.
+    """
+
+    def __init__(self, units: List[dict], *, payload: Callable, local: Callable,
+                 accept: Callable, progress: Callable, report: Callable, deadline: float):
+        self.units, self.payload, self.local = units, payload, local
+        self.accept, self.progress, self.report = accept, progress, report
+        self.deadline = deadline
+        self.failed: List[dict] = []
+        self.stolen = 0
+        self.live = 0
+        self._here: List[Dict[str, Any]] = []
+        self._lock = threading.Lock()
+
+    def _start_here(self, unit: dict) -> None:
+        run = {"unit": unit, "done": threading.Event(), "result": None, "error": None, "taken": False}
+
+        def go():
+            try:
+                with self._lock:          # media/render state: one local unit at a time
+                    run["result"] = self.local(unit)
+            except Exception as e:  # noqa: BLE001 - handed back as failed
+                run["error"] = e
+                print(f"[fanout] local unit failed: {e}", flush=True)
+            finally:
+                run["done"].set()
+        self._here.append(run)
+        threading.Thread(target=go, daemon=True).start()
+
+    def _free(self) -> bool:
+        return all(r["done"].is_set() for r in self._here)
+
+    def _collect_here(self) -> float:
+        done = 0.0
+        for r in self._here:
+            if r["done"].is_set():
+                if not r["taken"]:
+                    r["taken"] = True
+                    ok = r["error"] is None and self.accept(r["unit"], r["result"], False)
+                    if not ok:
+                        self.failed.append(r["unit"])
+                done += r["unit"].get("weight", 1)
+        return done
+
+    def run(self, label: str) -> List[dict]:
+        if not self.units:
+            return []
+        self._start_here(self.units[0])
+        pending: Dict[str, dict] = {}
+        for unit in self.units[1:]:
+            jid = _submit(self.payload(unit))
+            if jid:
+                pending[jid] = unit
+            else:
+                self.failed.append(unit)
+        self.live = len(pending)
+        total = sum(u.get("weight", 1) for u in self.units)
+        print(f"[fanout] {label}: {len(pending)} unit(s) on other workers + 1 here", flush=True)
+        seen_progress: Dict[str, float] = {}
+        while (pending or not self._free()) and time.time() < self.deadline:
+            time.sleep(8)
+            here = self._collect_here()
+            for jid in list(pending):
+                st = _status(jid)
+                state = st.get("status")
+                unit = pending[jid]
+                if state == "IN_QUEUE" and self._free():
+                    _cancel(jid)
+                    del pending[jid]
+                    self._start_here(unit)
+                    self.stolen += 1
+                    print(f"[fanout] {label}: unit {jid[:8]} never started; doing it here", flush=True)
+                    continue
+                if state == "IN_PROGRESS" and isinstance(st.get("output"), dict):
+                    seen_progress[jid] = self.progress(unit, st["output"])
+                if state in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
+                    del pending[jid]
+                    out = st.get("output")
+                    if state != "COMPLETED" or not isinstance(out, dict) or not self.accept(unit, out, True):
+                        print(f"[fanout] {label}: unit {jid[:8]} {state}: "
+                              f"{str(out.get('error') if isinstance(out, dict) else out)[:160]}", flush=True)
+                        self.failed.append(unit)
+                    seen_progress[jid] = unit.get("weight", 1)
+            busy = len(pending) + (0 if self._free() else 1)
+            self.report(min(total, sum(seen_progress.values()) + here), total, busy)
+        for r in self._here:                  # past the deadline: finish our own work
+            r["done"].wait()
+        self._collect_here()
+        for jid, unit in pending.items():     # timed out: take it back
+            _cancel(jid)
+            self.failed.append(unit)
+        return self.failed
+
+
+def _dedupe(results: List[Optional[media.MediaAsset]], jobs: List[dict],
+            seen: Dict[str, int]) -> List[dict]:
+    """Drop clips an earlier scene already uses; return the jobs to redo."""
+    by_index = {j["index"]: j for j in jobs}
+    redo = []
+    for i, a in enumerate(results):
+        if a is None or i not in by_index:
+            continue
+        if a.identity in seen and seen[a.identity] != i:
+            results[i] = None
+            redo.append(by_index[i])
+        else:
+            seen[a.identity] = i
+    return redo
+
+
 def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_id: str,
            project_id: str, bucket: str, work: str, flags: dict,
            report: Callable, local: Callable[[List[dict], set], List[Optional[media.MediaAsset]]]
@@ -122,148 +243,176 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
     """
     Sourced assets for every job (list aligned to job["index"]).
 
-    `local(jobs, exclude)` sources jobs on this worker, for whatever the parts
-    did not deliver and for cross-part duplicates.
+    Round 1 splits the video across the workers. Round 2 sends every scene
+    round 1 left empty or doubled (two parts picking the same popular video)
+    back out across the workers too, each part told which clips are already
+    in use - a 22-minute video left 64 of 211 scenes for the parent to fill
+    alone. Whatever is still missing after that is sourced here.
+    `local(jobs, exclude)` sources jobs on this worker.
     """
     n = max(j["index"] for j in jobs) + 1
     results: List[Optional[media.MediaAsset]] = [None] * n
-    parts = split(jobs, sequences, config.FANOUT_PARTS)
-    # The parent sources the first part itself instead of waiting idle, and
-    # takes back any part no machine has started once it is free again.
-    parts_remote = parts[1:]
-    here: List[Dict[str, Any]] = []
-    lock = threading.Lock()
-
-    def start_here(p: dict) -> None:
-        run = {"part": p, "done": threading.Event(), "assets": None, "taken": False}
-
-        def go():
-            try:
-                with lock:              # media's shared state: one local batch at a time
-                    run["assets"] = local(p["jobs"], set())
-            except Exception as e:  # noqa: BLE001 - its scenes are refilled below
-                print(f"[fanout] local part failed: {e}", flush=True)
-            finally:
-                run["done"].set()
-        here.append(run)
-        threading.Thread(target=go, daemon=True).start()
-
-    def free_here() -> bool:
-        return all(r["done"].is_set() for r in here)
-
-    def collect_here() -> int:
-        n_done = 0
-        for r in here:
-            if r["done"].is_set() and not r["taken"]:
-                r["taken"] = True
-                if r["assets"] is None:
-                    failed_parts.append(r["part"])
-                else:
-                    for j, a in zip(sorted(r["part"]["jobs"], key=lambda j: j["index"]), r["assets"]):
-                        results[j["index"]] = a
-            if r["done"].is_set():
-                n_done += len(r["part"]["jobs"])
-        return n_done
-
-    start_here(parts[0])
-    submitted = []
-    for p in parts_remote:
-        jid = _submit({"action": "source_part", "parent_job_id": parent_job_id,
-                       "project_id": project_id, "bucket": bucket, "brief": brief,
-                       "jobs": p["jobs"], "sequences": p["sequences"], "exclude": [],
-                       **flags})
-        submitted.append((p, jid))
-    live = [(p, jid) for p, jid in submitted if jid]
-    print(f"[fanout] {len(live)}/{len(parts_remote)} parts on other workers "
-          f"({sum(len(p['jobs']) for p, _ in live)} scenes) + 1 here", flush=True)
     total_scenes = len(jobs)
-    report(f"Sourcing in parallel on {len(live) + 1} workers", 30, done=0, total=total_scenes)
+    stats: Dict[str, int] = {"parts": 0, "stolen_back": 0, "failed_parts": 0, "rounds": 0}
 
-    deadline = time.time() + max(config.FANOUT_TIMEOUT_SECONDS, 6.0 * len(jobs))
-    pending = {jid: p for p, jid in live}
-    failed_parts = [p for p, jid in submitted if not jid]
-    progress: Dict[str, int] = {}
-    stolen = 0
-    here_done = 0
-    while (pending or not free_here()) and time.time() < deadline:
-        time.sleep(8)
-        here_done = collect_here()
-        for jid in list(pending):
-            st = _status(jid)
-            state = st.get("status")
-            if state == "IN_QUEUE" and free_here():
-                # No machine picked this part up and this worker is free:
-                # take it back and source it here now (work stealing).
-                _cancel(jid)
-                start_here(pending.pop(jid))
-                stolen += 1
-                print(f"[fanout] part {jid[:8]} never started; sourcing it here", flush=True)
-                continue
-            if state == "IN_PROGRESS" and isinstance(st.get("output"), dict):
-                progress[jid] = int(st["output"].get("done") or 0)
-            if state in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
-                p = pending.pop(jid)
-                out = st.get("output") or {}
-                assets = out.get("assets") if isinstance(out, dict) else None
-                if state != "COMPLETED" or not isinstance(assets, dict):
-                    print(f"[fanout] part {jid[:8]} {state}: "
-                          f"{str(out.get('error') if isinstance(out, dict) else out)[:160]}",
-                          flush=True)
-                    failed_parts.append(p)
-                    continue
-                progress[jid] = len(p["jobs"])
-                for key, d in assets.items():
-                    i = int(key)
-                    url = d.get("remote_url") or ""
-                    ext = os.path.splitext((d.get("storage_path") or "x.bin"))[1] or ".bin"
-                    path = os.path.join(work, f"part_{i:04d}{ext}")
-                    try:
-                        storage.download(url, path)
-                        results[i] = _asset_from(d, path)
-                    except Exception as e:  # noqa: BLE001 - re-sourced below
-                        print(f"[fanout] scene {i + 1}: download failed ({e})", flush=True)
-        done_now = min(total_scenes, sum(progress.values()) + here_done)
-        busy = len(pending) + (0 if free_here() else 1)
-        report(f"Sourced {done_now}/{total_scenes} scenes on {busy} workers",
-               30 + int(32 * done_now / max(1, total_scenes)), done=done_now, total=total_scenes)
-    for r in here:                               # past the deadline: wait for our own work
-        r["done"].wait()
-    collect_here()
-    for jid, p in pending.items():             # timed out: take it back
-        _cancel(jid)
-        failed_parts.append(p)
+    def fetch(unit: dict, out: Any, remote: bool) -> bool:
+        if not remote:
+            for j, a in zip(sorted(unit["jobs"], key=lambda j: j["index"]), out or []):
+                results[j["index"]] = a
+            return True
+        assets = out.get("assets")
+        if not isinstance(assets, dict):
+            return False
+        for key, d in assets.items():
+            i = int(key)
+            ext = os.path.splitext((d.get("storage_path") or "x.bin"))[1] or ".bin"
+            path = os.path.join(work, f"part_{i:04d}{ext}")
+            try:
+                storage.download(d.get("remote_url") or "", path)
+                results[i] = _asset_from(d, path)
+            except Exception as e:  # noqa: BLE001 - redone in the next round
+                print(f"[fanout] scene {i + 1}: download failed ({e})", flush=True)
+        return True
 
-    # Clips two parts both picked: the first scene keeps it.
+    def run_round(round_jobs: List[dict], seqs: List[dict], exclude: set, lo: int, hi: int,
+                  label: str) -> None:
+        parts = split(round_jobs, seqs, config.FANOUT_PARTS)
+        for p in parts:
+            p["weight"] = len(p["jobs"])
+        base = len(jobs) - len(round_jobs)
+
+        def show(done, total, busy):
+            report(f"{label} {base + int(done)}/{total_scenes} scenes on {busy} workers",
+                   lo + int((hi - lo) * done / max(1, total)), done=base + int(done), total=total_scenes)
+        units = _Units(
+            parts,
+            payload=lambda p: {"action": "source_part", "parent_job_id": parent_job_id,
+                               "project_id": project_id, "bucket": bucket, "brief": brief,
+                               "jobs": p["jobs"], "sequences": p["sequences"],
+                               "exclude": sorted(exclude), **flags},
+            local=lambda p: local(p["jobs"], set(exclude)),
+            accept=fetch,
+            progress=lambda p, o: min(p["weight"], float(o.get("done") or 0)),
+            report=show,
+            deadline=time.time() + max(config.FANOUT_TIMEOUT_SECONDS, 6.0 * len(round_jobs)))
+        failed = units.run(label)
+        stats["parts"] += len(parts)
+        stats["stolen_back"] += units.stolen
+        stats["failed_parts"] += len(failed)
+        stats["rounds"] += 1
+
+    report(f"Sourcing in parallel: 0/{total_scenes} scenes", 30, done=0, total=total_scenes)
+    run_round(jobs, sequences, set(), 30, 55, "Sourced")
+
     seen: Dict[str, int] = {}
-    dup_jobs = []
-    by_index = {j["index"]: j for j in jobs}
-    for i, a in enumerate(results):
-        if a is None:
-            continue
-        ident = a.identity
-        if ident in seen:
-            results[i] = None
-            dup_jobs.append(by_index[i])
-        else:
-            seen[ident] = i
-    leftover = [j for p in failed_parts for j in p["jobs"]]
-    leftover += [by_index[i] for i, a in enumerate(results)
-                 if a is None and i in by_index and by_index[i] not in leftover
-                 and by_index[i] not in dup_jobs]
-    todo = leftover + dup_jobs
+    dups = _dedupe(results, jobs, seen)
+    empty = [j for j in jobs if results[j["index"]] is None and j not in dups]
+    todo = empty + dups
+    stats["cross_part_repeats"] = len(dups)
+    if len(todo) >= config.FANOUT_REFILL_MIN:
+        print(f"[fanout] round 2 across workers: {len(todo)} scene(s) "
+              f"({len(empty)} empty, {len(dups)} repeats)", flush=True)
+        run_round(todo, [], set(seen), 55, 60, "Filling gaps:")
+        stats["round2_repeats"] = len(_dedupe(results, jobs, seen))
+        todo = [j for j in jobs if results[j["index"]] is None]
     if todo:
-        print(f"[fanout] sourcing {len(todo)} scene(s) here "
-              f"({len(leftover)} undelivered, {len(dup_jobs)} cross-part repeats)", flush=True)
-        report(f"Filling {len(todo)} remaining scenes", 62)
+        print(f"[fanout] sourcing {len(todo)} last scene(s) here", flush=True)
+        report(f"Filling the last {len(todo)} scenes", 60)
         got = local(todo, set(seen))
         for j, a in zip(sorted(todo, key=lambda j: j["index"]), got):
             results[j["index"]] = a
-    media.LAST_STATS["fanout"] = {"parts": len(parts), "on_workers": len(live),
-                                  "stolen_back": stolen,
-                                  "failed_parts": len(failed_parts),
-                                  "cross_part_repeats": len(dup_jobs),
-                                  "sourced_by_parent": len(todo)}
+    stats["sourced_by_parent_last"] = len(todo)
+    media.LAST_STATS["fanout"] = stats
     return results
+
+
+def render_enabled(doc: dict, project_id: str) -> bool:
+    seconds = doc.get("durationInFrames", 0) / max(1, doc.get("fps", 30))
+    return bool(config.FANOUT_RENDER and seconds >= config.FANOUT_RENDER_MIN_SECONDS
+                and config.FANOUT_API_KEY and config.FANOUT_ENDPOINT_ID
+                and project_id and storage.broker_enabled())
+
+
+def chunks(total_frames: int, fps: int, parts: int) -> List[tuple]:
+    """Frame ranges (inclusive) of about equal length, at most `parts` of them."""
+    want = max(1, min(parts, math.ceil(total_frames / (fps * config.FANOUT_RENDER_CHUNK_SECONDS))))
+    size = math.ceil(total_frames / want)
+    return [(a, min(total_frames, a + size) - 1) for a in range(0, total_frames, size)]
+
+
+def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, bucket: str,
+           work: str, report: Callable, render_local: Callable) -> str:
+    """
+    Render `doc` to `out_path` in frame chunks across the workers.
+
+    Each chunk renders silent; the narration, music and sound effects are
+    rendered once here as one audio track, then the chunks are joined without
+    re-encoding and the audio laid under them - no seams in the sound.
+    `render_local(frames, path, muted, codec)` renders here (frames None =
+    the whole timeline).
+    """
+    fps = int(doc.get("fps") or 30)
+    ranges = chunks(int(doc["durationInFrames"]), fps, config.FANOUT_PARTS + 1)
+    units = [{"i": i, "frames": fr, "weight": fr[1] - fr[0] + 1,
+              "path": os.path.join(work, f"chunk_{i:03d}.mp4")} for i, fr in enumerate(ranges)]
+
+    def accept(unit: dict, out: Any, remote: bool) -> bool:
+        if remote:
+            try:
+                storage.download(out.get("url") or "", unit["path"])
+            except Exception as e:  # noqa: BLE001 - rendered here instead
+                print(f"[fanout] chunk {unit['i']}: download failed ({e})", flush=True)
+                return False
+        return os.path.isfile(unit["path"]) and os.path.getsize(unit["path"]) > 0
+
+    def show(done, total, busy):
+        frac = done / max(1, total)
+        report(f"Rendering video {int(frac * 100)}% on {busy} workers", 70 + int(20 * frac))
+
+    runner = _Units(
+        units,
+        payload=lambda u: {"action": "render_chunk", "parent_job_id": parent_job_id,
+                           "project_id": project_id, "bucket": bucket, "timeline": doc,
+                           "frames": list(u["frames"]), "chunk": u["i"]},
+        local=lambda u: render_local(u["frames"], u["path"], True, None),
+        accept=accept,
+        progress=lambda u, o: u["weight"] * float(o.get("frac") or 0),
+        report=show,
+        deadline=time.time() + config.FANOUT_TIMEOUT_SECONDS + 3 * doc["durationInFrames"] / fps)
+    failed = runner.run("render")
+    for unit in failed:                         # anything lost is rendered here
+        print(f"[fanout] rendering chunk {unit['i']} here", flush=True)
+        render_local(unit["frames"], unit["path"], True, None)
+    audio = os.path.join(work, "track.aac")
+    try:
+        render_local(None, audio, False, "aac")
+    except Exception as e:  # noqa: BLE001 - a silent video is still caught below
+        print(f"[fanout] audio track failed: {e}", flush=True)
+    listing = os.path.join(work, "chunks.txt")
+    with open(listing, "w", encoding="utf-8") as fh:
+        fh.writelines(f"file '{os.path.basename(u['path'])}'\n" for u in units)
+    video = os.path.join(work, "video_only.mp4")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", listing,
+                    "-c", "copy", video], cwd=work, check=True)
+    if not (os.path.isfile(audio) and os.path.getsize(audio) > 0):
+        raise RuntimeError("the narration track did not render")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", video, "-i", audio, "-map", "0:v",
+                    "-map", "1:a", "-c", "copy", "-shortest", out_path], check=True)
+    media.LAST_STATS["render_fanout"] = {"chunks": len(units), "on_workers": runner.live,
+                                         "stolen_back": runner.stolen, "rendered_here_after": len(failed)}
+    return out_path
+
+
+def run_chunk(inp: dict, work: str, render_local: Callable) -> dict:
+    """The child side of render(): render one silent chunk, upload it."""
+    a, b = inp["frames"]
+    i = int(inp.get("chunk", 0))
+    path = os.path.join(work, f"chunk_{i:03d}.mp4")
+    render_local((a, b), path, True, None)
+    obj = f"projects/{inp['project_id']}/parts/{inp['parent_job_id']}/render_{i:03d}.mp4"
+    url = storage.broker_upload(path, inp.get("bucket") or config.MEDIA_BUCKET, obj,
+                                inp["project_id"], inp["parent_job_id"], read_ttl=60 * 60 * 6)
+    return {"url": url, "path": obj, "frames": [a, b]}
 
 
 def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -> dict:

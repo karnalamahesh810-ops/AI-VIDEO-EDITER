@@ -801,7 +801,26 @@ def _contact_sheets(video: str, work: str, every: float = 3.0, per_sheet: int = 
     return sheets
 
 
-def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
+def _all_remote(doc: dict) -> bool:
+    """Every visual in the document is a URL another worker can fetch."""
+    medias = [s.get("media") or {} for s in doc.get("scenes", [])]
+    medias += [m for o in doc.get("overlays", []) for m in (o.get("media") or [])]
+    return all(m.get("type") == "color" or str(m.get("url", "")).startswith("http")
+               for m in medias)
+
+
+def _local_renderer(doc: dict, inp: dict, work: str, on_progress=None):
+    def go(frames, path, muted, codec):
+        return renderer.render(
+            doc, path, composition=inp.get("composition", "Main"),
+            concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY,
+            on_progress=on_progress if frames is None and codec is None else None,
+            serve_dir=work, frames=frames, muted=muted, codec=codec)
+    return go
+
+
+def do_render(doc: dict, inp: dict, work: str, report: Reporter,
+              split: bool = False) -> dict:
     # The document may have come back from a browser, so validate before
     # spending GPU minutes on it.
     timeline.validate(doc, require_media=True)
@@ -819,6 +838,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not refresh narration url: {e}", flush=True)
     _sign_supabase_urls(doc)
+    # Chunk workers get the document with its web links and clean their own
+    # stills; the cleaned copies below are files on this worker's disk only.
+    remote_doc = copy.deepcopy(doc) if split else None
     _sanitize_stills(doc, work)
 
     report(f"Rendering {doc['meta'].get('sceneCount', len(doc['scenes']))} scenes", 70)
@@ -832,23 +854,29 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter) -> dict:
             last_pct[0] = pct
             report(f"Rendering video {int(frac * 100)}%", pct)
 
-    renderer.render(
-        doc, out_path,
-        composition=inp.get("composition", "Main"),
-        # Left unset, Remotion auto-detects concurrency from the host's CPU
-        # count, which is a GPU pod's real vCPU count - not what a Docker
-        # container is actually allowed to spawn threads for. A real render
-        # crashed at 4% ("thread::unix::Thread::new::thread_start", a Rust
-        # panic in the compositor failing to spawn a new OS thread) right
-        # after the heaviest-possible run of the memory/thread-heavy parallel
-        # sourcing phase. RENDER_CONCURRENCY caps it to a value verified safe
-        # in this container instead.
-        concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY,
-        on_progress=on_render,
-        # Everything sourced for this job lives here; the renderer serves it
-        # over loopback so headless Chrome can actually fetch it.
-        serve_dir=work,
-    )
+    if split and remote_doc is not None and _all_remote(remote_doc):
+        fanout.render(remote_doc, out_path, parent_job_id=(report.job or {}).get("id", ""),
+                      project_id=inp.get("project_id") or "",
+                      bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
+                      report=report, render_local=_local_renderer(doc, inp, work))
+    else:
+        renderer.render(
+            doc, out_path,
+            composition=inp.get("composition", "Main"),
+            # Left unset, Remotion auto-detects concurrency from the host's CPU
+            # count, which is a GPU pod's real vCPU count - not what a Docker
+            # container is actually allowed to spawn threads for. A real render
+            # crashed at 4% ("thread::unix::Thread::new::thread_start", a Rust
+            # panic in the compositor failing to spawn a new OS thread) right
+            # after the heaviest-possible run of the memory/thread-heavy parallel
+            # sourcing phase. RENDER_CONCURRENCY caps it to a value verified safe
+            # in this container instead.
+            concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY,
+            on_progress=on_render,
+            # Everything sourced for this job lives here; the renderer serves it
+            # over loopback so headless Chrome can actually fetch it.
+            serve_dir=work,
+        )
 
     report("Uploading video", 91)
     duration = doc["durationInFrames"] / doc["fps"]
@@ -968,6 +996,27 @@ def handler(job):
             return {"ok": True, "action": "source_part", **out,
                     "elapsed": round(time.time() - started, 1)}
 
+        if action == "render_chunk":
+            # One frame range of a split render, queued by its parent (src/fanout.py).
+            doc = inp.get("timeline") or {}
+            _sanitize_stills(doc, work)
+            _fill_missing_media(doc)
+
+            def chunk_progress(frac):
+                try:
+                    runpod.serverless.progress_update(job, {"frac": round(frac, 3)})
+                except Exception:  # noqa: BLE001 - progress must never kill a chunk
+                    pass
+
+            def render_chunk(frames, path, muted, codec):
+                return renderer.render(doc, path, composition=inp.get("composition", "Main"),
+                                       concurrency=config.RENDER_CONCURRENCY, serve_dir=work,
+                                       on_progress=chunk_progress, frames=frames,
+                                       muted=muted, codec=codec)
+            out = fanout.run_chunk(inp, work, render_chunk)
+            return {"ok": True, "action": "render_chunk", **out,
+                    "elapsed": round(time.time() - started, 1)}
+
         if action == "selftest":
             out = selftest.run(work, width=int(inp.get("width", 854)), report=report)
             return {"ok": out.get("ok", False), "action": "selftest", **out,
@@ -1061,8 +1110,19 @@ def handler(job):
             if patched:
                 print(f"[worker] {patched} scene(s) had no media; reused a "
                      "nearby clip so the render could complete", flush=True)
-            out = do_render(local_doc, inp, work, report)
-            if project_id and inp.get("publish_media", True):
+            split = (project_id and inp.get("publish_media", True)
+                     and fanout.render_enabled(doc, project_id))
+            if split:
+                # Long video: save the clips first so every worker can fetch
+                # them, then render in chunks across the workers.
+                publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
+                              report, job_id=job_id, band=(62, 69))
+                local_doc = copy.deepcopy(doc)
+                _fill_missing_media(local_doc)
+                out = do_render(local_doc, inp, work, report, split=True)
+            else:
+                out = do_render(local_doc, inp, work, report)
+            if not split and project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))
             if project_id:
