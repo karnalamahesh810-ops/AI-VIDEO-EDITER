@@ -215,3 +215,18 @@ class ImageShipsSounds(unittest.TestCase):
                  if l.strip() and not l.startswith("#")]
         self.assertNotIn("remotion/public/", rules)
         self.assertIn("!remotion/public/sfx/", rules)
+
+
+class CleanSourcing(unittest.TestCase):
+    def test_stock_seller_uploads_are_filtered(self):
+        self.assertTrue(media._stock_seller("Dolphins playing 4K", "ZapataStock"))
+        self.assertTrue(media._stock_seller("Statue of Liberty 1970s | FootageForPro", ""))
+        self.assertTrue(media._stock_seller("Ocean waves stock footage", ""))
+        self.assertFalse(media._stock_seller("A Trip To Honolulu (1966)", "British Pathé"))
+
+    def test_one_shot_per_video(self):
+        self.assertEqual(media.SEQ_SHOTS_PER_WINDOW, 1)
+
+    def test_an_unjudged_clip_is_rejected(self):
+        from src import vision
+        self.assertFalse(vision.acceptable(None))

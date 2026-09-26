@@ -92,6 +92,8 @@ export interface SceneMedia {
   source: string;
   attribution?: string;
   license?: string;
+  /** Measured length of a video file; shorter than the scene = slowed to fill it. */
+  clipSeconds?: number;
 }
 
 export interface Scene {

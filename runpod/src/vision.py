@@ -70,7 +70,9 @@ _SYSTEM = (
     "But an era-accurate documentary reconstruction of an unfilmed private moment "
     "(a 1970s bedroom, hands typing a 1960s file) is fine when the INTENT asks for "
     "reconstruction footage and no face is presented as the named person.\n"
-    "Score 0 and set has_text_or_watermark true if the frames show a lyric video, "
+    "Score 0 and set has_text_or_watermark true for ANY stock-library or channel "
+    "watermark or logo bug (ZapataStock, FootageForPro, Pond5, Storyblocks, Getty, a "
+    "channel logo in a corner), a lyric video, "
     "glitch art or corrupted/blocky frames, or a screen "
     "recording, software UI, a video game, a news desk or presenter talking to "
     "camera, a thumbnail/title card, burned-in subtitles, a channel logo, a "
@@ -486,7 +488,11 @@ def acceptable(verdict: Optional[dict], allow_people: bool = False) -> bool:
     doing the right thing.
     """
     if verdict is None:
-        return True
+        # Unjudged used to pass ("vision can only remove clips"). During a
+        # model outage that let an off-topic, watermarked stock dolphin clip
+        # open a documentary. With gpt-5-2 first and the circuit breaker,
+        # no verdict now means every model failed: reject.
+        return bool(config.ACCEPT_UNJUDGED)
     if verdict["has_text_or_watermark"]:
         return False
     if verdict["is_talking_head"] and not allow_people:

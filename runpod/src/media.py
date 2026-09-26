@@ -989,6 +989,21 @@ _EVENT_WINDOW: contextvars.ContextVar = contextvars.ContextVar("event_window", d
 _YT_THIS_YEAR = "EgIIBQ%3D%3D"
 
 
+# Stock libraries upload watermarked previews to YouTube (ZapataStock,
+# FootageForPro... filled a real video with logo-stamped dolphins and
+# Statues of Liberty). Their titles and channel names give them away.
+_STOCK_SELLER = re.compile(
+    r"stock (?:footage|video|clip)|footage ?for ?pro|zapata|pond5|storyblocks|"
+    r"shutterstock|videoblocks|videohive|envato|artgrid|artlist|motion ?array|"
+    r"getty ?images|istock|adobe ?stock|dissolve|filmsupply|framepool|"
+    r"christoryman|royalty[- ]free|free (?:stock|footage)|no copyright",
+    re.IGNORECASE)
+
+
+def _stock_seller(*texts: str) -> bool:
+    return any(t and _STOCK_SELLER.search(t) for t in texts)
+
+
 def _talking_head(title: str) -> bool:
     """
     True when the title disqualifies a candidate.
@@ -1087,7 +1102,7 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
         cmd = [
             "yt-dlp", target, "--flat-playlist", "--no-warnings",
             "--playlist-items", f"1-{limit}",
-            "--print", "%(id)s\t%(duration)s\t%(url)s\t\t%(title)s",
+            "--print", "%(id)s\t%(duration)s\t%(url)s\t%(channel)s\t%(title)s",
         ]
     proxy = _next_proxy()
     cmd += _yt_network_args(proxy)
@@ -1113,6 +1128,7 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
         if len(parts) < 5 or not parts[0].strip():
             continue
         vid, dur, w, h, title = parts[0], parts[1], parts[2], parts[3], "\t".join(parts[4:])
+        channel = h if h and not h.replace(".", "").isdigit() and h != "NA" else ""
 
         def num(x):
             try:
@@ -1130,6 +1146,7 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
             "duration": num(dur),
             "aspect": aspect,
             "title": title.strip(),
+            "channel": channel,
         })
     return out
 
@@ -1444,6 +1461,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # documentary. No clip is better than the wrong clip - the caller
             # falls through to the next query, and the timeline holds the
             # previous shot.
+            if _stock_seller(candidate["title"], candidate.get("channel", "")):
+                continue
             if _talking_head(candidate["title"]):
                 continue
             if candidate["aspect"] and candidate["aspect"] < 1.2:
@@ -2667,7 +2686,7 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
 # photos a sequence gathers. One window replaces up to three separate
 # searches + scouts + downloads + vision checks, and consecutive shots from it
 # play as one continuous moment across consecutive lines.
-SEQ_SHOTS_PER_WINDOW = 3
+SEQ_SHOTS_PER_WINDOW = 1   # never the same video twice
 SEQ_MAX_VIDEOS = 4
 SEQ_MAX_IMAGES = 6
 SEQ_SHOT_PAD = 0.5
@@ -2716,6 +2735,7 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
     eligible = [c for c in sorted(cands, key=lambda c: _score_candidate(
                     c["title"], c["duration"], c["aspect"], window), reverse=True)
                 if not _talking_head(c["title"])
+                and not _stock_seller(c["title"], c.get("channel", ""))
                 and not (c["aspect"] and c["aspect"] < 1.2)
                 and not (c["duration"] and c["duration"] < window + 10)
                 and f"yt:{c['id']}" not in used]

@@ -250,6 +250,8 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # short grace for the rest. One stalled download used to hold a job for
 # 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
 PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+# A candidate no vision model could judge is rejected (vision.acceptable).
+ACCEPT_UNJUDGED = os.getenv("ACCEPT_UNJUDGED", "0").strip().lower() in ("1", "true", "yes")
 # Sound effects on big animation moments (timeline.plan_sfx). SFX_VOLUME
 # scales every sound (each already sits at 20-35%); 0.0 silences them.
 SFX_ENABLED = os.getenv("SFX_ENABLED", "1").strip().lower() not in ("0", "false", "no")

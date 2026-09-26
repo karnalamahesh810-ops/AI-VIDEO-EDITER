@@ -216,6 +216,20 @@ def plan_sfx(overlays: List[dict], fps: int, min_gap_seconds: float) -> List[dic
     return picks
 
 
+def _clip_seconds(asset) -> float:
+    """Measured length of a video asset's file, else its recorded duration."""
+    path = getattr(asset, "local_path", "") or ""
+    if path and os.path.isfile(path):
+        try:
+            import subprocess
+            out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                  "-of", "csv=p=0", path], capture_output=True, text=True, timeout=30)
+            return float((out.stdout or "0").strip() or 0)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+    return float(getattr(asset, "duration", 0) or 0)
+
+
 def build(segments: List[Segment], shots: List[dict],
           assets: List[Optional[MediaAsset]], *,
           audio_url: str, audio_duration: float, inp: Dict[str, Any],
@@ -251,6 +265,14 @@ def build(segments: List[Segment], shots: List[dict],
         else:
             media = asset.to_scene_media()
             motion = _IMAGE_MOTIONS[i % len(_IMAGE_MOTIONS)] if asset.kind == "image" else "none"
+            if asset.kind == "video":
+                # The clip's real length. A clip cut for the planned line can
+                # come out shorter than the final scene (a real job: 3.48 s of
+                # footage in a 5.10 s scene) and the scene then ended in
+                # black; the renderer slows such a clip to fill its scene.
+                clip_s = _clip_seconds(asset)
+                if clip_s:
+                    media["clipSeconds"] = round(clip_s, 2)
             review, reason = asset.review_required, asset.review_reason
 
         scenes.append({

@@ -50,6 +50,13 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
   }
 
   const entrance = entranceStyle(transition, frame);
+  // A clip shorter than its scene used to run out and leave the rest of the
+  // scene black (a real job: 3.48 s of footage in a 5.10 s scene). Slow it
+  // just enough to fill the scene, never below 0.6x.
+  const { durationInFrames: sceneFrames, fps: sceneFps } = useVideoConfig();
+  const sceneSeconds = sceneFrames / sceneFps;
+  const clip = media.type === "video" ? media.clipSeconds ?? 0 : 0;
+  const rate = clip > 0 && clip < sceneSeconds ? Math.max(0.6, clip / sceneSeconds) : 1;
   const filters = [cssFilterFor(treatment), effectFilter(effect, frame), entrance.filter]
     .filter((f) => f && f !== "none")
     .join(" ");
@@ -100,7 +107,7 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
           }}
         >
           {media.type === "video" ? (
-            <OffthreadVideo src={media.url} style={inset} muted />
+            <OffthreadVideo src={media.url} style={inset} muted playbackRate={rate} />
           ) : (
             <Img src={media.url} style={inset} />
           )}
@@ -120,7 +127,7 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
         }}
       >
         {media.type === "video" ? (
-          <OffthreadVideo src={media.url} style={fill} muted />
+          <OffthreadVideo src={media.url} style={fill} muted playbackRate={rate} />
         ) : (
           <Img src={media.url} style={fill} />
         )}
