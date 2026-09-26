@@ -1075,7 +1075,7 @@ def _score_candidate(title: str, duration: float, aspect: float,
     return score
 
 
-def _yt_candidates(target: str, require_cc: bool, limit: int = 12,
+def _yt_candidates(target: str, require_cc: bool, limit: int = 20,
                    timeout: int = 90) -> List[dict]:
     """
     List search results with the metadata needed to choose between them.
@@ -2687,7 +2687,9 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
 # searches + scouts + downloads + vision checks, and consecutive shots from it
 # play as one continuous moment across consecutive lines.
 SEQ_SHOTS_PER_WINDOW = 1   # never the same video twice
-SEQ_MAX_VIDEOS = 4
+# One shot per video now (no repeats), so a section needs as many videos as
+# it has lines: 4 left 6 of every 10 lines to the slow one-by-one search.
+SEQ_MAX_VIDEOS = 10
 SEQ_MAX_IMAGES = 6
 SEQ_SHOT_PAD = 0.5
 # Footage searches per sequence run concurrently (see source_sequence).
@@ -2730,7 +2732,7 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
         target = ("https://www.youtube.com/results?search_query="
                   + urllib.parse.quote_plus(query) + "&sp=EgIwAQ%3D%3D")
     else:
-        target = f"ytsearch12:{query}"
+        target = f"ytsearch20:{query}"  # no-repeats across long videos needs depth
     cands = _yt_candidates_cached(target, require_cc, "", variant=f"seq:{query}")
     eligible = [c for c in sorted(cands, key=lambda c: _score_candidate(
                     c["title"], c["duration"], c["aspect"], window), reverse=True)

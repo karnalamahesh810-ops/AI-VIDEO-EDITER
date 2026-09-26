@@ -646,7 +646,9 @@ _BRIEF_PROMPT = (
     "identity: name \"\" - never guess. Put these names in people too.\n"
     "- sections: split the beats (by index, inclusive) into story sections, one per "
     "time and place the story moves through (a biography jumps 1971 -> 1962 -> 1964; "
-    "split at every jump, 3-12 sections). when = the year or range that section is "
+    "split at every jump, and never more than ~20 beats per section - a long video "
+    "needs many sections so its footage searches stay specific). when = the year or "
+    "range that section is "
     "ABOUT, worked out from the whole story even when its lines never say it (\"He "
     "was one year old when his father left\" in a story of a boy born 1961 = 1962); "
     "where = its place (\"Honolulu, Hawaii\"). "
@@ -658,7 +660,9 @@ _BRIEF_PROMPT = (
 )
 
 # Enough for a 25-minute narration; the brief is about the story, not every line.
-_BRIEF_MAX_CHARS = 24000
+# A 30-minute narration is ~27k characters; 24000 cut the story off before
+# its last minutes, which then got no section, year, place or footage plan.
+_BRIEF_MAX_CHARS = 150000
 
 
 def _today() -> datetime.date:
@@ -752,7 +756,7 @@ def _validate_brief(raw, fallback: dict, n_beats: int,
         if c["name"] and c["name"] not in out["people"] and len(out["people"]) < 5:
             out["people"] = out["people"] + [c["name"]]
     sections = []
-    for sec in (raw.get("sections") or [])[:12]:
+    for sec in (raw.get("sections") or [])[:80]:
         if not isinstance(sec, dict):
             continue
         lo, hi = sec.get("from"), sec.get("to")
