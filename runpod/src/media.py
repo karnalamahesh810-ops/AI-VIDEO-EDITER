@@ -148,6 +148,9 @@ BLOCK_SIGNS = (
     "please sign in",
     "http error 429",
     "too many requests",
+    # A flagged IP served no stream formats at all (the "-f .../b" chain still
+    # found nothing): a soft block, seen on residential sessions.
+    "requested format is not available",
     # Search itself refused. A 403 on a single video can be a geo/age lock, but
     # on the search API it is the IP: seen on a Webshare proxy YouTube had banned.
     "unable to download api page: http error 403",
