@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import math
 import os
+import threading
 import time
 from dataclasses import asdict, fields
 from typing import Any, Callable, Dict, List, Optional
@@ -127,27 +128,79 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
     n = max(j["index"] for j in jobs) + 1
     results: List[Optional[media.MediaAsset]] = [None] * n
     parts = split(jobs, sequences, config.FANOUT_PARTS)
+    # The parent sources the first part itself instead of waiting idle, and
+    # takes back any part no machine has started once it is free again.
+    parts_remote = parts[1:]
+    here: List[Dict[str, Any]] = []
+    lock = threading.Lock()
+
+    def start_here(p: dict) -> None:
+        run = {"part": p, "done": threading.Event(), "assets": None, "taken": False}
+
+        def go():
+            try:
+                with lock:              # media's shared state: one local batch at a time
+                    run["assets"] = local(p["jobs"], set())
+            except Exception as e:  # noqa: BLE001 - its scenes are refilled below
+                print(f"[fanout] local part failed: {e}", flush=True)
+            finally:
+                run["done"].set()
+        here.append(run)
+        threading.Thread(target=go, daemon=True).start()
+
+    def free_here() -> bool:
+        return all(r["done"].is_set() for r in here)
+
+    def collect_here() -> int:
+        n_done = 0
+        for r in here:
+            if r["done"].is_set() and not r["taken"]:
+                r["taken"] = True
+                if r["assets"] is None:
+                    failed_parts.append(r["part"])
+                else:
+                    for j, a in zip(sorted(r["part"]["jobs"], key=lambda j: j["index"]), r["assets"]):
+                        results[j["index"]] = a
+            if r["done"].is_set():
+                n_done += len(r["part"]["jobs"])
+        return n_done
+
+    start_here(parts[0])
     submitted = []
-    for p in parts:
+    for p in parts_remote:
         jid = _submit({"action": "source_part", "parent_job_id": parent_job_id,
                        "project_id": project_id, "bucket": bucket, "brief": brief,
                        "jobs": p["jobs"], "sequences": p["sequences"], "exclude": [],
                        **flags})
         submitted.append((p, jid))
     live = [(p, jid) for p, jid in submitted if jid]
-    print(f"[fanout] {len(live)}/{len(parts)} parts on other workers "
-          f"({sum(len(p['jobs']) for p, _ in live)} scenes)", flush=True)
-    report(f"Sourcing in parallel on {len(live)} workers", 30, done=0, total=len(live))
+    print(f"[fanout] {len(live)}/{len(parts_remote)} parts on other workers "
+          f"({sum(len(p['jobs']) for p, _ in live)} scenes) + 1 here", flush=True)
+    total_scenes = len(jobs)
+    report(f"Sourcing in parallel on {len(live) + 1} workers", 30, done=0, total=total_scenes)
 
     deadline = time.time() + max(config.FANOUT_TIMEOUT_SECONDS, 6.0 * len(jobs))
     pending = {jid: p for p, jid in live}
     failed_parts = [p for p, jid in submitted if not jid]
-    finished = 0
-    while pending and time.time() < deadline:
+    progress: Dict[str, int] = {}
+    stolen = 0
+    here_done = 0
+    while (pending or not free_here()) and time.time() < deadline:
         time.sleep(8)
+        here_done = collect_here()
         for jid in list(pending):
             st = _status(jid)
             state = st.get("status")
+            if state == "IN_QUEUE" and free_here():
+                # No machine picked this part up and this worker is free:
+                # take it back and source it here now (work stealing).
+                _cancel(jid)
+                start_here(pending.pop(jid))
+                stolen += 1
+                print(f"[fanout] part {jid[:8]} never started; sourcing it here", flush=True)
+                continue
+            if state == "IN_PROGRESS" and isinstance(st.get("output"), dict):
+                progress[jid] = int(st["output"].get("done") or 0)
             if state in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
                 p = pending.pop(jid)
                 out = st.get("output") or {}
@@ -158,6 +211,7 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
                           flush=True)
                     failed_parts.append(p)
                     continue
+                progress[jid] = len(p["jobs"])
                 for key, d in assets.items():
                     i = int(key)
                     url = d.get("remote_url") or ""
@@ -168,10 +222,13 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
                         results[i] = _asset_from(d, path)
                     except Exception as e:  # noqa: BLE001 - re-sourced below
                         print(f"[fanout] scene {i + 1}: download failed ({e})", flush=True)
-                finished += 1
-                report(f"Sourcing in parallel: {finished}/{len(live)} parts done",
-                       30 + int(30 * finished / max(1, len(live))),
-                       done=finished, total=len(live))
+        done_now = min(total_scenes, sum(progress.values()) + here_done)
+        busy = len(pending) + (0 if free_here() else 1)
+        report(f"Sourced {done_now}/{total_scenes} scenes on {busy} workers",
+               30 + int(32 * done_now / max(1, total_scenes)), done=done_now, total=total_scenes)
+    for r in here:                               # past the deadline: wait for our own work
+        r["done"].wait()
+    collect_here()
     for jid, p in pending.items():             # timed out: take it back
         _cancel(jid)
         failed_parts.append(p)
@@ -202,6 +259,7 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
         for j, a in zip(sorted(todo, key=lambda j: j["index"]), got):
             results[j["index"]] = a
     media.LAST_STATS["fanout"] = {"parts": len(parts), "on_workers": len(live),
+                                  "stolen_back": stolen,
                                   "failed_parts": len(failed_parts),
                                   "cross_part_repeats": len(dup_jobs),
                                   "sourced_by_parent": len(todo)}

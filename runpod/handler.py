@@ -948,10 +948,17 @@ def handler(job):
                 vision.set_story(brief)
                 media.set_story_kind((brief or {}).get("kind", ""))
 
+            def part_progress(done, n):
+                # The parent sums these across parts for the app's progress bar.
+                try:
+                    runpod.serverless.progress_update(job, {"done": done, "total": n})
+                except Exception:  # noqa: BLE001 - progress must never kill a part
+                    pass
+
             def source_part(jobs, w, seqs, exclude):
                 b = inp.get("brief") or {}
                 return media.source_many(
-                    jobs, w, workers=config.SOURCE_WORKERS,
+                    jobs, w, workers=config.SOURCE_WORKERS, on_done=part_progress,
                     rescue=lambda items: director.rescue_queries(items, story=b),
                     sequences=seqs or None,
                     assign=lambda lines, pool: director.assign_shots(lines, pool, story=b),
