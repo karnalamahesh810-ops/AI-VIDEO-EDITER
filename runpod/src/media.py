@@ -145,7 +145,12 @@ def _yt_network_args(proxy: Optional[str] = None) -> List[str]:
             "--concurrent-fragments", "1"]
     proxy = _next_proxy() if proxy is None else proxy
     if proxy:
-        args += ["--proxy", proxy]
+        # yt-dlp hands section downloads to ffmpeg and passes the proxy only
+        # as an environment variable, which ffmpeg ignores for https:// stream
+        # URLs. The fetch then left the worker on its own (blocked) IP with a
+        # link minted for the proxy's IP: a frameless 262-byte file, exit 0,
+        # on every route. ffmpeg's -http_proxy option covers https.
+        args += ["--proxy", proxy, "--downloader-args", f"ffmpeg_i:-http_proxy {proxy}"]
     if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
         args += ["--cookies", config.YTDLP_COOKIES_FILE]
     return args

@@ -23,6 +23,13 @@ class Downloader(unittest.TestCase):
         # A download through a flaky residential IP gets more tries.
         self.assertEqual(last(fetch, '--retries'), '5')
 
+    def test_ffmpeg_gets_the_proxy_explicitly_for_https_streams(self):
+        args = media._yt_network_args("http://u:p@proxy.example:8080")
+        self.assertIn("--proxy", args)
+        self.assertEqual(args[args.index("--downloader-args") + 1],
+                         "ffmpeg_i:-http_proxy http://u:p@proxy.example:8080")
+        self.assertNotIn("--downloader-args", media._yt_network_args(""))
+
     def test_failed_download_never_returns_existing_file(self):
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, 'yt_abc_2000_3000.mp4')
