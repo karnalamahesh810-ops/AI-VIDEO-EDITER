@@ -2,15 +2,15 @@
 Narration alignment.
 
 This is the step that makes clips land on the right words. We transcribe the
-narration audio with word-level timestamps, then cut the timeline on clause
-boundaries — which is exactly how the VidRush reference renders behave
-(one visual per spoken clause, median ~3s).
+narration audio with word-level timestamps, then cut the timeline on natural
+clause boundaries around the 7-second GoMotion visual rhythm.
 
 If a script was pasted, we still transcribe (for timing) but snap the recognised
 words back onto the *authored* script text, so captions read exactly as written
 rather than as whisper heard them.
 """
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from typing import List, Optional
 import re
 
@@ -167,26 +167,73 @@ def segment_words(words: List[Word]) -> List[Segment]:
 
 def align_to_script(segments: List[Segment], script: str) -> List[Segment]:
     """
-    Replace transcribed text with the authored script text, preserving timing.
+    Align authored words to recognized words, then retain the actual audio times.
 
-    Whisper mishears names and numbers ("Pereira", "7.4"). When the user pasted a
-    script we keep whisper's *timing* but show the user's *words*, distributing
-    the script across segments proportionally to each segment's word count.
+    Proportionally distributing the script across the whole recording drifts
+    badly as soon as the narration skips, adds, or paraphrases a sentence. The
+    resulting captions and search terms then describe a different moment from
+    the voice. Sequence alignment anchors matching words and interpolates only
+    between unmatched spans.
     """
     script = (script or "").strip()
     if not script or not segments:
         return segments
 
-    script_words = script.split()
-    total_spoken = sum(len(s.words) for s in segments) or 1
-    idx = 0
-    for i, seg in enumerate(segments):
-        share = len(seg.words) / total_spoken
-        take = max(1, round(share * len(script_words)))
-        if i == len(segments) - 1:
-            take = len(script_words) - idx
-        chunk = script_words[idx: idx + take]
-        idx += take
+    authored = script.split()
+    spoken = [w for seg in segments for w in seg.words]
+    if not spoken:
+        return segments
+
+    def norm(token: str) -> str:
+        return re.sub(r"[^\w']", "", token, flags=re.UNICODE).casefold()
+
+    a = [norm(w) for w in authored]
+    b = [norm(w.text) for w in spoken]
+    aligned: List[Optional[tuple]] = [None] * len(authored)
+    matcher = SequenceMatcher(None, a, b, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for ai, bi in zip(range(i1, i2), range(j1, j2)):
+                aligned[ai] = (spoken[bi].start, spoken[bi].end)
+        elif tag == "replace" and j2 > j1:
+            lo, hi = spoken[j1].start, spoken[j2 - 1].end
+            count = max(1, i2 - i1)
+            for n, ai in enumerate(range(i1, i2)):
+                aligned[ai] = (lo + (hi - lo) * n / count,
+                               lo + (hi - lo) * (n + 1) / count)
+
+    # Fill script words absent from the recording between their nearest timed
+    # neighbours. If the script and narration are substantially different,
+    # fall back to Whisper's words rather than assigning unrelated text.
+    matched = sum(x is not None for x in aligned)
+    if matched < max(1, min(len(authored), len(spoken)) * 0.2):
+        return segments
+    known = [i for i, x in enumerate(aligned) if x is not None]
+    for i, item in enumerate(aligned):
+        if item is not None:
+            continue
+        left = max((k for k in known if k < i), default=None)
+        right = min((k for k in known if k > i), default=None)
+        if left is None:
+            t = aligned[right][0] if right is not None else spoken[0].start
+            aligned[i] = (t, t)
+        elif right is None:
+            t = aligned[left][1]
+            aligned[i] = (t, t)
+        else:
+            lo, hi = aligned[left][1], aligned[right][0]
+            count = right - left
+            aligned[i] = (lo + (hi - lo) * (i-left-1) / count,
+                          lo + (hi - lo) * (i-left) / count)
+
+    chunks = [[] for _ in segments]
+    for token, (start, end) in zip(authored, aligned):
+        midpoint = (start + end) / 2
+        index = next((i for i, seg in enumerate(segments)
+                      if seg.start <= midpoint < seg.end),
+                     min(range(len(segments)), key=lambda i: abs(segments[i].start-midpoint)))
+        chunks[index].append(token)
+    for seg, chunk in zip(segments, chunks):
         if chunk:
             seg.text = " ".join(chunk)
     return segments

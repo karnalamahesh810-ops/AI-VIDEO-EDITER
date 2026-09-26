@@ -1,6 +1,8 @@
 """Supabase Storage upload + generic file download."""
 import os
 import mimetypes
+import time
+import uuid
 import requests
 
 from . import config
@@ -25,20 +27,60 @@ def download(url: str, dest_path: str, timeout: int = 180) -> str:
     """
     if os.path.isfile(url):
         return url
-    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    with requests.get(url, stream=True, timeout=timeout,
-                      headers={"User-Agent": config.USER_AGENT}) as r:
-        r.raise_for_status()
-        with open(dest_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    f.write(chunk)
-    return dest_path
+    parent = os.path.dirname(dest_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    # Write to a unique sibling and atomically publish only a complete file.
+    # Parallel scene downloads can share a logical destination after retries;
+    # they must never truncate one another's partial bytes.
+    temp_path = f"{dest_path}.{uuid.uuid4().hex}.part"
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            with requests.get(url, stream=True, timeout=(20, timeout),
+                              headers={"User-Agent": config.USER_AGENT}) as r:
+                r.raise_for_status()
+                expected = int(r.headers.get("Content-Length") or 0)
+                content_type = (r.headers.get("Content-Type") or "").lower()
+                if "text/html" in content_type:
+                    raise StorageError(f"download returned an HTML error page ({r.status_code})")
+                written = 0
+                with open(temp_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1 << 20):
+                        if chunk:
+                            f.write(chunk)
+                            written += len(chunk)
+                if written <= 0:
+                    raise StorageError("download returned an empty file")
+                if expected and not r.headers.get("Content-Encoding") and written != expected:
+                    raise StorageError(f"incomplete download ({written}/{expected} bytes)")
+            os.replace(temp_path, dest_path)
+            return dest_path
+        except (requests.RequestException, OSError, StorageError) as e:
+            last_error = e
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+            # Retry transient network/server failures; don't waste time retrying
+            # permanent HTTP responses such as a missing or forbidden asset.
+            response = getattr(e, "response", None)
+            code = getattr(response, "status_code", None)
+            retryable = code is None or code in (408, 425, 429) or code >= 500
+            if attempt == 3 or not retryable:
+                break
+            time.sleep(0.5 * attempt)
+    raise StorageError(f"download failed after {attempt} attempt(s): {last_error}") from last_error
 
 
 def broker_enabled() -> bool:
     """Upload through the app's worker-storage function (no service key here)."""
     return bool(config.STORAGE_BROKER_URL and not config.SUPABASE_SERVICE_KEY)
+
+
+def parallel_storage_enabled() -> bool:
+    """Whether child workers can return media through either storage path."""
+    return broker_enabled() or bool(config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY)
 
 
 def _broker(payload: dict, timeout: int = 60) -> dict:
@@ -64,6 +106,11 @@ def broker_upload(local_path: str, bucket: str, object_path: str, project_id: st
     """
     ref = {"project_id": project_id, "job_id": job_id,
            "bucket": bucket, "path": object_path.lstrip("/")}
+    if not broker_enabled():
+        if not (config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY):
+            raise StorageError("parallel uploads need worker-storage or Supabase service credentials")
+        upload_to_supabase(local_path, ref["path"], bucket=bucket)
+        return signed_url(ref["path"], bucket=bucket, expires_in=read_ttl)
     upload_to_signed_url(local_path, _broker({**ref, "action": "upload"})["uploadUrl"])
     return _broker({**ref, "action": "read", "expires_in": read_ttl})["readUrl"]
 

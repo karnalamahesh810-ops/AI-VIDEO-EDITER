@@ -263,9 +263,12 @@ PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
 # Split one long video's sourcing across workers (src/fanout.py). RunPod
 # injects RUNPOD_ENDPOINT_ID into its workers; the API key is set on the
 # template (FANOUT_API_KEY) so a worker can queue parts on its own endpoint.
-FANOUT_PARTS = int(os.getenv("FANOUT_PARTS", "8"))
-FANOUT_MIN_SCENES = int(os.getenv("FANOUT_MIN_SCENES", "60"))
-FANOUT_API_KEY = os.getenv("FANOUT_API_KEY", "")
+# Total worker slots including the parent worker. The parent handles one part
+# locally while up to nine child jobs run on the other endpoint workers.
+FANOUT_PARTS = int(os.getenv("FANOUT_PARTS", "10"))
+FANOUT_MIN_SCENES = int(os.getenv("FANOUT_MIN_SCENES", "1"))
+FANOUT_API_KEY = (os.getenv("FANOUT_API_KEY", "")
+                  or os.getenv("RUNPOD_API_KEY", ""))
 FANOUT_ENDPOINT_ID = os.getenv("FANOUT_ENDPOINT_ID", "") or os.getenv("RUNPOD_ENDPOINT_ID", "")
 FANOUT_TIMEOUT_SECONDS = float(os.getenv("FANOUT_TIMEOUT_SECONDS", "1500"))
 # Scenes left empty/doubled after round 1: at least this many go back out
@@ -273,7 +276,7 @@ FANOUT_TIMEOUT_SECONDS = float(os.getenv("FANOUT_TIMEOUT_SECONDS", "1500"))
 FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "10"))
 # Split the render into frame chunks across the workers for longer videos.
 FANOUT_RENDER = os.getenv("FANOUT_RENDER", "1") == "1"
-FANOUT_RENDER_MIN_SECONDS = float(os.getenv("FANOUT_RENDER_MIN_SECONDS", "240"))
+FANOUT_RENDER_MIN_SECONDS = float(os.getenv("FANOUT_RENDER_MIN_SECONDS", "0"))
 FANOUT_RENDER_CHUNK_SECONDS = float(os.getenv("FANOUT_RENDER_CHUNK_SECONDS", "90"))
 # A candidate no vision model could judge is rejected (vision.acceptable).
 ACCEPT_UNJUDGED = os.getenv("ACCEPT_UNJUDGED", "0").strip().lower() in ("1", "true", "yes")
@@ -348,9 +351,9 @@ SCENE_TREATMENT = os.getenv("SCENE_TREATMENT", "none").strip().lower()
 # median shot 3.3-3.7 s, middle half 2.3-5.2 s, 13.6-16.5 cuts/min, only
 # 2-10% of shots over 8 s. The earlier 5/7/9 (GoMotion's ~7 s) cut half as
 # often. Set 5/7/9 again for the slower GoMotion feel.
-MIN_SCENE_SECONDS = float(os.getenv("MIN_SCENE_SECONDS", "2.0"))
-TARGET_SCENE_SECONDS = float(os.getenv("TARGET_SCENE_SECONDS", "3.4"))
-MAX_SCENE_SECONDS = float(os.getenv("MAX_SCENE_SECONDS", "6.0"))
+MIN_SCENE_SECONDS = float(os.getenv("MIN_SCENE_SECONDS", "5.0"))
+TARGET_SCENE_SECONDS = float(os.getenv("TARGET_SCENE_SECONDS", "7.0"))
+MAX_SCENE_SECONDS = float(os.getenv("MAX_SCENE_SECONDS", "9.0"))
 
 # Contact address used in the User-Agent for Wikimedia/Nominatim, both of which
 # require identifying your client in their terms of use.

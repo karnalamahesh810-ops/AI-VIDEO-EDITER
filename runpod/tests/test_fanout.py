@@ -152,8 +152,11 @@ class FanoutRender(unittest.TestCase):
         self.assertEqual(ranges[-1][1], 30 * 60 * 22 - 1)
         for (a, b), (c, _) in zip(ranges, ranges[1:]):
             self.assertEqual(c, b + 1)
-        with mock.patch.object(config, "FANOUT_RENDER_CHUNK_SECONDS", 90):
-            self.assertEqual(fanout.chunks(30 * 60, 30, 9), [(0, 1799)])
+        # Even a short render fills every worker slot.
+        short = fanout.chunks(30 * 60, 30, 9)
+        self.assertEqual(len(short), 9)
+        self.assertEqual((short[0][0], short[-1][1]), (0, 1799))
+        self.assertEqual(fanout.chunks(5, 30, 9), [(i, i) for i in range(5)])
 
     def test_lost_chunk_is_rendered_here_and_audio_rendered_once(self):
         work = tempfile.mkdtemp()
@@ -164,7 +167,7 @@ class FanoutRender(unittest.TestCase):
             with open(path, "wb") as fh:
                 fh.write(b"x")
 
-        ids = iter(["c1", "c2"])
+        ids = iter(["c2", "c1"])      # the one remote chunk is the one that fails
 
         def download(url, path):
             with open(path, "wb") as fh:
@@ -176,8 +179,8 @@ class FanoutRender(unittest.TestCase):
             fanout.render(doc, os.path.join(work, "final.mp4"), parent_job_id="p",
                           project_id="x", bucket="b", work=work,
                           report=lambda *a, **k: None, render_local=render_local)
-        self.assertIn(((0, 2699), True, None), calls)          # its own chunk, silent
-        self.assertIn(((5400, 8099), True, None), calls)       # the failed chunk, here
+        self.assertIn(((0, 4049), True, None), calls)          # its own chunk, silent
+        self.assertIn(((4050, 8099), True, None), calls)       # the failed chunk, here
         self.assertEqual([c for c in calls if c[2] == "aac"], [(None, False, "aac")])
         self.assertEqual(media.LAST_STATS["render_fanout"]["rendered_here_after"], 1)
 

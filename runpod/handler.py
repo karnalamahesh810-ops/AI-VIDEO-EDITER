@@ -1064,6 +1064,7 @@ def handler(job):
                     "imageCapPerVideo": config.IMAGE_MAX_PER_VIDEO,
                     "storage": store,
                     "readyToRender": store.get("ok", False),
+                    "parallelWorkers": fanout.readiness(config.FANOUT_MIN_SCENES),
                     "machine": _machine(),
                     # Real download check per route: {"probe_youtube": true}.
                     **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),

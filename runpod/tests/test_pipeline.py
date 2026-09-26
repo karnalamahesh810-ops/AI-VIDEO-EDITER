@@ -1026,14 +1026,13 @@ class Pacing(unittest.TestCase):
     ) * 4
 
     def test_cut_rate_matches_the_reference_band(self):
-        # VidRush, measured on four of their exports: 13.6-16.5 cuts/min for
-        # the three narrated-story videos (the fourth, all long drone shots,
-        # ran 6.9). A little margin either side.
+        # GoMotion, read off a 20-minute project: 174 clips = 8.7 cuts/min,
+        # median 7 s. A little margin either side.
         segments = segment_words(words_from(self.NARRATION))
         duration = segments[-1].end
         cpm = len(segments) / (duration / 60)
-        self.assertGreaterEqual(cpm, 11.0, f"too slow: {cpm:.1f} cuts/min")
-        self.assertLessEqual(cpm, 19.0, f"too fast: {cpm:.1f} cuts/min")
+        self.assertGreaterEqual(cpm, 6.5, f"too slow: {cpm:.1f} cuts/min")
+        self.assertLessEqual(cpm, 11.0, f"too fast: {cpm:.1f} cuts/min")
 
     def test_clips_cluster_around_the_target_length(self):
         """VidRush's median shot is 3.3-3.7 s; aim near the target."""
@@ -1522,8 +1521,9 @@ class SourcingCommands(unittest.TestCase):
 
         class Response:
             status_code = 200
+            headers = {}
             def raise_for_status(self): pass
-            def iter_content(self, chunk_size=0): return []
+            def iter_content(self, chunk_size=0): return [b"x"]
             def __enter__(self): return self
             def __exit__(self, *a): return False
 

@@ -118,6 +118,15 @@ def render(props: dict, out_path: str, composition: str = "Main",
         # Fixed caps keep it inside the container.
         cmd += [f"--offthreadvideo-cache-size-in-bytes={config.RENDER_FRAME_CACHE_BYTES}",
                 f"--offthreadvideo-video-threads={config.RENDER_VIDEO_THREADS}"]
+        # Remotion's canvas/SVG effects otherwise use Chromium's software GL
+        # path on headless workers, even when RunPod has attached an NVIDIA
+        # device. ANGLE uses the worker's GPU for composition; video decoding
+        # remains on OffthreadVideo's bounded FFmpeg workers. CPU-only local
+        # runs keep Remotion's default backend. REMOTION_GL can override this
+        # for a pod whose driver requires another supported backend.
+        gl_backend = os.getenv("REMOTION_GL", "").strip()
+        if gl_backend or os.path.exists("/dev/nvidia0"):
+            cmd.append(f"--gl={gl_backend or 'angle'}")
 
         def run(argv):
             if on_progress is None:

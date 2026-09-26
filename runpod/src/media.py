@@ -34,6 +34,7 @@ import subprocess
 import threading
 import time
 import urllib.parse
+import uuid
 import requests
 
 from . import config, moments, vision
@@ -1274,7 +1275,10 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     """Download one section of one known video. Returns the local path or ''."""
     # Different ranges must not reuse a previous download of the same video.
     range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
-    out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}.%(ext)s")
+    # Each parallel scene gets its own path even when it selects the same
+    # source/time range; yt-dlp otherwise races over one partial output file.
+    fetch_id = uuid.uuid4().hex[:10]
+    out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}_{fetch_id}.%(ext)s")
     cmd = [
         "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
         "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
@@ -1286,24 +1290,32 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     ]
     proxy = _next_proxy()
     cmd += _yt_network_args(proxy)
+    # After the shared network args: yt-dlp keeps the LAST value of a repeated
+    # option, so placed before them these were silently overridden by "2".
+    cmd += ["--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3"]
     try:
         with _NET_SEM:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         _bench_proxy(proxy, "download timed out")
+        print(f"[media] YouTube clip download timed out ({video_id}, {start_at:.1f}s)", flush=True)
         return ""
     except FileNotFoundError:
+        print("[media] yt-dlp executable is missing; cannot download YouTube footage", flush=True)
         return ""
     if looks_blocked(p.stderr):
         _bench_proxy(proxy, "download refused")
+        print(f"[media] YouTube refused the worker connection ({video_id}); check YTDLP_PROXY", flush=True)
         return ""
     if p.returncode != 0:
+        reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
+        print(f"[media] yt-dlp failed ({video_id}, exit {p.returncode}): {reason[-240:] or 'no diagnostic'}", flush=True)
         return ""
     for line in (p.stdout or "").splitlines():
         line = line.strip()
         if line and os.path.exists(line):
             return line
-    guess = os.path.join(out_dir, f"yt_{video_id}_{range_key}.mp4")
+    guess = os.path.join(out_dir, f"yt_{video_id}_{range_key}_{fetch_id}.mp4")
     return guess if os.path.exists(guess) else ""
 
 
@@ -1570,7 +1582,7 @@ def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     Needs curl_cffi, which yt-dlp uses to impersonate Chrome for Dailymotion.
     """
     range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
-    out_tpl = os.path.join(out_dir, f"dm_%(id)s_{range_key}.%(ext)s")
+    out_tpl = os.path.join(out_dir, f"dm_%(id)s_{range_key}_{uuid.uuid4().hex[:10]}.%(ext)s")
     base = ["yt-dlp", f"https://www.dailymotion.com/video/{video_id}",
             "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
             "--force-keyframes-at-cuts",

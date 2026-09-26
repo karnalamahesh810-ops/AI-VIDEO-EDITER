@@ -13,11 +13,15 @@ class Downloader(unittest.TestCase):
         with patch.object(media.subprocess, 'run', return_value=result) as run:
             media._yt_candidates('ytsearch1:lake', False)
             media._yt_fetch('abc', '/tmp', 2, 3)
-        for call in run.call_args_list:
-            cmd = call.args[0]
-            self.assertEqual(cmd[cmd.index('--js-runtimes') + 1], 'node')
-            self.assertEqual(cmd[cmd.index('--retries') + 1], '2')
+        def last(cmd, opt):   # yt-dlp keeps the last value of a repeated option
+            return cmd[len(cmd) - 1 - cmd[::-1].index(opt) + 1]
+        search, fetch = (c.args[0] for c in run.call_args_list[:2])
+        for cmd in (search, fetch):
+            self.assertEqual(last(cmd, '--js-runtimes'), 'node')
             self.assertIn('--ignore-config', cmd)
+        self.assertEqual(last(search, '--retries'), '2')
+        # A download through a flaky residential IP gets more tries.
+        self.assertEqual(last(fetch, '--retries'), '5')
 
     def test_failed_download_never_returns_existing_file(self):
         with tempfile.TemporaryDirectory() as folder:

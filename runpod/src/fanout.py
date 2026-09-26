@@ -30,6 +30,7 @@ import subprocess
 import threading
 import time
 from dataclasses import asdict, fields
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional
 
 import requests
@@ -37,10 +38,29 @@ import requests
 from . import config, media, storage
 
 
+def readiness(n_scenes: int, project_id: Optional[str] = None) -> dict:
+    """Safe fan-out diagnostics: report missing prerequisites, never secret values."""
+    missing = []
+    if config.FANOUT_PARTS < 2:
+        missing.append("worker_slots_must_be_at_least_2")
+    if n_scenes < config.FANOUT_MIN_SCENES:
+        missing.append("scene_count_below_fanout_minimum")
+    if not config.FANOUT_API_KEY:
+        missing.append("RunPod API key missing (FANOUT_API_KEY or RUNPOD_API_KEY)")
+    if not config.FANOUT_ENDPOINT_ID:
+        missing.append("endpoint id missing (FANOUT_ENDPOINT_ID or RUNPOD_ENDPOINT_ID)")
+    if project_id is not None and not project_id:
+        missing.append("project id required")
+    if not storage.parallel_storage_enabled():
+        missing.append("Supabase worker-storage or service credentials unavailable")
+    return {"enabled": not missing,
+            "workerSlots": config.FANOUT_PARTS,
+            "remoteWorkers": max(0, config.FANOUT_PARTS - 1),
+            "missing": missing}
+
+
 def enabled_for(n_scenes: int, project_id: str) -> bool:
-    return bool(config.FANOUT_PARTS > 1 and n_scenes >= config.FANOUT_MIN_SCENES
-                and config.FANOUT_API_KEY and config.FANOUT_ENDPOINT_ID
-                and project_id and storage.broker_enabled())
+    return readiness(n_scenes, project_id)["enabled"]
 
 
 def split(jobs: List[dict], sequences: List[dict], parts: int) -> List[Dict[str, Any]]:
@@ -175,23 +195,51 @@ class _Units:
             return []
         self._start_here(self.units[0])
         pending: Dict[str, dict] = {}
-        for unit in self.units[1:]:
-            jid = _submit(self.payload(unit))
-            if jid:
-                pending[jid] = unit
-            else:
-                self.failed.append(unit)
+        remote_units = self.units[1:]
+        if remote_units:
+            # Submit all parts concurrently; serial API calls can otherwise
+            # leave most of the endpoint idle while the parent waits on HTTP.
+            with ThreadPoolExecutor(max_workers=min(config.FANOUT_PARTS - 1,
+                                                     len(remote_units))) as pool:
+                futures = {pool.submit(_submit, self.payload(unit)): unit
+                           for unit in remote_units}
+                for future in as_completed(futures):
+                    unit = futures[future]
+                    try:
+                        jid = future.result()
+                    except Exception:
+                        jid = None
+                    if jid:
+                        pending[jid] = unit
+                    else:
+                        self.failed.append(unit)
         self.live = len(pending)
         total = sum(u.get("weight", 1) for u in self.units)
         print(f"[fanout] {label}: {len(pending)} unit(s) on other workers + 1 here", flush=True)
         seen_progress: Dict[str, float] = {}
+        seen_states: Dict[str, str] = {}
+        poll_delay = 1.0
+        status_pool = ThreadPoolExecutor(max_workers=max(1, min(config.FANOUT_PARTS - 1,
+                                                                  len(pending))))
         while (pending or not self._free()) and time.time() < self.deadline:
-            time.sleep(8)
+            time.sleep(poll_delay)
             here = self._collect_here()
-            for jid in list(pending):
-                st = _status(jid)
+            changed = False
+            snapshots = list(pending.items())
+            futures = {status_pool.submit(_status, jid): (jid, unit)
+                       for jid, unit in snapshots}
+            for future in as_completed(futures):
+                jid, unit = futures[future]
+                if jid not in pending:
+                    continue
+                try:
+                    st = future.result() or {}
+                except Exception:
+                    st = {}
                 state = st.get("status")
-                unit = pending[jid]
+                if state and seen_states.get(jid) != state:
+                    changed = True
+                    seen_states[jid] = state
                 if state == "IN_QUEUE" and self._free():
                     _cancel(jid)
                     del pending[jid]
@@ -200,7 +248,10 @@ class _Units:
                     print(f"[fanout] {label}: unit {jid[:8]} never started; doing it here", flush=True)
                     continue
                 if state == "IN_PROGRESS" and isinstance(st.get("output"), dict):
-                    seen_progress[jid] = self.progress(unit, st["output"])
+                    progress = self.progress(unit, st["output"])
+                    if seen_progress.get(jid) != progress:
+                        changed = True
+                    seen_progress[jid] = progress
                 if state in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
                     del pending[jid]
                     out = st.get("output")
@@ -209,8 +260,11 @@ class _Units:
                               f"{str(out.get('error') if isinstance(out, dict) else out)[:160]}", flush=True)
                         self.failed.append(unit)
                     seen_progress[jid] = unit.get("weight", 1)
+                    changed = True
             busy = len(pending) + (0 if self._free() else 1)
             self.report(min(total, sum(seen_progress.values()) + here), total, busy)
+            poll_delay = 1.0 if changed else min(4.0, poll_delay * 1.6)
+        status_pool.shutdown(wait=False, cancel_futures=True)
         for r in self._here:                  # past the deadline: finish our own work
             r["done"].wait()
         self._collect_here()
@@ -338,13 +392,18 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
 def render_enabled(doc: dict, project_id: str) -> bool:
     seconds = doc.get("durationInFrames", 0) / max(1, doc.get("fps", 30))
     return bool(config.FANOUT_RENDER and seconds >= config.FANOUT_RENDER_MIN_SECONDS
-                and config.FANOUT_API_KEY and config.FANOUT_ENDPOINT_ID
-                and project_id and storage.broker_enabled())
+                and readiness(config.FANOUT_MIN_SCENES, project_id)["enabled"])
 
 
 def chunks(total_frames: int, fps: int, parts: int) -> List[tuple]:
-    """Frame ranges (inclusive) of about equal length, at most `parts` of them."""
-    want = max(1, min(parts, math.ceil(total_frames / (fps * config.FANOUT_RENDER_CHUNK_SECONDS))))
+    """Frame ranges (inclusive), filling every available worker slot."""
+    if total_frames <= 0:
+        return []
+    # Keep even short renders distributed: the former 90-second chunk target
+    # sent every short video through one worker, leaving the other nine idle.
+    # A range always contains at least one frame, so a clip shorter than the
+    # pool naturally uses only its available frame count.
+    want = max(1, min(max(1, parts), total_frames))
     size = math.ceil(total_frames / want)
     return [(a, min(total_frames, a + size) - 1) for a in range(0, total_frames, size)]
 
@@ -361,7 +420,7 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
     the whole timeline).
     """
     fps = int(doc.get("fps") or 30)
-    ranges = chunks(int(doc["durationInFrames"]), fps, config.FANOUT_PARTS + 1)
+    ranges = chunks(int(doc["durationInFrames"]), fps, config.FANOUT_PARTS)
     units = [{"i": i, "frames": fr, "weight": fr[1] - fr[0] + 1,
               "path": os.path.join(work, f"chunk_{i:03d}.mp4")} for i, fr in enumerate(ranges)]
 
