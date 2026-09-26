@@ -274,11 +274,19 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
                 print(f"[fanout] scene {i + 1}: download failed ({e})", flush=True)
         return True
 
+    # IMAGE_MAX_PER_VIDEO is per VIDEO: each first-round part gets its share,
+    # gap-filling parts none (they exist to find footage), and the parent
+    # keeps the rest for the last scenes it fills itself.
     def run_round(round_jobs: List[dict], seqs: List[dict], exclude: set, lo: int, hi: int,
-                  label: str) -> None:
+                  label: str, first: bool = False) -> None:
         parts = split(round_jobs, seqs, config.FANOUT_PARTS)
-        for p in parts:
+        for k, p in enumerate(parts):
             p["weight"] = len(p["jobs"])
+            p["image_budget"] = (config.IMAGE_MAX_PER_VIDEO * len(p["jobs"]) // max(1, total_scenes)
+                                 if first and k else 0)
+        if first:
+            media.limit_generation(config.IMAGE_MAX_PER_VIDEO
+                                   - sum(p["image_budget"] for p in parts))
         base = len(jobs) - len(round_jobs)
 
         def show(done, total, busy):
@@ -289,7 +297,8 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
             payload=lambda p: {"action": "source_part", "parent_job_id": parent_job_id,
                                "project_id": project_id, "bucket": bucket, "brief": brief,
                                "jobs": p["jobs"], "sequences": p["sequences"],
-                               "exclude": sorted(exclude), **flags},
+                               "exclude": sorted(exclude),
+                               "image_budget": p["image_budget"], **flags},
             local=lambda p: local(p["jobs"], set(exclude)),
             accept=fetch,
             progress=lambda p, o: min(p["weight"], float(o.get("done") or 0)),
@@ -302,7 +311,7 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
         stats["rounds"] += 1
 
     report(f"Sourcing in parallel: 0/{total_scenes} scenes", 30, done=0, total=total_scenes)
-    run_round(jobs, sequences, set(), 30, 55, "Sourced")
+    run_round(jobs, sequences, set(), 30, 55, "Sourced", first=True)
 
     seen: Dict[str, int] = {}
     dups = _dedupe(results, jobs, seen)

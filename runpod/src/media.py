@@ -1369,14 +1369,16 @@ def _plan_grabs(eligible: List[dict], grab: float, start_at: float,
 
 def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float,
                     title: str = "") -> str:
-    """_yt_fetch with one retry on the next proxy; logs a failure instead of
-    swallowing it. Under load a residential IP occasionally drops a download
-    that succeeds seconds later from another address."""
-    for attempt in (1, 2):
+    """_yt_fetch retried on the next proxy; logs a failure instead of
+    swallowing it. A residential home IP drops or crawls on about a third of
+    downloads (measured: 15/24 first tries, 502s from IPs going offline) and
+    the same clip succeeds seconds later from another address - three tries
+    on different IPs gets ~95% through."""
+    for attempt in (1, 2, 3):
         path = _yt_fetch(video_id, out_dir, start_at, seconds)
         if path:
             return path
-    print(f"[media] download failed twice, skipping: {title[:60] or video_id}",
+    print(f"[media] download failed three times, skipping: {title[:60] or video_id}",
           flush=True)
     return ""
 
@@ -1815,6 +1817,12 @@ def _generation_budget_left() -> bool:
             return False
         _GENERATED[0] += 1
         return True
+
+
+def limit_generation(n: int) -> None:
+    """Allow at most `n` more generated images in this job (a fan-out part's share)."""
+    with _CACHE_LOCK:
+        _GENERATED[0] = max(0, config.IMAGE_MAX_PER_VIDEO - max(0, int(n)))
 
 
 def generated_count() -> int:

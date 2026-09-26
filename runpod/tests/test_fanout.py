@@ -111,6 +111,38 @@ class FanoutSource(unittest.TestCase):
         self.assertEqual(media.LAST_STATS["fanout"]["rounds"], 2)
 
 
+    def test_ai_image_cap_is_shared_across_parts(self):
+        payloads = []
+        ids = iter(["part-a", "part-b"])
+
+        def submit(payload):
+            payloads.append(payload)
+            return next(ids)
+        done = {"status": "COMPLETED", "output": {"assets": {}}}
+        with mock.patch.object(config, "FANOUT_PARTS", 3),                 mock.patch.object(config, "IMAGE_MAX_PER_VIDEO", 9),                 mock.patch.object(config, "FANOUT_REFILL_MIN", 99),                 mock.patch.object(config, "FANOUT_TIMEOUT_SECONDS", 60),                 mock.patch.object(fanout, "_submit", submit),                 mock.patch.object(fanout, "_status", lambda jid: done),                 mock.patch.object(fanout, "_cancel", lambda jid: None),                 mock.patch.object(fanout.time, "sleep", lambda s: None):
+            fanout.source(self.jobs, [], {}, parent_job_id="p", project_id="x", bucket="b",
+                          work=self.work, flags={}, report=lambda *a, **k: None, local=self._local)
+        self.assertEqual([p["image_budget"] for p in payloads], [3, 3])
+        media.limit_generation(3)
+        with mock.patch.object(config, "IMAGE_MAX_PER_VIDEO", 9):
+            media.limit_generation(3)
+            self.assertEqual(media.generated_count(), 6)   # 3 of 9 left here
+
+
+class YouTubeGate(unittest.TestCase):
+    def test_job_stops_before_spending_when_youtube_refuses_everything(self):
+        import handler
+        blocked = [{"route": "direct", "ok": False, "seconds": 1, "why": "bot check"}]
+        with mock.patch.object(config, "REQUIRE_YOUTUBE", True),                 mock.patch.object(handler.media, "probe_youtube", return_value=blocked):
+            with self.assertRaises(RuntimeError) as ctx:
+                handler._require_youtube()
+        self.assertIn("Nothing was spent", str(ctx.exception))
+        ok = [{"route": "direct", "ok": False, "seconds": 1, "why": "bot check"},
+              {"route": "proxy#1", "ok": True, "seconds": 2, "why": ""}]
+        with mock.patch.object(config, "REQUIRE_YOUTUBE", True),                 mock.patch.object(handler.media, "probe_youtube", return_value=ok):
+            handler._require_youtube()
+
+
 class FanoutRender(unittest.TestCase):
     def test_chunks_cover_every_frame_once(self):
         with mock.patch.object(config, "FANOUT_RENDER_CHUNK_SECONDS", 90):

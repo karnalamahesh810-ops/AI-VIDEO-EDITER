@@ -240,6 +240,30 @@ def _require_ai_credit() -> None:
             "would be random footage. Top up at kie.ai, then run this again.")
 
 
+def _require_youtube() -> None:
+    """
+    Refuse to start when no connection this worker has can download from YouTube.
+
+    A blocked IP still returns search results, so a job used to run to the end
+    with every download refused and the empty scenes filled with paid AI
+    images: two real videos came out with 0 YouTube clips out of 51 scenes.
+    Checked before any AI is spent. REQUIRE_YOUTUBE=0 turns this off.
+    """
+    if not config.REQUIRE_YOUTUBE:
+        return
+    routes = media.probe_youtube()
+    if not any(r["ok"] for r in routes):
+        routes = media.probe_youtube()          # one retry: a single slow answer is not a block
+    ok = [r["route"] for r in routes if r["ok"]]
+    print(f"[worker] YouTube reachable via: {', '.join(ok) or 'nothing'}", flush=True)
+    if not ok:
+        detail = "; ".join(f"{r['route']}: {r['why'] or 'failed'}" for r in routes)
+        raise RuntimeError(
+            "YouTube is refusing every connection this worker has (" + detail + "). "
+            "Nothing was spent. Without YouTube the video would be AI images, so the job "
+            "stopped. Add working US proxies (YTDLP_PROXY) and run it again.")
+
+
 def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                   job_id: str = "", band: tuple = (66, 68)) -> int:
     """
@@ -983,6 +1007,11 @@ def handler(job):
                 except Exception:  # noqa: BLE001 - progress must never kill a part
                     pass
 
+            media.reset_cache()
+            if inp.get("allow_youtube") is not False:
+                _require_youtube()      # a blocked machine fails fast; the parent redoes its part
+            media.limit_generation(inp.get("image_budget", config.IMAGE_MAX_PER_VIDEO))
+
             def source_part(jobs, w, seqs, exclude):
                 b = inp.get("brief") or {}
                 return media.source_many(
@@ -1049,6 +1078,9 @@ def handler(job):
 
         if action in ("plan", "build", "resource"):
             _require_ai_credit()
+            if inp.get("allow_youtube") is not False:
+                report("Checking the YouTube connection", 2)
+                _require_youtube()
 
         if action == "plan":
             doc = do_plan(inp, work, report)

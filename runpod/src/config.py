@@ -79,6 +79,16 @@ ALLOW_ARCHIVE_ORG = _flag("ALLOW_ARCHIVE_ORG", True)
 # Format: http://user:pass@host:port (or socks5://...).
 YTDLP_PROXY = os.getenv("YTDLP_PROXY", "").strip()
 YTDLP_PROXIES = [p.strip() for p in YTDLP_PROXY.split(",") if p.strip()]
+# Residential sticky sessions from one login: "{n}" in the template is the
+# session number (Webshare: http://USER-us-{n}:PASS@p.webshare.io:80). Each
+# session keeps one US home IP for a whole download - YouTube locks a
+# video's stream URL to the IP that asked for it, so per-request rotation
+# breaks downloads - while different downloads spread over many IPs.
+YTDLP_PROXY_TEMPLATE = os.getenv("YTDLP_PROXY_TEMPLATE", "").strip()
+YTDLP_PROXY_SESSIONS = int(os.getenv("YTDLP_PROXY_SESSIONS", "100"))
+if YTDLP_PROXY_TEMPLATE and "{n}" in YTDLP_PROXY_TEMPLATE:
+    YTDLP_PROXIES += [YTDLP_PROXY_TEMPLATE.replace("{n}", str(n))
+                      for n in range(1, YTDLP_PROXY_SESSIONS + 1)]
 
 # yt-dlp can also present browser cookies, which helps with the same check.
 YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
@@ -278,6 +288,10 @@ SOURCE_WORKERS = int(os.getenv("SOURCE_WORKERS", "16"))
 # Refuse to source a video with an empty AI account (handler._require_ai_credit).
 REQUIRE_AI_CREDIT = os.getenv("REQUIRE_AI_CREDIT", "1").strip().lower() not in ("0", "false", "no")
 MIN_AI_CREDIT = float(os.getenv("MIN_AI_CREDIT", "5"))
+# Refuse to start sourcing when no connection can download from YouTube
+# (every search still "works" from a blocked IP; the downloads fail and the
+# gaps became paid AI images - two real videos got 0 YouTube clips).
+REQUIRE_YOUTUBE = os.getenv("REQUIRE_YOUTUBE", "1").strip().lower() not in ("0", "false", "no")
 # Include the worker's own IP in the YouTube route rotation (media._PROXIES).
 YTDLP_DIRECT = os.getenv("YTDLP_DIRECT", "0").strip().lower() in ("1", "true", "yes")
 
