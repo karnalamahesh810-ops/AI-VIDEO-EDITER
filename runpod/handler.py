@@ -43,7 +43,7 @@ from typing import Dict
 
 import runpod
 
-from src import (config, director, fanout, geocode, media, render as renderer,
+from src import (config, director, fanout, geocode, media, pools, render as renderer,
                  selftest, storage, timeline, transcribe, vision)
 
 
@@ -564,18 +564,35 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             exclude=exclude, **flags)
 
     project_id = inp.get("project_id") or ""
-    if fanout.enabled_for(len(jobs), project_id):
+    # GoMotion's method first: a few long videos per subject, judged once,
+    # many moments cut from each (src/pools.py). Whatever the pools do not
+    # cover - people, stills, one-off subjects - goes to per-scene sourcing,
+    # which is told to leave the pool videos alone.
+    pooled: dict = {}
+    if config.SUBJECT_POOLS and inp.get("allow_youtube") is not False:
+        report("Finding footage by subject", 22, done=0, total=len(jobs))
+        require_cc = flags["require_cc"] if flags["require_cc"] is not None else config.REQUIRE_CC
+        pooled = pools.source_by_subject(jobs, work, require_cc=bool(require_cc), report=report)
+        print(f"[worker] subject pools covered {len(pooled)}/{len(jobs)} lines", flush=True)
+    taken = {a.identity for a in pooled.values()} | pools.video_ids(pooled)
+    rest = [j for j in jobs if j["index"] not in pooled]
+    assets = [pooled.get(j["index"]) for j in jobs]
+    if rest and fanout.enabled_for(len(rest), project_id):
         # Long video: each part is found, vision-checked and repaired on its
         # own worker at the same time; the parent fills whatever comes back
         # missing and resolves clips two parts both picked.
-        assets = fanout.source(
-            jobs, sequences or [], brief,
+        got = fanout.source(
+            rest, sequences or [], brief,
             parent_job_id=(report.job or {}).get("id", ""), project_id=project_id,
             bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
-            flags=flags, report=report,
+            flags=flags, report=report, exclude=taken,
             local=lambda some, exclude: local(some, exclude, progress=False))
-    else:
-        assets = local(jobs, set(), seqs=sequences)
+        for j in rest:
+            assets[j["index"]] = got[j["index"]] if j["index"] < len(got) else None
+    elif rest:
+        got = local(rest, set(taken), seqs=sequences)
+        for j, a in zip(sorted(rest, key=lambda j: j["index"]), got):
+            assets[j["index"]] = a
     vision.require_credits()
 
     doc = timeline.build(

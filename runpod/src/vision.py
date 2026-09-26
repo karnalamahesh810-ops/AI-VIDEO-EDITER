@@ -530,6 +530,66 @@ _PICK_SYSTEM = (
 )
 
 
+_RATE_SYSTEM = (
+    "You pick B-roll moments for a documentary, GoMotion-style: one long video about "
+    "a subject supplies many shots. You are shown a numbered grid of thumbnails "
+    "taken across one YouTube video (numbers top-left). For EVERY tile that is a "
+    "usable shot of the SUBJECT, give a score and a few words on what it shows.\n"
+    "Usable = the subject itself (or its immediate setting) filmed as real footage: "
+    "aerials, landscapes, the place, the thing, the event. NOT usable: a presenter or "
+    "interviewee talking to camera, title cards, on-screen text or captions, graphics, "
+    "maps, logos, black or blurry frames, a different named place or era.\n"
+    "Scoring: 0.9-1.0 clearly the subject, striking footage; 0.7-0.89 clearly the "
+    "subject; below 0.7 leave the tile out. Tiles are small thumbnails - never score "
+    "above 0.7 what you cannot actually make out.\n"
+    "Reply with JSON only: {\"tiles\": [{\"tile\": int, \"score\": number, "
+    "\"description\": str}]} listing only tiles scoring 0.7 or more (an empty list "
+    "when none fit)."
+)
+
+
+def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "") -> Optional[List[dict]]:
+    """
+    Every usable tile of one storyboard sheet for a subject, in one call:
+    [{"tile": 1-based, "score": 0-1, "description": str}] (None on failure).
+
+    GoMotion cut 174 clips from few long videos about 45 subjects; judging a
+    video once and taking many moments from it replaces a search, scout,
+    download and vision check per scene.
+    """
+    if not enabled():
+        return None
+    messages = [
+        {"role": "system", "content": _RATE_SYSTEM},
+        {"role": "user", "content": [
+            {"type": "text", "text": (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
+             + f"SUBJECT: {subject}\n"
+             + (f"WHAT THE LINES SAY ABOUT IT: {context[:600]}\n" if context else "")
+             + f"There are {count} tiles, numbered 1-{count}."},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},
+        ]},
+    ]
+    text, model = _ask(messages, 900)
+    with _LOCK:
+        _CALLS["n"] += 1
+    if not text:
+        return None
+    m = re.search(r"\{[\s\S]*\}", text)
+    try:
+        data = json.loads(m.group(0)) if m else {}
+        rows = data.get("tiles") or []
+        out = []
+        for r in rows:
+            tile, score = int(r.get("tile")), max(0.0, min(1.0, float(r.get("score", 0))))
+            if 1 <= tile <= count:
+                out.append({"tile": tile, "score": score,
+                            "description": str(r.get("description") or "")[:300]})
+    except (ValueError, TypeError, AttributeError):
+        _fail(model, f"unparseable tile rating: {text[:120]!r}")
+        return None
+    return out
+
+
 def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Optional[dict]:
     """Best tile number (1-based) on a storyboard contact sheet, or None."""
     if not enabled():

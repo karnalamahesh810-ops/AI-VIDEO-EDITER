@@ -189,6 +189,10 @@ class MediaAsset:
     # framed), whatever it shows. Used to pick between clips that both match.
     quality: Optional[float] = None
     vision_model: str = ""
+    # Set for subject-pool shots (src/pools.py): "yt:<id>@<10 s bucket>". A
+    # long subject video supplies many DIFFERENT moments - GoMotion's method -
+    # so these are distinct from each other but never the same moment twice.
+    moment_key: str = ""
 
     @property
     def identity(self) -> str:
@@ -201,6 +205,8 @@ class MediaAsset:
         and for a generated image the local file, since each generation is
         unique by construction.
         """
+        if self.moment_key:
+            return self.moment_key
         if self.source == "youtube":
             # The video id from the watch URL first: sequence-pool shots are
             # named seq_<tag>_<id>_<n>.mp4 and their URL carries "&t=<start>",
@@ -283,7 +289,28 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
     if not config.ALLOW_WEB_IMAGES or not query.strip():
         return []
     rows = []
-    if config.SERPER_API_KEY:
+    if config.BRIGHTDATA_API_KEY and config.BRIGHTDATA_SERP_ZONE:
+        # Google Images through Bright Data's SERP API: 100 results per call
+        # with the full-size original (press photos: NOAA, TIME, NASA...).
+        # Billed per successful search, not per image.
+        try:
+            r = requests.post(
+                "https://api.brightdata.com/request",
+                headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw",
+                      "url": "https://www.google.com/search?tbm=isch&brd_json=1&q="
+                             + urllib.parse.quote_plus(query)},
+                timeout=90)
+            r.raise_for_status()
+            for it in (r.json().get("images") or [])[:limit * 3]:
+                rows.append((it.get("original_image"), 0, 0,
+                             it.get("image_alt") or it.get("source") or "",
+                             it.get("title") or ""))
+        except (requests.RequestException, ValueError) as e:
+            _source_error("web_images_brightdata", e)
+            rows = []
+    if not rows and config.SERPER_API_KEY:
         try:
             r = requests.post("https://google.serper.dev/images",
                               headers={"X-API-KEY": config.SERPER_API_KEY,

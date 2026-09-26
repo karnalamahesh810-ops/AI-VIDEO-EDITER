@@ -231,6 +231,19 @@ MOMENT_PARALLEL = int(os.getenv("MOMENT_PARALLEL", "5"))
 # when SERPER_API_KEY is set; otherwise the keyless DuckDuckGo image search.
 ALLOW_WEB_IMAGES = _flag("ALLOW_WEB_IMAGES", True)
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
+# Google Images via Bright Data's SERP API (tried first when set).
+BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY", "")
+BRIGHTDATA_SERP_ZONE = os.getenv("BRIGHTDATA_SERP_ZONE", "serp_api1")
+
+# --- subject pools (src/pools.py) -----------------------------------------------
+# GoMotion's method: a few long videos per subject, judged once from their
+# storyboard, many different moments cut from them. Lines whose subject pool
+# runs dry fall back to per-scene sourcing.
+SUBJECT_POOLS = _flag("SUBJECT_POOLS", True)
+POOL_MIN_SCENES = int(os.getenv("POOL_MIN_SCENES", "2"))
+POOL_MAX_VIDEOS = int(os.getenv("POOL_MAX_VIDEOS", "6"))
+POOL_PARALLEL_SUBJECTS = int(os.getenv("POOL_PARALLEL_SUBJECTS", "4"))
+POOL_MIN_GAP_SECONDS = float(os.getenv("POOL_MIN_GAP_SECONDS", "8"))
 
 # --- supabase storage --------------------------------------------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")

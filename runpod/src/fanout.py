@@ -292,8 +292,8 @@ def _dedupe(results: List[Optional[media.MediaAsset]], jobs: List[dict],
 
 def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_id: str,
            project_id: str, bucket: str, work: str, flags: dict,
-           report: Callable, local: Callable[[List[dict], set], List[Optional[media.MediaAsset]]]
-           ) -> List[Optional[media.MediaAsset]]:
+           report: Callable, local: Callable[[List[dict], set], List[Optional[media.MediaAsset]]],
+           exclude: Optional[set] = None) -> List[Optional[media.MediaAsset]]:
     """
     Sourced assets for every job (list aligned to job["index"]).
 
@@ -365,9 +365,11 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
         stats["rounds"] += 1
 
     report(f"Sourcing in parallel: 0/{total_scenes} scenes", 30, done=0, total=total_scenes)
-    run_round(jobs, sequences, set(), 30, 55, "Sourced", first=True)
+    # `exclude`: clips already on the timeline (subject pools, reused scenes).
+    taken = set(exclude or ())
+    run_round(jobs, sequences, set(taken), 30, 55, "Sourced", first=True)
 
-    seen: Dict[str, int] = {}
+    seen: Dict[str, int] = {ident: -1 for ident in taken}
     dups = _dedupe(results, jobs, seen)
     empty = [j for j in jobs if results[j["index"]] is None and j not in dups]
     todo = empty + dups
