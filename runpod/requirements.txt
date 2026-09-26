@@ -1,5 +1,8 @@
 runpod==1.7.7
 yt-dlp[default]==2026.8.19
+# YouTube proof-of-origin tokens (the "confirm you're not a bot" check on
+# datacenter IPs). The plugin asks the bgutil server started by scripts/start.sh.
+bgutil-ytdlp-pot-provider==2.0.0
 faster-whisper==1.1.1
 requests==2.32.3
 pydantic==2.9.2

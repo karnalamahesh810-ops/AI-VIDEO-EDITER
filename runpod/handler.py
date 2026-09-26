@@ -1083,6 +1083,7 @@ def handler(job):
                     "readyToRender": store.get("ok", False),
                     "parallelWorkers": fanout.readiness(config.FANOUT_MIN_SCENES),
                     "machine": _machine(),
+                    "potProvider": media.pot_provider_alive(),
                     # Real download check per route: {"probe_youtube": true}.
                     **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),
                     # One real model call, so only on request: {"probe": true}.

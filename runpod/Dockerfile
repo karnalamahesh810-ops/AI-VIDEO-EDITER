@@ -16,12 +16,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
       libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
       libpango-1.0-0 libcairo2 libatspi2.0-0 \
+      libjpeg62-turbo libgif7 librsvg2-2 \
     && rm -rf /var/lib/apt/lists/*
 
 # --- node --------------------------------------------------------------------
 RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# --- YouTube PO-token server (bgutil) ----------------------------------------
+# YouTube answers datacenter IPs - every RunPod machine - with "Sign in to
+# confirm you're not a bot" unless the request carries a proof-of-origin
+# token. This server mints them; yt-dlp's bgutil plugin (requirements.txt)
+# fetches one per request. Started by scripts/start.sh. Pinned commit.
+RUN git init /opt/bgutil \
+    && cd /opt/bgutil \
+    && git fetch --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider 2d758ea29ae5c65886bdf56c42ebbdfe17d78bbb \
+    && git checkout FETCH_HEAD \
+    && cd server && npm ci --no-audit --no-fund && npx tsc \
+    && rm -rf /opt/bgutil/.git
 
 WORKDIR /app
 
@@ -47,4 +60,4 @@ COPY scripts/ scripts/
 
 RUN mkdir -p ${WORK_DIR}
 
-CMD ["python", "-u", "handler.py"]
+CMD ["sh", "scripts/start.sh"]

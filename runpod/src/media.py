@@ -77,6 +77,14 @@ def _next_proxy() -> str:
         return min(_PROXIES, key=lambda p: _PROXY_BENCHED.get(p, 0))
 
 
+def pot_provider_alive() -> bool:
+    """Is the YouTube PO-token server (scripts/start.sh) answering on this worker?"""
+    try:
+        return requests.get("http://127.0.0.1:4416/ping", timeout=2).status_code == 200
+    except requests.RequestException:
+        return False
+
+
 def probe_youtube(video_id: str = "ka2S39HhLsM") -> List[dict]:
     """
     Can this worker actually download from YouTube, directly and per proxy?
