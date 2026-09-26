@@ -1396,7 +1396,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
 def playable_video(path: str, min_seconds: float = 0.5) -> bool:
     """A real, decodable video: a video stream at least min_seconds long."""
     try:
-        if os.path.getsize(path) < 20_000:
+        if os.path.getsize(path) < 2_000:
             return False
         p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
                             "-show_entries", "stream=codec_name:format=duration",
