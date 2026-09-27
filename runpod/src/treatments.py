@@ -432,27 +432,42 @@ def _plan_music(segments: List[Segment], brief: Optional[dict], fps: int, total:
     return {"sections": out, "duck": 0.55}
 
 
+FULLSCREEN_CUES = {"then-now", "compare", "ranking", "series", "chart"}
+_WEAK_REASONS = ("Best available", "Reused shot", "Repeat of an earlier shot", "No usable clip",
+                 "No footage found")
+
+
 def wants_animation(seg, shot: dict, asset, brief: Optional[dict]) -> bool:
     """
     Should this beat be a full-screen animation scene instead of footage?
-    Yes when the line carries a strong cue (a figure, a change, a date, a
-    mapped place, a quote, a chapter) and the footage found for it is weak:
-    nothing, a still borrowed for the beat, or a clip the vision judge rated
-    under ANIMATION_OVER_FOOTAGE_BELOW. VidRush's timelines put such beats in
-    the video track as animation blocks, not as tags over an unrelated shot.
+
+    - No footage at all: yes.
+    - A chart moment (then vs now, a comparison, a ranking, a series of
+      values): yes, whatever the footage - VidRush shows graphs full screen.
+    - A strong cue (a figure, a date, a mapped place, a quote, a chapter)
+      over WEAK footage: yes. Weak means the vision judge scored it under
+      ANIMATION_OVER_FOOTAGE_BELOW, or it is a borrowed, repeated or
+      best-available shot. The licence flag every web clip carries is not
+      weakness: treating it as such swapped good matching footage for cards.
+    - Otherwise the footage stays and the planner puts the graphic on it.
     """
     if not config.ANIMATION_FILL:
         return False
     if asset is None:
         return True
+    cues = cues_for(seg, shot, brief)
+    if any(c["cue"] in FULLSCREEN_CUES for c in cues):
+        return True
     score = getattr(asset, "relevance_score", None)
-    weak = score is not None and float(score) < config.ANIMATION_OVER_FOOTAGE_BELOW
-    if not weak and not getattr(asset, "review_required", False):
+    reason = str(getattr(asset, "review_reason", "") or "")
+    weak = ((score is not None and float(score) < config.ANIMATION_OVER_FOOTAGE_BELOW)
+            or reason.startswith(_WEAK_REASONS))
+    if not weak:
         return False
     hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else None
     if hint and hint.get("type") == "map" and (hint.get("locations") or hint.get("places")):
         return True
-    return any(c["cue"] in STRONG_CUES and c["emphasis"] == "high" for c in cues_for(seg, shot, brief))
+    return any(c["cue"] in STRONG_CUES and c["emphasis"] == "high" for c in cues)
 
 
 def animation_for(seg, shot: dict, pack: dict, brief: Optional[dict]) -> dict:

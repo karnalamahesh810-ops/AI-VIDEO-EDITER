@@ -43,6 +43,36 @@ class AnimationFor(unittest.TestCase):
         self.assertIn(templates.get(a["template"])["kind"], treatments.CARD_KINDS)
 
 
+class WantsAnimation(unittest.TestCase):
+    def _asset(self, score, reason="Licence unverified — confirm you hold the rights"):
+        from src.media import MediaAsset
+        return MediaAsset(kind="video", source="youtube", url="u", relevance_score=score,
+                          review_required=True, review_reason=reason)
+
+    def test_good_footage_with_a_licence_flag_stays_footage(self):
+        with mock.patch.object(config, "ANIMATION_FILL", True):
+            self.assertFalse(treatments.wants_animation(seg("Lake Mead is now at 26% capacity."), {"subject": "Lake Mead"},
+                                                        self._asset(0.92), None))
+
+    def test_weak_or_borrowed_footage_on_a_strong_beat_becomes_a_graphic(self):
+        with mock.patch.object(config, "ANIMATION_FILL", True):
+            self.assertTrue(treatments.wants_animation(seg("Lake Mead is now at 26% capacity."), {"subject": "Lake Mead"},
+                                                       self._asset(0.5), None))
+            self.assertTrue(treatments.wants_animation(seg("Lake Mead is now at 26% capacity."), {"subject": "Lake Mead"},
+                                                       self._asset(0.9, "Reused shot of Lake Mead - no other footage"), None))
+
+    def test_a_chart_moment_is_full_screen_even_over_good_footage(self):
+        with mock.patch.object(config, "ANIMATION_FILL", True):
+            self.assertTrue(treatments.wants_animation(
+                seg("In 2020 the lake stood at 40 percent; by 2026 it was 26 percent."), {"subject": "Lake Mead"},
+                self._asset(0.95), None))
+
+    def test_a_plain_line_over_good_footage_stays_footage(self):
+        with mock.patch.object(config, "ANIMATION_FILL", True):
+            self.assertFalse(treatments.wants_animation(seg("Boat ramps end in dry gravel."), {"subject": "Boulder Harbor"},
+                                                        self._asset(0.5), None))
+
+
 class BuildFillsGaps(unittest.TestCase):
     def _doc(self, fill=True):
         segments, shots, assets = simple_plan(4, 6.0)

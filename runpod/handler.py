@@ -1264,6 +1264,50 @@ def _contact_sheets(video: str, work: str, every: float = 3.0, per_sheet: int = 
     return sheets
 
 
+def _preflight_media(doc: dict, workers: int = 16) -> int:
+    """
+    Read the first bytes of every remote clip and still in the document. A
+    scene whose file cannot be read (storage 4xx/5xx, a dead link) gets the
+    empty-scene treatment (_fill_missing_media: an animation scene or a
+    matching shot) so the render never dies on it. Returns how many.
+    """
+    import requests as _rq
+    from concurrent.futures import ThreadPoolExecutor
+
+    def ok(url: str) -> bool:
+        for _ in range(2):
+            try:
+                r = _rq.get(url, headers={"Range": "bytes=0-1023"}, timeout=25, stream=True)
+                code = r.status_code
+                r.close()
+                if code in (200, 206):
+                    return True
+                if code in (400, 401, 403, 404, 410):
+                    return False
+            except _rq.RequestException:
+                pass
+        return False
+
+    scenes = doc.get("scenes") or []
+    todo = [(i, s["media"]["url"]) for i, s in enumerate(scenes)
+            if (s.get("media") or {}).get("type") in ("video", "image")
+            and str((s.get("media") or {}).get("url", "")).startswith("http")]
+    if not todo:
+        return 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(lambda t: ok(t[1]), todo))
+    bad = [i for (i, _u), good in zip(todo, results) if not good]
+    for i in bad:
+        s = scenes[i]
+        print(f"[worker] scene {i + 1}: clip unreadable in storage; replacing it", flush=True)
+        s["media"] = {"type": "color", "url": "", "source": "none"}
+        s["reviewRequired"] = True
+        s["reviewReason"] = "The clip could not be read from storage; replace it"
+    if bad:
+        _fill_missing_media(doc)
+    return len(bad)
+
+
 def _all_remote(doc: dict) -> bool:
     """Every visual in the document is a URL another worker can fetch."""
     medias = [s.get("media") or {} for s in doc.get("scenes", [])]
@@ -1304,6 +1348,12 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not refresh narration url: {e}", flush=True)
     _sign_supabase_urls(doc)
+    # One unreadable clip killed a 15-minute render at frame 22,534 (storage
+    # answered 500 for it). Every clip is checked first; a broken one is
+    # replaced like an empty scene, before any frame is drawn.
+    broken = _preflight_media(doc)
+    if broken:
+        report(f"Replaced {broken} unreadable clip(s)", 69)
     # Chunk workers get the document with its web links and clean their own
     # stills; the cleaned copies below are files on this worker's disk only.
     remote_doc = copy.deepcopy(doc) if split else None
@@ -1665,7 +1715,11 @@ def handler(job):
             # copy only; the saved timeline still shows it for Find footage.
             doc = copy.deepcopy(doc)
             patched = _fill_missing_media(doc)
-            out = do_render(doc, inp, work, report)
+            # Editor renders are split across every worker too. They used to
+            # render the whole video on one worker: a 15-minute video took
+            # 15 minutes of one CPU and then failed on one broken clip.
+            split = bool(project_id and fanout.render_enabled(doc, project_id))
+            out = do_render(doc, inp, work, report, split=split)
             if project_id:
                 storage.patch_project(project_id, _done_fields(out))
             costs.measure_end()
