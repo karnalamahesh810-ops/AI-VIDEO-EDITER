@@ -130,10 +130,12 @@ def spaced(found: List[dict], gap: float) -> List[dict]:
 
 
 def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Set[str],
-                 claim: Callable[[str], bool]) -> tuple:
+                 claim: Callable[[str], bool], library=None, work: str = "") -> tuple:
     """
     ([(job, candidate, moment)] for the subject's lines, spare (candidate, moment)s).
 
+    Clips the library already holds for the subject come first (no search,
+    no download from YouTube, no vision call); YouTube supplies the rest.
     Spares are approved moments beyond what the lines need; fill_from_reserve
     hands them to lines that ended up empty or repeated.
     """
@@ -141,7 +143,18 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
     seconds = max(j.get("seconds") or 6.0 for j in sjobs) + media.SEQ_SHOT_PAD
     context = " ".join((j.get("context") or "") for j in sjobs[:4])
     pool: List[tuple] = []
+    if library is not None and need:
+        for entry in library.find(subject, n=need):
+            if not claim(entry["id"]):
+                continue
+            pool.append(({"id": entry["id"], "title": entry.get("attribution", ""), "_library": entry},
+                         {"start": 0.0, "score": entry.get("relevance"),
+                          "description": entry.get("description", "")}))
+        if pool:
+            print(f"[library] {subject}: {len(pool)} clip(s) reused", flush=True)
     for cand in candidates(subject, require_cc, skip_ids)[:config.POOL_MAX_VIDEOS]:
+        if len(pool) >= need:
+            break
         found = spaced(rate_video(cand, subject, context, seconds), config.POOL_MIN_GAP_SECONDS)
         for m in found:
             if claim(f"yt:{cand['id']}@{int(m['start'] // 10)}"):
@@ -184,8 +197,10 @@ def fill_from_reserve(jobs: List[dict], indices: List[int], work: str,
 
 
 def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
-           subject: str) -> Optional[media.MediaAsset]:
+           subject: str, library=None) -> Optional[media.MediaAsset]:
     seconds = (job.get("seconds") or 6.0) + media.SEQ_SHOT_PAD
+    if cand.get("_library") is not None and library is not None:
+        return library.fetch(cand["_library"], work, seconds, job)
     path = media._yt_fetch_retry(cand["id"], work, m["start"], seconds, cand.get("title", ""))
     if not path or media.has_burned_captions(path):
         return None
@@ -206,7 +221,7 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
 
 def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
                       report: Optional[Callable] = None,
-                      min_scenes: Optional[int] = None) -> Dict[int, media.MediaAsset]:
+                      min_scenes: Optional[int] = None, library=None) -> Dict[int, media.MediaAsset]:
     """{job index: asset} for every line a subject pool covered."""
     need_min = config.POOL_MIN_SCENES if min_scenes is None else min_scenes
     todo = {k: v for k, v in groups(jobs).items() if len(v) >= need_min}
@@ -231,9 +246,10 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
         sjobs = todo[key]
         name = display_name(sjobs)
         try:
-            plan, spare = plan_subject(name, sjobs, require_cc, set(), claim)
+            plan, spare = plan_subject(name, sjobs, require_cc, set(), claim, library=library, work=work)
             with ThreadPoolExecutor(max_workers=6) as ex:
-                got = list(ex.map(lambda p: (p[0], _fetch(p[0], p[1], p[2], work, require_cc, name)),
+                got = list(ex.map(lambda p: (p[0], _fetch(p[0], p[1], p[2], work, require_cc, name,
+                                                          library=library)),
                                   plan))
             with _RESERVE_LOCK:
                 _RESERVE.extend((key, c, m) for c, m in spare)

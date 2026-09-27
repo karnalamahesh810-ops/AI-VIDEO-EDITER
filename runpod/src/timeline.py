@@ -325,6 +325,11 @@ def build(segments: List[Segment], shots: List[dict],
                 "relevanceScore": getattr(asset, "relevance_score", None),
                 "qualityScore": getattr(asset, "quality", None),
                 "provider": getattr(asset, "source", "") or "",
+                # What makes this clip this clip (video id + moment), so the
+                # clip library can keep and re-find it.
+                "assetId": getattr(asset, "identity", "") if asset is not None else "",
+                "sourceUrl": (getattr(asset, "url", "") or "") if asset is not None
+                and str(getattr(asset, "url", "") or "").startswith("http") else "",
             },
             "words": [{"text": w.text, "start": w.start, "end": w.end}
                       for w in seg.words],

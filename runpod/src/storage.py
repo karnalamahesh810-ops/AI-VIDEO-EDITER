@@ -95,6 +95,14 @@ def _broker(payload: dict, timeout: int = 60) -> dict:
     return body
 
 
+def broker_read_url(bucket: str, object_path: str, project_id: str, job_id: str,
+                    read_ttl: int = 60 * 60) -> str:
+    """A signed read URL for an existing object, through the app's broker."""
+    return _broker({"project_id": project_id, "job_id": job_id, "bucket": bucket,
+                    "path": object_path.lstrip("/"), "action": "read",
+                    "expires_in": read_ttl})["readUrl"]
+
+
 def broker_upload(local_path: str, bucket: str, object_path: str, project_id: str,
                   job_id: str, read_ttl: int = 60 * 60 * 24 * 7) -> str:
     """

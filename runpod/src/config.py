@@ -320,8 +320,19 @@ ARCHIVE_CHANNELS = [c.strip() for c in os.getenv(
 ).split(",") if c.strip()]
 NEWS_CHANNELS = [c.strip() for c in os.getenv(
     "NEWS_CHANNELS",
-    "@Reuters,@AssociatedPress,@NBCNews,@weatherchannel,@FOXWeather,@ABCNews"
+    # Wire services and weather networks, plus the agencies that film the
+    # water crisis first-hand (Bureau of Reclamation runs Lake Mead) and the
+    # Las Vegas station that covers it daily.
+    "@Reuters,@AssociatedPress,@weatherchannel,@FOXWeather,@usbr,@8NewsNow,@USGS"
 ).split(",") if c.strip()]
+
+# --- clip library (src/library.py) ------------------------------------------
+# Every approved clip is kept, with its subject and description, and reused
+# by later videos about the same subjects: no search, no download from
+# YouTube, no vision call. Needs the worker-storage broker's library/ prefix.
+CLIP_LIBRARY = _flag("CLIP_LIBRARY", True)
+CLIP_LIBRARY_MIN_SCORE = float(os.getenv("CLIP_LIBRARY_MIN_SCORE", "0.8"))
+CLIP_LIBRARY_MAX_PER_JOB = int(os.getenv("CLIP_LIBRARY_MAX_PER_JOB", "60"))
 STRAGGLER_GRACE_SECONDS = float(os.getenv("STRAGGLER_GRACE_SECONDS", "75"))
 SEQUENCE_BUDGET_SECONDS = float(os.getenv("SEQUENCE_BUDGET_SECONDS", "300"))
 

@@ -2219,6 +2219,13 @@ def clip_quality(path: str) -> tuple:
     if has_burned_captions(path):
         return False, "burned-in text or UI"
 
+    # A phone or screen recording turned sideways: on a 16:9 canvas it is
+    # pillarboxed with blurred edges and reads as a mistake (one slipped
+    # into a real render as a vertical dashboard capture).
+    w, h = _video_dims(path)
+    if w and h and w < h * 1.2:
+        return False, "vertical or square video"
+
     dark = sum(1 for f in frames if float(f.mean()) < 26)
     if dark >= max(2, len(frames) // 2):
         return False, "near-black"
@@ -2228,7 +2235,72 @@ def clip_quality(path: str) -> tuple:
                   for a, b in zip(frames, frames[1:])]
         if max(deltas) < 1.2:
             return False, "frozen frame"
+    if _blurry(frames, np):
+        return False, "blurry"
+    if _corner_watermark(frames, np):
+        return False, "corner watermark"
     return True, ""
+
+
+def _video_dims(path: str) -> tuple:
+    """(width, height) of the first video stream, (0, 0) when unknown."""
+    try:
+        p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+                           capture_output=True, text=True, timeout=20)
+        a, b = (p.stdout.strip().splitlines() or [""])[0].split(",")[:2]
+        return int(a), int(b)
+    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
+        return 0, 0
+
+
+def _blurry(frames, np) -> bool:
+    """
+    Out of focus or badly upscaled in every sampled frame.
+
+    The variance of a Laplacian is the standard focus measure: sharp detail
+    gives strong second derivatives, blur flattens them. Judged on the
+    320x180 grey frames; the threshold is deliberately low so only clips
+    that are soft everywhere are dropped, not a shallow-focus shot.
+    """
+    if not frames:
+        return False
+    scores = []
+    for f in frames:
+        a = f.astype("float32")
+        lap = (4 * a[1:-1, 1:-1] - a[:-2, 1:-1] - a[2:, 1:-1] - a[1:-1, :-2] - a[1:-1, 2:])
+        scores.append(float(lap.var()))
+    scores.sort()
+    return scores[len(scores) // 2] < 12.0
+
+
+def _corner_watermark(frames, np) -> bool:
+    """
+    A channel logo or stock watermark parked in a corner.
+
+    Across a clip the picture moves but a burned-in logo does not: a corner
+    box that is edge-dense yet nearly unchanged between frames while the
+    rest of the frame changes is a watermark. Needs three frames and real
+    motion elsewhere, so a static landscape is never mistaken for one.
+    """
+    if len(frames) < 3:
+        return False
+    h, w = frames[0].shape
+    bh, bw = max(8, int(h * 0.16)), max(8, int(w * 0.22))
+    corners = {"tl": (slice(0, bh), slice(0, bw)), "tr": (slice(0, bh), slice(w - bw, w)),
+               "bl": (slice(h - bh, h), slice(0, bw)), "br": (slice(h - bh, h), slice(w - bw, w))}
+    arr = [f.astype("int16") for f in frames]
+    whole = float(np.mean([np.abs(a - b).mean() for a, b in zip(arr, arr[1:])]))
+    if whole < 3.0:
+        return False
+    for ys, xs in corners.values():
+        boxes = [a[ys, xs] for a in arr]
+        moving = float(np.mean([np.abs(a - b).mean() for a, b in zip(boxes, boxes[1:])]))
+        gx = np.abs(np.diff(boxes[0], axis=1)); gy = np.abs(np.diff(boxes[0], axis=0))
+        edges = float((gx > 40).mean() + (gy > 40).mean()) / 2
+        if edges > 0.05 and moving < whole * 0.25:
+            return True
+    return False
 
 
 def _asset_ok(asset) -> tuple:

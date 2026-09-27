@@ -43,7 +43,7 @@ from typing import Dict
 
 import runpod
 
-from src import (config, director, fanout, geocode, media, pools, render as renderer,
+from src import (config, director, fanout, geocode, library, media, pools, render as renderer,
                  selftest, storage, timeline, transcribe, vision)
 
 
@@ -577,9 +577,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # which is told to leave the pool videos alone.
     pooled: dict = {}
     require_cc = bool(flags["require_cc"] if flags["require_cc"] is not None else config.REQUIRE_CC)
+    # Clips kept from earlier videos about the same subjects come first.
+    lib = library.Library.load(project_id, (report.job or {}).get("id", ""),
+                               inp.get("media_bucket") or config.MEDIA_BUCKET)
+    LAST_LIBRARY["lib"] = lib
     if config.SUBJECT_POOLS and inp.get("allow_youtube") is not False:
         report("Finding footage by subject", 22, done=0, total=len(jobs))
-        pooled = pools.source_by_subject(jobs, work, require_cc=require_cc, report=report)
+        pooled = pools.source_by_subject(jobs, work, require_cc=require_cc, report=report, library=lib)
         print(f"[worker] subject pools covered {len(pooled)}/{len(jobs)} lines", flush=True)
     pool_stats = dict(media.LAST_STATS.get("pools") or {}, covered_lines=len(pooled))
     taken = {a.identity for a in pooled.values()} | pools.video_ids(pooled)
@@ -875,6 +879,21 @@ def _sanitize_stills(doc: dict, work: str) -> int:
 # module level so the job's error path can still return them when the upload
 # after the render fails.
 LAST_FRAMES: list = []
+# The clip library the current plan loaded, so the build/plan branches can
+# record this job's good clips into it before the work directory is wiped.
+LAST_LIBRARY: dict = {"lib": None}
+
+
+def _keep_in_library(doc: dict, report: Reporter) -> None:
+    lib = LAST_LIBRARY.get("lib")
+    if lib is None or not lib.enabled:
+        return
+    try:
+        report("Keeping clips for future videos", 61)
+        if lib.record_from_doc(doc):
+            lib.save()
+    except Exception as e:  # noqa: BLE001 - the library must never fail a video
+        print(f"[library] skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
 # The planned timeline of the current build, returned on failure in QA mode
 # (return_frames) so a failed render can be reproduced locally.
 LAST_TIMELINE: dict = {}
@@ -1164,6 +1183,7 @@ def handler(job):
         if action == "plan":
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
+            _keep_in_library(doc, report)
             # Without this the timeline points at files this job is about to
             # delete. See publish_media().
             if project_id and inp.get("publish_media", True):
@@ -1212,6 +1232,7 @@ def handler(job):
         if action == "build":
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
+            _keep_in_library(doc, report)
             if project_id:
                 storage.patch_project(project_id, {"scene_data": doc})
             # Render from the local files (fast), THEN save the clips, so the

@@ -44,7 +44,7 @@ class SourceBySubject(unittest.TestCase):
             calls.append(cand["id"])
             return rated[cand["id"]]
 
-        def fake_fetch(job_, cand, m, work, require_cc, subject):
+        def fake_fetch(job_, cand, m, work, require_cc, subject, library=None):
             return media.MediaAsset(kind="video", source="youtube",
                                     url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(m['start'])}",
                                     local_path=f"/w/{cand['id']}_{int(m['start'])}.mp4",
@@ -71,7 +71,7 @@ class Reserve(unittest.TestCase):
         rated = {"AAAAAAAAAAA": [{"start": 10.0 * k, "score": 0.9, "description": f"mead {k}"} for k in range(1, 6)],
                  "HHHHHHHHHHH": [{"start": 10.0 * k, "score": 0.9, "description": f"dam {k}"} for k in range(1, 4)]}
 
-        def fake_fetch(job_, cand, m, work, require_cc, subject):
+        def fake_fetch(job_, cand, m, work, require_cc, subject, library=None):
             return media.MediaAsset(kind="video", source="youtube",
                                     url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(m['start'])}",
                                     local_path="/w/x.mp4", moment_key=f"yt:{cand['id']}@{int(m['start'] // 10)}")
