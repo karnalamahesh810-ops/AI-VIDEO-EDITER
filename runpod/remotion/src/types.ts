@@ -113,6 +113,8 @@ export interface SceneMedia {
   license?: string;
   /** Measured length of a video file; shorter than the scene = slowed to fill it. */
   clipSeconds?: number;
+  /** A still frame of the clip (the editor's thumbnail); an animation scene's blurred backdrop. */
+  thumbnail?: string;
 }
 
 export interface Scene {

@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Img, OffthreadVideo, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { OVERLAYS, accentFor } from "../overlays";
 import { resolveOverlay, templateFor } from "../templates";
 import { MotionWrap } from "./MotionWrap";
@@ -37,7 +37,11 @@ export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?:
     const fullFrame = ov.type === "map" || t?.kind === "map";
     const col = accentFor(ov, accent);
     const drift = interpolate(frame, [0, Math.max(1, scene.durationInFrames)], [0, 1], clamp);
-    const bg = backdrop && backdrop.url && (backdrop.type === "video" || backdrop.type === "image") ? backdrop : null;
+    // A still of the neighbouring clip (its thumbnail), never a second video
+    // decode of it: two OffthreadVideos on one file at different times made
+    // Remotion's compositor miss frames ("No frame found at position") and
+    // blurred to 22 px a still is indistinguishable.
+    const still = backdrop ? (backdrop.type === "image" ? backdrop.url : (backdrop.thumbnail || "")) : "";
     const blurStyle: React.CSSProperties = {
       width: "100%", height: "100%", objectFit: "cover",
       transform: `scale(${1.18 + drift * 0.06})`,
@@ -48,15 +52,15 @@ export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?:
       <AbsoluteFill style={{ backgroundColor: "#08080a", overflow: "hidden" }}>
         {!fullFrame ? (
           <>
-            {bg ? (
+            {still ? (
               <AbsoluteFill>
-                {bg.type === "video" ? <OffthreadVideo src={bg.url} muted style={blurStyle} /> : <Img src={bg.url} style={blurStyle} />}
+                <Img src={still} style={blurStyle} />
               </AbsoluteFill>
             ) : (
               <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 42%, #1b1c21 0%, #0e0e12 60%, #08080a 100%)" }} />
             )}
             {/* A fine grid (VidRush's dark chart cards), fading toward the edges. */}
-            <AbsoluteFill style={{ opacity: bg ? 0.07 : 0.1,
+            <AbsoluteFill style={{ opacity: still ? 0.07 : 0.1,
               backgroundImage: "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
               backgroundSize: `${72 * k}px ${72 * k}px`, transform: `translateY(${-drift * 24 * k}px)`,
               maskImage: "radial-gradient(ellipse at center, #000 30%, transparent 80%)",

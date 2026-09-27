@@ -1126,6 +1126,14 @@ def _sign_supabase_urls(doc: dict):
         m = scene.get("media") or {}
         if m.get("url"):
             m["url"] = resign(m["url"])
+        # The still an animation scene blurs behind its graphic: re-signed
+        # like the clip, or dropped when it cannot be (a dead link would fail
+        # the render; without it the scene draws on the charcoal grid).
+        if m.get("thumbnail"):
+            try:
+                m["thumbnail"] = resign(m["thumbnail"])
+            except Exception:  # noqa: BLE001
+                m.pop("thumbnail", None)
     for ov in doc.get("overlays", []):
         for m in (ov.get("media") or []):
             if isinstance(m, dict) and m.get("url"):
@@ -1297,6 +1305,15 @@ def _preflight_media(doc: dict, workers: int = 16) -> int:
     with ThreadPoolExecutor(max_workers=workers) as pool:
         results = list(pool.map(lambda t: ok(t[1]), todo))
     bad = [i for (i, _u), good in zip(todo, results) if not good]
+    # Thumbnails double as animation backdrops: one that cannot be read is dropped.
+    thumbs = [(i, s["media"]["thumbnail"]) for i, s in enumerate(scenes)
+              if str((s.get("media") or {}).get("thumbnail", "")).startswith("http")]
+    if thumbs:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            tres = list(pool.map(lambda t: ok(t[1]), thumbs))
+        for (i, _u), good in zip(thumbs, tres):
+            if not good:
+                scenes[i]["media"].pop("thumbnail", None)
     for i in bad:
         s = scenes[i]
         print(f"[worker] scene {i + 1}: clip unreadable in storage; replacing it", flush=True)
