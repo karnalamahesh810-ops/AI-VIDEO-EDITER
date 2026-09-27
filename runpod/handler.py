@@ -1343,7 +1343,8 @@ def _done_fields(out: dict) -> dict:
 # the setting already has; anything else is ignored.
 CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
                       "POOL_EXTRA_QUERIES", "POOL_SCOUT", "INTENT_QUERIES_MAX",
-                      "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS")
+                      "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS",
+                      "TREATMENTS", "STYLE_PACK", "MOMENT_FINE_PASS", "CLEAN_CUTS")
 
 
 def _apply_config(overrides) -> dict:
@@ -1366,6 +1367,8 @@ def _apply_config(overrides) -> dict:
                 value = json.loads(value) if isinstance(value, str) else value
                 if not isinstance(value, dict):
                     continue
+            elif isinstance(current, str):
+                value = str(value)[:64]
             else:
                 continue
         except (TypeError, ValueError):

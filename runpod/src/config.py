@@ -428,6 +428,10 @@ DEFAULT_HEIGHT = int(os.getenv("DEFAULT_HEIGHT", "1080"))
 # "none" by default: modern footage is shown as shot, bright and full colour.
 # Era beats still get the light vintage/archival grade (director.pick_treatment).
 SCENE_TREATMENT = os.getenv("SCENE_TREATMENT", "none").strip().lower()
+# The visual treatment planner (src/treatments.py) and the style pack a video
+# uses when the job does not name one ("" = chosen from the story's kind).
+TREATMENTS = _flag("TREATMENTS", True)
+STYLE_PACK = os.getenv("STYLE_PACK", "").strip().lower()
 
 # VidRush's pacing, measured on four of their exports (first 8 min each):
 # median shot 3.3-3.7 s, middle half 2.3-5.2 s, 13.6-16.5 cuts/min, only

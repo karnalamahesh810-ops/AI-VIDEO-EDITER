@@ -17,7 +17,7 @@ import os
 import subprocess
 from typing import Any, Dict, List, Optional
 
-from . import config
+from . import config, templates
 from .director import TEMPLATES
 from .transcribe import Segment
 from .media import MediaAsset
@@ -51,6 +51,21 @@ _EFFECT_CYCLE = ["color-shift", "ken-burns", "light-leaks", "color-shift",
 # Fewest cuts between two transitions. Transitions are punctuation; on every
 # cut they read as an amateur edit.
 _MIN_TRANSITION_GAP = 3
+
+
+def _pack_transitions(entrances: List[str], pack: dict) -> List[str]:
+    """The planned entrances, kept to the transitions the style pack allows."""
+    allowed = [t for t in (pack.get("transitions") or []) if t in TRANSITIONS]
+    if not allowed:
+        return entrances
+    out, used = [], 0
+    for e in entrances:
+        if e == "none" or e in allowed:
+            out.append(e)
+        else:
+            out.append(allowed[used % len(allowed)])
+            used += 1
+    return out
 
 
 def plan_transitions(shots: List[dict]) -> List[str]:
@@ -277,6 +292,16 @@ def build(segments: List[Segment], shots: List[dict],
     keep_captions = bool(inp.get("captions", False))
 
     entrances = plan_transitions(list(shots) + [{}] * max(0, len(segments) - len(shots)))
+    # The visual treatment planner (src/treatments.py): the style pack decides
+    # the looks, the narration decides where a treatment goes.
+    from . import director, treatments as vt
+    brief = inp.get("brief") if isinstance(inp.get("brief"), dict) else dict(director.LAST_STORY)
+    pack = vt.pack_for(brief, str(inp.get("style_pack") or config.STYLE_PACK or "")) if config.TREATMENTS else None
+    if pack:
+        entrances = _pack_transitions(entrances, pack)
+        image_look = templates.image_treatment(pack.get("imageTreatment", "")) or {}
+    else:
+        image_look = {}
 
     for i, seg in enumerate(segments):
         shot = shots[i] if i < len(shots) else {}
@@ -309,11 +334,15 @@ def build(segments: List[Segment], shots: List[dict],
             "visualType": shot.get("visualType", "footage"),
             "media": media,
             "motion": motion,
-            "treatment": shot.get("treatment", "film"),
+            "treatment": (image_look.get("treatment") if image_look and asset is not None
+                          and asset.kind == "image" and shot.get("treatment", "film") == "film"
+                          else shot.get("treatment", "film")),
             "transition": entrances[i] if i < len(entrances) else "none",
             "frame": pick_frame(asset, shot.get("treatment", "film"),
                                 shot.get("subjectType", "")),
             "effect": ("none" if asset is None
+                       else image_look.get("effect", _EFFECT_CYCLE[i % len(_EFFECT_CYCLE)])
+                       if image_look and asset.kind == "image"
                        else _EFFECT_CYCLE[i % len(_EFFECT_CYCLE)]),
             "semanticMetadata": {
                 "intent": shot.get("intent", ""),
@@ -371,6 +400,21 @@ def build(segments: List[Segment], shots: List[dict],
             "durationInFrames": min(int(round(3.5 * fps)), max(1, total - int(round(1.0 * fps)))),
         })
 
+    music: Dict[str, Any] = {"sections": [], "duck": 0.55}
+    treatment_counts: Dict[str, Any] = {}
+    sfx_list = plan_sfx(overlays, fps, config.SFX_MIN_GAP_SECONDS)
+    if pack:
+        planned = vt.plan(segments, shots, scenes, fps, total, brief, pack, _OVERLAY_SECONDS)
+        title_card = [o for o in overlays if o.get("type") == "title" and inp.get("title_overlay")
+                      and o.get("text") == str(inp["title_overlay"])[:240]]
+        overlays = title_card + planned["overlays"]
+        for i, scene in enumerate(scenes):
+            if i < len(planned["treatments"]):
+                scene["visualTreatment"] = planned["treatments"][i]
+        sfx_list = planned["sfx"]
+        music = planned["music"]
+        treatment_counts = planned["counts"]
+
     missing = sum(1 for a in assets if a is None)
     if missing:
         warnings.append(f"{missing} scene(s) have no media and will render black.")
@@ -389,17 +433,20 @@ def build(segments: List[Segment], shots: List[dict],
             "position": brand.get("captionPosition", "bottom"),
             "accent": brand.get("accent", "#FFD400"),
             "fontFamily": brand.get("fontFamily", "Inter"),
+            "style": str(inp.get("caption_style") or (pack or {}).get("caption") or "documentary"),
         },
+        "music": music,
         "scenes": scenes,
         "overlays": overlays,
-        "sfx": (plan_sfx(overlays, fps, config.SFX_MIN_GAP_SECONDS)
-                if inp.get("sfx", config.SFX_ENABLED) else []),
+        "sfx": (sfx_list if inp.get("sfx", config.SFX_ENABLED) else []),
         "sfxVolume": float(inp.get("sfx_volume", config.SFX_VOLUME)),
         "sfxEnabled": bool(inp.get("sfx", config.SFX_ENABLED)),
         "meta": {
             "schemaVersion": SCHEMA_VERSION,
             "sceneCount": len(scenes),
             "overlayCount": len(overlays),
+            "treatments": treatment_counts,
+            "stylePack": (pack or {}).get("id", ""),
             "planner": planner,
             "sourcePolicy": "stock_allowed" if config.ALLOW_STOCK else "no_stock",
             "cutsPerMinute": round(len(scenes) / max(audio_duration / 60, 0.01), 1),
