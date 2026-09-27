@@ -2,7 +2,12 @@ import React, { useMemo } from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { useScale } from "./layout";
 import { INTER } from "./fonts";
+import { captionStyle } from "../templates";
 import type { Scene, SceneWord, TimelineProps } from "../types";
+
+// Words a caption style may emphasise: a number, or a capitalised name.
+const isNumber = (t: string) => /\d/.test(t);
+const isKeyword = (t: string, i: number) => isNumber(t) || (i > 0 && /^[A-Z][a-z]{2,}/.test(t));
 
 /**
  * Word-synced captions, shown a few words at a time.
@@ -64,6 +69,10 @@ export const Captions: React.FC<{
     else break;
   }
 
+  const preset = captionStyle(style.style);
+  const emphasised = (t: string, i: number) =>
+    preset.emphasis === "numbers" ? isNumber(t) : preset.emphasis === "keywords" ? isKeyword(t, i) : false;
+
   const body = active ? (
     active.words.map((w, i) => {
       const spoken = nowSec >= w.start;
@@ -71,11 +80,13 @@ export const Captions: React.FC<{
         (nowSec - w.start) * 1000, [0, POP_MS], [0, 1],
         { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
       );
+      const strong = emphasised(w.text, i);
       return (
         <span
           key={i}
           style={{
-            color: nowSec >= w.start && nowSec <= w.end ? style.accent : "#fff",
+            color: (nowSec >= w.start && nowSec <= w.end) || strong ? style.accent : "#fff",
+            fontWeight: strong ? 900 : undefined,
             marginRight: "0.32em",
             display: "inline-block",
             opacity: spoken ? 1 : 0.94,
@@ -105,13 +116,17 @@ export const Captions: React.FC<{
         style={{
           fontFamily: style.fontFamily && style.fontFamily !== "Inter"
             ? `${style.fontFamily}, ${INTER}` : INTER,
-          fontSize: s(64),
-          fontWeight: 800,
+          fontSize: s(64 * preset.size),
+          fontWeight: preset.weight,
           lineHeight: 1.18,
           textAlign: "center",
           maxWidth: "82%",
-          textShadow: "0 4px 18px rgba(0,0,0,0.85), 0 2px 4px rgba(0,0,0,0.9)",
+          textShadow: preset.background === "bar" ? "none" : "0 4px 18px rgba(0,0,0,0.85), 0 2px 4px rgba(0,0,0,0.9)",
           letterSpacing: "-0.01em",
+          // The news style sits on a dark bar; the others float on the picture.
+          background: preset.background === "bar" ? "rgba(8,8,10,0.72)" : "transparent",
+          padding: preset.background === "bar" ? `${s(10)}px ${s(26)}px` : 0,
+          borderRadius: preset.background === "bar" ? s(8) : 0,
         }}
       >
         {body}

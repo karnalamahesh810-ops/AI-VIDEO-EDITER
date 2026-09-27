@@ -28,6 +28,7 @@ import { IconPop, LineChart, PathSteps, ProgressSteps, Span } from "./components
 import { AreaChart, Banner, Counter, Donut, IconArray, NumberRoll, ProgressBar, Ranking, ScaleCompare, Trend, YearRoll } from "./components/MotionGraphics";
 import { SatelliteMap, SpreadMap } from "./components/MapLooks";
 import { MotionWrap } from "./components/MotionWrap";
+import { resolveOverlay } from "./templates";
 
 const THEMES: Record<string, string> = {
   gold: "#d6a83c", red: "#e63946", teal: "#2ec4b6", blue: "#2f80ed", white: "#f4f1ea", amber: "#f4a100",
@@ -108,16 +109,58 @@ const OVERLAYS: Record<
     ) : null,
 };
 
-const renderOverlay = (ov: Overlay, accent: string) => {
+const renderOverlay = (raw: Overlay, accent: string) => {
+  // An overlay that names a template gets its unset fields from the
+  // registry, so the editor's pick and the planner's draw the same way.
+  const ov = resolveOverlay(raw);
   const Component = OVERLAYS[ov.type];
   // A document can arrive from the editor or an older schema, so an unknown
   // type is possible at runtime even though it is not at compile time.
   if (!Component) return null;
   return (
-    <MotionWrap motion={ov.motion}>
+    <MotionWrap motion={ov.motion} exit={ov.exit} speed={ov.speed}
+      placement={{ position: ov.position, scale: ov.scale, opacity: ov.opacity }}>
       <Component overlay={ov} accent={THEMES[ov.theme || ""] || accent} />
     </MotionWrap>
   );
+};
+
+/**
+ * The music level at a frame: the section's mood level, ramped over 1.5 s at
+ * each section change, and ducked under speech (a word is being spoken).
+ */
+const makeMusicVolume = (props: TimelineProps) => {
+  const base = props.bgm?.volume ?? 0.12;
+  const sections = props.music?.sections || [];
+  const duck = props.music?.duck ?? 0.55;
+  const fps = props.fps;
+  const words: [number, number][] = [];
+  for (const sc of props.scenes) {
+    for (const w of sc.words || []) words.push([w.start, w.end]);
+  }
+  words.sort((a, b) => a[0] - b[0]);
+  const ramp = Math.max(1, Math.round(fps * 1.5));
+  const levelAt = (f: number): number => {
+    if (!sections.length) return base;
+    let level = sections[0].volume;
+    for (const s of sections) {
+      if (f >= s.startFrame) {
+        const t = Math.min(1, (f - s.startFrame) / ramp);
+        level = level + (s.volume - level) * t;
+      }
+    }
+    return level;
+  };
+  return (f: number) => {
+    const level = levelAt(f);
+    const sec = f / fps;
+    let speaking = false;
+    for (const [a, b] of words) {
+      if (a > sec + 0.15) break;
+      if (sec >= a - 0.15 && sec <= b + 0.35) { speaking = true; break; }
+    }
+    return Math.max(0, Math.min(1, speaking ? level * duck : level));
+  };
 };
 
 export const Main: React.FC<TimelineProps> = (props) => {
@@ -171,7 +214,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
       {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
-      {bgm?.url ? <Audio src={bgm.url} volume={bgm.volume ?? 0.12} loop /> : null}
+      {bgm?.url ? <Audio src={bgm.url} volume={makeMusicVolume(props)} loop /> : null}
       {props.sfxEnabled !== false && (props.sfx || []).map((fx, i) => (
         <Sequence key={`sfx-${i}`} from={Math.max(0, fx.startFrame)} durationInFrames={90} layout="none">
           <Audio src={staticFile(`sfx/${fx.name}.mp3`)}

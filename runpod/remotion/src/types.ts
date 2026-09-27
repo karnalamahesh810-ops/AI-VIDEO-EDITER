@@ -182,12 +182,33 @@ export interface Overlay {
   /** Normalized frame positions, supplied after visual review, not guessed. */
   anchor?: { x: number; y: number };
   labelPosition?: { x: number; y: number };
-  /** Entrance/exit move (MotionWrap.tsx): rise, drop, slide-left, zoom-in, glitch... */
+  /** Entrance move (MotionWrap.tsx): rise, drop, slide-left, zoom-in, glitch... */
   motion?: string;
   /** Colour theme replacing the brand accent: gold, red, teal, blue, white, amber. */
   theme?: string;
+  /**
+   * The premade animation this overlay is an instance of (templates/registry.json)
+   * and the customisations the editor or the planner set on it. Unset fields
+   * are filled from the template (templates.ts resolveOverlay).
+   */
+  template?: string;
+  style?: string;
+  exit?: string;
+  speed?: number;
+  position?: string;
+  scale?: number;
+  opacity?: number;
+  fontScale?: number;
   startFrame: number;
   durationInFrames: number;
+}
+
+/** A music section: the level the music sits at between two frames, by mood. */
+export interface MusicSection {
+  startFrame: number;
+  endFrame: number;
+  mood: string;
+  volume: number;
 }
 
 export interface TimelineProps {
@@ -198,11 +219,18 @@ export interface TimelineProps {
   durationInFrames: number;
   audio: { url: string; volume: number };
   bgm?: { url: string; volume: number } | null;
+  /**
+   * Music automation over the bgm: sections with a mood and a level, ramped
+   * between; `duck` is the share of the section level kept under speech.
+   */
+  music?: { sections: MusicSection[]; duck?: number } | null;
   captions: {
     enabled: boolean;
     position: "bottom" | "center";
     accent: string;
     fontFamily: string;
+    /** documentary | news | modern (templates/registry.json captionStyles). */
+    style?: string;
   };
   scenes: Scene[];
   overlays: Overlay[];
