@@ -2,3 +2,8 @@ Sound effects from Mixkit (https://mixkit.co), used under the Mixkit License
 (free for commercial and personal use in video projects). IDs: typewriter 1372,
 whoosh 1489, paper 1530, impact 1143, pop 2358, glitch 2595, bell 933, page 1101.
 Trimmed to 2.5 s and loudness-normalised (-16 LUFS).
+
+Added 2026-09-27 by the project owner (their own licensed files): "whoosh-cinematic-for-maps.mp3",
+"typing text.mp3", "glitch fx transistion.mp3". The renderer plays the loudness-matched copies
+map-whoosh.mp3, typewriter.mp3 (first 3.5 s of the typing file) and glitch-transition.mp3.
+bell.mp3 (Mixkit 933) was removed; map pings now use map-whoosh.mp3.

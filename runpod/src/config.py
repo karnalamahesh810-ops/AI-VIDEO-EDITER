@@ -391,6 +391,12 @@ NEWS_CHANNELS = [c.strip() for c in os.getenv(
 # by later videos about the same subjects: no search, no download from
 # YouTube, no vision call. Needs the worker-storage broker's library/ prefix.
 CLIP_LIBRARY = _flag("CLIP_LIBRARY", True)
+# A beat with no footage becomes a full-screen motion graphic chosen from the
+# line (VidRush fills gaps with animations, not repeated clips).
+ANIMATION_FILL = _flag("ANIMATION_FILL", True)
+# A strong beat (figure, date, mapped place, quote) whose footage scored under
+# this becomes an animation scene instead (treatments.wants_animation).
+ANIMATION_OVER_FOOTAGE_BELOW = float(os.getenv("ANIMATION_OVER_FOOTAGE_BELOW", "0.6"))
 CLIP_LIBRARY_MIN_SCORE = float(os.getenv("CLIP_LIBRARY_MIN_SCORE", "0.8"))
 CLIP_LIBRARY_MAX_PER_JOB = int(os.getenv("CLIP_LIBRARY_MAX_PER_JOB", "60"))
 STRAGGLER_GRACE_SECONDS = float(os.getenv("STRAGGLER_GRACE_SECONDS", "75"))
@@ -400,6 +406,10 @@ RENDER_CONCURRENCY = int(os.getenv("RENDER_CONCURRENCY", "4"))
 # See render.render: the defaults size these from the host, not the container.
 RENDER_FRAME_CACHE_BYTES = int(os.getenv("RENDER_FRAME_CACHE_BYTES", str(1536 * 1024 * 1024)))
 RENDER_VIDEO_THREADS = int(os.getenv("RENDER_VIDEO_THREADS", "1"))
+# Satellite maps load public tiles (USGS, NASA GIBS) at render time; one slow
+# tile past Remotion's 30 s default killed a whole render. Long enough for
+# a retried fetch, short enough that a dead tile server still fails the job.
+RENDER_DELAY_TIMEOUT_MS = int(os.getenv("RENDER_DELAY_TIMEOUT_MS", "120000"))
 
 # --- whisper -----------------------------------------------------------------
 # "base" is the sweet spot for narration alignment on CPU; bump to "small" on GPU.

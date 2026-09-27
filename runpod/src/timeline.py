@@ -32,7 +32,8 @@ _IMAGE_MOTIONS = ["zoom-in", "pan-left", "zoom-out", "pan-right"]
 # remotion/src/types.ts (SceneTransition / SceneEffect) and SceneEffects.tsx;
 # a test asserts they agree.
 TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide",
-               "whip", "flash", "light-leak", "dip", "blur", "punch"}
+               "whip", "flash", "light-leak", "dip", "blur", "punch",
+               "split-wipe", "bar-wipe", "mosaic", "color-wash"}
 EFFECTS = {"none", "ken-burns", "light-leaks", "dust", "film-flicker", "color-shift"}
 
 # Rotation for the strong transitions at section changes. Film burn leads
@@ -242,7 +243,7 @@ _SFX_FOR = {
     "swoosh-title": ("whoosh", 0.3), "red-strip": ("impact", 0.3),
     "icon-pop": ("pop", 0.3), "ring-stat": ("pop", 0.3), "kicker": ("typewriter", 0.25),
 }
-SFX_NAMES = {name for name, _ in _SFX_FOR.values()} | {"glitch", "bell", "page"}
+SFX_NAMES = {name for name, _ in _SFX_FOR.values()} | {"glitch", "glitch-transition", "map-whoosh", "riser", "page"}
 
 
 def plan_sfx(overlays: List[dict], fps: int, min_gap_seconds: float) -> List[dict]:
@@ -328,7 +329,17 @@ def build(segments: List[Segment], shots: List[dict],
         asset = assets[i] if i < len(assets) else None
         start, duration = bounds[i], bounds[i + 1] - bounds[i]
 
-        if asset is None:
+        animation = None
+        if pack and vt.wants_animation(seg, shot, asset, brief):
+            # VidRush fills a beat nothing was found for with a motion
+            # graphic, not a repeated clip: a card or map from the line.
+            media = {"type": "animation", "url": "", "source": "template"}
+            animation = vt.animation_for(seg, shot, pack, brief)
+            motion = "none"
+            review = asset is None
+            reason = ("No footage found — a motion graphic fills this beat (keep it or replace the clip)"
+                      if asset is None else "")
+        elif asset is None:
             media = {"type": "color", "url": "", "source": "none"}
             motion = "none"
             review, reason = True, "No media found for this beat"
@@ -351,8 +362,9 @@ def build(segments: List[Segment], shots: List[dict],
             "durationInFrames": duration,
             "text": seg.text,
             "query": shot.get("query", ""),
-            "visualType": shot.get("visualType", "footage"),
+            "visualType": "animation" if animation else shot.get("visualType", "footage"),
             "media": media,
+            **({"animation": animation} if animation else {}),
             "motion": motion,
             "treatment": (image_look.get("treatment") if image_look and asset is not None
                           and asset.kind == "image" and shot.get("treatment", "film") == "film"
@@ -591,7 +603,8 @@ def validate(doc: Any, require_media: bool = True,
             raise ValueError(
                 f"Scene {i + 1} uses {source} footage; this workflow is no-stock "
                 "(set ALLOW_STOCK=1 to override)")
-        if require_media and (media.get("type") == "color" or not media.get("url")):
+        if require_media and (media.get("type") == "color" or
+                              (media.get("type") != "animation" and not media.get("url"))):
             raise ValueError(f"Scene {i + 1} still needs media before it can render")
 
     if cursor != total:

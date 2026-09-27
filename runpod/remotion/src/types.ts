@@ -18,7 +18,10 @@ export type Treatment = "none" | "film" | "vintage" | "archival";
  */
 export type SceneTransition =
   | "none" | "fade" | "film-burn" | "zoom" | "glitch" | "slide"
-  | "whip" | "flash" | "light-leak" | "dip" | "blur" | "punch";
+  | "whip" | "flash" | "light-leak" | "dip" | "blur" | "punch"
+  // VidRush section changes: barn-door split, a coloured bar sweep, a pixel
+  // mosaic into archival material, a blue wash into a quote.
+  | "split-wipe" | "bar-wipe" | "mosaic" | "color-wash";
 
 /**
  * One effect per clip, so borrowed footage reads as designed.
@@ -99,7 +102,8 @@ export interface SceneWord {
 }
 
 export interface SceneMedia {
-  type: "video" | "image" | "color";
+  /** "animation": the scene is a full-screen motion graphic (scene.animation). */
+  type: "video" | "image" | "color" | "animation";
   url: string;
   source: string;
   attribution?: string;
@@ -115,8 +119,13 @@ export interface Scene {
   text: string;
   /** What the sourcing step searched for — shown in the editor, not on screen. */
   query?: string;
-  visualType?: "footage" | "image";
+  visualType?: "footage" | "image" | "animation";
   media: SceneMedia;
+  /**
+   * For media.type "animation": the template and its props, drawn full-screen
+   * by AnimationScene (VidRush's purple blocks: a graphic instead of a clip).
+   */
+  animation?: Partial<Overlay>;
   motion: Motion;
   /** Footage grade — film grain, vintage warmth, archival black and white. */
   treatment?: Treatment;

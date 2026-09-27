@@ -53,7 +53,9 @@ export const ObjectCallout:React.FC<{overlay:Overlay;accent:string}>=({overlay})
 export const EditorialChapter:React.FC<{overlay:Overlay;accent:string}>=({overlay,accent})=>{
  const f=useCurrentFrame();const {fps,width}=useVideoConfig();const s=width/1920;const p=progress(f,0,fps*.6);
  return <AbsoluteFill style={{background:'#111b',justifyContent:'center',alignItems:'center',overflow:'hidden'}}>
-  {overlay.variant==='echo'&&<AbsoluteFill style={{color:accent,opacity:.16,fontFamily:NARROW,fontSize:160*s,lineHeight:1.12,fontWeight:700,transform:`rotate(-7deg) translateX(${-f*s*.5}px)`}}>{Array(8).fill(overlay.text.toUpperCase()).join(' ')}</AbsoluteFill>}
-  <div style={{fontFamily:overlay.variant==='echo'?NARROW:'Georgia,serif',fontStyle:overlay.variant==='echo'?'normal':'italic',fontWeight:700,color:'#fff',fontSize:72*s,maxWidth:'80%',textAlign:'center',opacity:p,transform:`translateY(${(1-p)*28*s}px)`,textShadow:'0 4px 20px #000'}}>{overlay.text}</div>
+  {overlay.variant==='echo'&&<AbsoluteFill style={{color:accent,opacity:.08,fontFamily:NARROW,fontSize:150*s,lineHeight:1.1,fontWeight:700,transform:`rotate(-7deg) translateX(${-f*s*.5}px)`,filter:`blur(${1.5*s}px)`}}>{Array(6).fill(overlay.text.toUpperCase()).join('  ')}</AbsoluteFill>}
+  <div style={{position:'absolute',left:'50%',top:'50%',transform:'translate(-50%,-50%)',width:'62%',height:'1px',background:`linear-gradient(90deg,transparent,${accent},transparent)`,opacity:p*.8}}/>
+  <div style={{fontFamily:INTER,fontWeight:800,fontSize:26*s,letterSpacing:'0.36em',color:accent,textTransform:'uppercase',opacity:p,marginBottom:22*s}}>{overlay.subtitle||'Chapter'}</div>
+  <div style={{fontFamily:overlay.variant==='echo'?NARROW:'Georgia,serif',fontStyle:overlay.variant==='echo'?'normal':'italic',fontWeight:700,color:'#fff',fontSize:(overlay.variant==='echo'?112:96)*s,lineHeight:1.06,maxWidth:'82%',textAlign:'center',textTransform:overlay.variant==='echo'?'uppercase':'none',letterSpacing:overlay.variant==='echo'?'0.03em':'0',opacity:p,transform:`translateY(${(1-p)*36*s}px)`,filter:p<1?`blur(${(1-p)*10*s}px)`:undefined,textShadow:'0 8px 30px #000'}}>{overlay.text}</div>
  </AbsoluteFill>;
 };

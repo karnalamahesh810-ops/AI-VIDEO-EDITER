@@ -143,7 +143,7 @@ class Variety(unittest.TestCase):
 
     def test_every_template_is_renderable(self):
         import re
-        main = open("remotion/src/Main.tsx", encoding="utf-8").read()
+        main = open("remotion/src/overlays.tsx", encoding="utf-8").read()
         for kind in director.TEMPLATES:
             self.assertTrue(re.search(r'(^|\s)"?%s"?\s*:' % re.escape(kind), main, re.M), kind)
 

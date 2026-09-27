@@ -103,6 +103,19 @@ def broker_events(project_id: str, job_id: str, batch: list) -> None:
             timeout=30)
 
 
+def broker_library_query(project_id: str, job_id: str, limit: int = 500, **filters) -> dict:
+    """The app's footage_library rows (worker-storage action "library_query")."""
+    payload = {"project_id": project_id, "job_id": job_id, "action": "library_query", "limit": int(limit)}
+    payload.update({k: v for k, v in filters.items() if v})
+    return _broker(payload, timeout=60)
+
+
+def broker_library_upsert(project_id: str, job_id: str, rows: list) -> dict:
+    """Insert or update footage_library rows (worker-storage action "library_upsert")."""
+    return _broker({"project_id": project_id, "job_id": job_id, "action": "library_upsert",
+                    "rows": list(rows)}, timeout=120)
+
+
 def broker_read_url(bucket: str, object_path: str, project_id: str, job_id: str,
                     read_ttl: int = 60 * 60) -> str:
     """A signed read URL for an existing object, through the app's broker."""

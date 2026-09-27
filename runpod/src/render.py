@@ -7,6 +7,7 @@ import shutil
 import subprocess
 
 from . import config
+from . import templates
 from .assetserver import AssetServer, localise
 
 
@@ -92,6 +93,16 @@ def render(props: dict, out_path: str, composition: str = "Main",
         # Rewrite a copy: the caller keeps the document it passed in, which is
         # what gets stored for the editor. Localhost URLs must not leak there.
         served = localise(copy.deepcopy(props), assets)
+        # A sound the renderer does not ship (an editor pick, a renamed file)
+        # would 404 and fail the whole render; drop it and say so.
+        have = templates.sfx_files()
+        kept, dropped = [], []
+        for fx in served.get("sfx") or []:
+            (kept if fx.get("name") in have else dropped).append(fx)
+        if dropped:
+            print(f"[render] dropping {len(dropped)} sfx without a file: "
+                  f"{sorted({fx.get('name') for fx in dropped})}", flush=True)
+            served["sfx"] = kept
         with open(props_path, "w", encoding="utf-8") as f:
             json.dump(served, f)
 
@@ -117,7 +128,9 @@ def render(props: dict, out_path: str, composition: str = "Main",
         # with "thread::unix::Thread::new::thread_start" partway through.
         # Fixed caps keep it inside the container.
         cmd += [f"--offthreadvideo-cache-size-in-bytes={config.RENDER_FRAME_CACHE_BYTES}",
-                f"--offthreadvideo-video-threads={config.RENDER_VIDEO_THREADS}"]
+                f"--offthreadvideo-video-threads={config.RENDER_VIDEO_THREADS}",
+                # Map tiles and remote images are fetched while rendering.
+                f"--timeout={config.RENDER_DELAY_TIMEOUT_MS}"]
         # Remotion's canvas/SVG effects otherwise use Chromium's software GL
         # path on headless workers, even when RunPod has attached an NVIDIA
         # device. ANGLE uses the worker's GPU for composition; video decoding

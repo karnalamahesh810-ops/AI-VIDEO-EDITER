@@ -119,7 +119,7 @@ class Registry(unittest.TestCase):
         from src import director
         self.assertEqual(templates.check(), [])
         comps = {t["component"] for t in templates.all_templates()}
-        self.assertEqual(director.TEMPLATES - comps, {"photo-card", "name-card"})
+        self.assertEqual(director.TEMPLATES - comps, set())
         self.assertGreaterEqual(len(templates.all_templates()), 60)
         self.assertEqual(len(templates.by_category("MAPS")), 15)
 

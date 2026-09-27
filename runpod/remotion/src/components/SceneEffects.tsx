@@ -52,6 +52,14 @@ export const entranceStyle = (
     case "punch":
       // A quick punch-in that lands on the beat.
       return { transform: `scale(${1.12 - 0.12 * p})` };
+    case "split-wipe":
+      // Barn doors: the incoming shot opens from the centre line outward.
+      return { clipPath: `inset(0 ${(1 - p) * 50}% 0 ${(1 - p) * 50}%)` };
+    case "bar-wipe":
+      // Revealed left to right behind a coloured bar (TransitionLayer).
+      return { clipPath: `inset(0 ${(1 - p) * 100}% 0 0)` };
+    case "color-wash":
+      return { filter: p < 1 ? `saturate(${0.2 + 0.8 * p}) brightness(${1.35 - 0.35 * p})` : undefined };
     case "glitch": {
       if (frame >= IN) return {};
       const jitter = (random(`gx${frame}`) - 0.5) * 60 * (1 - p);
@@ -106,6 +114,55 @@ export const TransitionLayer: React.FC<{ transition?: SceneTransition }> = ({ tr
             "rgba(255,120,50,0.8) 28%, rgba(230,60,30,0.35) 55%, rgba(0,0,0,0) 80%)",
         }}
       />
+    );
+  }
+
+  if (transition === "bar-wipe" && frame <= IN) {
+    // The bar leads the reveal by a hair so the edge never shows a seam.
+    const x = interpolate(frame, [0, IN], [0, 100], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    return (
+      <AbsoluteFill style={{ pointerEvents: "none" }}>
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: `${x}%`, width: "3.5%",
+          transform: "translateX(-60%)", background: "#f4a100", boxShadow: "0 0 40px rgba(244,161,0,0.7)" }} />
+      </AbsoluteFill>
+    );
+  }
+
+  if (transition === "mosaic" && frame < IN + 2) {
+    // A grid of tiles that clear in a fixed random order: a pixel mosaic
+    // resolving into the shot. Deterministic, so renders are reproducible.
+    const cols = 16, rows = 9;
+    const p = frame / (IN + 2);
+    const tiles: React.ReactNode[] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const order = random(`mz${r}-${c}`);
+        if (order < p) continue;
+        const tone = 30 + Math.floor(random(`mt${r}-${c}`) * 60);
+        tiles.push(
+          <div key={`${r}-${c}`} style={{ position: "absolute", left: `${(c / cols) * 100}%`, top: `${(r / rows) * 100}%`,
+            width: `${100 / cols + 0.1}%`, height: `${100 / rows + 0.1}%`, background: `rgb(${tone},${tone},${tone + 8})` }} />,
+        );
+      }
+    }
+    return <AbsoluteFill style={{ pointerEvents: "none" }}>{tiles}</AbsoluteFill>;
+  }
+
+  if (transition === "color-wash") {
+    const o = interpolate(frame, [0, 3, IN + 4], [0.85, 0.7, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    return <AbsoluteFill style={{ background: "#1f5fd6", mixBlendMode: "screen", opacity: o, pointerEvents: "none" }} />;
+  }
+
+  if (transition === "split-wipe" && frame <= IN) {
+    // Thin light seams on the two opening edges so the doors read as doors.
+    const p = interpolate(frame, [0, IN], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) });
+    const edge = (1 - p) * 50;
+    const seam: React.CSSProperties = { position: "absolute", top: 0, bottom: 0, width: 4, background: "rgba(255,255,255,0.85)" };
+    return (
+      <AbsoluteFill style={{ pointerEvents: "none", opacity: 1 - p }}>
+        <div style={{ ...seam, left: `${edge}%` }} />
+        <div style={{ ...seam, right: `${edge}%` }} />
+      </AbsoluteFill>
     );
   }
 

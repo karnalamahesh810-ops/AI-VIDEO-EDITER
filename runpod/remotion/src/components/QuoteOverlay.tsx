@@ -1,79 +1,42 @@
 import React from "react";
 import { AbsoluteFill, interpolate } from "remotion";
-import { SANS, TEXT_SHADOW, useOverlayAnim, useOverlaySafeStyle, useScale } from "./layout";
+import { TEXT_SHADOW, useOverlayAnim, useOverlaySafeStyle, useScale } from "./layout";
+import { INTER, SERIF, SERIF_ITALIC } from "./fonts";
+import { Rule, Shade, Words, run, useDrift } from "./kinetic";
 import type { Overlay } from "../types";
 
 /**
- * Pull quote. A large opening mark, the line itself, and an attribution rule.
- *
- * The quotation mark scales in from oversized rather than fading, which reads
- * as "someone is being quoted" before the viewer has read a word.
+ * Pull quote. An oversized accent quotation mark lands first, the line rises
+ * word by word in italic serif, then the attribution draws in under a rule.
+ * `label` or `subtitle` is the speaker.
  */
-export const QuoteOverlay: React.FC<{ overlay: Overlay; accent: string }> = ({
-  overlay,
-  accent,
-}) => {
-  const { enter, opacity } = useOverlayAnim(20, 12);
+export const QuoteOverlay: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, accent }) => {
+  const { frame, enter, opacity, fps } = useOverlayAnim(20, 12);
   const s = useScale();
   const safe = useOverlaySafeStyle();
-
-  // Strip any quote marks already in the text; the graphic supplies its own.
-  const body = overlay.text.replace(/^["“”']+|["“”']+$/g, "");
+  const drift = useDrift(8);
+  const body = (overlay.text || "").replace(/^["“”']+|["“”']+$/g, "");
+  const who = overlay.label || overlay.subtitle || "";
+  const words = body.split(/\s+/).filter(Boolean).length;
+  const size = words > 18 ? 56 : words > 10 ? 66 : 78;
+  const attr = run(frame, fps * 0.4 + words * 3, fps * 0.5);
 
   return (
-    <AbsoluteFill
-      style={{ ...safe, justifyContent: "center", alignItems: "center", opacity }}
-    >
-      <div style={{ maxWidth: "72%", padding: `0 ${s(40)}px`, textAlign: "center" }}>
-        <div
-          style={{
-            fontFamily: "Georgia, 'Times New Roman', serif",
-            fontSize: s(150),
-            lineHeight: 0.6,
-            color: accent,
-            opacity: 0.85,
-            transform: `scale(${interpolate(enter, [0, 1], [2.2, 1])})`,
-            marginBottom: s(18),
-          }}
-        >
-          “
+    <AbsoluteFill style={{ ...safe, justifyContent: "center", alignItems: "center", opacity }}>
+      <Shade p={enter} strength={0.6} />
+      <div style={{ maxWidth: "70%", position: "relative", transform: drift, padding: `0 ${s(40)}px` }}>
+        <div style={{ position: "absolute", left: s(-30), top: s(-120), fontFamily: SERIF, fontSize: s(340), lineHeight: 1,
+          color: accent, opacity: 0.9 * enter, transform: `scale(${interpolate(enter, [0, 1], [1.8, 1])})`,
+          transformOrigin: "left top", textShadow: "0 10px 40px rgba(0,0,0,.6)" }}>“</div>
+        <div style={{ position: "relative", fontFamily: SERIF_ITALIC, fontStyle: "italic", fontSize: s(size), lineHeight: 1.28,
+          color: "#fff", textShadow: TEXT_SHADOW, paddingLeft: s(60) }}>
+          <Words text={body} at={Math.round(fps * 0.25)} step={3} rise={34} />
         </div>
-        <div
-          style={{
-            fontFamily: "Georgia, 'Times New Roman', serif",
-            fontStyle: "italic",
-            fontSize: s(58),
-            fontWeight: 500,
-            lineHeight: 1.3,
-            color: "#fff",
-            textShadow: TEXT_SHADOW,
-            transform: `translateY(${interpolate(enter, [0, 1], [s(24), 0])}px)`,
-          }}
-        >
-          {body}
-        </div>
-        {overlay.subtitle ? (
-          <div
-            style={{
-              marginTop: s(26),
-              display: "inline-flex",
-              alignItems: "center",
-              gap: s(14),
-            }}
-          >
-            <span style={{ width: s(54), height: s(3), background: accent }} />
-            <span
-              style={{
-                fontFamily: SANS,
-                fontSize: s(28),
-                fontWeight: 700,
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-                color: "rgba(255,255,255,0.82)",
-              }}
-            >
-              {overlay.subtitle}
-            </span>
+        {who ? (
+          <div style={{ display: "flex", alignItems: "center", gap: s(18), marginTop: s(30), paddingLeft: s(60), opacity: attr }}>
+            <Rule p={attr} width={s(90)} height={s(4)} color={accent} />
+            <span style={{ fontFamily: INTER, fontSize: s(30), fontWeight: 700, letterSpacing: "0.18em",
+              textTransform: "uppercase", color: "rgba(255,255,255,0.88)" }}>{who}</span>
           </div>
         ) : null}
       </div>

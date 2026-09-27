@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import handler
-from src import media
+from src import config, media
 
 
 def _stub_mp4(path: str) -> None:
@@ -51,7 +51,8 @@ class SanitizeVideos(unittest.TestCase):
             {"id": "s0001", "media": {"type": "video", "url": good, "source": "youtube"}, "semanticMetadata": {"subject": "Lake Mead"}},
         ], "overlays": []}
         with mock.patch.object(media, "playable_video", side_effect=lambda p: p == good):
-            dropped = handler._sanitize_videos(doc)
+            with mock.patch.object(config, "ANIMATION_FILL", False):      # the borrowing path, not a graphic
+                dropped = handler._sanitize_videos(doc)
         self.assertEqual(dropped, 1)
         self.assertEqual(doc["scenes"][0]["media"]["url"], good)        # covered by the good clip
         self.assertTrue(doc["scenes"][0]["reviewRequired"])

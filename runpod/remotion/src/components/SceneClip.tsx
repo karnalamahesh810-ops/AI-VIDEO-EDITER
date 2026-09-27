@@ -5,6 +5,7 @@ import {
 } from "remotion";
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
 import { EffectLayer, TransitionLayer, effectFilter, entranceStyle } from "./SceneEffects";
+import { AnimationScene } from "./AnimationScene";
 import type { Scene } from "../types";
 
 /**
@@ -16,7 +17,7 @@ import type { Scene } from "../types";
  * for one (see SceneEffects), and every clip carries one effect so borrowed
  * footage still feels designed.
  */
-export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
+export const SceneClip: React.FC<{ scene: Scene; accent?: string }> = ({ scene, accent }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const { media, motion, treatment, transition, effect } = scene;
@@ -33,6 +34,11 @@ export const SceneClip: React.FC<{ scene: Scene }> = ({ scene }) => {
     transform = `scale(1.16) translateX(${interpolate(progress, [0, 1], [3, -3])}%)`;
   } else if (motion === "pan-right") {
     transform = `scale(1.16) translateX(${interpolate(progress, [0, 1], [-3, 3])}%)`;
+  }
+
+  if (media.type === "animation") {
+    // The beat is a motion graphic, not a clip (VidRush's purple blocks).
+    return <AnimationScene scene={scene} accent={accent || "#d6a83c"} />;
   }
 
   if (media.type === "color" || !media.url) {

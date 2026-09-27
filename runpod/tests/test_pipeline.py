@@ -61,6 +61,13 @@ def simple_plan(n: int, seconds: float = 3.0):
     return segments, shots, assets
 
 
+def _fill_no_anim(doc):
+    """handler._fill_missing_media with animation fill off: the borrowing path."""
+    import handler
+    with mock.patch.object(config, "ANIMATION_FILL", False):
+        return handler._fill_missing_media(doc)
+
+
 def build_doc(n=5, seconds=3.0, inp=None, **kw):
     segments, shots, assets = simple_plan(n, seconds)
     return timeline.build(
@@ -92,7 +99,7 @@ class TemplateContract(unittest.TestCase):
         return set(re.findall(r'"([a-z-]+)"', block.group(1)))
 
     def _main_overlay_keys(self):
-        with open(os.path.join(REMOTION, "Main.tsx"), encoding="utf-8") as fh:
+        with open(os.path.join(REMOTION, "overlays.tsx"), encoding="utf-8") as fh:
             src = fh.read()
         block = re.search(r"const OVERLAYS[^=]*=\s*\{(.*?)\n\};", src, re.S)
         self.assertIsNotNone(block, "OVERLAYS map not found in Main.tsx")
@@ -372,7 +379,7 @@ class PersonSafetyNet(unittest.TestCase):
         for i in (1, 2, 3):
             doc["scenes"][i]["media"] = {"type": "color", "url": "", "source": "none"}
         doc["scenes"][2]["semanticMetadata"] = {"subject": "Hoover Dam"}
-        handler._fill_missing_media(doc)
+        _fill_no_anim(doc)
         self.assertEqual(doc["scenes"][2]["media"]["url"], "https://x/4.mp4")
         self.assertIn("same subject", doc["scenes"][2]["reviewReason"])
 
@@ -818,7 +825,7 @@ class PipelineProgress(unittest.TestCase):
         for i, s in enumerate(doc["scenes"]):
             s["media"] = ({"type": "video", "source": "youtube", "url": f"https://x/real{i}.mp4"}
                           if i in (0, 100) else {"type": "color", "url": "", "source": "none"})
-        patched = handler._fill_missing_media(doc)
+        patched = _fill_no_anim(doc)
         self.assertEqual(patched, 99)
         urls = [doc["scenes"][i]["media"]["url"] for i in range(1, 5)]  # right next to scene 0
         self.assertLessEqual(urls.count("https://x/real0.mp4"), 2)
@@ -1235,8 +1242,9 @@ class Validation(unittest.TestCase):
     def test_missing_media_blocks_render_but_not_planning(self):
         segments, shots, assets = simple_plan(3)
         assets[1] = None
-        doc = timeline.build(segments, shots, assets, audio_url="file:///vo.mp3",
-                             audio_duration=9.0, inp={})
+        with mock.patch.object(config, "ANIMATION_FILL", False):
+            doc = timeline.build(segments, shots, assets, audio_url="file:///vo.mp3",
+                                 audio_duration=9.0, inp={})
         timeline.validate(doc, require_media=False)
         with self.assertRaisesRegex(ValueError, "needs media"):
             timeline.validate(doc, require_media=True)

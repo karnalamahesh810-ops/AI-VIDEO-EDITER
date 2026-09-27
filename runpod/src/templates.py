@@ -145,6 +145,17 @@ def resolve(template_id: str, *, style: str = "", entrance: str = "", exit_: str
     return out
 
 
+SFX_DIR = os.path.join(os.path.dirname(PATH), "..", "..", "public", "sfx")
+
+
+def sfx_files() -> set:
+    """The sound names the renderer can play: public/sfx/<name>.mp3."""
+    try:
+        return {f[:-4] for f in os.listdir(SFX_DIR) if f.endswith(".mp3")}
+    except OSError:
+        return set()
+
+
 def check() -> List[str]:
     """Consistency problems, for the test suite."""
     problems = []
@@ -165,6 +176,11 @@ def check() -> List[str]:
         sfx_name = (t["defaults"].get("sfx") or {}).get("name", "none")
         if sfx_name != "none" and sfx_name not in {v["file"] for v in reg["sfx"].values()}:
             problems.append(f"{t['id']}: sfx file {sfx_name}")
+    # Every sound the registry names must ship with the renderer: a missing
+    # file is a 404 that kills the whole render, not a silent beat.
+    for name in sorted({v["file"] for v in reg["sfx"].values()} | set(reg["templates"][0]["props"]["sfx"]["options"]) - {"default", "none"}):
+        if name not in sfx_files():
+            problems.append(f"sfx file missing: public/sfx/{name}.mp3")
     for name, pack in reg["stylePacks"].items():
         for key in ("chapter", "map", "route", "region", "multi", "lowerThird"):
             if pack[key] not in seen:

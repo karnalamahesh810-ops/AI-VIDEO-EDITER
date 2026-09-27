@@ -23,12 +23,18 @@ from typing import Any, Dict, List, Optional
 from . import config, templates
 from .transcribe import Segment
 
-MIN_GAP = 12.0          # seconds between any two treatments
-TAG_GAP = 8.0           # a tag riding on the footage may follow sooner
-QUIET_MAX = 40.0        # after this long with plain footage a light label is allowed
-FAMILY_GAP = 60.0       # the same category is not repeated within this
-SFX_GAP = 20.0          # seconds between two sounds
-HIGH_GAP = 6.0          # a chapter, a number or a map may follow anything after this
+# Read off VidRush's own timelines (an animation block every 8-10 s through
+# the first two minutes, then every 15-25 s): denser than a "treatment every
+# 20-40 s" documentary, because a faceless channel's viewer is on a phone.
+MIN_GAP = 8.0           # seconds between any two treatments
+TAG_GAP = 5.0           # a tag riding on the footage may follow sooner
+QUIET_MAX = 18.0        # after this long with plain footage a light label is allowed
+FAMILY_GAP = 45.0       # the same category is not repeated within this
+SFX_GAP = 12.0          # seconds between two sounds
+HIGH_GAP = 5.0          # a chapter, a number or a map may follow anything after this
+HOOK_SECONDS = 120.0    # the opening, where the cadence is tightest
+HOOK_GAP = 6.0          # ... and any treatment may follow another after this
+STRONG_CUES = {"percent", "change", "then-now", "big-number", "date", "route", "place", "quote", "chapter"}
 
 _MONTHS = "january|february|march|april|may|june|july|august|september|october|november|december"
 _PERCENT = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*(?:%|percent\b)", re.I)
@@ -158,6 +164,11 @@ class _Rhythm:
         self.last_sfx = -1e9
 
     def allows(self, at: float, t: dict) -> bool:
+        # The opening two minutes run at VidRush's hook cadence: anything may
+        # follow anything after HOOK_GAP, as long as no card is still up.
+        if at < HOOK_SECONDS and at - self.last_any >= HOOK_GAP and not (
+                t["kind"] in CARD_KINDS and self.overlaps(at)):
+            return True
         gap = at - self.last_any
         need = TAG_GAP if t["kind"] == "tag" else MIN_GAP
         if t["emphasis"] == "high":
@@ -254,6 +265,26 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
         at = seg.start
         start = int(scene.get("startFrame", int(round(at * fps))))
         scene_frames = int(scene.get("durationInFrames", int(round(seg.duration * fps))))
+        if (scene.get("media") or {}).get("type") == "animation":
+            # The beat already IS a graphic (timeline.build filled it): no
+            # overlay on top, but it counts against the rhythm like a card.
+            anim = scene.get("animation") or {}
+            t = templates.get(anim.get("template") or "")
+            treatments.append({
+                "primaryType": "animation", "secondaryType": t["category"].lower() if t else None,
+                "template": anim.get("template"), "variant": anim.get("variant") or anim.get("style"),
+                "entrance": anim.get("motion"), "exit": anim.get("exit"),
+                "duration": round(scene_frames / fps, 2), "emphasis": "high", "animation": anim.get("motion"),
+                "data": {k: anim[k] for k in ("value", "suffix", "items") if k in anim},
+                "text": str(anim.get("text") or ""),
+                "mapData": {"locations": anim.get("locations")} if anim.get("locations") else None,
+                "chartData": None, "overlays": [], "transitionIn": scene.get("transition", "none"),
+                "transitionOut": "none", "sfx": None, "musicCue": None,
+            })
+            if t:
+                rhythm.note(at, t, scene_frames / fps)
+                used_recently[t["id"]] = at
+            continue
         chosen: Optional[dict] = None
         chosen_id = ""
         props: dict = {}
@@ -401,6 +432,62 @@ def _plan_music(segments: List[Segment], brief: Optional[dict], fps: int, total:
     return {"sections": out, "duck": 0.55}
 
 
+def wants_animation(seg, shot: dict, asset, brief: Optional[dict]) -> bool:
+    """
+    Should this beat be a full-screen animation scene instead of footage?
+    Yes when the line carries a strong cue (a figure, a change, a date, a
+    mapped place, a quote, a chapter) and the footage found for it is weak:
+    nothing, a still borrowed for the beat, or a clip the vision judge rated
+    under ANIMATION_OVER_FOOTAGE_BELOW. VidRush's timelines put such beats in
+    the video track as animation blocks, not as tags over an unrelated shot.
+    """
+    if not config.ANIMATION_FILL:
+        return False
+    if asset is None:
+        return True
+    score = getattr(asset, "relevance_score", None)
+    weak = score is not None and float(score) < config.ANIMATION_OVER_FOOTAGE_BELOW
+    if not weak and not getattr(asset, "review_required", False):
+        return False
+    hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else None
+    if hint and hint.get("type") == "map" and (hint.get("locations") or hint.get("places")):
+        return True
+    return any(c["cue"] in STRONG_CUES and c["emphasis"] == "high" for c in cues_for(seg, shot, brief))
+
+
+def animation_for(seg, shot: dict, pack: dict, brief: Optional[dict]) -> dict:
+    """
+    A full-screen motion graphic for a beat with no footage. What the line
+    says decides: a map for a place the director mapped, a number card for a
+    figure, a date card for a date, a quote card for a quote; otherwise the
+    line itself typed on a card. Only card and map templates qualify (a tag
+    is made to ride on footage, not to be the frame).
+    """
+    pack = pack or {}
+    hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else None
+    tid, props = "", {}
+    if hint and hint.get("type") == "map" and (hint.get("locations") or hint.get("places")):
+        tid = _from_hint(hint, pack, len(hint.get("locations") or hint.get("places") or []), seg.text) or ""
+        props = _hint_props(hint)
+    if not tid:
+        for cue in cues_for(seg, shot, brief):
+            cand = _template_for_cue(cue["cue"], pack, set())
+            t = templates.get(cand or "")
+            if t and t["kind"] in CARD_KINDS:
+                tid, props = t["id"], dict(cue["props"])
+                break
+    if not tid:
+        text = (seg.text or "").strip()
+        subject = (shot.get("subject") or "").strip()
+        tid = "TEXT_TYPEWRITER_V1"
+        props = {"text": text[:110] if len(text) <= 110 or not subject else subject}
+    resolved = templates.resolve(tid, style=str(pack.get("caption") or ""), props=props, pack=pack)
+    resolved.pop("seconds", None)
+    resolved.pop("sfx", None)
+    resolved.pop("_motion", None)
+    return resolved
+
+
 def counts(scenes: List[dict], overlays: List[dict], sfx: List[dict], music: dict,
            treatments: List[dict]) -> Dict[str, Any]:
     cat = {}
@@ -409,6 +496,7 @@ def counts(scenes: List[dict], overlays: List[dict], sfx: List[dict], music: dic
         c = t["category"] if t else "OTHER"
         cat[c] = cat.get(c, 0) + 1
     footage = sum(1 for s in scenes if (s.get("media") or {}).get("type") == "video")
+    animations = sum(1 for s in scenes if (s.get("media") or {}).get("type") == "animation")
     stills = [s for s in scenes if (s.get("media") or {}).get("type") == "image"]
     image_treated = sum(1 for s in stills if (s.get("motion") or "none") != "none" or (s.get("effect") or "none") != "none")
     transitions = sum(1 for s in scenes if (s.get("transition") or "none") != "none")
@@ -416,10 +504,11 @@ def counts(scenes: List[dict], overlays: List[dict], sfx: List[dict], music: dic
     data = sum(cat.get(c, 0) for c in ("NUMBERS", "CHARTS", "COMPARISONS", "TIMELINES"))
     return {
         "scenes": len(scenes), "footage_scenes": footage, "image_scenes": len(stills),
+        "animation_scenes": animations,
         "text_treatments": text, "maps": cat.get("MAPS", 0), "data_graphics": data,
         "callouts": cat.get("CALLOUTS", 0), "image_treatments": image_treated,
         "transitions": transitions, "sfx": len(sfx), "music_cues": len(music.get("sections") or []),
-        "total_treatments": len(overlays) + image_treated + transitions,
+        "total_treatments": len(overlays) + image_treated + transitions + animations,
         "by_category": cat,
         "unique_templates": len({ov.get("template") for ov in overlays if ov.get("template")}),
     }

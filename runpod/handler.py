@@ -473,7 +473,7 @@ def _fill_missing_media(doc: dict) -> int:
     """
     scenes = doc.get("scenes", [])
     have = [i for i, s in enumerate(scenes)
-           if (s.get("media") or {}).get("type") != "color"]
+           if (s.get("media") or {}).get("type") in ("video", "image")]
     if not have:
         # Nothing was sourced anywhere in the whole video - there is no clip
         # to borrow. Never leave this as a black hole: give each empty scene
@@ -501,6 +501,23 @@ def _fill_missing_media(doc: dict) -> int:
     patched = 0
     for i, s in enumerate(scenes):
         if (s.get("media") or {}).get("type") == "color":
+            if config.ANIMATION_FILL and config.TREATMENTS:
+                # A graphic over the line beats a repeated clip (and never
+                # goes stale the way a borrowed shot of something else does).
+                from src import treatments as vt
+                pack = vt.pack_for(doc.get("meta", {}).get("brief") or {}, str(doc.get("meta", {}).get("stylePack") or ""))
+                fps = max(1, int(doc.get("fps") or 30))
+                sf, df = int(s.get("startFrame") or 0), int(s.get("durationInFrames") or 0)
+                seg = type("Seg", (), {"text": s.get("text") or "", "start": sf / fps,
+                                       "end": (sf + df) / fps, "duration": df / fps})()
+                shot = {"subject": (s.get("semanticMetadata") or {}).get("subject") or ""}
+                s["media"] = {"type": "animation", "url": "", "source": "template"}
+                s["animation"] = vt.animation_for(seg, shot, pack, None)
+                s["visualType"] = "animation"
+                s["reviewRequired"] = True
+                s["reviewReason"] = "No footage found — a motion graphic fills this beat (keep it or replace the clip)"
+                patched += 1
+                continue
             want = subject_of(i)
             same_subject = [h for h in have if want and subject_of(h) == want]
             pool = same_subject or have
@@ -1150,8 +1167,9 @@ def _keep_in_library(doc: dict, report: Reporter) -> None:
     try:
         report("Keeping clips for future videos", 61)
         events.phase("library")
-        if lib.record_from_doc(doc):
-            lib.save()
+        # New good clips are added; clips the job reused are marked used.
+        lib.record_from_doc(doc)
+        lib.save()
     except Exception as e:  # noqa: BLE001 - the library must never fail a video
         print(f"[library] skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
 # The planned timeline of the current build, returned on failure in QA mode

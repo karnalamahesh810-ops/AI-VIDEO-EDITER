@@ -2,117 +2,22 @@ import React from "react";
 import { AbsoluteFill, Audio, Sequence, staticFile, useVideoConfig } from "remotion";
 import { SceneClip } from "./components/SceneClip";
 import { Captions } from "./components/Captions";
-import { TitleOverlay } from "./components/TitleOverlay";
-import { CalloutOverlay } from "./components/CalloutOverlay";
-import { TypewriterTitle } from "./components/TypewriterTitle";
-import { SplitScreen } from "./components/SplitScreen";
-import { ChapterCard } from "./components/ChapterCard";
-import { StatOverlay } from "./components/StatOverlay";
-import { BarChartOverlay } from "./components/BarChartOverlay";
-import { ComparisonOverlay } from "./components/ComparisonOverlay";
-import { MapOverlay } from "./components/MapOverlay";
-import { QuoteOverlay } from "./components/QuoteOverlay";
-import { TimelineOverlay } from "./components/TimelineOverlay";
-import { HighlightOverlay } from "./components/HighlightOverlay";
-import { LowerThird } from "./components/LowerThird";
-import { ArrowOverlay } from "./components/ArrowOverlay";
-import { SentenceHighlight } from "./components/SentenceHighlight";
-import { ArticleZoom } from "./components/ArticleZoom";
-import { DateStamp } from "./components/DateStamp";
-import { DocumentaryMap } from "./components/DocumentaryMap";
-import { PhotoCard, NameCard, TimeRuler, ObjectCallout, EditorialChapter } from "./components/ReferenceGraphics";
-import { Bullets, LabelBoxes, RingStat, StatTag } from "./components/FootageTags";
-import { AgeTag, BarTitle, ClockBadge, Kicker, MemoBox, PersonTag, RedStrip, SwooshTitle, UnderlineTitle, WordType } from "./components/TextGraphics";
-
-import { IconPop, LineChart, PathSteps, ProgressSteps, Span } from "./components/DataGraphics";
-import { AreaChart, Banner, Counter, Donut, IconArray, NumberRoll, ProgressBar, Ranking, ScaleCompare, Trend, YearRoll } from "./components/MotionGraphics";
-import { SatelliteMap, SpreadMap } from "./components/MapLooks";
 import { MotionWrap } from "./components/MotionWrap";
 import { resolveOverlay } from "./templates";
-
-const THEMES: Record<string, string> = {
-  gold: "#d6a83c", red: "#e63946", teal: "#2ec4b6", blue: "#2f80ed", white: "#f4f1ea", amber: "#f4a100",
-};
-
-const PERSON_TAGS = new Set(["tag", "line", "serif", "chyron"]);
+import { OVERLAYS, accentFor } from "./overlays";
 import type { Overlay, OverlayType, TimelineProps } from "./types";
 
-/**
- * Overlay type -> component.
- *
- * A lookup rather than a switch so the keys can be type-checked against
- * OverlayType: adding a template to types.ts without wiring it here becomes a
- * compile error instead of a title card appearing where a chart should be.
- * The Python test suite checks this same set against director.TEMPLATES.
- */
-const OVERLAYS: Record<
-  OverlayType,
-  React.FC<{ overlay: Overlay; accent: string }>
-> = {
-  title: TitleOverlay,
-  chapter: (p) => p.overlay.variant ? <EditorialChapter {...p}/> : <ChapterCard {...p}/>,
-  callout: CalloutOverlay,
-  typewriter: TypewriterTitle,
-  stat: StatOverlay,
-  "bar-chart": BarChartOverlay,
-  comparison: ComparisonOverlay,
-  map: (p) => {
-    const v = p.overlay.variant || "";
-    if (v.startsWith("satellite")) return <SatelliteMap {...p}/>;
-    if (v.startsWith("spread")) return <SpreadMap {...p}/>;
-    return v ? <DocumentaryMap {...p}/> : <MapOverlay {...p}/>;
-  },
-  quote: QuoteOverlay,
-  timeline: (p) => p.overlay.variant === 'ruler' ? <TimeRuler {...p}/> : <TimelineOverlay {...p}/>,
-  highlight: HighlightOverlay,
-  "lower-third": (p) => PERSON_TAGS.has(p.overlay.variant || "") ? <PersonTag {...p}/> : <LowerThird {...p}/>,
-  arrow: (p) => p.overlay.anchor ? <ObjectCallout {...p}/> : <ArrowOverlay {...p}/>,
-  "sentence-highlight": SentenceHighlight,
-  "article-zoom": ArticleZoom,
-  "date-stamp": DateStamp,
-  "photo-card": PhotoCard,
-  "name-card": NameCard,
-  "stat-tag": StatTag,
-  "label-boxes": LabelBoxes,
-  "ring-stat": RingStat,
-  bullets: Bullets,
-  "swoosh-title": SwooshTitle,
-  kicker: Kicker,
-  "memo-box": MemoBox,
-  "word-type": WordType,
-  "underline-title": UnderlineTitle,
-  "bar-title": BarTitle,
-  "age-tag": AgeTag,
-  "clock-badge": ClockBadge,
-  "red-strip": RedStrip,
-  "line-chart": LineChart,
-  "path-steps": PathSteps,
-  "progress-steps": ProgressSteps,
-  span: Span,
-  "icon-pop": IconPop,
-  donut: Donut,
-  "area-chart": AreaChart,
-  "progress-bar": ProgressBar,
-  "icon-array": IconArray,
-  ranking: Ranking,
-  counter: Counter,
-  "number-roll": NumberRoll,
-  trend: Trend,
-  "year-roll": YearRoll,
-  banner: Banner,
-  "scale-compare": ScaleCompare,
-  // Split takes its two media entries rather than a text payload, so it gets
-  // a small adapter instead of the shared signature.
-  split: ({ overlay, accent }) =>
-    overlay.media && overlay.media.length >= 2 ? (
-      <SplitScreen top={overlay.media[0]} bottom={overlay.media[1]} accent={accent} />
-    ) : null,
-};
+const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
 
-const renderOverlay = (raw: Overlay, accent: string) => {
+const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scenes"]) => {
   // An overlay that names a template gets its unset fields from the
   // registry, so the editor's pick and the planner's draw the same way.
-  const ov = resolveOverlay(raw);
+  let ov = resolveOverlay(raw);
+  if (PHOTO_CARDS.has(ov.type) && !(ov.media && ov.media.length)) {
+    // A photo or person card dropped on a scene borrows that scene's image.
+    const under = scenes.find((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
+    if (under && under.media.type === "image" && under.media.url) ov = { ...ov, media: [under.media] };
+  }
   const Component = OVERLAYS[ov.type];
   // A document can arrive from the editor or an older schema, so an unknown
   // type is possible at runtime even though it is not at compile time.
@@ -120,7 +25,7 @@ const renderOverlay = (raw: Overlay, accent: string) => {
   return (
     <MotionWrap motion={ov.motion} exit={ov.exit} speed={ov.speed}
       placement={{ position: ov.position, scale: ov.scale, opacity: ov.opacity }}>
-      <Component overlay={ov} accent={THEMES[ov.theme || ""] || accent} />
+      <Component overlay={ov} accent={accentFor(ov, accent)} />
     </MotionWrap>
   );
 };
@@ -184,7 +89,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           durationInFrames={scene.durationInFrames}
           premountFor={premount}
         >
-          <SceneClip scene={scene} />
+          <SceneClip scene={scene} accent={captions.accent} />
         </Sequence>
       ))}
 
@@ -208,7 +113,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           durationInFrames={ov.durationInFrames}
           premountFor={premount}
         >
-          {renderOverlay(ov, captions.accent)}
+          {renderOverlay(ov, captions.accent, scenes)}
         </Sequence>
       ))}
 

@@ -413,7 +413,24 @@ export const Counter: React.FC<P> = ({ overlay, accent }) => {
   const s = useScale();
   const v = overlay.variant || "split";
   const [a, b] = numbered(overlay.items);
-  if (!a || !b) return null;
+  if (!a || !b) {
+    // One figure, no before/after: the big number counts up (NUM_BIG_COUNTER_V1).
+    if (!Number.isFinite(overlay.value)) return null;
+    const target = overlay.value as number;
+    const g = ease(frame, fps * 0.1, fps * 1.4);
+    const sufOne = overlay.suffix || "";
+    return (
+      <AbsoluteFill style={{ opacity, alignItems: "center", justifyContent: "center", gap: s(18),
+        background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,.55) 0%, rgba(0,0,0,.15) 60%, rgba(0,0,0,0) 100%)" }}>
+        <div style={{ fontFamily: NARROW, fontWeight: 700, fontSize: s(260), lineHeight: 1, color: INK,
+          textShadow: TEXT_SHADOW, letterSpacing: "-0.01em" }}>
+          {formatNumber(target * g)}{sufOne}
+        </div>
+        <div style={{ width: s(140 + 260 * g), height: s(5), background: accent || "#d6a83c" }} />
+        <Heading text={overlay.text} s={s} show={ease(frame, fps * 0.5, fps * 0.4)} size={52} />
+      </AbsoluteFill>
+    );
+  }
   const change = a.value ? ((b.value - a.value) / Math.abs(a.value)) * 100 : 0;
   const down = b.value < a.value;
   const tone = down ? RED : GREEN;
@@ -601,15 +618,15 @@ export const Banner: React.FC<P> = ({ overlay, accent }) => {
   const blink = v === "live" ? 0.4 + 0.6 * Math.abs(Math.sin(frame / 8)) : 1;
   return (
     <AbsoluteFill style={{ opacity }}>
-      <div style={{ position: "absolute", left: s(70), top: s(80), display: "flex", alignItems: "stretch",
-        transform: `translateX(${(1 - slide) * -s(900)}px)`, boxShadow: "0 18px 50px rgba(0,0,0,.55)" }}>
-        <div style={{ background: tagBg, color: "#fff", fontFamily: INTER, fontWeight: 900, fontSize: s(40),
-          letterSpacing: "0.1em", padding: `${s(16)}px ${s(30)}px`, display: "flex", alignItems: "center", gap: s(14) }}>
+      <div style={{ position: "absolute", left: s(90), top: s(96), display: "flex", alignItems: "stretch",
+        transform: `translateX(${(1 - slide) * -s(900)}px)`, boxShadow: "0 22px 60px rgba(0,0,0,.55)" }}>
+        <div style={{ background: tagBg, color: "#fff", fontFamily: INTER, fontWeight: 900, fontSize: s(50),
+          letterSpacing: "0.12em", padding: `${s(20)}px ${s(38)}px`, display: "flex", alignItems: "center", gap: s(16) }}>
           {v === "live" ? <span style={{ width: s(22), height: s(22), borderRadius: "50%", background: "#fff", opacity: blink }} /> : null}
           {tag}
         </div>
         <div style={{ background: "rgba(250,250,247,.97)", color: "#111", fontFamily: NARROW, fontWeight: 700,
-          fontSize: s(50), padding: `${s(12)}px ${s(34)}px`, maxWidth: s(1300), textTransform: "uppercase",
+          fontSize: s(64), padding: `${s(14)}px ${s(42)}px`, maxWidth: s(1400), textTransform: "uppercase",
           clipPath: `inset(0 ${(1 - textIn) * 100}% 0 0)`, borderBottom: `${s(6)}px solid ${accent || tagBg}` }}>
           {overlay.text}
         </div>

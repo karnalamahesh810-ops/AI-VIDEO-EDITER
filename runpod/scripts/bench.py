@@ -21,6 +21,14 @@ import re
 import statistics
 import subprocess
 import sys
+
+# Windows consoles default to cp1252; a metrics line with a non-Latin
+# character must not kill a benchmark run after the job has finished.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 import time
 from typing import Dict, List, Optional
 
