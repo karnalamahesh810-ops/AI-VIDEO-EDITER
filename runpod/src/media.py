@@ -37,7 +37,7 @@ import urllib.parse
 import uuid
 import requests
 
-from . import config, intent, moments, vision
+from . import candidates, config, intent, moments, vision
 from .storage import download
 
 
@@ -221,6 +221,11 @@ class MediaAsset:
     # Runner-up clips that also passed the judge (id, url, scores and
     # description, never the files), for Replace Clip.
     alternatives: List[dict] = field(default_factory=list)
+    # The combined score that chose this clip over the others that passed
+    # (src/candidates.py), its parts, and a summary of the pool it came from.
+    final_score: Optional[float] = None
+    score_parts: Dict[str, float] = field(default_factory=dict)
+    pool: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def identity(self) -> str:
@@ -1608,13 +1613,19 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
     """
     if not passed:
         return None
-    ranked = sorted(passed, key=lambda a: vision.appeal(a.relevance_score, a.quality),
-                    reverse=True)
+
+    def rank(a: MediaAsset) -> float:
+        # The combined score when the pool computed one; the judge's appeal
+        # (relevance first, quality second) for clips found the old way.
+        return a.final_score if a.final_score is not None else vision.appeal(a.relevance_score, a.quality)
+
+    ranked = sorted(passed, key=rank, reverse=True)
     winner, losers = ranked[0], ranked[1:]
     for a in losers:
         winner.alternatives.append({
             "assetId": a.identity, "url": a.url, "title": (a.attribution or "")[:120],
-            "score": a.relevance_score, "quality": a.quality,
+            "score": a.relevance_score, "quality": a.quality, "finalScore": a.final_score,
+            "specificity": a.specificity,
             "description": (a.content_description or "")[:160], "source": a.source})
         try:
             if a.local_path and os.path.exists(a.local_path):
@@ -1676,6 +1687,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     # an era or an event is, ahead of general uploads.
     if _story_channels() and not require_cc:
         searches.insert(0, (query_or_url, "channels", False))
+
+    if config.CANDIDATE_POOL:
+        return _youtube_pool(query_or_url, out_dir, seconds, start_at, require_cc, skip,
+                             used, intent, context, subject, searches)
 
     judged = 0
     passed: List[MediaAsset] = []
@@ -1990,6 +2005,110 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
     return None
 
 
+def _search_target(search: str, require_cc: bool, this_year: bool) -> str:
+    if require_cc:
+        # yt-dlp's flat search extractor reports license=NA for every hit,
+        # so a CC match-filter over ytsearch rejects everything. YouTube's
+        # own results page with its CC filter populates the field.
+        return ("https://www.youtube.com/results?search_query="
+                + urllib.parse.quote_plus(search) + "&sp=EgIwAQ%3D%3D")
+    if this_year:
+        return ("https://www.youtube.com/results?search_query="
+                + urllib.parse.quote_plus(search) + "&sp=" + _YT_THIS_YEAR)
+    return f"ytsearch12:{search}"
+
+
+def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
+                  require_cc: bool, skip: int, used: Optional[set], intent_text: str,
+                  context: str, subject: str, searches: List[tuple]) -> Optional[MediaAsset]:
+    """
+    The candidate-pool way to find a clip (src/candidates.py).
+
+    Every search variant and the intent's own expanded searches run first and
+    their results are pooled and deduplicated; the pool is ranked on metadata
+    against the typed intent; the best few are scouted and judged; and the
+    combined score - not the order the searches happened to return - picks
+    the winner. The runners-up stay with the scene as alternatives.
+    """
+    si = intent.SceneIntent.from_dict(_SCENE_INTENT.get()) if _SCENE_INTENT.get() else None
+    pool = candidates.CandidatePool(si, query, seconds, used=used)
+    targets = list(searches)
+    if si and config.POOL_EXTRA_QUERIES > 0 and not require_cc:
+        for q in si.queries(query)[1:1 + config.POOL_EXTRA_QUERIES]:
+            targets.append((q, "intent", False))
+
+    def fetch_one(t):
+        search, variant, this_year = t
+        if variant == "channels":
+            return t, _channel_candidates(search, _story_channels(), subject), "channel"
+        return t, _yt_candidates_cached(_search_target(search, require_cc, this_year),
+                                        require_cc, subject, variant), "search"
+
+    with ThreadPoolExecutor(max_workers=max(1, min(4, len(targets)))) as ex:
+        for t, rows, via in ex.map(fetch_one, targets):
+            pool.add(rows, query=t[0], variant=t[1], via=via)
+
+    ranked = [c for c in pool.ranked()
+              if not _stock_seller(c.title, c.channel) and not _talking_head(c.title)
+              and not (c.aspect and c.aspect < 1.2)]
+    if skip:
+        ranked = ranked[skip:] + ranked[:skip]
+    if not ranked:
+        return None
+    print(f"[pool] {len(pool)} candidates from {pool.searches} searches; "
+          f"best meta {ranked[0].metadata:.2f} {ranked[0].title[:50]!r}", flush=True)
+
+    grab = max(2.0, seconds + 1.5)
+    scouts = ranked[:max(1, config.POOL_SCOUT)]
+    by_id = {c.id: c for c in scouts}
+    plan = _plan_grabs([c.row() for c in scouts], grab, start_at, intent_text, context)
+    story_kind = _STORY_KIND["kind"]
+    passed: List[MediaAsset] = []
+    judged = 0
+    for row, point, moment in plan:
+        if judged >= config.VISION_MAX_CANDIDATES or _scene_cap_reached() or _good_enough(passed):
+            break
+        c = by_id[row["id"]]
+        path = _yt_fetch_retry(c.id, out_dir, point, grab, c.title)
+        if not path:
+            continue
+        if has_burned_captions(path):
+            print(f"[media] hardsubs, skipping: {c.title[:60]}", flush=True)
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
+        judged += 1
+        _count_judged()
+        keep, verdict = _vision_gate(path, intent_text, context, c.title)
+        if not keep:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
+        asset = _asset_for(path, query, grab, require_cc, title=c.title)
+        asset.url = f"https://www.youtube.com/watch?v={c.id}&t={int(point)}"
+        asset.apply_verdict(verdict, intent_text)
+        penalty = candidates.reuse_penalty(f"yt:{c.id}", c.channel, used, used_channels=_USED_CHANNELS)
+        asset.final_score, asset.score_parts = candidates.final_score(
+            asset.relevance_score, asset.quality, (moment or {}).get("score"), c.parts,
+            asset.specificity, story_kind, penalty=penalty)
+        asset.score_parts["meta"] = round(c.metadata, 3)
+        asset.pool = pool.summary()
+        print(f"[pool] judged {c.id} final {asset.final_score:.2f} "
+              f"(visual {asset.relevance_score or 0:.2f}, meta {c.metadata:.2f}, "
+              f"{asset.specificity or 'unclassed'})", flush=True)
+        passed.append(asset)
+    winner = _best_of(passed)
+    if winner is not None:
+        chan = by_id.get(winner.identity[3:], None)
+        if chan is not None and chan.channel:
+            _USED_CHANNELS.add(chan.channel)
+    return winner
+
+
 def _asset_for(path: str, query: str, seconds: float, require_cc: bool,
                title: str = "") -> MediaAsset:
     return MediaAsset(
@@ -2113,6 +2232,8 @@ _GENERATED = [0]
 # exactly like one with no matches: a 362-scene job lost 300 photo scenes and
 # nothing said which source failed or why.
 _SOURCE_STATS: Dict[str, Dict[str, Any]] = {}
+# Channels whose footage the video already uses (a reuse penalty, not a bar).
+_USED_CHANNELS: set = set()
 
 
 def _source_stat(name: str) -> Dict[str, Any]:
@@ -2141,6 +2262,7 @@ def reset_cache():
         _YT_CANDIDATES_CACHE.clear()
         _GOOGLE_VIDEO_CACHE.clear()
         _SOURCE_STATS.clear()
+        _USED_CHANNELS.clear()
         _GENERATED[0] = 0
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats

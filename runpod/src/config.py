@@ -202,6 +202,29 @@ EXCELLENT_SCORE = float(os.getenv("EXCELLENT_SCORE", "0.9"))
 JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "6"))
 # Searches a typed scene intent expands to (src/intent.py), specific first.
 INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
+# The candidate pool (src/candidates.py): every search variant plus
+# POOL_EXTRA_QUERIES of the intent's own searches are pooled and ranked on
+# metadata before the best POOL_SCOUT are scouted and judged. Off restores the
+# search-by-search order (kept for A/B benchmarks). Weights are JSON maps.
+CANDIDATE_POOL = _flag("CANDIDATE_POOL", True)
+POOL_EXTRA_QUERIES = int(os.getenv("POOL_EXTRA_QUERIES", "3"))
+POOL_SCOUT = int(os.getenv("POOL_SCOUT", "5"))
+
+
+def _json_env(name: str):
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    try:
+        import json as _json
+        value = _json.loads(raw)
+        return value if isinstance(value, dict) else None
+    except ValueError:
+        return None
+
+
+META_WEIGHTS = _json_env("META_WEIGHTS")
+FINAL_WEIGHTS = _json_env("FINAL_WEIGHTS")
 
 # Moment selection: read the video's storyboard (YouTube's hover-preview
 # thumbnails, ~1/sec, a few hundred KB) and let the vision model pick the
