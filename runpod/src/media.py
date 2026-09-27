@@ -1268,6 +1268,65 @@ def _channel_candidates(query: str, channels: List[str], subject: str = "") -> L
     return merged
 
 
+_GOOGLE_VIDEO_CACHE: Dict[str, List[dict]] = {}
+
+
+def search_google_videos(query: str, limit: int = 10) -> List[dict]:
+    """
+    Google's video search (Bright Data SERP zone): [{url, title, site, seconds}].
+
+    A second finder beside yt-dlp's own search: on "Lake Mead drought aerial
+    footage" it returned 8 YouTube videos the flat search had not, plus
+    TikTok/Facebook clips. One paid call per distinct query, cached per job.
+    """
+    if not (config.BRIGHTDATA_API_KEY and config.BRIGHTDATA_SERP_ZONE and query.strip()):
+        return []
+    key = query.strip().lower()
+    with _CACHE_LOCK:
+        if key in _GOOGLE_VIDEO_CACHE:
+            return _GOOGLE_VIDEO_CACHE[key]
+    rows: List[dict] = []
+    try:
+        r = requests.post(
+            "https://api.brightdata.com/request",
+            headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw",
+                  "url": "https://www.google.com/search?tbm=vid&brd_json=1&q="
+                         + urllib.parse.quote_plus(query)},
+            timeout=150)
+        r.raise_for_status()
+        for it in (r.json().get("organic") or [])[:limit]:
+            url = it.get("link") or ""
+            if not url.startswith("http"):
+                continue
+            secs = it.get("duration_sec")
+            if not secs and it.get("duration"):
+                parts = [int(p) for p in re.findall(r"\d+", str(it["duration"]))]
+                secs = sum(p * 60 ** i for i, p in enumerate(reversed(parts))) if parts else 0
+            rows.append({"url": url, "title": (it.get("title") or "")[:200],
+                         "site": urllib.parse.urlparse(url).netloc.replace("www.", ""),
+                         "seconds": float(secs or 0)})
+    except (requests.RequestException, ValueError) as e:
+        _source_error("search_google_videos", e)
+        rows = []
+    with _CACHE_LOCK:
+        _GOOGLE_VIDEO_CACHE[key] = rows
+    return rows
+
+
+def _google_youtube_candidates(query: str) -> List[dict]:
+    """YouTube videos Google finds for the query, shaped like _yt_candidates rows."""
+    out = []
+    for row in search_google_videos(query):
+        m = re.search(r"youtube\.com/watch\?v=([\w-]{11})", row["url"])
+        if not m:
+            continue
+        out.append({"id": m.group(1), "duration": row["seconds"], "aspect": 0.0,
+                    "title": row["title"], "channel": "", "via": "google"})
+    return out
+
+
 def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
                           variant: str = "") -> List[dict]:
     """
@@ -1284,6 +1343,13 @@ def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
             if key in _YT_CANDIDATES_CACHE:
                 return _YT_CANDIDATES_CACHE[key]
     found = _yt_candidates(target, require_cc)
+    # Google finds YouTube videos yt-dlp's own search misses; they join the
+    # list after the direct hits (never for a Creative-Commons-only search,
+    # whose licence filter Google cannot apply).
+    if not require_cc and target.startswith("ytsearch"):
+        have = {c["id"] for c in found}
+        found = found + [c for c in _google_youtube_candidates(target.split(":", 1)[-1])
+                         if c["id"] not in have]
     if subject:
         with _CACHE_LOCK:
             _YT_CANDIDATES_CACHE[key] = found
@@ -1916,6 +1982,7 @@ def reset_cache():
         _SEARCH_CACHE.clear()
         _YT_INFO_CACHE.clear()
         _YT_CANDIDATES_CACHE.clear()
+        _GOOGLE_VIDEO_CACHE.clear()
         _SOURCE_STATS.clear()
         _GENERATED[0] = 0
     vision.reset()  # per-job call/failure counts for the job result
