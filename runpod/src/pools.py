@@ -86,9 +86,7 @@ def candidates(subject: str, require_cc: bool, skip_ids: Set[str]) -> List[dict]
                 continue
             seen.add(vid)
             title = c.get("title") or ""
-            if media._talking_head(title) or media._stock_seller(title, c.get("channel", "")):
-                continue
-            if c.get("aspect") and c["aspect"] < 1.2:
+            if not media._usable_title(title, c.get("channel", ""), c.get("aspect") or 0.0):
                 continue
             if c.get("duration") and c["duration"] < 60:
                 continue

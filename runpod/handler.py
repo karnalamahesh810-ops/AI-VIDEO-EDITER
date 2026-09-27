@@ -1613,6 +1613,9 @@ def handler(job):
                 **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {}),
                 **({"timeline": dict(LAST_TIMELINE)} if inp.get("return_frames") and LAST_TIMELINE else {})}
     finally:
+        # Stragglers a time box left running get a bounded moment to finish
+        # before the work directory goes and the next job starts.
+        media.drain_pools(config.DRAIN_SECONDS)
         _restore_config(config_before)
         events.phase("")
         try:

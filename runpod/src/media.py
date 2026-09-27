@@ -859,6 +859,21 @@ _STOCK_SELLER = re.compile(
     re.IGNORECASE)
 
 
+def _usable_title(title: str, channel: str = "", aspect: float = 0.0) -> bool:
+    """
+    The one title-and-shape check every source applies before spending
+    anything: not a stock seller's listing, not a talking head, not
+    vertical. It was written five times with small drifts between them.
+    """
+    if _stock_seller(title or "", channel or ""):
+        return False
+    if _talking_head(title or ""):
+        return False
+    if aspect and aspect < 1.2:
+        return False                        # vertical, unusable in 16:9
+    return True
+
+
 def _stock_seller(*texts: str) -> bool:
     return any(t and _STOCK_SELLER.search(t) for t in texts)
 
@@ -1373,12 +1388,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # documentary. No clip is better than the wrong clip - the caller
             # falls through to the next query, and the timeline holds the
             # previous shot.
-            if _stock_seller(candidate["title"], candidate.get("channel", "")):
+            if not _usable_title(candidate["title"], candidate.get("channel", ""), candidate["aspect"]):
                 continue
-            if _talking_head(candidate["title"]):
-                continue
-            if candidate["aspect"] and candidate["aspect"] < 1.2:
-                continue                       # vertical, unusable in 16:9
             eligible.append(candidate)
         if not eligible:
             continue
@@ -1542,7 +1553,7 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
         page = f"https://www.dailymotion.com/video/{c['id']}"
         if used and f"dailymotion:{page}" in used:
             continue
-        if _talking_head(c["title"]) or (c["aspect"] and c["aspect"] < 1.2):
+        if not _usable_title(c["title"], c.get("channel", ""), c["aspect"]):
             continue
         if c["duration"] and c["duration"] < grab + 4:
             continue
@@ -1714,9 +1725,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
 
     tried = _scene_tried()
     ranked = [c for c in pool.ranked()
-              if c.id not in tried
-              and not _stock_seller(c.title, c.channel) and not _talking_head(c.title)
-              and not (c.aspect and c.aspect < 1.2)]
+              if c.id not in tried and _usable_title(c.title, c.channel, c.aspect)]
     if skip:
         ranked = ranked[skip:] + ranked[:skip]
     if not ranked:
@@ -2229,6 +2238,43 @@ def _asset_ok(asset) -> tuple:
 LAST_STATS: Dict[str, Any] = {}
 
 
+# Thread pools that a time box leaves running. They are shut down without
+# waiting (a hung download must not hold the video), tracked here, and
+# drained for a bounded time when the job ends so stragglers do not run on
+# into the next job on this process.
+_LIVE_POOLS: List[ThreadPoolExecutor] = []
+_POOLS_LOCK = threading.Lock()
+
+
+def _new_pool(workers: int) -> ThreadPoolExecutor:
+    pool = ThreadPoolExecutor(max_workers=max(1, workers))
+    with _POOLS_LOCK:
+        _LIVE_POOLS.append(pool)
+    return pool
+
+
+def drain_pools(timeout: float = 15.0) -> int:
+    """Wait up to `timeout` seconds for the tracked pools' running work; returns how many were still busy."""
+    with _POOLS_LOCK:
+        pools, _LIVE_POOLS[:] = list(_LIVE_POOLS), []
+    if not pools:
+        return 0
+    busy = [0]
+
+    def close_all():
+        for pool in pools:
+            pool.shutdown(wait=True, cancel_futures=True)
+
+    t = threading.Thread(target=close_all, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        busy[0] = len(pools)
+        print(f"[media] {len(pools)} pool(s) still busy after {timeout:.0f}s; left to finish in the background",
+              flush=True)
+    return busy[0]
+
+
 def _budget(base: float, per_item: float, n: int) -> float:
     """
     A pass budget that grows with the video.
@@ -2341,7 +2387,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
 
         # Same straggler rule as pass 1: a pool still running at the budget
         # is abandoned and its lines fall through to the one-by-one search.
-        seq_pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        seq_pool = _new_pool(max(1, workers))
         futures = [seq_pool.submit(contextvars.copy_context().run, run_sequence, n, seq)
                    for n, seq in enumerate(sequences)]
         try:
@@ -2421,7 +2467,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # for over ten minutes on a single stalled scene. Stragglers are left
     # running in the background and their scenes fall through to the
     # recheck / fill steps below, which exist for exactly that.
-    pool = ThreadPoolExecutor(max_workers=max(1, workers))
+    pool = _new_pool(max(1, workers))
     futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
     started = time.time()
     deadline = started + _budget(config.PASS1_BUDGET_SECONDS, 3.0, len(pass1))
@@ -2537,7 +2583,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     if todo:
         if on_review:
             on_review(0, len(todo))
-        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        pool = _new_pool(max(1, workers))
         futures = {pool.submit(contextvars.copy_context().run, replace, *t): t for t in todo}
         try:
             for n, fut in enumerate(_until(futures, deadline + 15), 1):
@@ -2635,7 +2681,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             return got
 
         filled_by_ai = 0
-        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        pool = _new_pool(max(1, workers))
         futures = {pool.submit(contextvars.copy_context().run, rescue_one, job): job
                    for job in empties}
         try:
@@ -2848,9 +2894,7 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
     cands = _yt_candidates_cached(target, require_cc, "", variant=f"seq:{query}")
     eligible = [c for c in sorted(cands, key=lambda c: _score_candidate(
                     c["title"], c["duration"], c["aspect"], window), reverse=True)
-                if not _talking_head(c["title"])
-                and not _stock_seller(c["title"], c.get("channel", ""))
-                and not (c["aspect"] and c["aspect"] < 1.2)
+                if _usable_title(c["title"], c.get("channel", ""), c["aspect"])
                 and not (c["duration"] and c["duration"] < window + 10)
                 and f"yt:{c['id']}" not in used]
     shots: List[dict] = []

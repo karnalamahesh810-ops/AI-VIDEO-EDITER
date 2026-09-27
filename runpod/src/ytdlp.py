@@ -28,8 +28,15 @@ _INFO_LOCK = threading.Lock()
 _YT_INFO_CACHE: Dict[str, tuple] = {}
 
 
+# The job epoch. A download that started in one job and finishes after the
+# next began (a straggler left running past a time box) must not leave its
+# file in a work directory that is being, or has been, deleted.
+EPOCH = [0]
+
+
 def reset() -> None:
     """Between jobs: forget unavailable videos, the metadata cache and the counters."""
+    EPOCH[0] += 1
     with _INFO_LOCK:
         _YT_INFO_CACHE.clear()
     with _FAIL_LOCK:
@@ -411,6 +418,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     # option, so placed before them these were silently overridden by "2".
     cmd += ["--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3"]
     started = time.time()
+    epoch = EPOCH[0]
     try:
         with _NET_SEM:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
@@ -466,6 +474,15 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         return ""
     _release_proxy(proxy, True, None, started)
     _LAST_FAILURE.set(None)
+    if EPOCH[0] != epoch:
+        # The job this download belonged to has ended; its directory is gone
+        # or going. Nothing may be left behind for the next job.
+        try:
+            os.remove(found)
+        except OSError:
+            pass
+        print(f"[media] straggler download from an earlier job discarded ({video_id})", flush=True)
+        return ""
     try:
         costs.record("proxy.bytes", os.path.getsize(found))
     except OSError:

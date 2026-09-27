@@ -227,6 +227,8 @@ def _json_env(name: str):
         return None
 
 
+# How long a job waits at its end for downloads a time box left running.
+DRAIN_SECONDS = float(os.getenv("DRAIN_SECONDS", "15"))
 # Replace Clip: how many ranked choices a re-source returns (winner + rest).
 REPLACE_ALTERNATIVES = int(os.getenv("REPLACE_ALTERNATIVES", "5"))
 META_WEIGHTS = _json_env("META_WEIGHTS")
