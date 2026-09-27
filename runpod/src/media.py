@@ -1708,7 +1708,11 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     si = intent.SceneIntent.from_dict(_SCENE_INTENT.get()) if _SCENE_INTENT.get() else None
     pool = candidates.CandidatePool(si, query, seconds, used=used)
     targets = list(searches)
-    if si and config.POOL_EXTRA_QUERIES > 0 and not require_cc:
+    tried = _scene_tried()
+    # The intent's own expanded searches join the first attempt's pool only;
+    # a fallback attempt already has their results and adds its own query.
+    if si and config.POOL_EXTRA_QUERIES > 0 and not require_cc and "__intent_searched__" not in tried:
+        tried.add("__intent_searched__")
         for q in si.queries(query)[1:1 + config.POOL_EXTRA_QUERIES]:
             targets.append((q, "intent", False))
 
@@ -1723,7 +1727,6 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         for t, rows, via in ex.map(fetch_one, targets):
             pool.add(rows, query=t[0], variant=t[1], via=via)
 
-    tried = _scene_tried()
     ranked = [c for c in pool.ranked()
               if c.id not in tried and _usable_title(c.title, c.channel, c.aspect)]
     if skip:

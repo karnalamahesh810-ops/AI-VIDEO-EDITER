@@ -203,7 +203,7 @@ JUDGE_BEST_OF = int(os.getenv("JUDGE_BEST_OF", "2"))
 EXCELLENT_SCORE = float(os.getenv("EXCELLENT_SCORE", "0.9"))
 # Every model call a scene makes (scouting, the fine pass, judging) across
 # all its searches. The old-style search used about 10 per scene.
-JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "16"))
+JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "24"))
 # Searches a typed scene intent expands to (src/intent.py), specific first.
 INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # The candidate pool (src/candidates.py): every search variant plus
@@ -212,7 +212,9 @@ INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # search-by-search order (kept for A/B benchmarks). Weights are JSON maps.
 CANDIDATE_POOL = _flag("CANDIDATE_POOL", True)
 POOL_EXTRA_QUERIES = int(os.getenv("POOL_EXTRA_QUERIES", "3"))
-POOL_SCOUT = int(os.getenv("POOL_SCOUT", "5"))
+# Three, not five: a scout is a model call, and the first benchmark of the
+# pool showed scenes spending their budget on scouting before a download.
+POOL_SCOUT = int(os.getenv("POOL_SCOUT", "3"))
 
 
 def _json_env(name: str):

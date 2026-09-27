@@ -174,8 +174,14 @@ def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600,
         with open(video_path, "wb") as fh:
             fh.write(base64.b64decode(out["video_b64"]))
         print(f"[bench]   saved {video_path} ({os.path.getsize(video_path) / 1e6:.1f} MB)", flush=True)
+    ev = out.get("events") or {}
     return {"ok": True, "timeline": out.get("timeline") or {}, "elapsed": float(out.get("elapsed") or elapsed),
-            "job": jid, "video": video_path, "costs": out.get("costs"), "render_seconds": out.get("render_seconds")}
+            "job": jid, "video": video_path, "costs": out.get("costs"),
+            "events": {k: ev.get(k) for k in ("stage_seconds", "child_stage_seconds", "failures_by_class",
+                                             "providers", "errors") if k in ev},
+            "sourcing": ((out.get("timeline") or {}).get("meta") or {}).get("sourcing"),
+            "proxies": [{k: p.get(k) for k in ("proxy_id", "state", "success_rate", "failures")}
+                        for p in ((out.get("timeline") or {}).get("meta") or {}).get("proxies") or []]}
 
 
 def git_sha() -> str:
@@ -257,6 +263,9 @@ def main() -> int:
                 row["metrics"]["measured_credits"] = res["costs"].get("credits_measured")
                 row["metrics"]["worker_seconds"] = res["costs"].get("worker_seconds")
                 row["metrics"]["ledger_usd"] = res["costs"].get("total")
+            for k in ("events", "sourcing", "proxies"):
+                if res.get(k):
+                    row[k] = res[k]
         else:
             row["error"] = res.get("error", "")
             row["metrics"] = {"generation_s": round(res.get("elapsed", 0), 1)}
