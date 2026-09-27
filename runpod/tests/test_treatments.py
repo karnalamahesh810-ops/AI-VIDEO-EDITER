@@ -144,6 +144,15 @@ class TimelineIntegration(unittest.TestCase):
         self.assertIn("treatments", doc["meta"])
         self.assertEqual(doc["captions"]["style"], "news")
         self.assertEqual(doc["meta"]["stylePack"], "news")
+        # Music: a bundled track by the story's kind when the job names none.
+        with mock.patch.object(config, "TREATMENTS", True), mock.patch.object(config, "BGM_AUTO", True):
+            doc = build_doc(n=3, seconds=6.0, inp={"style_pack": "weather", "brief": {"kind": "weather"}})
+            self.assertEqual(doc["bgm"]["url"], "bgm://suspense")
+            doc = build_doc(n=3, seconds=6.0, inp={"style_pack": "history", "brief": {"kind": "history"},
+                                                  "bgm_url": "https://x/track.mp3"})
+            self.assertEqual(doc["bgm"]["url"], "https://x/track.mp3")
+            doc = build_doc(n=3, seconds=6.0, inp={"style_pack": "history", "bgm": False})
+            self.assertIsNone(doc["bgm"])
 
 
 if __name__ == "__main__":

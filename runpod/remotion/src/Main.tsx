@@ -214,7 +214,13 @@ export const Main: React.FC<TimelineProps> = (props) => {
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
       {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
-      {bgm?.url ? <Audio src={bgm.url} volume={makeMusicVolume(props)} loop /> : null}
+      {bgm?.url ? (
+        <Audio
+          src={bgm.url.startsWith("bgm://") ? staticFile(`bgm/${bgm.url.slice(6)}.mp3`) : bgm.url}
+          volume={makeMusicVolume(props)}
+          loop
+        />
+      ) : null}
       {props.sfxEnabled !== false && (props.sfx || []).map((fx, i) => (
         <Sequence key={`sfx-${i}`} from={Math.max(0, fx.startFrame)} durationInFrames={90} layout="none">
           <Audio src={staticFile(`sfx/${fx.name}.mp3`)}
