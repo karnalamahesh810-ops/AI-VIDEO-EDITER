@@ -639,7 +639,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             # whole job: its "Filling ... 65%" made the bar jump backwards.
             on_review=(lambda d, n: report(f"Filling empty or repeated scenes {d}/{n}", 65, done=d, total=n))
             if progress else None,
-            rescue=lambda items: director.rescue_queries(items, story=brief),
+            # A fan-out unit (progress=False) only finds: no rescue queries and
+            # no refill time box, the same rule as a part on another worker
+            # (commit 9757e11). Those ran here for minutes after every other
+            # part had finished. The final local fill keeps the full machinery.
+            rescue=(lambda items: director.rescue_queries(items, story=brief)) if progress else None,
+            refill=progress,
             on_recheck=(lambda n: report(f"Rechecking {n} missing scenes against the story", 66))
             if progress else None,
             sequences=local_seqs or None,
