@@ -39,5 +39,20 @@ class RenderCommand(unittest.TestCase):
         self.assertIn("--codec=aac", argv)
 
 
+class SplitAndProgress(unittest.TestCase):
+    def test_animation_scenes_do_not_keep_a_render_on_one_worker(self):
+        import handler
+        doc = {"scenes": [{"media": {"type": "animation", "url": "", "source": "template"}},
+                          {"media": {"type": "video", "url": "https://x/y.mp4"}},
+                          {"media": {"type": "color", "url": ""}}], "overlays": []}
+        self.assertTrue(handler._all_remote(doc))
+        doc["scenes"].append({"media": {"type": "video", "url": "/tmp/local.mp4"}})
+        self.assertFalse(handler._all_remote(doc))
+
+    def test_bundling_is_not_render_progress(self):
+        self.assertIsNone(render._render_progress("Bundling 100%"))
+        self.assertAlmostEqual(render._render_progress("Rendered 50/100, time remaining: 1m"), 0.4)
+
+
 if __name__ == "__main__":
     unittest.main()

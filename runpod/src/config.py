@@ -373,6 +373,9 @@ SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "2"))
 SOURCE_BUDGET_MAX_SECONDS = float(os.getenv("SOURCE_BUDGET_MAX_SECONDS", "900"))
 # Saving good clips to the library: parallel uploads under one time box.
 LIBRARY_SAVE_SECONDS = float(os.getenv("LIBRARY_SAVE_SECONDS", "90"))
+# The editor's playback copies of each clip (the render uses the originals).
+PREVIEW_WIDTH = int(os.getenv("PREVIEW_WIDTH", "1280"))
+PREVIEW_CRF = int(os.getenv("PREVIEW_CRF", "24"))
 
 # Split the render into frame chunks across the workers for longer videos.
 FANOUT_RENDER = os.getenv("FANOUT_RENDER", "1") == "1"

@@ -263,8 +263,11 @@ def _preview_proxy(path: str, work: str, scene_id: str) -> str:
     out = os.path.join(work, f"preview_{scene_id}.mp4")
     try:
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, "-an",
-                        "-vf", "scale='min(640,iw)':-2", "-c:v", "libx264",
-                        "-preset", "veryfast", "-crf", "30", "-g", "15",
+                        # 720p at CRF 24: the owner judged footage quality from
+                        # these (they were 640x360 at ~300 kbps while the clips
+                        # themselves were 1080p). Still small enough to scrub.
+                        "-vf", f"scale='min({config.PREVIEW_WIDTH},iw)':-2", "-c:v", "libx264",
+                        "-preset", "veryfast", "-crf", str(config.PREVIEW_CRF), "-g", "15",
                         "-pix_fmt", "yuv420p", "-movflags", "+faststart", out],
                        capture_output=True, timeout=120)
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -1265,7 +1268,10 @@ def _all_remote(doc: dict) -> bool:
     """Every visual in the document is a URL another worker can fetch."""
     medias = [s.get("media") or {} for s in doc.get("scenes", [])]
     medias += [m for o in doc.get("overlays", []) for m in (o.get("media") or [])]
-    return all(m.get("type") == "color" or str(m.get("url", "")).startswith("http")
+    # An animation scene draws from the template registry and needs no file,
+    # so it never keeps a render on one worker (it did: every video with an
+    # animation scene rendered its whole length on the parent alone).
+    return all(m.get("type") in ("color", "animation") or str(m.get("url", "")).startswith("http")
                for m in medias)
 
 

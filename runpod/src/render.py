@@ -46,6 +46,11 @@ def _render_progress(line: str):
     0 - the user saw the video's progress "go back". Frames map to 0-0.8,
     encoding to 0.8-1.0.
     """
+    low_line = line.lower()
+    if "bundling" in low_line or "copying public" in low_line:
+        # Webpack's bundling percent is not the render: read as progress it
+        # showed "Rendering video 100%" before a single frame was drawn.
+        return None
     m = _FRAC.search(line)
     if m:
         done, total = int(m.group(1)), int(m.group(2))
