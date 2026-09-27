@@ -37,7 +37,7 @@ import urllib.parse
 import uuid
 import requests
 
-from . import candidates, config, costs, events, intent, moments, proxies, vision
+from . import candidates, config, costs, events, intent, moments, providers, proxies, vision
 from .errors import RETRY, FailureClass, classify_exception, classify_ytdlp, from_reason
 from .storage import download
 
@@ -816,6 +816,8 @@ B_ROLL_INTENT = "drone aerial footage"
 # threaded through every source function: each scene is sourced on one
 # thread, start to finish, so it cannot leak into another scene.
 _SUBJECT_TYPE: contextvars.ContextVar = contextvars.ContextVar("subject_type", default="")
+# A job's allow-list of provider names (src/providers.py), or None for all.
+_ENABLED_PROVIDERS: contextvars.ContextVar = contextvars.ContextVar("enabled_providers", default=None)
 
 # Set while sourcing a beat of a news/weather/disaster story (from the
 # director's story brief): "event", or "year" when the event is this year's.
@@ -2046,9 +2048,12 @@ def generated_count() -> int:
         return _GENERATED[0]
 
 
-def _cached_search(fn, query: str, cache_key: str = "") -> List[MediaAsset]:
+def _cached_search(fn, query: str, cache_key: str = "", key: str = "") -> List[MediaAsset]:
     """
     Cache `fn(query)` under `cache_key` (default: the query itself).
+
+    `key` names the source when `fn` is a lambda: every lambda is called
+    "<lambda>", so without it Pixabay was handed Pexels's cached results.
 
     Sourcing passes `cache_key=subject` wherever a subject is known: a
     passage that stays on one subject for several beats used to re-search
@@ -2060,18 +2065,19 @@ def _cached_search(fn, query: str, cache_key: str = "") -> List[MediaAsset]:
     unaffected: which MOMENT of a candidate is used, and whether it passes
     the vision judge, are still decided from that beat's own intent.
     """
-    key = f"{fn.__name__}::{cache_key or query}"
+    name = key or fn.__name__
+    key = f"{name}::{cache_key or query}"
     with _CACHE_LOCK:
         if key in _SEARCH_CACHE:
             return _SEARCH_CACHE[key]
     try:
         found = fn(query)
     except Exception as e:  # noqa: BLE001
-        print(f"[media] {fn.__name__} '{query}' failed: {e}", flush=True)
-        _source_error(fn.__name__, e)
+        print(f"[media] {name} '{query}' failed: {e}", flush=True)
+        _source_error(name, e)
         found = []
     with _CACHE_LOCK:
-        st = _source_stat(fn.__name__)
+        st = _source_stat(name)
         st["searches"] += 1
         st["withResults"] += 1 if found else 0
     with _CACHE_LOCK:
@@ -2169,140 +2175,31 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
                 require_cc: bool = None, intent: str = "",
                 context: str = "", subject: str = "") -> Optional[MediaAsset]:
     """
-    Find and download one visual for a scene.
+    Find and download one visual for a scene, from the provider registry
+    (src/providers.py) in its order: YouTube, Dailymotion, web video, the
+    public-domain and Creative Commons archives, stock when allowed, then
+    stills (the subject's own article, web images, the archives, stock), a
+    still's last resort of footage, and a generated illustration.
 
     `visual_type` is the director's call: "footage" wants moving pictures,
     "image" wants a still that Ken Burns will animate. Footage falls back to
-    stills rather than leaving the scene black — a good photograph beats a
-    wrong clip.
-
-    `nth` and `used` are what keep a long video from repeating itself. `nth`
-    is how many earlier scenes already asked this exact question, so the Nth
-    one reaches further down the result list instead of taking the same top
-    hit. `used` is every asset already placed anywhere in this video, so even
-    two differently-worded queries cannot land on the same clip.
+    stills rather than leaving the scene black - a good photograph beats a
+    wrong clip. `nth` and `used` keep a long video from repeating itself:
+    the Nth scene to ask the same question reaches further down the result
+    list, and `used` is every asset already placed anywhere in this video.
     """
     allow_youtube = config.ALLOW_YOUTUBE if allow_youtube is None else allow_youtube
     allow_stock = config.ALLOW_STOCK if allow_stock is None else allow_stock
     require_cc = config.REQUIRE_CC if require_cc is None else require_cc
     if youtube_only():
         visual_type, allow_youtube, allow_stock = "footage", True, False
-
-    if visual_type == "footage" and allow_youtube:
-        # Skip past results earlier scenes already took, and offset the grab
-        # point so a repeat of the same subject is at least a different
-        # moment of footage rather than the identical seconds again.
-        asset = youtube_clip(query, work_dir, seconds=seconds, require_cc=require_cc,
-                             skip=nth, start_at=30.0 + 25.0 * nth, used=used,
-                             intent=intent, context=context, subject=subject)
-        if asset:
-            return asset
-    if youtube_only():
-        return None
-
-    if visual_type == "footage" and config.ALLOW_DAILYMOTION and not require_cc:
-        asset = dailymotion_clip(query, work_dir, seconds=seconds, skip=nth,
-                                 used=used, intent=intent, context=context,
-                                 subject=subject)
-        if asset:
-            return asset
-
-    if visual_type == "footage" and not require_cc:
-        asset = web_video_clip(query, work_dir, seconds=seconds, used=used,
-                               intent=intent, context=context)
-        if asset:
-            return asset
-
-    # Free footage sources beyond YouTube. These carry clean licences, so
-    # they are tried for motion before falling back to a Ken Burns still —
-    # a real moving shot of the subject beats a panned photograph of it.
-    if visual_type == "footage":
-        extra = (search_archive_org_video,) if config.ALLOW_ARCHIVE_ORG else ()
-        for search in (search_nasa_video, search_wikimedia_video) + extra:
-            found = _cached_search(search, query)
-            ordered = found[nth:] + found[:nth] if found else []
-            got = _pick_unused(ordered, used, query, work_dir, intent, context)
-            if got:
-                return got
-
-    if allow_stock and visual_type == "footage":
-        for fn in (search_pexels, search_pixabay):
-            clips = [c for c in _cached_search(lambda q: fn(q, kind="video"), query)
-                     if c.duration >= seconds * 0.8]
-            asset = _pick_unused(clips[nth:] + clips[:nth], used, query, work_dir, intent, context)
-            if asset:
-                return asset
-
-    # Generated stills first, when asked for. The prompt is the narration
-    # line rather than the search keywords: "Lake Powell concrete ramp" is a
-    # good thing to search for and a poor thing to describe to an image model.
-    tried_generation = False
-    person = _SUBJECT_TYPE.get() == "person"
-    if config.PREFER_GENERATED_IMAGES and not person:
-        tried_generation = True
-        if _generation_budget_left():
-            made = generate_image(prompt or query, work_dir)
-            if made:
-                return made
-
-    # The subject's own Wikipedia article first: for a named person or place
-    # it holds real photos of exactly that subject, where keyword searches
-    # built from the line ("Anne Dunham teenage archival photo") match nothing.
-    if subject and _SUBJECT_TYPE.get() in ("person", "place", "event"):
-        found = _cached_search(search_wikipedia_article_images, subject)
-        ordered = found[nth:] + found[:nth] if found else []
-        asset = _pick_unused(ordered, used, subject, work_dir, intent, context)
-        if asset:
-            return asset
-
-    # Real photographs of the named subject, before any generated impression.
-    # A general web image search finds the specific press photo; the archives
-    # follow with cleaner licences but narrower coverage.
-    for search in (search_web_images, search_wikimedia, search_nasa, search_openverse):
-        found = _cached_search(search, query)
-        # Rotate the list so repeats start further down, but still fall back
-        # to earlier entries rather than giving up and rendering black.
-        ordered = found[nth:] + found[:nth] if found else []
-        asset = _pick_unused(ordered, used, query, work_dir, intent, context)
-        if asset:
-            return asset
-
-    if allow_stock:
-        for fn in (search_pexels, search_pixabay):
-            found = _cached_search(lambda q: fn(q, kind="image"), query)
-            asset = _pick_unused(found[nth:] + found[:nth], used, query, work_dir, intent, context)
-            if asset:
-                return asset
-
-    # A still nothing was found for tries moving footage of the same thing.
-    # Footage already fell back to stills; stills never fell back to footage,
-    # and on a 362-scene biography the planner made 300 lines photos - photo
-    # search came back empty for nearly all of them while footage filled 94%
-    # of its scenes, so 86% of the video rendered black. For a person the
-    # vision gate already accepts footage of that person speaking.
-    if visual_type == "image":
-        if allow_youtube:
-            asset = youtube_clip(query, work_dir, seconds=seconds, require_cc=require_cc,
-                                 skip=nth, start_at=30.0 + 25.0 * nth, used=used,
-                                 intent=intent, context=context, subject=subject)
-            if asset:
-                return asset
-        if config.ALLOW_DAILYMOTION and not require_cc:
-            asset = dailymotion_clip(query, work_dir, seconds=seconds, skip=nth,
-                                     used=used, intent=intent, context=context,
-                                     subject=subject)
-            if asset:
-                return asset
-
-    # Last resort: an illustration for a beat nothing real covers. Always a
-    # fresh generation, so it is never a duplicate.
-    # The budget is always consulted. Writing this as
-    # `if PREFER_GENERATED or budget_left()` short-circuits past the check
-    # whenever the preference is on, which silently disabled the spend cap
-    # entirely — caught by the cap test, not by reading it.
-    if not tried_generation and not person and _generation_budget_left():
-        return generate_image(prompt or query, work_dir)
-    return None
+    ctx = providers.SourceContext(
+        query=query, seconds=seconds, work_dir=work_dir, visual_type=visual_type, nth=nth,
+        used=used, prompt=prompt, allow_youtube=bool(allow_youtube), allow_stock=bool(allow_stock),
+        require_cc=bool(require_cc), intent=intent, context=context, subject=subject,
+        subject_type=_SUBJECT_TYPE.get() or "", youtube_only=bool(youtube_only()),
+        enabled_names=_ENABLED_PROVIDERS.get())
+    return providers.source_one(ctx)
 
 
 def _asset_ok(asset) -> tuple:
