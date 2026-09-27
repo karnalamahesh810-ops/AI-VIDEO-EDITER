@@ -1833,6 +1833,85 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
     return None
 
 
+_WEB_VIDEO_SKIP = ("youtube.com", "youtu.be", "dailymotion.com", "google.com")
+
+
+def _web_fetch(url: str, out_dir: str, start_at: float, seconds: float, timeout: int = 240) -> str:
+    """One section of a non-YouTube web video through yt-dlp; '' on failure."""
+    out_tpl = os.path.join(out_dir, f"web_%(extractor)s_%(id)s_{int(start_at)}_{uuid.uuid4().hex[:6]}.%(ext)s")
+    cmd = ["yt-dlp", url, "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
+           "--force-keyframes-at-cuts", "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]/b",
+           "--no-playlist", "--no-warnings", "--quiet", "--max-filesize", "300M",
+           "--merge-output-format", "mp4", "-o", out_tpl, "--print", "after_move:filepath"]
+    proxy = _next_proxy()
+    cmd += _yt_network_args(proxy)
+    try:
+        with _NET_SEM:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+    if p.returncode != 0:
+        return ""
+    for line in (p.stdout or "").splitlines():
+        if line.strip() and os.path.exists(line.strip()):
+            return line.strip() if playable_video(line.strip()) else ""
+    return ""
+
+
+def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = None,
+                   intent: str = "", context: str = "") -> Optional[MediaAsset]:
+    """
+    A clip from the non-YouTube videos Google's video search returns - TikTok,
+    Facebook, Vimeo, news sites - held to the Dailymotion rules: not a
+    talking-head title, not vertical, no burned-in text, and the vision model
+    must see the intent in the downloaded frames. yt-dlp handles the sites.
+    """
+    if not config.ALLOW_WEB_VIDEO:
+        return None
+    os.makedirs(out_dir, exist_ok=True)
+    grab = max(2.0, seconds + 1.5)
+    judged = 0
+    for row in search_google_videos(query):
+        if any(s in row["site"] for s in _WEB_VIDEO_SKIP):
+            continue
+        if used and f"web:{row['url']}" in used:
+            continue
+        if _talking_head(row["title"]) or _stock_seller(row["title"], row["site"]):
+            continue
+        if row["seconds"] and row["seconds"] < grab + 2:
+            continue
+        if judged >= config.VISION_MAX_CANDIDATES:
+            break
+        start = _fixed_point({"duration": row["seconds"]}, grab, 5.0) if row["seconds"] else 5.0
+        path = _web_fetch(row["url"], out_dir, start, grab)
+        if not path:
+            continue
+        w, h = _video_dims(path)
+        if (w and h and w < h * 1.2) or has_burned_captions(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
+        judged += 1
+        keep, verdict = _vision_gate(path, intent, context, row["title"])
+        if not keep:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
+        return MediaAsset(
+            kind="video", source="web_video", url=row["url"], local_path=path,
+            duration=grab, attribution=f"{row['site']}: {row['title']}"[:200],
+            license="unverified — you must hold the rights", query=query,
+            review_required=True,
+            review_reason="Licence unverified — confirm you hold the rights",
+        ).apply_verdict(verdict, intent)
+    return None
+
+
 def _asset_for(path: str, query: str, seconds: float, require_cc: bool,
                title: str = "") -> MediaAsset:
     return MediaAsset(
@@ -2159,6 +2238,12 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
         asset = dailymotion_clip(query, work_dir, seconds=seconds, skip=nth,
                                  used=used, intent=intent, context=context,
                                  subject=subject)
+        if asset:
+            return asset
+
+    if visual_type == "footage" and not require_cc:
+        asset = web_video_clip(query, work_dir, seconds=seconds, used=used,
+                               intent=intent, context=context)
         if asset:
             return asset
 

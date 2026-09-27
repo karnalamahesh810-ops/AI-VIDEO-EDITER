@@ -230,6 +230,9 @@ MOMENT_PARALLEL = int(os.getenv("MOMENT_PARALLEL", "5"))
 # Real photographs of named people, places and events. Serper (Google Images)
 # when SERPER_API_KEY is set; otherwise the keyless DuckDuckGo image search.
 ALLOW_WEB_IMAGES = _flag("ALLOW_WEB_IMAGES", True)
+# Non-YouTube videos from Google's video search (TikTok, Facebook, Vimeo,
+# news sites), downloaded by yt-dlp. Only when the job is not youtube_only.
+ALLOW_WEB_VIDEO = _flag("ALLOW_WEB_VIDEO", True)
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 # Google Images via Bright Data's SERP API (tried first when set).
 BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY", "")
