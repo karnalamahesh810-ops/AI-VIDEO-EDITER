@@ -361,7 +361,9 @@ FANOUT_ENDPOINT_ID = os.getenv("FANOUT_ENDPOINT_ID", "") or os.getenv("RUNPOD_EN
 FANOUT_TIMEOUT_SECONDS = float(os.getenv("FANOUT_TIMEOUT_SECONDS", "1500"))
 # Scenes left empty/doubled after round 1: at least this many go back out
 # across the workers; fewer are filled on the parent.
-FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "10"))
+# Leftover scenes after round 1 go back out across the workers from this many
+# up; a real job kept 9 for the parent alone ("Filling the last 9 scenes").
+FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "3"))
 # Split the render into frame chunks across the workers for longer videos.
 FANOUT_RENDER = os.getenv("FANOUT_RENDER", "1") == "1"
 FANOUT_RENDER_MIN_SECONDS = float(os.getenv("FANOUT_RENDER_MIN_SECONDS", "0"))
