@@ -1653,7 +1653,7 @@ class ResourceAction(unittest.TestCase):
         try:
             return handler.do_resource(
                 {"timeline": doc, "scene_index": scene_index, **(inp_extra or {})},
-                os.path.join(ROOT, "out", "_t_res"), handler.Reporter(""))
+                os.path.join(ROOT, "out", "_t_res"), handler.Reporter(""))[0]
         finally:
             handler.media.source_for_segment = original
 
@@ -1712,7 +1712,7 @@ class ResourceAction(unittest.TestCase):
         try:
             doc = handler.do_resource({"timeline": doc, "scene_index": 1},
                                       os.path.join(ROOT, "out", "_t_res"),
-                                      handler.Reporter(""))
+                                      handler.Reporter(""))[0]
         finally:
             handler.media.source_for_segment = original
         self.assertEqual(seen["intent"], "Aerial of the dry lakebed")

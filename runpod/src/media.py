@@ -1066,6 +1066,8 @@ _EVENT_WINDOW: contextvars.ContextVar = contextvars.ContextVar("event_window", d
 # without limit.
 _SCENE_INTENT: contextvars.ContextVar = contextvars.ContextVar("scene_intent", default=None)
 _SCENE_JUDGED: contextvars.ContextVar = contextvars.ContextVar("scene_judged", default=None)
+# Replace Clip keeps the runner-up files so they can be published as choices.
+_KEEP_ALT_FILES: contextvars.ContextVar = contextvars.ContextVar("keep_alt_files", default=False)
 
 # YouTube's own "Upload date: This year" filter, for the results page.
 _YT_THIS_YEAR = "EgIIBQ%3D%3D"
@@ -1625,12 +1627,18 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
 
     ranked = sorted(passed, key=rank, reverse=True)
     winner, losers = ranked[0], ranked[1:]
+    keep_files = bool(_KEEP_ALT_FILES.get())
     for a in losers:
-        winner.alternatives.append({
+        entry = {
             "assetId": a.identity, "url": a.url, "title": (a.attribution or "")[:120],
             "score": a.relevance_score, "quality": a.quality, "finalScore": a.final_score,
-            "specificity": a.specificity,
-            "description": (a.content_description or "")[:160], "source": a.source})
+            "specificity": a.specificity, "moment": dict(a.moment or {}),
+            "description": (a.content_description or "")[:160], "source": a.source}
+        if keep_files:
+            entry["localPath"] = a.local_path
+        winner.alternatives.append(entry)
+        if keep_files:
+            continue
         try:
             if a.local_path and os.path.exists(a.local_path):
                 os.remove(a.local_path)

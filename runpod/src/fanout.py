@@ -24,6 +24,8 @@ never lose scenes. Clips two parts both picked are resolved by the parent.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import os
 import subprocess
@@ -410,8 +412,71 @@ def chunks(total_frames: int, fps: int, parts: int) -> List[tuple]:
     return [(a, min(total_frames, a + size) - 1) for a in range(0, total_frames, size)]
 
 
+def _media_ref(m: dict) -> str:
+    """What identifies a scene's media across renders: its storage path, not its signed URL."""
+    st = m.get("storage") or {}
+    if st.get("path"):
+        return f"{st.get('bucket', '')}/{st['path']}"
+    return str(m.get("url") or "").split("?", 1)[0]
+
+
+def chunk_hash(doc: dict, a: int, b: int) -> str:
+    """
+    A fingerprint of everything that draws frames a..b: the scenes and
+    overlays that overlap the range (media by storage path, so a re-signed
+    URL does not count as a change), the caption settings and the frame size.
+    Two renders whose chunk hashes match can share the chunk file.
+    """
+    def overlaps(item: dict) -> bool:
+        s0 = int(item.get("startFrame") or 0)
+        s1 = s0 + int(item.get("durationInFrames") or 0) - 1
+        return s0 <= b and s1 >= a
+
+    scenes = []
+    for sc in doc.get("scenes") or []:
+        if not overlaps(sc):
+            continue
+        m = sc.get("media") or {}
+        scenes.append({k: sc.get(k) for k in ("id", "startFrame", "durationInFrames", "text",
+                                                "motion", "transition", "effect", "treatment", "frame")}
+                      | {"media": [m.get("type"), _media_ref(m), m.get("sourceStart"), m.get("sourceEnd")],
+                         "words": [(w.get("text"), w.get("start"), w.get("end")) for w in sc.get("words") or []]})
+    overlays = [o for o in doc.get("overlays") or [] if overlaps(o)]
+    payload = {"fps": doc.get("fps"), "width": doc.get("width"), "height": doc.get("height"),
+               "captions": doc.get("captions"), "brand": doc.get("brand"), "overlaysEnabled": doc.get("overlaysEnabled"),
+               "scenes": scenes, "overlays": overlays}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+
+
+def _reuse_chunks(units: List[dict], hashes: List[str], previous: Optional[dict], bucket: str,
+                  project_id: str, parent_job_id: str, fps: int, total_frames: int) -> List[dict]:
+    """Download unchanged chunks from the previous render; returns the units reused."""
+    if not previous or not storage.broker_enabled():
+        return []
+    if int(previous.get("fps") or 0) != fps or int(previous.get("durationInFrames") or 0) != total_frames:
+        return []
+    old = {tuple(c.get("frames") or ()): c for c in previous.get("chunks") or []}
+    reused = []
+    for u, h in zip(units, hashes):
+        c = old.get(tuple(u["frames"]))
+        st = (c or {}).get("storage") or {}
+        if not c or c.get("hash") != h or not st.get("path"):
+            continue
+        try:
+            url = storage.broker_read_url(st.get("bucket") or bucket, st["path"], project_id, parent_job_id)
+            storage.download(url, u["path"])
+        except Exception as e:  # noqa: BLE001 - render it instead
+            print(f"[fanout] chunk {u['i']}: previous copy unavailable ({type(e).__name__})", flush=True)
+            continue
+        if os.path.isfile(u["path"]) and os.path.getsize(u["path"]) > 0:
+            u["storage"] = dict(st)
+            reused.append(u)
+    return reused
+
+
 def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, bucket: str,
-           work: str, report: Callable, render_local: Callable) -> str:
+           work: str, report: Callable, render_local: Callable,
+           previous: Optional[dict] = None) -> str:
     """
     Render `doc` to `out_path` in frame chunks across the workers.
 
@@ -420,11 +485,24 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
     re-encoding and the audio laid under them - no seams in the sound.
     `render_local(frames, path, muted, codec)` renders here (frames None =
     the whole timeline).
+
+    `previous` is the manifest of the last render of this project (fps,
+    durationInFrames, chunks with frame ranges, hashes and storage paths).
+    A chunk whose hash is unchanged is downloaded instead of rendered, so a
+    Replace Clip re-renders only the chunk it touched. The new manifest is
+    left in media.LAST_STATS["render_manifest"].
     """
     fps = int(doc.get("fps") or 30)
-    ranges = chunks(int(doc["durationInFrames"]), fps, config.FANOUT_PARTS)
+    total_frames = int(doc["durationInFrames"])
+    ranges = chunks(total_frames, fps, config.FANOUT_PARTS)
     units = [{"i": i, "frames": fr, "weight": fr[1] - fr[0] + 1,
               "path": os.path.join(work, f"chunk_{i:03d}.mp4")} for i, fr in enumerate(ranges)]
+    hashes = [chunk_hash(doc, a, b) for a, b in ranges]
+    all_units = list(units)
+    reused = _reuse_chunks(units, hashes, previous, bucket, project_id, parent_job_id, fps, total_frames)
+    if reused:
+        print(f"[fanout] reusing {len(reused)} of {len(units)} chunks from the previous render", flush=True)
+        units = [u for u in units if u not in reused]
 
     def accept(unit: dict, out: Any, remote: bool) -> bool:
         if remote:
@@ -449,10 +527,29 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
         progress=lambda u, o: u["weight"] * float(o.get("frac") or 0),
         report=show,
         deadline=time.time() + config.FANOUT_TIMEOUT_SECONDS + 3 * doc["durationInFrames"] / fps)
-    failed = runner.run("render")
+    failed = runner.run("render") if units else []
     for unit in failed:                         # anything lost is rendered here
         print(f"[fanout] rendering chunk {unit['i']} here", flush=True)
         render_local(unit["frames"], unit["path"], True, None)
+    # Chunks rendered on this worker are kept too, so the next render of this
+    # project can reuse every chunk it did not change.
+    manifest_chunks = []
+    for u, h in zip(all_units, hashes):
+        entry = {"i": u["i"], "frames": list(u["frames"]), "hash": h}
+        if not u.get("storage") and storage.broker_enabled() and project_id and parent_job_id:
+            obj = f"projects/{project_id}/parts/{parent_job_id}/render_{u['i']:03d}.mp4"
+            try:
+                storage.broker_upload(u["path"], bucket, obj, project_id, parent_job_id, read_ttl=60)
+                u["storage"] = {"bucket": bucket, "path": obj}
+            except Exception as e:  # noqa: BLE001 - only the reuse is lost
+                print(f"[fanout] chunk {u['i']}: not kept ({type(e).__name__})", flush=True)
+        if u.get("storage"):
+            entry["storage"] = u["storage"]
+        manifest_chunks.append(entry)
+    media.LAST_STATS["render_manifest"] = {"fps": fps, "durationInFrames": total_frames,
+                                           "parts": len(all_units), "chunks": manifest_chunks,
+                                           "reused": len(reused)}
+    units = all_units
     audio = os.path.join(work, "track.aac")
     try:
         render_local(None, audio, False, "aac")
@@ -469,7 +566,8 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", video, "-i", audio, "-map", "0:v",
                     "-map", "1:a", "-c", "copy", "-shortest", out_path], check=True)
     media.LAST_STATS["render_fanout"] = {"chunks": len(units), "on_workers": runner.live,
-                                         "stolen_back": runner.stolen, "rendered_here_after": len(failed)}
+                                         "stolen_back": runner.stolen, "rendered_here_after": len(failed),
+                                         "reused": len(reused)}
     return out_path
 
 

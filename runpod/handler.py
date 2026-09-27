@@ -43,12 +43,13 @@ import threading
 import time
 import traceback
 import uuid
-from typing import Dict
+from typing import Dict, List
 
 import runpod
 
 from src import (config, director, fanout, geocode, library, media, pools, render as renderer,
                  selftest, storage, timeline, transcribe, vision)
+from src import intent as scene_intent_mod
 
 
 def _work_dir(job_id: str) -> str:
@@ -777,15 +778,97 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     return doc
 
 
-def do_resource(inp: dict, work: str, report: Reporter) -> dict:
+def _replan_beat(scene: dict, doc: dict, story: dict, title: str) -> dict:
     """
-    Re-source the media for ONE scene and return the whole timeline back.
+    Regenerate: plan this one beat again from the story, as the planner
+    would, and return the new shot (query, intent, sceneIntent).
+    """
+    fps = int(doc.get("fps") or config.DEFAULT_FPS)
+    start = int(scene.get("startFrame") or 0) / fps
+    end = start + max(1, int(scene.get("durationInFrames") or fps)) / fps
+    seg = transcribe.Segment(text=str(scene.get("text") or ""), start=start, end=end)
+    title = director.clean_title(title or story.get("event") or "")
+    shots = [director._rule_shot(seg, 0, title)]
+    if director.is_configured():
+        director._ai_pass([seg], title, shots, brief=story)
+    director.anchor_to_story(shots, [seg], story)
+    shot = shots[0]
+    si = (scene_intent_mod.SceneIntent.from_dict(shot["sceneIntent"]) if shot.get("sceneIntent")
+          else scene_intent_mod.SceneIntent.from_shot(shot, story))
+    shot["sceneIntent"] = si.to_dict()
+    shot["fallbacks"] = list(dict.fromkeys(si.queries(shot.get("query", ""))[1:]
+                                           + list(shot.get("fallbacks") or [])))
+    return shot
 
-    This is what makes the editor usable: the user rejects a single shot and
-    gets a replacement in seconds, instead of re-running a twenty-minute plan
-    to change one clip. Timing is deliberately untouched — only `media` and
-    its review flags change, so the visual track still tiles the narration
-    exactly and the voiceover cannot drift.
+
+def _candidate_entry(asset, rank: int, winner: bool) -> dict:
+    return {
+        "rank": rank, "winner": winner, "assetId": asset.identity,
+        "sourceUrl": asset.url if str(asset.url or "").startswith("http") else "",
+        "title": (asset.attribution or "")[:160], "source": asset.source,
+        "score": asset.relevance_score, "quality": asset.quality,
+        "finalScore": asset.final_score, "specificity": asset.specificity,
+        "description": (asset.content_description or "")[:300],
+        "moment": dict(asset.moment or {}), "media": asset.to_scene_media(),
+    }
+
+
+def _publish_alternatives(cands: List[dict], project_id: str, bucket: str, job_id: str,
+                          scene_id: str, work: str) -> None:
+    """Upload each alternative's clip, thumbnail and preview; fill its media."""
+    def put(local: str, obj: str) -> str:
+        if storage.broker_enabled():
+            return storage.broker_upload(local, bucket, obj, project_id, job_id,
+                                         read_ttl=_MEDIA_LINK_TTL)
+        storage.upload_to_supabase(local, obj, bucket=bucket)
+        return storage.signed_url(obj, bucket=bucket, expires_in=_MEDIA_LINK_TTL)
+
+    for n, c in enumerate(cands, 1):
+        path = c.pop("localPath", "") or (c.get("media") or {}).get("url") or ""
+        if not path or not os.path.isfile(path):
+            continue
+        ext = os.path.splitext(path)[1] or ".mp4"
+        tag = f"{scene_id}_alt{n}"
+        obj = f"projects/{project_id}/alts/{tag}{ext}"
+        try:
+            url = put(path, obj)
+        except Exception as e:  # noqa: BLE001 - the choice is lost, the rest stand
+            print(f"[replace] could not publish alternative {n}: {e}", flush=True)
+            c["media"] = {}
+            continue
+        media_fields = dict(c.get("media") or {})
+        media_fields.update({"type": "video", "url": url, "storage": {"bucket": bucket, "path": obj}})
+        thumb = _thumbnail(path, work, tag)
+        if thumb:
+            tobj = f"projects/{project_id}/thumbs/{tag}.jpg"
+            try:
+                media_fields["thumbnail"] = put(thumb, tobj)
+                media_fields["thumbStorage"] = {"bucket": bucket, "path": tobj}
+            except Exception:  # noqa: BLE001 - cosmetic
+                pass
+        preview = _preview_proxy(path, work, tag)
+        if preview:
+            pobj = f"projects/{project_id}/preview/{tag}.mp4"
+            try:
+                media_fields["previewUrl"] = put(preview, pobj)
+                media_fields["previewStorage"] = {"bucket": bucket, "path": pobj}
+            except Exception:  # noqa: BLE001 - the editor falls back to the clip
+                pass
+        c["media"] = media_fields
+
+
+def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
+    """
+    Replace Clip: re-source ONE scene and return the timeline plus the ranked
+    choices (the winner and up to REPLACE_ALTERNATIVES - 1 alternatives), each
+    published with a thumbnail and preview so the editor can show them.
+
+    Timing is untouched: only `media` and its review flags change, so the
+    visual track still tiles the narration exactly. The search honours the
+    scene's typed intent, never returns the clip being replaced, one the user
+    rejected (`exclude`), or one another scene already shows. `mode`:
+    "replace" (default) or "more" search again; "regenerate" plans the beat
+    again from the story first.
     """
     doc = inp.get("timeline")
     if not isinstance(doc, dict):
@@ -798,30 +881,68 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
     scene = scenes[idx]
     fps = int(doc.get("fps") or config.DEFAULT_FPS)
     seconds = max(0.4, int(scene.get("durationInFrames", fps)) / fps)
-    query = str(inp.get("query") or scene.get("query")
-                or scene.get("text") or "").strip()[:240]
-    if not query:
-        raise ValueError("this scene has nothing to search for — set a query first")
+    sem = dict(scene.get("semanticMetadata") or {})
+    story = dict((doc.get("meta") or {}).get("story") or {})
+    mode = str(inp.get("mode") or "replace").lower()
+    count = max(1, int(inp.get("count") or config.REPLACE_ALTERNATIVES))
 
-    # The same matching as the plan: the vision model scores candidates
-    # against what the beat should show, not just the search words.
-    sem = scene.get("semanticMetadata") or {}
+    query = str(inp.get("query") or scene.get("query") or scene.get("text") or "").strip()[:240]
     intent = str(inp.get("intent") or sem.get("intent") or "")[:300]
+    scene_intent = sem.get("sceneIntent") if isinstance(sem.get("sceneIntent"), dict) else None
+    fallbacks: List[str] = []
+    if mode == "regenerate":
+        report(f"Planning scene {idx + 1} again", 10)
+        shot = _replan_beat(scene, doc, story, str(inp.get("title") or ""))
+        query, intent = shot["query"], shot.get("intent") or intent
+        scene_intent, fallbacks = shot.get("sceneIntent"), list(shot.get("fallbacks") or [])
+        sem["subject"] = shot.get("subject") or sem.get("subject", "")
+        sem["subjectType"] = shot.get("subjectType") or sem.get("subjectType", "")
+    elif scene_intent:
+        fallbacks = scene_intent_mod.SceneIntent.from_dict(scene_intent).queries(query)[1:]
+    if not query:
+        raise ValueError("this scene has nothing to search for - set a query first")
 
-    report(f"Re-sourcing scene {idx + 1}", 20)
+    # Never the clip being replaced, never one the user rejected, never one
+    # another scene already shows.
+    exclude = {str(x) for x in (inp.get("exclude") or []) if x}
+    if sem.get("assetId"):
+        exclude.add(str(sem["assetId"]))
+    for k, other in enumerate(scenes):
+        if k != idx:
+            aid = (other.get("semanticMetadata") or {}).get("assetId")
+            if aid:
+                exclude.add(str(aid))
+
+    report(f"Finding {count} choices for scene {idx + 1}", 20)
+    vision.set_story(story)
+    media.set_story_kind(story.get("kind", ""))
     media.reset_cache()
-    asset = media.source_for_segment(
-        query, seconds, work,
-        visual_type=scene.get("visualType", "footage"),
-        allow_youtube=inp.get("allow_youtube"),
-        allow_stock=inp.get("allow_stock"),
-        require_cc=inp.get("require_cc"),
-        intent=intent, context=str(scene.get("text") or ""),
-        subject_type=str(sem.get("subjectType") or ""),
-        event_window=str(sem.get("eventWindow") or ""),
-    )
+    overrides = _apply_config({
+        "JUDGE_BEST_OF": count, "EXCELLENT_SCORE": 1.01,
+        "VISION_MAX_CANDIDATES": max(count, config.VISION_MAX_CANDIDATES),
+        "POOL_SCOUT": max(count + 2, config.POOL_SCOUT),
+        "JUDGE_MAX_PER_SCENE": max(count + 3, config.JUDGE_MAX_PER_SCENE),
+    })
+    keep = media._KEEP_ALT_FILES.set(True)
+    try:
+        asset = media.source_for_segment(
+            query, seconds, work,
+            visual_type=scene.get("visualType", "footage"),
+            used=exclude, fallbacks=fallbacks,
+            allow_youtube=inp.get("allow_youtube"),
+            allow_stock=inp.get("allow_stock"),
+            require_cc=inp.get("require_cc"),
+            intent=intent, context=str(scene.get("text") or ""),
+            subject_type=str(sem.get("subjectType") or ""),
+            subject=str(sem.get("subject") or ""),
+            event_window=str(sem.get("eventWindow") or ""),
+            scene_intent=scene_intent,
+        )
+    finally:
+        media._KEEP_ALT_FILES.reset(keep)
+        _restore_config(overrides)
     if not asset:
-        raise ValueError(f"no usable media found for '{query}' — try different wording")
+        raise ValueError(f"no usable media found for '{query}' - try different wording")
 
     scene["media"] = asset.to_scene_media()
     scene["query"] = query
@@ -829,20 +950,46 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
                        if asset.kind == "image" else "none")
     scene["reviewRequired"] = bool(asset.review_required)
     scene["reviewReason"] = asset.review_reason or ""
+    alternatives = list(asset.alternatives or [])
     scene["semanticMetadata"] = {
         **sem,
         "intent": intent,
         "searchQuery": query,
+        "sceneIntent": scene_intent,
         "contentDescription": asset.content_description or "",
         "relevanceScore": asset.relevance_score,
+        "qualityScore": asset.quality,
         "provider": asset.source or "",
+        "assetId": asset.identity,
+        "sourceUrl": asset.url if str(asset.url or "").startswith("http") else "",
+        "specificity": asset.specificity,
+        "finalScore": asset.final_score,
+        "scoreParts": dict(asset.score_parts or {}),
+        "moment": dict(asset.moment or {}),
+        "alternatives": [{k: v for k, v in a.items() if k != "localPath"} for a in alternatives][:4],
     }
+
+    candidates = [_candidate_entry(asset, 1, True)]
+    for n, alt in enumerate(alternatives[:count - 1], 2):
+        candidates.append({"rank": n, "winner": False, "assetId": alt.get("assetId"),
+                           "sourceUrl": alt.get("url") if str(alt.get("url") or "").startswith("http") else "",
+                           "title": alt.get("title", ""), "source": alt.get("source", ""),
+                           "score": alt.get("score"), "quality": alt.get("quality"),
+                           "finalScore": alt.get("finalScore"), "specificity": alt.get("specificity", ""),
+                           "description": alt.get("description", ""), "moment": alt.get("moment") or {},
+                           "localPath": alt.get("localPath", ""), "media": {}})
 
     project_id = inp.get("project_id") or ""
     if project_id and inp.get("publish_media", True):
         report("Saving replacement media", 70)
         publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                       report, job_id=inp.get("_job_id", ""), band=(70, 72))
+        candidates[0]["media"] = dict(scene.get("media") or {})
+        report("Saving the other choices", 80)
+        _publish_alternatives(candidates[1:], project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
+                              inp.get("_job_id", ""), scene["id"], work)
+    for c in candidates:
+        c.pop("localPath", None)
 
     meta = doc.setdefault("meta", {})
     meta["scenesWithoutMedia"] = sum(
@@ -850,7 +997,7 @@ def do_resource(inp: dict, work: str, report: Reporter) -> dict:
     meta["scenesNeedingReview"] = sum(1 for s in scenes if s.get("reviewRequired"))
     # Only this scene changed, so validate without demanding the rest be filled.
     timeline.validate(doc, require_media=False)
-    return doc
+    return doc, candidates
 
 
 def _sign_supabase_urls(doc: dict):
@@ -1070,7 +1217,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         fanout.render(remote_doc, out_path, parent_job_id=(report.job or {}).get("id", ""),
                       project_id=inp.get("project_id") or "",
                       bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
-                      report=report, render_local=_local_renderer(doc, inp, work))
+                      report=report, render_local=_local_renderer(doc, inp, work),
+                      # The previous render's manifest: unchanged chunks are reused.
+                      previous=inp.get("render_manifest") if isinstance(inp.get("render_manifest"), dict) else None)
     else:
         renderer.render(
             doc, out_path,
@@ -1342,7 +1491,7 @@ def handler(job):
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "resource":
-            doc = do_resource(inp, work, report)
+            doc, candidates = do_resource(inp, work, report)
             if project_id:
                 storage.patch_project(project_id, {
                     "scene_data": doc, "status": "editing",
@@ -1350,6 +1499,8 @@ def handler(job):
                 })
             return {"ok": True, "action": "resource", "timeline": doc,
                     "scene_index": inp.get("scene_index"),
+                    "mode": str(inp.get("mode") or "replace"),
+                    "candidates": candidates,
                     "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
@@ -1367,6 +1518,7 @@ def handler(job):
             if project_id:
                 storage.patch_project(project_id, _done_fields(out))
             return {"ok": True, "action": "render", **out,
+                    "render_manifest": media.LAST_STATS.get("render_manifest"),
                     "filledScenes": patched,
                     "elapsed": round(time.time() - started, 1)}
 

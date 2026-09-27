@@ -223,6 +223,8 @@ def _json_env(name: str):
         return None
 
 
+# Replace Clip: how many ranked choices a re-source returns (winner + rest).
+REPLACE_ALTERNATIVES = int(os.getenv("REPLACE_ALTERNATIVES", "5"))
 META_WEIGHTS = _json_env("META_WEIGHTS")
 FINAL_WEIGHTS = _json_env("FINAL_WEIGHTS")
 
