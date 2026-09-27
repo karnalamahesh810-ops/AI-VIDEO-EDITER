@@ -28,6 +28,7 @@ import time
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 from . import config, geocode, vision
 from .transcribe import Segment, keywords_for
@@ -1512,7 +1513,10 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
     story = {k: v for k, v in (brief or {}).items() if k != "hookBeats"}
     hooks = set((brief or {}).get("hookBeats") or [])
 
-    for offset in range(0, total, _BATCH):
+    def one(offset: int) -> Tuple[int, List[str]]:
+        """Plan one batch of beats; writes only its own shots[offset:offset+_BATCH]."""
+        warnings: List[str] = []
+        enriched = 0
         batch = segments[offset:offset + _BATCH]
         payload = {
             "title": title,
@@ -1531,7 +1535,7 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                 f"AI director unavailable for beats {offset + 1}-{offset + len(batch)} "
                 f"({'; '.join(tried) or 'no model configured or out of credits'}); "
                 "rule-based choices used.")
-            continue
+            return enriched, warnings
 
         seen = set()
         for shot in (data.get("shots") or []):
@@ -1584,9 +1588,20 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
             warnings.append(
                 f"Director skipped {len(batch) - len(seen)} beats around "
                 f"{offset + 1}; rules filled the gaps.")
-        if report:
-            done = min(offset + _BATCH, total)
-            report("Planning the visual story", 12 + int(8 * done / total))
+        return enriched, warnings
+
+    # Batches are independent (each writes its own slice of shots), so they
+    # run side by side: sequentially, a 22-minute story's 14 batches took
+    # 5-7 minutes of planning before any footage was searched.
+    offsets = list(range(0, total, _BATCH))
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, min(config.PLAN_PARALLEL, len(offsets)))) as ex:
+        for got, warns in ex.map(one, offsets):
+            enriched += got
+            warnings.extend(warns)
+            done += 1
+            if report:
+                report("Planning the visual story", 12 + int(8 * done / len(offsets)))
     return enriched, warnings
 
 

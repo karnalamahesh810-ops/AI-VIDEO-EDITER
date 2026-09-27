@@ -235,6 +235,9 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY", "")
 BRIGHTDATA_SERP_ZONE = os.getenv("BRIGHTDATA_SERP_ZONE", "serp_api1")
 
+# Story-planning batches (director._ai_pass) run this many at a time.
+PLAN_PARALLEL = int(os.getenv("PLAN_PARALLEL", "4"))
+
 # --- subject pools (src/pools.py) -----------------------------------------------
 # GoMotion's method: a few long videos per subject, judged once from their
 # storyboard, many different moments cut from them. Lines whose subject pool
