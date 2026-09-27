@@ -47,8 +47,8 @@ from typing import Dict, List
 
 import runpod
 
-from src import (config, director, fanout, geocode, library, media, pools, render as renderer,
-                 selftest, storage, timeline, transcribe, vision)
+from src import (config, costs, director, events, fanout, geocode, library, media, pools,
+                 render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
 
 
@@ -523,6 +523,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         raise ValueError("audio_url is required (upload a voiceover or generate TTS first)")
 
     report("Downloading narration", 4)
+    events.phase("narration")
     if str(raw_audio).startswith("bench://"):
         # A benchmark narration baked into the image (bench/audio/<case>.mp3),
         # so the seven-script benchmark needs no upload and no credentials.
@@ -531,6 +532,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
                                  "bench", "audio", f"{case}.mp3")
         if not os.path.isfile(bench_src):
             raise ValueError(f"unknown benchmark case '{case}'")
+        audio_src = str(raw_audio)
         audio_path = shutil.copy(bench_src, os.path.join(work, "narration.mp3"))
     else:
         # Handles both public URLs and private-bucket object paths.
@@ -539,6 +541,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     audio_duration = renderer.probe_duration(audio_path)
 
     report("Aligning narration", 8)
+    events.phase("transcribe")
     words = transcribe.transcribe_words(
         audio_path, language=inp.get("language"),
         # 8 -> 13%: the band between download and the planner.
@@ -555,6 +558,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # sourcing it steers the recheck of scenes still missing a shot.
     title = director.clean_title(inp.get("title") or inp.get("title_overlay") or "")
     report("Reading the whole story", 13)
+    events.phase("plan")
     brief = director.story_brief(segments, title, configured=director.is_configured())
     # Every vision judgement sees the whole story, not just its own line.
     vision.set_story(brief)
@@ -585,6 +589,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
 
     total = len(segments)
     report(f"Sourcing media for {total} scenes", 22, done=0, total=total)
+    events.phase("source")
     media.reset_cache()
     jobs = [{"index": i, "query": shot["query"], "seconds": seg.duration,
              "visual_type": shot.get("visualType", "footage"),
@@ -1128,12 +1133,23 @@ LAST_FRAMES: list = []
 LAST_LIBRARY: dict = {"lib": None}
 
 
+def _finish_costs(doc: dict, started: float) -> dict:
+    """Measured credits, the priced ledger and the event summary into the result and the doc."""
+    costs.measure_end()
+    summary = costs.summary(time.time() - started)
+    doc.setdefault("meta", {})["costs"] = summary
+    doc["meta"]["events"] = events.summary()
+    doc["meta"]["proxies"] = media.proxy_snapshot()
+    return summary
+
+
 def _keep_in_library(doc: dict, report: Reporter) -> None:
     lib = LAST_LIBRARY.get("lib")
     if lib is None or not lib.enabled:
         return
     try:
         report("Keeping clips for future videos", 61)
+        events.phase("library")
         if lib.record_from_doc(doc):
             lib.save()
     except Exception as e:  # noqa: BLE001 - the library must never fail a video
@@ -1204,6 +1220,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     _sanitize_stills(doc, work)
 
     report(f"Rendering {doc['meta'].get('sceneCount', len(doc['scenes']))} scenes", 70)
+    events.phase("render")
     out_path = os.path.join(work, "final.mp4")
     last_pct = [70]
 
@@ -1241,6 +1258,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         )
 
     report("Uploading video", 91)
+    events.phase("upload")
     duration = doc["durationInFrames"] / doc["fps"]
 
     # Preferred: the caller pre-signed a destination for us, so this worker
@@ -1373,6 +1391,12 @@ def handler(job):
     config_before = _apply_config(inp.get("config"))
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
+    # Every job keeps its own ledger and event log; a fan-out child returns
+    # both in its result and the parent absorbs them.
+    costs.reset(inp.get("prices") if isinstance(inp.get("prices"), dict) else None)
+    events.start_job(job_id, project_id, part=("part" if action in ("source_part", "render_chunk") else ""))
+    if action in ("plan", "build", "render", "resource"):
+        costs.measure_start()
     report = Reporter(project_id, job=job)
     work = _work_dir(job_id)
 
@@ -1409,6 +1433,8 @@ def handler(job):
                     allow_stock=inp.get("allow_stock"), require_cc=inp.get("require_cc"))
             out = fanout.run_part(inp, work, source_part, set_story)
             return {"ok": True, "action": "source_part", **out,
+                    "costs": costs.summary(time.time() - started),
+                    "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "render_chunk":
@@ -1430,6 +1456,8 @@ def handler(job):
                                        muted=muted, codec=codec)
             out = fanout.run_chunk(inp, work, render_chunk)
             return {"ok": True, "action": "render_chunk", **out,
+                    "costs": costs.summary(time.time() - started),
+                    "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "selftest":
@@ -1480,6 +1508,7 @@ def handler(job):
             # delete. See publish_media().
             if project_id and inp.get("publish_media", True):
                 report("Saving sourced media", 66)
+                events.phase("publish")
                 publish_media(doc, project_id,
                               inp.get("media_bucket") or config.MEDIA_BUCKET, report,
                               job_id=job_id)
@@ -1488,7 +1517,9 @@ def handler(job):
                     "scene_data": doc, "status": "editing",
                     "current_step": "Timeline ready", "progress": 68,
                 })
-            return {"ok": True, "action": "plan", "timeline": doc,
+            summary = _finish_costs(doc, started)
+            return {"ok": True, "action": "plan", "timeline": doc, "costs": summary,
+                    "events": doc["meta"]["events"],
                     "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
@@ -1499,10 +1530,13 @@ def handler(job):
                     "scene_data": doc, "status": "editing",
                     "current_step": "Scene re-sourced", "progress": 100,
                 })
+            costs.measure_end()
             return {"ok": True, "action": "resource", "timeline": doc,
                     "scene_index": inp.get("scene_index"),
                     "mode": str(inp.get("mode") or "replace"),
                     "candidates": candidates,
+                    "costs": costs.summary(time.time() - started),
+                    "events": events.summary(),
                     "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
@@ -1519,8 +1553,11 @@ def handler(job):
             out = do_render(doc, inp, work, report)
             if project_id:
                 storage.patch_project(project_id, _done_fields(out))
+            costs.measure_end()
             return {"ok": True, "action": "render", **out,
                     "render_manifest": media.LAST_STATS.get("render_manifest"),
+                    "costs": costs.summary(time.time() - started),
+                    "events": events.summary(),
                     "filledScenes": patched,
                     "elapsed": round(time.time() - started, 1)}
 
@@ -1556,7 +1593,9 @@ def handler(job):
                               report, job_id=job_id, band=(93, 99))
             if project_id:
                 storage.patch_project(project_id, _done_fields(out))
-            return {"ok": True, "action": "build", "timeline": doc, **out,
+            summary = _finish_costs(doc, started)
+            return {"ok": True, "action": "build", "timeline": doc, **out, "costs": summary,
+                    "events": doc["meta"]["events"],
                     **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") else {}),
                     "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
@@ -1575,6 +1614,11 @@ def handler(job):
                 **({"timeline": dict(LAST_TIMELINE)} if inp.get("return_frames") and LAST_TIMELINE else {})}
     finally:
         _restore_config(config_before)
+        events.phase("")
+        try:
+            events.flush(storage.broker_events)
+        except Exception:  # noqa: BLE001
+            pass
         report.finish()
         # Serverless workers are reused; a 17-minute render leaves GBs behind.
         if not inp.get("keep_workdir"):

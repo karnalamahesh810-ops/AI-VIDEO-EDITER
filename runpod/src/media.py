@@ -37,7 +37,7 @@ import urllib.parse
 import uuid
 import requests
 
-from . import candidates, config, intent, moments, proxies, vision
+from . import candidates, config, costs, events, intent, moments, proxies, vision
 from .errors import RETRY, FailureClass, classify_exception, classify_ytdlp, from_reason
 from .storage import download
 
@@ -386,6 +386,7 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
         # Google Images through Bright Data's SERP API: 100 results per call
         # with the full-size original (press photos: NOAA, TIME, NASA...).
         # Billed per successful search, not per image.
+        costs.record("serp.call")
         try:
             r = requests.post(
                 "https://api.brightdata.com/request",
@@ -1381,6 +1382,7 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
         if key in _GOOGLE_VIDEO_CACHE:
             return _GOOGLE_VIDEO_CACHE[key]
     rows: List[dict] = []
+    costs.record("serp.call")
     try:
         r = requests.post(
             "https://api.brightdata.com/request",
@@ -1551,6 +1553,9 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
         print(f"[media] download failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}: "
               f"{reason[-160:] or 'no diagnostic'}", flush=True)
+        events.emit("source", "download_failed", level="warning", provider="youtube",
+                    failure=cls.value, data={"video": video_id, "proxy": _proxy_index(proxy)},
+                    message=reason[-120:])
         return ""
     found = ""
     for line in (p.stdout or "").splitlines():
@@ -1583,6 +1588,13 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         return ""
     _release_proxy(proxy, True, None, started)
     _LAST_FAILURE.set(None)
+    try:
+        costs.record("proxy.bytes", os.path.getsize(found))
+    except OSError:
+        pass
+    events.emit("source", "download_ok", provider="youtube",
+                data={"video": video_id, "seconds": round(seconds, 1), "proxy": _proxy_index(proxy)},
+                duration_ms=(time.time() - started) * 1000.0)
     return found
 
 
@@ -2510,6 +2522,8 @@ def _source_stat(name: str) -> Dict[str, Any]:
 def _source_error(name: str, exc: Exception) -> None:
     """Record why a source failed, and its class; never raises."""
     cls = classify_exception(exc)
+    events.emit("source", "provider_failed", level="warning", provider=name, failure=cls.value,
+                message=f"{type(exc).__name__}: {str(exc)[:100]}")
     with _CACHE_LOCK:
         st = _source_stat(name)
         st["errors"] += 1
@@ -2546,6 +2560,8 @@ def _generation_budget_left() -> bool:
         if _GENERATED[0] >= config.IMAGE_MAX_PER_VIDEO:
             return False
         _GENERATED[0] += 1
+    costs.record("image.generate")
+    with _CACHE_LOCK:
         return True
 
 

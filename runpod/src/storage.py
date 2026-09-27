@@ -95,6 +95,14 @@ def _broker(payload: dict, timeout: int = 60) -> dict:
     return body
 
 
+def broker_events(project_id: str, job_id: str, batch: list) -> None:
+    """Send a batch of job events to the app (worker-storage action "events")."""
+    if not broker_enabled():
+        raise StorageError("no storage broker configured")
+    _broker({"project_id": project_id, "job_id": job_id, "action": "events", "events": batch},
+            timeout=30)
+
+
 def broker_read_url(bucket: str, object_path: str, project_id: str, job_id: str,
                     read_ttl: int = 60 * 60) -> str:
     """A signed read URL for an existing object, through the app's broker."""

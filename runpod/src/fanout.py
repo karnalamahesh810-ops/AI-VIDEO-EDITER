@@ -37,7 +37,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
-from . import config, media, storage
+from . import config, media, storage, costs, events
 
 
 def readiness(n_scenes: int, project_id: Optional[str] = None) -> dict:
@@ -257,6 +257,10 @@ class _Units:
                 if state in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
                     del pending[jid]
                     out = st.get("output")
+                    if state == "COMPLETED" and isinstance(out, dict):
+                        # The child's cost units and stage timings join this job's.
+                        costs.absorb(out.get("costs"))
+                        events.absorb(out.get("events"))
                     if state != "COMPLETED" or not isinstance(out, dict) or not self.accept(unit, out, True):
                         print(f"[fanout] {label}: unit {jid[:8]} {state}: "
                               f"{str(out.get('error') if isinstance(out, dict) else out)[:160]}", flush=True)

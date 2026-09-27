@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Tuple
 import requests
 from concurrent.futures import ThreadPoolExecutor
 
-from . import config, geocode, vision
+from . import config, costs, geocode, vision
 from . import intent as scene_intent
 from .transcribe import Segment, keywords_for
 
@@ -964,6 +964,7 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
             data = _json_reply(body["choices"][0]["message"]["content"])
             if isinstance(data, dict):
                 CHAT_CALLS["n"] += 1
+                costs.record("llm.director_call")
                 vision.model_result(model, True)
                 return data
         except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:

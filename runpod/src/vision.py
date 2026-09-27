@@ -31,7 +31,7 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
-from . import config, intent as scene_intent
+from . import config, costs, events, intent as scene_intent
 
 _CACHE: Dict[str, dict] = {}
 _LOCK = threading.Lock()
@@ -183,6 +183,8 @@ def _fail(model: str, why: str) -> None:
     with _LOCK:
         _FAILS["n"] += 1
         _ERRORS.append(f"{model}: {why}"[:240])
+    events.emit("vision", "model_failed", level="warning", provider=model or "vision",
+                failure="AI_API_FAILURE", message=why)
 
 
 def stats() -> dict:
@@ -484,6 +486,9 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
 
     with _LOCK:
         _CALLS["n"] += 1
+    if text:
+        costs.record("vision.judge")
+    with _LOCK:
         if verdict:
             _CACHE[key] = verdict
         else:
@@ -590,6 +595,7 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
         _CALLS["n"] += 1
     if not text:
         return None
+    costs.record("vision.rate_tiles")
     m = re.search(r"\{[\s\S]*\}", text)
     try:
         data = json.loads(m.group(0)) if m else {}
@@ -624,6 +630,7 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Opt
         _CALLS["n"] += 1
     if not text:
         return None
+    costs.record("vision.pick_tile")
     m = re.search(r"\{[\s\S]*\}", text)
     try:
         data = json.loads(m.group(0)) if m else {}
