@@ -1121,7 +1121,20 @@ _EVENT_WINDOW: contextvars.ContextVar = contextvars.ContextVar("event_window", d
 # per-scene count of clips judged, so the expanded searches cannot spend
 # without limit.
 _SCENE_INTENT: contextvars.ContextVar = contextvars.ContextVar("scene_intent", default=None)
+# One vision budget per scene: every model call made for it (scouting a
+# storyboard, the fine pass, judging a download) counts, across all of the
+# scene's fallback searches. Before this only judgements counted, so a hard
+# scene spent 30-40 calls re-scouting the same videos for every fallback.
 _SCENE_JUDGED: contextvars.ContextVar = contextvars.ContextVar("scene_judged", default=None)
+# Videos this scene has already scouted or downloaded, across its fallback
+# searches: the next search only brings NEW candidates.
+_SCENE_TRIED: contextvars.ContextVar = contextvars.ContextVar("scene_tried", default=None)
+# Storyboard picks memoised per (video, intent) for the job, and the videos
+# some scene is downloading right now, so parallel scenes stop converging on
+# the same top-ranked candidate.
+_SCOUT_MEMO: Dict[str, Optional[dict]] = {}
+_INFLIGHT: set = set()
+_SCENE_LOCK = threading.Lock()
 # Replace Clip keeps the runner-up files so they can be published as choices.
 _KEEP_ALT_FILES: contextvars.ContextVar = contextvars.ContextVar("keep_alt_files", default=False)
 
@@ -1624,8 +1637,39 @@ def _fixed_point(candidate: dict, grab: float, start_at: float) -> float:
     return point
 
 
+def _scene_tried() -> set:
+    tried = _SCENE_TRIED.get()
+    return tried if tried is not None else set()
+
+
+def _vision_budget_left() -> int:
+    counter = _SCENE_JUDGED.get()
+    if counter is None:
+        return config.JUDGE_MAX_PER_SCENE
+    return max(0, config.JUDGE_MAX_PER_SCENE - counter[0])
+
+
+def _claim_inflight(video_id: str, used: Optional[set]) -> bool:
+    """Claim a video for this scene's download; False if another scene has it."""
+    key = f"yt:{video_id}"
+    with _SCENE_LOCK:
+        if key in _INFLIGHT or (used and key in used):
+            return False
+        _INFLIGHT.add(key)
+        return True
+
+
+def _release_inflight(video_id: str) -> None:
+    with _SCENE_LOCK:
+        _INFLIGHT.discard(f"yt:{video_id}")
+
+
 def _scout(candidate: dict, grab: float, intent: str, context: str) -> Optional[dict]:
     """Storyboard moment for one candidate video, or None if unavailable."""
+    memo_key = _scout_memo_key(candidate["id"], grab, intent)
+    with _SCENE_LOCK:
+        if memo_key in _SCOUT_MEMO:
+            return _SCOUT_MEMO[memo_key]
     info, proxy = _yt_info(candidate["id"])
     if not info:
         return None
@@ -1633,8 +1677,16 @@ def _scout(candidate: dict, grab: float, intent: str, context: str) -> Optional[
     if w and h and w / h < 1.2:
         # Vertical. The flat search cannot see this; a zero score drops it
         # before anything is downloaded.
-        return {"start": 0.0, "score": 0.0, "description": "vertical video", "tile": 0}
-    return moments.pick(info, intent, context, grab, proxy)
+        got = {"start": 0.0, "score": 0.0, "description": "vertical video", "tile": 0}
+    else:
+        got = moments.pick(info, intent, context, grab, proxy)
+    with _SCENE_LOCK:
+        _SCOUT_MEMO[memo_key] = got
+    return got
+
+
+def _scout_memo_key(video_id: str, grab: float, intent: str) -> str:
+    return f"{video_id}|{round(grab)}|{(intent or '')[:120]}"
 
 
 def _plan_grabs(eligible: List[dict], grab: float, start_at: float,
@@ -2198,32 +2250,59 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         for t, rows, via in ex.map(fetch_one, targets):
             pool.add(rows, query=t[0], variant=t[1], via=via)
 
+    tried = _scene_tried()
     ranked = [c for c in pool.ranked()
-              if not _stock_seller(c.title, c.channel) and not _talking_head(c.title)
+              if c.id not in tried
+              and not _stock_seller(c.title, c.channel) and not _talking_head(c.title)
               and not (c.aspect and c.aspect < 1.2)]
     if skip:
         ranked = ranked[skip:] + ranked[:skip]
     if not ranked:
         return None
-    print(f"[pool] {len(pool)} candidates from {pool.searches} searches; "
-          f"best meta {ranked[0].metadata:.2f} {ranked[0].title[:50]!r}", flush=True)
+    # Scouting spends one model call per candidate; leave room for judging.
+    left = _vision_budget_left()
+    if left < 2:
+        print(f"[pool] scene out of vision budget ({config.JUDGE_MAX_PER_SCENE}); no more searches", flush=True)
+        return None
+    n_scouts = max(1, min(config.POOL_SCOUT, left - 2))
+    print(f"[pool] {len(pool)} candidates from {pool.searches} searches ({len(ranked)} new); "
+          f"best meta {ranked[0].metadata:.2f} {ranked[0].title[:50]!r}; scouting {n_scouts}", flush=True)
 
     grab = max(2.0, seconds + 1.5)
-    scouts = ranked[:max(1, config.POOL_SCOUT)]
+    scouts = ranked[:n_scouts]
+    tried.update(c.id for c in scouts)
     by_id = {c.id: c for c in scouts}
+    # Scouting runs in pool threads, which do not see this scene's budget
+    # counter, so the fresh (unmemoised) scouts are counted here first.
+    if config.MOMENT_SELECTION and intent_text and vision.enabled():
+        with _SCENE_LOCK:
+            fresh = sum(1 for c in scouts if _scout_memo_key(c.id, grab, intent_text) not in _SCOUT_MEMO)
+        for _ in range(fresh):
+            _count_judged()
     plan = _plan_grabs([c.row() for c in scouts], grab, start_at, intent_text, context)
     story_kind = _STORY_KIND["kind"]
     passed: List[MediaAsset] = []
     judged = 0
+    fine_done = False
+    claimed: List[str] = []
     for row, point, moment in plan:
-        if judged >= config.VISION_MAX_CANDIDATES or _scene_cap_reached() or _good_enough(passed):
+        if judged >= config.VISION_MAX_CANDIDATES or _vision_budget_left() < 1 or _good_enough(passed):
             break
         c = by_id[row["id"]]
-        moment = _refine_moment(row, moment, grab, intent_text, context)
+        if not _claim_inflight(c.id, used):
+            continue                        # another scene is downloading it right now
+        claimed.append(c.id)
+        # The fine pass (one more model call) goes to the best-ranked
+        # download only; the others keep their coarse pick.
+        if not fine_done and _vision_budget_left() >= 2:
+            fine_done = True
+            _count_judged()
+            moment = _refine_moment(row, moment, grab, intent_text, context)
         if moment and moment.get("fine"):
             point = moment["start"]
         path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title)
         if not path:
+            _release_inflight(c.id)
             continue
         if has_burned_captions(path):
             print(f"[media] hardsubs, skipping: {c.title[:60]}", flush=True)
@@ -2231,6 +2310,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
                 os.remove(path)
             except OSError:
                 pass
+            _release_inflight(c.id)
             continue
         judged += 1
         _count_judged()
@@ -2240,6 +2320,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
                 os.remove(path)
             except OSError:
                 pass
+            _release_inflight(c.id)
             continue
         asset = _asset_for(path, query, grab, require_cc, title=c.title)
         asset.url = f"https://www.youtube.com/watch?v={c.id}&t={int(point)}"
@@ -2258,6 +2339,11 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
               f"{asset.specificity or 'unclassed'})", flush=True)
         passed.append(asset)
     winner = _best_of(passed)
+    # The claims only had to cover the download-and-judge window, when two
+    # scenes could converge on one video; the caller records the winner in
+    # `used` as soon as this returns.
+    for vid in claimed:
+        _release_inflight(vid)
     if winner is not None:
         chan = by_id.get(winner.identity[3:], None)
         if chan is not None and chan.channel:
@@ -2539,6 +2625,9 @@ def source_stats() -> Dict[str, Any]:
 
 def reset_cache():
     """Call between jobs — serverless worker processes are reused across renders."""
+    with _SCENE_LOCK:
+        _SCOUT_MEMO.clear()
+        _INFLIGHT.clear()
     with _CACHE_LOCK:
         _SEARCH_CACHE.clear()
         _YT_INFO_CACHE.clear()
@@ -2670,6 +2759,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     window_token = _EVENT_WINDOW.set(event_window or "")
     intent_token = _SCENE_INTENT.set(scene_intent or None)
     judged_token = _SCENE_JUDGED.set([0])
+    tried_token = _SCENE_TRIED.set(set())
     try:
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
@@ -2684,6 +2774,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                 return got
         return None
     finally:
+        _SCENE_TRIED.reset(tried_token)
         _SCENE_JUDGED.reset(judged_token)
         _SCENE_INTENT.reset(intent_token)
         _EVENT_WINDOW.reset(window_token)

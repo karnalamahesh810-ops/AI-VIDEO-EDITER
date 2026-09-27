@@ -201,7 +201,9 @@ VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
 # vision calls across all of a scene's expanded searches.
 JUDGE_BEST_OF = int(os.getenv("JUDGE_BEST_OF", "2"))
 EXCELLENT_SCORE = float(os.getenv("EXCELLENT_SCORE", "0.9"))
-JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "6"))
+# Every model call a scene makes (scouting, the fine pass, judging) across
+# all its searches. The old-style search used about 10 per scene.
+JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "16"))
 # Searches a typed scene intent expands to (src/intent.py), specific first.
 INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # The candidate pool (src/candidates.py): every search variant plus

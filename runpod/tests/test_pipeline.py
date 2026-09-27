@@ -745,6 +745,7 @@ class PipelineProgress(unittest.TestCase):
             return {"video_url": "https://v", "object_path": "p", "bucket": "renders", "duration": 6}
 
         with mock.patch.object(handler, "do_plan", return_value=doc), \
+                mock.patch.object(handler, "_require_youtube"), \
                 mock.patch.object(handler, "do_render", side_effect=fake_render), \
                 mock.patch.object(handler, "publish_media",
                                   side_effect=lambda *a, **k: order.append("save")), \
@@ -770,6 +771,7 @@ class PipelineProgress(unittest.TestCase):
             return {"video_url": "https://v", "object_path": "p", "bucket": "renders", "duration": 6}
 
         with mock.patch.object(handler, "do_plan", return_value=doc), \
+                mock.patch.object(handler, "_require_youtube"), \
                 mock.patch.object(handler, "do_render", side_effect=fake_render), \
                 mock.patch.object(handler, "publish_media"), \
                 mock.patch.object(handler.storage, "patch_project"):

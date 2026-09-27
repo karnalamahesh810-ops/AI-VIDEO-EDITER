@@ -13,7 +13,7 @@ def _candidates():
 
 
 class BestOfN(unittest.TestCase):
-    def _run(self, scores, best_of, excellent=0.9, cap=6, judged_before=0):
+    def _run(self, scores, best_of, excellent=0.9, cap=20, judged_before=0):
         d = tempfile.mkdtemp()
         fetched, verdict_iter = [], iter(scores)
 
