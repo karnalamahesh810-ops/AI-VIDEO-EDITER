@@ -635,9 +635,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             # network, and the network side is capped separately (NETWORK_CONCURRENCY).
             workers=int(inp.get("source_workers", config.SOURCE_WORKERS)),
             on_done=on_done if progress else None,
-            on_review=lambda d, n: report(f"Filling empty or repeated scenes {d}/{n}", 65, done=d, total=n),
+            # A part run on this worker for the fan-out must not report as the
+            # whole job: its "Filling ... 65%" made the bar jump backwards.
+            on_review=(lambda d, n: report(f"Filling empty or repeated scenes {d}/{n}", 65, done=d, total=n))
+            if progress else None,
             rescue=lambda items: director.rescue_queries(items, story=brief),
-            on_recheck=lambda n: report(f"Rechecking {n} missing scenes against the story", 66),
+            on_recheck=(lambda n: report(f"Rechecking {n} missing scenes against the story", 66))
+            if progress else None,
             sequences=local_seqs or None,
             assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
             on_pool=on_pool if progress else None,
