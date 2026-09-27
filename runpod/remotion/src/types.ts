@@ -1,4 +1,7 @@
-export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right";
+export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right"
+  // Stills (VidRush): the photo slides in from a side while it settles from a
+  // close zoom, then keeps pushing; or a slow push with a slight turn.
+  | "reveal-left" | "reveal-right" | "push-rotate";
 
 /**
  * The grade applied to a scene's footage.
@@ -208,6 +211,8 @@ export interface Overlay {
   scale?: number;
   opacity?: number;
   fontScale?: number;
+  /** Set by AnimationScene: the graphic IS the frame (no scrim over footage). */
+  fullFrame?: boolean;
   startFrame: number;
   durationInFrames: number;
 }

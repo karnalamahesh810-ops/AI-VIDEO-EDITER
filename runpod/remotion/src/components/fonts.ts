@@ -2,6 +2,8 @@ import { loadFont as loadOswald } from "@remotion/google-fonts/Oswald";
 import { loadFont as loadCourierPrime } from "@remotion/google-fonts/CourierPrime";
 import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
 import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
+import { loadFont as loadBebas } from "@remotion/google-fonts/BebasNeue";
+import { loadFont as loadBarlowCondensed } from "@remotion/google-fonts/BarlowCondensed";
 
 /**
  * The composition's typefaces, loaded the same way in the RunPod render and in
@@ -20,3 +22,8 @@ export const TYPEWRITER = `${loadCourierPrime("normal", { ...latin, weights: ["4
 export const SERIF_ITALIC = `${loadPlayfair("italic", { ...latin, weights: ["700"] }).fontFamily}, Georgia, serif`;
 export const SERIF = `${loadPlayfair("normal", { ...latin, weights: ["400"] }).fontFamily}, Georgia, serif`;
 export const INTER = `${loadInter("normal", { ...latin, weights: ["400", "700", "800"] }).fontFamily}, system-ui, sans-serif`;
+
+// The "pro" graphics (components/pro): Bebas Neue for big numbers and titles,
+// Barlow Condensed for labels and tags.
+export const DISPLAY = `${loadBebas("normal", { ...latin, weights: ["400"] }).fontFamily}, Impact, sans-serif`;
+export const LABEL = `${loadBarlowCondensed("normal", { ...latin, weights: ["600", "700", "800"] }).fontFamily}, 'Arial Narrow', sans-serif`;

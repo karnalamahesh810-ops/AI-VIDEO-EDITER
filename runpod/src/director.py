@@ -1109,6 +1109,49 @@ def name_people(segments: List[Segment], shots: List[dict]) -> int:
 MAX_PERSON_STILLS_IN_A_ROW = 2
 
 
+_PHOTO_WORDS = re.compile(r"\b(photo(?:graph)?s?|pictures?|pictured|portraits?|snapshots?|images?|newspapers?|"
+                          r"headlines?|front page|letters?|documents?|records?|archives?|postcards?|posters?)\b", re.I)
+STILL_EVERY = 7          # a planned photo beat about every seventh line for variety
+
+
+def promote_stills(segments: List[Segment], shots: List[dict], story: dict) -> int:
+    """
+    Photos where the line is about one (a photograph, a newspaper, a letter,
+    a document), and, for variety, a real photo of the named subject about
+    every STILL_EVERY lines when the stretch has none - VidRush mixes quality
+    stills with slide-in moves between clips. Never two promoted stills in a
+    row, never an unnamed person (a stranger's photo), never past
+    MAX_STILL_SHARE of the video. Returns how many beats changed.
+    """
+    n = len(shots)
+    cap = int(MAX_STILL_SHARE * n)
+    stills = sum(1 for sh in shots if sh.get("visualType") == "image")
+    changed = 0
+    since = 0
+    for i, shot in enumerate(shots):
+        if stills >= cap:
+            break
+        text = segments[i].text if i < len(segments) else ""
+        if shot.get("visualType") == "image":
+            since = 0
+            continue
+        since += 1
+        prev_still = i > 0 and shots[i - 1].get("visualType") == "image"
+        subject = (shot.get("subject") or "").strip()
+        named = bool(subject) and _looks_named(subject)
+        if shot.get("subjectType") == "person" and not named:
+            continue
+        mentions_photo = bool(_PHOTO_WORDS.search(text or ""))
+        due = since >= STILL_EVERY and named and i > 0 and not prev_still
+        if (mentions_photo and not prev_still) or due:
+            shot["visualType"] = "image"
+            shot["stillReason"] = "photo mentioned" if mentions_photo else "variety"
+            stills += 1
+            changed += 1
+            since = 0
+    return changed
+
+
 def vary_person_stills(shots: List[dict]) -> int:
     """
     Turn every third person photo in a row into footage of that person.
@@ -1908,6 +1951,7 @@ def plan(segments: List[Segment], title: str = "", report=None,
     diversify_overlays(segments, shots)
 
     vary_person_stills(shots)
+    promote_stills(segments, shots, brief)
     anchor_to_story(shots, segments, brief)
     # Every beat carries a typed intent (the model's, or the one its shot and
     # story imply) and the searches it expands to, most specific first, ahead

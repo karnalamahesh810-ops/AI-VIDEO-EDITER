@@ -26,7 +26,9 @@ SCHEMA_VERSION = 2
 
 # Stills need Ken Burns or they read as a stalled video. Cycled rather than
 # random so a re-plan of the same script produces the same document.
-_IMAGE_MOTIONS = ["zoom-in", "pan-left", "zoom-out", "pan-right"]
+# Stills cycle through moves so no two photos in a row move alike; the
+# side reveals are VidRush's "photo slides in and settles" look.
+_IMAGE_MOTIONS = ["reveal-left", "zoom-in", "reveal-right", "push-rotate", "pan-left", "zoom-out"]
 
 # Scene entrances and per-clip effects. Both lists are a contract with
 # remotion/src/types.ts (SceneTransition / SceneEffect) and SceneEffects.tsx;

@@ -5,7 +5,7 @@ import { Captions } from "./components/Captions";
 import { MotionWrap } from "./components/MotionWrap";
 import { resolveOverlay } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
-import type { Overlay, OverlayType, TimelineProps } from "./types";
+import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
 
 const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
 
@@ -78,6 +78,21 @@ export const Main: React.FC<TimelineProps> = (props) => {
   // fresh download. Rendering ignores premounting.
   const { fps } = useVideoConfig();
   const premount = Math.round(fps * 2);
+  // An animation scene's backdrop: the nearest clip of the story, blurred.
+  const backdrops = React.useMemo(() => {
+    const out: Record<string, SceneMedia | null> = {};
+    const real = (i: number) => {
+      const m = scenes[i]?.media;
+      return m && m.url && (m.type === "video" || m.type === "image") ? m : null;
+    };
+    scenes.forEach((sc, i) => {
+      if (sc.media?.type !== "animation") return;
+      let pick: SceneMedia | null = null;
+      for (let d = 1; d < scenes.length && !pick; d++) pick = real(i - d) || real(i + d);
+      out[sc.id] = pick;
+    });
+    return out;
+  }, [scenes]);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -89,7 +104,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           durationInFrames={scene.durationInFrames}
           premountFor={premount}
         >
-          <SceneClip scene={scene} accent={captions.accent} />
+          <SceneClip scene={scene} accent={captions.accent} backdrop={backdrops[scene.id]} />
         </Sequence>
       ))}
 

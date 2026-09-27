@@ -23,6 +23,7 @@ import { AgeTag, BarTitle, ClockBadge, Kicker, MemoBox, PersonTag, RedStrip, Swo
 import { IconPop, LineChart, PathSteps, ProgressSteps, Span } from "./components/DataGraphics";
 import { AreaChart, Banner, Counter, Donut, IconArray, NumberRoll, ProgressBar, Ranking, ScaleCompare, Trend, YearRoll } from "./components/MotionGraphics";
 import { SatelliteMap, SpreadMap } from "./components/MapLooks";
+import { ProBars, ProCompare, ProStat, ProTitle, ProTrend } from "./components/pro/ProGraphics";
 import type { Overlay, OverlayType } from "./types";
 
 /** Colour themes an overlay can ask for instead of the brand accent. */
@@ -48,10 +49,10 @@ export const OVERLAYS: Record<OverlayType, OverlayComponent> = {
   title: TitleOverlay,
   chapter: (p) => p.overlay.variant ? <EditorialChapter {...p}/> : <ChapterCard {...p}/>,
   callout: CalloutOverlay,
-  typewriter: TypewriterTitle,
-  stat: StatOverlay,
-  "bar-chart": BarChartOverlay,
-  comparison: ComparisonOverlay,
+  typewriter: ProTitle,
+  stat: (p) => <ProStat {...p} />,
+  "bar-chart": ProBars,
+  comparison: ProCompare,
   map: (p) => {
     const v = p.overlay.variant || "";
     if (v.startsWith("satellite")) return <SatelliteMap {...p}/>;
@@ -70,7 +71,7 @@ export const OVERLAYS: Record<OverlayType, OverlayComponent> = {
   "name-card": NameCard,
   "stat-tag": StatTag,
   "label-boxes": LabelBoxes,
-  "ring-stat": RingStat,
+  "ring-stat": (p) => <ProStat {...p} variant="ring" />,
   bullets: Bullets,
   "swoosh-title": SwooshTitle,
   kicker: Kicker,
@@ -86,14 +87,15 @@ export const OVERLAYS: Record<OverlayType, OverlayComponent> = {
   "progress-steps": ProgressSteps,
   span: Span,
   "icon-pop": IconPop,
-  donut: Donut,
+  donut: (p) => <ProStat {...p} variant="ring" />,
   "area-chart": AreaChart,
   "progress-bar": ProgressBar,
   "icon-array": IconArray,
   ranking: Ranking,
-  counter: Counter,
-  "number-roll": NumberRoll,
-  trend: Trend,
+  counter: (p) => ((p.overlay.items || []).filter((i) => typeof i.value === "number").length >= 2
+    ? <ProCompare {...p} /> : <ProStat {...p} variant="roll" />),
+  "number-roll": (p) => <ProStat {...p} variant="roll" />,
+  trend: ProTrend,
   "year-roll": YearRoll,
   banner: Banner,
   "scale-compare": ScaleCompare,

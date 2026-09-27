@@ -1,12 +1,12 @@
 import React from "react";
 import {
-  AbsoluteFill, Img, OffthreadVideo, interpolate,
+  AbsoluteFill, Easing, Img, OffthreadVideo, interpolate,
   useCurrentFrame, useVideoConfig,
 } from "remotion";
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
 import { EffectLayer, TransitionLayer, effectFilter, entranceStyle } from "./SceneEffects";
 import { AnimationScene } from "./AnimationScene";
-import type { Scene } from "../types";
+import type { Scene, SceneMedia } from "../types";
 
 /**
  * One visual for one spoken clause.
@@ -17,9 +17,9 @@ import type { Scene } from "../types";
  * for one (see SceneEffects), and every clip carries one effect so borrowed
  * footage still feels designed.
  */
-export const SceneClip: React.FC<{ scene: Scene; accent?: string }> = ({ scene, accent }) => {
+export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: SceneMedia | null }> = ({ scene, accent, backdrop }) => {
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
+  const { durationInFrames, fps } = useVideoConfig();
   const { media, motion, treatment, transition, effect } = scene;
 
   const progress = durationInFrames > 1 ? frame / durationInFrames : 0;
@@ -34,11 +34,28 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string }> = ({ scene, 
     transform = `scale(1.16) translateX(${interpolate(progress, [0, 1], [3, -3])}%)`;
   } else if (motion === "pan-right") {
     transform = `scale(1.16) translateX(${interpolate(progress, [0, 1], [-3, 3])}%)`;
+  } else if (motion === "reveal-left" || motion === "reveal-right") {
+    // In from the side, settling from a close zoom, then a slow push.
+    const side = motion === "reveal-left" ? -1 : 1;
+    const e = interpolate(frame, [0, Math.round(fps * 1.0)], [0, 1],
+      { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.bezier(0.16, 1, 0.3, 1) });
+    transform = `translateX(${(1 - e) * side * 12}%) scale(${1.32 - 0.22 * e + progress * 0.06})`;
+  } else if (motion === "push-rotate") {
+    transform = `scale(${1.08 + progress * 0.1}) rotate(${interpolate(progress, [0, 1], [-1.4, 0.6])}deg)`;
+  }
+
+  // A long clip gets a cut-in halfway: a hard cut to a tighter framing of the
+  // same shot reads as a second camera angle (VidRush's shots average 3.5 s;
+  // ours ran 8 s on one framing).
+  const longClip = media.type === "video" && scene.frame !== "inset" && durationInFrames > fps * 5.5;
+  if (longClip && frame >= Math.round(durationInFrames * 0.5)) {
+    const side = (scene.id.charCodeAt(scene.id.length - 1) % 2) ? 1 : -1;
+    transform = `scale(1.24) translate(${side * 3.5}%, -2%)`;
   }
 
   if (media.type === "animation") {
     // The beat is a motion graphic, not a clip (VidRush's purple blocks).
-    return <AnimationScene scene={scene} accent={accent || "#d6a83c"} />;
+    return <AnimationScene scene={scene} accent={accent || "#d6a83c"} backdrop={backdrop} />;
   }
 
   if (media.type === "color" || !media.url) {
