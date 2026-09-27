@@ -567,6 +567,9 @@ _RATE_SYSTEM = (
 )
 
 
+_TILE_ROW = re.compile(r'\{\s*"tile"\s*:\s*(\d+)\s*,\s*"score"\s*:\s*([\d.]+)\s*,\s*"description"\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+
 def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
                intent: str = "") -> Optional[List[dict]]:
     """
@@ -607,8 +610,20 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
                 out.append({"tile": tile, "score": score,
                             "description": str(r.get("description") or "")[:300]})
     except (ValueError, TypeError, AttributeError):
-        _fail(model, f"unparseable tile rating: {text[:120]!r}")
-        return None
+        # Kie sometimes hands back a reply that starts mid-JSON (seen 17 times
+        # in one job with gpt-5-2: '0.88,"description":...},{"tile":5,...').
+        # Keep every complete tile object in it rather than losing the sheet.
+        out = []
+        for m2 in _TILE_ROW.finditer(text):
+            try:
+                tile, score = int(m2.group(1)), max(0.0, min(1.0, float(m2.group(2))))
+            except ValueError:
+                continue
+            if 1 <= tile <= count:
+                out.append({"tile": tile, "score": score, "description": m2.group(3)[:300]})
+        if not out:
+            _fail(model, f"unparseable tile rating: {text[:120]!r}")
+            return None
     return out
 
 

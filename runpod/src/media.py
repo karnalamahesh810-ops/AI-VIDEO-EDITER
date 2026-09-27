@@ -186,6 +186,42 @@ class MediaAsset:
 # Real imagery: Wikimedia Commons + Openverse
 # --------------------------------------------------------------------------- #
 
+# Bright Data's SERP zone answers some calls with a page that is not JSON.
+# Measured locally that was 2 in 9; on the worker, ten fan-out parts firing
+# searches at once got 212 of them in one job. So: a few at a time per
+# worker, and up to three tries with a pause between.
+_SERP_SLOTS = threading.BoundedSemaphore(max(1, int(os.getenv("SERP_CONCURRENCY", "3"))))
+
+
+def _brightdata_serp(google_url: str, timeout: int = 150) -> dict:
+    """The parsed JSON Bright Data returns for one Google results URL (raises on failure)."""
+    last = ""
+    for attempt in range(3):
+        if attempt:
+            costs.record("serp.call")
+            time.sleep(2.0 if attempt == 1 else 5.0)
+        with _SERP_SLOTS:
+            r = requests.post(
+                "https://api.brightdata.com/request",
+                headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw", "url": google_url},
+                timeout=timeout)
+        if r.status_code == 429 or r.status_code >= 500:
+            last = f"HTTP {r.status_code}"
+            continue
+        r.raise_for_status()
+        try:
+            body = r.json()
+        except ValueError:
+            last = f"not JSON: {r.text[:100]!r}"
+            continue
+        if isinstance(body, dict):
+            return body
+        last = f"unexpected {type(body).__name__}"
+    raise ValueError(f"Bright Data SERP: {last}")
+
+
 def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
     """
     Real photographs of the named subject from a general image search.
@@ -206,16 +242,9 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
         # Billed per successful search, not per image.
         costs.record("serp.call")
         try:
-            r = requests.post(
-                "https://api.brightdata.com/request",
-                headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
-                         "Content-Type": "application/json"},
-                json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw",
-                      "url": "https://www.google.com/search?tbm=isch&brd_json=1&q="
-                             + urllib.parse.quote_plus(query)},
-                timeout=90)
-            r.raise_for_status()
-            for it in (r.json().get("images") or [])[:limit * 3]:
+            body = _brightdata_serp("https://www.google.com/search?tbm=isch&brd_json=1&q="
+                                    + urllib.parse.quote_plus(query), timeout=90)
+            for it in (body.get("images") or [])[:limit * 3]:
                 rows.append((it.get("original_image"), 0, 0,
                              it.get("image_alt") or it.get("source") or "",
                              it.get("title") or ""))
@@ -1036,27 +1065,9 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
     rows: List[dict] = []
     costs.record("serp.call")
     try:
-        body = None
-        # The SERP zone answers with a non-JSON page now and then (measured
-        # locally: 2 of 9 calls); one retry recovers it.
-        for attempt in range(2):
-            r = requests.post(
-                "https://api.brightdata.com/request",
-                headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
-                         "Content-Type": "application/json"},
-                json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw",
-                      "url": "https://www.google.com/search?tbm=vid&brd_json=1&q="
-                             + urllib.parse.quote_plus(query)},
-                timeout=150)
-            r.raise_for_status()
-            try:
-                body = r.json()
-                break
-            except ValueError:
-                if attempt:
-                    raise
-                costs.record("serp.call")
-        for it in ((body or {}).get("organic") or [])[:limit]:
+        body = _brightdata_serp("https://www.google.com/search?tbm=vid&brd_json=1&q="
+                                + urllib.parse.quote_plus(query))
+        for it in (body.get("organic") or [])[:limit]:
             url = it.get("link") or ""
             if not url.startswith("http"):
                 continue
