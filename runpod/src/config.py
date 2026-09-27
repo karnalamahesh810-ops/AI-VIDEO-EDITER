@@ -428,6 +428,8 @@ DEFAULT_HEIGHT = int(os.getenv("DEFAULT_HEIGHT", "1080"))
 # "none" by default: modern footage is shown as shot, bright and full colour.
 # Era beats still get the light vintage/archival grade (director.pick_treatment).
 SCENE_TREATMENT = os.getenv("SCENE_TREATMENT", "none").strip().lower()
+# A benchmark render returned inline in the job result (handler do_render).
+RETURN_VIDEO_MAX_MB = float(os.getenv("RETURN_VIDEO_MAX_MB", "18"))
 # The visual treatment planner (src/treatments.py) and the style pack a video
 # uses when the job does not name one ("" = chosen from the story's kind).
 TREATMENTS = _flag("TREATMENTS", True)

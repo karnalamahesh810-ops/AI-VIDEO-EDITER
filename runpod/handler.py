@@ -1268,6 +1268,21 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     if inp.get("return_frames"):
         LAST_FRAMES.extend(_contact_sheets(out_path, work))
 
+    if inp.get("return_video"):
+        # A benchmark render with no project to upload to: the file rides
+        # back in the job result (RunPod caps results, so small renders only).
+        import base64
+        size = os.path.getsize(out_path)
+        cap = int(config.RETURN_VIDEO_MAX_MB * 1024 * 1024)
+        if size > cap:
+            raise RuntimeError(f"rendered file is {size / 1e6:.1f} MB, over the {config.RETURN_VIDEO_MAX_MB} MB "
+                               "return cap; render smaller (width/height) or give the job a project")
+        with open(out_path, "rb") as fh:
+            payload = base64.b64encode(fh.read()).decode("ascii")
+        return {"video_url": "", "public_url": "", "object_path": "", "bucket": "",
+                "uploadedVia": "inline", "size_bytes": size, "duration": duration,
+                "video_b64": payload}
+
     upload_url = inp.get("upload_url")
     if upload_url:
         size = storage.upload_to_signed_url(out_path, upload_url)

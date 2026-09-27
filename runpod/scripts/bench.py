@@ -99,8 +99,13 @@ def score_timeline(doc: dict, case: dict, elapsed: float = 0.0) -> dict:
     fanout = (meta.get("sourcing") or {}).get("fanout") or meta.get("fanout") or {}
     workers = 1 + int(fanout.get("parts") or 0)
     runpod_usd = elapsed * RUNPOD_USD_PER_WORKER_SECOND * max(1, min(workers, 10)) * 0.6
+    treatments = meta.get("treatments") or {}
     return {
         "scenes": n,
+        **({k: treatments.get(k) for k in ("text_treatments", "maps", "data_graphics", "callouts",
+                                           "image_treatments", "transitions", "sfx", "music_cues",
+                                           "total_treatments", "unique_templates")} if treatments else {}),
+        "style_pack": meta.get("stylePack"),
         "fill_pct": round(100 * len(filled) / n, 1) if n else 0.0,
         "video_pct": round(100 * len(videos) / n, 1) if n else 0.0,
         "entity_acc": round(100 * len(ent_ok) / len(ent_scenes), 1) if ent_scenes else None,
@@ -122,12 +127,20 @@ def score_timeline(doc: dict, case: dict, elapsed: float = 0.0) -> dict:
 
 
 # ------------------------------------------------------------------ running
-def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600) -> dict:
+OUT_DIR = os.path.join(ROOT, "bench", "out")
+
+
+def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600,
+             render: bool = False, width: int = 1280, height: int = 720) -> dict:
     import requests
     H = {"Authorization": f"Bearer {key}"}
-    inp = {"action": "plan", "audio_url": f"bench://{case['name']}", "title": case["title"],
-           "youtube_only": True, "allow_youtube": True, "publish_media": False,
+    inp = {"action": "build" if render else "plan", "audio_url": f"bench://{case['name']}",
+           "title": case["title"], "youtube_only": True, "allow_youtube": True, "publish_media": False,
            "contract_version": 2, "bench": True}
+    if render:
+        # The finished video comes back inline (no project to upload to), so
+        # the benchmark renders at 720p to stay under the result cap.
+        inp.update({"return_video": True, "width": width, "height": height, "captions": True, "sfx": True})
     if config:
         inp["config"] = config
     r = requests.post(f"https://api.runpod.ai/v2/{ENDPOINT}/run", headers=H,
@@ -153,8 +166,16 @@ def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600) 
     elapsed = time.time() - t0
     if st != "COMPLETED" or not out.get("ok", True):
         return {"ok": False, "error": (s.get("error") or out.get("error") or st)[:300], "elapsed": elapsed}
+    video_path = ""
+    if out.get("video_b64"):
+        import base64
+        os.makedirs(OUT_DIR, exist_ok=True)
+        video_path = os.path.join(OUT_DIR, f"{case['name']}.mp4")
+        with open(video_path, "wb") as fh:
+            fh.write(base64.b64decode(out["video_b64"]))
+        print(f"[bench]   saved {video_path} ({os.path.getsize(video_path) / 1e6:.1f} MB)", flush=True)
     return {"ok": True, "timeline": out.get("timeline") or {}, "elapsed": float(out.get("elapsed") or elapsed),
-            "job": jid}
+            "job": jid, "video": video_path, "costs": out.get("costs"), "render_seconds": out.get("render_seconds")}
 
 
 def git_sha() -> str:
@@ -203,6 +224,7 @@ def main() -> int:
     ap.add_argument("--config", action="append", default=[], help="KEY=VALUE worker config override")
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--parallel", type=int, default=1)
+    ap.add_argument("--render", action="store_true", help="build (plan + render) and save the video to bench/out")
     args = ap.parse_args()
     if args.report:
         report()
@@ -223,12 +245,18 @@ def main() -> int:
     from concurrent.futures import ThreadPoolExecutor
 
     def one(case):
-        res = run_case(case, key, config)
+        res = run_case(case, key, config, render=args.render)
         row = {"label": label, "sha": sha, "case": case["name"], "at": int(time.time()),
-               "config": config, "ok": res["ok"]}
+               "config": config, "ok": res["ok"], "render": args.render}
         if res["ok"]:
             row["metrics"] = score_timeline(res["timeline"], case, res["elapsed"])
             row["job"] = res.get("job")
+            if res.get("video"):
+                row["video"] = res["video"]
+            if res.get("costs"):
+                row["metrics"]["measured_credits"] = res["costs"].get("credits_measured")
+                row["metrics"]["worker_seconds"] = res["costs"].get("worker_seconds")
+                row["metrics"]["ledger_usd"] = res["costs"].get("total")
         else:
             row["error"] = res.get("error", "")
             row["metrics"] = {"generation_s": round(res.get("elapsed", 0), 1)}
