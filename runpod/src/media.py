@@ -226,6 +226,10 @@ class MediaAsset:
     final_score: Optional[float] = None
     score_parts: Dict[str, float] = field(default_factory=dict)
     pool: Dict[str, Any] = field(default_factory=dict)
+    # Where in the source the clip was cut and how that was decided: start,
+    # coarse or fine storyboard score, whether the cut window was free of
+    # shot changes (src/moments.py, clean_window below).
+    moment: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def identity(self) -> str:
@@ -1899,7 +1903,11 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
             continue
         if c["duration"] and c["duration"] < grab + 4:
             continue
-        path = _dm_fetch(c["id"], out_dir, _fixed_point(c, grab, 10.0), grab)
+        point = _fixed_point(c, grab, 10.0)
+        margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
+        path = _dm_fetch(c["id"], out_dir, max(0.0, point - margin), grab + 2 * margin)
+        if path and margin:
+            path = tidy_clip(path, grab, prefer=min(point, margin))[0]
         if not path:
             continue
         if has_burned_captions(path):
@@ -1977,7 +1985,10 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
         if judged >= config.VISION_MAX_CANDIDATES:
             break
         start = _fixed_point({"duration": row["seconds"]}, grab, 5.0) if row["seconds"] else 5.0
-        path = _web_fetch(row["url"], out_dir, start, grab)
+        margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
+        path = _web_fetch(row["url"], out_dir, max(0.0, start - margin), grab + 2 * margin)
+        if path and margin:
+            path = tidy_clip(path, grab, prefer=min(start, margin))[0]
         if not path:
             continue
         w, h = _video_dims(path)
@@ -2069,7 +2080,10 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         if judged >= config.VISION_MAX_CANDIDATES or _scene_cap_reached() or _good_enough(passed):
             break
         c = by_id[row["id"]]
-        path = _yt_fetch_retry(c.id, out_dir, point, grab, c.title)
+        moment = _refine_moment(row, moment, grab, intent_text, context)
+        if moment and moment.get("fine"):
+            point = moment["start"]
+        path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title)
         if not path:
             continue
         if has_burned_captions(path):
@@ -2093,10 +2107,13 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         asset.apply_verdict(verdict, intent_text)
         penalty = candidates.reuse_penalty(f"yt:{c.id}", c.channel, used, used_channels=_USED_CHANNELS)
         asset.final_score, asset.score_parts = candidates.final_score(
-            asset.relevance_score, asset.quality, (moment or {}).get("score"), c.parts,
+            asset.relevance_score, asset.quality, _moment_score(moment, clean), c.parts,
             asset.specificity, story_kind, penalty=penalty)
         asset.score_parts["meta"] = round(c.metadata, 3)
         asset.pool = pool.summary()
+        asset.moment = {"start": round(float(point), 1), "score": (moment or {}).get("score"),
+                        "fine": bool((moment or {}).get("fine")), "span": (moment or {}).get("span"),
+                        "clean": clean, "cuts": cuts}
         print(f"[pool] judged {c.id} final {asset.final_score:.2f} "
               f"(visual {asset.relevance_score or 0:.2f}, meta {c.metadata:.2f}, "
               f"{asset.specificity or 'unclassed'})", flush=True)
@@ -2107,6 +2124,128 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         if chan is not None and chan.channel:
             _USED_CHANNELS.add(chan.channel)
     return winner
+
+
+# --------------------------------------------------------------------------- #
+# Clean cuts: a clip that starts on a shot change or straddles one reads as a
+# mistake. Every downloaded section is taken with a margin on each side, its
+# shot changes are found, and the clip is cut from the longest stretch that
+# holds the intended moment and no cut.
+# --------------------------------------------------------------------------- #
+
+_PTS_RE = re.compile(r"pts_time:\s*([0-9.]+)")
+
+
+def scene_cuts(path: str, threshold: Optional[float] = None, timeout: int = 120) -> List[float]:
+    """Seconds at which ffmpeg's scene detector sees a shot change."""
+    thr = config.SHOT_CUT_THRESHOLD if threshold is None else threshold
+    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-an",
+           "-vf", f"select='gt(scene,{thr})',showinfo", "-f", "null", "-"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+    return sorted(float(m) for m in _PTS_RE.findall(p.stderr or ""))
+
+
+def clean_window(total: float, cuts: List[float], need: float, prefer: float) -> tuple:
+    """
+    (offset, clean, cuts_inside): where to cut `need` seconds out of a file
+    `total` seconds long whose shot changes are at `cuts`, preferring the
+    stretch that holds the intended moment at `prefer`. `clean` is False when
+    no stretch is long enough (rapid cutting): the caller keeps the moment
+    and scores the timing down.
+    """
+    inner = sorted(c for c in cuts if 0.2 < c < total - 0.2)
+    if total <= 0:
+        return 0.0, True, 0
+    edges = [0.0] + inner + [total]
+    windows = list(zip(edges, edges[1:]))
+    for a, b in windows:
+        if a <= prefer < b and b - a >= need:
+            return max(a, min(prefer, b - need)), True, len(inner)
+    a, b = max(windows, key=lambda w: w[1] - w[0])
+    if b - a >= need:
+        return a, True, len(inner)
+    return max(0.0, min(prefer, total - need)), False, len(inner)
+
+
+def trim_clip(path: str, offset: float, seconds: float, timeout: int = 180) -> str:
+    """`seconds` of `path` from `offset`, re-encoded so the cut is exact; '' on failure."""
+    base, _ = os.path.splitext(path)
+    out = f"{base}_c{int(round(offset * 10)):05d}.mp4"
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, offset):.2f}", "-i", path,
+           "-t", f"{seconds:.2f}", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
+           "-pix_fmt", "yuv420p", "-movflags", "+faststart", out]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+    return out if playable_video(out, min_seconds=min(1.0, seconds * 0.5)) else ""
+
+
+def tidy_clip(path: str, need: float, prefer: float) -> tuple:
+    """
+    (path, clean, cuts) for a downloaded section: the `need` seconds cut from
+    its cleanest stretch around `prefer`. The original file is replaced.
+    """
+    if not path or not config.CLEAN_CUTS:
+        return path, True, 0
+    total = _video_seconds(path)
+    if total <= need + 0.6:
+        return path, True, 0             # nothing to choose from
+    offset, clean, inner = clean_window(total, scene_cuts(path), need, prefer)
+    out = trim_clip(path, offset, need + 0.5)
+    if not out:
+        return path, clean, inner
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    if inner:
+        print(f"[cut] {os.path.basename(out)}: {inner} shot change(s) in the section, "
+              f"clip from {offset:.1f}s{'' if clean else ' (no clean stretch long enough)'}",
+              flush=True)
+    return out, clean, inner
+
+
+def fetch_clean_clip(video_id: str, out_dir: str, start: float, need: float,
+                     title: str = "") -> tuple:
+    """(path, clean, cuts): a YouTube section with margin, cut clean around `start`."""
+    margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
+    fetch_start = max(0.0, start - margin)
+    path = _yt_fetch_retry(video_id, out_dir, fetch_start, need + 2 * margin, title)
+    if not path:
+        return "", True, 0
+    if not margin:
+        return path, True, 0
+    return tidy_clip(path, need, prefer=start - fetch_start)
+
+
+def _refine_moment(candidate: dict, moment: Optional[dict], grab: float,
+                   intent_text: str, context: str) -> Optional[dict]:
+    """The fine storyboard pass around a coarse pick (moments.refine), or the pick."""
+    if not moment or not config.MOMENT_FINE_PASS or not intent_text:
+        return moment
+    try:
+        info, proxy = _yt_info(candidate["id"])
+        fine = moments.refine(info, moment, intent_text, context, grab, proxy) if info else None
+    except Exception as e:  # noqa: BLE001 - the coarse pick stands
+        print(f"[moment] fine pass failed: {type(e).__name__}", flush=True)
+        fine = None
+    if fine:
+        print(f"[moment] fine {fine['score']:.2f} @ {fine['start']:.1f}s over {fine['span']:.0f}s "
+              f"(coarse {moment.get('score', 0):.2f} @ {moment.get('start', 0):.1f}s)", flush=True)
+        return fine
+    return moment
+
+
+def _moment_score(moment: Optional[dict], clean: bool) -> Optional[float]:
+    s = (moment or {}).get("score")
+    if s is None:
+        return None
+    return float(s) * (1.0 if clean else 0.5)
 
 
 def _asset_for(path: str, query: str, seconds: float, require_cc: bool,

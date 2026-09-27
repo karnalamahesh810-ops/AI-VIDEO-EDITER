@@ -338,6 +338,7 @@ def build(segments: List[Segment], shots: List[dict],
                                  if asset is not None else []),
                 "finalScore": getattr(asset, "final_score", None) if asset is not None else None,
                 "scoreParts": dict(getattr(asset, "score_parts", None) or {}) if asset is not None else {},
+                "moment": dict(getattr(asset, "moment", None) or {}) if asset is not None else {},
                 "candidates": dict(getattr(asset, "pool", None) or {}) if asset is not None else {},
             },
             "words": [{"text": w.text, "start": w.start, "end": w.end}

@@ -89,15 +89,24 @@ def _fetch(url: str, proxy: str) -> Optional[bytes]:
 
 
 def contact_sheet(info: dict, seconds: float, proxy: str = "",
-                  tiles: int = 20) -> Optional[Tuple[str, List[float]]]:
-    """(base64 JPEG of a numbered grid, timestamp of each number) or None."""
+                  tiles: int = 20, window: Optional[Tuple[float, float]] = None
+                  ) -> Optional[Tuple[str, List[float]]]:
+    """
+    (base64 JPEG of a numbered grid, timestamp of each number) or None.
+
+    `window` = (from, to) seconds restricts the sheet to that stretch of the
+    video at the storyboard's own frame rate: the fine pass around a coarse
+    pick. Without it the tiles are spread over the whole video.
+    """
     vid = info.get("id") or ""
-    key = f"{vid}::{round(seconds)}::{tiles}" if vid else ""
+    win = f"::{round(window[0], 1)}-{round(window[1], 1)}" if window else ""
+    key = f"{vid}::{round(seconds)}::{tiles}{win}" if vid else ""
     if key:
         with _SHEET_LOCK:
             if key in _SHEET_CACHE:
                 return _SHEET_CACHE[key]
-    made = _build_contact_sheet(info, seconds, proxy, tiles)
+    made = (_build_contact_sheet(info, seconds, proxy, tiles, window) if window
+            else _build_contact_sheet(info, seconds, proxy, tiles))
     if key:
         with _SHEET_LOCK:
             _SHEET_CACHE[key] = made
@@ -105,7 +114,8 @@ def contact_sheet(info: dict, seconds: float, proxy: str = "",
 
 
 def _build_contact_sheet(info: dict, seconds: float, proxy: str,
-                         tiles: int) -> Optional[Tuple[str, List[float]]]:
+                         tiles: int, window: Optional[Tuple[float, float]] = None
+                         ) -> Optional[Tuple[str, List[float]]]:
     try:
         from PIL import Image, ImageDraw
     except ImportError:
@@ -117,11 +127,15 @@ def _build_contact_sheet(info: dict, seconds: float, proxy: str,
     rows, cols = int(fmt["rows"]), int(fmt["columns"])
     tw, th = int(fmt.get("width") or 160), int(fmt.get("height") or 90)
 
-    # Skip the first and last 5% (intros, end screens) and anything too close
-    # to the end to fit a full clip.
     latest = max(0.0, duration - seconds - 1.0)
-    pool = [t for t in _tile_times(fmt)
-            if duration * 0.05 <= t[2] <= min(duration * 0.95, latest)]
+    if window:
+        lo, hi = max(0.0, window[0]), min(window[1], latest)
+        pool = [t for t in _tile_times(fmt) if lo <= t[2] <= hi]
+    else:
+        # Skip the first and last 5% (intros, end screens) and anything too
+        # close to the end to fit a full clip.
+        pool = [t for t in _tile_times(fmt)
+                if duration * 0.05 <= t[2] <= min(duration * 0.95, latest)]
     if not pool:
         return None
     step = max(1, len(pool) // tiles)
@@ -182,3 +196,57 @@ def pick(info: dict, intent: str, context: str, seconds: float,
     start = max(0.0, times[idx] - min(1.0, seconds * 0.2))
     return {"start": start, "score": verdict["score"],
             "description": verdict["description"], "tile": verdict["tile"]}
+
+
+def refine(info: dict, coarse: dict, intent: str, context: str, seconds: float,
+           proxy: str = "") -> Optional[dict]:
+    """
+    The fine pass: the strongest continuous stretch around a coarse pick.
+
+    The coarse sheet spreads 20 tiles over a whole video, so its pick says
+    "somewhere near 2:20", not "2:23 to 2:31". This lays the storyboard tiles
+    of the seconds around the pick on a second sheet at the board's own rate
+    (about one per second), asks the model to rate every tile, and returns
+    the run of consecutive tiles at or above the floor that best covers a
+    clip: its start, its mean score and its length. None keeps the coarse
+    pick (no storyboard, no model, or nothing rated above the floor).
+    """
+    if not config.MOMENT_FINE_PASS or not coarse or not intent or not vision.enabled():
+        return None
+    half = max(8.0, seconds * 1.5)
+    centre = float(coarse.get("start") or 0.0)
+    made = contact_sheet(info, seconds, proxy, config.MOMENT_FINE_TILES,
+                         window=(centre - half, centre + half + seconds))
+    if not made:
+        return None
+    sheet, times = made
+    if len(times) < 3:
+        return None
+    rated = vision.rate_tiles(sheet, len(times), subject="", context=context, intent=intent) or []
+    score = {r["tile"]: r for r in rated if r["score"] >= config.VISION_MIN_SCORE}
+    if not score:
+        return None
+    gap = (times[-1] - times[0]) / max(1, len(times) - 1)
+    best = None
+    i, n = 0, len(times)
+    while i < n:
+        if (i + 1) not in score:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and (j + 2) in score:
+            j += 1
+        run = range(i, j + 1)
+        span = times[j] - times[i] + gap
+        mean = sum(score[k + 1]["score"] for k in run) / len(run)
+        # A long run of fair tiles beats one brilliant tile: the clip has to
+        # stay on subject for its whole length, not for one frame.
+        value = mean * min(1.0, span / max(1.0, seconds))
+        if best is None or value > best["value"]:
+            best = {"value": value, "start": max(0.0, times[i] - 0.3), "score": mean,
+                    "span": span, "description": score[i + 1]["description"], "tiles": len(run)}
+        i = j + 1
+    if best is None:
+        return None
+    return {"start": best["start"], "score": round(best["score"], 3), "span": round(best["span"], 1),
+            "description": best["description"], "tiles": best["tiles"], "fine": True}

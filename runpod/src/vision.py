@@ -547,7 +547,8 @@ _RATE_SYSTEM = (
     "You pick B-roll moments for a documentary, GoMotion-style: one long video about "
     "a subject supplies many shots. You are shown a numbered grid of thumbnails "
     "taken across one YouTube video (numbers top-left). For EVERY tile that is a "
-    "usable shot of the SUBJECT, give a score and a few words on what it shows.\n"
+    "usable shot of the SUBJECT - or, when an INTENT is given, of the exact shot the "
+    "INTENT describes - give a score and a few words on what it shows.\n"
     "Usable = the subject itself (or its immediate setting) filmed as real footage: "
     "aerials, landscapes, the place, the thing, the event. NOT usable: a presenter or "
     "interviewee talking to camera, title cards, on-screen text or captions, graphics, "
@@ -561,7 +562,8 @@ _RATE_SYSTEM = (
 )
 
 
-def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "") -> Optional[List[dict]]:
+def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
+               intent: str = "") -> Optional[List[dict]]:
     """
     Every usable tile of one storyboard sheet for a subject, in one call:
     [{"tile": 1-based, "score": 0-1, "description": str}] (None on failure).
@@ -576,7 +578,8 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "") -> O
         {"role": "system", "content": _RATE_SYSTEM},
         {"role": "user", "content": [
             {"type": "text", "text": (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
-             + f"SUBJECT: {subject}\n"
+             + (f"INTENT (the exact shot wanted): {intent}\n" if intent else "")
+             + (f"SUBJECT: {subject}\n" if subject else "")
              + (f"WHAT THE LINES SAY ABOUT IT: {context[:600]}\n" if context else "")
              + f"There are {count} tiles, numbered 1-{count}."},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},

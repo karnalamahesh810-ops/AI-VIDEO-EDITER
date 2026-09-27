@@ -118,6 +118,17 @@ def rate_video(cand: dict, subject: str, context: str, seconds: float) -> List[d
     return out
 
 
+def moment_key(video_id: str, start: float) -> str:
+    """
+    One key per distinct moment of a video: "yt:<id>@<bucket>", the bucket
+    being POOL_MIN_GAP_SECONDS wide - the same spacing `spaced` keeps, so two
+    approved moments never share a key and get silently dropped (they did
+    when the bucket was 10 s and the spacing 8 s).
+    """
+    gap = max(1.0, float(config.POOL_MIN_GAP_SECONDS))
+    return f"yt:{video_id}@{int(start // gap)}"
+
+
 def spaced(found: List[dict], gap: float) -> List[dict]:
     """Moments of one video at least `gap` seconds apart, in time order."""
     kept: List[dict] = []
@@ -157,7 +168,7 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
             break
         found = spaced(rate_video(cand, subject, context, seconds), config.POOL_MIN_GAP_SECONDS)
         for m in found:
-            if claim(f"yt:{cand['id']}@{int(m['start'] // 10)}"):
+            if claim(moment_key(cand["id"], m["start"])):
                 pool.append((cand, m))
         if len(pool) >= need:
             break
@@ -201,7 +212,8 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
     seconds = (job.get("seconds") or 6.0) + media.SEQ_SHOT_PAD
     if cand.get("_library") is not None and library is not None:
         return library.fetch(cand["_library"], work, seconds, job)
-    path = media._yt_fetch_retry(cand["id"], work, m["start"], seconds, cand.get("title", ""))
+    path, clean, cuts = media.fetch_clean_clip(cand["id"], work, m["start"], seconds,
+                                               cand.get("title", ""))
     if not path or media.has_burned_captions(path):
         return None
     return media.MediaAsset(
@@ -216,7 +228,9 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
         review_reason="" if require_cc else "Licence unverified — confirm you hold the rights",
         content_description=m.get("description", ""),
         relevance_score=m.get("score"),
-        moment_key=f"yt:{cand['id']}@{int(m['start'] // 10)}")
+        moment_key=moment_key(cand["id"], m["start"]),
+        moment={"start": round(float(m["start"]), 1), "score": m.get("score"), "fine": False,
+                "clean": clean, "cuts": cuts})
 
 
 def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,

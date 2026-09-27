@@ -251,6 +251,17 @@ SEQUENCE_SOURCING = _flag("SEQUENCE_SOURCING", True)
 REQUIRE_AI = _flag("REQUIRE_AI", False)
 MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
 MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
+# The fine pass (src/moments.refine): a second sheet of the seconds around
+# the coarse pick at the storyboard's own rate, rated tile by tile, so the
+# clip is cut from the strongest continuous stretch. One more model call per
+# downloaded candidate.
+MOMENT_FINE_PASS = _flag("MOMENT_FINE_PASS", True)
+MOMENT_FINE_TILES = int(os.getenv("MOMENT_FINE_TILES", "20"))
+# Every downloaded section is taken with CUT_MARGIN_SECONDS on each side and
+# cut from its longest stretch without a shot change (media.tidy_clip).
+CLEAN_CUTS = _flag("CLEAN_CUTS", True)
+CUT_MARGIN_SECONDS = float(os.getenv("CUT_MARGIN_SECONDS", "2.0"))
+SHOT_CUT_THRESHOLD = float(os.getenv("SHOT_CUT_THRESHOLD", "0.4"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp
 # metadata call plus one vision call; the beat then costs about the slowest.
 # This is also the ONLY candidates a query ever gets: _plan_grabs slices the

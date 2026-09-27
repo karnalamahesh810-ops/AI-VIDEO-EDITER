@@ -1879,7 +1879,8 @@ class NoDuplicateShots(unittest.TestCase):
             media.youtube_clip("lake", "/tmp/x", seconds=4.0)
         finally:
             self._restore_yt(saved)
-        self.assertAlmostEqual(starts[0], 210.0, delta=1.0)   # 35% of 600s
+        # 35% of 600 s, less the margin the clean-cut pass downloads on each side.
+        self.assertAlmostEqual(starts[0], 210.0 - config.CUT_MARGIN_SECONDS, delta=1.0)
 
     def test_b_roll_intent_is_tried_before_the_plain_query(self):
         searched = []
