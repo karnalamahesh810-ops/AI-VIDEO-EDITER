@@ -192,6 +192,16 @@ VISION_RETRY_WAIT = float(os.getenv("VISION_RETRY_WAIT", "2"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
+# Best-of-N judging. A scene no longer takes the first clip that clears the
+# floor: up to JUDGE_BEST_OF passing clips are judged and the strongest wins,
+# the rest ride along as alternatives for Replace Clip. A clip at
+# EXCELLENT_SCORE or above ends the search at once. JUDGE_MAX_PER_SCENE caps
+# vision calls across all of a scene's expanded searches.
+JUDGE_BEST_OF = int(os.getenv("JUDGE_BEST_OF", "2"))
+EXCELLENT_SCORE = float(os.getenv("EXCELLENT_SCORE", "0.9"))
+JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "6"))
+# Searches a typed scene intent expands to (src/intent.py), specific first.
+INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 
 # Moment selection: read the video's storyboard (YouTube's hover-preview
 # thumbnails, ~1/sec, a few hundred KB) and let the vision model pick the

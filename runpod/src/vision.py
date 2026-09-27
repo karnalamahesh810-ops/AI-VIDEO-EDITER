@@ -31,7 +31,7 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
-from . import config
+from . import config, intent as scene_intent
 
 _CACHE: Dict[str, dict] = {}
 _LOCK = threading.Lock()
@@ -90,8 +90,13 @@ _SYSTEM = (
     "stable, well lit, well composed, filling a 16:9 frame, with motion or visual "
     "interest is high; blurry, blocky compression, shaky, very dark, a vertical phone "
     "video with bars or blur down the sides, or a flat uninteresting frame is low.\n"
+    "When the prompt lists ENTITIES or LOCATIONS, say in the description which of "
+    "them the frames show, and class the frames: specificity \"event\" when they are "
+    "recognisably the named event at the named place, \"location\" when they show the "
+    "named place but not that event, \"generic\" otherwise.\n"
     "Reply with JSON only: {\"description\": str, \"score\": number, \"quality\": number, "
-    "\"has_text_or_watermark\": bool, \"is_talking_head\": bool}"
+    "\"has_text_or_watermark\": bool, \"is_talking_head\": bool, "
+    "\"specificity\": \"event\"|\"location\"|\"generic\"}"
 )
 
 # Added for a beat of a news, weather or disaster story. Without it "clearly fits
@@ -409,6 +414,8 @@ def _parse(text: str) -> Optional[dict]:
         "quality": quality,
         "has_text_or_watermark": bool(data.get("has_text_or_watermark")),
         "is_talking_head": bool(data.get("is_talking_head")),
+        "specificity": (data.get("specificity")
+                        if data.get("specificity") in scene_intent.SPECIFICITY else ""),
     }
 
 
@@ -430,7 +437,12 @@ def set_story(brief: Optional[dict]) -> None:
     _STORY["line"] = " | ".join(p for p in parts if p)[:500]
 
 
-def judge(path: str, intent: str, context: str = "", event: bool = False) -> Optional[dict]:
+def _scene_lines(scene: Optional[dict]) -> str:
+    return scene_intent.SceneIntent.from_dict(scene).vision_lines() if scene else ""
+
+
+def judge(path: str, intent: str, context: str = "", event: bool = False,
+          scene: Optional[dict] = None) -> Optional[dict]:
     """
     Verdict for one candidate file, or None when no model could be reached.
 
@@ -441,7 +453,8 @@ def judge(path: str, intent: str, context: str = "", event: bool = False) -> Opt
     """
     if not enabled() or not path or not os.path.exists(path):
         return None
-    key = f"{_fingerprint(path)}|{int(event)}|{intent}|{_STORY['line'][:80]}"
+    key = (f"{_fingerprint(path)}|{int(event)}|{intent}|{_STORY['line'][:80]}"
+           f"|{_scene_lines(scene)[:160]}")
     with _LOCK:
         if key in _CACHE:
             return _CACHE[key]
@@ -455,7 +468,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False) -> Opt
 
     content = [{"type": "text", "text":
                 (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
-                + f"INTENT: {intent}\nNARRATION: {context}\n"
+                + f"INTENT: {intent}\n" + _scene_lines(scene) + f"NARRATION: {context}\n"
                 f"These are {len(frames)} frames from the candidate."}]
     content += [{"type": "image_url",
                  "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames]

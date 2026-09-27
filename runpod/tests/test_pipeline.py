@@ -2341,13 +2341,12 @@ class SubjectLevelSearchCache(unittest.TestCase):
                 media.youtube_clip(job["query"], "/tmp", seconds=job["seconds"],
                                    require_cc=False, intent=job["intent"],
                                    subject=job["subject"])
-        # youtube_clip tries a b-roll-decorated search then the plain one, so
-        # each beat scouts twice - the point is which INTENT it scouted with,
-        # and that the two beats' intents are never mixed up.
-        self.assertEqual(set(seen_intents), {"exposed concrete ramp",
-                                             "white bathtub ring on the shoreline"})
-        self.assertEqual(seen_intents[:2], ["exposed concrete ramp"] * 2)
-        self.assertEqual(seen_intents[2:], ["white bathtub ring on the shoreline"] * 2)
+        # youtube_clip tries a b-roll-decorated search then the plain one; the
+        # one candidate is scouted once per beat (a video tried under one
+        # variant is not tried again under the next). The point is which
+        # INTENT each beat scouted with, never mixed up between beats.
+        self.assertEqual(seen_intents, ["exposed concrete ramp",
+                                        "white bathtub ring on the shoreline"])
 
 
 class NetworkConcurrency(unittest.TestCase):

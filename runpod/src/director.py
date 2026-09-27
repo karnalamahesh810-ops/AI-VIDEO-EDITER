@@ -31,6 +31,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 
 from . import config, geocode, vision
+from . import intent as scene_intent
 from .transcribe import Segment, keywords_for
 
 # Templates the renderer can draw. Kept in sync with Main.tsx's overlay router
@@ -1196,9 +1197,22 @@ _SYSTEM_PROMPT = (
     "it names (a freight train), not the event, and set anchor false.\n"
     "Return JSON: {\"shots\":[{\"index\":int,\"subject\":str,\"subjectType\":str,"
     "\"entity\":str,\"intent\":str,\"query\":str,\"visualType\":str,\"anchor\":bool,"
-    "\"overlay\":obj|null}]}.\n"
+    "\"overlay\":obj|null,\"scene\":{\"entities\":[str],\"locations\":[str],"
+    "\"eventType\":str,\"visualSubjects\":[str],\"desiredShots\":[str],"
+    "\"timeContext\":str,\"specificity\":str,\"genericOk\":bool}}]}.\n"
     "- anchor: false only for a metaphor, analogy or general explainer shot that is "
     "not the story's own event or place; true otherwise.\n"
+    "- scene: the shot as data, for the ranking and the vision check. entities: the "
+    "named people, places and things the frames must show (\"Lake Mead\", \"Hoover "
+    "Dam\"); locations: where it is, as searchable names (\"Nevada\", \"Boulder "
+    "City\"); eventType: the occurrence (\"drought / reservoir decline\", \"flash "
+    "flood\") or \"\"; visualSubjects: 2-4 concrete things the frames must contain "
+    "(\"exposed shoreline\", \"bathtub ring\", \"low water\"); desiredShots: from "
+    "aerial, wide, medium, detail, human, infrastructure, archival, news, satellite, "
+    "night; timeContext: current, recent, historical, or a year like 1964; "
+    "specificity: event when only THAT event at THAT place will do, location when "
+    "the place must match but the moment need not, generic when illustrative footage "
+    "of the subject is fine; genericOk: false unless generic.\n"
     "- subject: the NAMED real thing the line is about - a person, place, event, "
     "object, organisation or document (\"Barack Obama Sr.\", \"Honolulu Airport\", "
     "\"Lake Mead\"). Always concrete and searchable. Reuse the same subject across "
@@ -1579,6 +1593,10 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                                 else shots[idx].get("subjectType", "")),
                 "entity": shot.get("entity") if shot.get("entity") in ENTITY_KINDS else "",
             }
+            # The shot as data (src/intent.py): the model's scene object with its
+            # gaps filled from the shot and the story.
+            shots[idx]["sceneIntent"] = scene_intent.SceneIntent.parse(
+                shot.get("scene"), shots[idx], story).to_dict()
             shape_query(shots[idx])
             # The subject alone is the last fallback: broad, but always on topic.
             if subject and subject not in shots[idx]["fallbacks"]:
@@ -1890,6 +1908,19 @@ def plan(segments: List[Segment], title: str = "", report=None,
 
     vary_person_stills(shots)
     anchor_to_story(shots, segments, brief)
+    # Every beat carries a typed intent (the model's, or the one its shot and
+    # story imply) and the searches it expands to, most specific first, ahead
+    # of the broad rule fallbacks. Each is tried only when the ones before
+    # found nothing, and JUDGE_MAX_PER_SCENE bounds what they can spend.
+    for shot in shots:
+        si = (scene_intent.SceneIntent.from_dict(shot["sceneIntent"]) if shot.get("sceneIntent")
+              else scene_intent.SceneIntent.from_shot(shot, brief))
+        shot["sceneIntent"] = si.to_dict()
+        expanded = si.queries(shot.get("query", ""))[1:]
+        existing = list(shot.get("fallbacks") or [])
+        # anchor_to_story put the story's own event first; it stays first.
+        head = [f for f in existing[:1] if f and f == (brief.get("event") or "")]
+        shot["fallbacks"] = list(dict.fromkeys(head + expanded + existing))
     for i in brief.get("hookBeats") or []:
         shots[i]["hook"] = True
 

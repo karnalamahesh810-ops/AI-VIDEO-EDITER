@@ -23,7 +23,7 @@ from concurrent.futures import (FIRST_COMPLETED, ThreadPoolExecutor, as_complete
                                 wait)
 from concurrent.futures import TimeoutError as FuturesTimeout
 import contextvars
-from dataclasses import dataclass, asdict, replace as _dc_replace
+from dataclasses import dataclass, asdict, field, replace as _dc_replace
 from typing import List, Optional, Dict, Any
 import base64
 import datetime
@@ -37,7 +37,7 @@ import urllib.parse
 import uuid
 import requests
 
-from . import config, moments, vision
+from . import config, intent, moments, vision
 from .storage import download
 
 
@@ -215,6 +215,12 @@ class MediaAsset:
     # long subject video supplies many DIFFERENT moments - GoMotion's method -
     # so these are distinct from each other but never the same moment twice.
     moment_key: str = ""
+    # The vision judge's class of the frames against the scene intent: event,
+    # location, generic, or "" when not judged.
+    specificity: str = ""
+    # Runner-up clips that also passed the judge (id, url, scores and
+    # description, never the files), for Replace Clip.
+    alternatives: List[dict] = field(default_factory=list)
 
     @property
     def identity(self) -> str:
@@ -284,6 +290,7 @@ class MediaAsset:
             self.relevance_score = verdict.get("score")
             self.quality = verdict.get("quality")
             self.vision_model = verdict.get("model", "")
+            self.specificity = verdict.get("specificity", "") or ""
         elif intent and vision.enabled() and self.source != "generated":
             # Vision is on but no model could judge this one: it is kept (an API
             # outage must not empty the timeline) but must not pass silently.
@@ -1045,6 +1052,11 @@ _SUBJECT_TYPE: contextvars.ContextVar = contextvars.ContextVar("subject_type", d
 # longer rejected on the word "news", and for "year" searches try this year's
 # uploads first so a 2026 flood does not get 2019's.
 _EVENT_WINDOW: contextvars.ContextVar = contextvars.ContextVar("event_window", default="")
+# The typed scene intent (src/intent.py) of the scene being sourced, and a
+# per-scene count of clips judged, so the expanded searches cannot spend
+# without limit.
+_SCENE_INTENT: contextvars.ContextVar = contextvars.ContextVar("scene_intent", default=None)
+_SCENE_JUDGED: contextvars.ContextVar = contextvars.ContextVar("scene_judged", default=None)
 
 # YouTube's own "Upload date: This year" filter, for the results page.
 _YT_THIS_YEAR = "EgIIBQ%3D%3D"
@@ -1090,7 +1102,9 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
     if not intent or not vision.enabled():
         return True, None
-    verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()))
+    scene = _SCENE_INTENT.get()
+    verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()),
+                           **({"scene": scene} if scene else {}))
     keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person")
     if verdict is not None:
         mark = "keep" if keep else "REJECT"
@@ -1133,6 +1147,15 @@ def _score_candidate(title: str, duration: float, aspect: float,
         score -= 5.0          # vertical; object-fit would crop it to nothing
     elif aspect and aspect >= 1.7:
         score += 1.0
+    # The typed intent: a title that names the entity, the place or what the
+    # frames must contain ranks ahead of one that merely shares a word. An
+    # event scene demotes a title that names neither the entity nor the place.
+    si = _SCENE_INTENT.get()
+    if si:
+        ents, locs, subj = intent.SceneIntent.from_dict(si).title_match(title)
+        score += 2.0 * min(ents, 2) + 1.5 * min(locs, 2) + 1.0 * min(subj, 2)
+        if si.get("specificity") == "event" and not (ents or locs):
+            score -= 3.0
     return score
 
 
@@ -1560,6 +1583,50 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
     return ""
 
 
+def _scene_cap_reached() -> bool:
+    counter = _SCENE_JUDGED.get()
+    return counter is not None and counter[0] >= config.JUDGE_MAX_PER_SCENE
+
+
+def _count_judged() -> None:
+    counter = _SCENE_JUDGED.get()
+    if counter is not None:
+        counter[0] += 1
+
+
+def _good_enough(passed: List[MediaAsset]) -> bool:
+    """Stop judging: enough clips passed, or one is plainly excellent."""
+    if len(passed) >= config.JUDGE_BEST_OF:
+        return True
+    return any((a.relevance_score or 0) >= config.EXCELLENT_SCORE for a in passed)
+
+
+def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
+    """
+    The strongest of the clips that passed; the others become its
+    alternatives and their files go. Relevance leads, quality breaks ties.
+    """
+    if not passed:
+        return None
+    ranked = sorted(passed, key=lambda a: vision.appeal(a.relevance_score, a.quality),
+                    reverse=True)
+    winner, losers = ranked[0], ranked[1:]
+    for a in losers:
+        winner.alternatives.append({
+            "assetId": a.identity, "url": a.url, "title": (a.attribution or "")[:120],
+            "score": a.relevance_score, "quality": a.quality,
+            "description": (a.content_description or "")[:160], "source": a.source})
+        try:
+            if a.local_path and os.path.exists(a.local_path):
+                os.remove(a.local_path)
+        except OSError:
+            pass
+    if losers:
+        print(f"[media] best of {len(passed)}: {winner.relevance_score or 0:.2f} over "
+              + ", ".join(f"{a.relevance_score or 0:.2f}" for a in losers), flush=True)
+    return winner
+
+
 def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                  start_at: float = 30.0, require_cc: bool = True,
                  skip: int = 0, used: set = None,
@@ -1611,8 +1678,13 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         searches.insert(0, (query_or_url, "channels", False))
 
     judged = 0
+    passed: List[MediaAsset] = []
+    # Videos this call already downloaded or judged. The search variants
+    # overlap heavily; before best-of-N the first pass returned at once, so a
+    # repeat could not cost a second download and a second model call.
+    tried: set = set()
     for search, variant, this_year in searches:
-        if judged >= config.VISION_MAX_CANDIDATES:
+        if judged >= config.VISION_MAX_CANDIDATES or _scene_cap_reached() or _good_enough(passed):
             break
         if require_cc:
             # yt-dlp's flat search extractor reports license=NA for every hit,
@@ -1641,6 +1713,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         for candidate in ranked[skip:] + ranked[:skip]:
             if used and f"yt:{candidate['id']}" in used:
                 continue
+            if candidate["id"] in tried:
+                continue
             # A disqualifying title excludes the candidate outright. Scoring it
             # down is not enough: the loop still takes the best of what is left,
             # so when a query finds nothing good a penalised tutorial wins
@@ -1662,8 +1736,9 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         plan = _plan_grabs(eligible, grab, start_at, intent, context)
 
         for candidate, point, moment in plan:
-            if judged >= config.VISION_MAX_CANDIDATES:
+            if judged >= config.VISION_MAX_CANDIDATES or _scene_cap_reached() or _good_enough(passed):
                 break
+            tried.add(candidate["id"])
             path = _yt_fetch_retry(candidate["id"], out_dir, point, grab,
                                    candidate["title"])
             if not path:
@@ -1682,6 +1757,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # the actual cut decide. Bounded per search so one bad query cannot
             # spend a dozen model calls.
             judged += 1
+            _count_judged()
             keep, verdict = _vision_gate(path, intent, context, candidate["title"])
             if not keep:
                 try:
@@ -1691,8 +1767,10 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                 continue
             asset = _asset_for(path, query_or_url, grab, require_cc,
                                title=candidate["title"])
-            return asset.apply_verdict(verdict, intent)
-    return None
+            # Not returned yet: the first clip to clear the floor is rarely the
+            # best one available. Up to JUDGE_BEST_OF passing clips are compared.
+            passed.append(asset.apply_verdict(verdict, intent))
+    return _best_of(passed)
 
 
 def search_dailymotion(query: str, limit: int = 12, created_after: int = 0) -> List[dict]:
@@ -2161,7 +2239,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        allow_youtube: bool = None, allow_stock: bool = None,
                        require_cc: bool = None, intent: str = "",
                        context: str = "", subject_type: str = "",
-                       subject: str = "", event_window: str = "") -> Optional[MediaAsset]:
+                       subject: str = "", event_window: str = "",
+                       scene_intent: Optional[dict] = None) -> Optional[MediaAsset]:
     """
     Source one scene, relaxing the query until something is found.
 
@@ -2178,6 +2257,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
         return None   # the job is stopping; do not spend on searches it will discard
     token = _SUBJECT_TYPE.set(subject_type or "")
     window_token = _EVENT_WINDOW.set(event_window or "")
+    intent_token = _SCENE_INTENT.set(scene_intent or None)
+    judged_token = _SCENE_JUDGED.set([0])
     try:
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
@@ -2192,6 +2273,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                 return got
         return None
     finally:
+        _SCENE_JUDGED.reset(judged_token)
+        _SCENE_INTENT.reset(intent_token)
         _EVENT_WINDOW.reset(window_token)
         _SUBJECT_TYPE.reset(token)
 
@@ -2629,6 +2712,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             intent=job.get("intent", ""), context=job.get("context", ""),
             subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
             event_window=job.get("event_window", ""),
+                    scene_intent=job.get("scene_intent"),
             **kwargs)
 
     def stronger_hook(job, nth, got):
@@ -2768,6 +2852,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     intent=job.get("intent", ""), context=job.get("context", ""),
                     subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
                     event_window=job.get("event_window", ""),
+                    scene_intent=job.get("scene_intent"),
                     **kwargs)
             except Exception:  # noqa: BLE001
                 candidate = None
@@ -2873,7 +2958,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     fallbacks=alts[1:], prompt=job.get("prompt", ""),
                     intent=job.get("intent", ""), context=job.get("context", ""),
                     subject_type=job.get("subject_type", ""),
-                    event_window=job.get("event_window", ""), **kwargs)
+                    event_window=job.get("event_window", ""),
+                    scene_intent=job.get("scene_intent"), **kwargs)
             except Exception:  # noqa: BLE001
                 return None
             if not got:

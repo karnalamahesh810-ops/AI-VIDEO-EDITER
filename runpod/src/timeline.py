@@ -330,6 +330,12 @@ def build(segments: List[Segment], shots: List[dict],
                 "assetId": getattr(asset, "identity", "") if asset is not None else "",
                 "sourceUrl": (getattr(asset, "url", "") or "") if asset is not None
                 and str(getattr(asset, "url", "") or "").startswith("http") else "",
+                # The typed intent the scene was sourced against, the judge's
+                # class of the frames, and the runner-up clips for Replace Clip.
+                "sceneIntent": shot.get("sceneIntent") or None,
+                "specificity": (getattr(asset, "specificity", "") or "") if asset is not None else "",
+                "alternatives": (list(getattr(asset, "alternatives", None) or [])[:4]
+                                 if asset is not None else []),
             },
             "words": [{"text": w.text, "start": w.start, "end": w.end}
                       for w in seg.words],

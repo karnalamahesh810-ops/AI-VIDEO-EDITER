@@ -582,6 +582,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "subject_type": shot.get("subjectType") or "",
              "subject": shot.get("subject") or "",
              "event_window": shot.get("eventWindow") or "",
+             "scene_intent": shot.get("sceneIntent") or None,
              "hook": bool(shot.get("hook")),
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
