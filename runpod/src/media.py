@@ -1036,16 +1036,27 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
     rows: List[dict] = []
     costs.record("serp.call")
     try:
-        r = requests.post(
-            "https://api.brightdata.com/request",
-            headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
-                     "Content-Type": "application/json"},
-            json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw",
-                  "url": "https://www.google.com/search?tbm=vid&brd_json=1&q="
-                         + urllib.parse.quote_plus(query)},
-            timeout=150)
-        r.raise_for_status()
-        for it in (r.json().get("organic") or [])[:limit]:
+        body = None
+        # The SERP zone answers with a non-JSON page now and then (measured
+        # locally: 2 of 9 calls); one retry recovers it.
+        for attempt in range(2):
+            r = requests.post(
+                "https://api.brightdata.com/request",
+                headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw",
+                      "url": "https://www.google.com/search?tbm=vid&brd_json=1&q="
+                             + urllib.parse.quote_plus(query)},
+                timeout=150)
+            r.raise_for_status()
+            try:
+                body = r.json()
+                break
+            except ValueError:
+                if attempt:
+                    raise
+                costs.record("serp.call")
+        for it in ((body or {}).get("organic") or [])[:limit]:
             url = it.get("link") or ""
             if not url.startswith("http"):
                 continue
@@ -1362,7 +1373,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             target = ("https://www.youtube.com/results?search_query="
                       + urllib.parse.quote_plus(search) + "&sp=" + _YT_THIS_YEAR)
         else:
-            target = f"ytsearch12:{search}"
+            target = f"ytsearch{config.YT_SEARCH_RESULTS}:{search}"
 
         if variant == "channels":
             candidates = _channel_candidates(search, _story_channels(), subject)
@@ -1690,7 +1701,7 @@ def _search_target(search: str, require_cc: bool, this_year: bool) -> str:
     if this_year:
         return ("https://www.youtube.com/results?search_query="
                 + urllib.parse.quote_plus(search) + "&sp=" + _YT_THIS_YEAR)
-    return f"ytsearch12:{search}"
+    return f"ytsearch{config.YT_SEARCH_RESULTS}:{search}"
 
 
 def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,

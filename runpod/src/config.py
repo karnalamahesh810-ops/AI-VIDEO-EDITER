@@ -199,6 +199,9 @@ VISION_RETRY_WAIT = float(os.getenv("VISION_RETRY_WAIT", "2"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
+# Results asked of each YouTube flat search. One request either way (the
+# results page), so a longer list only widens the metadata ranking.
+YT_SEARCH_RESULTS = int(os.getenv("YT_SEARCH_RESULTS", "20"))
 # Best-of-N judging. A scene no longer takes the first clip that clears the
 # floor: up to JUDGE_BEST_OF passing clips are judged and the strongest wins,
 # the rest ride along as alternatives for Replace Clip. A clip at
