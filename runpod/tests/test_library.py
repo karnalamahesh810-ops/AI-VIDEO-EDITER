@@ -57,6 +57,22 @@ class Record(unittest.TestCase):
             lib = library.Library.load("p", "j")
         self.assertEqual(lib.entries, [])
         self.assertEqual(lib.find("Lake Mead"), [])
+        self.assertTrue(lib.unreadable)
+        lib.added = 1
+        with mock.patch.object(config, "CLIP_LIBRARY", True), \
+                mock.patch.object(library.storage, "broker_enabled", return_value=True), \
+                mock.patch.object(library.storage, "broker_upload", side_effect=AssertionError("must not overwrite")):
+            self.assertFalse(lib.save())                          # an unreadable index is never replaced
+
+    def test_missing_index_is_the_first_video_not_an_error(self):
+        err = library.storage.StorageError("storage broker refused (500): Object not found")
+        with mock.patch.object(config, "CLIP_LIBRARY", True), \
+                mock.patch.object(library.storage, "broker_enabled", return_value=True), \
+                mock.patch.object(library.storage, "broker_read_url", side_effect=err):
+            lib = library.Library.load("p", "j")
+        self.assertTrue(lib.loaded)
+        self.assertFalse(lib.unreadable)
+        self.assertEqual(lib.entries, [])
 
 
 class PoolsUseLibrary(unittest.TestCase):

@@ -44,6 +44,7 @@ class Library:
         self.bucket = bucket or config.MEDIA_BUCKET
         self.entries: List[dict] = []
         self.loaded = False
+        self.unreadable = False   # the index exists but could not be read: never overwrite it
         self.added = 0
 
     @property
@@ -64,7 +65,14 @@ class Library:
             lib.loaded = True
             print(f"[library] {len(lib.entries)} clip(s) available", flush=True)
         except Exception as e:  # noqa: BLE001 - an unreachable library is an empty one
-            print(f"[library] not available: {type(e).__name__}: {str(e)[:120]}", flush=True)
+            if "not found" in str(e).lower() or "404" in str(e):
+                # First video for this app: there is no index yet. Good clips
+                # from this job will start it.
+                lib.loaded = True
+                print("[library] empty (first video): good clips from this job will seed it", flush=True)
+            else:
+                lib.unreadable = True
+                print(f"[library] not available: {type(e).__name__}: {str(e)[:120]}", flush=True)
         return lib
 
     def find(self, subject: str, exclude: Optional[set] = None, n: int = 1,
@@ -150,6 +158,9 @@ class Library:
 
     def save(self) -> bool:
         if not self.enabled or not self.added:
+            return False
+        if self.unreadable:
+            print("[library] not saved: the index could not be read, so it is left as it is", flush=True)
             return False
         tmp = os.path.join(tempfile.gettempdir(), f"library_index_{os.getpid()}.json")
         try:
