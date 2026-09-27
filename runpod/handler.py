@@ -722,6 +722,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             print(f"[worker] {len(extra)}/{len(redo)} empty or repeated line(s) filled from "
                   "spare pool moments", flush=True)
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
+    media.LAST_STATS["proxies"] = media.proxy_snapshot()
     vision.require_credits()
 
     doc = timeline.build(
@@ -1454,6 +1455,7 @@ def handler(job):
                     "potProvider": media.pot_provider_alive(),
                     **({} if media.pot_provider_alive() else {"potLog": media.pot_provider_log()}),
                     # Real download check per route: {"probe_youtube": true}.
+                    "proxies": media.proxy_snapshot(),
                     **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),
                     # One real model call, so only on request: {"probe": true}.
                     **({"vision": vision.probe()} if inp.get("probe") else {})}

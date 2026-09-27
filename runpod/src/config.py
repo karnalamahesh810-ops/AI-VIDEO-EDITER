@@ -100,7 +100,9 @@ YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
 # time out, which reads as "sourcing is slow" with nothing to explain why.
 # Default tracks the proxy pool (one request per healthy IP), floor of 4 so
 # an unproxied dev box still gets some parallelism.
-NETWORK_CONCURRENCY = int(os.getenv("NETWORK_CONCURRENCY", "0")) or max(4, 2 * len(YTDLP_PROXIES))
+# Capped at 16: with a hundred sticky sessions the old formula allowed 200
+# simultaneous yt-dlp processes on one worker.
+NETWORK_CONCURRENCY = int(os.getenv("NETWORK_CONCURRENCY", "0")) or max(4, min(16, 2 * len(YTDLP_PROXIES)))
 
 # --- generated images --------------------------------------------------------
 # Any OpenAI-compatible /images/generations endpoint (OpenAI gpt-image-1, or a

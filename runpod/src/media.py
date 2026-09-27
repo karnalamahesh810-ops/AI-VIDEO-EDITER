@@ -37,7 +37,8 @@ import urllib.parse
 import uuid
 import requests
 
-from . import candidates, config, intent, moments, vision
+from . import candidates, config, intent, moments, proxies, vision
+from .errors import RETRY, FailureClass, classify_exception, classify_ytdlp, from_reason
 from .storage import download
 
 
@@ -52,10 +53,17 @@ _PROXIES = list(config.YTDLP_PROXIES)
 # machine's own IP may be the better route. YTDLP_DIRECT=1 adds it.
 if config.YTDLP_DIRECT and "" not in _PROXIES:
     _PROXIES.insert(0, "")
-_PROXY_LOCK = threading.Lock()
-_PROXY_POS = [0]
-_PROXY_BENCHED: Dict[str, float] = {}
-_PROXY_BENCH_SECONDS = 600
+# The proxy manager (src/proxies.py) owns health, latency and quarantine
+# per route; the helpers below are the call sites' view of it.
+PROXY_MANAGER = proxies.ProxyManager(config.YTDLP_PROXIES, direct=bool(config.YTDLP_DIRECT))
+# Per job: videos found unavailable (never retried), and the routes each
+# video was refused on - a second refusal on a different route means the
+# video, not the route, is the problem.
+_UNAVAILABLE_VIDEOS: set = set()
+_DENIED_ON: Dict[str, set] = {}
+_FAIL_LOCK = threading.Lock()
+# The class of the last failed yt-dlp run in this thread, for the retry policy.
+_LAST_FAILURE: contextvars.ContextVar = contextvars.ContextVar("last_failure", default=None)
 
 # Bounds how many yt-dlp subprocesses run at once, across every scene and
 # every scout, so sourcing does not send more simultaneous requests than
@@ -64,17 +72,60 @@ _NET_SEM = threading.Semaphore(config.NETWORK_CONCURRENCY)
 
 
 def _next_proxy() -> str:
-    """Next healthy proxy; if every one is benched, the least-recently benched."""
+    """The route the manager would give the next request (no claim)."""
     if not _PROXIES:
         return ""
-    now = time.time()
-    with _PROXY_LOCK:
-        for _ in range(len(_PROXIES)):
-            proxy = _PROXIES[_PROXY_POS[0] % len(_PROXIES)]
-            _PROXY_POS[0] += 1
-            if _PROXY_BENCHED.get(proxy, 0) <= now:
-                return proxy
-        return min(_PROXIES, key=lambda p: _PROXY_BENCHED.get(p, 0))
+    return PROXY_MANAGER.peek()
+
+
+def _acquire_proxy(domain: str = "youtube.com") -> str:
+    if not _PROXIES:
+        return ""
+    return PROXY_MANAGER.acquire(domain)
+
+
+def _release_proxy(proxy: str, ok: bool, failure: Optional[FailureClass] = None,
+                   started: Optional[float] = None, domain: str = "youtube.com") -> None:
+    if not _PROXIES:
+        return
+    latency = (time.time() - started) * 1000.0 if started else None
+    PROXY_MANAGER.release(proxy, ok, failure, latency, domain)
+
+
+def _proxy_index(proxy: str) -> int:
+    return PROXY_MANAGER.index_of(proxy)
+
+
+def proxy_snapshot() -> List[dict]:
+    """Health of every route, by index only (a proxy URL carries credentials)."""
+    return PROXY_MANAGER.snapshot()
+
+
+def _note_failure(video_id: str, cls: FailureClass, proxy: str) -> FailureClass:
+    """
+    Record a failed download; returns the class to act on. A video refused
+    on two different routes is unavailable, whatever YouTube said, and the
+    second route is not to blame.
+    """
+    _LAST_FAILURE.set((cls, proxy))
+    if cls == FailureClass.MEDIA_UNAVAILABLE:
+        with _FAIL_LOCK:
+            _UNAVAILABLE_VIDEOS.add(video_id)
+        return cls
+    if cls == FailureClass.ACCESS_DENIED and video_id:
+        with _FAIL_LOCK:
+            routes = _DENIED_ON.setdefault(video_id, set())
+            routes.add(proxy)
+            if len(routes) >= 2:
+                _UNAVAILABLE_VIDEOS.add(video_id)
+                _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, proxy))
+                return FailureClass.MEDIA_UNAVAILABLE
+    return cls
+
+
+def _video_unavailable(video_id: str) -> bool:
+    with _FAIL_LOCK:
+        return video_id in _UNAVAILABLE_VIDEOS
 
 
 def pot_provider_alive() -> bool:
@@ -121,20 +172,24 @@ def probe_youtube(video_id: str = "ka2S39HhLsM") -> List[dict]:
         why = re.sub(r"https?://\S+", "<url>", why)
         return {"route": name, "ok": ok, "seconds": round(time.time() - t, 1), "why": why}
 
-    with ThreadPoolExecutor(max_workers=len(routes)) as ex:
-        return list(ex.map(one, routes))
+    def guarded(route):
+        with _NET_SEM:                  # the probe used to start one process per route at once
+            return one(route)
+
+    with ThreadPoolExecutor(max_workers=max(1, min(len(routes), config.NETWORK_CONCURRENCY))) as ex:
+        return list(ex.map(guarded, routes))
 
 
 def _bench_proxy(proxy: str, why: str = "") -> None:
-    """Take a refused or timed-out proxy out of rotation for ten minutes."""
+    """A failure on a route, by the old free-text reason; the manager decides what it costs."""
     if not proxy:
         return
-    with _PROXY_LOCK:
-        _PROXY_BENCHED[proxy] = time.time() + _PROXY_BENCH_SECONDS
-        idx = _PROXIES.index(proxy) + 1 if proxy in _PROXIES else "?"
+    cls = from_reason(why)
+    PROXY_MANAGER.report(proxy, cls)
+    r = PROXY_MANAGER.by_url.get(proxy)
+    state = r.state if r else "?"
     # Never print the proxy URL: it carries credentials.
-    print(f"[media] benched proxy #{idx} for {_PROXY_BENCH_SECONDS // 60} min"
-          f"{' (' + why + ')' if why else ''}", flush=True)
+    print(f"[media] proxy #{_proxy_index(proxy)} {cls.value.lower()} ({why}); now {state}", flush=True)
 
 
 def _yt_network_args(proxy: Optional[str] = None) -> List[str]:
@@ -1199,23 +1254,29 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 20,
             "--playlist-items", f"1-{limit}",
             "--print", "%(id)s\t%(duration)s\t%(url)s\t%(channel)s\t%(title)s",
         ]
-    proxy = _next_proxy()
+    proxy = _acquire_proxy()
     cmd += _yt_network_args(proxy)
+    started = time.time()
 
     try:
         with _NET_SEM:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
-        _bench_proxy(proxy, "search timed out")
+        _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started)
+        print(f"[media] search timed out via proxy #{_proxy_index(proxy)}", flush=True)
         return []
     except FileNotFoundError:
+        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
         return []
     if looks_blocked(p.stderr):
-        _bench_proxy(proxy, "search refused")
-        print("[media] YouTube rejected this request. Check proxy health, "
-              "yt-dlp/runtime support, and source availability.",
+        cls = classify_ytdlp(p.stderr, p.returncode)
+        _release_proxy(proxy, False, cls, started)
+        print(f"[media] YouTube rejected this search via proxy #{_proxy_index(proxy)} "
+              f"({cls.value}); the route is {PROXY_MANAGER.by_url.get(proxy).state if proxy in PROXY_MANAGER.by_url else 'direct'}",
               flush=True)
         return []
+    _release_proxy(proxy, p.returncode == 0, None if p.returncode == 0 else classify_ytdlp(p.stderr, p.returncode),
+                   started)
 
     out = []
     for line in (p.stdout or "").splitlines():
@@ -1405,23 +1466,36 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
     if cached is not None:
         return cached
 
-    proxy = _next_proxy()
+    if _video_unavailable(video_id):
+        return {}, ""
+    proxy = _acquire_proxy()
+    # The same network arguments as a download (runtime, retries, cookies,
+    # the ffmpeg proxy): this call used to skip them and fail quietly, which
+    # sent scouting back to the fixed grab point.
     cmd = ["yt-dlp", f"https://www.youtube.com/watch?v={video_id}", "-J",
-           "--no-warnings", "--ignore-config", "--socket-timeout", "20"]
-    if proxy:
-        cmd += ["--proxy", proxy]
-    if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
-        cmd += ["--cookies", config.YTDLP_COOKIES_FILE]
+           "--no-warnings", "--ignore-config"] + _yt_network_args(proxy)
+    started = time.time()
     try:
         with _NET_SEM:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                errors="replace", timeout=timeout)
         info = json.loads(p.stdout) if p.returncode == 0 and p.stdout else {}
     except subprocess.TimeoutExpired:
-        _bench_proxy(proxy, "metadata timed out")
+        _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started)
+        print(f"[media] metadata timed out ({video_id}) via proxy #{_proxy_index(proxy)}", flush=True)
         return {}, proxy
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError:
+        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
         return {}, proxy
+    except ValueError:
+        _release_proxy(proxy, False, FailureClass.INVALID_MEDIA, started)
+        return {}, proxy
+    if not info:
+        cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode), proxy)
+        _release_proxy(proxy, False, cls, started)
+        print(f"[media] metadata failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}", flush=True)
+        return {}, proxy
+    _release_proxy(proxy, True, None, started)
     if info:
         # A failed extraction is never cached - the next scout should retry
         # it, possibly through a different (unbenched) proxy.
@@ -1448,28 +1522,35 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         "--merge-output-format", "mp4",
         "-o", out_tpl, "--print", "after_move:filepath",
     ]
-    proxy = _next_proxy()
+    if _video_unavailable(video_id):
+        _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
+        return ""
+    proxy = _acquire_proxy()
     cmd += _yt_network_args(proxy)
     # After the shared network args: yt-dlp keeps the LAST value of a repeated
     # option, so placed before them these were silently overridden by "2".
     cmd += ["--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3"]
+    started = time.time()
     try:
         with _NET_SEM:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
-        _bench_proxy(proxy, "download timed out")
-        print(f"[media] YouTube clip download timed out ({video_id}, {start_at:.1f}s)", flush=True)
+        cls = _note_failure(video_id, FailureClass.NETWORK_TIMEOUT, proxy)
+        _release_proxy(proxy, False, cls, started)
+        print(f"[media] YouTube clip download timed out ({video_id}, {start_at:.1f}s) "
+              f"via proxy #{_proxy_index(proxy)}", flush=True)
         return ""
     except FileNotFoundError:
+        _note_failure(video_id, FailureClass.PROVIDER_UNAVAILABLE, proxy)
+        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
         print("[media] yt-dlp executable is missing; cannot download YouTube footage", flush=True)
         return ""
-    if looks_blocked(p.stderr):
-        _bench_proxy(proxy, "download refused")
-        print(f"[media] YouTube refused the worker connection ({video_id}); check YTDLP_PROXY", flush=True)
-        return ""
     if p.returncode != 0:
+        cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode), proxy)
+        _release_proxy(proxy, False, cls, started)
         reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
-        print(f"[media] yt-dlp failed ({video_id}, exit {p.returncode}): {reason[-240:] or 'no diagnostic'}", flush=True)
+        print(f"[media] download failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}: "
+              f"{reason[-160:] or 'no diagnostic'}", flush=True)
         return ""
     found = ""
     for line in (p.stdout or "").splitlines():
@@ -1487,14 +1568,21 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         # retry goes through another proxy.
         reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
         print(f"[media] empty download ({video_id} @{start_at:.0f}s, "
-              f"{os.path.getsize(found)} bytes) via proxy #{_PROXIES.index(proxy) + 1 if proxy in _PROXIES else 0}: "
+              f"{os.path.getsize(found)} bytes) via proxy #{_proxy_index(proxy)}: "
               f"{reason[-160:] or 'no diagnostic'}", flush=True)
         try:
             os.remove(found)
         except OSError:
             pass
-        _bench_proxy(proxy, "empty download")
+        cls = _note_failure(video_id, FailureClass.INVALID_MEDIA, proxy)
+        _release_proxy(proxy, False, cls, started)
         return ""
+    if not found:
+        cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode, empty=True), proxy)
+        _release_proxy(proxy, False, cls, started)
+        return ""
+    _release_proxy(proxy, True, None, started)
+    _LAST_FAILURE.set(None)
     return found
 
 
@@ -1585,13 +1673,23 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
     downloads (measured: 15/24 first tries, 502s from IPs going offline) and
     the same clip succeeds seconds later from another address - three tries
     on different IPs gets ~95% through."""
-    for attempt in (1, 2, 3):
+    attempts = 0
+    while True:
         path = _yt_fetch(video_id, out_dir, start_at, seconds)
         if path:
             return path
-    print(f"[media] download failed three times, skipping: {title[:60] or video_id}",
-          flush=True)
-    return ""
+        cls, _proxy = _LAST_FAILURE.get() or (FailureClass.UNKNOWN, "")
+        policy = RETRY.get(cls, RETRY[FailureClass.UNKNOWN])
+        attempts += 1
+        if cls == FailureClass.MEDIA_UNAVAILABLE:
+            print(f"[media] not retrying {title[:50] or video_id}: the video is unavailable", flush=True)
+            return ""
+        if attempts > policy["retries"] or attempts >= 4:
+            print(f"[media] giving up on {title[:50] or video_id} after {attempts} "
+                  f"attempt(s): {cls.value}", flush=True)
+            return ""
+        if policy["backoff"]:
+            time.sleep(policy["backoff"] * attempts)
 
 
 def _scene_cap_reached() -> bool:
@@ -1857,18 +1955,29 @@ def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             "--merge-output-format", "mp4", "--no-playlist", "--no-warnings",
             "--ignore-config", "--socket-timeout", "20", "--retries", "2",
             "-o", out_tpl, "--print", "after_move:filepath"]
-    for proxy in ("", _next_proxy()):
+    for proxy in ("", _acquire_proxy("dailymotion.com")):
         cmd = base + (["--proxy", proxy] if proxy else [])
+        started = time.time()
         try:
             with _NET_SEM:
                 p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                    errors="replace", timeout=timeout)
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except subprocess.TimeoutExpired:
+            if proxy:
+                _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started, "dailymotion.com")
+            continue
+        except FileNotFoundError:
+            if proxy:
+                _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started, "dailymotion.com")
             continue
         for line in (p.stdout or "").splitlines():
             line = line.strip()
             if line and os.path.exists(line):
+                if proxy:
+                    _release_proxy(proxy, True, None, started, "dailymotion.com")
                 return line
+        if proxy:
+            _release_proxy(proxy, False, classify_ytdlp(p.stderr, p.returncode), started, "dailymotion.com")
         if not proxy and not _PROXIES:
             break
     return ""
@@ -1952,19 +2061,29 @@ def _web_fetch(url: str, out_dir: str, start_at: float, seconds: float, timeout:
            "--force-keyframes-at-cuts", "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]/b",
            "--no-playlist", "--no-warnings", "--quiet", "--max-filesize", "300M",
            "--merge-output-format", "mp4", "-o", out_tpl, "--print", "after_move:filepath"]
-    proxy = _next_proxy()
+    domain = (urllib.parse.urlparse(url).hostname or "web").removeprefix("www.")
+    proxy = _acquire_proxy(domain)
     cmd += _yt_network_args(proxy)
+    started = time.time()
     try:
         with _NET_SEM:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                errors="replace", timeout=timeout)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except subprocess.TimeoutExpired:
+        _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started, domain)
+        return ""
+    except FileNotFoundError:
+        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started, domain)
         return ""
     if p.returncode != 0:
+        _release_proxy(proxy, False, classify_ytdlp(p.stderr, p.returncode), started, domain)
         return ""
     for line in (p.stdout or "").splitlines():
         if line.strip() and os.path.exists(line.strip()):
-            return line.strip() if playable_video(line.strip()) else ""
+            ok = playable_video(line.strip())
+            _release_proxy(proxy, ok, None if ok else FailureClass.INVALID_MEDIA, started, domain)
+            return line.strip() if ok else ""
+    _release_proxy(proxy, False, FailureClass.INVALID_MEDIA, started, domain)
     return ""
 
 
@@ -2389,11 +2508,14 @@ def _source_stat(name: str) -> Dict[str, Any]:
 
 
 def _source_error(name: str, exc: Exception) -> None:
-    """Record why a source failed; never raises."""
+    """Record why a source failed, and its class; never raises."""
+    cls = classify_exception(exc)
     with _CACHE_LOCK:
         st = _source_stat(name)
         st["errors"] += 1
-        st["recentErrors"] = (st["recentErrors"] + [f"{type(exc).__name__}: {str(exc)[:140]}"])[-4:]
+        st["recentErrors"] = (st["recentErrors"] + [f"{cls.value}: {type(exc).__name__}: {str(exc)[:120]}"])[-4:]
+        by = st.setdefault("byClass", {})
+        by[cls.value] = by.get(cls.value, 0) + 1
 
 
 def source_stats() -> Dict[str, Any]:
@@ -2411,6 +2533,10 @@ def reset_cache():
         _SOURCE_STATS.clear()
         _USED_CHANNELS.clear()
         _GENERATED[0] = 0
+    with _FAIL_LOCK:
+        _UNAVAILABLE_VIDEOS.clear()
+        _DENIED_ON.clear()
+    PROXY_MANAGER.reset_stats()
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
 
