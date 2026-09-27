@@ -458,7 +458,11 @@ def _source_with_pools(jobs: list, work: str, *, require_cc: bool, exclude: set,
     rest = [j for j in ordered if j["index"] not in pooled]
     by_index = dict(pooled)
     if rest:
-        got = source_rest(rest, taken) or []
+        # Per-scene sourcing indexes its results by job["index"], so the lines
+        # it gets must be numbered 0..n-1: a part handed [0, 2, 3] crashed with
+        # IndexError and every part fell back to the parent (a 107-minute job).
+        dense = [dict(j, index=k) for k, j in enumerate(rest)]
+        got = source_rest(dense, taken) or []
         for j, a in zip(rest, got):
             by_index[j["index"]] = a
     if pooled:
