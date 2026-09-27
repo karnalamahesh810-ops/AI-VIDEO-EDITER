@@ -1,0 +1,17 @@
+{
+ "title": "The Ruidoso Flash Flood",
+ "kind": "weather",
+ "year": 2025,
+ "entities": [
+  "Ruidoso",
+  "Rio Ruidoso",
+  "South Fork Fire",
+  "burn scar",
+  "Lincoln County"
+ ],
+ "locations": [
+  "New Mexico"
+ ],
+ "narration": "On July eighth, twenty twenty-five, a wall of water swept through Ruidoso, New Mexico. A summer thunderstorm stalled over the burn scar left by the South Fork Fire a year earlier, and the bare mountainsides shed rain like concrete. The Rio Ruidoso rose more than twenty feet in under an hour, a record crest for the river. A house was carried whole down the current and filmed as it slammed into a bridge on Highway seventy. Cars floated through the streets of Midtown, and RV parks along the riverbank were swept away. Three people died, including two children, and the National Weather Service issued flash flood emergencies for Lincoln County through the evening. Rescue crews from the state police and the fire department pulled dozens of people from rooftops and vehicles. It was the second summer in a row that fire and then flood had struck the same mountain village.",
+ "name": "new_mexico_flash_flood"
+}

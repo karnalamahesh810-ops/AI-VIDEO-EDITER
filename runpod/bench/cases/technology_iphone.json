@@ -1,0 +1,20 @@
+{
+ "title": "The Day the iPhone Was Announced",
+ "kind": "history",
+ "year": 2007,
+ "entities": [
+  "iPhone",
+  "Steve Jobs",
+  "Apple",
+  "Macworld",
+  "Moscone Center",
+  "Cingular",
+  "BlackBerry"
+ ],
+ "locations": [
+  "San Francisco",
+  "Cupertino"
+ ],
+ "narration": "On January ninth, two thousand seven, Steve Jobs walked onto the stage at Macworld in the Moscone Center in San Francisco. He told the crowd that Apple was introducing three products: a widescreen iPod, a phone and an internet communicator, and then revealed they were one device, the iPhone. The phone had no physical keyboard, only a three and a half inch touch screen that responded to fingers instead of a stylus. Jobs demonstrated pinching to zoom on a photo, scrolling through a list of songs, and browsing the full New York Times website over the Cingular network. Competitors like BlackBerry and Nokia dismissed it, pointing to its high price and slow data connection. When it went on sale in June, lines wrapped around Apple stores in New York and Cupertino, and the first million iPhones sold in seventy-four days. Within a few years the design that debuted on that stage had reshaped the entire mobile phone industry.",
+ "name": "technology_iphone"
+}

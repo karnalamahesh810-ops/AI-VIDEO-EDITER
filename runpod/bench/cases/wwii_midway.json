@@ -1,0 +1,21 @@
+{
+ "title": "Midway: The Battle That Turned the Pacific",
+ "kind": "history",
+ "year": 1942,
+ "entities": [
+  "Battle of Midway",
+  "USS Yorktown",
+  "USS Enterprise",
+  "Akagi",
+  "Admiral Nimitz",
+  "Admiral Yamamoto",
+  "Dauntless dive bombers"
+ ],
+ "locations": [
+  "Midway Atoll",
+  "Pacific Ocean",
+  "Pearl Harbor"
+ ],
+ "narration": "In June nineteen forty-two, six months after Pearl Harbor, the Imperial Japanese Navy sailed for Midway Atoll with four aircraft carriers. Admiral Yamamoto intended to draw out and destroy the American fleet. But codebreakers at Pearl Harbor had read the Japanese plans, and Admiral Nimitz placed three carriers, the Enterprise, the Hornet and the hastily repaired Yorktown, in ambush northeast of the island. On the morning of June fourth, American torpedo bombers attacked first and were slaughtered, but they pulled the Japanese fighters down to sea level. Minutes later, Dauntless dive bombers fell out of the sun on the carriers Akagi, Kaga and Soryu, their decks crowded with fuelled aircraft. Within six minutes three carriers were burning. The fourth, Hiryu, struck back and crippled the Yorktown, but was itself sunk that evening. Japan had lost four fleet carriers and hundreds of its best pilots in a single day, and the balance of the Pacific war had shifted.",
+ "name": "wwii_midway"
+}

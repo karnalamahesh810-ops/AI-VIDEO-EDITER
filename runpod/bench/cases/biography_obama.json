@@ -1,0 +1,23 @@
+{
+ "title": "Barack Obama Before the White House",
+ "kind": "biography",
+ "year": 1961,
+ "entities": [
+  "Barack Obama",
+  "Ann Dunham",
+  "Barack Obama Sr.",
+  "Punahou School",
+  "Occidental College",
+  "Columbia University",
+  "Harvard Law School",
+  "Michelle Obama"
+ ],
+ "locations": [
+  "Honolulu",
+  "Hawaii",
+  "Jakarta",
+  "Chicago"
+ ],
+ "narration": "Barack Obama was born in Honolulu in August nineteen sixty-one, the son of Ann Dunham from Kansas and Barack Obama Senior, a student from Kenya. His parents separated when he was two, and his father returned to Africa. In nineteen sixty-seven his mother remarried and moved the family to Jakarta, where Obama attended local schools until he was ten. He returned to Hawaii to live with his grandparents and won a scholarship to the Punahou School, graduating in nineteen seventy-nine. He studied at Occidental College in Los Angeles before transferring to Columbia University in New York. In nineteen eighty-five he moved to Chicago to work as a community organizer on the South Side. Three years later he entered Harvard Law School, where he became the first Black president of the Harvard Law Review. Back in Chicago he taught constitutional law, married Michelle Robinson in nineteen ninety-two, and in nineteen ninety-six won a seat in the Illinois State Senate.",
+ "name": "biography_obama"
+}

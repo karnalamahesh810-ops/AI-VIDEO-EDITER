@@ -1,0 +1,18 @@
+{
+ "title": "Lake Mead Is Running Out of Water",
+ "kind": "weather",
+ "year": 2026,
+ "entities": [
+  "Lake Mead",
+  "Hoover Dam",
+  "Colorado River",
+  "Las Vegas",
+  "Boulder City"
+ ],
+ "locations": [
+  "Nevada",
+  "Arizona"
+ ],
+ "narration": "Lake Mead has fallen dramatically near Hoover Dam, exposing shoreline that stayed underwater for decades. The white bathtub ring on the canyon walls now stands more than a hundred and fifty feet tall. Boat ramps at Boulder Harbor end in dry gravel, and marinas have been dragged downhill again and again to follow the retreating water. The Colorado River feeds the reservoir, but a warming climate and twenty years of drought have cut the flow that reaches Nevada and Arizona. Las Vegas draws almost all of its drinking water from Lake Mead through a third intake bored deep under the lakebed. Downstream, farms in the Imperial Valley depend on the same river for lettuce and alfalfa. At Hoover Dam, turbines lose power as the head of water drops, and engineers have installed new wheels to keep generating at lower levels. The Bureau of Reclamation warns that another dry winter could push the lake toward dead pool, the level at which water can no longer pass through the dam at all.",
+ "name": "lake_mead"
+}

@@ -33,6 +33,7 @@ so the caller always gets a structured result instead of a RunPod stack trace.
 """
 import collections
 import copy
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import shutil
@@ -521,9 +522,19 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         raise ValueError("audio_url is required (upload a voiceover or generate TTS first)")
 
     report("Downloading narration", 4)
-    # Handles both public URLs and private-bucket object paths.
-    audio_src = storage.resolve_audio(raw_audio, bucket=inp.get("audio_bucket", "video-audio"))
-    audio_path = storage.download(audio_src, os.path.join(work, "narration.mp3"))
+    if str(raw_audio).startswith("bench://"):
+        # A benchmark narration baked into the image (bench/audio/<case>.mp3),
+        # so the seven-script benchmark needs no upload and no credentials.
+        case = "".join(ch for ch in str(raw_audio)[8:] if ch.isalnum() or ch in "_-")
+        bench_src = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "bench", "audio", f"{case}.mp3")
+        if not os.path.isfile(bench_src):
+            raise ValueError(f"unknown benchmark case '{case}'")
+        audio_path = shutil.copy(bench_src, os.path.join(work, "narration.mp3"))
+    else:
+        # Handles both public URLs and private-bucket object paths.
+        audio_src = storage.resolve_audio(raw_audio, bucket=inp.get("audio_bucket", "video-audio"))
+        audio_path = storage.download(audio_src, os.path.join(work, "narration.mp3"))
     audio_duration = renderer.probe_duration(audio_path)
 
     report("Aligning narration", 8)
@@ -680,7 +691,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             rest, sequences or [], brief,
             parent_job_id=(report.job or {}).get("id", ""), project_id=project_id,
             bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
-            flags=flags, report=report, exclude=taken,
+            # Parts on other workers apply the same per-job config overrides.
+            flags=({**flags, "config": inp["config"]} if isinstance(inp.get("config"), dict) else flags),
+            report=report, exclude=taken,
             local=lambda some, exclude: local(some, exclude, progress=False))
         for j in rest:
             assets[j["index"]] = got[j["index"]] if j["index"] < len(got) else None
@@ -1157,12 +1170,57 @@ def _done_fields(out: dict) -> dict:
     }
 
 
+# Settings a job may override for itself ({"config": {...}} in the input), so
+# the benchmark can A/B a selection change on one image. Coerced to the type
+# the setting already has; anything else is ignored.
+CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
+                      "POOL_EXTRA_QUERIES", "POOL_SCOUT", "INTENT_QUERIES_MAX",
+                      "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS")
+
+
+def _apply_config(overrides) -> dict:
+    """Apply per-job overrides; returns what to put back."""
+    previous = {}
+    if not isinstance(overrides, dict):
+        return previous
+    for key, value in overrides.items():
+        if key not in CONFIG_OVERRIDABLE or not hasattr(config, key):
+            continue
+        current = getattr(config, key)
+        try:
+            if isinstance(current, bool):
+                value = str(value).strip().lower() in ("1", "true", "yes", "on")
+            elif isinstance(current, int):
+                value = int(value)
+            elif isinstance(current, float):
+                value = float(value)
+            elif current is None or isinstance(current, dict):
+                value = json.loads(value) if isinstance(value, str) else value
+                if not isinstance(value, dict):
+                    continue
+            else:
+                continue
+        except (TypeError, ValueError):
+            continue
+        previous[key] = current
+        setattr(config, key, value)
+    if previous:
+        print(f"[worker] config overrides: {sorted(previous)}", flush=True)
+    return previous
+
+
+def _restore_config(previous: dict) -> None:
+    for key, value in (previous or {}).items():
+        setattr(config, key, value)
+
+
 def handler(job):
     started = time.time()
     job_id = job.get("id") or uuid.uuid4().hex
     inp = job.get("input") or {}
     # The storage broker authorises uploads by the running job's id.
     inp["_job_id"] = job_id
+    config_before = _apply_config(inp.get("config"))
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
     report = Reporter(project_id, job=job)
@@ -1362,6 +1420,7 @@ def handler(job):
                 **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {}),
                 **({"timeline": dict(LAST_TIMELINE)} if inp.get("return_frames") and LAST_TIMELINE else {})}
     finally:
+        _restore_config(config_before)
         report.finish()
         # Serverless workers are reused; a 17-minute render leaves GBs behind.
         if not inp.get("keep_workdir"):

@@ -1,0 +1,19 @@
+{
+ "title": "The Los Angeles Fires of January 2025",
+ "kind": "disaster",
+ "year": 2025,
+ "entities": [
+  "Palisades Fire",
+  "Eaton Fire",
+  "Pacific Palisades",
+  "Altadena",
+  "Santa Ana winds",
+  "Cal Fire"
+ ],
+ "locations": [
+  "Los Angeles",
+  "California"
+ ],
+ "narration": "On the morning of January seventh, twenty twenty-five, a brush fire ignited in the hills above Pacific Palisades. Santa Ana winds gusting past eighty miles an hour drove the flames toward the coast within hours. By nightfall a second blaze, the Eaton Fire, was tearing through Altadena on the other side of Los Angeles. Firefighters from Cal Fire and the Los Angeles Fire Department found hydrants running dry as thousands of homes burned along Sunset Boulevard and Lake Avenue. Air tankers were grounded by the wind, and residents fled on foot down Palisades Drive, abandoning cars that were later bulldozed to clear the road. Over the following week the two fires destroyed more than sixteen thousand structures and killed at least twenty-nine people. Satellite images showed smoke stretching far over the Pacific Ocean. When the winds finally eased, whole neighbourhoods of Altadena were reduced to chimneys and ash, and the cleanup became the largest in the history of California.",
+ "name": "california_wildfire"
+}

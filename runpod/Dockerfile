@@ -57,6 +57,9 @@ COPY src/ src/
 # itself: `python -m unittest discover -s tests -t .` inside a running worker.
 COPY tests/ tests/
 COPY scripts/ scripts/
+# The seven benchmark narrations (bench/README.md): ~2.5 MB, so a benchmark
+# run needs no upload and no credentials (audio_url "bench://<case>").
+COPY bench/ bench/
 
 RUN mkdir -p ${WORK_DIR}
 

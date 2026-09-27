@@ -1,0 +1,20 @@
+{
+ "title": "Big Boy 4014: The Largest Steam Locomotive Alive",
+ "kind": "explainer",
+ "year": 2019,
+ "entities": [
+  "Big Boy 4014",
+  "Union Pacific",
+  "Cheyenne",
+  "Ed Dickens",
+  "Sherman Hill",
+  "Transcontinental Railroad"
+ ],
+ "locations": [
+  "Wyoming",
+  "Utah",
+  "Nebraska"
+ ],
+ "narration": "Union Pacific Big Boy number four thousand fourteen is the largest operating steam locomotive in the world. Built in nineteen forty-one by the American Locomotive Company, the Big Boys hauled freight over Sherman Hill in Wyoming, where grades were too steep for ordinary engines. Four thousand fourteen was retired in nineteen sixty-one and sat in a Pomona museum for half a century. In twenty thirteen Union Pacific brought it back to its Cheyenne steam shop, where a crew led by Ed Dickens spent five years rebuilding it and converting it to burn oil. In May twenty nineteen the locomotive steamed to Ogden, Utah for the one hundred fiftieth anniversary of the golden spike and the Transcontinental Railroad. Crowds lined the tracks across Nebraska and Wyoming as the engine, more than a hundred and thirty feet long with its tender, rolled past at sixty miles an hour. Every summer since, the Big Boy has toured the Union Pacific system, drawing tens of thousands of people to small-town crossings.",
+ "name": "locomotive_big_boy"
+}
