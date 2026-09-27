@@ -29,6 +29,7 @@ class BestOfN(unittest.TestCase):
         with mock.patch.object(config, "JUDGE_BEST_OF", best_of), \
                 mock.patch.object(config, "EXCELLENT_SCORE", excellent), \
                 mock.patch.object(config, "JUDGE_MAX_PER_SCENE", cap), \
+                mock.patch.object(config, "POOL_SCOUT", 3), \
                 mock.patch.object(config, "VISION_MAX_CANDIDATES", 3), \
                 mock.patch.object(media, "_story_channels", return_value=[]), \
                 mock.patch.object(media, "_yt_candidates_cached", return_value=cands), \

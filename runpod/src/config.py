@@ -208,10 +208,10 @@ YT_SEARCH_RESULTS = int(os.getenv("YT_SEARCH_RESULTS", "20"))
 # EXCELLENT_SCORE or above ends the search at once. JUDGE_MAX_PER_SCENE caps
 # vision calls across all of a scene's expanded searches.
 JUDGE_BEST_OF = int(os.getenv("JUDGE_BEST_OF", "2"))
-EXCELLENT_SCORE = float(os.getenv("EXCELLENT_SCORE", "0.9"))
+EXCELLENT_SCORE = float(os.getenv("EXCELLENT_SCORE", "0.85"))
 # Every model call a scene makes (scouting, the fine pass, judging) across
 # all its searches. The old-style search used about 10 per scene.
-JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "24"))
+JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "12"))
 # Searches a typed scene intent expands to (src/intent.py), specific first.
 INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # The candidate pool (src/candidates.py): every search variant plus
@@ -219,10 +219,10 @@ INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # metadata before the best POOL_SCOUT are scouted and judged. Off restores the
 # search-by-search order (kept for A/B benchmarks). Weights are JSON maps.
 CANDIDATE_POOL = _flag("CANDIDATE_POOL", True)
-POOL_EXTRA_QUERIES = int(os.getenv("POOL_EXTRA_QUERIES", "3"))
+POOL_EXTRA_QUERIES = int(os.getenv("POOL_EXTRA_QUERIES", "2"))
 # Three, not five: a scout is a model call, and the first benchmark of the
 # pool showed scenes spending their budget on scouting before a download.
-POOL_SCOUT = int(os.getenv("POOL_SCOUT", "3"))
+POOL_SCOUT = int(os.getenv("POOL_SCOUT", "2"))
 
 
 def _json_env(name: str):
@@ -249,9 +249,12 @@ FINAL_WEIGHTS = _json_env("FINAL_WEIGHTS")
 # timestamp that shows the intent, instead of cutting at a fixed 35%.
 # Wall-clock cap on the second sourcing pass (repeats, rejected and empty
 # scenes). Attempts in flight finish; no new ones start after it.
-REPLACE_BUDGET_SECONDS = int(os.getenv("REPLACE_BUDGET_SECONDS", "240"))
+# Speed defaults (2026-09-27): a 3-minute narration must finish in 5-10 min.
+# Per-scene judging is capped at 12 model calls, a 0.85 clip ends a search,
+# and the repair passes are half as long; animation scenes cover the rest.
+REPLACE_BUDGET_SECONDS = int(os.getenv("REPLACE_BUDGET_SECONDS", "120"))
 # Wall-clock cap on the AI-rescue pass for scenes still empty after pass 2.
-RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "180"))
+RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "60"))
 # Last resort for a scene nothing could fill: reuse a real shot of the same
 # subject (or a nearby scene) from elsewhere in the video, never within
 # REUSE_MIN_GAP scenes of itself and always flagged for review. Off ("0")
@@ -308,6 +311,10 @@ PLAN_PARALLEL = int(os.getenv("PLAN_PARALLEL", "4"))
 # storyboard, many different moments cut from them. Lines whose subject pool
 # runs dry fall back to per-scene sourcing.
 SUBJECT_POOLS = _flag("SUBJECT_POOLS", True)
+# With fan-out available, every part runs its own subject pools, so all ten
+# workers start at once instead of the parent pooling alone first (a real
+# job sat 6 minutes at 22-25% on one worker while nine idled).
+POOLS_IN_PARTS = _flag("POOLS_IN_PARTS", True)
 POOL_MIN_SCENES = int(os.getenv("POOL_MIN_SCENES", "1"))
 POOL_MAX_VIDEOS = int(os.getenv("POOL_MAX_VIDEOS", "8"))
 POOL_PARALLEL_SUBJECTS = int(os.getenv("POOL_PARALLEL_SUBJECTS", "4"))
@@ -408,7 +415,7 @@ ANIMATION_OVER_FOOTAGE_BELOW = float(os.getenv("ANIMATION_OVER_FOOTAGE_BELOW", "
 CLIP_LIBRARY_MIN_SCORE = float(os.getenv("CLIP_LIBRARY_MIN_SCORE", "0.8"))
 CLIP_LIBRARY_MAX_PER_JOB = int(os.getenv("CLIP_LIBRARY_MAX_PER_JOB", "60"))
 STRAGGLER_GRACE_SECONDS = float(os.getenv("STRAGGLER_GRACE_SECONDS", "75"))
-SEQUENCE_BUDGET_SECONDS = float(os.getenv("SEQUENCE_BUDGET_SECONDS", "300"))
+SEQUENCE_BUDGET_SECONDS = float(os.getenv("SEQUENCE_BUDGET_SECONDS", "180"))
 
 RENDER_CONCURRENCY = int(os.getenv("RENDER_CONCURRENCY", "4"))
 # See render.render: the defaults size these from the host, not the container.

@@ -441,6 +441,43 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
     return len(published)
 
 
+def _source_with_pools(jobs: list, work: str, *, require_cc: bool, exclude: set, source_rest,
+                       report=None, library=None):
+    """
+    Everything one worker does for its lines: subject pools first, per-scene
+    sourcing for what the pools did not cover (`source_rest(rest, taken)`),
+    then the pools' spare moments for lines still empty or repeated.
+    Returns (assets aligned to the jobs sorted by index, pooled).
+    """
+    ordered = sorted(jobs, key=lambda j: j["index"])
+    pooled: dict = {}
+    if config.SUBJECT_POOLS and jobs:
+        pooled = pools.source_by_subject(jobs, work, require_cc=require_cc, report=report, library=library)
+        print(f"[worker] subject pools covered {len(pooled)}/{len(jobs)} lines", flush=True)
+    taken = set(exclude or ()) | {a.identity for a in pooled.values()} | pools.video_ids(pooled)
+    rest = [j for j in ordered if j["index"] not in pooled]
+    by_index = dict(pooled)
+    if rest:
+        got = source_rest(rest, taken) or []
+        for j, a in zip(rest, got):
+            by_index[j["index"]] = a
+    if pooled:
+        seen: set = set()
+        redo = []
+        for j in ordered:
+            a = by_index.get(j["index"])
+            if a is None or a.identity in seen:
+                redo.append(j["index"])
+            else:
+                seen.add(a.identity)
+        if redo:
+            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc)
+            by_index.update(extra)
+            print(f"[worker] {len(extra)}/{len(redo)} empty or repeated line(s) filled from "
+                  "spare pool moments", flush=True)
+    return [by_index.get(j["index"]) for j in ordered], pooled
+
+
 def _fill_missing_media(doc: dict) -> int:
     """
     Give every scene something to render, for the `build` path only.
@@ -698,7 +735,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     lib = library.Library.load(project_id, (report.job or {}).get("id", ""),
                                inp.get("media_bucket") or config.MEDIA_BUCKET)
     LAST_LIBRARY["lib"] = lib
-    if config.SUBJECT_POOLS and inp.get("allow_youtube") is not False:
+    # Parts on other workers apply the same per-job config overrides.
+    fan_flags = ({**flags, "config": inp["config"]} if isinstance(inp.get("config"), dict) else flags)
+    pools_wanted = bool(config.SUBJECT_POOLS and inp.get("allow_youtube") is not False)
+    in_parts = bool(pools_wanted and config.POOLS_IN_PARTS and jobs
+                    and fanout.enabled_for(len(jobs), project_id))
+    if pools_wanted and not in_parts:
         report("Finding footage by subject", 22, done=0, total=len(jobs))
         pooled = pools.source_by_subject(jobs, work, require_cc=require_cc, report=report, library=lib)
         print(f"[worker] subject pools covered {len(pooled)}/{len(jobs)} lines", flush=True)
@@ -706,7 +748,23 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     taken = {a.identity for a in pooled.values()} | pools.video_ids(pooled)
     rest = [j for j in jobs if j["index"] not in pooled]
     assets = [pooled.get(j["index"]) for j in jobs]
-    if rest and fanout.enabled_for(len(rest), project_id):
+    if in_parts:
+        # Every worker starts now: each part pools its own subjects, sources
+        # the rest and fills from its spare moments; the parent's own share
+        # goes through the same path with the clip library.
+        report("Finding footage on every worker", 22, done=0, total=len(jobs))
+        pool_stats["in_parts"] = True
+        got = fanout.source(
+            jobs, sequences or [], brief,
+            parent_job_id=(report.job or {}).get("id", ""), project_id=project_id,
+            bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
+            flags={**fan_flags, "pools": True}, report=report, exclude=set(),
+            local=lambda some, exclude: _source_with_pools(
+                some, work, require_cc=require_cc, exclude=exclude,
+                source_rest=lambda r, ex: local(r, ex, progress=False), library=lib)[0])
+        for j in jobs:
+            assets[j["index"]] = got[j["index"]] if j["index"] < len(got) else None
+    elif rest and fanout.enabled_for(len(rest), project_id):
         # Long video: each part is found, vision-checked and repaired on its
         # own worker at the same time; the parent fills whatever comes back
         # missing and resolves clips two parts both picked.
@@ -714,8 +772,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             rest, sequences or [], brief,
             parent_job_id=(report.job or {}).get("id", ""), project_id=project_id,
             bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
-            # Parts on other workers apply the same per-job config overrides.
-            flags=({**flags, "config": inp["config"]} if isinstance(inp.get("config"), dict) else flags),
+            flags=fan_flags,
             report=report, exclude=taken,
             local=lambda some, exclude: local(some, exclude, progress=False))
         for j in rest:
@@ -1458,15 +1515,22 @@ def handler(job):
 
             def source_part(jobs, w, seqs, exclude):
                 b = inp.get("brief") or {}
+
                 # A part only finds; the parent fills gaps (spare pool moments,
                 # then its own pass), so no rescue or refill time box here.
-                return media.source_many(
-                    jobs, w, workers=config.SOURCE_WORKERS, on_done=part_progress,
-                    rescue=None, refill=False,
-                    sequences=seqs or None,
-                    assign=lambda lines, pool: director.assign_shots(lines, pool, story=b),
-                    exclude=exclude, allow_youtube=inp.get("allow_youtube"),
-                    allow_stock=inp.get("allow_stock"), require_cc=inp.get("require_cc"))
+                def find(lines, ex):
+                    return media.source_many(
+                        lines, w, workers=config.SOURCE_WORKERS, on_done=part_progress,
+                        rescue=None, refill=False,
+                        sequences=seqs or None,
+                        assign=lambda ls, pool: director.assign_shots(ls, pool, story=b),
+                        exclude=ex, allow_youtube=inp.get("allow_youtube"),
+                        allow_stock=inp.get("allow_stock"), require_cc=inp.get("require_cc"))
+                if inp.get("pools"):
+                    # This part pools its own subjects first (POOLS_IN_PARTS).
+                    rc = bool(inp["require_cc"] if inp.get("require_cc") is not None else config.REQUIRE_CC)
+                    return _source_with_pools(jobs, w, require_cc=rc, exclude=set(exclude), source_rest=find)[0]
+                return find(jobs, exclude)
             out = fanout.run_part(inp, work, source_part, set_story)
             return {"ok": True, "action": "source_part", **out,
                     "costs": costs.summary(time.time() - started),
