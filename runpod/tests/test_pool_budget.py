@@ -70,6 +70,20 @@ class Budget(unittest.TestCase):
         self.assertEqual(sorted(scouted), ["A0000000000", "B0000000000", "C0000000000"])   # each once
         self.assertEqual(sorted(fetched), ["A0000000000", "B0000000000", "C0000000000"])
 
+    def test_a_near_miss_is_kept_as_best_available_when_nothing_passes(self):
+        d = tempfile.mkdtemp()
+        fetched = []
+        # Every judged clip scores 0.6: under the 0.70 floor, above the soft floor.
+        asset = self._clip(d, {"*": _rows(["A0000000000", "B0000000000"])}, verdict_score=0.6, fetched=fetched)
+        self.assertIsNotNone(asset)
+        self.assertTrue(asset.review_required)
+        self.assertIn("Best available", asset.review_reason)
+        self.assertAlmostEqual(asset.relevance_score, 0.6, places=2)
+        self.assertTrue(os.path.isfile(asset.local_path))
+        # A clear rejection never qualifies, however it scores.
+        with mock.patch.object(config, "VISION_SOFT_MIN_SCORE", 0.65):
+            self.assertIsNone(self._clip(tempfile.mkdtemp(), {"*": _rows(["C0000000000"])}, verdict_score=0.6))
+
     def test_the_budget_counts_scouting_and_stops_the_scene(self):
         d = tempfile.mkdtemp()
         scouted, fetched = [], []

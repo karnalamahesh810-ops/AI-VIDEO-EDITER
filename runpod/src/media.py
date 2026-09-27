@@ -1756,6 +1756,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     plan = _plan_grabs([c.row() for c in scouts], grab, start_at, intent_text, context)
     story_kind = _STORY_KIND["kind"]
     passed: List[MediaAsset] = []
+    soft: Optional[dict] = None       # the best candidate under the floor, if any
     judged = 0
     fine_done = False
     claimed: List[str] = []
@@ -1790,6 +1791,20 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         _count_judged()
         keep, verdict = _vision_gate(path, intent_text, context, c.title)
         if not keep:
+            v = verdict or {}
+            score = float(v.get("score") or 0.0)
+            clear_no = bool(v.get("has_text_or_watermark")) or bool(v.get("is_talking_head"))
+            if (score >= config.VISION_SOFT_MIN_SCORE and not clear_no
+                    and (soft is None or score > soft["score"])):
+                # The best near-miss so far: kept in case nothing passes.
+                if soft is not None:
+                    try:
+                        os.remove(soft["path"])
+                    except OSError:
+                        pass
+                soft = {"path": path, "score": score, "verdict": verdict, "c": c, "point": point,
+                        "moment": moment, "clean": clean, "cuts": cuts}
+                continue
             try:
                 os.remove(path)
             except OSError:
@@ -1813,6 +1828,34 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
               f"{asset.specificity or 'unclassed'})", flush=True)
         passed.append(asset)
     winner = _best_of(passed)
+    if winner is None and soft is not None:
+        # Nothing cleared the floor: the best near-miss, flagged for review.
+        # The editor shows the flag and the alternatives; a related shot the
+        # user can swap beats a beat with nothing on it.
+        c, point, moment = soft["c"], soft["point"], soft["moment"]
+        asset = _asset_for(soft["path"], query, grab, require_cc, title=c.title)
+        asset.url = f"https://www.youtube.com/watch?v={c.id}&t={int(point)}"
+        asset.apply_verdict(soft["verdict"], intent_text)
+        asset.review_required = True
+        asset.review_reason = (f"Best available: the vision check scored it {soft['score']:.2f}, "
+                               f"under the {config.VISION_MIN_SCORE:.2f} floor")
+        penalty = candidates.reuse_penalty(f"yt:{c.id}", c.channel, used, used_channels=_USED_CHANNELS)
+        asset.final_score, asset.score_parts = candidates.final_score(
+            asset.relevance_score, asset.quality, _moment_score(moment, soft["clean"]), c.parts,
+            asset.specificity, story_kind, penalty=penalty)
+        asset.score_parts["meta"] = round(c.metadata, 3)
+        asset.pool = pool.summary()
+        asset.moment = {"start": round(float(point), 1), "score": (moment or {}).get("score"),
+                        "fine": bool((moment or {}).get("fine")), "span": (moment or {}).get("span"),
+                        "clean": soft["clean"], "cuts": soft["cuts"]}
+        print(f"[pool] best available {c.id} {soft['score']:.2f} (under the floor) - flagged for review",
+              flush=True)
+        winner = asset
+    elif soft is not None:
+        try:
+            os.remove(soft["path"])
+        except OSError:
+            pass
     # The claims only had to cover the download-and-judge window, when two
     # scenes could converge on one video; the caller records the winner in
     # `used` as soon as this returns.

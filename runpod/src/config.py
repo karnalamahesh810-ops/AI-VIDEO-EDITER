@@ -182,6 +182,11 @@ VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
 # same call. Low on purpose: it only removes clips that are plainly unwatchable,
 # since rejecting more leaves scenes empty; quality otherwise ranks hook shots.
 VISION_MIN_QUALITY = float(os.getenv("VISION_MIN_QUALITY", "0.30"))
+# A candidate the judge scored under VISION_MIN_SCORE but at or above this
+# is kept as the "best available" when nothing passes, flagged for review:
+# a related shot the editor can swap beats an empty beat. Clear rejections
+# (a watermark, a talking head) never qualify.
+VISION_SOFT_MIN_SCORE = float(os.getenv("VISION_SOFT_MIN_SCORE", "0.55"))
 # gpt-5-2 reasons before it answers. Measured on one real clip check: 32.5 s
 # at the default effort, 13.5 s at "low", same verdict (0.97 vs 0.98);
 # "minimal" is refused (code 500). Sent to gpt-* models only. Empty = default.
