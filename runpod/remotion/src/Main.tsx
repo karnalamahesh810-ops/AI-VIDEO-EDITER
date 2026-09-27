@@ -8,6 +8,12 @@ import { OVERLAYS, accentFor } from "./overlays";
 import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
 
 const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
+// Case-file looks that show a still of the story when they were given no
+// picture: the scene's own image, or a frame of its clip (the newspaper
+// photo, the print on the board, the portrait on a facts card).
+const STILL_LOOKS = new Set(["board", "clipping", "doc", "facts", "dossier", "window", "audio", "evidence"]);
+const stillOf = (m?: SceneMedia | null) =>
+  m && m.url ? (m.type === "image" ? m : m.thumbnail ? { ...m, type: "image" as const, url: m.thumbnail } : null) : null;
 
 const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scenes"]) => {
   // An overlay that names a template gets its unset fields from the
@@ -17,6 +23,22 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
     // A photo or person card dropped on a scene borrows that scene's image.
     const under = scenes.find((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
     if (under && under.media.type === "image" && under.media.url) ov = { ...ov, media: [under.media] };
+  }
+  if (!(ov.media && ov.media.length)) {
+    const v = ov.variant || "";
+    const at = scenes.findIndex((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
+    if (v === "collage") {
+      // A burst of the story's own pictures: the stills of the scenes that follow.
+      const pics: SceneMedia[] = [];
+      for (let i = Math.max(0, at + 1); i < scenes.length && pics.length < 6; i++) {
+        const m = stillOf(scenes[i].media);
+        if (m && !pics.some((p) => p.url === m.url)) pics.push(m);
+      }
+      if (pics.length) ov = { ...ov, media: pics };
+    } else if (STILL_LOOKS.has(v) && at >= 0) {
+      const m = stillOf(scenes[at].media);
+      if (m) ov = { ...ov, media: [m] };
+    }
   }
   const Component = OVERLAYS[ov.type];
   // A document can arrive from the editor or an older schema, so an unknown

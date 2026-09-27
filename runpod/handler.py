@@ -485,6 +485,195 @@ def _source_with_pools(jobs: list, work: str, *, require_cc: bool, exclude: set,
     return [by_index.get(j["index"]) for j in ordered], pooled
 
 
+def _bind_split_images(doc: dict, work: str, put) -> int:
+    """
+    Contrasts told with pictures (the owner: a picture left, a picture right,
+    a line in the middle). Every two-label overlay (label-boxes with two items)
+    gets a photo searched for each side - "<subject> <label>" - and becomes a
+    left/right split (ProSplit). Both photos or neither: a contrast with one
+    picture keeps its label pills. `put(local, object)` uploads a file and
+    returns its link. Time boxed by SPLIT_IMAGES_SECONDS. Returns how many.
+    """
+    if not config.SPLIT_IMAGES:
+        return 0
+    from concurrent.futures import ThreadPoolExecutor, wait as _wait
+    import requests as _rq
+    scenes = doc.get("scenes") or []
+
+    def subject_at(frame: int) -> str:
+        for sc in scenes:
+            if sc["startFrame"] <= frame < sc["startFrame"] + sc["durationInFrames"]:
+                return ((sc.get("semanticMetadata") or {}).get("subject") or "").strip()
+        return ""
+
+    targets = []
+    for n, ov in enumerate(doc.get("overlays") or []):
+        labels = [(it.get("label") or it.get("text") or "").strip() for it in (ov.get("items") or [])]
+        labels = [l for l in labels if l]
+        if ov.get("type") == "label-boxes" and len(labels) == 2 and not ov.get("media"):
+            targets.append((n, ov, labels, subject_at(int(ov.get("startFrame") or 0))))
+    if not targets:
+        return 0
+
+    def fetch(query: str, dest: str) -> str:
+        from PIL import Image
+        try:
+            found = media.search_web_images(query, 6) or []
+        except Exception:  # noqa: BLE001
+            return ""
+        for a in found:
+            url = getattr(a, "url", "") or ""
+            if not url.startswith("http"):
+                continue
+            try:
+                r = _rq.get(url, timeout=15, headers={"User-Agent": config.USER_AGENT})
+                if r.status_code != 200 or len(r.content) > 15_000_000:
+                    continue
+                raw = dest + ".src"
+                with open(raw, "wb") as fh:
+                    fh.write(r.content)
+                im = Image.open(raw).convert("RGB")
+                if min(im.size) < 360:
+                    continue
+                im.save(dest, "JPEG", quality=88)
+                return dest
+            except Exception:  # noqa: BLE001 - try the next result
+                continue
+        return ""
+
+    jobs = {}
+    pool = ThreadPoolExecutor(max_workers=8)
+    for n, ov, labels, subject in targets:
+        for side, label in enumerate(labels):
+            q = f"{subject} {label}".strip()
+            dest = os.path.join(work, f"split_{n}_{side}.jpg")
+            jobs[pool.submit(fetch, q, dest)] = (n, side)
+    done, _late = _wait(jobs, timeout=config.SPLIT_IMAGES_SECONDS)
+    pool.shutdown(wait=False, cancel_futures=True)
+    got = {}
+    for f in done:
+        try:
+            path = f.result()
+        except Exception:  # noqa: BLE001
+            path = ""
+        if path:
+            got[jobs[f]] = path
+    made = 0
+    for n, ov, labels, subject in targets:
+        a, b = got.get((n, 0)), got.get((n, 1))
+        if not (a and b):
+            continue
+        try:
+            urls = [put(p, f"split/{n:03d}_{i}.jpg") for i, p in enumerate((a, b))]
+        except Exception as e:  # noqa: BLE001 - the label pills stay
+            print(f"[worker] split images for overlay {n}: upload failed ({type(e).__name__})", flush=True)
+            continue
+        ov["type"] = "split"
+        ov["template"] = "CMP_SPLIT_V1"
+        ov["items"] = [{"label": labels[0]}, {"label": labels[1]}]
+        ov["media"] = [{"type": "image", "url": u, "source": "web"} for u in urls]
+        made += 1
+    if made:
+        print(f"[worker] {made} contrast(s) shown as a split of two photos", flush=True)
+    return made
+
+
+def _bind_overlay_photos(doc: dict, work: str, put) -> int:
+    """
+    The case-file looks that show a picture the footage does not have: a
+    photo window of the place or thing named, riding on a weak clip
+    (PHOTO_PIP_V1), and the framed photo beside a map pin (MAP_PHOTO_PIN_V1).
+    One web photo is searched for each ("<subject>" or the pinned place,
+    plus the story's subject when it adds context), checked for size,
+    uploaded and bound as overlay.media. A photo window that finds nothing is
+    removed (an empty window is worse than none); a map without its photo
+    stays a plain pin. Time boxed by SPLIT_IMAGES_SECONDS. Returns how many.
+    """
+    if not config.SPLIT_IMAGES:
+        return 0
+    from concurrent.futures import ThreadPoolExecutor, wait as _wait
+    import requests as _rq
+    overlays = doc.get("overlays") or []
+    story = str(((doc.get("meta") or {}).get("planner") or {}).get("subject") or "").strip() \
+        if isinstance((doc.get("meta") or {}).get("planner"), dict) else ""
+    targets = []
+    for n, ov in enumerate(overlays):
+        if ov.get("media"):
+            continue
+        if ov.get("template") == "PHOTO_PIP_V1" or (ov.get("type") == "photo-card" and ov.get("variant") == "pip"):
+            q = str(ov.get("text") or "").strip()
+        elif ov.get("type") == "map" and ov.get("variant") == "satellite-photo":
+            locs = ov.get("locations") or []
+            q = str((locs[0] or {}).get("label") or "").split(",")[0].strip() if locs else ""
+        else:
+            continue
+        if len(q) < 3:
+            continue
+        if story and story.lower() not in q.lower() and len(q.split()) < 3:
+            q = f"{q} {story}"
+        targets.append((n, ov, q))
+    if not targets:
+        return 0
+
+    def fetch(query: str, dest: str) -> str:
+        from PIL import Image
+        try:
+            found = media.search_web_images(query, 6) or []
+        except Exception:  # noqa: BLE001
+            return ""
+        for a in found:
+            url = getattr(a, "url", "") or ""
+            if not url.startswith("http"):
+                continue
+            try:
+                r = _rq.get(url, timeout=15, headers={"User-Agent": config.USER_AGENT})
+                if r.status_code != 200 or len(r.content) > 15_000_000:
+                    continue
+                raw = dest + ".src"
+                with open(raw, "wb") as fh:
+                    fh.write(r.content)
+                im = Image.open(raw).convert("RGB")
+                if min(im.size) < 360:
+                    continue
+                im.save(dest, "JPEG", quality=88)
+                return dest
+            except Exception:  # noqa: BLE001 - try the next result
+                continue
+        return ""
+
+    pool = ThreadPoolExecutor(max_workers=8)
+    jobs = {pool.submit(fetch, q, os.path.join(work, f"ovphoto_{n}.jpg")): n for n, _ov, q in targets}
+    done, _late = _wait(jobs, timeout=config.SPLIT_IMAGES_SECONDS)
+    pool.shutdown(wait=False, cancel_futures=True)
+    got = {}
+    for f in done:
+        try:
+            path = f.result()
+        except Exception:  # noqa: BLE001
+            path = ""
+        if path:
+            got[jobs[f]] = path
+    made, drop = 0, set()
+    for n, ov, _q in targets:
+        path = got.get(n)
+        url = ""
+        if path:
+            try:
+                url = put(path, f"overlay/{n:03d}.jpg")
+            except Exception as e:  # noqa: BLE001
+                print(f"[worker] overlay photo {n}: upload failed ({type(e).__name__})", flush=True)
+        if url:
+            ov["media"] = [{"type": "image", "url": url, "source": "web"}]
+            made += 1
+        elif ov.get("type") != "map":
+            drop.add(n)
+    if drop:
+        doc["overlays"] = [ov for i, ov in enumerate(overlays) if i not in drop]
+    if made or drop:
+        print(f"[worker] overlay photos: {made} bound, {len(drop)} photo window(s) dropped (nothing found)", flush=True)
+    return made
+
+
 def _fill_missing_media(doc: dict) -> int:
     """
     Give every scene something to render, for the `build` path only.
@@ -545,6 +734,7 @@ def _fill_missing_media(doc: dict) -> int:
     patched = 0
     for i, s in enumerate(scenes):
         if (s.get("media") or {}).get("type") == "color":
+            anim = None
             if config.ANIMATION_FILL and config.TREATMENTS:
                 # A graphic over the line beats a repeated clip (and never
                 # goes stale the way a borrowed shot of something else does).
@@ -555,12 +745,16 @@ def _fill_missing_media(doc: dict) -> int:
                 seg = type("Seg", (), {"text": s.get("text") or "", "start": sf / fps,
                                        "end": (sf + df) / fps, "duration": df / fps})()
                 shot = {"subject": (s.get("semanticMetadata") or {}).get("subject") or ""}
+                anim = vt.animation_for(seg, shot, pack, None)
+            if anim:
                 s["media"] = {"type": "animation", "url": "", "source": "template"}
-                s["animation"] = vt.animation_for(seg, shot, pack, None)
+                s["animation"] = anim
                 s["visualType"] = "animation"
                 s["reviewRequired"] = True
                 s["reviewReason"] = "No footage found — a motion graphic fills this beat (keep it or replace the clip)"
                 patched += 1
+                continue
+            if not have:
                 continue
             want = subject_of(i)
             same_subject = [h for h in have if want and subject_of(h) == want]
@@ -826,6 +1020,17 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         planner=planner,
         warnings=warnings,
     )
+    try:
+        def _put_split(local: str, name: str) -> str:
+            obj = f"projects/{project_id}/{name}"
+            if storage.broker_enabled() and project_id:
+                return storage.broker_upload(local, inp.get("media_bucket") or config.MEDIA_BUCKET, obj, project_id,
+                                             (report.job or {}).get("id", ""), read_ttl=_MEDIA_LINK_TTL)
+            return local
+        _bind_split_images(doc, work, _put_split)
+        _bind_overlay_photos(doc, work, _put_split)
+    except Exception as e:  # noqa: BLE001 - a nicety, never a failure
+        print(f"[worker] split images skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     # A signed URL expires; keep the original reference so render can re-sign.
     unsupported = [k for k in ("own_clips", "channels")
                    if inp.get(k) and inp.get("source") in ("clips", "channels")]

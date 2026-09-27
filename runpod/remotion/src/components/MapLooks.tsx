@@ -18,6 +18,9 @@ import {INTER, NARROW} from './fonts';
  *   satellite-route     two places, a path drawn between them
  *   satellite-distance  two places, the straight-line distance measured
  *   satellite-inset     zoom with a small locator map in the corner
+ *   satellite-focus     teal night grade, a white box drawn round the place, its name in a pill
+ *   satellite-photo     the pin, then a framed photo of the place on a leader line
+ *   satellite-trace     two places on the teal grade, a dashed cyan route, "[ 50 MILES ]"
  * and the spread maps (spread / spread-dark): every named state or country
  * lights up in turn - "across seven states".
  */
@@ -72,7 +75,10 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
   const places = (overlay.locations || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon)).slice(0, 4);
   if (!places.length) return null;
   const v = overlay.variant || 'satellite';
-  const pair = (v === 'satellite-route' || v === 'satellite-distance') && places.length > 1;
+  const pair = (v === 'satellite-route' || v === 'satellite-distance' || v === 'satellite-trace') && places.length > 1;
+  // The case-file looks (Dr Insanity pass): a teal night grade and cyan markers.
+  const teal = v === 'satellite-focus' || v === 'satellite-trace';
+  const CYAN = '#53c8ff';
   const us = places.every(inUS);
   const zMax = us ? USGS_MAX : GIBS_MAX;
   const k = width / 1920;
@@ -139,7 +145,7 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
   const pts = places.map((p) => toScreen(p.lat, p.lon));
   const dark = v === 'satellite-dark';
   const pulse = v === 'satellite-pulse';
-  const col = pulse ? '#ff3b3b' : accent || '#ffd400';
+  const col = teal ? CYAN : pulse ? '#ff3b3b' : accent || '#ffd400';
   const draw = interpolate(frame, [pinAt, pinAt + fps * 1.2], [0, 1], clamp);
   const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
   const heading = overlay.text && !tilt && !places.some((p) => norm(p.label).startsWith(norm(overlay.text)))
@@ -148,17 +154,23 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
   return (
     <AbsoluteFill style={{background: '#050a14', overflow: 'hidden'}}>
       <AbsoluteFill style={{transform: tilt ? `perspective(${1500 * k}px) rotateX(${tilt}deg) scale(${1 + tilt / 110})` : undefined,
-        transformOrigin: '50% 62%', filter: dark ? 'brightness(.55) contrast(1.25) saturate(.55) hue-rotate(-8deg)' : 'saturate(1.1) contrast(1.05)'}}>
-        {tiles}
+        transformOrigin: '50% 62%'}}>
+        {/* The grade is on the imagery only, so pins, routes and labels keep their colour. */}
+        <AbsoluteFill style={{filter: teal ? 'grayscale(.85) sepia(.35) hue-rotate(150deg) saturate(1.3) brightness(.62) contrast(1.15)'
+          : dark ? 'brightness(.55) contrast(1.25) saturate(.55) hue-rotate(-8deg)' : 'saturate(1.1) contrast(1.05)'}}>
+          {tiles}
+        </AbsoluteFill>
         <svg width={width} height={height} style={{position: 'absolute', inset: 0}}>
           {pair && (() => {
             const [a, b] = pts;
             const bend = v === 'satellite-route' ? Math.min(160 * k, Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.18) : 0;
             const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2 - bend;
             return <path d={`M ${a[0]} ${a[1]} Q ${mx} ${my} ${b[0]} ${b[1]}`} fill="none" stroke={col} strokeWidth={6 * k}
-              strokeLinecap="round" pathLength={1} strokeDasharray={v === 'satellite-distance' ? '0.012 0.01' : 1}
+              strokeLinecap="round" pathLength={1}
+              strokeDasharray={v === 'satellite-distance' ? '0.012 0.01' : v === 'satellite-trace' ? '0.016 0.012' : 1}
               strokeDashoffset={v === 'satellite-distance' ? 0 : 1 - draw}
-              opacity={v === 'satellite-distance' ? draw : 1} />;
+              opacity={v === 'satellite-distance' ? draw : 1}
+              style={teal ? {filter: `drop-shadow(0 0 ${8 * k}px ${CYAN})`} : undefined} />;
           })()}
           {pts.map(([x, y], i) => {
             const show = interpolate(frame, [pinAt + i * fps * 0.25, pinAt + i * fps * 0.25 + fps * 0.35], [0, 1], clamp);
@@ -169,7 +181,8 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
                   return <circle key={r} cx={x} cy={y} r={(18 + (pulse ? 150 : 70) * q) * k} fill="none" stroke={col}
                     strokeWidth={4 * k} opacity={1 - q} />;
                 })}
-                <circle cx={x} cy={y} r={16 * k * show} fill={col} stroke="#fff" strokeWidth={5 * k} />
+                <circle cx={x} cy={y} r={(teal ? 12 : 16) * k * show} fill={col} stroke="#fff" strokeWidth={(teal ? 3 : 5) * k}
+                  style={teal ? {filter: `drop-shadow(0 0 ${14 * k}px ${CYAN})`} : undefined} />
               </g>
             );
           })}
@@ -177,7 +190,7 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
       </AbsoluteFill>
       {dark ? <AbsoluteFill style={{background: 'radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.7) 100%)'}} /> : null}
       {/* Labels sit outside the tilted plane so they stay readable. */}
-      {!tilt && pts.map(([x, y], i) => {
+      {!tilt && !teal && pts.map(([x, y], i) => {
         const show = interpolate(frame, [pinAt + fps * 0.2 + i * fps * 0.25, pinAt + fps * 0.6 + i * fps * 0.25], [0, 1], clamp);
         const label = shortLabel(places[i].label).toUpperCase();
         const w = Math.max(160, label.length * 26) * k;
@@ -208,6 +221,65 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
           textShadow: '0 4px 20px rgba(0,0,0,.95)'}}>{heading}</div>
       ) : null}
       {v === 'satellite-inset' ? <Inset place={places[0]} accent={col} /> : null}
+      {teal ? pts.map(([x, y], i) => {
+        // Small caps beside each dot (trace), or the focus box and its pill (focus).
+        const show = interpolate(frame, [pinAt + fps * 0.2 + i * fps * 0.25, pinAt + fps * 0.6 + i * fps * 0.25], [0, 1], clamp);
+        const label = shortLabel(places[i].label).toUpperCase();
+        if (v === 'satellite-focus') {
+          const bw = 300 * k, bh = 200 * k;
+          const box = interpolate(frame, [pinAt + fps * 0.1, pinAt + fps * 0.7], [0, 1], clamp);
+          return (
+            <React.Fragment key={i}>
+              <svg width={width} height={height} style={{position: 'absolute', inset: 0}}>
+                <rect x={x - bw / 2} y={y - bh / 2} width={bw} height={bh} fill="none" stroke="#fff" strokeWidth={4 * k}
+                  pathLength={1} strokeDasharray={1} strokeDashoffset={1 - box} />
+              </svg>
+              <div style={{position: 'absolute', left: x - 260 * k, width: 520 * k, top: y + bh / 2 + 18 * k, display: 'flex',
+                justifyContent: 'center', opacity: show, transform: `translateY(${(1 - show) * 12 * k}px)`}}>
+                <span style={{background: '#f4f7fb', color: '#10202e', fontFamily: NARROW, fontWeight: 700, fontSize: 30 * k,
+                  letterSpacing: '0.08em', padding: `${6 * k}px ${18 * k}px`, borderRadius: 4 * k, whiteSpace: 'nowrap',
+                  boxShadow: '0 8px 24px rgba(0,0,0,.45)'}}>{label}</span>
+              </div>
+            </React.Fragment>
+          );
+        }
+        const right = x + 380 * k < width;
+        return (
+          <div key={i} style={{position: 'absolute', left: right ? x + 26 * k : x - 26 * k - 360 * k, width: 360 * k,
+            textAlign: right ? 'left' : 'right', top: y - 18 * k, opacity: show, fontFamily: NARROW, fontWeight: 700,
+            fontSize: 26 * k, letterSpacing: '0.12em', color: '#e9f6ff', textShadow: '0 2px 10px rgba(0,0,0,.95)'}}>{label}</div>
+        );
+      }) : null}
+      {pair && v === 'satellite-trace' ? (
+        <div style={{position: 'absolute', left: (pts[0][0] + pts[1][0]) / 2 - 200 * k, top: (pts[0][1] + pts[1][1]) / 2 - 64 * k,
+          width: 400 * k, textAlign: 'center', opacity: draw, fontFamily: NARROW, fontWeight: 700, fontSize: 34 * k,
+          letterSpacing: '0.1em', color: '#fff', textShadow: '0 3px 14px rgba(0,0,0,.95)'}}>
+          [ {Math.round(miles(places[0], places[1])).toLocaleString('en-US')} MILES ]
+        </div>
+      ) : null}
+      {v === 'satellite-photo' && pts.length ? (() => {
+        // A framed photo of the place on a leader line from the pin.
+        const src = (overlay.media || []).map((m) => (m.type === 'image' ? m.url : m.thumbnail || '')).find(Boolean);
+        if (!src) return null;
+        const [x, y] = pts[0];
+        const cw = 400 * k, ch = 280 * k;
+        const right = x + 90 * k + cw < width - 40 * k;
+        const cx0 = right ? x + 90 * k : x - 90 * k - cw;
+        const cy0 = Math.max(40 * k, y - ch - 110 * k);
+        const pop = interpolate(frame, [pinAt + fps * 0.35, pinAt + fps * 0.75], [0, 1], clamp);
+        return (
+          <>
+            <svg width={width} height={height} style={{position: 'absolute', inset: 0}}>
+              <line x1={x} y1={y} x2={right ? cx0 : cx0 + cw} y2={cy0 + ch} stroke="#fff" strokeWidth={3 * k} opacity={pop} />
+            </svg>
+            <div style={{position: 'absolute', left: cx0, top: cy0, width: cw, height: ch, padding: 8 * k, background: '#fff',
+              boxShadow: '0 18px 40px rgba(0,0,0,.5)', opacity: pop, transform: `scale(${0.85 + 0.15 * pop}) rotate(${right ? 1.5 : -1.5}deg)`,
+              transformOrigin: right ? '0% 100%' : '100% 100%', boxSizing: 'border-box'}}>
+              <Img src={src} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+            </div>
+          </>
+        );
+      })() : null}
     </AbsoluteFill>
   );
 };

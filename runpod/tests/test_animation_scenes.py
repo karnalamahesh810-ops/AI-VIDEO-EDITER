@@ -30,16 +30,19 @@ class AnimationFor(unittest.TestCase):
         self.assertEqual(a["template"], self.pack["map"])
         self.assertEqual(a["locations"][0]["label"], "Nevada")
 
-    def test_a_plain_line_is_typed_on_a_card(self):
+    def test_a_plain_line_gets_no_full_screen_card(self):
+        # The full-screen layout is for figures, money and comparisons only.
         a = treatments.animation_for(seg("Boat ramps at Boulder Harbor end in dry gravel."), {"subject": "Boulder Harbor"},
                                      self.pack, None)
-        self.assertEqual(a["template"], "TEXT_TYPEWRITER_V1")
-        self.assertEqual(a["text"], "Boat ramps at Boulder Harbor end in dry gravel.")
-        self.assertIn(a["motion"], templates.load()["entrances"])
+        self.assertIsNone(a)
+
+    def test_money_gets_a_number_graphic_with_a_dollar_sign(self):
+        a = treatments.animation_for(seg("The new intake cost $1.4 billion to build."), {"subject": "Lake Mead"},
+                                     self.pack, None)
+        self.assertEqual((a["prefix"], a["value"], a["suffix"]), ("$", 1.4, "B"))
 
     def test_only_cards_and_maps_fill_a_frame(self):
-        # "count" cues pick the label pill (a tag) first; a tag cannot be the frame.
-        a = treatments.animation_for(seg("Officials counted 40 boat ramps."), {"subject": "ramps"}, self.pack, None)
+        a = treatments.animation_for(seg("Lake Mead is now at 26% capacity."), {"subject": "Lake Mead"}, self.pack, None)
         self.assertIn(templates.get(a["template"])["kind"], treatments.CARD_KINDS)
 
 
@@ -74,15 +77,21 @@ class WantsAnimation(unittest.TestCase):
 
 
 class BuildFillsGaps(unittest.TestCase):
-    def _doc(self, fill=True):
+    def _doc(self, fill=True, text=None):
         segments, shots, assets = simple_plan(4, 6.0)
+        if text is not None:
+            segments[1].text = text
         assets[1] = None
         with mock.patch.object(config, "TREATMENTS", True), mock.patch.object(config, "ANIMATION_FILL", fill):
             return timeline.build(segments, shots, assets, audio_url="file:///tmp/vo.mp3",
                                   audio_duration=24.0, inp={"style_pack": "documentary"})
 
-    def test_the_empty_beat_becomes_an_animation_scene(self):
+    def test_a_plain_empty_beat_stays_empty_for_the_borrow_step(self):
         doc = self._doc()
+        self.assertEqual(doc["scenes"][1]["media"]["type"], "color")
+
+    def test_the_empty_beat_becomes_an_animation_scene(self):
+        doc = self._doc(text="Lake Mead is now at 26% capacity.")
         sc = doc["scenes"][1]
         self.assertEqual(sc["media"], {"type": "animation", "url": "", "source": "template"})
         self.assertEqual(sc["visualType"], "animation")
@@ -98,7 +107,7 @@ class BuildFillsGaps(unittest.TestCase):
         self.assertEqual(doc["meta"]["treatments"]["animation_scenes"], 1)
 
     def test_switched_off_it_stays_an_empty_beat(self):
-        doc = self._doc(fill=False)
+        doc = self._doc(fill=False, text="Lake Mead is now at 26% capacity.")
         self.assertEqual(doc["scenes"][1]["media"]["type"], "color")
         with self.assertRaises(ValueError):
             timeline.validate(doc, require_media=True)

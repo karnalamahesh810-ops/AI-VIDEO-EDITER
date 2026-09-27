@@ -3049,6 +3049,11 @@
    "kind": "card",
    "emphasis": "high",
    "props": {
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
     "value": {
      "type": "number",
      "label": "Value"
@@ -3186,7 +3191,8 @@
     ]
    },
    "cues": [
-    "big-number"
+    "big-number",
+    "money"
    ],
    "tags": []
   },
@@ -3349,6 +3355,11 @@
    "kind": "card",
    "emphasis": "medium",
    "props": {
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
     "value": {
      "type": "number",
      "label": "Value"
@@ -3641,7 +3652,8 @@
     ]
    },
    "cues": [
-    "change"
+    "change",
+    "change-length"
    ],
    "tags": []
   },
@@ -3943,6 +3955,632 @@
    "cues": [
     "percent",
     "share"
+   ],
+   "tags": []
+  },
+  {
+   "id": "NUM_WAFFLE_V1",
+   "name": "Dot Grid",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "A hundred dots filling to the share, the percentage beside them.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "waffle",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": []
+  },
+  {
+   "id": "NUM_BAR_V1",
+   "name": "Level Bar",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "A wide bar filling to the share, the number riding its end.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "bar",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": []
+  },
+  {
+   "id": "NUM_PILL_V1",
+   "name": "Stat Pill",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "A glass pill low on the footage: the number, an accent rule, the words it counts.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pill",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "measurement"
+   ],
+   "tags": []
+  },
+  {
+   "id": "NUM_SPLIT_V1",
+   "name": "Number and Line",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "The number on the left, what it counts in big type on the right.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "split",
+    "sfx": {
+     "name": "riser",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "money"
    ],
    "tags": []
   },
@@ -4250,9 +4888,9 @@
    "name": "Line Chart",
    "category": "CHARTS",
    "component": "line-chart",
-   "description": "A line drawing across time.",
+   "description": "A line drawing point to point through the years, each value popping as the line passes, the last one rolling with the change in a pill.",
    "kind": "card",
-   "emphasis": "medium",
+   "emphasis": "high",
    "props": {
     "text": {
      "type": "string",
@@ -4266,6 +4904,11 @@
       "label": "string",
       "value": "number"
      }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
     },
     "position": {
      "type": "enum",
@@ -4351,7 +4994,7 @@
     }
    },
    "defaults": {
-    "duration": 5.5,
+    "duration": 6.0,
     "entrance": "fade",
     "exit": "fade",
     "sfx": {
@@ -4399,9 +5042,9 @@
    "name": "Area Chart",
    "category": "CHARTS",
    "component": "area-chart",
-   "description": "A filled area across time.",
+   "description": "The line chart with the area under it filled in the accent.",
    "kind": "card",
-   "emphasis": "medium",
+   "emphasis": "high",
    "props": {
     "text": {
      "type": "string",
@@ -4415,6 +5058,11 @@
       "label": "string",
       "value": "number"
      }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
     },
     "position": {
      "type": "enum",
@@ -4548,9 +5196,9 @@
    "name": "Ranking",
    "category": "CHARTS",
    "component": "ranking",
-   "description": "Ranked rows revealed one by one.",
+   "description": "Ranked rows sliding in: number, name, a bar growing to its value, the leader in the accent.",
    "kind": "card",
-   "emphasis": "medium",
+   "emphasis": "high",
    "props": {
     "text": {
      "type": "string",
@@ -4564,6 +5212,11 @@
       "label": "string",
       "value": "number"
      }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
     },
     "position": {
      "type": "enum",
@@ -4688,7 +5341,8 @@
     ]
    },
    "cues": [
-    "ranking"
+    "ranking",
+    "compare-values"
    ],
    "tags": []
   },
@@ -4847,7 +5501,7 @@
    "name": "Scale Comparison",
    "category": "CHARTS",
    "component": "scale-compare",
-   "description": "Two quantities drawn to scale.",
+   "description": "Two or three quantities as circles drawn to scale, the ratio between them.",
    "kind": "card",
    "emphasis": "medium",
    "props": {
@@ -4863,6 +5517,11 @@
       "label": "string",
       "value": "number"
      }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
     },
     "position": {
      "type": "enum",
@@ -4987,7 +5646,8 @@
     ]
    },
    "cues": [
-    "compare-values"
+    "compare-values",
+    "money-compare"
    ],
    "tags": []
   },
@@ -5137,7 +5797,160 @@
    },
    "cues": [
     "compare-values",
-    "then-now"
+    "then-now",
+    "money-compare"
+   ],
+   "tags": []
+  },
+  {
+   "id": "CMP_BOXES_V1",
+   "name": "Two Boxes",
+   "category": "COMPARISONS",
+   "component": "comparison",
+   "description": "Two dark boxes joined by a dashed line, a value in each.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "boxes",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "then-now",
+    "compare-values",
+    "money-compare"
    ],
    "tags": []
   },
@@ -9957,7 +10770,7 @@
    "name": "Framed Photo",
    "category": "IMAGES",
    "component": "photo-card",
-   "description": "The scene's photo on a green matte with a typed caption, VidRush's archival frame.",
+   "description": "The photo drops in with a white border and a slight turn onto a blurred copy of itself, a typed caption below.",
    "kind": "card",
    "emphasis": "medium",
    "props": {
@@ -10053,6 +10866,7 @@
     "duration": 4.5,
     "entrance": "fade",
     "exit": "fade",
+    "variant": "frame",
     "sfx": {
      "name": "none",
      "volume": 0.0
@@ -10197,7 +11011,7 @@
     "duration": 4.5,
     "entrance": "fade",
     "exit": "fade",
-    "variant": "grid",
+    "variant": "paper",
     "sfx": {
      "name": "none",
      "volume": 0.0
@@ -10236,11 +11050,11 @@
    "tags": []
   },
   {
-   "id": "PERSON_CARD_V1",
-   "name": "Person Card",
+   "id": "PLACE_CARD_V1",
+   "name": "Place Photo",
    "category": "IMAGES",
-   "component": "name-card",
-   "description": "A cutout or portrait on a coloured disc; the name types, the role fades in.",
+   "component": "photo-card",
+   "description": "The place's photo full frame, a location pin drops, the name and its coordinates slide up.",
    "kind": "card",
    "emphasis": "high",
    "props": {
@@ -10253,6 +11067,454 @@
      "type": "string",
      "label": "Subtitle",
      "max": 200
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "place",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place-photo"
+   ],
+   "tags": [
+    "vidrush",
+    "place"
+   ]
+  },
+  {
+   "id": "OBJECT_CARD_V1",
+   "name": "Object Spotlight",
+   "category": "IMAGES",
+   "component": "photo-card",
+   "description": "The photo of a thing floating on a dark spotlight, turning slowly, its name on a leader line.",
+   "kind": "card",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "object",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "object-photo"
+   ],
+   "tags": [
+    "vidrush",
+    "object"
+   ]
+  },
+  {
+   "id": "PHOTO_STACK_V1",
+   "name": "Photo Stack",
+   "category": "IMAGES",
+   "component": "photo-card",
+   "description": "Up to three photos dropping onto a pile one after another.",
+   "kind": "card",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "stack",
+    "sfx": {
+     "name": "paper",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photos"
+   ],
+   "tags": [
+    "vidrush"
+   ]
+  },
+  {
+   "id": "PERSON_CARD_V1",
+   "name": "Person Card",
+   "category": "IMAGES",
+   "component": "name-card",
+   "description": "A round portrait on an accent disc slides in; the name in big condensed caps, the role in a tag.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
     },
     "position": {
      "type": "enum",
@@ -10382,6 +11644,4155 @@
    "tags": [
     "vidrush",
     "people"
+   ]
+  },
+  {
+   "id": "NUM_TANK_V1",
+   "name": "Water Tank",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "A percentage as a tank of water filling to its level, the surface rippling, the number rolling beside it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "tank",
+    "sfx": {
+     "name": "riser",
+     "volume": 0.22
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": [
+    "water"
+   ]
+  },
+  {
+   "id": "NUM_PIE_V1",
+   "name": "Pie Slice",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "A percentage as a pie: the slice sweeps round and eases out of the pie.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pie",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": []
+  },
+  {
+   "id": "NUM_SPARK_V1",
+   "name": "Trend Line",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "A rise or a fall: a trend line races across the frame, red down or green up, the amount rolling in a panel.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "spark",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "change",
+    "change-length"
+   ],
+   "tags": []
+  },
+  {
+   "id": "NUM_MONEY_STACK_V1",
+   "name": "Money Stack",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "Money: bundles of bills drop onto stacks while the amount rolls beside them.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "stack",
+    "sfx": {
+     "name": "impact",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "money"
+   ],
+   "tags": []
+  },
+  {
+   "id": "NUM_MEASURE_V1",
+   "name": "Ruler Level",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "A height or a depth on a ruler: the level falls or rises by the amount, the lost band hatched.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "measure",
+    "sfx": {
+     "name": "riser",
+     "volume": 0.22
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "measurement",
+    "change-length"
+   ],
+   "tags": [
+    "water"
+   ]
+  },
+  {
+   "id": "NUM_RATIO_V1",
+   "name": "People Ratio",
+   "category": "NUMBERS",
+   "component": "stat",
+   "description": "'1 in 4': a row of people pops in and the counted ones light up, the ratio rolling beneath.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ratio",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ratio"
+   ],
+   "tags": []
+  },
+  {
+   "id": "CHART_SHARES_V1",
+   "name": "Shares Bar",
+   "category": "CHARTS",
+   "component": "bar-chart",
+   "description": "Parts of a whole: a 100% bar filling segment by segment, each share rolling above its part.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "shares",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "shares"
+   ],
+   "tags": []
+  },
+  {
+   "id": "CHART_PIE_V1",
+   "name": "Pie Chart",
+   "category": "CHARTS",
+   "component": "bar-chart",
+   "description": "Parts of a whole as a pie, slices sweeping in turn, the first easing out, a legend rolling beside it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pie",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "shares"
+   ],
+   "tags": []
+  },
+  {
+   "id": "CMP_VERSUS_V1",
+   "name": "Versus",
+   "category": "COMPARISONS",
+   "component": "comparison",
+   "description": "Two values on two panels sliding in from their sides, a VS badge popping between, the ratio beneath.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "versus",
+    "sfx": {
+     "name": "impact",
+     "volume": 0.28
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "money-compare",
+    "compare-values"
+   ],
+   "tags": []
+  },
+  {
+   "id": "CMP_DELTA_V1",
+   "name": "Before and After",
+   "category": "COMPARISONS",
+   "component": "comparison",
+   "description": "The earlier value small above, an arrow drawing down, the new value big, the change in a pill.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "delta",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.28
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "then-now",
+    "money-compare"
+   ],
+   "tags": []
+  },
+  {
+   "id": "CMP_COLUMNS_V1",
+   "name": "Tile Columns",
+   "category": "COMPARISONS",
+   "component": "comparison",
+   "description": "Two to four values as columns of tiles stacking up, the biggest in the accent.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "columns",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-values",
+    "then-now"
+   ],
+   "tags": []
+  },
+  {
+   "id": "CMP_BUBBLES_V1",
+   "name": "Bubbles to Scale",
+   "category": "COMPARISONS",
+   "component": "comparison",
+   "description": "Quantities as circles drawn to scale growing in turn, the ratio between them.",
+   "kind": "card",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "bubbles",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-values",
+    "money-compare"
+   ],
+   "tags": []
+  },
+  {
+   "id": "PHOTO_WINDOW_V1",
+   "name": "Photo Window",
+   "category": "IMAGES",
+   "component": "photo-card",
+   "description": "The photo in a floating viewer window on a flowing dotted desktop, its caption in an info window.",
+   "kind": "card",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "window",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "place-photo"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "PHOTO_EVIDENCE_V1",
+   "name": "Evidence Photo",
+   "category": "IMAGES",
+   "component": "photo-card",
+   "description": "The photo full frame in black and white with grain, viewfinder brackets closing in, a small [ PHOTO ] tag.",
+   "kind": "card",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "evidence",
+    "sfx": {
+     "name": "impact",
+     "volume": 0.2
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "object-photo"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "PHOTO_PIP_V1",
+   "name": "Photo Window on Footage",
+   "category": "IMAGES",
+   "component": "photo-card",
+   "description": "A small photo window of the place or thing named, riding on the footage with its caption.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pip",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.2
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "subject-photo"
+   ],
+   "tags": [
+    "case"
+   ]
+  },
+  {
+   "id": "PHOTO_BOARD_V1",
+   "name": "Detective Board",
+   "category": "IMAGES",
+   "component": "photo-card",
+   "description": "The photo pasted on paper, circled in red marker, an arrow to a handwritten note; two or three photos get hand-drawn links.",
+   "kind": "card",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "board",
+    "sfx": {
+     "name": "paper",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "person",
+    "object-photo"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "PHOTO_COLLAGE_V1",
+   "name": "Case Collage",
+   "category": "IMAGES",
+   "component": "photo-card",
+   "description": "The story's own pictures bursting onto a red desk in photo windows, one after another.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "collage",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "intro"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "QUOTE_AUDIO_V1",
+   "name": "Recording",
+   "category": "QUOTES",
+   "component": "quote",
+   "description": "A recording playing in an audio window: the waveform moving, the words appearing below, the speaker's photo beside it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "audio",
+    "sfx": {
+     "name": "glitch-transition",
+     "volume": 0.18
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "recording"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "QUOTE_CALLOUT_V1",
+   "name": "Quote Callout",
+   "category": "QUOTES",
+   "component": "quote",
+   "description": "The quoted words in a compact dark box near the top, word by word, the speaker under it.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "callout",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "quote"
+   ],
+   "tags": [
+    "case"
+   ]
+  },
+  {
+   "id": "DOC_WINDOW_V1",
+   "name": "Report Window",
+   "category": "DOCUMENTS",
+   "component": "article-zoom",
+   "description": "A report page in a document window on the desk, its key line marked with a highlighter.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "doc",
+    "sfx": {
+     "name": "page",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "document",
+    "report"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "DOC_CLIPPING_V1",
+   "name": "Newspaper Clipping",
+   "category": "DOCUMENTS",
+   "component": "article-zoom",
+   "description": "A newspaper page landing on the desk: the headline, a black-and-white photo, the key sentence highlighted.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "clipping",
+    "sfx": {
+     "name": "paper",
+     "volume": 0.35
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "document",
+    "report",
+    "headline"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "FACTS_CARD_V1",
+   "name": "Facts Card",
+   "category": "CALLOUTS",
+   "component": "bullets",
+   "description": "A portrait fading into the dark on the right, the points listed on the left under a heading.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "facts",
+    "sfx": {
+     "name": "riser",
+     "volume": 0.22
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "summary"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "DOSSIER_V1",
+   "name": "Dossier",
+   "category": "CALLOUTS",
+   "component": "bullets",
+   "description": "A file window on the red desk: the fields typed in beside a scanned photo, a stamp coming down.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dossier",
+    "sfx": {
+     "name": "typewriter",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "profile"
+   ],
+   "tags": [
+    "case",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "TAG_SOURCE_V1",
+   "name": "Source Tag",
+   "category": "CALLOUTS",
+   "component": "kicker",
+   "description": "A small outlined label low left on the footage: ARCHIVE FOOTAGE and its year.",
+   "kind": "tag",
+   "emphasis": "low",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "source",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "archive"
+   ],
+   "tags": [
+    "case"
+   ]
+  },
+  {
+   "id": "MAP_FOCUS_V1",
+   "name": "Location Focus",
+   "category": "MAPS",
+   "component": "map",
+   "description": "A teal night-graded satellite zoom, a white box drawn round the place, its name in a pill beneath.",
+   "kind": "map",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "satellite-focus",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place"
+   ],
+   "tags": [
+    "case"
+   ]
+  },
+  {
+   "id": "MAP_PHOTO_PIN_V1",
+   "name": "Location with Photo",
+   "category": "MAPS",
+   "component": "map",
+   "description": "Zoom to the place and pin it, then a framed photo of the place pops up on a leader line.",
+   "kind": "map",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "satellite-photo",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.3
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place"
+   ],
+   "tags": [
+    "case"
+   ]
+  },
+  {
+   "id": "MAP_TRACE_V1",
+   "name": "Route Trace",
+   "category": "MAPS",
+   "component": "map",
+   "description": "Two places on the teal satellite grade, a dashed cyan route between glowing dots, the miles in brackets.",
+   "kind": "map",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "satellite-trace",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.35
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "route",
+    "distance"
+   ],
+   "tags": [
+    "case"
    ]
   }
  ],
@@ -10810,6 +16221,13 @@
    "size": 1.15,
    "background": "none",
    "emphasis": "keywords"
+  },
+  "case": {
+   "name": "Case File",
+   "weight": 700,
+   "size": 0.9,
+   "background": "box",
+   "emphasis": "none"
   }
  },
  "musicMoods": {

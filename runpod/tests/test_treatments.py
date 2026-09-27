@@ -22,7 +22,8 @@ class Cues(unittest.TestCase):
         self.assertEqual(c[0]["props"]["value"], 26.0)
         self.assertEqual(c[0]["props"]["text"], "CAPACITY")
         c = treatments.cues_for(seg("Water levels dropped 12 feet in a single summer.", 0), shot, None)
-        self.assertEqual(c[0]["cue"], "change")
+        # A fall in feet is a level on a ruler as well as a trend (change-length).
+        self.assertEqual(c[0]["cue"], "change-length")
         self.assertEqual((c[0]["props"]["value"], c[0]["props"]["suffix"], c[0]["props"]["label"]), (12.0, "FT", "down"))
         c = treatments.cues_for(seg("In 2020 the lake stood at 40 percent; by 2026 it was 26 percent.", 0), shot, None)
         self.assertEqual(c[0]["cue"], "then-now")
@@ -71,7 +72,9 @@ class Planner(unittest.TestCase):
         self.assertEqual((first["type"], first["value"], first["suffix"], first["text"]), ("stat", 26.0, "%", "CAPACITY"))
         self.assertIn(first["motion"], templates.load()["entrances"])
         self.assertEqual(first["startFrame"], 0)
-        self.assertGreaterEqual(first["durationInFrames"], 180)
+        # On the voice, not the whole scene: readable, never past the template's hold + slack.
+        self.assertGreaterEqual(first["durationInFrames"], int(treatments.MIN_HOLD * 30))
+        self.assertLessEqual(first["durationInFrames"], int((3.5 + treatments.HOLD_SLACK) * 30) + 1)
         vt = out["treatments"][0]
         self.assertEqual((vt["primaryType"], vt["secondaryType"], vt["template"]), ("footage", "numbers", "NUM_PERCENT_V1"))
         self.assertEqual(vt["data"]["value"], 26.0)
@@ -121,7 +124,7 @@ class Registry(unittest.TestCase):
         comps = {t["component"] for t in templates.all_templates()}
         self.assertEqual(director.TEMPLATES - comps, set())
         self.assertGreaterEqual(len(templates.all_templates()), 60)
-        self.assertEqual(len(templates.by_category("MAPS")), 15)
+        self.assertEqual(len(templates.by_category("MAPS")), 18)
 
     def test_resolve_keeps_only_known_props_in_range(self):
         r = templates.resolve("MAP_ROUTE_DARK_V1", style="news", entrance="whip", exit_="scale",

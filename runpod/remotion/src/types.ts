@@ -136,7 +136,8 @@ export interface Scene {
   treatment?: Treatment;
   transition: SceneTransition;
   /** "inset": media framed on a backdrop at its own shape (archival, low-res, 4:3). */
-  frame?: "full" | "inset";
+  /** "window": the footage plays inside a floating player window on a designed backdrop (case-file look). */
+  frame?: "full" | "inset" | "window";
   /** Per-clip effect drawn over / applied to the media. */
   effect?: SceneEffect;
   /** Vision-model match record: what the frames actually show, and how well. */
@@ -183,7 +184,11 @@ export interface Overlay {
   label?: string;
   /** Unit drawn after a stat's number: "%", "km", "years". */
   suffix?: string;
+  /** Drawn before the number: "$" for money. */
+  prefix?: string;
   value?: number;
+  /** The whole a count is out of: "1 in 4" is value 1, total 4 (ratio graphics). */
+  total?: number;
   items?: OverlayItem[];
   locations?: MapLocation[];
   /** Only used by "split": the two visuals to show, top then bottom. */

@@ -4,6 +4,9 @@ import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay
 import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
 import { loadFont as loadBebas } from "@remotion/google-fonts/BebasNeue";
 import { loadFont as loadBarlowCondensed } from "@remotion/google-fonts/BarlowCondensed";
+import { loadFont as loadCaveat } from "@remotion/google-fonts/Caveat";
+import { loadFont as loadMarker } from "@remotion/google-fonts/PermanentMarker";
+import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
 
 /**
  * The composition's typefaces, loaded the same way in the RunPod render and in
@@ -27,3 +30,9 @@ export const INTER = `${loadInter("normal", { ...latin, weights: ["400", "700", 
 // Barlow Condensed for labels and tags.
 export const DISPLAY = `${loadBebas("normal", { ...latin, weights: ["400"] }).fontFamily}, Impact, sans-serif`;
 export const LABEL = `${loadBarlowCondensed("normal", { ...latin, weights: ["600", "700", "800"] }).fontFamily}, 'Arial Narrow', sans-serif`;
+
+// The case-file graphics (components/pro/ProCase): handwriting for notes on a
+// board, a felt marker for the big words, a mono face for window chrome.
+export const HAND = `${loadCaveat("normal", { ...latin, weights: ["600", "700"] }).fontFamily}, cursive`;
+export const MARKER = `${loadMarker("normal", { ...latin, weights: ["400"] }).fontFamily}, cursive`;
+export const MONO = `${loadMono("normal", { ...latin, weights: ["500", "700"] }).fontFamily}, monospace`;

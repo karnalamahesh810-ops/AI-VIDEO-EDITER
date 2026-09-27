@@ -421,6 +421,10 @@ NEWS_CHANNELS = [c.strip() for c in os.getenv(
 # by later videos about the same subjects: no search, no download from
 # YouTube, no vision call. Needs the worker-storage broker's library/ prefix.
 CLIP_LIBRARY = _flag("CLIP_LIBRARY", True)
+# A two-label contrast ("solid ground" vs "submerged mud") becomes a left/right
+# split of two photos, one searched for each side (ProSplit), when both are found.
+SPLIT_IMAGES = _flag("SPLIT_IMAGES", True)
+SPLIT_IMAGES_SECONDS = float(os.getenv("SPLIT_IMAGES_SECONDS", "60"))
 # A beat with no footage becomes a full-screen motion graphic chosen from the
 # line (VidRush fills gaps with animations, not repeated clips).
 ANIMATION_FILL = _flag("ANIMATION_FILL", True)

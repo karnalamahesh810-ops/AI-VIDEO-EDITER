@@ -32,9 +32,19 @@ export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?:
       ...spec,
       fullFrame: true,
     } as Overlay);
+    if (!(ov.media && ov.media.length) && backdrop && backdrop.url) {
+      // A photo card borrows the nearest image; the case-file looks take a
+      // still of the nearest clip too (the board print, the newspaper photo).
+      const still = backdrop.type === "image" ? backdrop
+        : backdrop.thumbnail ? { ...backdrop, type: "image" as const, url: backdrop.thumbnail } : null;
+      const photoCard = ov.type === "photo-card" || ov.type === "name-card";
+      const caseLook = ["board", "clipping", "doc", "facts", "dossier", "window", "audio", "evidence"].includes(ov.variant || "");
+      if ((photoCard && backdrop.type === "image") || (caseLook && still)) ov.media = [still || backdrop];
+    }
     const Component = OVERLAYS[ov.type];
     const t = templateFor(ov.template);
-    const fullFrame = ov.type === "map" || t?.kind === "map";
+    // Maps and the case-file looks (own-backdrop) draw their whole frame.
+    const fullFrame = ov.type === "map" || t?.kind === "map" || Boolean(t?.tags?.includes("own-backdrop"));
     const col = accentFor(ov, accent);
     const drift = interpolate(frame, [0, Math.max(1, scene.durationInFrames)], [0, 1], clamp);
     // A still of the neighbouring clip (its thumbnail), never a second video
@@ -45,7 +55,7 @@ export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?:
     const blurStyle: React.CSSProperties = {
       width: "100%", height: "100%", objectFit: "cover",
       transform: `scale(${1.18 + drift * 0.06})`,
-      filter: "blur(22px) grayscale(0.55) brightness(0.38) contrast(1.1)",
+      filter: "blur(16px) grayscale(0.4) brightness(0.55) contrast(1.05)",
     };
 
     return (
@@ -65,7 +75,7 @@ export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?:
               backgroundSize: `${72 * k}px ${72 * k}px`, transform: `translateY(${-drift * 24 * k}px)`,
               maskImage: "radial-gradient(ellipse at center, #000 30%, transparent 80%)",
               WebkitMaskImage: "radial-gradient(ellipse at center, #000 30%, transparent 80%)" }} />
-            <AbsoluteFill style={{ boxShadow: `inset 0 0 ${320 * k}px rgba(0,0,0,.85)`, pointerEvents: "none" }} />
+            <AbsoluteFill style={{ boxShadow: `inset 0 0 ${280 * k}px rgba(0,0,0,.6)`, pointerEvents: "none" }} />
           </>
         ) : null}
         {Component ? (

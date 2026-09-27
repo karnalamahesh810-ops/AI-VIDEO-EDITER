@@ -326,17 +326,21 @@ def build(segments: List[Segment], shots: List[dict],
     else:
         image_look = {}
 
+    seen_figures: Dict[tuple, float] = {}
+    anim_counts: Dict[str, int] = {}
     for i, seg in enumerate(segments):
         shot = shots[i] if i < len(shots) else {}
         asset = assets[i] if i < len(assets) else None
         start, duration = bounds[i], bounds[i + 1] - bounds[i]
 
         animation = None
-        if pack and vt.wants_animation(seg, shot, asset, brief):
-            # VidRush fills a beat nothing was found for with a motion
-            # graphic, not a repeated clip: a card or map from the line.
+        if pack and vt.wants_animation(seg, shot, asset, brief, seen=seen_figures):
+            animation = vt.animation_for(seg, shot, pack, brief, counts=anim_counts)
+            vt.note_figure(seen_figures, seg, animation)
+        if animation:
+            # A data beat: the number, money or comparison graphic full
+            # screen on the blurred nearest clip.
             media = {"type": "animation", "url": "", "source": "template"}
-            animation = vt.animation_for(seg, shot, pack, brief)
             motion = "none"
             review = asset is None
             reason = ("No footage found — a motion graphic fills this beat (keep it or replace the clip)"

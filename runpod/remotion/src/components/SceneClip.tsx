@@ -6,6 +6,7 @@ import {
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
 import { EffectLayer, TransitionLayer, effectFilter, entranceStyle } from "./SceneEffects";
 import { AnimationScene } from "./AnimationScene";
+import { PlayerWindow } from "./pro/ProCase";
 import type { Scene, SceneMedia } from "../types";
 
 /**
@@ -47,7 +48,7 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
   // A long clip gets a cut-in halfway: a hard cut to a tighter framing of the
   // same shot reads as a second camera angle (VidRush's shots average 3.5 s;
   // ours ran 8 s on one framing).
-  const longClip = media.type === "video" && scene.frame !== "inset" && durationInFrames > fps * 5.5;
+  const longClip = media.type === "video" && scene.frame !== "inset" && scene.frame !== "window" && durationInFrames > fps * 5.5;
   if (longClip && frame >= Math.round(durationInFrames * 0.5)) {
     const side = (scene.id.charCodeAt(scene.id.length - 1) % 2) ? 1 : -1;
     transform = `scale(1.24) translate(${side * 3.5}%, -2%)`;
@@ -91,6 +92,28 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
     transform,
     filter: filters || undefined,
   };
+
+  if (scene.frame === "window") {
+    // The case-file look: the footage plays inside a player window on the
+    // desk (a recording, an interview, archive film shown as footage).
+    const tone = scene.id.charCodeAt(scene.id.length - 1) % 2 ? "dark" : "light";
+    const media100: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover",
+      transform: `scale(${1.02 + progress * 0.04})`, filter: filters || undefined };
+    return (
+      <AbsoluteFill style={{ backgroundColor: "#000" }}>
+        <PlayerWindow tone={tone} seed={scene.startFrame % 7}
+          title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
+          {media.type === "video" ? (
+            <OffthreadVideo src={media.url} style={media100} muted playbackRate={rate} />
+          ) : (
+            <Img src={media.url} style={media100} />
+          )}
+          <FilmLayer treatment={treatment} />
+        </PlayerWindow>
+        <TransitionLayer transition={transition} />
+      </AbsoluteFill>
+    );
+  }
 
   if (scene.frame === "inset") {
     // VidRush's framing for archival photos, documents and low-resolution or

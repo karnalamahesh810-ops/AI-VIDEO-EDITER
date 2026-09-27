@@ -121,11 +121,13 @@ export const Captions: React.FC<{
           lineHeight: 1.18,
           textAlign: "center",
           maxWidth: "82%",
-          textShadow: preset.background === "bar" ? "none" : "0 4px 18px rgba(0,0,0,0.85), 0 2px 4px rgba(0,0,0,0.9)",
+          textShadow: preset.background === "bar" || preset.background === "box" ? "none"
+            : "0 4px 18px rgba(0,0,0,0.85), 0 2px 4px rgba(0,0,0,0.9)",
           letterSpacing: "-0.01em",
           // The news style sits on a dark bar; the others float on the picture.
-          background: preset.background === "bar" ? "rgba(8,8,10,0.72)" : "transparent",
-          padding: preset.background === "bar" ? `${s(10)}px ${s(26)}px` : 0,
+          // "box" (the case-file subtitle): white words on a solid black box.
+          background: preset.background === "bar" ? "rgba(8,8,10,0.72)" : preset.background === "box" ? "rgba(0,0,0,0.86)" : "transparent",
+          padding: preset.background === "bar" ? `${s(10)}px ${s(26)}px` : preset.background === "box" ? `${s(4)}px ${s(14)}px` : 0,
           borderRadius: preset.background === "bar" ? s(8) : 0,
         }}
       >
