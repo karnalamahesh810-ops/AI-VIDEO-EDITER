@@ -2139,9 +2139,9 @@ class BlockedIPDetection(unittest.TestCase):
             returncode, stdout, stderr = 0, "", ""
 
         original_run = media.subprocess.run
-        saved = (media._PROXIES[:], media.PROXY_MANAGER)
+        saved = (media._PROXIES[:], media._ytdlp.PROXY_MANAGER)
         media._PROXIES[:] = ["http://u:p@host1:8000", "http://u:p@host2:8000"]
-        media.PROXY_MANAGER = media.proxies.ProxyManager(media._PROXIES)
+        media._ytdlp.PROXY_MANAGER = media.proxies.ProxyManager(media._PROXIES)
         media.subprocess.run = lambda cmd, **k: seen.setdefault("cmds", []).append(cmd) or Result()
         try:
             media._yt_candidates("ytsearch1:a", False)
@@ -2149,7 +2149,7 @@ class BlockedIPDetection(unittest.TestCase):
         finally:
             media.subprocess.run = original_run
             media._PROXIES[:] = saved[0]
-            media.PROXY_MANAGER = saved[1]
+            media._ytdlp.PROXY_MANAGER = saved[1]
 
         proxies = [c[c.index("--proxy") + 1] for c in seen["cmds"] if "--proxy" in c]
         self.assertEqual(len(proxies), 2)
@@ -2188,9 +2188,9 @@ class BlockedIPDetection(unittest.TestCase):
             return replies.pop(0)
 
         original_run = media.subprocess.run
-        saved = (media._PROXIES[:], media.PROXY_MANAGER)
+        saved = (media._PROXIES[:], media._ytdlp.PROXY_MANAGER)
         media._PROXIES[:] = ["http://a:1", "http://b:2", "http://c:3"]
-        media.PROXY_MANAGER = media.proxies.ProxyManager(media._PROXIES)
+        media._ytdlp.PROXY_MANAGER = media.proxies.ProxyManager(media._PROXIES)
         media.subprocess.run = fake_run
         try:
             for q in "wxyz":
@@ -2198,25 +2198,25 @@ class BlockedIPDetection(unittest.TestCase):
         finally:
             media.subprocess.run = original_run
             media._PROXIES[:] = saved[0]
-            media.PROXY_MANAGER = saved[1]
+            media._ytdlp.PROXY_MANAGER = saved[1]
         self.assertEqual(used[0], "http://a:1")
         # a was refused (degraded at once), so the rotation carries on without it.
         self.assertNotIn("http://a:1", used[1:])
 
     def test_all_proxies_benched_still_returns_one(self):
-        saved = (media._PROXIES[:], media.PROXY_MANAGER)
+        saved = (media._PROXIES[:], media._ytdlp.PROXY_MANAGER)
         media._PROXIES[:] = ["http://a:1", "http://b:2"]
         pm = media.proxies.ProxyManager(media._PROXIES)
         for url, until in (("http://a:1", 9e12), ("http://b:2", 8e12)):
             pm.by_url[url].state = media.proxies.QUARANTINED
             pm.by_url[url].quarantined_until = until
-        media.PROXY_MANAGER = pm
+        media._ytdlp.PROXY_MANAGER = pm
         try:
             # The route due back soonest wins rather than running with no proxy.
             self.assertEqual(media._next_proxy(), "http://b:2")
         finally:
             media._PROXIES[:] = saved[0]
-            media.PROXY_MANAGER = saved[1]
+            media._ytdlp.PROXY_MANAGER = saved[1]
 
 
 class SameSubjectBeatsSpreadAcrossTheList(unittest.TestCase):
@@ -2384,7 +2384,7 @@ class NetworkConcurrency(unittest.TestCase):
             return Result()
 
         with mock.patch.object(config, "NETWORK_CONCURRENCY", cap), \
-                mock.patch.object(media, "_NET_SEM", threading.Semaphore(cap)), \
+                mock.patch.object(media._ytdlp, "_NET_SEM", threading.Semaphore(cap)), \
                 mock.patch.object(media.subprocess, "run", side_effect=fake_run):
             with concurrent.futures.ThreadPoolExecutor(10) as pool:
                 list(pool.map(lambda i: media._yt_candidates(f"ytsearch1:{i}", False), range(10)))

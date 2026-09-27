@@ -42,204 +42,22 @@ from .errors import RETRY, FailureClass, classify_exception, classify_ytdlp, fro
 from .storage import download
 
 
-# Round-robin over the configured proxies so one address does not take every
-# download and get flagged — but skip any address that was just refused or
-# timed out. Blind rotation meant every third request went to an IP YouTube
-# had already started refusing, costing a failed search plus a retry each time.
-_PROXIES = list(config.YTDLP_PROXIES)
+# Split out in Phase F: pixel/file checks and the yt-dlp primitives live in
+# their own modules; the names stay importable from here.
+from .filters import (  # noqa: F401
+    _STILL_EXTS, _is_still, _video_seconds, _gray_frames, has_burned_captions, _texty_rows, _longest_run, playable_video, clip_quality, _video_dims, _blurry, _corner_watermark, _PTS_RE, scene_cuts, clean_window, trim_clip, tidy_clip)
+from .ytdlp import (  # noqa: F401
+    _PROXIES, PROXY_MANAGER, _UNAVAILABLE_VIDEOS, _DENIED_ON, _FAIL_LOCK, _LAST_FAILURE, _NET_SEM, _next_proxy, _acquire_proxy, _release_proxy, _proxy_index, proxy_snapshot, _note_failure, _video_unavailable, pot_provider_alive, pot_provider_log, probe_youtube, _bench_proxy, _yt_network_args, BLOCK_SIGNS, BOT_CHECK, looks_blocked, _YT_THIS_YEAR, _yt_candidates, _yt_info, _yt_fetch)
+from . import ytdlp as _ytdlp  # noqa: F401
+from . import filters as _filters  # noqa: F401
+
 # "" is the worker's own address. Proxies are only worth it while YouTube has
 # not flagged them; when it has (2026-09-25: every proxy answered "Sign in to
 # confirm you're not a bot" to downloads while searches still worked), the
 # machine's own IP may be the better route. YTDLP_DIRECT=1 adds it.
 if config.YTDLP_DIRECT and "" not in _PROXIES:
     _PROXIES.insert(0, "")
-# The proxy manager (src/proxies.py) owns health, latency and quarantine
-# per route; the helpers below are the call sites' view of it.
-PROXY_MANAGER = proxies.ProxyManager(config.YTDLP_PROXIES, direct=bool(config.YTDLP_DIRECT))
-# Per job: videos found unavailable (never retried), and the routes each
-# video was refused on - a second refusal on a different route means the
-# video, not the route, is the problem.
-_UNAVAILABLE_VIDEOS: set = set()
-_DENIED_ON: Dict[str, set] = {}
-_FAIL_LOCK = threading.Lock()
-# The class of the last failed yt-dlp run in this thread, for the retry policy.
-_LAST_FAILURE: contextvars.ContextVar = contextvars.ContextVar("last_failure", default=None)
 
-# Bounds how many yt-dlp subprocesses run at once, across every scene and
-# every scout, so sourcing does not send more simultaneous requests than
-# there are proxy IPs to carry them. See config.NETWORK_CONCURRENCY.
-_NET_SEM = threading.Semaphore(config.NETWORK_CONCURRENCY)
-
-
-def _next_proxy() -> str:
-    """The route the manager would give the next request (no claim)."""
-    if not _PROXIES:
-        return ""
-    return PROXY_MANAGER.peek()
-
-
-def _acquire_proxy(domain: str = "youtube.com") -> str:
-    if not _PROXIES:
-        return ""
-    return PROXY_MANAGER.acquire(domain)
-
-
-def _release_proxy(proxy: str, ok: bool, failure: Optional[FailureClass] = None,
-                   started: Optional[float] = None, domain: str = "youtube.com") -> None:
-    if not _PROXIES:
-        return
-    latency = (time.time() - started) * 1000.0 if started else None
-    PROXY_MANAGER.release(proxy, ok, failure, latency, domain)
-
-
-def _proxy_index(proxy: str) -> int:
-    return PROXY_MANAGER.index_of(proxy)
-
-
-def proxy_snapshot() -> List[dict]:
-    """Health of every route, by index only (a proxy URL carries credentials)."""
-    return PROXY_MANAGER.snapshot()
-
-
-def _note_failure(video_id: str, cls: FailureClass, proxy: str) -> FailureClass:
-    """
-    Record a failed download; returns the class to act on. A video refused
-    on two different routes is unavailable, whatever YouTube said, and the
-    second route is not to blame.
-    """
-    _LAST_FAILURE.set((cls, proxy))
-    if cls == FailureClass.MEDIA_UNAVAILABLE:
-        with _FAIL_LOCK:
-            _UNAVAILABLE_VIDEOS.add(video_id)
-        return cls
-    if cls == FailureClass.ACCESS_DENIED and video_id:
-        with _FAIL_LOCK:
-            routes = _DENIED_ON.setdefault(video_id, set())
-            routes.add(proxy)
-            if len(routes) >= 2:
-                _UNAVAILABLE_VIDEOS.add(video_id)
-                _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, proxy))
-                return FailureClass.MEDIA_UNAVAILABLE
-    return cls
-
-
-def _video_unavailable(video_id: str) -> bool:
-    with _FAIL_LOCK:
-        return video_id in _UNAVAILABLE_VIDEOS
-
-
-def pot_provider_alive() -> bool:
-    """Is the YouTube PO-token server (scripts/start.sh) answering on this worker?"""
-    try:
-        return requests.get("http://127.0.0.1:4416/ping", timeout=2).status_code == 200
-    except requests.RequestException:
-        return False
-
-
-def pot_provider_log(lines: int = 8) -> List[str]:
-    """The server's last log lines, for a health probe when it is not answering."""
-    try:
-        with open("/tmp/bgutil.log", encoding="utf-8", errors="replace") as fh:
-            return [l.rstrip()[:200] for l in fh.readlines()[-lines:]]
-    except OSError:
-        return ["(no /tmp/bgutil.log - server never started)"]
-
-
-def probe_youtube(video_id: str = "ka2S39HhLsM") -> List[dict]:
-    """
-    Can this worker actually download from YouTube, directly and per proxy?
-
-    Metadata for one known video (the step that gets refused - searches keep
-    working from flagged IPs, which hid the block). Routes are reported by
-    number only; a proxy URL carries credentials.
-    """
-    routes = [("direct", "")] + [(f"proxy#{i + 1}", p) for i, p in enumerate(config.YTDLP_PROXIES)]
-
-    def one(route):
-        name, proxy = route
-        cmd = ["yt-dlp", "--skip-download", "--print", "%(id)s",
-               f"https://www.youtube.com/watch?v={video_id}"] + _yt_network_args(proxy)
-        t = time.time()
-        try:
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                               errors="replace", timeout=60)
-            ok = video_id in (p.stdout or "")
-            why = "" if ok else ("bot check" if looks_blocked(p.stderr) else
-                                 ((p.stderr or "").strip().splitlines() or ["no output"])[-1][:80])
-        except subprocess.TimeoutExpired:
-            ok, why = False, "timeout"
-        # Never echo anything that could contain the proxy URL.
-        why = re.sub(r"https?://\S+", "<url>", why)
-        return {"route": name, "ok": ok, "seconds": round(time.time() - t, 1), "why": why}
-
-    def guarded(route):
-        with _NET_SEM:                  # the probe used to start one process per route at once
-            return one(route)
-
-    with ThreadPoolExecutor(max_workers=max(1, min(len(routes), config.NETWORK_CONCURRENCY))) as ex:
-        return list(ex.map(guarded, routes))
-
-
-def _bench_proxy(proxy: str, why: str = "") -> None:
-    """A failure on a route, by the old free-text reason; the manager decides what it costs."""
-    if not proxy:
-        return
-    cls = from_reason(why)
-    PROXY_MANAGER.report(proxy, cls)
-    r = PROXY_MANAGER.by_url.get(proxy)
-    state = r.state if r else "?"
-    # Never print the proxy URL: it carries credentials.
-    print(f"[media] proxy #{_proxy_index(proxy)} {cls.value.lower()} ({why}); now {state}", flush=True)
-
-
-def _yt_network_args(proxy: Optional[str] = None) -> List[str]:
-    """Shared bounded network/runtime settings; never log credential values."""
-    args = ["--ignore-config", "--js-runtimes", "node",
-            "--socket-timeout", "20", "--retries", "2",
-            "--extractor-retries", "2", "--fragment-retries", "2",
-            "--concurrent-fragments", "1"]
-    proxy = _next_proxy() if proxy is None else proxy
-    if proxy:
-        # yt-dlp hands section downloads to ffmpeg and passes the proxy only
-        # as an environment variable, which ffmpeg ignores for https:// stream
-        # URLs. The fetch then left the worker on its own (blocked) IP with a
-        # link minted for the proxy's IP: a frameless 262-byte file, exit 0,
-        # on every route. ffmpeg's -http_proxy option covers https.
-        args += ["--proxy", proxy, "--downloader-args", f"ffmpeg_i:-http_proxy {proxy}"]
-    if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
-        args += ["--cookies", config.YTDLP_COOKIES_FILE]
-    return args
-
-
-# How YouTube refuses a datacenter IP. It does not always use the famous
-# "sign in to confirm you're not a bot" wording — on a RunPod worker the
-# observed message was "The following content is not available on this app",
-# which reads like a missing video rather than a blocked client. Matching only
-# the famous string reported that as "no results", which is precisely the
-# ambiguity this detection exists to remove.
-BLOCK_SIGNS = (
-    "sign in to confirm",
-    "confirm you're not a bot",
-    "confirm you are not a bot",
-    "not available on this app",
-    "this content isn't available",
-    "please sign in",
-    "http error 429",
-    "too many requests",
-    # A flagged IP served no stream formats at all (the "-f .../b" chain still
-    # found nothing): a soft block, seen on residential sessions.
-    "requested format is not available",
-    # Search itself refused. A 403 on a single video can be a geo/age lock, but
-    # on the search API it is the IP: seen on a Webshare proxy YouTube had banned.
-    "unable to download api page: http error 403",
-)
-BOT_CHECK = BLOCK_SIGNS[0]  # kept for callers that check the classic wording
-
-
-def looks_blocked(stderr: str) -> bool:
-    """True when yt-dlp's failure is the IP being refused, not an empty search."""
-    low = (stderr or "").lower()
-    return any(sign in low for sign in BLOCK_SIGNS)
 
 
 @dataclass
@@ -993,118 +811,6 @@ _B_ROLL = re.compile(
 B_ROLL_INTENT = "drone aerial footage"
 
 
-_STILL_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
-
-
-def _is_still(path: str) -> bool:
-    return os.path.splitext(path or "")[1].lower() in _STILL_EXTS
-
-
-def _video_seconds(path: str) -> float:
-    try:
-        p = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=nw=1:nk=1", path],
-            capture_output=True, text=True, timeout=30)
-        return max(0.0, float((p.stdout or "0").strip() or 0))
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return 0.0
-
-
-def _gray_frames(path: str, count: int = 4, w: int = 320, h: int = 180):
-    """
-    `count` evenly spaced frames as (h, w) uint8 arrays, [] if unreadable.
-
-    A still yields its one frame. The old filter (`fps=N/N`) produced ZERO
-    frames from a single image - ffmpeg's fps filter drops a lone frame with
-    no duration - so every web photo and archive still was judged
-    "unreadable" and thrown away after passing vision. That one bug sent
-    18 of 23 beats of an image-heavy story into the slow replacement pass,
-    where every replacement photo failed the same way. For video it also
-    sampled only the first `count` seconds rather than across the clip.
-    """
-    try:
-        import numpy as np
-    except ImportError:
-        return []
-    if _is_still(path):
-        vf, frames = f"scale={w}:{h},format=gray", 1
-    else:
-        seconds = _video_seconds(path)
-        rate = f"{count}/{seconds:.3f}" if seconds > count else "1"
-        vf, frames = f"fps={rate},scale={w}:{h},format=gray", count
-    p = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", path, "-vf", vf,
-         "-frames:v", str(frames), "-f", "rawvideo", "-"],
-        capture_output=True, timeout=90)
-    buf = p.stdout or b""
-    n = len(buf) // (w * h)
-    if n == 0:
-        return []
-    import numpy as np
-    return [np.frombuffer(buf[i * w * h:(i + 1) * w * h], dtype="uint8").reshape(h, w)
-            for i in range(n)]
-
-
-def has_burned_captions(path: str, count: int = 4) -> bool:
-    """
-    True when a clip carries text that is not ours: hardsubs, or a UI.
-
-    Two separate failures, one cheap geometric test each:
-
-    * **Subtitles** sit in the lower third and make a tight horizontal band of
-      many strong vertical edges - letter strokes. Scenery rarely does that in
-      a band a few rows tall.
-    * **Screen recordings** (gameplay HUDs, leaderboards, dashboards, slides)
-      spread that same signature across the whole frame. The clip that forced
-      this was a Diablo IV leaderboard with a webcam in the corner: no
-      subtitles at all, and unusable as documentary footage.
-
-    Runs on the downloaded section, because a title never admits to either.
-    """
-    try:
-        import numpy as np
-    except ImportError:
-        return False
-    frames = _gray_frames(path, count)
-    if not frames:
-        return False
-
-    sub_hits = texty_hits = 0
-    for fr in frames:
-        h, w = fr.shape
-        rows = _texty_rows(fr, np)
-        if not rows:
-            continue
-        lower = [r for r in rows if r >= h * 0.62]
-        # a caption band: a short contiguous run down in the lower third
-        if lower and _longest_run(lower) >= 3 and len(lower) <= h * 0.20:
-            sub_hits += 1
-        # a UI: text-like rows scattered over much of the frame height
-        if len(rows) >= h * 0.14 and (max(rows) - min(rows)) > h * 0.45:
-            texty_hits += 1
-
-    need = max(2, len(frames) // 2)
-    return sub_hits >= need or texty_hits >= need
-
-
-def _texty_rows(frame, np) -> list:
-    """Row indices whose strong-vertical-edge count looks like a line of text."""
-    h, w = frame.shape
-    a = frame.astype("int16")
-    edges = np.abs(np.diff(a, axis=1)) > 48
-    per_row = edges.sum(axis=1)
-    return [i for i, c in enumerate(per_row) if c > w * 0.16]
-
-
-def _longest_run(rows: list) -> int:
-    run = best = 1
-    for a, b in zip(rows, rows[1:]):
-        run = run + 1 if b - a <= 2 else 1
-        best = max(best, run)
-    return best
-
-
 # Set by source_for_segment for the scene being sourced; read by the vision
 # gate deep in the call chain. A context variable rather than a parameter
 # threaded through every source function: each scene is sourced on one
@@ -1138,8 +844,6 @@ _SCENE_LOCK = threading.Lock()
 # Replace Clip keeps the runner-up files so they can be published as choices.
 _KEEP_ALT_FILES: contextvars.ContextVar = contextvars.ContextVar("keep_alt_files", default=False)
 
-# YouTube's own "Upload date: This year" filter, for the results page.
-_YT_THIS_YEAR = "EgIIBQ%3D%3D"
 
 
 # Stock libraries upload watermarked previews to YouTube (ZapataStock,
@@ -1237,88 +941,6 @@ def _score_candidate(title: str, duration: float, aspect: float,
         if si.get("specificity") == "event" and not (ents or locs):
             score -= 3.0
     return score
-
-
-def _yt_candidates(target: str, require_cc: bool, limit: int = 20,
-                   timeout: int = 90) -> List[dict]:
-    """
-    List search results with the metadata needed to choose between them.
-
-    Metadata only — no video is fetched. Downloading the first hit and hoping
-    is what produced a man in an armchair for a line about a boat trailer.
-
-    A flat search: one request for the results page. Asking for width/height
-    made yt-dlp open every result's player (twelve extra requests with a JS
-    challenge each): measured 30 s and a bot-check refusal against 5.5 s and
-    twelve results for the flat form. Shorts are recognised from their URL;
-    any other vertical video is dropped when it is scouted (_scout), which
-    reads the full info anyway. Only the CC-only mode still needs the full
-    form, because the licence is not on the results page.
-    """
-    if require_cc:
-        cmd = [
-            "yt-dlp", target, "--skip-download", "--no-warnings",
-            "--playlist-items", f"1-{limit}",
-            "--print", "%(id)s\t%(duration)s\t%(width)s\t%(height)s\t%(title)s",
-            "--match-filter", "license *= Creative Commons",
-        ]
-    else:
-        cmd = [
-            "yt-dlp", target, "--flat-playlist", "--no-warnings",
-            "--playlist-items", f"1-{limit}",
-            "--print", "%(id)s\t%(duration)s\t%(url)s\t%(channel)s\t%(title)s",
-        ]
-    proxy = _acquire_proxy()
-    cmd += _yt_network_args(proxy)
-    started = time.time()
-
-    try:
-        with _NET_SEM:
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started)
-        print(f"[media] search timed out via proxy #{_proxy_index(proxy)}", flush=True)
-        return []
-    except FileNotFoundError:
-        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
-        return []
-    if looks_blocked(p.stderr):
-        cls = classify_ytdlp(p.stderr, p.returncode)
-        _release_proxy(proxy, False, cls, started)
-        print(f"[media] YouTube rejected this search via proxy #{_proxy_index(proxy)} "
-              f"({cls.value}); the route is {PROXY_MANAGER.by_url.get(proxy).state if proxy in PROXY_MANAGER.by_url else 'direct'}",
-              flush=True)
-        return []
-    _release_proxy(proxy, p.returncode == 0, None if p.returncode == 0 else classify_ytdlp(p.stderr, p.returncode),
-                   started)
-
-    out = []
-    for line in (p.stdout or "").splitlines():
-        parts = line.rstrip("\n").split("\t")
-        if len(parts) < 5 or not parts[0].strip():
-            continue
-        vid, dur, w, h, title = parts[0], parts[1], parts[2], parts[3], "\t".join(parts[4:])
-        channel = h if h and not h.replace(".", "").isdigit() and h != "NA" else ""
-
-        def num(x):
-            try:
-                return float(x)
-            except (TypeError, ValueError):
-                return 0.0
-        if require_cc:
-            width, height = num(w), num(h)
-            aspect = (width / height) if height else 0.0
-        else:
-            # Flat results carry the URL where the full form had dimensions.
-            aspect = 9 / 16 if "/shorts/" in w else 0.0
-        out.append({
-            "id": vid.strip(),
-            "duration": num(dur),
-            "aspect": aspect,
-            "title": title.strip(),
-            "channel": channel,
-        })
-    return out
 
 
 # Where VidRush-grade footage actually lives. A plain YouTube search for
@@ -1464,168 +1086,6 @@ def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
         with _CACHE_LOCK:
             _YT_CANDIDATES_CACHE[key] = found
     return found
-
-
-def _yt_info(video_id: str, timeout: int = 60) -> tuple:
-    """(full yt-dlp info dict, proxy used) for one video, or ({}, proxy).
-
-    Needed for moment selection: the flat search results carry no formats, and
-    the storyboard (`sb*`) formats are what map thumbnails to timestamps. This
-    is a full extraction (opens the player, runs its JS challenge) - as slow
-    as the per-result lookup the flat search above exists to avoid - so a
-    popular subject that several scenes reach for the same candidate is
-    cached rather than re-extracted every time.
-    """
-    with _CACHE_LOCK:
-        cached = _YT_INFO_CACHE.get(video_id)
-    if cached is not None:
-        return cached
-
-    if _video_unavailable(video_id):
-        return {}, ""
-    proxy = _acquire_proxy()
-    # The same network arguments as a download (runtime, retries, cookies,
-    # the ffmpeg proxy): this call used to skip them and fail quietly, which
-    # sent scouting back to the fixed grab point.
-    cmd = ["yt-dlp", f"https://www.youtube.com/watch?v={video_id}", "-J",
-           "--no-warnings", "--ignore-config"] + _yt_network_args(proxy)
-    started = time.time()
-    try:
-        with _NET_SEM:
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                               errors="replace", timeout=timeout)
-        info = json.loads(p.stdout) if p.returncode == 0 and p.stdout else {}
-    except subprocess.TimeoutExpired:
-        _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started)
-        print(f"[media] metadata timed out ({video_id}) via proxy #{_proxy_index(proxy)}", flush=True)
-        return {}, proxy
-    except FileNotFoundError:
-        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
-        return {}, proxy
-    except ValueError:
-        _release_proxy(proxy, False, FailureClass.INVALID_MEDIA, started)
-        return {}, proxy
-    if not info:
-        cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode), proxy)
-        _release_proxy(proxy, False, cls, started)
-        print(f"[media] metadata failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}", flush=True)
-        return {}, proxy
-    _release_proxy(proxy, True, None, started)
-    if info:
-        # A failed extraction is never cached - the next scout should retry
-        # it, possibly through a different (unbenched) proxy.
-        with _CACHE_LOCK:
-            _YT_INFO_CACHE[video_id] = (info, proxy)
-    return info, proxy
-
-
-def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
-              timeout: int = 300) -> str:
-    """Download one section of one known video. Returns the local path or ''."""
-    # Different ranges must not reuse a previous download of the same video.
-    range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
-    # Each parallel scene gets its own path even when it selects the same
-    # source/time range; yt-dlp otherwise races over one partial output file.
-    fetch_id = uuid.uuid4().hex[:10]
-    out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}_{fetch_id}.%(ext)s")
-    cmd = [
-        "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
-        "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
-        "--force-keyframes-at-cuts",
-        "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]",
-        "--no-playlist", "--no-warnings", "--quiet",
-        "--merge-output-format", "mp4",
-        "-o", out_tpl, "--print", "after_move:filepath",
-    ]
-    if _video_unavailable(video_id):
-        _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
-        return ""
-    proxy = _acquire_proxy()
-    cmd += _yt_network_args(proxy)
-    # After the shared network args: yt-dlp keeps the LAST value of a repeated
-    # option, so placed before them these were silently overridden by "2".
-    cmd += ["--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3"]
-    started = time.time()
-    try:
-        with _NET_SEM:
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-    except subprocess.TimeoutExpired:
-        cls = _note_failure(video_id, FailureClass.NETWORK_TIMEOUT, proxy)
-        _release_proxy(proxy, False, cls, started)
-        print(f"[media] YouTube clip download timed out ({video_id}, {start_at:.1f}s) "
-              f"via proxy #{_proxy_index(proxy)}", flush=True)
-        return ""
-    except FileNotFoundError:
-        _note_failure(video_id, FailureClass.PROVIDER_UNAVAILABLE, proxy)
-        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
-        print("[media] yt-dlp executable is missing; cannot download YouTube footage", flush=True)
-        return ""
-    if p.returncode != 0:
-        cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode), proxy)
-        _release_proxy(proxy, False, cls, started)
-        reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
-        print(f"[media] download failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}: "
-              f"{reason[-160:] or 'no diagnostic'}", flush=True)
-        events.emit("source", "download_failed", level="warning", provider="youtube",
-                    failure=cls.value, data={"video": video_id, "proxy": _proxy_index(proxy)},
-                    message=reason[-120:])
-        return ""
-    found = ""
-    for line in (p.stdout or "").splitlines():
-        line = line.strip()
-        if line and os.path.exists(line):
-            found = line
-            break
-    if not found:
-        guess = os.path.join(out_dir, f"yt_{video_id}_{range_key}_{fetch_id}.mp4")
-        found = guess if os.path.exists(guess) else ""
-    if found and not playable_video(found):
-        # yt-dlp exited 0 but the section has no frames: a 262-byte MP4 shell
-        # (seen when a proxy dropped the stream mid-section). Uploaded as-is it
-        # killed a whole render ("Is this a video file?"). Drop it so the
-        # retry goes through another proxy.
-        reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
-        print(f"[media] empty download ({video_id} @{start_at:.0f}s, "
-              f"{os.path.getsize(found)} bytes) via proxy #{_proxy_index(proxy)}: "
-              f"{reason[-160:] or 'no diagnostic'}", flush=True)
-        try:
-            os.remove(found)
-        except OSError:
-            pass
-        cls = _note_failure(video_id, FailureClass.INVALID_MEDIA, proxy)
-        _release_proxy(proxy, False, cls, started)
-        return ""
-    if not found:
-        cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode, empty=True), proxy)
-        _release_proxy(proxy, False, cls, started)
-        return ""
-    _release_proxy(proxy, True, None, started)
-    _LAST_FAILURE.set(None)
-    try:
-        costs.record("proxy.bytes", os.path.getsize(found))
-    except OSError:
-        pass
-    events.emit("source", "download_ok", provider="youtube",
-                data={"video": video_id, "seconds": round(seconds, 1), "proxy": _proxy_index(proxy)},
-                duration_ms=(time.time() - started) * 1000.0)
-    return found
-
-
-def playable_video(path: str, min_seconds: float = 0.5) -> bool:
-    """A real, decodable video: a video stream at least min_seconds long."""
-    try:
-        if os.path.getsize(path) < 2_000:
-            return False
-        p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
-                            "-show_entries", "stream=codec_name:format=duration",
-                            "-of", "csv=p=0", path],
-                           capture_output=True, text=True, timeout=30)
-        lines = [l.strip() for l in (p.stdout or "").splitlines() if l.strip()]
-        codec = next((l for l in lines if not re.fullmatch(r"[\d.]+", l)), "")
-        seconds = max((float(l) for l in lines if re.fullmatch(r"[\d.]+", l)), default=0.0)
-        return bool(codec) and seconds >= min_seconds
-    except (OSError, subprocess.TimeoutExpired, ValueError):
-        return False
 
 
 def _fixed_point(candidate: dict, grab: float, start_at: float) -> float:
@@ -2358,81 +1818,6 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
 # holds the intended moment and no cut.
 # --------------------------------------------------------------------------- #
 
-_PTS_RE = re.compile(r"pts_time:\s*([0-9.]+)")
-
-
-def scene_cuts(path: str, threshold: Optional[float] = None, timeout: int = 120) -> List[float]:
-    """Seconds at which ffmpeg's scene detector sees a shot change."""
-    thr = config.SHOT_CUT_THRESHOLD if threshold is None else threshold
-    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-an",
-           "-vf", f"select='gt(scene,{thr})',showinfo", "-f", "null", "-"]
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=timeout)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
-    return sorted(float(m) for m in _PTS_RE.findall(p.stderr or ""))
-
-
-def clean_window(total: float, cuts: List[float], need: float, prefer: float) -> tuple:
-    """
-    (offset, clean, cuts_inside): where to cut `need` seconds out of a file
-    `total` seconds long whose shot changes are at `cuts`, preferring the
-    stretch that holds the intended moment at `prefer`. `clean` is False when
-    no stretch is long enough (rapid cutting): the caller keeps the moment
-    and scores the timing down.
-    """
-    inner = sorted(c for c in cuts if 0.2 < c < total - 0.2)
-    if total <= 0:
-        return 0.0, True, 0
-    edges = [0.0] + inner + [total]
-    windows = list(zip(edges, edges[1:]))
-    for a, b in windows:
-        if a <= prefer < b and b - a >= need:
-            return max(a, min(prefer, b - need)), True, len(inner)
-    a, b = max(windows, key=lambda w: w[1] - w[0])
-    if b - a >= need:
-        return a, True, len(inner)
-    return max(0.0, min(prefer, total - need)), False, len(inner)
-
-
-def trim_clip(path: str, offset: float, seconds: float, timeout: int = 180) -> str:
-    """`seconds` of `path` from `offset`, re-encoded so the cut is exact; '' on failure."""
-    base, _ = os.path.splitext(path)
-    out = f"{base}_c{int(round(offset * 10)):05d}.mp4"
-    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, offset):.2f}", "-i", path,
-           "-t", f"{seconds:.2f}", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
-           "-pix_fmt", "yuv420p", "-movflags", "+faststart", out]
-    try:
-        subprocess.run(cmd, capture_output=True, timeout=timeout)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return ""
-    return out if playable_video(out, min_seconds=min(1.0, seconds * 0.5)) else ""
-
-
-def tidy_clip(path: str, need: float, prefer: float) -> tuple:
-    """
-    (path, clean, cuts) for a downloaded section: the `need` seconds cut from
-    its cleanest stretch around `prefer`. The original file is replaced.
-    """
-    if not path or not config.CLEAN_CUTS:
-        return path, True, 0
-    total = _video_seconds(path)
-    if total <= need + 0.6:
-        return path, True, 0             # nothing to choose from
-    offset, clean, inner = clean_window(total, scene_cuts(path), need, prefer)
-    out = trim_clip(path, offset, need + 0.5)
-    if not out:
-        return path, clean, inner
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-    if inner:
-        print(f"[cut] {os.path.basename(out)}: {inner} shot change(s) in the section, "
-              f"clip from {offset:.1f}s{'' if clean else ' (no clean stretch long enough)'}",
-              flush=True)
-    return out, clean, inner
 
 
 def fetch_clean_clip(video_id: str, out_dir: str, start: float, need: float,
@@ -2585,7 +1970,7 @@ _YT_CANDIDATES_CACHE: Dict[str, List[dict]] = {}
 _CACHE_LOCK = threading.Lock()
 
 # One yt-dlp -J extraction per video per job, however many scenes scout it.
-_YT_INFO_CACHE: Dict[str, tuple] = {}
+_YT_INFO_CACHE = _ytdlp._YT_INFO_CACHE   # one cache, owned by ytdlp
 
 # Generated images are billed per call, so the budget is enforced here rather
 # than trusted to callers. Reset per job alongside the cache.
@@ -2630,16 +2015,12 @@ def reset_cache():
         _INFLIGHT.clear()
     with _CACHE_LOCK:
         _SEARCH_CACHE.clear()
-        _YT_INFO_CACHE.clear()
         _YT_CANDIDATES_CACHE.clear()
         _GOOGLE_VIDEO_CACHE.clear()
         _SOURCE_STATS.clear()
         _USED_CHANNELS.clear()
         _GENERATED[0] = 0
-    with _FAIL_LOCK:
-        _UNAVAILABLE_VIDEOS.clear()
-        _DENIED_ON.clear()
-    PROXY_MANAGER.reset_stats()
+    _ytdlp.reset()
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
 
@@ -2922,122 +2303,6 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
     if not tried_generation and not person and _generation_budget_left():
         return generate_image(prompt or query, work_dir)
     return None
-
-
-def clip_quality(path: str) -> tuple:
-    """
-    (ok, reason) for a sourced file. Reason is empty when it passes.
-
-    Everything here is a failure that only shows up once the bytes are on disk,
-    which is why the title heuristics upstream cannot catch it:
-
-    * somebody else's text - hardsubs, or a UI (see has_burned_captions)
-    * near-black - a fade, a night shot, or a download that grabbed the gap
-      between scenes
-    * frozen - a still image uploaded as a video, or a held title card, which
-      reads as a broken player rather than a cut
-    """
-    if not path or not os.path.exists(path):
-        return False, "missing"
-    try:
-        import numpy as np
-    except ImportError:
-        return True, ""
-    frames = _gray_frames(path, 4)
-    if not frames:
-        return False, "unreadable"
-
-    if _is_still(path):
-        # Text on a still was already judged by vision, and a document photo
-        # is text by design - the caption detector would reject every one.
-        # Frozen means nothing for a photo. Only a black frame is a failure.
-        return (False, "near-black") if float(frames[0].mean()) < 26 else (True, "")
-
-    if has_burned_captions(path):
-        return False, "burned-in text or UI"
-
-    # A phone or screen recording turned sideways: on a 16:9 canvas it is
-    # pillarboxed with blurred edges and reads as a mistake (one slipped
-    # into a real render as a vertical dashboard capture).
-    w, h = _video_dims(path)
-    if w and h and w < h * 1.2:
-        return False, "vertical or square video"
-
-    dark = sum(1 for f in frames if float(f.mean()) < 26)
-    if dark >= max(2, len(frames) // 2):
-        return False, "near-black"
-
-    if len(frames) >= 2:
-        deltas = [float(np.abs(a.astype("int16") - b.astype("int16")).mean())
-                  for a, b in zip(frames, frames[1:])]
-        if max(deltas) < 1.2:
-            return False, "frozen frame"
-    if _blurry(frames, np):
-        return False, "blurry"
-    if _corner_watermark(frames, np):
-        return False, "corner watermark"
-    return True, ""
-
-
-def _video_dims(path: str) -> tuple:
-    """(width, height) of the first video stream, (0, 0) when unknown."""
-    try:
-        p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
-                            "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
-                           capture_output=True, text=True, timeout=20)
-        a, b = (p.stdout.strip().splitlines() or [""])[0].split(",")[:2]
-        return int(a), int(b)
-    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
-        return 0, 0
-
-
-def _blurry(frames, np) -> bool:
-    """
-    Out of focus or badly upscaled in every sampled frame.
-
-    The variance of a Laplacian is the standard focus measure: sharp detail
-    gives strong second derivatives, blur flattens them. Judged on the
-    320x180 grey frames; the threshold is deliberately low so only clips
-    that are soft everywhere are dropped, not a shallow-focus shot.
-    """
-    if not frames:
-        return False
-    scores = []
-    for f in frames:
-        a = f.astype("float32")
-        lap = (4 * a[1:-1, 1:-1] - a[:-2, 1:-1] - a[2:, 1:-1] - a[1:-1, :-2] - a[1:-1, 2:])
-        scores.append(float(lap.var()))
-    scores.sort()
-    return scores[len(scores) // 2] < 12.0
-
-
-def _corner_watermark(frames, np) -> bool:
-    """
-    A channel logo or stock watermark parked in a corner.
-
-    Across a clip the picture moves but a burned-in logo does not: a corner
-    box that is edge-dense yet nearly unchanged between frames while the
-    rest of the frame changes is a watermark. Needs three frames and real
-    motion elsewhere, so a static landscape is never mistaken for one.
-    """
-    if len(frames) < 3:
-        return False
-    h, w = frames[0].shape
-    bh, bw = max(8, int(h * 0.16)), max(8, int(w * 0.22))
-    corners = {"tl": (slice(0, bh), slice(0, bw)), "tr": (slice(0, bh), slice(w - bw, w)),
-               "bl": (slice(h - bh, h), slice(0, bw)), "br": (slice(h - bh, h), slice(w - bw, w))}
-    arr = [f.astype("int16") for f in frames]
-    whole = float(np.mean([np.abs(a - b).mean() for a, b in zip(arr, arr[1:])]))
-    if whole < 3.0:
-        return False
-    for ys, xs in corners.values():
-        boxes = [a[ys, xs] for a in arr]
-        moving = float(np.mean([np.abs(a - b).mean() for a, b in zip(boxes, boxes[1:])]))
-        gx = np.abs(np.diff(boxes[0], axis=1)); gy = np.abs(np.diff(boxes[0], axis=0))
-        edges = float((gx > 40).mean() + (gy > 40).mean()) / 2
-        if edges > 0.05 and moving < whole * 0.25:
-            return True
-    return False
 
 
 def _asset_ok(asset) -> tuple:

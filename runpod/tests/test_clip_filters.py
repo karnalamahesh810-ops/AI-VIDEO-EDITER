@@ -38,11 +38,12 @@ class Blurry(unittest.TestCase):
 class VerticalVideo(unittest.TestCase):
     def test_portrait_clip_is_rejected_by_clip_quality(self):
         frames = [_moving(k) for k in range(4)]
+        # clip_quality lives in src/filters.py now; its helpers are patched there.
         with mock.patch.object(media.os.path, "exists", return_value=True), \
-                mock.patch.object(media, "_gray_frames", return_value=frames), \
-                mock.patch.object(media, "_is_still", return_value=False), \
-                mock.patch.object(media, "has_burned_captions", return_value=False), \
-                mock.patch.object(media, "_video_dims", return_value=(720, 1280)):
+                mock.patch.object(media._filters, "_gray_frames", return_value=frames), \
+                mock.patch.object(media._filters, "_is_still", return_value=False), \
+                mock.patch.object(media._filters, "has_burned_captions", return_value=False), \
+                mock.patch.object(media._filters, "_video_dims", return_value=(720, 1280)):
             ok, why = media.clip_quality("/w/vertical.mp4")
         self.assertFalse(ok)
         self.assertEqual(why, "vertical or square video")

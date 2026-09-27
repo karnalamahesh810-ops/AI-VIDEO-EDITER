@@ -121,9 +121,9 @@ class RetryPolicy(unittest.TestCase):
             class P:
                 returncode, stdout, stderr = 0, "{}", ""
             return P()
-        with mock.patch.object(media.subprocess, "run", fake_run), \
-                mock.patch.object(media, "_acquire_proxy", return_value="http://p"), \
-                mock.patch.object(media, "_release_proxy"):
+        with mock.patch.object(media._ytdlp.subprocess, "run", fake_run), \
+                mock.patch.object(media._ytdlp, "_acquire_proxy", return_value="http://p"), \
+                mock.patch.object(media._ytdlp, "_release_proxy"):
             media.reset_cache()
             media._yt_info("VID00000002")
         for arg in media._yt_network_args("http://p"):
