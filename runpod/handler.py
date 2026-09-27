@@ -31,11 +31,14 @@ selftest: render the whole template library in-container, upload nothing.
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
 """
+import collections
 import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import shutil
 import subprocess
+import sys
+import threading
 import time
 import traceback
 import uuid
@@ -69,8 +72,52 @@ _PHASE_BY_PREFIX = (
 )
 
 
+class _LogTail:
+    """
+    Keeps the last lines this worker printed, so a job's status can say what
+    it is doing right now. RunPod has no API for worker logs; without this a
+    job that sits at "Finding footage" for ten minutes cannot be told apart
+    from one that is stuck. Proxies are only ever logged by index.
+    """
+
+    def __init__(self, stream, keep: int = 60):
+        self.stream = stream
+        self.lines = collections.deque(maxlen=keep)
+        self.lock = threading.Lock()
+        self.count = 0
+        self._buf = ""
+
+    def write(self, s):
+        self.stream.write(s)
+        with self.lock:
+            self._buf += s
+            while "\n" in self._buf:
+                line, self._buf = self._buf.split("\n", 1)
+                line = line.rstrip()
+                if line:
+                    self.lines.append(f"{time.strftime('%H:%M:%S')} {line[:220]}")
+                    self.count += 1
+
+    def flush(self):
+        self.stream.flush()
+
+    def tail(self, n: int = 30):
+        with self.lock:
+            return list(self.lines)[-n:]
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+if not isinstance(sys.stdout, _LogTail):
+    sys.stdout = _LogTail(sys.stdout)
+LOG_TAIL = sys.stdout
+
+
 class Reporter:
     """Mirrors progress to RunPod's job status AND to the video_projects row."""
+
+    HEARTBEAT = 20  # seconds between status refreshes while a phase runs
 
     def __init__(self, project_id: str = "", job: dict = None):
         self.project_id = project_id or ""
@@ -80,22 +127,48 @@ class Reporter:
         self.job = job
         self._last = None
         self._started = time.time()
+        self._update = None
+        self._pushed_count = -1
+        self._stop = threading.Event()
+        if job and job.get("id"):
+            threading.Thread(target=self._heartbeat, daemon=True).start()
+
+    def _push(self):
+        update = dict(self._update or {})
+        update["elapsed"] = round(time.time() - self._started)
+        update["recent"] = LOG_TAIL.tail()
+        self._pushed_count = LOG_TAIL.count
+        try:
+            runpod.serverless.progress_update(self.job, update)
+        except Exception as e:  # noqa: BLE001 — progress must never kill a job
+            self.stream_print(f"[worker] progress update failed: {e}")
+
+    @staticmethod
+    def stream_print(msg: str):
+        print(msg, flush=True)
+
+    def _heartbeat(self):
+        # A long phase ("Finding footage by subject") prints plenty but reports
+        # nothing; every HEARTBEAT seconds the status gets the fresh log tail.
+        while not self._stop.wait(self.HEARTBEAT):
+            if self._update and LOG_TAIL.count != self._pushed_count:
+                self._push()
+
+    def finish(self):
+        self._stop.set()
 
     def __call__(self, step: str, progress: int = None, *, done: int = None,
                  total: int = None, **fields):
         phase = next((p for prefix, p in _PHASE_BY_PREFIX if step.startswith(prefix)), "")
         update = {"status": step, "progress": progress, "phase": phase,
-                  "phases": list(PHASES),
-                  "elapsed": round(time.time() - self._started)}
+                  "phases": list(PHASES)}
         if done is not None and total is not None:
             update.update(done=done, total=total)
-        if self.job and self.job.get("id"):
-            try:
-                runpod.serverless.progress_update(self.job, update)
-            except Exception as e:  # noqa: BLE001 — progress must never kill a job
-                print(f"[worker] progress update failed: {e}", flush=True)
         print(f"[worker] {step}" + (f" ({progress}%)" if progress is not None else ""),
               flush=True)
+        if self.job and self.job.get("id"):
+            self._update = update
+            self._push()
         if not self.project_id:
             return
         # A 600-scene job would otherwise write the same row hundreds of times.
@@ -1279,6 +1352,7 @@ def handler(job):
                 **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {}),
                 **({"timeline": dict(LAST_TIMELINE)} if inp.get("return_frames") and LAST_TIMELINE else {})}
     finally:
+        report.finish()
         # Serverless workers are reused; a 17-minute render leaves GBs behind.
         if not inp.get("keep_workdir"):
             shutil.rmtree(work, ignore_errors=True)
