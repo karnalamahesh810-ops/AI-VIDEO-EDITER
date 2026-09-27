@@ -364,6 +364,16 @@ FANOUT_TIMEOUT_SECONDS = float(os.getenv("FANOUT_TIMEOUT_SECONDS", "1500"))
 # Leftover scenes after round 1 go back out across the workers from this many
 # up; a real job kept 9 for the parent alone ("Filling the last 9 scenes").
 FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "3"))
+# One wall-clock budget for all footage finding, across every worker: a
+# real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
+# and searches stop at once and the beats still without footage become
+# animation scenes. Budget = base + per scene, capped.
+SOURCE_BUDGET_BASE_SECONDS = float(os.getenv("SOURCE_BUDGET_BASE_SECONDS", "180"))
+SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "2"))
+SOURCE_BUDGET_MAX_SECONDS = float(os.getenv("SOURCE_BUDGET_MAX_SECONDS", "900"))
+# Saving good clips to the library: parallel uploads under one time box.
+LIBRARY_SAVE_SECONDS = float(os.getenv("LIBRARY_SAVE_SECONDS", "90"))
+
 # Split the render into frame chunks across the workers for longer videos.
 FANOUT_RENDER = os.getenv("FANOUT_RENDER", "1") == "1"
 FANOUT_RENDER_MIN_SECONDS = float(os.getenv("FANOUT_RENDER_MIN_SECONDS", "0"))

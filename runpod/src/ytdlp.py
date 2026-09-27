@@ -33,6 +33,19 @@ _YT_INFO_CACHE: Dict[str, tuple] = {}
 # file in a work directory that is being, or has been, deleted.
 EPOCH = [0]
 
+# The job's sourcing deadline (epoch seconds, 0 = none). Past it every
+# download and metadata call returns empty at once, so every loop above them
+# ends in seconds and the beats left fall through to animation scenes.
+DEADLINE = [0.0]
+
+
+def set_deadline(at: float) -> None:
+    DEADLINE[0] = float(at or 0.0)
+
+
+def past_deadline() -> bool:
+    return bool(DEADLINE[0]) and time.time() > DEADLINE[0]
+
 
 def reset() -> None:
     """Between jobs: forget unavailable videos, the metadata cache and the counters."""
@@ -213,7 +226,7 @@ def _yt_network_args(proxy: Optional[str] = None) -> List[str]:
         # URLs. The fetch then left the worker on its own (blocked) IP with a
         # link minted for the proxy's IP: a frameless 262-byte file, exit 0,
         # on every route. ffmpeg's -http_proxy option covers https.
-        args += ["--proxy", proxy, "--downloader-args", f"ffmpeg_i:-http_proxy {proxy}"]
+        args += ["--proxy", proxy, "--downloader-args", f"ffmpeg_i:-loglevel error -http_proxy {proxy}"]
     if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
         args += ["--cookies", config.YTDLP_COOKIES_FILE]
     return args
@@ -350,6 +363,8 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
     """
     with _INFO_LOCK:
         cached = _YT_INFO_CACHE.get(video_id)
+    if cached is None and past_deadline():
+        return {}, None
     if cached is not None:
         return cached
 
@@ -405,11 +420,14 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
         "--force-keyframes-at-cuts",
         "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]",
-        "--no-playlist", "--no-warnings", "--quiet",
+        "--no-playlist", "--no-warnings",
         "--merge-output-format", "mp4",
         "-o", out_tpl, "--print", "after_move:filepath",
     ]
     if _video_unavailable(video_id):
+        _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
+        return ""
+    if past_deadline():
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
     proxy = _acquire_proxy()
@@ -458,6 +476,9 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         # killed a whole render ("Is this a video file?"). Drop it so the
         # retry goes through another proxy.
         reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
+        events.emit("source", "empty_download", level="warning", provider="youtube",
+                    failure="INVALID_MEDIA", data={"video": video_id, "proxy": _proxy_index(proxy)},
+                    message=reason[-160:])
         print(f"[media] empty download ({video_id} @{start_at:.0f}s, "
               f"{os.path.getsize(found)} bytes) via proxy #{_proxy_index(proxy)}: "
               f"{reason[-160:] or 'no diagnostic'}", flush=True)

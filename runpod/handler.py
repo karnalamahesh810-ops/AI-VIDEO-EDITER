@@ -732,6 +732,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     pooled: dict = {}
     require_cc = bool(flags["require_cc"] if flags["require_cc"] is not None else config.REQUIRE_CC)
     # Clips kept from earlier videos about the same subjects come first.
+    # One sourcing budget for the whole job (every worker shares it).
+    from src import ytdlp as _ytdlp_mod
+    _ytdlp_mod.set_deadline(time.time() + fanout.source_budget(len(jobs)))
+    print(f"[worker] sourcing budget {fanout.source_budget(len(jobs)):.0f}s for {len(jobs)} scenes", flush=True)
     lib = library.Library.load(project_id, (report.job or {}).get("id", ""),
                                inp.get("media_bucket") or config.MEDIA_BUCKET)
     LAST_LIBRARY["lib"] = lib
@@ -800,6 +804,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             pool_stats["reserve_filled"] = len(extra)
             print(f"[worker] {len(extra)}/{len(redo)} empty or repeated line(s) filled from "
                   "spare pool moments", flush=True)
+    _ytdlp_mod.set_deadline(0.0)               # later steps (resource, render) are not time boxed here
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
     vision.require_credits()

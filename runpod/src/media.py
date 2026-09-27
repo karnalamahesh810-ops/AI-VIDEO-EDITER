@@ -1227,6 +1227,8 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
     on different IPs gets ~95% through."""
     attempts = 0
     while True:
+        if _ytdlp.past_deadline():
+            return ""
         path = _yt_fetch(video_id, out_dir, start_at, seconds)
         if path:
             return path
@@ -2206,6 +2208,9 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     that person speaking passes the vision gate, and no image is ever
     GENERATED - an invented photo of a real person is a fabrication.
     """
+    if _ytdlp.past_deadline():
+        # The job's sourcing time is spent: the beat becomes an animation scene.
+        return None
     if config.REQUIRE_AI and vision.ai_exhausted():
         return None   # the job is stopping; do not spend on searches it will discard
     token = _SUBJECT_TYPE.set(subject_type or "")

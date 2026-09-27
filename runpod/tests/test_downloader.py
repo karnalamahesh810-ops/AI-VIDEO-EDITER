@@ -27,7 +27,7 @@ class Downloader(unittest.TestCase):
         args = media._yt_network_args("http://u:p@proxy.example:8080")
         self.assertIn("--proxy", args)
         self.assertEqual(args[args.index("--downloader-args") + 1],
-                         "ffmpeg_i:-http_proxy http://u:p@proxy.example:8080")
+                         "ffmpeg_i:-loglevel error -http_proxy http://u:p@proxy.example:8080")
         self.assertNotIn("--downloader-args", media._yt_network_args(""))
 
     def test_failed_download_never_returns_existing_file(self):

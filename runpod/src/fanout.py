@@ -37,6 +37,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
+from . import ytdlp
 from . import config, media, storage, costs, events
 
 
@@ -358,12 +359,13 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
                                "project_id": project_id, "bucket": bucket, "brief": brief,
                                "jobs": p["jobs"], "sequences": p["sequences"],
                                "exclude": sorted(exclude),
-                               "image_budget": p["image_budget"], **flags},
+                               "image_budget": p["image_budget"],
+                               "deadline_at": ytdlp.DEADLINE[0], **flags},
             local=lambda p: local(p["jobs"], set(exclude)),
             accept=fetch,
             progress=lambda p, o: min(p["weight"], float(o.get("done") or 0)),
             report=show,
-            deadline=time.time() + max(config.FANOUT_TIMEOUT_SECONDS, 6.0 * len(round_jobs)))
+            deadline=_round_deadline(len(round_jobs)))
         failed = units.run(label)
         stats["parts"] += len(parts)
         stats["stolen_back"] += units.stolen
@@ -371,6 +373,8 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
         stats["rounds"] += 1
 
     report(f"Sourcing in parallel: 0/{total_scenes} scenes", 30, done=0, total=total_scenes)
+    if not ytdlp.DEADLINE[0]:
+        ytdlp.set_deadline(time.time() + source_budget(total_scenes))
     # `exclude`: clips already on the timeline (subject pools, reused scenes).
     taken = set(exclude or ())
     run_round(jobs, sequences, set(taken), 30, 55, "Sourced", first=True)
@@ -380,12 +384,17 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
     empty = [j for j in jobs if results[j["index"]] is None and j not in dups]
     todo = empty + dups
     stats["cross_part_repeats"] = len(dups)
+    if ytdlp.past_deadline():
+        print(f"[fanout] sourcing time spent; {len(todo)} scene(s) left for animation", flush=True)
+        todo = []
     if len(todo) >= config.FANOUT_REFILL_MIN:
         print(f"[fanout] round 2 across workers: {len(todo)} scene(s) "
               f"({len(empty)} empty, {len(dups)} repeats)", flush=True)
         run_round(todo, [], set(seen), 55, 60, "Filling gaps:")
         stats["round2_repeats"] = len(_dedupe(results, jobs, seen))
         todo = [j for j in jobs if results[j["index"]] is None]
+    if todo and ytdlp.past_deadline():
+        todo = []
     if todo:
         print(f"[fanout] sourcing {len(todo)} last scene(s) here", flush=True)
         report(f"Filling the last {len(todo)} scenes", 60)
@@ -395,6 +404,21 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
     stats["sourced_by_parent_last"] = len(todo)
     media.LAST_STATS["fanout"] = stats
     return results
+
+
+def source_budget(n_scenes: int) -> float:
+    """Seconds all footage finding may take for a video of n scenes."""
+    return min(config.SOURCE_BUDGET_MAX_SECONDS,
+               config.SOURCE_BUDGET_BASE_SECONDS + config.SOURCE_BUDGET_PER_SCENE * max(0, n_scenes))
+
+
+def _round_deadline(n_jobs: int) -> float:
+    """A round's parts are collected until the job's sourcing deadline (plus the
+    time a part needs to upload what it found), never longer than the old cap."""
+    cap = time.time() + max(config.FANOUT_TIMEOUT_SECONDS, 6.0 * n_jobs)
+    if ytdlp.DEADLINE[0]:
+        return min(cap, ytdlp.DEADLINE[0] + 45.0)
+    return cap
 
 
 def render_enabled(doc: dict, project_id: str) -> bool:
@@ -591,6 +615,8 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
     """The child side: source one part, upload its files, return them."""
     brief = inp.get("brief") or {}
     set_story(brief)
+    if inp.get("deadline_at"):
+        ytdlp.set_deadline(float(inp["deadline_at"]) - 20.0)
     jobs = inp.get("jobs") or []
     local_of = {j["index"]: k for k, j in enumerate(sorted(jobs, key=lambda j: j["index"]))}
     local_jobs = [dict(j, index=local_of[j["index"]]) for j in jobs]

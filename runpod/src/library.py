@@ -206,10 +206,12 @@ class Library:
         if not self.enabled:
             return 0
         from .assetserver import is_local
+        from concurrent.futures import ThreadPoolExecutor, wait
         have = {e.get("id") for e in self.entries}
         added = 0
+        picks = []
         for s in doc.get("scenes", []):
-            if added >= config.CLIP_LIBRARY_MAX_PER_JOB:
+            if len(picks) >= config.CLIP_LIBRARY_MAX_PER_JOB:
                 break
             m, sem = s.get("media") or {}, s.get("semanticMetadata") or {}
             ident = sem.get("assetId") or ""
@@ -221,12 +223,36 @@ class Library:
                 continue
             if s.get("reviewReason", "").startswith("The downloaded clip was empty"):
                 continue
+            picks.append((s, m, sem, ident, url))
+            have.add(ident)
+
+        # Uploads run eight at a time under one time box: a real job sat
+        # here for many minutes uploading clips one by one before it could
+        # show its storyboard. What does not make it in time is skipped.
+        def upload(item):
+            _s, _m, _sem, ident, url = item
             obj = f"library/clips/{_safe_id(ident)}.mp4"
-            try:
-                storage.broker_upload(url, self.bucket, obj, self.project_id, self.job_id,
-                                      read_ttl=60)
-            except Exception as e:  # noqa: BLE001 - keep the video going
-                print(f"[library] upload failed for {ident}: {type(e).__name__}", flush=True)
+            storage.broker_upload(url, self.bucket, obj, self.project_id, self.job_id, read_ttl=60)
+            return obj
+
+        uploaded = {}
+        if picks:
+            pool = ThreadPoolExecutor(max_workers=8)
+            futs = {pool.submit(upload, it): it for it in picks}
+            done, _late = wait(futs, timeout=config.LIBRARY_SAVE_SECONDS)
+            pool.shutdown(wait=False, cancel_futures=True)
+            for f in done:
+                it = futs[f]
+                try:
+                    uploaded[it[3]] = f.result()
+                except Exception as e:  # noqa: BLE001 - keep the video going
+                    print(f"[library] upload failed for {it[3]}: {type(e).__name__}", flush=True)
+            if _late:
+                print(f"[library] {len(_late)} clip(s) not saved in {config.LIBRARY_SAVE_SECONDS:.0f}s; skipped",
+                      flush=True)
+        for s, m, sem, ident, url in picks:
+            obj = uploaded.get(ident)
+            if not obj:
                 continue
             intent = sem.get("sceneIntent") if isinstance(sem.get("sceneIntent"), dict) else {}
             self.entries.append({
@@ -245,7 +271,6 @@ class Library:
                 "review_reason": (s.get("reviewReason") or "")[:120],
                 "created": int(time.time()), "project": self.project_id, "_new": True,
             })
-            have.add(ident)
             added += 1
         self.added = added
         return added
