@@ -213,7 +213,7 @@ def _bench_proxy(proxy: str, why: str = "") -> None:
     print(f"[media] proxy #{_proxy_index(proxy)} {cls.value.lower()} ({why}); now {state}", flush=True)
 
 
-def _yt_network_args(proxy: Optional[str] = None) -> List[str]:
+def _yt_network_args(proxy: Optional[str] = None, hls_fix: bool = False) -> List[str]:
     """Shared bounded network/runtime settings; never log credential values."""
     args = ["--ignore-config", "--js-runtimes", "node",
             "--socket-timeout", "20", "--retries", "2",
@@ -226,7 +226,9 @@ def _yt_network_args(proxy: Optional[str] = None) -> List[str]:
         # URLs. The fetch then left the worker on its own (blocked) IP with a
         # link minted for the proxy's IP: a frameless 262-byte file, exit 0,
         # on every route. ffmpeg's -http_proxy option covers https.
-        args += ["--proxy", proxy, "--downloader-args", f"ffmpeg_i:-loglevel error -http_proxy {proxy}"]
+        # hls_fix: one HTTP connection per segment (see _HLS_REUSE).
+        extra = "-http_persistent 0 " if hls_fix else ""
+        args += ["--proxy", proxy, "--downloader-args", f"ffmpeg_i:-loglevel error {extra}-http_proxy {proxy}"]
     if config.YTDLP_COOKIES_FILE and os.path.isfile(config.YTDLP_COOKIES_FILE):
         args += ["--cookies", config.YTDLP_COOKIES_FILE]
     return args
@@ -406,8 +408,14 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
     return info, proxy
 
 
+# ffmpeg's HLS demuxer keeps one connection for all segments; through a proxy a
+# segment on another googlevideo host fails with this, and yt-dlp still exits 0
+# with a frameless file. Not the proxy's fault: fetch again without reuse.
+_HLS_REUSE = "cannot reuse http connection for different host"
+
+
 def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
-              timeout: int = 300) -> str:
+              timeout: int = 300, hls_fix: bool = False) -> str:
     """Download one section of one known video. Returns the local path or ''."""
     # Different ranges must not reuse a previous download of the same video.
     range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
@@ -419,7 +427,10 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
         "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
         "--force-keyframes-at-cuts",
-        "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]",
+        # Direct https formats first: HLS sections go through ffmpeg's HLS
+        # demuxer and its connection reuse (see _HLS_REUSE).
+        "-f", ("bv*[height<=1080][ext=mp4][protocol^=https]/bv*[height<=1080][ext=mp4]"
+               "/bv*[height<=1080]/b[height<=1080]"),
         "--no-playlist", "--no-warnings",
         "--merge-output-format", "mp4",
         "-o", out_tpl, "--print", "after_move:filepath",
@@ -431,7 +442,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
     proxy = _acquire_proxy()
-    cmd += _yt_network_args(proxy)
+    cmd += _yt_network_args(proxy, hls_fix=hls_fix)
     # After the shared network args: yt-dlp keeps the LAST value of a repeated
     # option, so placed before them these were silently overridden by "2".
     cmd += ["--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3"]
@@ -476,6 +487,15 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         # killed a whole render ("Is this a video file?"). Drop it so the
         # retry goes through another proxy.
         reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
+        if _HLS_REUSE in reason.lower() and not hls_fix:
+            try:
+                os.remove(found)
+            except OSError:
+                pass
+            _release_proxy(proxy, True, None, started)
+            print(f"[media] HLS connection reuse failed ({video_id} @{start_at:.0f}s); "
+                  "fetching again without reuse", flush=True)
+            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True)
         events.emit("source", "empty_download", level="warning", provider="youtube",
                     failure="INVALID_MEDIA", data={"video": video_id, "proxy": _proxy_index(proxy)},
                     message=reason[-160:])

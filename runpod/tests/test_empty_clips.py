@@ -41,6 +41,33 @@ class PlayableVideo(unittest.TestCase):
         self.assertFalse(os.path.exists(stub))
 
 
+class HlsConnectionReuse(unittest.TestCase):
+    def test_an_hls_reuse_failure_is_fetched_again_without_reuse(self):
+        d = tempfile.mkdtemp()
+        stub = os.path.join(d, "yt_abc_1_2_x.mp4"); _stub_mp4(stub)
+        good = os.path.join(d, "yt_abc_1_2_y.mp4"); _stub_mp4(good)
+        calls = []
+
+        def run(cmd, **kw):
+            calls.append(cmd)
+            if len(calls) == 1:
+                return SimpleNamespace(returncode=0, stdout=stub + "\n",
+                                       stderr="Cannot reuse HTTP connection for different host: a != b")
+            return SimpleNamespace(returncode=0, stdout=good + "\n", stderr="")
+
+        from src import ytdlp
+        with mock.patch.object(media.subprocess, "run", side_effect=run), \
+                mock.patch.object(ytdlp, "_acquire_proxy", return_value="http://u:p@h:1"), \
+                mock.patch.object(ytdlp, "_release_proxy") as release, \
+                mock.patch.object(ytdlp, "playable_video", side_effect=lambda p: p == good):
+            self.assertEqual(ytdlp._yt_fetch("abc", d, 1.0, 2.0), good)
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("-http_persistent 0", " ".join(calls[0]))
+        self.assertIn("ffmpeg_i:-loglevel error -http_persistent 0 -http_proxy http://u:p@h:1", calls[1])
+        self.assertTrue(all(c.args[1] for c in release.call_args_list))   # never the proxy's fault
+        self.assertFalse(os.path.exists(stub))
+
+
 class SanitizeVideos(unittest.TestCase):
     def test_stub_scene_is_blanked_then_covered(self):
         d = tempfile.mkdtemp()
