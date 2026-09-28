@@ -706,6 +706,15 @@ def _kie_image_size(size: str) -> str:
     return best
 
 
+# The image account answered "credits insufficient" in this job.
+_IMAGE_NO_CREDIT = {"hit": False}
+
+
+def _ai_on_kie() -> bool:
+    """True when vision or the director uses the Kie account."""
+    return "kie.ai" in (config.VISION_API_BASE or "") + (config.DIRECTOR_API_BASE or "")
+
+
 def _kie_generate(full_prompt: str, timeout: int) -> Optional[str]:
     """Submit one image job to KIE and block until it has a URL.
 
@@ -731,7 +740,12 @@ def _kie_generate(full_prompt: str, timeout: int) -> Optional[str]:
         body = r.json()
         if body.get("code") != 200:
             if vision.is_credit_error(body.get("code"), body.get("msg")):
-                vision.note_out_of_credits()
+                _IMAGE_NO_CREDIT["hit"] = True
+                # The same empty account behind vision/the director stops them
+                # too; an image account alone must not (vision on Google kept
+                # working while Kie was at -3.25).
+                if _ai_on_kie():
+                    vision.note_out_of_credits()
             print(f"[media] kie createTask refused: {body.get('code')} "
                   f"{body.get('msg')}", flush=True)
             return None
@@ -780,7 +794,7 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
     """
     if not config.IMAGE_API_KEY:
         return None
-    if "kie.ai" in config.IMAGE_API_BASE and vision.out_of_credits():
+    if "kie.ai" in config.IMAGE_API_BASE and (_IMAGE_NO_CREDIT["hit"] or (_ai_on_kie() and vision.out_of_credits())):
         return None
     os.makedirs(out_dir, exist_ok=True)
     full_prompt = f"{prompt}. {config.IMAGE_STYLE_SUFFIX}"[:3800]
@@ -2130,6 +2144,7 @@ def reset_cache():
         _USED_CHANNELS.clear()
         _GENERATED[0] = 0
     _BRIGHTDATA_REFUSED["why"] = ""     # a topped-up account works again on the next job
+    _IMAGE_NO_CREDIT["hit"] = False
     _ytdlp.reset()
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
