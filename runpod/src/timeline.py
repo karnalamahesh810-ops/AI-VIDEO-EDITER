@@ -15,6 +15,7 @@ headless Chrome with a stack trace.
 import math
 import os
 import subprocess
+import zlib
 from typing import Any, Dict, List, Optional
 
 from . import config, templates
@@ -56,16 +57,36 @@ _EFFECT_CYCLE = ["color-shift", "ken-burns", "light-leaks", "color-shift",
 _MIN_TRANSITION_GAP = 3
 
 
-# The music that ships with the renderer (remotion/public/bgm/<genre>.mp3),
-# chosen by the story's kind when the job names no track. "bgm://<genre>" is
-# resolved by the renderer to its bundled file.
-BGM_GENRES = ("investigative", "suspense", "crime")
+# The music that ships with the renderer (remotion/public/bgm/<track>.mp3),
+# chosen by the story's kind when the job names no track. "bgm://<track>" is
+# resolved by the renderer to its bundled file and loops under the narration.
+# The owner's full-length tracks (added 2026-09-28) come first; the original
+# 12-minute beds (<genre>.mp3) stay for projects that already name them.
+BGM_TRACKS = {
+    "investigative": (("investigative-v5", 1800), ("investigative-20m", 1199), ("investigative", 720)),
+    "suspense": (("suspense-v2", 1800), ("suspense", 720)),
+    "crime": (("crime-v1", 1800), ("crime", 720)),
+}
+BGM_GENRES = tuple(BGM_TRACKS)
 _BGM_BY_KIND = {"news": "suspense", "weather": "suspense", "disaster": "suspense",
                 "history": "investigative", "biography": "investigative", "science": "investigative",
                 "explainer": "investigative", "nature": "investigative", "other": "investigative"}
 
 
-def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict]) -> Optional[dict]:
+def _bgm_track(genre: str, seconds: float, seed: str) -> str:
+    """
+    A track of the genre long enough to play under the whole narration without
+    looping (else the longest ones, which loop), varied between projects by a
+    stable seed. The old 12-minute beds are only used when a job names them.
+    """
+    tracks = BGM_TRACKS[genre]
+    fresh = [name for name, length in tracks[:-1]] or [tracks[0][0]]
+    long_enough = [name for name, length in tracks[:-1] if length >= seconds] or fresh
+    return long_enough[zlib.crc32(seed.encode("utf-8")) % len(long_enough)]
+
+
+def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict],
+             seconds: float = 0.0) -> Optional[dict]:
     if inp.get("bgm_url"):
         return {"url": str(inp["bgm_url"]), "volume": float(inp.get("bgm_volume", 0.12))}
     if not inp.get("bgm", config.BGM_AUTO) or not pack:
@@ -73,7 +94,12 @@ def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict]) -
     genre = str(inp.get("bgm_genre") or _BGM_BY_KIND.get((brief or {}).get("kind") or "", "investigative"))
     if genre not in BGM_GENRES:
         genre = "investigative"
-    return {"url": f"bgm://{genre}", "volume": float(inp.get("bgm_volume", 0.12)), "genre": genre}
+    names = {name for tracks in BGM_TRACKS.values() for name, _ in tracks}
+    track = str(inp.get("bgm_track") or "")
+    if track not in names:
+        track = _bgm_track(genre, seconds, str(inp.get("project_id") or inp.get("title") or ""))
+    return {"url": f"bgm://{track}", "volume": float(inp.get("bgm_volume", 0.12)), "genre": genre,
+            "track": track}
 
 
 def _pack_transitions(entrances: List[str], pack: dict) -> List[str]:
@@ -466,7 +492,7 @@ def build(segments: List[Segment], shots: List[dict],
         "height": height,
         "durationInFrames": total,
         "audio": {"url": audio_url, "volume": float(inp.get("audio_volume", 1.0))},
-        "bgm": _bgm_for(inp, pack, brief),
+        "bgm": _bgm_for(inp, pack, brief, audio_duration),
         "captions": {
             "enabled": keep_captions,
             "position": brand.get("captionPosition", "bottom"),

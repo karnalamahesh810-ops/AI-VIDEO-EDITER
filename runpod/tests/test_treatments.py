@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest import mock
 
@@ -151,12 +152,34 @@ class TimelineIntegration(unittest.TestCase):
         # Music: a bundled track by the story's kind when the job names none.
         with mock.patch.object(config, "TREATMENTS", True), mock.patch.object(config, "BGM_AUTO", True):
             doc = build_doc(n=3, seconds=6.0, inp={"style_pack": "weather", "brief": {"kind": "weather"}})
-            self.assertEqual(doc["bgm"]["url"], "bgm://suspense")
+            self.assertEqual(doc["bgm"]["url"], "bgm://suspense-v2")
+            self.assertEqual(doc["bgm"]["genre"], "suspense")
             doc = build_doc(n=3, seconds=6.0, inp={"style_pack": "history", "brief": {"kind": "history"},
                                                   "bgm_url": "https://x/track.mp3"})
             self.assertEqual(doc["bgm"]["url"], "https://x/track.mp3")
             doc = build_doc(n=3, seconds=6.0, inp={"style_pack": "history", "bgm": False})
             self.assertIsNone(doc["bgm"])
+
+    def test_music_tracks_cover_the_narration_and_vary_between_projects(self):
+        from src import timeline
+        on = {"bgm": True}
+        # A 22-minute narration gets the 30-minute investigative track, never the 20-minute one.
+        got = timeline._bgm_for({**on, "project_id": "a"}, {"id": "x"}, {"kind": "history"}, 1320.0)
+        self.assertEqual(got["url"], "bgm://investigative-v5")
+        # Short videos spread over the owner's tracks by project.
+        picks = {timeline._bgm_for({**on, "project_id": str(i)}, {"id": "x"}, {"kind": "history"}, 180.0)["track"]
+                 for i in range(40)}
+        self.assertEqual(picks, {"investigative-v5", "investigative-20m"})
+        # A named track wins, including the old 12-minute beds existing projects use.
+        got = timeline._bgm_for({**on, "bgm_track": "crime"}, {"id": "x"}, {"kind": "history"}, 60.0)
+        self.assertEqual(got["url"], "bgm://crime")
+        got = timeline._bgm_for({**on, "bgm_genre": "crime"}, {"id": "x"}, {}, 60.0)
+        self.assertEqual(got["url"], "bgm://crime-v1")
+        # Every track the planner can name ships with the renderer.
+        root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "remotion", "public", "bgm")
+        for tracks in timeline.BGM_TRACKS.values():
+            for name, _ in tracks:
+                self.assertTrue(os.path.isfile(os.path.join(root, name + ".mp3")), name)
 
 
 if __name__ == "__main__":

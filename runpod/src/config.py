@@ -196,6 +196,17 @@ VISION_FRAMES = int(os.getenv("VISION_FRAMES", "3"))
 # fallback model is tried, and the pause before each.
 VISION_RETRIES = int(os.getenv("VISION_RETRIES", "1"))
 VISION_RETRY_WAIT = float(os.getenv("VISION_RETRY_WAIT", "2"))
+# One request's timeout. gpt-5-2 answers a clip check in ~14 s at "low"; the
+# old 90 s wait, retried and then repeated on the fallback, let one verdict
+# hold a scene for ~6 minutes when Kie's channels stalled (job 16c80a8b:
+# 112 failed vision calls, most of them timeouts).
+VISION_TIMEOUT = float(os.getenv("VISION_TIMEOUT", "60"))
+# No answer after this many seconds: the next model is asked in parallel and
+# the first answer wins (a whole contact sheet gets 1.6x). 0 = one at a time.
+VISION_HEDGE_SECONDS = float(os.getenv("VISION_HEDGE_SECONDS", "25"))
+# A call gives up after this long in total; the candidate is then handled
+# like any unjudged one. Late answers are dropped.
+VISION_CALL_BUDGET_SECONDS = float(os.getenv("VISION_CALL_BUDGET_SECONDS", "100"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
@@ -308,8 +319,10 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY", "")
 BRIGHTDATA_SERP_ZONE = os.getenv("BRIGHTDATA_SERP_ZONE", "serp_api1")
 
-# Story-planning batches (director._ai_pass) run this many at a time.
-PLAN_PARALLEL = int(os.getenv("PLAN_PARALLEL", "4"))
+# Story-planning batches (director._ai_pass) run this many at a time. At 4 the
+# owner's 111-line job planned in two waves (401 s before the first search);
+# at 8 its seven 16-line batches go in one.
+PLAN_PARALLEL = int(os.getenv("PLAN_PARALLEL", "8"))
 
 # --- subject pools (src/pools.py) -----------------------------------------------
 # GoMotion's method: a few long videos per subject, judged once from their

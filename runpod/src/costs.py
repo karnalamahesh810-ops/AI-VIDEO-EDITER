@@ -32,6 +32,7 @@ DEFAULT_PRICES: Dict[str, float] = {
     "vision.judge": 0.5,                 # credits: one 3-frame verdict
     "vision.rate_tiles": 0.6,            # credits: one 20-tile sheet, every tile rated
     "vision.pick_tile": 0.4,             # credits: one 20-tile sheet, one pick
+    "vision.hedge": 0.5,                 # credits: a backup request sent while the first model was slow
     "llm.director_call": 1.0,            # credits: one planning batch
     "llm.brief_call": 1.0,               # credits: the story brief
     "image.generate": 4.0,               # credits: one generated image
@@ -41,9 +42,10 @@ DEFAULT_PRICES: Dict[str, float] = {
     "storage.gb": 0.021,                 # USD per GB-month kept
     "tts.char": 0.0,                     # the app pays for TTS; kept for the total
 }
-_CREDIT_KEYS = ("vision.judge", "vision.rate_tiles", "vision.pick_tile", "llm.director_call",
+_CREDIT_KEYS = ("vision.judge", "vision.rate_tiles", "vision.pick_tile", "vision.hedge", "llm.director_call",
                 "llm.brief_call", "image.generate")
 _CATEGORY = {"vision.judge": "vision", "vision.rate_tiles": "vision", "vision.pick_tile": "vision",
+             "vision.hedge": "vision",
              "llm.director_call": "llm", "llm.brief_call": "llm", "image.generate": "image",
              "runpod.worker_second": "runpod", "proxy.bytes": "proxy", "serp.call": "serp",
              "storage.bytes": "storage", "tts.char": "tts"}

@@ -27,6 +27,7 @@ import subprocess
 import threading
 import time
 from collections import deque
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Dict, List, Optional, Tuple
 
 import requests
@@ -210,7 +211,7 @@ def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
                   **({"reasoning_effort": config.VISION_REASONING_EFFORT}
                      if config.VISION_REASONING_EFFORT and model.startswith("gpt-")
                      else {})},
-            timeout=90)
+            timeout=config.VISION_TIMEOUT)
     except requests.RequestException as e:
         _fail(model, f"request failed: {type(e).__name__}")
         return None, True
@@ -272,40 +273,104 @@ def model_result(model: str, ok: bool) -> None:
                   flush=True)
 
 
-def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
-    """
-    First model that answers: (text, model). (None, "") when none did.
-
-    A transient failure (timeout, HTTP/Kie 5xx, 429) is retried once on the
-    same model before moving on. Kie's gpt-5-2 answers "code 500: Server
-    exception, please try again later" in bursts - 116 of 609 calls on one
-    real job - and moving straight on meant a burst on the fallback too left
-    clips on the timeline that no model had ever looked at.
-    """
+def _routes() -> list:
     routes = [(m, "", "", True) for m in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS)
               if m and config.VISION_API_KEY]
     if fallback_configured():
         routes.append((config.AI_FALLBACK_VISION_MODEL,
                        f"{config.AI_FALLBACK_API_BASE}/chat/completions",
                        config.AI_FALLBACK_API_KEY, False))
-    for model, url, key, main in routes:
-        if main and _OUT_OF_CREDITS["hit"]:
-            continue
-        if not model_available(model):
-            continue
-        for attempt in range(1 + config.VISION_RETRIES):
-            if attempt:
-                time.sleep(config.VISION_RETRY_WAIT)
-            text, retryable = _ask_once(model, messages, max_tokens, url, key, main)
-            if text:
-                model_result(model, True)
-                return text, model
-            if retryable:
-                model_result(model, False)
-                if not model_available(model):
-                    break
-            else:
+    return routes
+
+
+def _route_call(route: tuple, messages: list, max_tokens: int, deadline: float) -> Optional[str]:
+    """One model, retried once on a transient failure while the call's budget lasts."""
+    model, url, key, main = route
+    for attempt in range(1 + config.VISION_RETRIES):
+        if attempt:
+            if time.time() + config.VISION_RETRY_WAIT >= deadline:
                 break
+            time.sleep(config.VISION_RETRY_WAIT)
+        if main and _OUT_OF_CREDITS["hit"]:
+            break
+        text, retryable = _ask_once(model, messages, max_tokens, url, key, main)
+        if text:
+            model_result(model, True)
+            return text
+        if retryable:
+            model_result(model, False)
+            if not model_available(model):
+                break
+        else:
+            break
+    return None
+
+
+# Hedged requests run here; abandoned ones finish in the background.
+_HEDGE_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix="vision")
+
+
+def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
+    """
+    First model that answers: (text, model). (None, "") when none did.
+
+    A transient failure (timeout, HTTP/Kie 5xx, 429) is retried once on the
+    same model. Kie's gpt-5-2 answers "code 500: Server exception, please try
+    again later" in bursts - 116 of 609 calls on one real job - and moving
+    straight on meant a burst on the fallback too left clips on the timeline
+    that no model had ever looked at.
+
+    Hedged: when the first model has not answered after VISION_HEDGE_SECONDS,
+    the next one is asked in parallel and the first answer wins; a model that
+    fails hands over at once; the call ends after VISION_CALL_BUDGET_SECONDS.
+    On the 111-line job 16c80a8b a stalled channel cost the full 90 s timeout
+    twice per model before the next was tried, and the worker sat idle.
+    """
+    queue = [r for r in _routes()
+             if not (r[3] and _OUT_OF_CREDITS["hit"]) and model_available(r[0])]
+    if not queue:
+        return None, ""
+    started = time.time()
+    deadline = started + max(1.0, config.VISION_CALL_BUDGET_SECONDS)
+    hedge = config.VISION_HEDGE_SECONDS * (1.6 if max_tokens > 600 else 1.0)
+    if hedge <= 0:
+        for route in queue:
+            if time.time() >= deadline:
+                break
+            text = _route_call(route, messages, max_tokens, deadline)
+            if text:
+                return text, route[0]
+        return None, ""
+    running: Dict = {}
+    nxt = 0
+
+    def launch(backup: bool) -> None:
+        nonlocal nxt
+        route = queue[nxt]
+        nxt += 1
+        if backup:
+            costs.record("vision.hedge")
+        running[_HEDGE_POOL.submit(_route_call, route, messages, max_tokens, deadline)] = route
+
+    launch(False)
+    while running:
+        left = deadline - time.time()
+        if left <= 0:
+            break
+        # Wait for an answer, but no longer than the next hedge point.
+        until_hedge = (started + hedge * nxt) - time.time() if nxt < len(queue) else left
+        done, _ = wait(list(running), timeout=max(0.05, min(left, until_hedge)),
+                       return_when=FIRST_COMPLETED)
+        for fut in done:
+            route = running.pop(fut)
+            try:
+                text = fut.result()
+            except Exception:  # noqa: BLE001 - a crashed route is a failed one
+                text = None
+            if text:
+                return text, route[0]
+        if nxt < len(queue) and (not running or time.time() >= started + hedge * nxt):
+            launch(bool(running))
     return None, ""
 
 
