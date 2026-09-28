@@ -548,6 +548,45 @@ def _number(value, name: str) -> float:
     return float(value)
 
 
+# Photo looks the renderer fills from the story's own pictures when they carry
+# none (Main.tsx renderOverlay): the collage from the following scenes' stills,
+# the case-file looks from the still of the scene under them.
+_BORROWING_VARIANTS = {"collage", "board", "clipping", "doc", "facts", "dossier", "window", "audio", "evidence"}
+
+
+def _borrows_pictures(ov: dict) -> bool:
+    if (ov.get("variant") or "") in _BORROWING_VARIANTS:
+        return True
+    t = templates.get(ov.get("template") or "") or {}
+    tags = t.get("tags") or []
+    return "still" in tags or "stills" in tags
+
+
+def drop_invalid_overlays(doc: dict) -> int:
+    """
+    Remove overlays that would fail validation, with a warning each, so one
+    malformed graphic never fails a video that already spent its sourcing.
+    """
+    overlays = doc.get("overlays")
+    if not isinstance(overlays, list):
+        return 0
+    total = int(doc.get("durationInFrames") or 0)
+    kept, dropped = [], []
+    for i, ov in enumerate(overlays):
+        try:
+            _validate_overlay(ov, i, total)
+            kept.append(ov)
+        except ValueError as e:
+            dropped.append(str(e))
+    if dropped:
+        doc["overlays"] = kept
+        meta = doc.setdefault("meta", {})
+        meta.setdefault("warnings", []).append(
+            f"{len(dropped)} graphic(s) left out: {'; '.join(dropped[:3])}")
+        print(f"[timeline] dropped {len(dropped)} overlay(s): {dropped[:3]}", flush=True)
+    return len(dropped)
+
+
 def _validate_overlay(ov: Any, index: int, total: int) -> None:
     where = f"Overlay {index + 1}"
     if not isinstance(ov, dict):
@@ -574,6 +613,8 @@ def _validate_overlay(ov: Any, index: int, total: int) -> None:
         media = ov.get("media")
         minimum = 2 if kind == "split" else 1
         if not isinstance(media, list) or len(media) < minimum:
+            if kind != "split" and _borrows_pictures(ov):
+                return          # the renderer fills it from the scenes' own pictures
             raise ValueError(f"{where}: a split screen needs two media assets"
                              if kind == "split" else
                              f"{where}: {kind} needs a real image asset")

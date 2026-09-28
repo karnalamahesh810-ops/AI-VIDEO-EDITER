@@ -1073,8 +1073,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         for sec in (doc["meta"]["story"].get("sections") or [])]
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
-    # still be missing at plan time — that is what the editor is for.
-    timeline.validate(doc, require_media=False)
+    # still be missing at plan time — that is what the editor is for. One bad
+    # graphic is dropped, never the video (a 30-minute job failed on one).
+    timeline.drop_invalid_overlays(doc)
+    timeline.validate(doc, require_media=False, allow_stock=inp.get("allow_stock"))
     return doc
 
 
@@ -1296,7 +1298,8 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         1 for s in scenes if (s.get("media") or {}).get("type") == "color")
     meta["scenesNeedingReview"] = sum(1 for s in scenes if s.get("reviewRequired"))
     # Only this scene changed, so validate without demanding the rest be filled.
-    timeline.validate(doc, require_media=False)
+    timeline.drop_invalid_overlays(doc)
+    timeline.validate(doc, require_media=False, allow_stock=inp.get("allow_stock"))
     return doc, candidates
 
 
@@ -1558,7 +1561,8 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
               split: bool = False) -> dict:
     # The document may have come back from a browser, so validate before
     # spending GPU minutes on it.
-    timeline.validate(doc, require_media=True)
+    timeline.drop_invalid_overlays(doc)
+    timeline.validate(doc, require_media=True, allow_stock=inp.get("allow_stock"))
 
     # A plan can sit in the editor for days; any signed URL in it has long
     # since expired. Re-resolve the narration from the reference the plan
