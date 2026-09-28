@@ -193,8 +193,21 @@ class MediaAsset:
 _SERP_SLOTS = threading.BoundedSemaphore(max(1, int(os.getenv("SERP_CONCURRENCY", "3"))))
 
 
+# Set when Bright Data refuses the account (no credit, key revoked): every later
+# search skips it - images go straight to DuckDuckGo - instead of paying a
+# failed request (and its retries) per search.
+_BRIGHTDATA_REFUSED = {"why": ""}
+_REFUSAL_WORDS = ("balance", "credit", "payment", "insufficient", "suspended", "billing")
+
+
+def brightdata_available() -> bool:
+    return bool(config.BRIGHTDATA_API_KEY and config.BRIGHTDATA_SERP_ZONE and not _BRIGHTDATA_REFUSED["why"])
+
+
 def _brightdata_serp(google_url: str, timeout: int = 150) -> dict:
     """The parsed JSON Bright Data returns for one Google results URL (raises on failure)."""
+    if _BRIGHTDATA_REFUSED["why"]:
+        raise ValueError(f"Bright Data off for this worker: {_BRIGHTDATA_REFUSED['why']}")
     last = ""
     for attempt in range(3):
         if attempt:
@@ -207,6 +220,13 @@ def _brightdata_serp(google_url: str, timeout: int = 150) -> dict:
                          "Content-Type": "application/json"},
                 json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw", "url": google_url},
                 timeout=timeout)
+        refusal = r.status_code in (401, 402, 403) or (
+            r.status_code >= 400 and any(w in (r.text or "").lower()[:400] for w in _REFUSAL_WORDS))
+        if refusal:
+            _BRIGHTDATA_REFUSED["why"] = f"HTTP {r.status_code}"
+            print(f"[media] Bright Data refused the account (HTTP {r.status_code}); "
+                  "image search falls back to DuckDuckGo for the rest of this worker", flush=True)
+            raise ValueError(f"Bright Data SERP refused: HTTP {r.status_code}")
         if r.status_code == 429 or r.status_code >= 500:
             last = f"HTTP {r.status_code}"
             continue
@@ -236,7 +256,7 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
     if not config.ALLOW_WEB_IMAGES or not query.strip():
         return []
     rows = []
-    if config.BRIGHTDATA_API_KEY and config.BRIGHTDATA_SERP_ZONE:
+    if brightdata_available():
         # Google Images through Bright Data's SERP API: 100 results per call
         # with the full-size original (press photos: NOAA, TIME, NASA...).
         # Billed per successful search, not per image.
@@ -1056,7 +1076,7 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
     footage" it returned 8 YouTube videos the flat search had not, plus
     TikTok/Facebook clips. One paid call per distinct query, cached per job.
     """
-    if not (config.BRIGHTDATA_API_KEY and config.BRIGHTDATA_SERP_ZONE and query.strip()):
+    if not (brightdata_available() and query.strip()):
         return []
     key = query.strip().lower()
     with _CACHE_LOCK:
@@ -2101,6 +2121,7 @@ def reset_cache():
         _SOURCE_STATS.clear()
         _USED_CHANNELS.clear()
         _GENERATED[0] = 0
+    _BRIGHTDATA_REFUSED["why"] = ""     # a topped-up account works again on the next job
     _ytdlp.reset()
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
