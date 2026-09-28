@@ -637,6 +637,15 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
     intro_done = False
     last_window = -1e9
     prev_archival = False
+    # A persisting look (LibPersist, "ps-") is one object riding across cuts:
+    # no second one is scheduled while it is live.
+    persist_until = -1e9
+    # (overlay index, treatment index, layout class) of the overlays that may
+    # be held across the short cuts that follow them (_persist_figures).
+    persisting: List[tuple] = []
+    # Frame spans the clip is covered by (full-screen graphics): a persisting
+    # figure never runs under one.
+    covered: List[tuple] = []
 
     for i, seg in enumerate(segments):
         shot = shots[i] if i < len(shots) else {}
@@ -703,6 +712,8 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
                 t = templates.get(tid or "")
                 if not t or not rhythm.allows(at, t):
                     continue
+                if at < persist_until and layout_class(t, cue["cue"]) == "persist":
+                    continue
                 chosen, chosen_id, props, emphasis = t, t["id"], dict(cue["props"]), cue["emphasis"]
                 chosen_cue = cue["cue"]
                 if key:
@@ -768,6 +779,12 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
             overlay.pop("seconds", None)
             apply_layout(overlay, chosen, klass)
             overlays.append(overlay)
+            if klass in _PERSIST_CLASSES:
+                persisting.append((len(overlays) - 1, len(treatments), klass))
+            if klass == "persist":
+                persist_until = max(persist_until, (o_start + frames) / fps)
+            if klass in _FULLSCREEN_CLASSES:
+                covered.append((o_start, o_start + frames))
             rhythm.note(at, chosen, frames / fps)
             used_recently[chosen_id] = at
             use_count[chosen_id] = use_count.get(chosen_id, 0) + 1
@@ -796,6 +813,7 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
             scene["frame"] = "window"
             last_window = at
 
+    _persist_figures(overlays, treatments, persisting, covered, scenes, fps, total)
     sfx = _plan_sfx(overlays, treatments, fps, float(pack.get("sfxIntensity", 1.0)))
     music = _plan_music(segments, brief, fps, total, hooks)
     for i, entry in enumerate(treatments):
@@ -803,6 +821,57 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
         entry["musicCue"] = cue
     return {"overlays": overlays, "treatments": treatments, "sfx": sfx, "music": music,
             "counts": counts(scenes, overlays, sfx, music, treatments)}
+
+
+def _persist_figures(overlays: List[dict], treatments: List[dict], persisting: List[tuple], covered: List[tuple],
+                     scenes: List[dict], fps: int, total: int) -> None:
+    """
+    GoMotion's persistent figure: a compact ring or number on the clip stays
+    up across the short cuts that follow it ("22% OF CAPACITY REMAINING" rode
+    three consecutive shots) instead of leaving with its own sentence.
+
+    After its voice-synced window is set, a figure-class overlay is extended
+    to the end of each following scene while (a) that scene is shorter than
+    PERSIST_SCENE_MAX, (b) the whole run stays within PERSIST_MAX_SECONDS of
+    the overlay's start, (c) no other overlay starts inside the extended span,
+    (d) the scene is not an animation scene and no full-screen graphic covers
+    it. Off with PERSIST_FIGURES=0 (the overlays are left as planned).
+    """
+    if not config.PERSIST_FIGURES or not persisting or not scenes:
+        return
+    scene_max = float(config.PERSIST_SCENE_MAX) * fps
+    run_max = float(config.PERSIST_MAX_SECONDS) * fps
+    starts = sorted((ov["startFrame"], j) for j, ov in enumerate(overlays))
+    for idx, tr_idx, _klass in persisting:
+        ov = overlays[idx]
+        o_start = int(ov["startFrame"])
+        o_end = o_start + int(ov["durationInFrames"])
+        home = next((s for s, sc in enumerate(scenes)
+                     if sc.get("startFrame", 0) <= o_start < sc.get("startFrame", 0) + sc.get("durationInFrames", 0)), None)
+        if home is None:
+            continue
+        new_end = o_end
+        for sc in scenes[home + 1:]:
+            sc_start = int(sc.get("startFrame", 0))
+            sc_end = sc_start + int(sc.get("durationInFrames", 0))
+            if sc_end <= new_end:
+                continue
+            if sc_end - sc_start >= scene_max:                       # (a) a long shot: the figure leaves
+                break
+            if sc_end - o_start > run_max + 1e-6:                    # (b) the run is long enough
+                break
+            if (sc.get("media") or {}).get("type") == "animation":   # (d) the beat IS a graphic
+                break
+            if any(a < sc_end and b > sc_start for a, b in covered):  # (d) a full-screen graphic covers it
+                break
+            if any(o_start < s < sc_end for s, j in starts if j != idx):  # (c) another graphic starts in the span
+                break
+            new_end = sc_end
+        new_end = min(new_end, total)
+        if new_end > o_end:
+            ov["durationInFrames"] = new_end - o_start
+            if 0 <= tr_idx < len(treatments):
+                treatments[tr_idx]["duration"] = round((new_end - o_start) / fps, 2)
 
 
 def _plan_sfx(overlays: List[dict], treatments: List[dict], fps: int, intensity: float) -> List[dict]:
@@ -887,15 +956,30 @@ FULL_DATA_CUES = {"series", "shares", "compare-values", "ranking", "then-now", "
                   "span", "steps"}
 TEXT_CUES = {"headline", "question", "quote", "warning", "date", "list", "summary", "age", "time-of-day", "chapter"}
 LAYOUT_WINDOWS = {"figure": (2.5, 4.0), "full": (3.2, 5.0), "map": (4.0, 5.5), "cutaway": (3.0, 4.5),
-                  "text": (1.8, 4.0)}
+                  "text": (1.8, 4.0),
+                  # The LibPersist family ("ps-"): built to ride on footage across cuts, so it
+                  # keeps its own registry hold (6-12 s) instead of the figure window's 4 s.
+                  "persist": (6.0, 12.0)}
 COMPACT_SCALE = 0.55
 _CORNERS = ["bottom-left", "bottom-right"]
 _corner_turn = [0]
+# Layout classes that cover the clip (a persisting figure never runs under them).
+_FULLSCREEN_CLASSES = {"full", "cutaway", "map"}
+# Layout classes whose overlay may persist across the short cuts that follow it.
+_PERSIST_CLASSES = {"figure", "persist"}
+
+
+def is_persist_look(template: dict) -> bool:
+    """A LibPersist look ("ps-..."): registered as LIB_PS_* with the look id as its variant."""
+    variant = str((template.get("defaults") or {}).get("variant") or "")
+    return variant.startswith("ps-") or str(template.get("id") or "").startswith("LIB_PS_")
 
 
 def layout_class(template: dict, cue: str = "") -> str:
-    """figure | full | map | cutaway | text: how a chosen template sits on its clip."""
+    """figure | full | map | cutaway | text | persist: how a chosen template sits on its clip."""
     tags = template.get("tags") or []
+    if is_persist_look(template):
+        return "persist"
     if template.get("kind") == "map" or template.get("component") == "map":
         return "map"
     if "own-backdrop" in tags:
@@ -914,7 +998,8 @@ def layout_class(template: dict, cue: str = "") -> str:
 
 def apply_layout(overlay: dict, template: dict, klass: str) -> None:
     """Mark a planned overlay compact (one figure on the clip) or full screen (several values)."""
-    if template.get("kind") == "tag":
+    if template.get("kind") == "tag" or klass == "persist":
+        # A persisting look places and sizes itself: no scrim, no compact scaling.
         return
     if klass == "figure":
         overlay["compact"] = True

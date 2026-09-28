@@ -127,6 +127,10 @@ class Reporter:
     """Mirrors progress to RunPod's job status AND to the video_projects row."""
 
     HEARTBEAT = 20  # seconds between status refreshes while a phase runs
+    # Every this many heartbeats the event log goes to the project (live diagnosis).
+    FLUSH_EVERY = 3
+    # A RunPod serverless job has a status to report to; a pod does not.
+    SERVERLESS = bool(os.environ.get("RUNPOD_WEBHOOK_GET_JOB"))
 
     def __init__(self, project_id: str = "", job: dict = None):
         self.project_id = project_id or ""
@@ -150,6 +154,8 @@ class Reporter:
         update["elapsed"] = round(time.time() - self._started)
         update["recent"] = LOG_TAIL.tail()
         self._pushed_count = LOG_TAIL.count
+        if not self.SERVERLESS:
+            return
         try:
             runpod.serverless.progress_update(self.job, update)
         except Exception as e:  # noqa: BLE001 — progress must never kill a job
@@ -162,9 +168,27 @@ class Reporter:
     def _heartbeat(self):
         # A long phase ("Finding footage by subject") prints plenty but reports
         # nothing; every HEARTBEAT seconds the status gets the fresh log tail.
+        beats = 0
         while not self._stop.wait(self.HEARTBEAT):
+            beats += 1
             if self._update and LOG_TAIL.count != self._pushed_count:
                 self._push()
+                if not self.SERVERLESS and self.project_id:
+                    # A pod has no RunPod status: the project row carries the tail.
+                    storage.patch_project(self.project_id, {"job_progress": self._compact()})
+            if beats % self.FLUSH_EVERY == 0:
+                try:
+                    events.flush(storage.broker_events)
+                except Exception:  # noqa: BLE001 - diagnosis must never cost the job
+                    pass
+
+    def _compact(self, update: dict = None) -> dict:
+        """job_progress for the project row: the update plus the last 8 log lines, short."""
+        src = update if update is not None else (self._update or {})
+        out = {k: v for k, v in src.items() if k != "recent"}
+        out["recent"] = [str(l)[:160] for l in LOG_TAIL.tail()[-8:]]
+        out["elapsed"] = round(time.time() - self._started)
+        return out
 
     def finish(self):
         self._stop.set()
@@ -202,7 +226,7 @@ class Reporter:
             payload["progress"] = progress
         # The app's agent screen reads job_progress (serverless: from RunPod's
         # status; a pod has none, so the worker writes it).
-        payload["job_progress"] = {k: v for k, v in update.items() if k != "recent"}
+        payload["job_progress"] = self._compact(update)
         storage.patch_project(self.project_id, payload)
 
 

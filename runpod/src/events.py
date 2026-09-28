@@ -17,6 +17,8 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 _LOCK = threading.Lock()
+# One flush at a time: the heartbeat and the job's end must not send a batch twice.
+_FLUSH_LOCK = threading.Lock()
 _CTX: Dict[str, str] = {"project": "", "job": "", "part": ""}
 _EVENTS: List[dict] = []
 _PHASE: Dict[str, Any] = {"name": "", "since": 0.0}
@@ -150,21 +152,22 @@ def flush(sink) -> int:
     Send the events not yet sent through `sink(project_id, job_id, events)`.
     A sink that fails is not retried in this job (one line says so).
     """
-    if _SINK_DOWN[0]:
-        return 0
-    batch = pending()
-    if not batch or not _CTX["project"]:
-        return 0
-    try:
-        sink(_CTX["project"], _CTX["job"], batch)
-    except Exception as e:  # noqa: BLE001 - events must never fail a job
-        _SINK_DOWN[0] = True
-        print(f"[event] sink unavailable ({type(e).__name__}: {str(e)[:100]}); "
-              f"events stay in the job result only", flush=True)
-        return 0
-    with _LOCK:
-        _FLUSHED[0] = len(_EVENTS)
-    return len(batch)
+    with _FLUSH_LOCK:
+        if _SINK_DOWN[0]:
+            return 0
+        batch = pending()
+        if not batch or not _CTX["project"]:
+            return 0
+        try:
+            sink(_CTX["project"], _CTX["job"], batch)
+        except Exception as e:  # noqa: BLE001 - events must never fail a job
+            _SINK_DOWN[0] = True
+            print(f"[event] sink unavailable ({type(e).__name__}: {str(e)[:100]}); "
+                  f"events stay in the job result only", flush=True)
+            return 0
+        with _LOCK:
+            _FLUSHED[0] += len(batch)
+        return len(batch)
 
 
 def to_json_lines() -> str:

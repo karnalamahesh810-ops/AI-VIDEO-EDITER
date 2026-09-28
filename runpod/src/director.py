@@ -700,6 +700,13 @@ def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
         subject = names[0] if names else (carry if _PRONOUN.search(text) or not main else main)
         words = list(dict.fromkeys(names[:2] + ([subject] if subject and subject not in names else [])))
         words += years[:1]
+        # An event story's rule query names its medium: the interview with
+        # the person a line names, the news report of the place it names.
+        if config.NEWS_FOOTAGE and brief.get("kind") in EVENT_KINDS:
+            if people:
+                words.append("interview")
+            elif names and not years:
+                words.append("news")
         if len(" ".join(words).split()) < 3:
             have = " ".join(words).lower()
             extra = [w for w in keywords_for(seg, max_terms=6).split()
@@ -1144,6 +1151,115 @@ def anchor_to_story(shots: List[dict], segments: List[Segment], brief: dict) -> 
     return changed
 
 
+# --------------------------------------------------------------------------- #
+# News reports and interviews - what GoMotion showed for 22 minutes
+# --------------------------------------------------------------------------- #
+#
+# Neither sourcing path ever searched "<person> interview <topic>" or
+# "<place> news <year>"; GoMotion's 215 shots were mostly exactly those
+# (KUTV/ABC15/8NewsNow reports of the event, Udall/Polis/Hobbs interviews and
+# press conferences, drone of the exact places). An explainer about a dated
+# event (the owner's Glen Canyon narration) is sourced like news.
+
+_NEWS_QUERY_KINDS = EVENT_KINDS | {"explainer"}
+_PLACE_ENTITIES = {"natural-feature", "landmark", "city-region", "building"}
+_MEDIUM_WORDS = re.compile(r"\b(interview|press conference|news|speech|footage)\b", re.I)
+
+
+def _event_topic(brief: dict) -> str:
+    """The story's event without its year: '2026 Colorado River water cuts' -> 'Colorado River water cuts'."""
+    return " ".join(w for w in (brief.get("event") or "").split() if not _YEAR.fullmatch(w)).strip()
+
+
+def _person_beat(shot: dict, brief: dict) -> bool:
+    """
+    A beat whose footage is a named person speaking.
+
+    The model's person tag and public-figure entity are trusted; a RULE shot's
+    person tag is not on its own - it fires on any Name-Name title ("Midwest
+    Floods"), so for rule shots the subject must be one of the story's people.
+    """
+    if shot.get("entity") == "public-figure":
+        return True
+    if shot.get("subjectType") != "person":
+        return False
+    if not shot.get("rule"):
+        return True
+    from .media import same_subject
+    subject = (shot.get("subject") or "").strip()
+    return bool(subject) and any(same_subject(subject, p) for p in (brief.get("people") or []) if p)
+
+
+def news_queries(shot: dict, text: str, brief: dict) -> List[str]:
+    """
+    Searches that find the news report of the event a line names, and the
+    interview with the person it names. Only for news/weather/disaster
+    stories and an explainer with an event, only with config.NEWS_FOOTAGE;
+    never for a metaphor beat (anchor false), a still, or a beat with no
+    subject. A line that names its own other year (the 2021 shortage a 2026
+    story compares itself to) searches that year, as anchor_to_story does.
+    """
+    kind = brief.get("kind")
+    topic = _event_topic(brief)
+    if not config.NEWS_FOOTAGE:
+        return []
+    if kind not in _NEWS_QUERY_KINDS or (kind == "explainer" and not topic):
+        return []
+    if shot.get("anchor") is False or shot.get("visualType") == "image":
+        return []
+    subject = (shot.get("subject") or "").strip()
+    if not subject:
+        return []
+    year = brief.get("year")
+    own = [int(y) for y in _YEAR.findall(text or "")]
+    when = own[0] if own and own[0] != year else year
+    when = str(when) if when else ""
+    out: List[str] = []
+    if _person_beat(shot, brief):
+        out.append(f"{subject} interview {topic}".strip())
+        out.append(f"{subject} {topic} news {when}".strip())
+        out.append(f"{subject} press conference {when}".strip())
+    else:
+        out.append(f"{subject} news {when}".strip())
+        if topic and topic.lower() not in subject.lower():
+            out.append(f"{subject} {topic} news report")
+        if shot.get("subjectType") == "place" or shot.get("entity") in _PLACE_ENTITIES:
+            out.append(f"{subject} drone {when}".strip())
+    return [q[:240] for q in dict.fromkeys(" ".join(q.split()) for q in out) if q]
+
+
+def prefer_interviews(shots: List[dict], segments: List[Segment], brief: dict) -> int:
+    """
+    In an event story a footage beat about a named person searches for their
+    interview on the story's topic first. shape_query's public-figure suffix
+    ("speech footage") finds campaign speeches; GoMotion shows Udall, Polis
+    and Hobbs speaking ABOUT the cuts, in news interviews and press
+    conferences - and the per-scene path only reaches a fallback when the
+    primary search finds nothing acceptable, which a speech search rarely
+    is. The old query stays as the first fallback. Returns how many changed.
+    """
+    topic = _event_topic(brief)
+    if not config.NEWS_FOOTAGE or brief.get("kind") not in _NEWS_QUERY_KINDS or not topic:
+        return 0
+    changed = 0
+    for shot, seg in zip(shots, segments):
+        if shot.get("visualType") != "footage" or shot.get("anchor") is False:
+            continue
+        if not _person_beat(shot, brief):
+            continue
+        subject = (shot.get("subject") or "").strip()
+        if not subject or not _looks_named(subject):
+            continue
+        old = shot.get("query") or ""
+        new = with_subject(subject, f"{subject} interview {topic}")[:240]
+        if old.lower() == new.lower():
+            continue
+        shot["query"] = new
+        shot["fallbacks"] = ([old] if old else []) + [f for f in (shot.get("fallbacks") or []) if f != old]
+        changed += 1
+    return changed
+
+
 def name_people(segments: List[Segment], shots: List[dict]) -> int:
     """
     A lower-third naming each person the first time they are on screen.
@@ -1377,7 +1493,9 @@ _SYSTEM_PROMPT = (
     "place of the story at that moment (a file, a letter, a courthouse).\n"
     "- query: 3-7 search words containing the subject plus the visual detail "
     "(\"Lake Mead boat ramp dry\"). Prefer footage words (aerial, drone, archival, "
-    "footage, photo). No URLs, no code.\n"
+    "footage, photo). For a news, weather or disaster story a line quoting or "
+    "naming an official or expert: query \"<name> interview <topic>\" - their news "
+    "interview is the shot. No URLs, no code.\n"
     "- visualType: \"footage\" for moving pictures, \"image\" for a still. Vary the "
     "shots like a documentary editor. A real photograph of a PERSON (subject = that "
     "person, visualType \"image\") only where the line is about who they are or how "
@@ -2028,11 +2146,16 @@ def plan(segments: List[Segment], title: str = "", report=None,
     vary_person_stills(shots)
     promote_stills(segments, shots, brief)
     anchor_to_story(shots, segments, brief)
+    prefer_interviews(shots, segments, brief)
     # Every beat carries a typed intent (the model's, or the one its shot and
     # story imply) and the searches it expands to, most specific first, ahead
     # of the broad rule fallbacks. Each is tried only when the ones before
-    # found nothing, and JUDGE_MAX_PER_SCENE bounds what they can spend.
-    for shot in shots:
+    # found nothing, and JUDGE_MAX_PER_SCENE bounds what they can spend. In an
+    # event story the news report of the event and the interview with the
+    # person come right after the event itself, before the expansions - the
+    # order GoMotion's edit shows (news of the exact event first, drone of
+    # the place second).
+    for shot, seg in zip(shots, segments):
         si = (scene_intent.SceneIntent.from_dict(shot["sceneIntent"]) if shot.get("sceneIntent")
               else scene_intent.SceneIntent.from_shot(shot, brief))
         shot["sceneIntent"] = si.to_dict()
@@ -2040,7 +2163,12 @@ def plan(segments: List[Segment], title: str = "", report=None,
         existing = list(shot.get("fallbacks") or [])
         # anchor_to_story put the story's own event first; it stays first.
         head = [f for f in existing[:1] if f and f == (brief.get("event") or "")]
-        shot["fallbacks"] = list(dict.fromkeys(head + expanded + existing))
+        news = news_queries(shot, seg.text, brief)
+        query = (shot.get("query") or "").lower()
+        shot["fallbacks"] = [q for q in dict.fromkeys(head + news + expanded + existing)
+                             if q.lower() != query]
+        if news:
+            shot["newsQueries"] = news
     for i in brief.get("hookBeats") or []:
         shots[i]["hook"] = True
 

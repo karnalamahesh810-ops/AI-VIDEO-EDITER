@@ -10,7 +10,8 @@ class LogTailInStatus(unittest.TestCase):
         pushes = []
         with mock.patch.object(handler.runpod.serverless, "progress_update",
                                side_effect=lambda job, u: pushes.append(u)), \
-                mock.patch.object(handler.Reporter, "HEARTBEAT", 0.05):
+                mock.patch.object(handler.Reporter, "HEARTBEAT", 0.05), \
+                mock.patch.object(handler.Reporter, "SERVERLESS", True):
             rep = handler.Reporter("", job={"id": "j1"})
             rep("Finding footage by subject", 22)
             self.assertEqual(pushes[-1]["status"], "Finding footage by subject")

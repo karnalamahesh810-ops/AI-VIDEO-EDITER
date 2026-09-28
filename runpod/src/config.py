@@ -191,6 +191,9 @@ VISION_SOFT_MIN_SCORE = float(os.getenv("VISION_SOFT_MIN_SCORE", "0.55"))
 # at the default effort, 13.5 s at "low", same verdict (0.97 vs 0.98);
 # "minimal" is refused (code 500). Sent to gpt-* models only. Empty = default.
 VISION_REASONING_EFFORT = os.getenv("VISION_REASONING_EFFORT", "low").strip()
+# Google Gemini (VISION_API_BASE = Google's OpenAI-compatible endpoint): thinking
+# eats max_tokens, so vision calls ask for none (see vision._extra).
+VISION_GEMINI_REASONING = os.getenv("VISION_GEMINI_REASONING", "none").strip()
 VISION_FRAMES = int(os.getenv("VISION_FRAMES", "3"))
 # Retries per model on a transient failure (timeout, 5xx, 429), before the
 # fallback model is tried, and the pause before each.
@@ -535,6 +538,16 @@ RETURN_VIDEO_MAX_MB = float(os.getenv("RETURN_VIDEO_MAX_MB", "18"))
 # uses when the job does not name one ("" = chosen from the story's kind).
 TREATMENTS = _flag("TREATMENTS", True)
 STYLE_PACK = os.getenv("STYLE_PACK", "").strip().lower()
+# GoMotion's persistent figure (Glen Canyon, 2026-09-29): the compact ring
+# or number riding on a clip stays up across the short cuts that follow it
+# ("22% OF CAPACITY REMAINING" rode three consecutive shots) instead of
+# leaving with its own sentence. A following scene must be shorter than
+# PERSIST_SCENE_MAX seconds, the whole run stays under PERSIST_MAX_SECONDS,
+# and the graphic never crosses another overlay, an animation scene or a
+# full-screen graphic (treatments._persist_figures).
+PERSIST_FIGURES = _flag("PERSIST_FIGURES", True)
+PERSIST_SCENE_MAX = float(os.getenv("PERSIST_SCENE_MAX", "4.5"))
+PERSIST_MAX_SECONDS = float(os.getenv("PERSIST_MAX_SECONDS", "12"))
 
 # VidRush's pacing, measured on four of their exports (first 8 min each):
 # median shot 3.3-3.7 s, middle half 2.3-5.2 s, 13.6-16.5 cuts/min, only

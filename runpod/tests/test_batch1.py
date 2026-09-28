@@ -63,7 +63,8 @@ class AgentProgress(unittest.TestCase):
         sent = {}
         r.job = {"id": "j"}
         with mock.patch.object(handler.runpod.serverless, "progress_update",
-                               side_effect=lambda job, update: sent.update(update)):
+                               side_effect=lambda job, update: sent.update(update)), \
+                mock.patch.object(handler.Reporter, "SERVERLESS", True):
             r("Sourcing media for 167 scenes", 22, done=0, total=167)
             first = sent["phase_started_at"]
             self.assertEqual((sent["phase"], sent["agent"]), ("source", "assets"))

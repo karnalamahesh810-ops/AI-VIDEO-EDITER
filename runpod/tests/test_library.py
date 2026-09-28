@@ -169,7 +169,7 @@ class PoolsUseLibrary(unittest.TestCase):
                  "subject": "Lake Mead", "subject_type": "place", "context": "x", "intent": "x"} for i in range(3)]
         searched = []
 
-        def cands(subject, cc, skip):
+        def cands(subject, cc, skip, **kw):
             searched.append(subject); return [{"id": "NEWNEWNEWNE", "title": "Lake Mead 4k"}]
 
         def fetch_lib(entry, work, seconds, job):
@@ -181,7 +181,7 @@ class PoolsUseLibrary(unittest.TestCase):
             return media.MediaAsset(kind="video", source="youtube", url=f"https://www.youtube.com/watch?v={cand['id']}&t=9",
                                     local_path="/w/n.mp4", moment_key=f"yt:{cand['id']}@0")
         with mock.patch.object(pools, "candidates", cands), \
-                mock.patch.object(pools, "rate_video", lambda c, s, ctx, sec: [{"start": 9.0, "score": 0.9, "description": "d"}]), \
+                mock.patch.object(pools, "rate_video", lambda c, s, ctx, sec, **kw: [{"start": 9.0, "score": 0.9, "description": "d"}]), \
                 mock.patch.object(pools, "_fetch", fake_fetch), \
                 mock.patch.object(lib, "fetch", fetch_lib), \
                 mock.patch.object(config, "POOL_MIN_SCENES", 1):

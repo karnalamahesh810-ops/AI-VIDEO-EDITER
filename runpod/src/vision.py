@@ -95,7 +95,8 @@ _SYSTEM = (
     "them the frames show, and class the frames: specificity \"event\" when they are "
     "recognisably the named event at the named place, \"location\" when they show the "
     "named place but not that event, \"generic\" otherwise.\n"
-    "Reply with JSON only: {\"description\": str, \"score\": number, \"quality\": number, "
+    "Reply with one valid JSON object only. Do not wrap it in JSON.stringify(), "
+    "JavaScript, markdown, or commentary: {\"description\": str, \"score\": number, \"quality\": number, "
     "\"has_text_or_watermark\": bool, \"is_talking_head\": bool, "
     "\"specificity\": \"event\"|\"location\"|\"generic\"}"
 )
@@ -245,18 +246,33 @@ def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
         return _ask_once_slot(model, messages, max_tokens, url, key, main)
 
 
+def _extra(model: str, url: str, max_tokens: int) -> tuple:
+    """
+    (max_tokens, extra fields) for one model. Google's Gemini flash models think
+    before answering and the thinking comes out of max_tokens: a 400-token
+    verdict came back cut off ("finish_reason": "length") until reasoning was
+    set to "none" (3 s, complete JSON; measured 2026-09-29). They also get
+    double the room as a margin. gpt-* keep VISION_REASONING_EFFORT.
+    """
+    if model.startswith("gemini-") and "googleapis.com" in url:
+        extra = {"reasoning_effort": config.VISION_GEMINI_REASONING} if config.VISION_GEMINI_REASONING else {}
+        return max_tokens * 2, extra
+    if config.VISION_REASONING_EFFORT and model.startswith("gpt-"):
+        return max_tokens, {"reasoning_effort": config.VISION_REASONING_EFFORT}
+    return max_tokens, {}
+
+
 def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
                    key: str, main: bool) -> Tuple[Optional[str], bool]:
+    target = url or _endpoint(model)
+    budget, extra = _extra(model, target, max_tokens)
     try:
         r = requests.post(
-            url or _endpoint(model),
+            target,
             headers={"Authorization": f"Bearer {key or config.VISION_API_KEY}",
                      "Content-Type": "application/json"},
             json={"model": model, "messages": messages,
-                  "max_tokens": max_tokens, "stream": False,
-                  **({"reasoning_effort": config.VISION_REASONING_EFFORT}
-                     if config.VISION_REASONING_EFFORT and model.startswith("gpt-")
-                     else {})},
+                  "max_tokens": budget, "stream": False, **extra},
             timeout=config.VISION_TIMEOUT)
     except requests.RequestException as e:
         _fail(model, f"request failed: {type(e).__name__}")
@@ -512,12 +528,52 @@ def _endpoint(model: str) -> str:
 
 def _parse(text: str) -> Optional[dict]:
     text = re.sub(r"^\s*```(?:json)?|```\s*$", "", text or "").strip()
-    m = re.search(r"\{[\s\S]*\}", text)
-    if not m:
+    # Some OpenAI-compatible gateways occasionally return a JS expression such
+    # as JSON.stringify({description: "..."}) despite the JSON-only instruction.
+    # Extract the first complete object, then accept its common JS object-literal
+    # form without weakening the required fields or score validation.
+    start = text.find("{")
+    if start < 0:
         return None
+    depth = 0
+    quote = ""
+    escaped = False
+    end = -1
+    for i in range(start, len(text)):
+        ch = text[i]
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end < 0:
+        return None
+    raw = text[start:end]
     try:
-        data = json.loads(m.group(0))
+        data = json.loads(raw)
     except ValueError:
+        # Quote unquoted object keys (the usual JSON.stringify({key: value})
+        # slip), and remove trailing commas. Restrict the key match to object
+        # separators so colons in description strings are left untouched.
+        repaired = re.sub(r'([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)', r'\1"\2"\3', raw)
+        repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+        try:
+            data = json.loads(repaired)
+        except ValueError:
+            return None
+    if not isinstance(data, dict):
         return None
     try:
         score = float(data.get("score", 0))

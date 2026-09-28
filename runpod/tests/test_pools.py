@@ -40,7 +40,7 @@ class SourceBySubject(unittest.TestCase):
                                  {"start": 140.0, "score": 0.9, "description": "ring"}]}
         calls = []
 
-        def fake_rate(cand, subject, context, seconds):
+        def fake_rate(cand, subject, context, seconds, **kw):
             calls.append(cand["id"])
             return rated[cand["id"]]
 
@@ -49,7 +49,7 @@ class SourceBySubject(unittest.TestCase):
                                     url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(m['start'])}",
                                     local_path=f"/w/{cand['id']}_{int(m['start'])}.mp4",
                                     moment_key=f"yt:{cand['id']}@{int(m['start'] // 10)}")
-        with mock.patch.object(pools, "candidates", lambda s, cc, skip: cands.get(s, [])), \
+        with mock.patch.object(pools, "candidates", lambda s, cc, skip, **kw: cands.get(s, [])), \
                 mock.patch.object(pools, "rate_video", fake_rate), \
                 mock.patch.object(pools, "_fetch", fake_fetch), \
                 mock.patch.object(config, "POOL_MIN_SCENES", 2):
@@ -75,8 +75,8 @@ class Reserve(unittest.TestCase):
             return media.MediaAsset(kind="video", source="youtube",
                                     url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(m['start'])}",
                                     local_path="/w/x.mp4", moment_key=f"yt:{cand['id']}@{int(m['start'] // 10)}")
-        with mock.patch.object(pools, "candidates", lambda s, cc, skip: cands.get(s, [])), \
-                mock.patch.object(pools, "rate_video", lambda c, s, ctx, sec: rated[c["id"]]), \
+        with mock.patch.object(pools, "candidates", lambda s, cc, skip, **kw: cands.get(s, [])), \
+                mock.patch.object(pools, "rate_video", lambda c, s, ctx, sec, **kw: rated[c["id"]]), \
                 mock.patch.object(pools, "_fetch", fake_fetch), \
                 mock.patch.object(config, "POOL_MIN_SCENES", 1):
             got = pools.source_by_subject(jobs, "/w")
