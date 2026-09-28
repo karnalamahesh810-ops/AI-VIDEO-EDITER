@@ -36,7 +36,7 @@ DEFAULT_PRICES: Dict[str, float] = {
     "llm.director_call": 1.0,            # credits: one planning batch
     "llm.brief_call": 1.0,               # credits: the story brief
     "image.generate": 4.0,               # credits: one generated image
-    "runpod.worker_second": 0.49 / 3600, # USD: cpu5c-32-64 list price per worker
+    "runpod.worker_second": 0.576 / 3600,  # USD: serverless cpu3c-16-32 (the endpoint prefers 16 cores since 2026-09-28)
     "proxy.gb": 0.0,                     # USD per GB (ISP proxies are flat monthly)
     "serp.call": 0.0015,                 # USD: one Bright Data SERP request
     "storage.gb": 0.021,                 # USD per GB-month kept

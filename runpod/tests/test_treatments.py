@@ -175,6 +175,9 @@ class TimelineIntegration(unittest.TestCase):
         self.assertEqual(got["url"], "bgm://crime")
         got = timeline._bgm_for({**on, "bgm_genre": "crime"}, {"id": "x"}, {}, 60.0)
         self.assertEqual(got["url"], "bgm://crime-v1")
+        # The editor's music list sends a track name as the genre.
+        got = timeline._bgm_for({**on, "bgm_genre": "investigative-20m"}, {"id": "x"}, {"kind": "news"}, 60.0)
+        self.assertEqual((got["url"], got["genre"]), ("bgm://investigative-20m", "investigative"))
         # Every track the planner can name ships with the renderer.
         root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "remotion", "public", "bgm")
         for tracks in timeline.BGM_TRACKS.values():

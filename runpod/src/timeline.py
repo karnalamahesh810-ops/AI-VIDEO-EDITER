@@ -92,10 +92,16 @@ def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict],
     if not inp.get("bgm", config.BGM_AUTO) or not pack:
         return None
     genre = str(inp.get("bgm_genre") or _BGM_BY_KIND.get((brief or {}).get("kind") or "", "investigative"))
-    if genre not in BGM_GENRES:
-        genre = "investigative"
     names = {name for tracks in BGM_TRACKS.values() for name, _ in tracks}
     track = str(inp.get("bgm_track") or "")
+    # The editor's music list names tracks ("investigative-v5") in bgm_genre; a
+    # plain genre ("investigative") still means "the best track of that genre".
+    if not track and genre in names and genre not in BGM_GENRES:
+        track = genre
+    if track in names:
+        genre = next(g for g, tracks in BGM_TRACKS.items() if any(n == track for n, _ in tracks))
+    if genre not in BGM_GENRES:
+        genre = "investigative"
     if track not in names:
         track = _bgm_track(genre, seconds, str(inp.get("project_id") or inp.get("title") or ""))
     return {"url": f"bgm://{track}", "volume": float(inp.get("bgm_volume", 0.12)), "genre": genre,
