@@ -394,10 +394,13 @@ FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "3"))
 # One wall-clock budget for all footage finding, across every worker: a
 # real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
 # and searches stop at once and the beats still without footage become
-# animation scenes. Budget = base + per scene, capped.
+# animation scenes. Budget = base + per scene, capped. At 2 s per scene the
+# owner's 22-minute Glen Canyon video (167 lines) got 514 s and its parts
+# delivered 3-6 clips each; 4 s per scene gives it ~14 minutes (GoMotion's
+# own screen shows 24+ minutes on this step).
 SOURCE_BUDGET_BASE_SECONDS = float(os.getenv("SOURCE_BUDGET_BASE_SECONDS", "180"))
-SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "2"))
-SOURCE_BUDGET_MAX_SECONDS = float(os.getenv("SOURCE_BUDGET_MAX_SECONDS", "900"))
+SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "4"))
+SOURCE_BUDGET_MAX_SECONDS = float(os.getenv("SOURCE_BUDGET_MAX_SECONDS", "1500"))
 # Saving good clips to the library: parallel uploads under one time box.
 LIBRARY_SAVE_SECONDS = float(os.getenv("LIBRARY_SAVE_SECONDS", "90"))
 # The editor's playback copies of each clip (the render uses the originals).
