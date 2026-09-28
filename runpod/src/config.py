@@ -434,6 +434,14 @@ SFX_MIN_GAP_SECONDS = float(os.getenv("SFX_MIN_GAP_SECONDS", "45"))
 # narration (and so our render) sat at -23.8. 0 turns the step off.
 LOUDNESS_TARGET_LUFS = float(os.getenv("LOUDNESS_TARGET_LUFS", "-14"))
 LOUDNESS_TRUE_PEAK = float(os.getenv("LOUDNESS_TRUE_PEAK", "-1.5"))
+# Picture quality of h264 renders (x264 CRF). Remotion's own default, 18, made
+# ~13 Mbit/s at 1080p: a 22-minute render passed 2 GB and the app's storage
+# (Lovable Cloud: 2 GB a file by default) refused it after the whole render.
+# 21 is ~8 Mbit/s, YouTube's own 1080p upload recommendation. 0 = Remotion's.
+RENDER_CRF = int(os.getenv("RENDER_CRF", "21"))
+# The largest file the app's storage takes. A render over it is re-encoded to
+# fit before the upload (render.fit_size). 0 turns the check off.
+UPLOAD_MAX_MB = float(os.getenv("UPLOAD_MAX_MB", "1900"))
 # Scenes sourced at once. 8 suited the old 8-vCPU GPU pods; the 32-vCPU CPU
 # workers carry 16 (the work is mostly waiting on network and vision calls).
 SOURCE_WORKERS = int(os.getenv("SOURCE_WORKERS", "16"))

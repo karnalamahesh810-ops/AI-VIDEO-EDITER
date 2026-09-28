@@ -1682,6 +1682,8 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # every competitor's render. Never fails the job.
     report("Balancing the sound", 90)
     renderer.normalize_loudness(out_path)
+    # Over the app's per-file storage limit: re-encode to fit, not fail the upload.
+    renderer.fit_size(out_path)
 
     report("Uploading video", 91)
     events.phase("upload")
@@ -2065,6 +2067,12 @@ def handler(job):
         traceback.print_exc()
         msg = str(e)[:800]
         if project_id:
+            # The broker takes events only while the project is "rendering":
+            # send them before the status changes, or a failed job has no log.
+            try:
+                events.flush(storage.broker_events)
+            except Exception:  # noqa: BLE001
+                pass
             storage.patch_project(project_id, {
                 "status": "failed", "error_message": msg, "current_step": "Failed",
             })

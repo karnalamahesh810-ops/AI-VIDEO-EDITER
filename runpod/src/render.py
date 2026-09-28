@@ -126,6 +126,9 @@ def render(props: dict, out_path: str, composition: str = "Main",
             cmd.append("--muted")
         if codec:
             cmd.append(f"--codec={codec}")
+        # Picture quality (the audio-only render has no picture).
+        if config.RENDER_CRF and (codec or "h264") == "h264":
+            cmd.append(f"--crf={config.RENDER_CRF}")
         # A container sees the HOST's memory and cores. Remotion sizes its
         # frame cache at half of "system memory" and the compositor's decoders
         # scale with cores, so on a RunPod worker both overshoot the cgroup
@@ -254,6 +257,54 @@ def normalize_loudness(path: str, target: float = None) -> bool:
         return True
     except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as e:
         print(f"[render] loudness step skipped: {type(e).__name__}", flush=True)
+        return False
+
+
+def fit_size(path: str, max_mb: float = None) -> bool:
+    """
+    Re-encode a finished video that is over `max_mb` (config.UPLOAD_MAX_MB) at
+    a bitrate that fits, copying the sound. The app's storage refuses a file
+    over its limit only after the whole upload, so without this a long render
+    was lost at the last step. True when the file was changed; any failure
+    leaves it as it was.
+    """
+    max_mb = config.UPLOAD_MAX_MB if max_mb is None else max_mb
+    if not max_mb or not os.path.isfile(path):
+        return False
+    size = os.path.getsize(path)
+    cap = max_mb * 1024 * 1024
+    if size <= cap:
+        return False
+    seconds = probe_duration(path)
+    if seconds <= 0:
+        return False
+    # 90% of the cap for the picture, after 192 kbit/s of sound.
+    kbps = int(cap * 8 * 0.90 / seconds / 1000) - 192
+    if kbps < 300:
+        print(f"[render] {size / 1e6:.0f} MB over the {max_mb:.0f} MB upload cap and too long to fit", flush=True)
+        return False
+    tmp = path + ".fit.mp4"
+    try:
+        p = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", path, "-map", "0:v:0", "-map", "0:a:0?",
+             "-c:v", "libx264", "-preset", "veryfast", "-b:v", f"{kbps}k", "-maxrate", f"{int(kbps * 1.5)}k",
+             "-bufsize", f"{kbps * 2}k", "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", tmp],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=max(1800, int(seconds * 3)))
+        if p.returncode != 0 or not os.path.isfile(tmp) or os.path.getsize(tmp) < 1024:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            print(f"[render] size fit skipped: {(p.stderr or '')[-200:]}", flush=True)
+            return False
+        new = os.path.getsize(tmp)
+        os.replace(tmp, path)
+        print(f"[render] {size / 1e6:.0f} MB over the {max_mb:.0f} MB upload cap -> {new / 1e6:.0f} MB "
+              f"at {kbps} kbit/s", flush=True)
+        return True
+    except (OSError, subprocess.TimeoutExpired) as e:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        print(f"[render] size fit skipped: {type(e).__name__}", flush=True)
         return False
 
 
