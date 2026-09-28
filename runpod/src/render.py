@@ -211,6 +211,52 @@ def _run_streaming(cmd, timeout, on_progress) -> "_Completed":
     return _Completed(proc.returncode, "".join(lines), "")
 
 
+def normalize_loudness(path: str, target: float = None) -> bool:
+    """
+    Set a finished video's sound to `target` LUFS (config.LOUDNESS_TARGET_LUFS),
+    true peak config.LOUDNESS_TRUE_PEAK, copying the picture. Two passes: the
+    first measures, the second applies loudnorm with the measurement (a steady
+    gain wherever the peaks allow it). True when the file was changed; any
+    failure leaves the file as it was.
+    """
+    target = config.LOUDNESS_TARGET_LUFS if target is None else target
+    if not target or not os.path.isfile(path):
+        return False
+    tp = config.LOUDNESS_TRUE_PEAK
+    try:
+        probe = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-vn",
+             "-af", f"loudnorm=I={target}:TP={tp}:LRA=11:print_format=json", "-f", "null", "-"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+        m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", probe.stderr or "", re.S)
+        if not m:
+            return False
+        meas = json.loads(m.group(0))
+        measured = float(meas["input_i"])
+        if measured < -60 or abs(measured - target) < 0.7:
+            return False                   # silent, or already there
+        tmp = path + ".loud.mp4"
+        af = (f"loudnorm=I={target}:TP={tp}:LRA=11:measured_I={meas['input_i']}:"
+              f"measured_TP={meas['input_tp']}:measured_LRA={meas['input_lra']}:"
+              f"measured_thresh={meas['input_thresh']}:offset={meas['target_offset']}:linear=true")
+        p = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", path, "-map", "0:v:0?", "-map", "0:a:0",
+             "-c:v", "copy", "-af", af, "-ar", "48000", "-c:a", "aac", "-b:a", "192k",
+             "-movflags", "+faststart", tmp],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
+        if p.returncode != 0 or not os.path.isfile(tmp) or os.path.getsize(tmp) < 1024:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            print(f"[render] loudness step skipped: {(p.stderr or '')[-200:]}", flush=True)
+            return False
+        os.replace(tmp, path)
+        print(f"[render] loudness {measured:.1f} -> {target:.1f} LUFS", flush=True)
+        return True
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as e:
+        print(f"[render] loudness step skipped: {type(e).__name__}", flush=True)
+        return False
+
+
 def probe_duration(media_path: str) -> float:
     """
     Duration in seconds via ffprobe, 0.0 when it can't be read.

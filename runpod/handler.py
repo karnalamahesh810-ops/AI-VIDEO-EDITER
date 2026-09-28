@@ -1622,6 +1622,11 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
             serve_dir=work,
         )
 
+    # YouTube loudness (-14 LUFS): the raw narration sat ~10 dB under
+    # every competitor's render. Never fails the job.
+    report("Balancing the sound", 90)
+    renderer.normalize_loudness(out_path)
+
     report("Uploading video", 91)
     events.phase("upload")
     duration = doc["durationInFrames"] / doc["fps"]

@@ -418,6 +418,11 @@ ACCEPT_UNJUDGED = os.getenv("ACCEPT_UNJUDGED", "0").strip().lower() in ("1", "tr
 SFX_ENABLED = os.getenv("SFX_ENABLED", "1").strip().lower() not in ("0", "false", "no")
 SFX_VOLUME = float(os.getenv("SFX_VOLUME", "1.0"))
 SFX_MIN_GAP_SECONDS = float(os.getenv("SFX_MIN_GAP_SECONDS", "45"))
+# The finished video's loudness (integrated LUFS) and true-peak ceiling. YouTube
+# plays at -14; GoMotion's Glen Canyon render measured -14.3 while the raw
+# narration (and so our render) sat at -23.8. 0 turns the step off.
+LOUDNESS_TARGET_LUFS = float(os.getenv("LOUDNESS_TARGET_LUFS", "-14"))
+LOUDNESS_TRUE_PEAK = float(os.getenv("LOUDNESS_TRUE_PEAK", "-1.5"))
 # Scenes sourced at once. 8 suited the old 8-vCPU GPU pods; the 32-vCPU CPU
 # workers carry 16 (the work is mostly waiting on network and vision calls).
 SOURCE_WORKERS = int(os.getenv("SOURCE_WORKERS", "16"))
