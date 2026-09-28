@@ -51442,6 +51442,4668 @@
     "lib",
     "sc"
    ]
+  },
+  {
+   "id": "LIB_BM_USA_ZOOM",
+   "name": "USA zoom",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The lower 48 fade up on a dark sea, then a spring camera dives (about 1.2 s) into the region bounding the places (default: the seven Colorado River Basin states). Target states fill brighter in the accent and their outlines draw on, the rest dim, state names rise out of masks with a pop tick each, places pin (white dot for cities, cyan ring for lakes and dams). Title bottom-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "bm-usa-zoom",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "region",
+    "several-places",
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "bm",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_BM_BASIN_ZOOM",
+   "name": "Basin zoom",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Dark USA map: the lower 48 fade up and a mono UNITED STATES caption (overlay.label) pops at the map centroid, then the camera pushes (about 1.3 s, scale 1.6-2.6) onto the states holding the places, or the seven basin states by default. Targets tint in the accent with a soft glow and their outlines draw on while every other state dims; as the push settles each state's name rises out of a mask with a pop tick; city places get a white pin dot with a short label, lakes and dams a cyan ring. Title top-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "bm-basin-zoom",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "region",
+    "several-places",
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "bm",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_BM_RIVER_NETWORK",
+   "name": "River network",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The seven basin states tinted on a dark USA, then the Colorado River draws itself source to sea (about 2 s) as a glowing cyan line with bright water streaming down it; the Green, Yampa, San Juan, Gunnison, Little Colorado, Virgin and Gila start from their heads the moment the mainstem's head passes their confluence. Tributary names pop at their midpoints with a tick (all of them, or only those named in items), Lake Powell, Lake Mead, Glen Canyon Dam and Hoover Dam light up as the river reaches them, the mainstem caption (overlay.label) sits at Lees Ferry and the places pin with names as the head passes. Title top-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 8.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "bm-river-network",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "route",
+    "several-places",
+    "region",
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "bm",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_BM_BASIN_SPLIT",
+   "name": "Basin split",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The basin states in two tints: the upper basin (Colorado, Wyoming, Utah, New Mexico) fills in the accent, then the lower basin (Arizona, Nevada, California) in desert sand, each outline drawing on and each state named. The compact's dividing line dashes along the Utah-Arizona border to Lees Ferry, which is marked and captioned; the two halves get their labels (items[0] / items[1], default UPPER BASIN / LOWER BASIN) with the items' values rolling beneath in overlay.suffix units. Title top-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "bm-basin-split",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-values"
+   ],
+   "tags": [
+    "lib",
+    "bm",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_BM_STATE_CALLOUT",
+   "name": "State callout",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The lower 48, then the camera pushes onto one state (the state holding locations[0], or the one named by overlay.label; Arizona by default). The state tints and glows, its outline draws on, the place pulses; a white callout line runs from it, elbows, and lands on a glass figure box on the right: a mono kicker (label or subtitle), the value rolling with its suffix, the text beneath. With no value the text is the headline of the box.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "bm-state-callout",
+    "sfx": {
+     "name": "map-whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place",
+    "big-number",
+    "percent"
+   ],
+   "tags": [
+    "lib",
+    "bm",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_LINE_TICKER",
+   "name": "Line Ticker",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "A line chart on a dark clean canvas drawing point by point: every point pops in with a soft tick, a small value chip rides the head of the line, x labels rise as the head passes them, and when the last point lands its value parks in a badge - red when the series fell, the accent when it rose - with the change from the first point beside it. Small title top-left, the source bottom-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 8.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-line-ticker",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "series",
+    "years"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_BARS_TICKER",
+   "name": "Bars Ticker",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "Horizontal bars on a dark clean canvas growing one after another in the given order, a soft tick as each lands and its value parking at the bar end with the unit; the largest bar (or the one the narration names) glows in the accent, the others run white to grey; dashed axis ticks above, the axis caption under the bars, the source bottom-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-bars-ticker",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-values",
+    "ranking",
+    "shares"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_COLUMNS_TICKER",
+   "name": "Columns Ticker",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "Vertical columns on a dark clean canvas rising one after another with a soft tick each, a white edge flashing as a column lands and its value rolling above it; the largest column (or the named one) in the accent; dashed grid with figures on the left, labels under the columns, the axis caption beneath, the source bottom-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-columns-ticker",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-values",
+    "ranking",
+    "series"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_PLANNED_VS_ACTUAL",
+   "name": "Planned vs Actual",
+   "category": "COMPARISONS",
+   "component": "motion",
+   "description": "Two big columns on a dark clean canvas: the planned figure (items[0]) rises first in white, the actual (items[1]) second in red when it fell short or green when it beat the plan, each landing with a tick and its value rolling above; the planned level runs across as a dashed target, a diagonal drop line draws from one top to the other and the difference pops in a badge on it, the percent change and the absolute gap with its unit.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-planned-vs-actual",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "then-now",
+    "compare-values",
+    "money-compare"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_TWO_SERIES",
+   "name": "Two Series Ticker",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "Two lines on a dark clean canvas drawing point by point together, one tick per x: the first series from items[].value in the accent, the second from a number in items[].text in cyan (or, when there is none, a dashed smoothed TREND of the first); a legend top-right names them from overlay.label ('Inflow | Outflow'), the end values roll beside the last points, the source sits bottom-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 8.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-two-series",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "series",
+    "compare-values",
+    "then-now"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_SNOW_SITES",
+   "name": "Snow Sites Dots",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "Item values as dots along one horizontal axis on a dark clean canvas (GoMotion's SNOWPACK DEPTH sites): the dots land one after another with a tick and a shock ring, their names on thin leader lines above and below the axis, nice ticks with figures beneath, and the last dot is red, bigger, pulsing, and carries its value in a red pill; the axis caption under the axis, the source bottom-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-snow-sites",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "series",
+    "compare-values"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_TICK_BARS",
+   "name": "Tick Bars",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "A data card on the scrim: horizontal bars in the given order, each growing expo-out with a bright bead riding its head, flashing a white edge as it lands, playing a soft tick and rolling its value at the bar end before parking it with the unit; the bar the narration names (else the largest) glows in the accent and breathes through the hold, the others run white to grey; dashed axis ticks above, the axis caption in mono caps beneath, the subtitle as a kicker over the title; negative values grow left of a zero line.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-tick-bars",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-values",
+    "ranking",
+    "shares"
+   ],
+   "tags": [
+    "lib",
+    "cc"
+   ]
+  },
+  {
+   "id": "LIB_CC_TICK_LINE",
+   "name": "Tick Line",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "A data card on the scrim: a monotone line drawn segment by segment with a dwell on every point, each point popping with a shock ring and a soft tick while its value rises beside it (above when the line is falling, below when rising), a faint accent area following the head, x labels rising as the head passes, y ticks on the left; the last value lands in a pill - red when below the first, green when above - with the signed percent change, pulsing through the hold; overlay.highlight calls out one x label in the accent.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-tick-line",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "series",
+    "years"
+   ],
+   "tags": [
+    "lib",
+    "cc"
+   ]
+  },
+  {
+   "id": "LIB_CC_CIRCLE_ROW",
+   "name": "Circle Row",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Outlined circles in a row on flat black (GoMotion's TUNNELS / CUTS): each ring draws on clockwise from 12 o'clock with a soft tick as it closes, the word rises inside in tracked caps, an optional value rolls under the circle, thin connectors then draw between neighbours; through the hold the circles take the accent one at a time, and at the end the rings unwind and the words drop; overlay.text as a tracked kicker top-centre.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-circle-row",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "steps",
+    "sequence"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_NETWORK_TREE",
+   "name": "Network Tree",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "A schematic on the case-file dark backdrop: a hub chip (overlay.label, accent edge) at the left, a trunk line drawing right and dropping to a bus that forks into right-angled branches, each popping a framed tile with a soft tick - a still from the overlay's media when there is one, else a dark tile with the node's initial and an accent corner - with its name beneath and items[].text as a sub-line; a bright comet keeps running down each branch in turn while the card holds, then the branches retract into the hub and the tiles shrink out.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-network-tree",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "steps"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_CC_WAVE_CHAIN",
+   "name": "Wave Chain",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "A concept diagram on flat black: a sine wave draws left to right with a glowing accent head, one half-period per item after the first; the first label sits at the wave's start and the rest at successive crests (above) and troughs (below), each popping a white node with an accent shock ring and a soft tick as the head arrives, the label rising in tracked caps - the endpoints larger - with items[].text as a mono sub-line; thin arrowheads on the wave between nodes read as '->', a green dot rides the wave back and forth through the hold, then the wave un-draws from its end and the labels drop.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "cc-wave-chain",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "steps",
+    "sequence",
+    "list"
+   ],
+   "tags": [
+    "lib",
+    "cc",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_PS_PERCENT_RING",
+   "name": "Persistent Percent Ring",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "GoMotion's ring at the upper centre of the frame, built to ride across cuts: the track draws, the accent arc sweeps from 12 o'clock to value/total with a bright glowing head and a pop as it lands while the percent rolls inside; a dark chip with the noun ('OF CAPACITY REMAINING') and a mono subtitle rises beneath. Holds up to 12 s with only the head's 1.6 s breath and a 1.5% ring breath, then the arc unwinds and the number and chip drop out of their masks. Red below 25%, gold above, never green; no scrim, only a soft radial pool. No value: the chip text alone.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 10.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ps-percent-ring",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent",
+    "level",
+    "ratio"
+   ],
+   "tags": [
+    "lib",
+    "ps"
+   ]
+  },
+  {
+   "id": "LIB_PS_STAT_RIDE",
+   "name": "Stat Ride",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A bare bold figure riding top-right on the footage the way GoMotion sets '3,491 FEET': no box or pill, DISPLAY white with a deep shadow over a soft radial pool, the unit in the accent at 0.42 of the size, the noun ('ACRE FEET', 'CUTS') on a line beneath or inline after a one-word noun, a small mono subtitle. Minus kept, thousands commas below 100k, compact 1.3M / 500K / 76K for round large integers, decimals as given, years without a comma. Rises out of its mask letter by letter while the digits roll, drifts 2-3 px on the hold, sinks back into the mask to leave. 'center' sets it giant mid-frame; compact halves it in a corner. No value: the noun alone as a word ride.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ps-stat-ride",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "measurement",
+    "money",
+    "change"
+   ],
+   "tags": [
+    "lib",
+    "ps"
+   ]
+  },
+  {
+   "id": "LIB_PS_PAPER_CHECKLIST",
+   "name": "Paper Checklist",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "A cream paper card with a faint fibre texture pinned top-right by an accent push-pin, rotated -2 degrees over a soft pool: a red header tab carries the title ('TRIBUTARIES', or NOTES) with a tiny caption in its corner, rows in a handwritten face sit beside hand-drawn wobbly boxes, a mono footer holds the subtitle. The card slides down and settles, rows rise 4 frames apart, then one row per 0.55 s the box fills with the accent and a tick draws through it with a small pop (max 6). On the hold only the shadow breathes; to leave, the card lifts off its pin and slides out right. No items: the tab and an empty sheet with the subtitle.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 9.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ps-paper-checklist",
+    "sfx": {
+     "name": "paper",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "summary",
+    "steps"
+   ],
+   "tags": [
+    "lib",
+    "ps"
+   ]
+  },
+  {
+   "id": "LIB_SP_QUOTE_PORTRAIT",
+   "name": "Quote Portrait",
+   "category": "QUOTES",
+   "component": "motion",
+   "description": "Full-frame dark card: the speaker's photo in a ringed circle on the left (an accent arc turning round it, initials on a dark disc when there is no still), a big accent quote mark, and the quote typing in line by line in the serif italic with a blinking caret and a typewriter track; the name slides out of an accent rule with the role under it once the last line is typed.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-quote-portrait",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "quote",
+    "recording"
+   ],
+   "tags": [
+    "lib",
+    "sp",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_SP_NAME_TAG",
+   "name": "Name Tag",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "A slim bar bottom-left riding on footage: an accent stripe, the name in bold condensed caps with a hairline growing under it and the role beneath; it slides in from the left out of a mask and slides back out at the end. For press photos and interview clips.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-name-tag",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [],
+   "tags": [
+    "lib",
+    "sp"
+   ]
+  },
+  {
+   "id": "LIB_SP_TWO_VOICES",
+   "name": "Two Voices",
+   "category": "COMPARISONS",
+   "component": "motion",
+   "description": "Two ringed portraits (media[0] and media[1], initials when a still is missing) turned toward each other over the dimmed footage, each with its position (items[].label) and its line (items[].text) rising beneath; a hairline divider draws out from an accent diamond between them. No 'VS' text.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-two-voices",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-values",
+    "then-now"
+   ],
+   "tags": [
+    "lib",
+    "sp",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_SP_STATEMENT_CARD",
+   "name": "Statement Card",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A light paper card with an accent spine settles in over the dimmed footage; one bold sentence rises line by line, then a highlighter sweeps under the key phrase (overlay.highlight) in the accent word by word; the source sits under an accent dash. The card drops away at the end.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-statement-card",
+    "sfx": {
+     "name": "paper",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "summary",
+    "warning"
+   ],
+   "tags": [
+    "lib",
+    "sp"
+   ]
+  },
+  {
+   "id": "LIB_SP_CHECKLIST",
+   "name": "Checklist Card",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "A ruled paper card drops in with a bounce, titled with the text; the items (items[].label, an optional items[].text beside each) are checkbox rows that rise in and then tick one by one, each tick a drawn accent stroke with a small pop while the row's ink darkens; a footer counts them (overlay.label names what). The card slides away at the end.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-checklist",
+    "sfx": {
+     "name": "paper",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "steps"
+   ],
+   "tags": [
+    "lib",
+    "sp"
+   ]
+  },
+  {
+   "id": "LIB_SP_CIRCLE_LIST",
+   "name": "Circle List",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Full-frame black: three to five words (items[].label) in circles left to right, each ring drawing on with a pop as the word rises into it, three dots stepping across to the next; the highlighted word's ring is in the accent. A small tracked title (overlay.text) above.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-circle-list",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "steps",
+    "sequence"
+   ],
+   "tags": [
+    "lib",
+    "sp",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_SP_NETWORK",
+   "name": "Hub Network",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "A hub-and-spoke diagram over the dimmed footage: the text in an accent hub in the centre, the items (items[].label, items[].text under it) on nodes around it; a dotted line draws out to each node in turn with a pulse riding it, the node pops with a small photo tile when media has an entry for it (else a dark disc with the item's initial) and the label rises.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-network",
+    "sfx": {
+     "name": "pop",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "steps"
+   ],
+   "tags": [
+    "lib",
+    "sp",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_SP_CONCEPT_WAVE",
+   "name": "Concept Wave",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A sine wave draws across the dimmed footage with a glowing head; up to three stops on it (crest, trough, crest) light up in turn as the head passes, each with its label (items[].label) rising and a small line (items[].text) under it, a chevron pointing on to the next. A tracked title top-left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-concept-wave",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "sequence",
+    "steps"
+   ],
+   "tags": [
+    "lib",
+    "sp"
+   ]
+  },
+  {
+   "id": "LIB_SP_PORTRAIT_QUOTE",
+   "name": "Portrait Quote",
+   "category": "QUOTES",
+   "component": "motion",
+   "description": "The footage darkens more on the left, where an accent opening mark and the serif italic quote rise line by line (at most four lines, shrinking before it cuts) with the highlight words in the accent; the name rises out of an accent rule with the role under it. On the right a 4:5 white-framed portrait slides in with a 3D turn and a gloss sweep (a dark medallion with the speaker's initials when there is no still). The lines drop and the frame slides out right at the end.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "sp-portrait-quote",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.25
+    }
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "quote",
+    "recording",
+    "person"
+   ],
+   "tags": [
+    "lib",
+    "sp",
+    "still"
+   ]
   }
  ],
  "imageTreatments": [

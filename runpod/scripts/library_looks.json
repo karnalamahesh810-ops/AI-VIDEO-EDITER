@@ -8054,5 +8054,1293 @@
   },
   "family": "sc",
   "file": "LibScience"
+ },
+ {
+  "id": "bm-usa-zoom",
+  "name": "USA zoom",
+  "category": "MAPS",
+  "description": "The lower 48 fade up on a dark sea, then a spring camera dives (about 1.2 s) into the region bounding the places (default: the seven Colorado River Basin states). Target states fill brighter in the accent and their outlines draw on, the rest dim, state names rise out of masks with a pop tick each, places pin (white dot for cities, cyan ring for lakes and dams). Title bottom-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "locations"
+  ],
+  "cues": [
+   "region",
+   "several-places",
+   "place"
+  ],
+  "duration": 7,
+  "sfx": "map-whoosh",
+  "sample": {
+   "text": "The Colorado River Basin",
+   "subtitle": "Seven states, 40 million people",
+   "locations": [
+    {
+     "label": "Lake Powell, Utah",
+     "lat": 36.94,
+     "lon": -111.49,
+     "kind": "lake"
+    },
+    {
+     "label": "Denver, Colorado",
+     "lat": 39.7392,
+     "lon": -104.9903,
+     "kind": "city"
+    },
+    {
+     "label": "Phoenix, Arizona",
+     "lat": 33.4484,
+     "lon": -112.074,
+     "kind": "city"
+    },
+    {
+     "label": "Las Vegas, Nevada",
+     "lat": 36.1699,
+     "lon": -115.1398,
+     "kind": "city"
+    },
+    {
+     "label": "Cheyenne, Wyoming",
+     "lat": 41.14,
+     "lon": -104.82,
+     "kind": "city"
+    },
+    {
+     "label": "Santa Fe, New Mexico",
+     "lat": 35.687,
+     "lon": -105.9378,
+     "kind": "city"
+    },
+    {
+     "label": "Los Angeles, California",
+     "lat": 34.0522,
+     "lon": -118.2437,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "bm",
+  "file": "LibBasinMap"
+ },
+ {
+  "id": "bm-basin-zoom",
+  "name": "Basin zoom",
+  "category": "MAPS",
+  "description": "Dark USA map: the lower 48 fade up and a mono UNITED STATES caption (overlay.label) pops at the map centroid, then the camera pushes (about 1.3 s, scale 1.6-2.6) onto the states holding the places, or the seven basin states by default. Targets tint in the accent with a soft glow and their outlines draw on while every other state dims; as the push settles each state's name rises out of a mask with a pop tick; city places get a white pin dot with a short label, lakes and dams a cyan ring. Title top-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "locations"
+  ],
+  "cues": [
+   "region",
+   "several-places",
+   "place"
+  ],
+  "duration": 7,
+  "sfx": "map-whoosh",
+  "sample": {
+   "text": "The Colorado River Basin",
+   "subtitle": "Seven states, 40 million people",
+   "label": "United States",
+   "locations": [
+    {
+     "label": "Lake Powell, Utah",
+     "lat": 36.94,
+     "lon": -111.49,
+     "kind": "lake"
+    },
+    {
+     "label": "Denver, Colorado",
+     "lat": 39.7392,
+     "lon": -104.9903,
+     "kind": "city"
+    },
+    {
+     "label": "Salt Lake City, Utah",
+     "lat": 40.7608,
+     "lon": -111.891,
+     "kind": "city"
+    },
+    {
+     "label": "Cheyenne, Wyoming",
+     "lat": 41.14,
+     "lon": -104.82,
+     "kind": "city"
+    },
+    {
+     "label": "Santa Fe, New Mexico",
+     "lat": 35.687,
+     "lon": -105.9378,
+     "kind": "city"
+    },
+    {
+     "label": "Phoenix, Arizona",
+     "lat": 33.4484,
+     "lon": -112.074,
+     "kind": "city"
+    },
+    {
+     "label": "Las Vegas, Nevada",
+     "lat": 36.1699,
+     "lon": -115.1398,
+     "kind": "city"
+    },
+    {
+     "label": "Los Angeles, California",
+     "lat": 34.0522,
+     "lon": -118.2437,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "bm",
+  "file": "LibBasinMap"
+ },
+ {
+  "id": "bm-river-network",
+  "name": "River network",
+  "category": "MAPS",
+  "description": "The seven basin states tinted on a dark USA, then the Colorado River draws itself source to sea (about 2 s) as a glowing cyan line with bright water streaming down it; the Green, Yampa, San Juan, Gunnison, Little Colorado, Virgin and Gila start from their heads the moment the mainstem's head passes their confluence. Tributary names pop at their midpoints with a tick (all of them, or only those named in items), Lake Powell, Lake Mead, Glen Canyon Dam and Hoover Dam light up as the river reaches them, the mainstem caption (overlay.label) sits at Lees Ferry and the places pin with names as the head passes. Title top-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "locations"
+  ],
+  "cues": [
+   "route",
+   "several-places",
+   "region",
+   "place"
+  ],
+  "duration": 8,
+  "sfx": "map-whoosh",
+  "sample": {
+   "text": "One river, seven states",
+   "subtitle": "The Colorado River Basin",
+   "label": "Colorado River",
+   "items": [
+    {
+     "label": "Green River"
+    },
+    {
+     "label": "San Juan River"
+    },
+    {
+     "label": "Gunnison River"
+    },
+    {
+     "label": "Gila River"
+    },
+    {
+     "label": "Little Colorado River"
+    }
+   ],
+   "locations": [
+    {
+     "label": "La Poudre Pass, Colorado",
+     "lat": 40.47,
+     "lon": -105.83,
+     "kind": "source"
+    },
+    {
+     "label": "Lake Powell, Utah",
+     "lat": 36.94,
+     "lon": -111.49,
+     "kind": "lake"
+    },
+    {
+     "label": "Lake Mead, Nevada",
+     "lat": 36.016,
+     "lon": -114.737,
+     "kind": "lake"
+    },
+    {
+     "label": "Yuma, Arizona",
+     "lat": 32.69,
+     "lon": -114.63,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "bm",
+  "file": "LibBasinMap"
+ },
+ {
+  "id": "bm-basin-split",
+  "name": "Basin split",
+  "category": "MAPS",
+  "description": "The basin states in two tints: the upper basin (Colorado, Wyoming, Utah, New Mexico) fills in the accent, then the lower basin (Arizona, Nevada, California) in desert sand, each outline drawing on and each state named. The compact's dividing line dashes along the Utah-Arizona border to Lees Ferry, which is marked and captioned; the two halves get their labels (items[0] / items[1], default UPPER BASIN / LOWER BASIN) with the items' values rolling beneath in overlay.suffix units. Title top-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "compare-values"
+  ],
+  "duration": 7,
+  "sfx": "map-whoosh",
+  "sample": {
+   "text": "Two basins, one river",
+   "subtitle": "The 1922 Colorado River Compact",
+   "suffix": "acre-feet",
+   "items": [
+    {
+     "label": "Upper Basin",
+     "value": 7500000,
+     "text": "Colorado, Wyoming, Utah, New Mexico"
+    },
+    {
+     "label": "Lower Basin",
+     "value": 7500000,
+     "text": "Arizona, Nevada, California"
+    }
+   ]
+  },
+  "family": "bm",
+  "file": "LibBasinMap"
+ },
+ {
+  "id": "bm-state-callout",
+  "name": "State callout",
+  "category": "MAPS",
+  "description": "The lower 48, then the camera pushes onto one state (the state holding locations[0], or the one named by overlay.label; Arizona by default). The state tints and glows, its outline draws on, the place pulses; a white callout line runs from it, elbows, and lands on a glass figure box on the right: a mono kicker (label or subtitle), the value rolling with its suffix, the text beneath. With no value the text is the headline of the box.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix",
+   "prefix",
+   "locations"
+  ],
+  "cues": [
+   "place",
+   "big-number",
+   "percent"
+  ],
+  "duration": 6,
+  "sfx": "map-whoosh",
+  "sample": {
+   "text": "Arizona takes the deepest cuts under the 2026 shortage tiers",
+   "subtitle": "Lower Basin shortage",
+   "label": "Arizona's cut",
+   "value": -1300000,
+   "suffix": "acre-feet",
+   "locations": [
+    {
+     "label": "Phoenix, Arizona",
+     "lat": 33.4484,
+     "lon": -112.074,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "bm",
+  "file": "LibBasinMap"
+ },
+ {
+  "id": "cc-line-ticker",
+  "name": "Line Ticker",
+  "category": "CHARTS",
+  "description": "A line chart on a dark clean canvas drawing point by point: every point pops in with a soft tick, a small value chip rides the head of the line, x labels rise as the head passes them, and when the last point lands its value parks in a badge - red when the series fell, the accent when it rose - with the change from the first point beside it. Small title top-left, the source bottom-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "series",
+   "years"
+  ],
+  "duration": 8,
+  "sfx": "none",
+  "sample": {
+   "text": "Lake Powell elevation",
+   "subtitle": "Source: U.S. Bureau of Reclamation",
+   "label": "Feet above sea level",
+   "suffix": "ft",
+   "items": [
+    {
+     "label": "2000",
+     "value": 3690
+    },
+    {
+     "label": "2005",
+     "value": 3588
+    },
+    {
+     "label": "2010",
+     "value": 3634
+    },
+    {
+     "label": "2015",
+     "value": 3606
+    },
+    {
+     "label": "2020",
+     "value": 3597
+    },
+    {
+     "label": "2023",
+     "value": 3522
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-bars-ticker",
+  "name": "Bars Ticker",
+  "category": "CHARTS",
+  "description": "Horizontal bars on a dark clean canvas growing one after another in the given order, a soft tick as each lands and its value parking at the bar end with the unit; the largest bar (or the one the narration names) glows in the accent, the others run white to grey; dashed axis ticks above, the axis caption under the bars, the source bottom-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "ranking",
+   "shares"
+  ],
+  "duration": 7.5,
+  "sfx": "none",
+  "sample": {
+   "text": "Who takes the water",
+   "subtitle": "Colorado River Compact allocations",
+   "label": "Million acre-feet per year",
+   "suffix": "MAF",
+   "highlight": "California",
+   "items": [
+    {
+     "label": "California",
+     "value": 4.4
+    },
+    {
+     "label": "Colorado",
+     "value": 3.9
+    },
+    {
+     "label": "Arizona",
+     "value": 2.8
+    },
+    {
+     "label": "Utah",
+     "value": 1.7
+    },
+    {
+     "label": "Mexico",
+     "value": 1.5
+    },
+    {
+     "label": "Nevada",
+     "value": 0.3
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-columns-ticker",
+  "name": "Columns Ticker",
+  "category": "CHARTS",
+  "description": "Vertical columns on a dark clean canvas rising one after another with a soft tick each, a white edge flashing as a column lands and its value rolling above it; the largest column (or the named one) in the accent; dashed grid with figures on the left, labels under the columns, the axis caption beneath, the source bottom-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "ranking",
+   "series"
+  ],
+  "duration": 7.5,
+  "sfx": "none",
+  "sample": {
+   "text": "Lake Mead storage",
+   "subtitle": "Source: USBR Lower Colorado operations",
+   "label": "Percent of capacity",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "2000",
+     "value": 94
+    },
+    {
+     "label": "2005",
+     "value": 55
+    },
+    {
+     "label": "2010",
+     "value": 41
+    },
+    {
+     "label": "2015",
+     "value": 38
+    },
+    {
+     "label": "2020",
+     "value": 40
+    },
+    {
+     "label": "2022",
+     "value": 27
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-planned-vs-actual",
+  "name": "Planned vs Actual",
+  "category": "COMPARISONS",
+  "description": "Two big columns on a dark clean canvas: the planned figure (items[0]) rises first in white, the actual (items[1]) second in red when it fell short or green when it beat the plan, each landing with a tick and its value rolling above; the planned level runs across as a dashed target, a diagonal drop line draws from one top to the other and the difference pops in a badge on it, the percent change and the absolute gap with its unit.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "then-now",
+   "compare-values",
+   "money-compare"
+  ],
+  "duration": 7,
+  "sfx": "none",
+  "sample": {
+   "text": "Lees Ferry flow",
+   "subtitle": "Compact assumption vs 2000-2023 average",
+   "label": "Planned | Actual",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "1922 Compact",
+     "value": 16.4
+    },
+    {
+     "label": "Actual",
+     "value": 12.3
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-two-series",
+  "name": "Two Series Ticker",
+  "category": "CHARTS",
+  "description": "Two lines on a dark clean canvas drawing point by point together, one tick per x: the first series from items[].value in the accent, the second from a number in items[].text in cyan (or, when there is none, a dashed smoothed TREND of the first); a legend top-right names them from overlay.label ('Inflow | Outflow'), the end values roll beside the last points, the source sits bottom-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "series",
+   "compare-values",
+   "then-now"
+  ],
+  "duration": 8,
+  "sfx": "none",
+  "sample": {
+   "text": "Supply and demand",
+   "subtitle": "Source: USBR Colorado River Basin study",
+   "label": "Supply | Demand",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "1990",
+     "value": 15.1,
+     "text": "12.8"
+    },
+    {
+     "label": "1995",
+     "value": 14.6,
+     "text": "13.4"
+    },
+    {
+     "label": "2000",
+     "value": 13.9,
+     "text": "14.0"
+    },
+    {
+     "label": "2005",
+     "value": 13.2,
+     "text": "14.6"
+    },
+    {
+     "label": "2010",
+     "value": 12.6,
+     "text": "14.9"
+    },
+    {
+     "label": "2015",
+     "value": 12.1,
+     "text": "15.1"
+    },
+    {
+     "label": "2020",
+     "value": 11.6,
+     "text": "15.3"
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-snow-sites",
+  "name": "Snow Sites Dots",
+  "category": "CHARTS",
+  "description": "Item values as dots along one horizontal axis on a dark clean canvas (GoMotion's SNOWPACK DEPTH sites): the dots land one after another with a tick and a shock ring, their names on thin leader lines above and below the axis, nice ticks with figures beneath, and the last dot is red, bigger, pulsing, and carries its value in a red pill; the axis caption under the axis, the source bottom-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "series",
+   "compare-values"
+  ],
+  "duration": 7,
+  "sfx": "none",
+  "sample": {
+   "text": "Snowpack depth",
+   "subtitle": "Upper Colorado SNOTEL sites, April 1",
+   "label": "Percent of median",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Tower",
+     "value": 112
+    },
+    {
+     "label": "Berthoud",
+     "value": 96
+    },
+    {
+     "label": "Vail",
+     "value": 84
+    },
+    {
+     "label": "Wolf Creek",
+     "value": 71
+    },
+    {
+     "label": "Red Mountain",
+     "value": 63
+    },
+    {
+     "label": "Lake Powell basin",
+     "value": 48
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-tick-bars",
+  "name": "Tick Bars",
+  "category": "CHARTS",
+  "description": "A data card on the scrim: horizontal bars in the given order, each growing expo-out with a bright bead riding its head, flashing a white edge as it lands, playing a soft tick and rolling its value at the bar end before parking it with the unit; the bar the narration names (else the largest) glows in the accent and breathes through the hold, the others run white to grey; dashed axis ticks above, the axis caption in mono caps beneath, the subtitle as a kicker over the title; negative values grow left of a zero line.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "ranking",
+   "shares"
+  ],
+  "duration": 6.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Mandatory cuts",
+   "subtitle": "Lower Basin, 2023",
+   "label": "Thousand acre-feet per year",
+   "suffix": "K",
+   "highlight": "Arizona",
+   "items": [
+    {
+     "label": "Arizona",
+     "value": 592
+    },
+    {
+     "label": "Mexico",
+     "value": 104
+    },
+    {
+     "label": "Nevada",
+     "value": 25
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-tick-line",
+  "name": "Tick Line",
+  "category": "CHARTS",
+  "description": "A data card on the scrim: a monotone line drawn segment by segment with a dwell on every point, each point popping with a shock ring and a soft tick while its value rises beside it (above when the line is falling, below when rising), a faint accent area following the head, x labels rising as the head passes, y ticks on the left; the last value lands in a pill - red when below the first, green when above - with the signed percent change, pulsing through the hold; overlay.highlight calls out one x label in the accent.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "series",
+   "years"
+  ],
+  "duration": 7,
+  "sfx": "pop",
+  "sample": {
+   "text": "Colorado River flows",
+   "subtitle": "Natural flow at Lees Ferry",
+   "label": "Million acre-feet per year",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "1930",
+     "value": 15.2
+    },
+    {
+     "label": "1950",
+     "value": 13.9
+    },
+    {
+     "label": "1970",
+     "value": 13.1
+    },
+    {
+     "label": "1990",
+     "value": 12.6
+    },
+    {
+     "label": "2010",
+     "value": 11.5
+    },
+    {
+     "label": "2024",
+     "value": 9.9
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-circle-row",
+  "name": "Circle Row",
+  "category": "CALLOUTS",
+  "description": "Outlined circles in a row on flat black (GoMotion's TUNNELS / CUTS): each ring draws on clockwise from 12 o'clock with a soft tick as it closes, the word rises inside in tracked caps, an optional value rolls under the circle, thin connectors then draw between neighbours; through the hold the circles take the accent one at a time, and at the end the rings unwind and the words drop; overlay.text as a tracked kicker top-centre.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "list",
+   "steps",
+   "sequence"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "Where the water goes",
+   "items": [
+    {
+     "label": "Tunnels"
+    },
+    {
+     "label": "Cuts"
+    },
+    {
+     "label": "Reservoirs"
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-network-tree",
+  "name": "Network Tree",
+  "category": "CALLOUTS",
+  "description": "A schematic on the case-file dark backdrop: a hub chip (overlay.label, accent edge) at the left, a trunk line drawing right and dropping to a bus that forks into right-angled branches, each popping a framed tile with a soft tick - a still from the overlay's media when there is one, else a dark tile with the node's initial and an accent corner - with its name beneath and items[].text as a sub-line; a bright comet keeps running down each branch in turn while the card holds, then the branches retract into the hub and the tiles shrink out.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "media"
+  ],
+  "cues": [
+   "list",
+   "steps"
+  ],
+  "duration": 6.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Front Range diversions",
+   "subtitle": "Where the West Slope's water goes",
+   "label": "Colorado River",
+   "items": [
+    {
+     "label": "Denver",
+     "text": "Moffat and Roberts tunnels"
+    },
+    {
+     "label": "Boulder",
+     "text": "Colorado-Big Thompson"
+    },
+    {
+     "label": "Aurora",
+     "text": "Homestake project"
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "cc-wave-chain",
+  "name": "Wave Chain",
+  "category": "CALLOUTS",
+  "description": "A concept diagram on flat black: a sine wave draws left to right with a glowing accent head, one half-period per item after the first; the first label sits at the wave's start and the rest at successive crests (above) and troughs (below), each popping a white node with an accent shock ring and a soft tick as the head arrives, the label rising in tracked caps - the endpoints larger - with items[].text as a mono sub-line; thin arrowheads on the wave between nodes read as '->', a green dot rides the wave back and forth through the hold, then the wave un-draws from its end and the labels drop.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "steps",
+   "sequence",
+   "list"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "The Arizona spiral",
+   "items": [
+    {
+     "label": "Cuts enacted",
+     "text": "2023"
+    },
+    {
+     "label": "Arizona dries",
+     "text": "Farms fallowed"
+    },
+    {
+     "label": "Lake falling",
+     "text": "Powell nears dead pool"
+    }
+   ]
+  },
+  "family": "cc",
+  "file": "LibChartsC"
+ },
+ {
+  "id": "ps-percent-ring",
+  "name": "Persistent Percent Ring",
+  "category": "NUMBERS",
+  "description": "GoMotion's ring at the upper centre of the frame, built to ride across cuts: the track draws, the accent arc sweeps from 12 o'clock to value/total with a bright glowing head and a pop as it lands while the percent rolls inside; a dark chip with the noun ('OF CAPACITY REMAINING') and a mono subtitle rises beneath. Holds up to 12 s with only the head's 1.6 s breath and a 1.5% ring breath, then the arc unwinds and the number and chip drop out of their masks. Red below 25%, gold above, never green; no scrim, only a soft radial pool. No value: the chip text alone.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "suffix",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "percent",
+   "level",
+   "ratio"
+  ],
+  "duration": 10,
+  "sfx": "pop",
+  "sample": {
+   "value": 22,
+   "total": 100,
+   "suffix": "%",
+   "text": "of capacity remaining",
+   "subtitle": "Lake Powell, 2023"
+  },
+  "family": "ps",
+  "file": "LibPersist"
+ },
+ {
+  "id": "ps-stat-ride",
+  "name": "Stat Ride",
+  "category": "NUMBERS",
+  "description": "A bare bold figure riding top-right on the footage the way GoMotion sets '3,491 FEET': no box or pill, DISPLAY white with a deep shadow over a soft radial pool, the unit in the accent at 0.42 of the size, the noun ('ACRE FEET', 'CUTS') on a line beneath or inline after a one-word noun, a small mono subtitle. Minus kept, thousands commas below 100k, compact 1.3M / 500K / 76K for round large integers, decimals as given, years without a comma. Rises out of its mask letter by letter while the digits roll, drifts 2-3 px on the hold, sinks back into the mask to leave. 'center' sets it giant mid-frame; compact halves it in a corner. No value: the noun alone as a word ride.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "big-number",
+   "measurement",
+   "money",
+   "change"
+  ],
+  "duration": 7,
+  "sfx": "whoosh",
+  "sample": {
+   "value": 3491,
+   "suffix": "feet",
+   "text": "Lake Powell elevation",
+   "subtitle": "March 2023"
+  },
+  "family": "ps",
+  "file": "LibPersist"
+ },
+ {
+  "id": "ps-paper-checklist",
+  "name": "Paper Checklist",
+  "category": "CALLOUTS",
+  "description": "A cream paper card with a faint fibre texture pinned top-right by an accent push-pin, rotated -2 degrees over a soft pool: a red header tab carries the title ('TRIBUTARIES', or NOTES) with a tiny caption in its corner, rows in a handwritten face sit beside hand-drawn wobbly boxes, a mono footer holds the subtitle. The card slides down and settles, rows rise 4 frames apart, then one row per 0.55 s the box fills with the accent and a tick draws through it with a small pop (max 6). On the hold only the shadow breathes; to leave, the card lifts off its pin and slides out right. No items: the tab and an empty sheet with the subtitle.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items"
+  ],
+  "cues": [
+   "list",
+   "summary",
+   "steps"
+  ],
+  "duration": 9,
+  "sfx": "paper",
+  "sample": {
+   "text": "Tributaries",
+   "subtitle": "Upper Colorado River Basin",
+   "label": "Colorado River",
+   "items": [
+    {
+     "label": "Gunnison River"
+    },
+    {
+     "label": "Yampa River"
+    },
+    {
+     "label": "Eagle River"
+    },
+    {
+     "label": "San Juan River"
+    }
+   ]
+  },
+  "family": "ps",
+  "file": "LibPersist"
+ },
+ {
+  "id": "sp-quote-portrait",
+  "name": "Quote Portrait",
+  "category": "QUOTES",
+  "description": "Full-frame dark card: the speaker's photo in a ringed circle on the left (an accent arc turning round it, initials on a dark disc when there is no still), a big accent quote mark, and the quote typing in line by line in the serif italic with a blinking caret and a typewriter track; the name slides out of an accent rule with the role under it once the last line is typed.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight",
+   "media"
+  ],
+  "cues": [
+   "quote",
+   "recording"
+  ],
+  "duration": 7,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "We are living on borrowed water, and the loan is being called in",
+   "label": "Brad Udall",
+   "subtitle": "Senior Water Scientist, Colorado State University",
+   "highlight": "borrowed water"
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
+ },
+ {
+  "id": "sp-name-tag",
+  "name": "Name Tag",
+  "category": "LOWER_THIRDS",
+  "description": "A slim bar bottom-left riding on footage: an accent stripe, the name in bold condensed caps with a hairline growing under it and the role beneath; it slides in from the left out of a mask and slides back out at the end. For press photos and interview clips.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [],
+  "duration": 4,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Camille Calimlim Touton",
+   "subtitle": "Commissioner, U.S. Bureau of Reclamation"
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
+ },
+ {
+  "id": "sp-two-voices",
+  "name": "Two Voices",
+  "category": "COMPARISONS",
+  "description": "Two ringed portraits (media[0] and media[1], initials when a still is missing) turned toward each other over the dimmed footage, each with its position (items[].label) and its line (items[].text) rising beneath; a hairline divider draws out from an accent diamond between them. No 'VS' text.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "items",
+   "media"
+  ],
+  "cues": [
+   "compare-values",
+   "then-now"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The post-2026 fight",
+   "items": [
+    {
+     "label": "Upper Basin",
+     "text": "We already live within the river's means"
+    },
+    {
+     "label": "Lower Basin",
+     "text": "The cuts must be shared by all seven states"
+    }
+   ]
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
+ },
+ {
+  "id": "sp-statement-card",
+  "name": "Statement Card",
+  "category": "HEADLINES",
+  "description": "A light paper card with an accent spine settles in over the dimmed footage; one bold sentence rises line by line, then a highlighter sweeps under the key phrase (overlay.highlight) in the accent word by word; the source sits under an accent dash. The card drops away at the end.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "subtitle"
+  ],
+  "cues": [
+   "headline",
+   "summary",
+   "warning"
+  ],
+  "duration": 5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Powell could stop generating power within two years",
+   "highlight": "stop generating power",
+   "subtitle": "Bureau of Reclamation, 24-month study"
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
+ },
+ {
+  "id": "sp-checklist",
+  "name": "Checklist Card",
+  "category": "CALLOUTS",
+  "description": "A ruled paper card drops in with a bounce, titled with the text; the items (items[].label, an optional items[].text beside each) are checkbox rows that rise in and then tick one by one, each tick a drawn accent stroke with a small pop while the row's ink darkens; a footer counts them (overlay.label names what). The card slides away at the end.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "label"
+  ],
+  "cues": [
+   "list",
+   "steps"
+  ],
+  "duration": 6,
+  "sfx": "paper",
+  "sample": {
+   "text": "Tributaries",
+   "label": "drying",
+   "items": [
+    {
+     "label": "Green River"
+    },
+    {
+     "label": "San Juan River"
+    },
+    {
+     "label": "Gunnison River"
+    },
+    {
+     "label": "Dolores River"
+    }
+   ]
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
+ },
+ {
+  "id": "sp-circle-list",
+  "name": "Circle List",
+  "category": "CALLOUTS",
+  "description": "Full-frame black: three to five words (items[].label) in circles left to right, each ring drawing on with a pop as the word rises into it, three dots stepping across to the next; the highlighted word's ring is in the accent. A small tracked title (overlay.text) above.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "highlight"
+  ],
+  "cues": [
+   "list",
+   "steps",
+   "sequence"
+  ],
+  "duration": 5,
+  "sfx": "none",
+  "sample": {
+   "text": "What the states agreed to",
+   "items": [
+    {
+     "label": "Tunnels"
+    },
+    {
+     "label": "Cuts"
+    },
+    {
+     "label": "Payments"
+    },
+    {
+     "label": "Lawsuits"
+    }
+   ],
+   "highlight": "Cuts"
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
+ },
+ {
+  "id": "sp-network",
+  "name": "Hub Network",
+  "category": "CHARTS",
+  "description": "A hub-and-spoke diagram over the dimmed footage: the text in an accent hub in the centre, the items (items[].label, items[].text under it) on nodes around it; a dotted line draws out to each node in turn with a pulse riding it, the node pops with a small photo tile when media has an entry for it (else a dark disc with the item's initial) and the label rises.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "items",
+   "media"
+  ],
+  "cues": [
+   "list",
+   "steps"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "Front Range cities",
+   "items": [
+    {
+     "label": "Denver",
+     "text": "1.4M people"
+    },
+    {
+     "label": "Boulder",
+     "text": "Boulder Reservoir"
+    },
+    {
+     "label": "Aurora",
+     "text": "Prairie Waters"
+    }
+   ]
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
+ },
+ {
+  "id": "sp-concept-wave",
+  "name": "Concept Wave",
+  "category": "TIMELINES",
+  "description": "A sine wave draws across the dimmed footage with a glowing head; up to three stops on it (crest, trough, crest) light up in turn as the head passes, each with its label (items[].label) rising and a small line (items[].text) under it, a chevron pointing on to the next. A tracked title top-left.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "sequence",
+   "steps"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The chain reaction",
+   "items": [
+    {
+     "label": "Cuts enacted",
+     "text": "Tier 2a shortage"
+    },
+    {
+     "label": "Arizona dries",
+     "text": "Pinal County farms idle"
+    },
+    {
+     "label": "Lake falling",
+     "text": "3,522 ft and dropping"
+    }
+   ]
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
+ },
+ {
+  "id": "sp-portrait-quote",
+  "name": "Portrait Quote",
+  "category": "QUOTES",
+  "description": "The footage darkens more on the left, where an accent opening mark and the serif italic quote rise line by line (at most four lines, shrinking before it cuts) with the highlight words in the accent; the name rises out of an accent rule with the role under it. On the right a 4:5 white-framed portrait slides in with a 3D turn and a gloss sweep (a dark medallion with the speaker's initials when there is no still). The lines drop and the frame slides out right at the end.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight",
+   "media"
+  ],
+  "cues": [
+   "quote",
+   "recording",
+   "person"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The worst year for Colorado snowpack in recorded history",
+   "label": "Russ Schumacher",
+   "subtitle": "Colorado State Climatologist",
+   "highlight": "worst year"
+  },
+  "family": "sp",
+  "file": "LibSpeakers"
  }
 ]

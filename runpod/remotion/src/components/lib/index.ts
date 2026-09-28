@@ -22,6 +22,10 @@ import { LOOKS as L_LibComparisons } from "./LibComparisons";
 import { LOOKS as L_LibAlerts } from "./LibAlerts";
 import { LOOKS as L_LibCaseFile } from "./LibCaseFile";
 import { LOOKS as L_LibScience } from "./LibScience";
+import { LOOKS as L_LibBasinMap } from "./LibBasinMap";
+import { LOOKS as L_LibChartsC } from "./LibChartsC";
+import { LOOKS as L_LibPersist } from "./LibPersist";
+import { LOOKS as L_LibSpeakers } from "./LibSpeakers";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -52,4 +56,8 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibAlerts, ["al-breaking-flag", "al-alert-toast", "al-siren-badge", "al-warning-polygon", "al-severity-meter", "al-countdown-timer", "al-live-tag", "al-emergency-stamp", "al-slim-ticker", "al-storm-track"]),
   ...pick(L_LibCaseFile, ["cf-evidence-bag", "cf-case-stamp", "cf-redacted-doc", "cf-fingerprint-scan", "cf-police-log", "cf-unknown-silhouette", "cf-evidence-markers", "cf-phone-records", "cf-cctv-frame", "cf-transcript"]),
   ...pick(L_LibScience, ["sc-water-cycle", "sc-aquifer-drop", "sc-pipe-flow", "sc-molecule-orbit", "sc-cause-chain", "sc-reservoir-levels", "sc-warming-stripes", "sc-rain-gauges", "sc-dam-level", "sc-heat-sun"]),
+  ...pick(L_LibBasinMap, ["bm-usa-zoom", "bm-basin-zoom", "bm-river-network", "bm-basin-split", "bm-state-callout"]),
+  ...pick(L_LibChartsC, ["cc-line-ticker", "cc-bars-ticker", "cc-columns-ticker", "cc-planned-vs-actual", "cc-two-series", "cc-snow-sites", "cc-tick-bars", "cc-tick-line", "cc-circle-row", "cc-network-tree", "cc-wave-chain"]),
+  ...pick(L_LibPersist, ["ps-percent-ring", "ps-stat-ride", "ps-paper-checklist"]),
+  ...pick(L_LibSpeakers, ["sp-quote-portrait", "sp-name-tag", "sp-two-voices", "sp-statement-card", "sp-checklist", "sp-circle-list", "sp-network", "sp-concept-wave", "sp-portrait-quote"]),
 };
