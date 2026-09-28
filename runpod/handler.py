@@ -61,18 +61,24 @@ def _work_dir(job_id: str) -> str:
 
 # Pipeline phases, in order, for the app's progress screen. The key is sent as
 # `phase` (not `stage`: the app already reads `stage` as the display text).
-PHASES = ("narration", "transcribe", "plan", "source", "render", "upload", "save")
+PHASES = ("narration", "transcribe", "plan", "source", "design", "sound", "render", "upload", "save")
 _PHASE_BY_PREFIX = (
     ("Downloading narration", "narration"),
     ("Aligning narration", "transcribe"),
     ("Reading the whole story", "plan"), ("Planning", "plan"),
     ("Sourcing", "source"), ("Sourced", "source"), ("Re-sourcing", "source"),
     ("Replacing", "source"), ("Rechecking", "source"),
-    ("Building shot pools", "source"),
-    ("Rendering", "render"),
+    ("Building shot pools", "source"), ("Finding footage", "source"), ("Filling", "source"),
+    ("Designing", "design"),
+    ("Mixing", "sound"),
+    ("Rendering", "render"), ("Replaced", "render"), ("Balancing the sound", "render"),
     ("Uploading", "upload"),
     ("Saving", "save"),
 )
+# The app's agent cards (GoMotion-style progress screen).
+_AGENT_BY_PHASE = {"narration": "voice", "transcribe": "voice", "plan": "director", "source": "assets",
+                   "design": "motion", "sound": "sound", "render": "editor", "upload": "editor",
+                   "save": "editor"}
 
 
 class _LogTail:
@@ -130,6 +136,9 @@ class Reporter:
         self.job = job
         self._last = None
         self._started = time.time()
+        self._phase = ""
+        self._phase_started = time.time()
+        self._estimate = None
         self._update = None
         self._pushed_count = -1
         self._stop = threading.Event()
@@ -160,11 +169,21 @@ class Reporter:
     def finish(self):
         self._stop.set()
 
+    def estimate(self, narration_seconds: float) -> None:
+        """Expected total minutes for a narration this long (measured on the owner's videos)."""
+        n = max(0.0, float(narration_seconds or 0)) / 60.0
+        self._estimate = [round(5 + 1.6 * n), round(8 + 2.6 * n)]
+
     def __call__(self, step: str, progress: int = None, *, done: int = None,
                  total: int = None, **fields):
-        phase = next((p for prefix, p in _PHASE_BY_PREFIX if step.startswith(prefix)), "")
+        phase = next((p for prefix, p in _PHASE_BY_PREFIX if step.startswith(prefix)), "") or self._phase
+        if phase != self._phase:
+            self._phase, self._phase_started = phase, time.time()
         update = {"status": step, "progress": progress, "phase": phase,
-                  "phases": list(PHASES)}
+                  "phases": list(PHASES), "agent": _AGENT_BY_PHASE.get(phase, ""),
+                  "phase_started_at": round(self._phase_started)}
+        if self._estimate:
+            update["estimate_minutes"] = list(self._estimate)
         if done is not None and total is not None:
             update.update(done=done, total=total)
         print(f"[worker] {step}" + (f" ({progress}%)" if progress is not None else ""),
@@ -797,6 +816,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         audio_src = storage.resolve_audio(raw_audio, bucket=inp.get("audio_bucket", "video-audio"))
         audio_path = storage.download(audio_src, os.path.join(work, "narration.mp3"))
     audio_duration = renderer.probe_duration(audio_path)
+    if audio_duration:
+        report.estimate(audio_duration)
 
     report("Aligning narration", 8)
     events.phase("transcribe")
@@ -1013,6 +1034,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
     vision.require_credits()
 
+    # No percentage: the sourcing bands already reach the mid 60s.
+    report("Designing motion graphics and animations")
     doc = timeline.build(
         segments, shots, assets,
         # The resolved URL, not the temp path: the document has to stay
@@ -1072,6 +1095,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
          "queries": sec.get("footage", [])}
         for sec in (doc["meta"]["story"].get("sections") or [])]
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
+    # The music sections, ducking and sound effects were laid out by the build.
+    report("Mixing music and sound effects")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).

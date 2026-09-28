@@ -198,9 +198,19 @@ def stats() -> dict:
                 "recentErrors": list(_ERRORS)}
 
 
+# At most VISION_CONCURRENCY requests in flight per worker (see config).
+_SLOTS = threading.BoundedSemaphore(max(1, config.VISION_CONCURRENCY))
+
+
 def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
               key: str = "", main: bool = True) -> Tuple[Optional[str], bool]:
     """(text, retryable): one call to one model; retryable when the failure was transient."""
+    with _SLOTS:
+        return _ask_once_slot(model, messages, max_tokens, url, key, main)
+
+
+def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
+                   key: str, main: bool) -> Tuple[Optional[str], bool]:
     try:
         r = requests.post(
             url or _endpoint(model),
@@ -239,6 +249,12 @@ def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
         # Reasoning models can spend max_tokens thinking and return nothing.
         _fail(model, "empty answer")
         return None, False
+    low = text.strip().lower()
+    if not low.startswith(("{", "[", "```")) and "limit" in low and "try again" in low:
+        # Kie's gpt-5-2 under load: "You've hit your attachment limit. Please try
+        # again later." A rate limit, not a verdict - the next model is asked.
+        _fail(model, f"rate limited: {text.strip()[:80]}")
+        return None, True
     return text, False
 
 

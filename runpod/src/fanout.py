@@ -630,9 +630,9 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
     bucket = inp.get("bucket") or config.MEDIA_BUCKET
     out: Dict[str, dict] = {}
     global_of = {k: g for g, k in local_of.items()}
-    for k, a in enumerate(assets):
-        if a is None or not a.local_path or not os.path.isfile(a.local_path):
-            continue
+
+    def upload(k_a):
+        k, a = k_a
         g = global_of[k]
         ext = os.path.splitext(a.local_path)[1] or ".bin"
         obj = f"projects/{project_id}/parts/{parent}/{g:04d}{ext}"
@@ -641,9 +641,17 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
                                         read_ttl=60 * 60 * 6)
         except Exception as e:  # noqa: BLE001 - the parent re-sources it
             print(f"[part] scene {g + 1}: upload failed ({e})", flush=True)
-            continue
+            return None
         d = asdict(a)
         d.pop("local_path", None)
         d.update(remote_url=url, storage_path=obj)
-        out[str(g)] = d
+        return str(g), d
+
+    ready = [(k, a) for k, a in enumerate(assets)
+             if a is not None and a.local_path and os.path.isfile(a.local_path)]
+    # Six at a time: one by one, a part's uploads could outlast the parent's wait.
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        for got in ex.map(upload, ready):
+            if got:
+                out[got[0]] = got[1]
     return {"assets": out, "delivered": len(out), "asked": len(jobs)}

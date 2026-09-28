@@ -37,7 +37,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Dict, List, Optional, Set
 
-from . import config, media, moments, vision
+from . import config, media, moments, vision, ytdlp
 
 _PUNCT = re.compile(r"[^a-z0-9 ]+")
 _ARTICLES = re.compile(r"\b(the|a|an)\b")
@@ -162,7 +162,7 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
         if pool:
             print(f"[library] {subject}: {len(pool)} clip(s) reused", flush=True)
     for cand in candidates(subject, require_cc, skip_ids)[:config.POOL_MAX_VIDEOS]:
-        if len(pool) >= need:
+        if len(pool) >= need or ytdlp.past_deadline():
             break
         found = spaced(rate_video(cand, subject, context, seconds), config.POOL_MIN_GAP_SECONDS)
         for m in found:
@@ -257,6 +257,10 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
     def one(key: str) -> None:
         sjobs = todo[key]
         name = display_name(sjobs)
+        if ytdlp.past_deadline():
+            # Sourcing time is spent: the lines go to what is already found.
+            print(f"[pools] {name}: skipped, sourcing time spent", flush=True)
+            return
         try:
             plan, spare = plan_subject(name, sjobs, require_cc, set(), claim, library=library, work=work)
             with ThreadPoolExecutor(max_workers=6) as ex:

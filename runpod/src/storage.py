@@ -67,6 +67,8 @@ def download(url: str, dest_path: str, timeout: int = 180) -> str:
             response = getattr(e, "response", None)
             code = getattr(response, "status_code", None)
             retryable = code is None or code in (408, 425, 429) or code >= 500
+            if isinstance(e, StorageError) and "HTML" in str(e):
+                retryable = False      # a web page where an image was expected
             if attempt == 3 or not retryable:
                 break
             time.sleep(0.5 * attempt)

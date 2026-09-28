@@ -207,6 +207,9 @@ VISION_HEDGE_SECONDS = float(os.getenv("VISION_HEDGE_SECONDS", "25"))
 # A call gives up after this long in total; the candidate is then handled
 # like any unjudged one. Late answers are dropped.
 VISION_CALL_BUDGET_SECONDS = float(os.getenv("VISION_CALL_BUDGET_SECONDS", "100"))
+# Vision requests in flight per worker. Ten workers each firing 20+ at once
+# drew Kie's "You've hit your attachment limit" (Glen Canyon, 2026-09-29).
+VISION_CONCURRENCY = int(os.getenv("VISION_CONCURRENCY", "8"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
@@ -342,7 +345,7 @@ SUBJECT_POOLS = _flag("SUBJECT_POOLS", True)
 # workers start at once instead of the parent pooling alone first (a real
 # job sat 6 minutes at 22-25% on one worker while nine idled).
 POOLS_IN_PARTS = _flag("POOLS_IN_PARTS", True)
-POOL_MIN_SCENES = int(os.getenv("POOL_MIN_SCENES", "1"))
+POOL_MIN_SCENES = int(os.getenv("POOL_MIN_SCENES", "2"))
 POOL_MAX_VIDEOS = int(os.getenv("POOL_MAX_VIDEOS", "8"))
 POOL_PARALLEL_SUBJECTS = int(os.getenv("POOL_PARALLEL_SUBJECTS", "4"))
 POOL_MIN_GAP_SECONDS = float(os.getenv("POOL_MIN_GAP_SECONDS", "8"))
@@ -396,10 +399,11 @@ FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "3"))
 # and searches stop at once and the beats still without footage become
 # animation scenes. Budget = base + per scene, capped. At 2 s per scene the
 # owner's 22-minute Glen Canyon video (167 lines) got 514 s and its parts
-# delivered 3-6 clips each; 4 s per scene gives it ~14 minutes (GoMotion's
-# own screen shows 24+ minutes on this step).
+# delivered 3-6 clips each; at 4 s (~14 min) its parts were still busy at the
+# deadline. 6 s per scene gives it ~20 minutes (GoMotion's own screen shows
+# 24+ minutes on this step).
 SOURCE_BUDGET_BASE_SECONDS = float(os.getenv("SOURCE_BUDGET_BASE_SECONDS", "180"))
-SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "4"))
+SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "6"))
 SOURCE_BUDGET_MAX_SECONDS = float(os.getenv("SOURCE_BUDGET_MAX_SECONDS", "1500"))
 # Saving good clips to the library: parallel uploads under one time box.
 LIBRARY_SAVE_SECONDS = float(os.getenv("LIBRARY_SAVE_SECONDS", "90"))

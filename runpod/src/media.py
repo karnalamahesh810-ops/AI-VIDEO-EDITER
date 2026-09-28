@@ -2573,6 +2573,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
     started = time.time()
     deadline = started + _budget(config.PASS1_BUDGET_SECONDS, 3.0, len(pass1))
+    if _ytdlp.DEADLINE[0]:
+        # The job's sourcing deadline wins: a part must hand back what it found
+        # (and upload it) before the parent stops waiting, or all of it is lost.
+        deadline = min(deadline, _ytdlp.DEADLINE[0] - 25.0)
     pending = set(futures)
     try:
         while pending:
