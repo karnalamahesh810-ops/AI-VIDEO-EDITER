@@ -2300,7 +2300,15 @@ def _asset_ok(asset) -> tuple:
     path = getattr(asset, "local_path", "") or ""
     if not path or not os.path.exists(path):
         return True, ""
-    return clip_quality(path)
+    # Archive film only exists small; everything else must be at least
+    # MIN_CLIP_HEIGHT lines (the owner: 1080p-quality clips).
+    title = f"{getattr(asset, 'attribution', '') or ''} {getattr(asset, 'query', '') or ''}"
+    archive = asset.source == "archive_org" or bool(_ARCHIVE_TITLE_RE.search(title))
+    return clip_quality(path, config.MIN_ARCHIVE_HEIGHT if archive else config.MIN_CLIP_HEIGHT)
+
+
+_ARCHIVE_TITLE_RE = re.compile(r"\b(newsreel|archive|archival|pathe|path\u00e9|periscope|movietone|travelogue|"
+                               r"huntley|18\d\d|19[0-8]\d|1990s?)\b", re.I)
 
 
 # What the last source_many() did, phase by phase, for the job result. The

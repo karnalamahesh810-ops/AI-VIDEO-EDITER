@@ -147,6 +147,8 @@ _OVERLAY_SECONDS = {
     "donut": 5.0, "area-chart": 6.0, "progress-bar": 4.5, "icon-array": 4.0,
     "ranking": 5.5, "counter": 4.5, "number-roll": 3.5, "trend": 4.0,
     "year-roll": 5.0, "banner": 4.0, "scale-compare": 5.0,
+    # Library looks carry their own duration in the registry.
+    "motion": 4.5,
 }
 
 # Sources this workflow refuses. Kept as data so the check and the error

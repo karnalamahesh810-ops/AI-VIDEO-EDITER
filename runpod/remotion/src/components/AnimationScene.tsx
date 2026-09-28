@@ -18,6 +18,36 @@ import type { Overlay, Scene, SceneMedia } from "../types";
  */
 const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
 
+/**
+ * A still of the story's own footage, blurred, darkened and slowly pushing,
+ * with a fine grid and a vignette: what a full-screen number or chart sits
+ * on (an animation scene, or a full-screen overlay over its clip).
+ */
+export const BlurBackdrop: React.FC<{ still: string; frames: number }> = ({ still, frames }) => {
+  const frame = useCurrentFrame();
+  const { width } = useVideoConfig();
+  const k = width / 1920;
+  const drift = interpolate(frame, [0, Math.max(1, frames)], [0, 1], clamp);
+  return (
+    <AbsoluteFill style={{ backgroundColor: "#08080a", overflow: "hidden" }}>
+      {still ? (
+        <AbsoluteFill>
+          <Img src={still} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.18 + drift * 0.06})`,
+            filter: "blur(16px) grayscale(0.4) brightness(0.55) contrast(1.05)" }} />
+        </AbsoluteFill>
+      ) : (
+        <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 42%, #1b1c21 0%, #0e0e12 60%, #08080a 100%)" }} />
+      )}
+      <AbsoluteFill style={{ opacity: still ? 0.07 : 0.1,
+        backgroundImage: "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
+        backgroundSize: `${72 * k}px ${72 * k}px`, transform: `translateY(${-drift * 24 * k}px)`,
+        maskImage: "radial-gradient(ellipse at center, #000 30%, transparent 80%)",
+        WebkitMaskImage: "radial-gradient(ellipse at center, #000 30%, transparent 80%)" }} />
+      <AbsoluteFill style={{ boxShadow: `inset 0 0 ${280 * k}px rgba(0,0,0,.6)`, pointerEvents: "none" }} />
+    </AbsoluteFill>
+  );
+};
+
 export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?: SceneMedia | null }> =
   ({ scene, accent, backdrop }) => {
     const frame = useCurrentFrame();
@@ -38,7 +68,8 @@ export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?:
       const still = backdrop.type === "image" ? backdrop
         : backdrop.thumbnail ? { ...backdrop, type: "image" as const, url: backdrop.thumbnail } : null;
       const photoCard = ov.type === "photo-card" || ov.type === "name-card";
-      const caseLook = ["board", "clipping", "doc", "facts", "dossier", "window", "audio", "evidence"].includes(ov.variant || "");
+      const caseLook = ["board", "clipping", "doc", "facts", "dossier", "window", "audio", "evidence"].includes(ov.variant || "")
+        || Boolean(templateFor(ov.template)?.tags?.some((x) => x === "still" || x === "stills"));
       if ((photoCard && backdrop.type === "image") || (caseLook && still)) ov.media = [still || backdrop];
     }
     const Component = OVERLAYS[ov.type];

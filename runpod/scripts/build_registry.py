@@ -563,12 +563,37 @@ MUSIC_MOODS = {
 }
 
 
+def _library() -> list:
+    """The animation library (remotion/src/components/lib): one "motion" template per QA-kept look."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library_looks.json")
+    if not os.path.exists(path):
+        return []
+    out = []
+    for look in json.load(open(path, encoding="utf-8")):
+        tags = ["lib", look["family"]]
+        if look.get("own_backdrop"):
+            tags.append("own-backdrop")
+        n = int(look.get("needs_media") or 0)
+        if n == 1:
+            tags.append("still")
+        elif n > 1:
+            tags.append("stills")
+        sfx = look.get("sfx") or "none"
+        out.append(T("LIB_" + look["id"].upper().replace("-", "_"), look["name"], look["category"], "motion",
+                     look["description"], props=[p for p in look.get("props", []) if p in P],
+                     duration=float(look.get("duration") or 4.5), variant=look["id"], entrance="fade",
+                     sfx=({"name": sfx, "volume": 0.25} if sfx != "none" else None),
+                     cues=look.get("cues", []), kind=("tag" if look.get("kind") == "tag" else "card"),
+                     emphasis=("high" if look.get("kind") == "card" else "medium"), tags=tags))
+    return out
+
+
 def main() -> None:
     reg = {
         "version": 1,
         "categories": ["TEXT", "HEADLINES", "LOWER_THIRDS", "NUMBERS", "CHARTS", "COMPARISONS", "TIMELINES",
                        "MAPS", "CALLOUTS", "QUOTES", "DOCUMENTS", "IMAGES", "TRANSITIONS", "CAPTIONS"],
-        "templates": TEMPLATES,
+        "templates": TEMPLATES + _library(),
         "imageTreatments": IMAGE_TREATMENTS,
         "transitions": TRANSITIONS,
         "sfx": SFX,

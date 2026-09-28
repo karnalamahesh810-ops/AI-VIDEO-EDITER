@@ -181,5 +181,54 @@ class OverlayPhotos(unittest.TestCase):
         self.assertEqual(len(doc["overlays"]), 1)
 
 
+
+class OverlayPolicy(unittest.TestCase):
+    """The owner (2026-09-28): the clip keeps its slot; one figure is a compact overlay on it,
+    several values are full screen for their moment only, nothing stays up 7 seconds."""
+
+    def _plan(self, texts):
+        segments = [seg(t, i) for i, t in enumerate(texts)]
+        shots = [{"subject": "Lake Mead"} for _ in texts]
+        scenes = [scene(i) for i in range(len(texts))]
+        brief = {"kind": "explainer", "sections": [], "hookBeats": []}
+        return treatments.plan(segments, shots, scenes, 30, len(texts) * 180, brief, treatments.pack_for(brief))["overlays"]
+
+    def test_a_single_figure_rides_on_the_clip(self):
+        figures = ["Lake Mead is now at 26 percent capacity.", "The lake held 31 percent of its water in 2019.",
+                   "Only 44 percent of the valley is irrigated now.", "Cuts reach 18 percent of the allocation."]
+        texts = []
+        for f in figures:
+            texts += [f, "Plain words about water here.", "More plain words about the valley."]
+        ovs = [o for o in self._plan(texts) if o.get("value") is not None]
+        self.assertTrue(ovs)
+        for o in ovs:
+            t = templates.get(o["template"])
+            self.assertNotIn("own-backdrop", t.get("tags") or [], o["template"])
+            self.assertNotEqual(o.get("backdrop"), "blur")
+            if t["kind"] != "tag":
+                self.assertTrue(o.get("compact"), o["template"])
+                self.assertIn(o.get("position"), ("bottom-left", "bottom-right"))
+                self.assertAlmostEqual(o.get("scale"), treatments.COMPACT_SCALE)
+            self.assertLessEqual(o["durationInFrames"] / 30, 4.0 + 1e-6)
+        # Four different percentages, four different looks.
+        self.assertEqual(len({o["template"] for o in ovs}), len(ovs))
+
+    def test_several_values_are_full_screen_for_their_moment_only(self):
+        ovs = self._plan(["In 2000 the lake was 95 percent full, in 2010 it held 60 percent, and today it is at 26 percent."])
+        self.assertEqual(len(ovs), 1)
+        o = ovs[0]
+        t = templates.get(o["template"])
+        self.assertNotEqual(t["kind"], "tag")
+        if "own-backdrop" not in (t.get("tags") or []):
+            self.assertEqual(o.get("backdrop"), "blur")
+        self.assertLessEqual(o["durationInFrames"] / 30, 5.0 + 1e-6)
+
+    def test_text_rides_on_the_clip(self):
+        ovs = self._plan(["So what happens when the lake runs dry?"])
+        for o in ovs:
+            self.assertNotIn("own-backdrop", templates.get(o["template"]).get("tags") or [])
+            self.assertLessEqual(o["durationInFrames"] / 30, 4.0 + 1e-6)
+
+
 if __name__ == "__main__":
     unittest.main()

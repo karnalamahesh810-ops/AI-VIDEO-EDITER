@@ -53,6 +53,8 @@ TEMPLATES = {
     # Broadcast motion-graphic family (remotion/components/MotionGraphics.tsx).
     "donut", "area-chart", "progress-bar", "icon-array", "ranking",
     "counter", "number-roll", "trend", "year-roll", "banner", "scale-compare",
+    # The animation library (remotion/src/components/lib): the variant names the look.
+    "motion",
 }
 
 # Pictograms the icon-pop template can draw (DataGraphics.tsx ICONS).
@@ -1111,7 +1113,7 @@ MAX_PERSON_STILLS_IN_A_ROW = 2
 
 _PHOTO_WORDS = re.compile(r"\b(photo(?:graph)?s?|pictures?|pictured|portraits?|snapshots?|images?|newspapers?|"
                           r"headlines?|front page|letters?|documents?|records?|archives?|postcards?|posters?)\b", re.I)
-STILL_EVERY = 7          # a planned photo beat about every seventh line for variety
+STILL_EVERY = 5          # a planned photo beat about every fifth line for variety (VidRush: ~30% stills)
 
 
 def promote_stills(segments: List[Segment], shots: List[dict], story: dict) -> int:
@@ -1142,7 +1144,11 @@ def promote_stills(segments: List[Segment], shots: List[dict], story: dict) -> i
         if shot.get("subjectType") == "person" and not named:
             continue
         mentions_photo = bool(_PHOTO_WORDS.search(text or ""))
-        due = since >= STILL_EVERY and named and i > 0 and not prev_still
+        # A document, an object or a building is a photo moment of its own:
+        # footage of "the 1922 Compact" or "Intake No. 3" rarely exists.
+        thing = (shot.get("subjectType") or "").lower() in ("document", "object", "artifact", "thing", "building",
+                                                             "structure") and bool(subject)
+        due = (since >= STILL_EVERY and named and i > 0 and not prev_still) or (thing and since >= 2 and not prev_still)
         if (mentions_photo and not prev_still) or due:
             shot["visualType"] = "image"
             shot["stillReason"] = "photo mentioned" if mentions_photo else "variety"

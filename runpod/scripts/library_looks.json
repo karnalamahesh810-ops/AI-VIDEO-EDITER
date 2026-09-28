@@ -1,0 +1,6542 @@
+[
+ {
+  "id": "lt-accent-line",
+  "name": "Accent Line Name",
+  "category": "LOWER_THIRDS",
+  "description": "A glowing accent line grows low-left with a bright node riding its head. The name rises letter by letter out of the line and the role drops out beneath it, then a glint runs along the line; at the end both sink back into the line and it retracts to the right.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person",
+   "intro",
+   "profile"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Pat Mulroy",
+   "subtitle": "Former head, Southern Nevada Water Authority"
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-two-tone",
+  "name": "Two-Tone Name Blocks",
+  "category": "LOWER_THIRDS",
+  "description": "The name sits on a white block with an accent edge that wipes in from the left, and the role sits on an accent block that wipes in from the right. Both have hard cut-out shadows and drift apart slightly while they hold, then collapse back toward the sides they came from.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person",
+   "profile"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Elwood Mead",
+   "subtitle": "Commissioner, Bureau of Reclamation"
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-glass-card",
+  "name": "Glass Name Card",
+  "category": "LOWER_THIRDS",
+  "description": "A frosted-glass card tilts up into place in 3D and floats gently. A gold icon circle pops in, draws its ring and person glyph, the name and role rise letter by letter, and a diagonal shine sweeps across the glass before the card tips away.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person",
+   "profile",
+   "intro"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Jay Famiglietti",
+   "subtitle": "Hydrologist and water scientist"
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-location-pin",
+  "name": "Location Pin Drop",
+  "category": "LOWER_THIRDS",
+  "description": "A map pin drops in, squashes and hops on landing, and ground ripples keep pulsing under its tip. The place name rises letter by letter with the region in accent caps, a hairline draws, and the real coordinates decode in mono: digits scramble in cyan, then lock.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "locations"
+  ],
+  "cues": [
+   "place"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Hoover Dam",
+   "subtitle": "Black Canyon · Nevada / Arizona",
+   "locations": [
+    {
+     "label": "Hoover Dam",
+     "lat": 36.016,
+     "lon": -114.7377,
+     "kind": "landmark"
+    }
+   ]
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-date-place",
+  "name": "Date And Place",
+  "category": "LOWER_THIRDS",
+  "description": "A glowing accent divider grows from its centre. The date slides out of it to the left and the place slides out of it to the right, both in mono caps with small DATE and LOCATION captions and a hairline beneath; at the end they slide back into the divider as it closes.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "date",
+   "place"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Hoover Dam, Nevada",
+   "label": "September 30, 1935"
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-role-badge",
+  "name": "Initials Role Badge",
+  "category": "LOWER_THIRDS",
+  "description": "A gold coin with the person's initials flips in on its Y axis with a slight overshoot, its accent ring draws on and a dashed orbit ring keeps turning. The name rises letter by letter beside it and the role wipes open inside an outlined pill; at the end the coin flips away.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person",
+   "profile"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Frank Crowe",
+   "subtitle": "Superintendent, Six Companies"
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-corner-brackets",
+  "name": "Corner Bracket Tag",
+  "category": "LOWER_THIRDS",
+  "description": "A tiny top-left tag with four accent corner brackets that lock onto the text from outside with an overshoot and a glow flash. A scan line passes through it, a status dot blinks, the brackets breathe while it holds, and they spring back open as the letters drop out.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "place",
+   "archive"
+  ],
+  "duration": 4,
+  "sfx": "pop",
+  "sample": {
+   "text": "Lake Mead",
+   "subtitle": "Nevada · July 2022"
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-stacked-index",
+  "name": "Stacked Index Profile",
+  "category": "LOWER_THIRDS",
+  "description": "A large outline index number rolls in like an odometer and then fills with accent colour behind a moving wave. An accent bar grows beside it, and the name, role and organisation rows slide up out of their masks one after another, split by hairlines that draw in.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value"
+  ],
+  "cues": [
+   "person",
+   "profile"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Floyd Dominy",
+   "subtitle": "Commissioner, 1959-1969",
+   "label": "U.S. Bureau of Reclamation",
+   "value": 2
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-slant-bar",
+  "name": "Slant Bar Drawer",
+  "category": "LOWER_THIRDS",
+  "description": "A compact skewed accent bar whips in from the left, trailing speed streaks and led by a white sliver, and the name rises letter by letter inside it. A thin dark role drawer then drops out from under the bar, a glint crosses it, and the bar whips out to the right.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person",
+   "intro"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Marc Reisner",
+   "subtitle": "Author, Cadillac Desert"
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "lt-source-credit",
+  "name": "Source Credit Line",
+  "category": "LOWER_THIRDS",
+  "description": "A small bottom-right credit line reading FOOTAGE: SOURCE in mono caps, its characters rising and fading in one by one. Beside it sits a play icon whose ring draws on, then an accent progress arc fills slowly as the shot plays; the characters drop out right to left at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "archive",
+   "recording"
+  ],
+  "duration": 5,
+  "sfx": "none",
+  "sample": {
+   "text": "U.S. Bureau of Reclamation",
+   "label": "Footage",
+   "subtitle": "Archive 1934"
+  },
+  "family": "lt",
+  "file": "LibLowerThirds"
+ },
+ {
+  "id": "hl-word-stack",
+  "name": "Word Stack Slam",
+  "category": "HEADLINES",
+  "description": "Two to four condensed words stack on the left, each dropping from 1.8x scale and landing with a speed streak, an outline shockwave and a small camera shake. An accent spine grows beside the stack as each word lands, the key word is in the accent, and at the end the words wipe out one by one.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "headline",
+   "warning",
+   "intro"
+  ],
+  "duration": 3.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead Is Dying",
+   "subtitle": "Nevada, July 2022",
+   "highlight": "Dying"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-split-line",
+  "name": "Split Line Reveal",
+  "category": "HEADLINES",
+  "description": "A hairline with end ticks draws out from the centre, then splits into two rules that move apart while the headline slides up out of the gap between them. An accent glint runs along the rules, and at the end the gap closes over the text and the line pulls back to the centre.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "headline",
+   "chapter"
+  ],
+  "duration": 4,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The River That Stopped Reaching The Sea",
+   "subtitle": "Colorado River Delta, Mexico",
+   "highlight": "Stopped"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-wipe-bar",
+  "name": "Wipe Bar Reveal",
+  "category": "HEADLINES",
+  "description": "An After Effects block reveal in the lower left: an accent bar wipes across each headline line and pulls away to leave the words behind, with a white bar doing the same for the subtitle and an accent spine beside them. At the end the bars wipe back over the text and carry it away.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "headline",
+   "event"
+  ],
+  "duration": 4,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Arizona Cuts Water To Its Farms",
+   "subtitle": "Pinal County, January 2023",
+   "highlight": "Cuts"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-keyword-pop",
+  "name": "Keyword Scale Pop",
+  "category": "TEXT",
+  "description": "A bold sentence near the bottom centre rises word by word out of masks. Then the key word grows about 1.36x in the accent, the other words move aside to make room, and an accent underline and a ring of eight spark strokes burst out. At the end the words rise back out of their masks.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "headline",
+   "summary",
+   "question"
+  ],
+  "duration": 4.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Forty million people depend on a single river",
+   "subtitle": "The Colorado River",
+   "highlight": "single"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-focus-pull",
+  "name": "Focus Pull Title",
+  "category": "TEXT",
+  "description": "Words come from a soft, scaled-up blur into sharp focus one after another, with rimmed bokeh discs drifting in parallax behind them. Camera focus brackets close in and flash the accent when the last word is sharp. At the end the words go soft again and fall back into depth.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "question",
+   "headline",
+   "intro"
+  ],
+  "duration": 4.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "Nobody saw it coming",
+   "subtitle": "Summer 2022",
+   "highlight": "Nobody"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-letter-flip",
+  "name": "3D Letter Flip",
+  "category": "HEADLINES",
+  "description": "A top-centre headline whose letters roll in one after another on the X axis like the faces of a cube, in perspective with shading, overshooting slightly before they settle. An accent bar and a tracked subtitle follow underneath, and at the end the letters roll away in turn.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "headline",
+   "chapter"
+  ],
+  "duration": 4,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Great Drought of 1934",
+   "subtitle": "The Dust Bowl, Oklahoma",
+   "highlight": "Drought"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-outline-fill",
+  "name": "Outline To Fill",
+  "category": "HEADLINES",
+  "description": "On a slowly settling navy backdrop of dotted ridges, a stroked title rises in letter by letter, then fills with solid white (the key word in the accent) from left to right behind a slanted glinting edge while an accent glow builds. An accent rule and a tracked subtitle follow.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "chapter",
+   "intro",
+   "headline"
+  ],
+  "duration": 4.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "Day Zero",
+   "subtitle": "Cape Town, South Africa, 2018",
+   "highlight": "Zero"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-marker-sweep",
+  "name": "Marker Sweep",
+  "category": "TEXT",
+  "description": "An editorial headline in heavy near-black sans on warm fibred paper rises word by word. Then a translucent, rough-edged accent highlighter sweeps behind the key words with its tip leading, under an accent-square kicker, with a source line below. At the end the highlighter lifts off and the words rise away.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "highlight",
+   "label"
+  ],
+  "cues": [
+   "headline",
+   "report",
+   "summary"
+  ],
+  "duration": 5.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "The aquifer under the Great Plains is being drained faster than rain can refill it",
+   "subtitle": "The Ogallala Aquifer",
+   "highlight": "drained faster",
+   "label": "Source: U.S. Geological Survey"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-center-stack",
+  "name": "Center Stack Title",
+  "category": "HEADLINES",
+  "description": "A centred three-weight stack: a widely tracked accent kicker, a big condensed title rising letter by letter, and a light note line. Fading hairline rules above and below the title draw outward from accent diamonds, and at the end everything leaves in turn as the rules pull back to the centre.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "body"
+  ],
+  "cues": [
+   "chapter",
+   "intro"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Dam That Drowned Glen Canyon",
+   "subtitle": "Chapter Two",
+   "label": "Page, Arizona, 1963"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "hl-ticker-slide",
+  "name": "Ticker Slide",
+  "category": "HEADLINES",
+  "description": "A compact, skewed accent band slides in from the left in the lower corner, with its headline following slightly behind so the two layers separate. Two trailing notches follow, a white kicker chip rises out from behind the band, and a sheen sweeps across once. At the end the text slides out of the band and the band wipes away.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "headline",
+   "event"
+  ],
+  "duration": 4,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Powell Hits Record Low",
+   "label": "Update",
+   "subtitle": "The reservoir fell to 22% of capacity in February 2023"
+  },
+  "family": "hl",
+  "file": "LibHeadlines"
+ },
+ {
+  "id": "pb-wipe-compare",
+  "name": "Wipe Slider Compare",
+  "category": "IMAGES",
+  "description": "A large framed photo pair on a dark stage: a white divider with a glass handle is dragged from the right edge to far left, then overshoots back and settles past the middle. THEN (graded archival) and NOW labels are wiped by the divider and the frame collapses to a line on exit.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 2,
+  "props": [
+   "text",
+   "subtitle",
+   "items"
+  ],
+  "cues": [
+   "then-now",
+   "photos"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead Shoreline",
+   "subtitle": "Hoover Dam, Nevada",
+   "items": [
+    {
+     "label": "1983"
+    },
+    {
+     "label": "2022"
+    }
+   ]
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-triptych",
+  "name": "Parallax Triptych",
+  "category": "IMAGES",
+  "description": "Three tall panels rise into place from alternating sides with masked reveals while the pictures inside counter-move. A single photo is sliced across all three and snaps into alignment. Panels drift at different pan speeds, carry numbered captions, and close away staggered.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 3,
+  "props": [
+   "text",
+   "subtitle",
+   "items"
+  ],
+  "cues": [
+   "photos",
+   "place-photo"
+  ],
+  "duration": 5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Three Rivers Running Dry",
+   "subtitle": "The Colorado Basin",
+   "items": [
+    {
+     "label": "Colorado River"
+    },
+    {
+     "label": "Rio Grande"
+    },
+    {
+     "label": "San Juan River"
+    }
+   ]
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-carousel",
+  "name": "3D Photo Carousel",
+  "category": "IMAGES",
+  "description": "Photos on a 3D ring spin in and land with the front card enlarged and lit and a floor reflection below. The ring then steps one photo at a time with a mono counter and caption swapping letter by letter, and spins away at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 5,
+  "props": [
+   "text",
+   "subtitle",
+   "items"
+  ],
+  "cues": [
+   "photos",
+   "list"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Towns That Ran Out",
+   "subtitle": "A global water crisis",
+   "items": [
+    {
+     "label": "Flint, Michigan"
+    },
+    {
+     "label": "Jackson, Mississippi"
+    },
+    {
+     "label": "Cape Town"
+    },
+    {
+     "label": "Chennai"
+    }
+   ]
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-corkboard",
+  "name": "Corkboard Pins",
+  "category": "IMAGES",
+  "description": "On a warm speckled cork board with a slow camera drift, a taped index card with a marker title lands first. Photo prints then drop in with closing shadows, a pin falls into each, and each print swings on its pin before settling into a faint sway; everything is yanked off the board at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 3,
+  "props": [
+   "text",
+   "subtitle",
+   "items"
+  ],
+  "cues": [
+   "photos",
+   "archive"
+  ],
+  "duration": 6,
+  "sfx": "paper",
+  "sample": {
+   "text": "Who Poisoned The Well?",
+   "subtitle": "Case file, 1979",
+   "items": [
+    {
+     "label": "Pump station 4"
+    },
+    {
+     "label": "The mayor's memo"
+    },
+    {
+     "label": "Lab results"
+    }
+   ]
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-double-exposure",
+  "name": "Double Exposure",
+  "category": "IMAGES",
+  "description": "A graded base photo slowly pushes while a second photo (or a mirrored copy) is screen-blended in through a travelling diagonal mask. An accent light leak sweeps and flickers across the frame, and the look exits in a burn-out flash under a bottom-left title.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 2,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "photo",
+   "archive"
+  ],
+  "duration": 5,
+  "sfx": "riser",
+  "sample": {
+   "text": "A River Remembered",
+   "subtitle": "Before the dam"
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-zoom-through",
+  "name": "Zoom Through",
+  "category": "IMAGES",
+  "description": "Photo 1 settles, then a bordered window pops open at its centre with cyan finder brackets and a rolling ZOOM readout. The camera dives in with motion blur and a flash until photo 2 fills the frame, and the title rises bottom-left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 2,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "this-one"
+  ],
+  "duration": 5,
+  "sfx": "riser",
+  "sample": {
+   "label": "Satellite view",
+   "text": "The Intake Tower",
+   "subtitle": "Lake Mead, Nevada"
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-annotated",
+  "name": "Annotated Photo",
+  "category": "IMAGES",
+  "description": "A photo is swept by a cyan scan line that leaves a faint grid behind. Numbered markers pop with pulsing rings, curved white arrows draw on to them with arrowheads snapping in, and condensed labels with detail lines rise beside each; the arrows undraw on exit.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items"
+  ],
+  "cues": [
+   "photo",
+   "point-at",
+   "subject-photo"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "Inside The Treatment Plant",
+   "subtitle": "Flint, Michigan",
+   "items": [
+    {
+     "label": "Intake pipe",
+     "text": "Drew straight from the Flint River"
+    },
+    {
+     "label": "Lead service lines",
+     "text": "Corroded by untreated water"
+    },
+    {
+     "label": "Filter beds",
+     "text": "Offline since April 2014"
+    }
+   ]
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-grid-pop",
+  "name": "Grid Pop Mosaic",
+  "category": "IMAGES",
+  "description": "A 2x2 (or 3x2) photo grid pops in diagonally with back-out scale, tilt and a camera-flash flicker per cell. The gutters then close as the grid grows into a full-bleed mosaic, a centred title rises over a soft dark pool, and the cells flip away in 3D at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 4,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "photos",
+   "summary"
+  ],
+  "duration": 5.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Every Photo Tells The Same Story",
+   "subtitle": "Drought across the West"
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-parallax-stack",
+  "name": "Parallax Depth Stack",
+  "category": "IMAGES",
+  "description": "Three layers: a blurred dark back photo, a large mid card and a white-bordered front print that flies in from near the lens. They truck sideways at three speeds with drifting dust motes and an accent light beam, then the camera pushes through the layers on exit.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 3,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photos",
+   "place-photo"
+  ],
+  "duration": 5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Last Farm In The Valley",
+   "subtitle": "San Joaquin, California",
+   "label": "Fallowed since 2015"
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "pb-date-plate",
+  "name": "Photo Date Plate",
+  "category": "IMAGES",
+  "description": "A photo is wiped on behind a glowing accent edge (archival grade for older years) and crop marks draw into the corners. A dark angled plate backed by an accent plate slides over the bottom-right corner while the year rolls in as an odometer, then both plates slide back out.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "value",
+   "text",
+   "label",
+   "subtitle",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "date",
+   "archive",
+   "photo"
+  ],
+  "duration": 5,
+  "sfx": "impact",
+  "sample": {
+   "value": 1936,
+   "text": "Hoover Dam Completed",
+   "label": "Black Canyon, Nevada"
+  },
+  "family": "pb",
+  "file": "LibPhotosB"
+ },
+ {
+  "id": "ls-numbered-cascade",
+  "name": "Numbered Cascade",
+  "category": "CALLOUTS",
+  "description": "Paper-white numbered cards fall one after another into a diagonal cascade, tilted back in 3D with shadows tightening as they land, an accent number block and words rising out of masks, a sheen sweeping each card, then folding away in turn.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "list",
+   "steps"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Why the Colorado is drying up",
+   "items": [
+    {
+     "label": "Megadrought",
+     "text": "The driest 22 years in 1,200 years"
+    },
+    {
+     "label": "Over-allocation",
+     "text": "The 1922 compact promised water that never existed"
+    },
+    {
+     "label": "Rising heat",
+     "text": "Warmer air steals snowpack before it melts"
+    },
+    {
+     "label": "Thirsty farms",
+     "text": "Agriculture takes about 70% of the river"
+    },
+    {
+     "label": "Growing cities",
+     "text": "40 million people now depend on it"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-checklist-ticks",
+  "name": "Checklist Ticks",
+  "category": "CALLOUTS",
+  "description": "A checklist on the left of the footage: rows rise in, each box draws its outline, then in sequence a box fills with the accent, a tick draws through it with a ripple, the row brightens and a progress bar counts it up.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "items"
+  ],
+  "cues": [
+   "list",
+   "summary"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Signs an aquifer is collapsing",
+   "label": "Confirmed",
+   "items": [
+    {
+     "label": "Wells running dry"
+    },
+    {
+     "label": "Ground sinking"
+    },
+    {
+     "label": "Salt water seeping in"
+    },
+    {
+     "label": "Pumping costs doubling"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-pros-cons",
+  "name": "Pros And Cons",
+  "category": "CALLOUTS",
+  "description": "Two columns split by a divider drawing from the centre, a green plus badge and a red minus badge spinning in over tinted columns, the points landing left, right, left, right with little plus and minus rings drawing on as the words rise.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "items"
+  ],
+  "cues": [
+   "list",
+   "summary"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Desalination: the trade-off",
+   "items": [
+    {
+     "label": "Drought-proof supply",
+     "text": "pro"
+    },
+    {
+     "label": "Unlimited seawater",
+     "text": "pro"
+    },
+    {
+     "label": "Works for coastal cities",
+     "text": "pro"
+    },
+    {
+     "label": "Huge energy bills",
+     "text": "con"
+    },
+    {
+     "label": "Toxic brine waste",
+     "text": "con"
+    },
+    {
+     "label": "Billion-dollar plants",
+     "text": "con"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-top-countdown",
+  "name": "Top Five Countdown",
+  "category": "CALLOUTS",
+  "description": "A giant rank numeral rolls 5 to 1 with motion blur while ranked rows slide in from the bottom of the list upward, values rolling, and number one lands last in an enlarged top slot with an accent wipe and glow flash as the others dim.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "prefix",
+   "suffix",
+   "items"
+  ],
+  "cues": [
+   "ranking",
+   "list"
+  ],
+  "duration": 6.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "America's biggest reservoirs",
+   "label": "Rank",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26.1
+    },
+    {
+     "label": "Lake Powell",
+     "value": 24.3
+    },
+    {
+     "label": "Lake Sakakawea",
+     "value": 23.8
+    },
+    {
+     "label": "Lake Oahe",
+     "value": 23.1
+    },
+    {
+     "label": "Fort Peck Lake",
+     "value": 18.7
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-icon-grid",
+  "name": "Icon Bullet Grid",
+  "category": "CALLOUTS",
+  "description": "A crosshair draws out from the centre to split a 2x2 grid, then clockwise each cell's geometric line icon (drop, bolt, house, coin, warning, leaf or a plain shape) draws on and fills with a rippling accent liquid as its label and line rise beside it.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "list",
+   "summary"
+  ],
+  "duration": 5.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Four ways a city runs dry",
+   "items": [
+    {
+     "label": "Drought",
+     "text": "Rain stops refilling the reservoirs"
+    },
+    {
+     "label": "Contamination",
+     "text": "Toxic runoff poisons the supply"
+    },
+    {
+     "label": "Leaking pipes",
+     "text": "Old mains lose a third of treated water"
+    },
+    {
+     "label": "Rising costs",
+     "text": "Bills double as supplies shrink"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-process-chevrons",
+  "name": "Process Chevrons",
+  "category": "CALLOUTS",
+  "description": "Interlocking chevrons draw their outlines left to right, then light up in turn as the accent pours through each, the active step lifting with a glow and its label brightening below, finished by a sheen running through the whole row.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "steps",
+   "sequence"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "How seawater becomes drinking water",
+   "items": [
+    {
+     "label": "Intake",
+     "text": "Seawater pulled from offshore"
+    },
+    {
+     "label": "Filtration",
+     "text": "Sand and silt removed"
+    },
+    {
+     "label": "Reverse osmosis",
+     "text": "Salt forced out under pressure"
+    },
+    {
+     "label": "Treatment",
+     "text": "Minerals added back"
+    },
+    {
+     "label": "Distribution",
+     "text": "Piped to homes"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-cycle-loop",
+  "name": "Cycle Loop",
+  "category": "CALLOUTS",
+  "description": "Three to five numbered nodes pop in round a ring, arcs draw between them and grow arrowheads, accent dashes then flow round the loop while a comet circles and lights each node it passes, a dashed outer ring turning slowly around the centred title.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "sequence",
+   "steps"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The water cycle",
+   "items": [
+    {
+     "label": "Evaporation",
+     "text": "The sun lifts water from the oceans"
+    },
+    {
+     "label": "Condensation",
+     "text": "Vapor cools into clouds"
+    },
+    {
+     "label": "Precipitation",
+     "text": "Rain and snow fall inland"
+    },
+    {
+     "label": "Collection",
+     "text": "Rivers carry it back to sea"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-pyramid-levels",
+  "name": "Pyramid Levels",
+  "category": "CALLOUTS",
+  "description": "On the dark case-file desktop a pyramid builds bottom-up, each shaded trapezoid level dropping and settling onto the one below with a flash line, the apex in the accent, and dashed leaders drawing out to labels that rise beside each level.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "suffix",
+   "items"
+  ],
+  "cues": [
+   "ranking",
+   "steps"
+  ],
+  "duration": 6,
+  "sfx": "impact",
+  "sample": {
+   "text": "Who gets the water first",
+   "items": [
+    {
+     "label": "Tribal nations",
+     "text": "The oldest reserved rights"
+    },
+    {
+     "label": "Senior farmers",
+     "text": "Claims filed before 1922"
+    },
+    {
+     "label": "Big cities",
+     "text": "Los Angeles, Phoenix, Las Vegas"
+    },
+    {
+     "label": "Junior users",
+     "text": "First to be cut in a shortage"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-funnel-stages",
+  "name": "Funnel Stages",
+  "category": "CALLOUTS",
+  "description": "On a drifting graphite gradient mesh a funnel's stage outlines draw, then the accent pours down through it stage by stage with a bright leading edge, each value rolling as the pour reaches it, labels rising on the left and red drop-off pills popping between stages on the right.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "prefix",
+   "suffix",
+   "items"
+  ],
+  "cues": [
+   "compare-values",
+   "steps"
+  ],
+  "duration": 6,
+  "sfx": "riser",
+  "sample": {
+   "text": "Where the water goes",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Pumped from the river",
+     "value": 100,
+     "text": "Every drop the utility draws"
+    },
+    {
+     "label": "Reaches the city",
+     "value": 84,
+     "text": "Lost to evaporation in canals"
+    },
+    {
+     "label": "Reaches homes",
+     "value": 70,
+     "text": "Lost to leaking mains"
+    },
+    {
+     "label": "Actually used",
+     "value": 58,
+     "text": "The rest never arrives"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "ls-tab-reveal",
+  "name": "Tab Reveal",
+  "category": "CALLOUTS",
+  "description": "An accordion of white tabs slides in on the right of the footage and opens one tab at a time, its chevron turning and number chip going accent while its lines rise and a progress bar runs along its foot, then folds shut as the next one opens.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "list",
+   "steps"
+  ],
+  "duration": 7,
+  "sfx": "page",
+  "sample": {
+   "text": "Day Zero: what happens next",
+   "items": [
+    {
+     "label": "Taps shut off",
+     "text": "Homes lose running water overnight"
+    },
+    {
+     "label": "Collection points",
+     "text": "About 200 sites hand out 25 litres a person"
+    },
+    {
+     "label": "Armed guards",
+     "text": "Police patrol the queues"
+    },
+    {
+     "label": "Hospitals first",
+     "text": "Critical services keep a priority supply"
+    }
+   ]
+  },
+  "family": "ls",
+  "file": "LibLists"
+ },
+ {
+  "id": "qs-giant-marks",
+  "name": "Giant Quote Marks",
+  "category": "QUOTES",
+  "description": "Oversized drawn accent quote marks spin and scale in over a faint drifting ghost mark, the quote rises line by line out of masks with key words in the accent, then the speaker slides out beside a drawn accent rule as the closing mark rotates in.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "We were told the water was safe to drink. It never was.",
+   "label": "Former city employee",
+   "subtitle": "Congressional hearing, 2016",
+   "highlight": "never"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-testimony-rail",
+  "name": "Testimony Rail",
+  "category": "QUOTES",
+  "description": "On a dark designed backdrop, an accent rail draws down with a glowing tip. Each quote line slides out of the rail as the tip passes it, tick marks light up, and the speaker's name and role rise at the foot beside a diamond node that keeps pulsing.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 6,
+  "sfx": "riser",
+  "sample": {
+   "text": "By the time the samples came back, the lead levels were off the charts. Nobody wanted to say it out loud.",
+   "label": "Water plant operator",
+   "subtitle": "Sworn testimony, 2016"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-side-panel",
+  "name": "Pull-Quote Panel",
+  "category": "QUOTES",
+  "description": "A frosted glass panel slides in from the right over the playing footage with a parallax lag. Its accent edge draws down, a quote mark pops, the words rise one by one with key words in the accent, and the speaker rises under a hairline before the panel slides back out.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The river is not running dry. We are drinking it dry.",
+   "label": "Hydrologist",
+   "subtitle": "Colorado River Research Group",
+   "highlight": "drinking"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-but-pivot",
+  "name": "Statement Vs Reality",
+  "category": "QUOTES",
+  "description": "The official statement rises word by word. Two rules then draw outward as a bouncing accent BUT drops between them with a soft flash and a camera punch, the statement dims and shrinks, and the reality rises letter by letter in big accent capitals.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "quote",
+   "headline"
+  ],
+  "duration": 5.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Officials said the reservoir would recover by spring",
+   "subtitle": "It dropped another 30 feet",
+   "label": "The official line"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-strike-correction",
+  "name": "Strike Correction",
+  "category": "QUOTES",
+  "description": "A claim rises under a small CLAIM tag and a red bar strikes through each line, led by a hot white spark. The claim shakes, dims and moves up, and the correction rises letter by letter in large capitals beneath an accent kicker.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "quote",
+   "headline"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead will refill on its own",
+   "subtitle": "It needs years of record snowfall",
+   "label": "The reality"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-karaoke",
+  "name": "Karaoke Highlight",
+  "category": "QUOTES",
+  "description": "The sentence rises in white. Each word then fills left to right with the accent in speaking rhythm (longer words take longer), lifting slightly with a glowing underline that trails off, and the speaker is tagged beneath.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "quote",
+   "recording"
+  ],
+  "duration": 6.5,
+  "sfx": "none",
+  "sample": {
+   "text": "Every drop that comes out of this tap has travelled three hundred miles through the desert",
+   "label": "Arizona farmer"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-zoom-word",
+  "name": "Emphasis Zoom Word",
+  "category": "QUOTES",
+  "description": "A sentence rises in big condensed capitals and the key word's underline charges. The camera then dives into that word with motion blur while the rest fall away, the word turns accent, and focus brackets snap around it during a slow push.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight"
+  ],
+  "cues": [
+   "quote",
+   "headline"
+  ],
+  "duration": 5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Nobody was ever held responsible for the poisoning",
+   "highlight": "responsible"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-said-stamp",
+  "name": "Said-By Stamp",
+  "category": "QUOTES",
+  "description": "The quote rises word by word. A circular seal then slams down from above with a camera shake, a shock ring and a burst of sparks; the speaker's name runs round its ring and the seal keeps turning slowly.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 5.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "If we keep pumping at this rate, the wells in this valley will be dry within a generation.",
+   "label": "County water board",
+   "subtitle": "1987",
+   "highlight": "dry"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-double-cards",
+  "name": "Double Quote Cards",
+  "category": "QUOTES",
+  "description": "Two cards rise showing their accent backs, then flip over in 3D one after the other with a spring settle and shading to reveal two short opposing quotes. A light sheen crosses each card and the speakers appear under hairlines, then the cards flip away.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "text"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 6.5,
+  "sfx": "page",
+  "sample": {
+   "text": "Two versions of the truth",
+   "items": [
+    {
+     "label": "City official, 2014",
+     "text": "The water meets every federal safety standard."
+    },
+    {
+     "label": "Resident, 2015",
+     "text": "My kids broke out in rashes every time they took a bath."
+    }
+   ]
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "qs-whisper",
+  "name": "Whisper Subtitle",
+  "category": "QUOTES",
+  "description": "A cinematic lowercase line sits low on the footage. Letters rise from the centre outward while wide tracking closes in, a hairline draws out from a glowing accent dot, and the speaker appears below in small spaced capitals before the line tracks back out.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "quote",
+   "intro"
+  ],
+  "duration": 5,
+  "sfx": "none",
+  "sample": {
+   "text": "They said the water would always be there.",
+   "label": "Rancher, Imperial Valley"
+  },
+  "family": "qs",
+  "file": "LibQuotes"
+ },
+ {
+  "id": "ch-number-roll",
+  "name": "Chapter Number Roll",
+  "category": "HEADLINES",
+  "description": "On a dark card with a pulsing accent glow, a huge two-digit chapter number spins into place on odometer wheels, an accent rule grows beside it as the kicker and title rise letter by letter, and a thin segmented progress line draws across the bottom with the current chapter filling in the accent.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "sequence"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Lake Runs Dry",
+   "label": "Chapter",
+   "value": 3,
+   "total": 8,
+   "subtitle": "Lake Mead, summer 2022"
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-part-divider",
+  "name": "Part Divider",
+  "category": "HEADLINES",
+  "description": "Over drifting navy dotted ridges, two fine rules draw outward from the centre, the top one framing a tracked PART II label and the bottom one a popping accent diamond, with the title rising letter by letter between them and the rules retracting to the centre at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "value",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "intro"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "The River That Built the West",
+   "value": 2,
+   "subtitle": "1905 - 1936"
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-episode-card",
+  "name": "Episode Card",
+  "category": "HEADLINES",
+  "description": "A dark gradient card flips in on a 3D turn over the darkened footage, its big outline episode number drawing on stroke by stroke with an accent glow, the title rising beside it and a light sheen sweeping across the card before it flips away.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "intro"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Who Owns the Water",
+   "label": "Episode",
+   "value": 4,
+   "subtitle": "Arizona's hidden aquifer war"
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-letterbox",
+  "name": "Letterbox Title",
+  "category": "HEADLINES",
+  "description": "Black cinema bars slide in from the top and bottom over the playing footage, the title rises letter by letter in the gap and slowly tracks wider, with a kicker in the top bar and a subtitle in the bottom bar, then the bars slide away.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "intro",
+   "headline"
+  ],
+  "duration": 5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Last Harvest",
+   "label": "Central Valley, California",
+   "subtitle": "Summer 2022"
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-glitch-resolve",
+  "name": "Glitch Resolve Title",
+  "category": "HEADLINES",
+  "description": "Over darkened footage, the title appears as jittering cyan and accent RGB-split slices with a scan line and brief scanlines, then snaps into a clean title within about half a second and holds clean, with a mono kicker, an accent rule and a subtitle rising in.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "headline"
+  ],
+  "duration": 4,
+  "sfx": "glitch-transition",
+  "sample": {
+   "text": "The Data They Buried",
+   "label": "Chapter 5",
+   "subtitle": "What the 2019 audit found"
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-chrome-sweep",
+  "name": "Chrome Light Sweep",
+  "category": "HEADLINES",
+  "description": "In a dark studio under a drifting spotlight, a chrome title with an accent rim rises line by line while its tracking closes up, a glossy light band sweeps across the letters twice, and its reflection fades into the floor below.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "intro",
+   "headline"
+  ],
+  "duration": 5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Empire of Dust",
+   "label": "Chapter One",
+   "subtitle": "The Dust Bowl, 1930 - 1936"
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-fraction-tag",
+  "name": "Chapter Fraction",
+  "category": "HEADLINES",
+  "description": "Low-left over the footage, a big 02 and a smaller 05 spin into place on digit wheels while an accent slash draws between them and chapter segments pop in beneath, with the current one filling, and the kicker and title rise letter by letter beside a growing divider.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "text",
+   "label"
+  ],
+  "cues": [
+   "chapter",
+   "sequence"
+  ],
+  "duration": 4,
+  "sfx": "pop",
+  "sample": {
+   "text": "The Aquifer Beneath",
+   "label": "Chapter",
+   "value": 2,
+   "total": 5
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-coordinates",
+  "name": "Coordinates Title",
+  "category": "HEADLINES",
+  "description": "Low-left over the footage, a mini dark globe spins and tilts onto the place while targeting brackets close in and lock in the accent, a pin pulses, and beside it the place kicker and title rise as a mono lat/lon readout scrambles in cyan and locks digit by digit to the true coordinates.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "locations",
+   "label"
+  ],
+  "cues": [
+   "place",
+   "chapter"
+  ],
+  "duration": 4.5,
+  "sfx": "map-whoosh",
+  "sample": {
+   "text": "The Sinking City",
+   "locations": [
+    {
+     "label": "Mexico City, Mexico",
+     "lat": 19.4326,
+     "lon": -99.1332,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-year-tape",
+  "name": "Year Tape Title",
+  "category": "HEADLINES",
+  "description": "On a light warm-grey card, a mechanical year counter rolls up through the decades to the year while a timeline tape of year ticks scrolls under an accent needle, then the title rises letter by letter beneath with an accent rule.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "date",
+   "chapter"
+  ],
+  "duration": 5,
+  "sfx": "riser",
+  "sample": {
+   "text": "The Year the Dam Rose",
+   "label": "Chapter 2",
+   "value": 1936,
+   "subtitle": "Hoover Dam, Black Canyon"
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "ch-countdown",
+  "name": "Countdown to Chapter",
+  "category": "HEADLINES",
+  "description": "A 3-2-1 countdown with rolling numerals inside a ring, an accent arc and radar wedge sweeping each count over a rotating tick dial, then a shockwave and particle burst as the ring shrinks into an emblem holding the chapter number above the title, which rises letter by letter.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "value",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "intro"
+  ],
+  "duration": 5,
+  "sfx": "riser",
+  "sample": {
+   "text": "Day Zero",
+   "label": "Final Chapter",
+   "value": 6,
+   "subtitle": "Cape Town, 2018"
+  },
+  "family": "ch",
+  "file": "LibChapters"
+ },
+ {
+  "id": "co-circle-pulse",
+  "name": "Marker Circle Pulse",
+  "category": "CALLOUTS",
+  "description": "A gold marker loop draws a little more than one full turn around the subject so its ends overlap like a real pen stroke, bumps as it closes and sends out soft pulse rings, while a short kicker and title rise letter by letter beside it on a white tick.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "point-at",
+   "this-one"
+  ],
+  "duration": 4,
+  "sfx": "pop",
+  "sample": {
+   "text": "Intake tower",
+   "subtitle": "Still above water"
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-draw-arrow",
+  "name": "Pigtail Arrow Label",
+  "category": "CALLOUTS",
+  "description": "The label rises in first, then an accent arrow draws out of it on a bowed curve with a looping pigtail, its head flicks open at the end and a ring bursts on the target point before the arrow retracts at the exit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "point-at",
+   "this-one"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Old shoreline",
+   "subtitle": "1983 high-water mark"
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-bracket-label",
+  "name": "Measured Bracket",
+  "category": "CALLOUTS",
+  "description": "A crisp white square bracket grows outward from its centre beside a region with fine ruler ticks and a faint accent wash; an accent notch points to the label, an optional value rolls like an odometer and a gold highlight keeps sliding along the spine.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "value",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "measurement",
+   "level",
+   "point-at"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The bathtub ring",
+   "subtitle": "Lake Mead",
+   "value": 150,
+   "suffix": "FT"
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-target-lock",
+  "name": "Target Lock Reticle",
+  "category": "CALLOUTS",
+  "description": "A large reticle turned 45 degrees hunts across the subject between seeded guesses, settles, snaps shut and blinks gold to lock; cyan crosshair lines shoot out, a range ring turns, the mono status flips from SCANNING to TARGET LOCKED and the coordinates decode digit by digit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "point-at",
+   "place",
+   "this-one"
+  ],
+  "duration": 4.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Hoover Dam",
+   "subtitle": "Black Canyon",
+   "locations": [
+    {
+     "label": "Hoover Dam",
+     "lat": 36.0161,
+     "lon": -114.7377
+    }
+   ]
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-measure-line",
+  "name": "Dimension Line",
+  "category": "CALLOUTS",
+  "description": "End ticks snap in and dashed witness lines reach toward the object, then a dimension line shoots out from the centre with gold arrowheads riding its ends; the value rolls above it (or beside it when label is vertical/height/depth), the caption rises below and a laser dot keeps sweeping along the line.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "value",
+   "suffix",
+   "prefix",
+   "label"
+  ],
+  "cues": [
+   "measurement",
+   "distance",
+   "level"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Exposed lakebed",
+   "value": 2.4,
+   "suffix": "MI"
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-ripple-pointer",
+  "name": "Water Drop Ripple",
+  "category": "CALLOUTS",
+  "description": "A gold drop falls onto the point, squashes into a marker dot and sends perspective-flattened water ripples across the surface; a leader line climbs to an elbow and runs out under the label, the title rising above the line and the subtitle dropping in below it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "point-at",
+   "place",
+   "this-one"
+  ],
+  "duration": 4.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Contaminated well",
+   "subtitle": "Flint, Michigan"
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-speech-bubble",
+  "name": "Typing Quote Bubble",
+  "category": "CALLOUTS",
+  "description": "A small white bubble with three bouncing typing dots springs out of the speaker, then morphs open into a clean minimal quote bubble with a curved tail; the words rise in line by line behind a gold accent bar under the speaker's name, and the bubble shrinks back into the speaker at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "quote",
+   "person"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "text": "We haven't had clean water in three years.",
+   "label": "Flint resident"
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-scribble-underline",
+  "name": "Marker Scribble Underline",
+  "category": "CALLOUTS",
+  "description": "A short statement rises in big condensed caps letter by letter, then a three-pass gold marker scribble tears back and forth under the key word and keeps a subtle hand-drawn line boil while it holds before it erases in stroke order.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "subtitle"
+  ],
+  "cues": [
+   "headline",
+   "warning"
+  ],
+  "duration": 4,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The river never reached the sea",
+   "highlight": "never",
+   "subtitle": "Colorado River Delta"
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-spotlight",
+  "name": "Searchlight Spotlight",
+  "category": "CALLOUTS",
+  "description": "The frame dims and desaturates while a soft pool of light sweeps in from off the subject, tightens onto it and gently breathes; a gold ring draws around the pool, the label steps out on an elbow line and at the end the iris opens back to the full picture.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "this-one",
+   "point-at",
+   "person"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "The last working pump",
+   "subtitle": "Station 7"
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "co-chip-stack",
+  "name": "Swinging Fact Chips",
+  "category": "CALLOUTS",
+  "description": "A connector climbs from a pulsing dot on the subject to a joint, a spine drops from it and two or three white key/value chips swing down one after another on a springy 3D hinge with their numbers rolling, then fold back up in reverse at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "list",
+   "summary",
+   "profile"
+  ],
+  "duration": 5,
+  "sfx": "page",
+  "sample": {
+   "text": "Hoover Dam",
+   "items": [
+    {
+     "label": "Built",
+     "text": "1936"
+    },
+    {
+     "label": "Height",
+     "value": 726,
+     "suffix": "FT"
+    },
+    {
+     "label": "Capacity",
+     "value": 26,
+     "suffix": "%"
+    }
+   ]
+  },
+  "family": "co",
+  "file": "LibCallouts"
+ },
+ {
+  "id": "ns-times-bigger",
+  "name": "Times Bigger Bars",
+  "category": "NUMBERS",
+  "description": "A grey reference bar lands, a dashed guide drops from its end, then an accent bar grows notch by notch (x1, x2, x3 markers rising as the glowing head passes) to N times its length and a big 'xN' odometer rolls in beside it.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "ratio",
+   "compare-values",
+   "money-compare"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Water needed to produce",
+   "subtitle": "more water",
+   "suffix": "L",
+   "items": [
+    {
+     "label": "Wheat, 1 kg",
+     "value": 1827
+    },
+    {
+     "label": "Beef, 1 kg",
+     "value": 15415
+    }
+   ]
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-fraction-pie",
+  "name": "Fraction Pie",
+  "category": "NUMBERS",
+  "description": "A pie outlined into its slices pops in with a rotating dotted rim; the counted slices fly in radially one by one with a back-out snap while a stacked numerator-over-denominator fraction rolls and the title rises letter by letter.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "value",
+   "total",
+   "suffix"
+  ],
+  "cues": [
+   "ratio",
+   "shares",
+   "percent"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "text": "of Colorado River water goes to farming",
+   "value": 3,
+   "total": 4
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-kpi-flip-grid",
+  "name": "KPI Flip Grid",
+  "category": "NUMBERS",
+  "description": "Up to four dark glass KPI tiles flip in on the Y axis one after another in 3D, each with an accent edge, rising label, rolling value, a filling hairline meter and a light sheen, then flip away at the end.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "summary",
+   "list"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Colorado River in numbers",
+   "highlight": "Lake Mead full",
+   "items": [
+    {
+     "label": "People served",
+     "value": 40,
+     "suffix": "M"
+    },
+    {
+     "label": "States",
+     "value": 7
+    },
+    {
+     "label": "Length",
+     "value": 1450,
+     "suffix": "mi"
+    },
+    {
+     "label": "Lake Mead full",
+     "value": 33,
+     "suffix": "%"
+    }
+   ]
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-before-after",
+  "name": "Before After Slider",
+  "category": "NUMBERS",
+  "description": "A panel opens like a barn door showing the 'before' value; a white slider handle sweeps across and wipes the red- or green-tinted 'after' state over it while the new number rolls, then a struck-through 'WAS' line and a change pill appear.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "then-now",
+   "change",
+   "compare-values"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead water level",
+   "suffix": "FT",
+   "items": [
+    {
+     "label": "1983",
+     "value": 1225
+    },
+    {
+     "label": "2022",
+     "value": 1040
+    }
+   ]
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-change-meter",
+  "name": "Change Meter",
+  "category": "NUMBERS",
+  "description": "Low-left on the footage, a red-to-green minus/plus scale unfolds from zero, then a white needle springs with overshoot to the percent change, lighting the ticks it passes while the signed value rolls above it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "value",
+   "suffix",
+   "label"
+  ],
+  "cues": [
+   "change",
+   "percent"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Colorado River flow since 2000",
+   "subtitle": "Two decades of drought",
+   "value": -20,
+   "suffix": "%",
+   "label": "down"
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-dual-gauge",
+  "name": "Dual Dial Gauges",
+  "category": "NUMBERS",
+  "description": "Two 270-degree speedometer dials sit side by side; each arc and needle springs up in turn with the ticks lighting as the fill passes, the needles keep a faint quiver, and the values roll in the open base of each dial.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix",
+   "total"
+  ],
+  "cues": [
+   "percent",
+   "compare-values",
+   "level"
+  ],
+  "duration": 5.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "How full are the reservoirs",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Lake Powell",
+     "value": 38
+    },
+    {
+     "label": "Lake Mead",
+     "value": 33
+    }
+   ]
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-podium",
+  "name": "Spotlight Podium",
+  "category": "NUMBERS",
+  "description": "On a dark stage with a perspective floor grid, the 3rd, 2nd and 1st podium blocks rise out of the floor with a back-out bounce, then a spotlight snaps on over the accent-colored winner with a ray burst and drifting dust while the values roll above.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "ranking",
+   "compare-values"
+  ],
+  "duration": 6,
+  "sfx": "impact",
+  "sample": {
+   "text": "Where the world's fresh water goes",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Agriculture",
+     "value": 70
+    },
+    {
+     "label": "Industry",
+     "value": 19
+    },
+    {
+     "label": "Homes & cities",
+     "value": 11
+    }
+   ]
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-tug-of-war",
+  "name": "Tug of War",
+  "category": "NUMBERS",
+  "description": "A braided rope draws outward from the centre between two labeled sides; the knot and its accent pennant jitter at the centre line, then are hauled by a spring toward the bigger value as the braid slides, and the winning share rolls in under the knot with a direction chevron.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "compare-values",
+   "shares"
+  ],
+  "duration": 5.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "Who uses California's water",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Farms",
+     "value": 80
+    },
+    {
+     "label": "Cities",
+     "value": 20
+    }
+   ]
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-goal-track",
+  "name": "Goal Track",
+  "category": "NUMBERS",
+  "description": "A track draws on while a goal flag is hoisted and waves at the finish; a glowing runner streaks along to the share of the goal, 25/50/75% milestones ping as it passes, a percent chip rides above it and the amount rolls in the headline.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "value",
+   "total",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "money",
+   "big-number",
+   "level"
+  ],
+  "duration": 5.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "Lead pipe replacement funding",
+   "value": 15,
+   "total": 45,
+   "prefix": "$",
+   "suffix": "B"
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "ns-block-stack",
+  "name": "Stacked Blocks",
+  "category": "NUMBERS",
+  "description": "Accent blocks (up to 50, one per unit or a nice unit each) drop with gravity and stack row by row into a grid, squashing as they land, while the counter beside them rolls in sync; a light sweep then glides across the finished stack.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "value",
+   "total",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "big-number",
+   "money"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "text": "people depend on the Colorado River",
+   "subtitle": "One river",
+   "value": 40,
+   "suffix": "M"
+  },
+  "family": "ns",
+  "file": "LibStatCards"
+ },
+ {
+  "id": "pa-polaroid-drop",
+  "name": "Polaroid Drop",
+  "category": "IMAGES",
+  "description": "A polaroid falls onto a dark lamp-lit desk with rotation and a shadow that tightens as it nears, lands with a small bump, develops from grey-green emulsion to full colour, and its caption is handwritten letter by letter on the white margin (an optional second print lies underneath); it lifts off the desk at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 2,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "archive",
+   "person"
+  ],
+  "duration": 5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead at its peak",
+   "label": "July 1983"
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-tilt-card",
+  "name": "3D Tilt Card",
+  "category": "IMAGES",
+  "description": "A thick photo block flips in from edge-on on a dotted navy stage and sways in 3D with parallax inside the frame, a gloss sweep, visible edges and a floor reflection, while the kicker, title and body rise beside it; it flips away edge-on at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "subject-photo",
+   "object-photo",
+   "photo"
+  ],
+  "duration": 5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Hoover Dam",
+   "label": "1936",
+   "subtitle": "The concrete wall that tamed the Colorado River"
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-blinds-reveal",
+  "name": "Blinds Reveal",
+  "category": "IMAGES",
+  "description": "Twelve dark vertical blind slats turn open left to right in perspective over a full-frame photo as it brightens and settles back, the caption lines rise out of their masks beside a growing accent bar, and the blinds close again right to left at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "place-photo",
+   "photo",
+   "chapter"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Flint, Michigan",
+   "subtitle": "April 2014"
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-spotlight-focus",
+  "name": "Spotlight Focus",
+  "category": "IMAGES",
+  "description": "The photo sits almost black while a soft spotlight with dust drifting in its beam sweeps a searching curve and locks onto the subject (overlay.anchor or centre) with a tightening ring and accent ticks, a leader line draws to the label, and the light floods the whole frame at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "point-at",
+   "this-one",
+   "subject-photo"
+  ],
+  "duration": 5,
+  "sfx": "riser",
+  "sample": {
+   "text": "The broken intake valve",
+   "subtitle": "Look closer"
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-film-strip",
+  "name": "Film Strip Pull",
+  "category": "IMAGES",
+  "description": "A warm 35 mm film strip with sprocket holes and mono edge codes races in from the right with motion blur and stops on its centre frame, which is pulled out and enlarged into a bordered print while the strip dims and softens behind it; the caption rises below and everything races off to the left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 4,
+  "props": [
+   "text",
+   "subtitle",
+   "items"
+  ],
+  "cues": [
+   "photos",
+   "archive"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Dust Bowl years",
+   "subtitle": "Oklahoma · 1935",
+   "items": [
+    {
+     "label": "1931"
+    },
+    {
+     "label": "1933"
+    },
+    {
+     "label": "1935"
+    },
+    {
+     "label": "1936"
+    }
+   ]
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-mosaic-assemble",
+  "name": "Mosaic Assemble",
+  "category": "IMAGES",
+  "description": "Over a blurred copy of itself, the photo builds from forty tiles flying in from the camera in a diagonal wave, tumbling in 3D and brightening as they land; the seams close, a gloss sweeps across, a frame with accent corners draws on, and the tiles scatter toward the camera at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "photo",
+   "subject-photo",
+   "intro"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Cape Town's Day Zero",
+   "subtitle": "2018"
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-torn-reveal",
+  "name": "Torn Paper Reveal",
+  "category": "IMAGES",
+  "description": "A sheet of cream paper covering the frame tears away to a jagged torn edge with a white fibrous rim and a cast shadow, revealing the photo and leaving a paper panel where the ink title rises letter by letter with an accent rule and body lines; the panel slides off to the left at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "photo",
+   "archive"
+  ],
+  "duration": 5.5,
+  "sfx": "paper",
+  "sample": {
+   "label": "Chapter 2",
+   "text": "The river that ran dry",
+   "subtitle": "Since the 1960s the Colorado has rarely reached the Gulf of California."
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-loupe-zoom",
+  "name": "Magnifier Lens",
+  "category": "IMAGES",
+  "description": "A clean loupe with a light bezel and glass highlight glides in on an arc over the dimmed photo and enlarges the detail beneath it, the zoom pulling in as it lands (a mono x2.3 readout wipes open), with a dashed leader to the label; the lens slides away at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "object-photo",
+   "point-at",
+   "this-one"
+  ],
+  "duration": 5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The bathtub ring",
+   "subtitle": "Old high-water mark"
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-scan-id",
+  "name": "Scan ID Frame",
+  "category": "IMAGES",
+  "description": "On a dark cyan HUD grid, corner brackets snap onto a portrait photo panel, a glowing scan line resolves the picture from cyan monochrome to colour, a detection box and ID tag lock on, the name rises letter by letter and mono readouts type in with a rolling metric and a segment bar; the screen collapses like a CRT switching off at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix",
+   "prefix",
+   "items",
+   "locations"
+  ],
+  "cues": [
+   "profile",
+   "person",
+   "subject-photo"
+  ],
+  "duration": 6,
+  "sfx": "glitch-transition",
+  "sample": {
+   "text": "Hoover Dam",
+   "subtitle": "Structure scan",
+   "label": "Lake Mead capacity",
+   "value": 27,
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Location",
+     "text": "Black Canyon, NV-AZ"
+    },
+    {
+     "label": "Completed",
+     "text": "1936"
+    },
+    {
+     "label": "Height",
+     "text": "726 ft"
+    }
+   ],
+   "locations": [
+    {
+     "label": "Hoover Dam",
+     "lat": 36.016,
+     "lon": -114.7377
+    }
+   ]
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "pa-ken-burns",
+  "name": "Ken Burns Vignette",
+  "category": "IMAGES",
+  "description": "A full-frame photo fades up from black and pushes slowly in a direction chosen by the picture, under a teal-and-amber grade, soft vignette, fine film grain and sliding letterbox bars; a lower caption's kicker and title rise letter by letter above a drawn rule and accent diamond.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "place-photo",
+   "photo",
+   "intro"
+  ],
+  "duration": 5,
+  "sfx": "none",
+  "sample": {
+   "text": "The Colorado River Delta",
+   "subtitle": "Sonora, Mexico",
+   "label": "Archive · 1972"
+  },
+  "family": "pa",
+  "file": "LibPhotosA"
+ },
+ {
+  "id": "tl-year-scroller",
+  "name": "Year Scroller Lens",
+  "category": "TIMELINES",
+  "description": "A ruler of years with quarter ticks races sideways under a glass magnifying lens, decelerates and clicks into the target year with a detent wobble, the year turning accent and underlined, then the ruler whooshes on as the lens shrinks away.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 5,
+  "sfx": "whoosh",
+  "sample": {
+   "value": 1936,
+   "text": "The Dust Bowl peaks",
+   "subtitle": "Great Plains"
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-vertical-milestones",
+  "name": "Milestone Spine",
+  "category": "TIMELINES",
+  "description": "A glowing spine draws down the frame and, as its tip passes each milestone, the node pops accent with a ring and a card wipes out of the spine alternating left and right with the year and a line rising out of masks, folding back in at the end.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "text"
+  ],
+  "cues": [
+   "sequence",
+   "list"
+  ],
+  "duration": 6.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "A century on the Colorado",
+   "items": [
+    {
+     "label": "1922",
+     "text": "Colorado River Compact signed"
+    },
+    {
+     "label": "1936",
+     "text": "Hoover Dam completed"
+    },
+    {
+     "label": "1983",
+     "text": "Lake Mead hits a record high"
+    },
+    {
+     "label": "2000",
+     "text": "The megadrought begins"
+    },
+    {
+     "label": "2022",
+     "text": "Lake Mead falls to 27% full"
+    }
+   ]
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-era-bands",
+  "name": "Era Bands",
+  "category": "TIMELINES",
+  "description": "Eras wipe in as staggered bands along a year axis, then a NOW marker with a mono year readout sweeps left to right painting each band it crosses, the current era glowing accent and past eras turning white.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "value",
+   "total",
+   "text"
+  ],
+  "cues": [
+   "sequence",
+   "span"
+  ],
+  "duration": 6.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Eras of the American West",
+   "value": 2026,
+   "items": [
+    {
+     "label": "Reclamation era",
+     "value": 1902
+    },
+    {
+     "label": "Big dam era",
+     "value": 1930
+    },
+    {
+     "label": "Groundwater boom",
+     "value": 1950
+    },
+    {
+     "label": "Megadrought",
+     "value": 2000
+    }
+   ]
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-calendar-flip",
+  "name": "Calendar Flip",
+  "category": "TIMELINES",
+  "description": "A desk calendar tilts up out of perspective and flips its pages over the binding in 3D, fast then slowing, through eleven earlier days, months or years to the date, which is then circled with a hand-drawn accent marker loop.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 5,
+  "sfx": "page",
+  "sample": {
+   "text": "March 1936",
+   "subtitle": "Hoover Dam is handed over"
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-time-passing",
+  "name": "Time Passing Clock",
+  "category": "TIMELINES",
+  "description": "A minimal clock face whose hands whirl many turns with an accent motion-trail fan and a rim filling up, then brake and settle with a wobble while the number rolls beside it with YEARS and LATER rising in letter by letter.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "label",
+   "text",
+   "prefix"
+  ],
+  "cues": [
+   "years",
+   "span"
+  ],
+  "duration": 5,
+  "sfx": "riser",
+  "sample": {
+   "value": 20,
+   "suffix": "YEARS",
+   "label": "LATER",
+   "text": "The reservoir was a shadow of itself"
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-decade-grid",
+  "name": "Decade Roulette Grid",
+  "category": "TIMELINES",
+  "description": "Twelve decade cells pop in on a diagonal wave, an accent selector races round them like a roulette wheel and lands on the target decade, which fills with accent while a zoom cone opens onto its ten years with the exact year lit.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "text"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 5.5,
+  "sfx": "pop",
+  "sample": {
+   "value": 1936,
+   "text": "The decade of the Dust Bowl"
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-curved-path",
+  "name": "Curved Path Events",
+  "category": "TIMELINES",
+  "description": "A glowing accent line draws along a winding S-shaped road with the camera easing after its head, each event node popping with a ring as it passes and its year and caption rising out of masks above or below the road, then the line erases away.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "text"
+  ],
+  "cues": [
+   "sequence",
+   "steps"
+  ],
+  "duration": 6.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "How the West was watered",
+   "items": [
+    {
+     "label": "1848",
+     "text": "Gold Rush pulls settlers west"
+    },
+    {
+     "label": "1902",
+     "text": "Reclamation Act is signed"
+    },
+    {
+     "label": "1928",
+     "text": "Congress approves Hoover Dam"
+    },
+    {
+     "label": "1963",
+     "text": "Lake Powell begins to fill"
+    },
+    {
+     "label": "2021",
+     "text": "First Colorado River shortage"
+    }
+   ]
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-years-later",
+  "name": "Years Later Card",
+  "category": "TIMELINES",
+  "description": "A cinematic time-jump card on its own graphite backdrop: a hairline flashes and irises open into a letterboxed frame, fast-forward streaks rush past while the big number rolls, YEARS LATER rises in with tightening tracking, and the card collapses back into the hairline.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "label",
+   "subtitle",
+   "text",
+   "prefix"
+  ],
+  "cues": [
+   "years",
+   "span"
+  ],
+  "duration": 4.5,
+  "sfx": "riser",
+  "sample": {
+   "value": 20,
+   "suffix": "YEARS",
+   "label": "LATER",
+   "subtitle": "2002 — 2022",
+   "text": "Lake Mead, Nevada"
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-date-stamp-circle",
+  "name": "Ink Date Stamp",
+  "category": "TIMELINES",
+  "description": "A round rubber stamp spins in large and slams onto the footage top right with a squash, shake, ink ring and splatter, its ring text and date printing letter by letter in rough speckled ink before it lifts away.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 4,
+  "sfx": "impact",
+  "sample": {
+   "text": "March 1, 1936",
+   "subtitle": "Bureau of Reclamation",
+   "label": "Completed"
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "tl-then-now-years",
+  "name": "Then Now Years",
+  "category": "TIMELINES",
+  "description": "The THEN year card flips in on a 3D hinge with its year rolling, an accent arrow crosses the gap popping a tick at every decade while the elapsed span counts up above it, and the NOW card flips in as the arrow arrives.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "value",
+   "total",
+   "text",
+   "suffix"
+  ],
+  "cues": [
+   "then-now",
+   "span"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Hoover Dam",
+   "suffix": "YEARS",
+   "items": [
+    {
+     "label": "Built",
+     "value": 1936
+    },
+    {
+     "label": "Today",
+     "value": 2026
+    }
+   ]
+  },
+  "family": "tl",
+  "file": "LibTimelines"
+ },
+ {
+  "id": "cb-twin-lines",
+  "name": "Twin Lines",
+  "category": "CHARTS",
+  "description": "Two smooth series lines (accent and cyan) draw left to right together behind a linked white scanner, the gap between them shades in, and each line ends in a pulsing dot with its name and rolling end value plus a GAP readout.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "series",
+   "compare-values",
+   "years"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Water Use vs River Flow",
+   "subtitle": "Colorado River, million acre-feet",
+   "label": "Water use vs River flow",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "1960",
+     "value": 11.2,
+     "text": "15.6"
+    },
+    {
+     "label": "1970",
+     "value": 12.6,
+     "text": "15.1"
+    },
+    {
+     "label": "1980",
+     "value": 13.8,
+     "text": "16.4"
+    },
+    {
+     "label": "1990",
+     "value": 14.9,
+     "text": "14.8"
+    },
+    {
+     "label": "2000",
+     "value": 15.6,
+     "text": "13.9"
+    },
+    {
+     "label": "2010",
+     "value": 15.4,
+     "text": "13.0"
+    },
+    {
+     "label": "2020",
+     "value": 15.2,
+     "text": "12.4"
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-step-chart",
+  "name": "Step Chart Flags",
+  "category": "CHARTS",
+  "description": "A glowing stepped line draws across a dark grid; as the head passes each step a flag pole rises and a swallowtail value flag unfurls and gently waves (the last in the accent), then a green/red change pill pops in.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "series",
+   "money",
+   "change",
+   "years"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "Average Monthly Water Bill",
+   "subtitle": "Phoenix households",
+   "prefix": "$",
+   "items": [
+    {
+     "label": "2000",
+     "value": 28
+    },
+    {
+     "label": "2005",
+     "value": 33
+    },
+    {
+     "label": "2010",
+     "value": 41
+    },
+    {
+     "label": "2015",
+     "value": 49
+    },
+    {
+     "label": "2020",
+     "value": 58
+    },
+    {
+     "label": "2024",
+     "value": 71
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-range-bars",
+  "name": "Range Bars",
+  "category": "CHARTS",
+  "description": "Rows of min-max ranges: each bar grows outward from its centre in a white-to-accent gradient while the hollow min dot and accent max dot slide apart carrying their counting values, the widest range highlighted with a pulsing ring.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "compare-values",
+   "measurement"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Reservoir Levels, Low to High",
+   "subtitle": "Percent full, 2019-2024",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 27,
+     "text": "52"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "48"
+    },
+    {
+     "label": "Shasta Lake",
+     "value": 31,
+     "text": "94"
+    },
+    {
+     "label": "Lake Oroville",
+     "value": 29,
+     "text": "98"
+    },
+    {
+     "label": "Folsom Lake",
+     "value": 26,
+     "text": "97"
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-stream",
+  "name": "Stacked Stream",
+  "category": "CHARTS",
+  "description": "A centred streamgraph whose smooth layered ribbons inflate one after another with a springy overshoot behind a glowing playhead that sweeps across reading out the year, ending with colour-keyed end values and layer names on the right.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "series",
+   "shares",
+   "years"
+  ],
+  "duration": 6,
+  "sfx": "riser",
+  "sample": {
+   "text": "Where California's Water Goes",
+   "subtitle": "Million acre-feet per year",
+   "label": "Farms, Environment, Cities",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "1960",
+     "value": 26,
+     "text": "14, 4"
+    },
+    {
+     "label": "1970",
+     "value": 29,
+     "text": "15, 5"
+    },
+    {
+     "label": "1980",
+     "value": 32,
+     "text": "17, 6.5"
+    },
+    {
+     "label": "1990",
+     "value": 33,
+     "text": "18, 8"
+    },
+    {
+     "label": "2000",
+     "value": 34,
+     "text": "20, 8.8"
+    },
+    {
+     "label": "2010",
+     "value": 32,
+     "text": "21, 8.6"
+    },
+    {
+     "label": "2020",
+     "value": 29,
+     "text": "22, 7.8"
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-donut-legend",
+  "name": "Donut Legend",
+  "category": "CHARTS",
+  "description": "A thick multi-slice ring is swept clockwise by a glowing comet inside a slowly turning tick dial, each legend row wiping in and rolling its value the moment its slice is reached, then the largest slice pops outward with its share in the centre.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "shares",
+   "compare-values"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Who Uses the Colorado River",
+   "subtitle": "Share of all water taken",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Agriculture",
+     "value": 71
+    },
+    {
+     "label": "Cities & Towns",
+     "value": 18
+    },
+    {
+     "label": "Reservoir Evaporation",
+     "value": 8
+    },
+    {
+     "label": "Industry & Power",
+     "value": 3
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-treemap",
+  "name": "Treemap Cut",
+  "category": "CHARTS",
+  "description": "A squarified treemap whose tiles are cut in one after another by a glowing white knife edge, largest first, the biggest tile in the accent with a sheen sweep, labels and rolling values rising inside each tile and the total in the corner.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "shares",
+   "compare-values",
+   "ranking"
+  ],
+  "duration": 5.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Where America's Water Goes",
+   "subtitle": "Billion gallons per day, USGS",
+   "suffix": "B GAL",
+   "items": [
+    {
+     "label": "Power Plants",
+     "value": 133
+    },
+    {
+     "label": "Irrigation",
+     "value": 118
+    },
+    {
+     "label": "Public Supply",
+     "value": 39
+    },
+    {
+     "label": "Industry",
+     "value": 14.8
+    },
+    {
+     "label": "Aquaculture",
+     "value": 7.6
+    },
+    {
+     "label": "Mining",
+     "value": 4
+    },
+    {
+     "label": "Home Wells",
+     "value": 3.3
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-flow-split",
+  "name": "Flow Split",
+  "category": "CHARTS",
+  "description": "A sankey-lite: one trunk of flow pours left to right and splits along smooth curves into branches sized by value, light streaks running continuously inside each ribbon, branch nodes growing at the end with rolling values and shares.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "shares",
+   "compare-values"
+  ],
+  "duration": 6,
+  "sfx": "riser",
+  "sample": {
+   "text": "Where the Colorado River Goes",
+   "subtitle": "Annual allocations",
+   "label": "Colorado River",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "California",
+     "value": 4.4
+    },
+    {
+     "label": "Colorado",
+     "value": 3.86
+    },
+    {
+     "label": "Arizona",
+     "value": 2.8
+    },
+    {
+     "label": "Utah",
+     "value": 1.71
+    },
+    {
+     "label": "Mexico",
+     "value": 1.5
+    },
+    {
+     "label": "Wyoming",
+     "value": 1.04
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-scatter",
+  "name": "Scatter Bubbles",
+  "category": "CHARTS",
+  "description": "Bubbles fly out of the centre on curved paths and land on a 2D grid with a ripple each, a dashed trend line draws through the cloud, and the highlighted point glows in the accent with crosshair lines and axis readout chips.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "Rainfall vs Water Use",
+   "subtitle": "Western U.S. cities",
+   "label": "Annual rainfall (inches) | Gallons per person per day",
+   "highlight": "Salt Lake City",
+   "items": [
+    {
+     "label": "Phoenix",
+     "value": 8,
+     "text": "114"
+    },
+    {
+     "label": "Las Vegas",
+     "value": 4.2,
+     "text": "112"
+    },
+    {
+     "label": "Tucson",
+     "value": 11.6,
+     "text": "80"
+    },
+    {
+     "label": "Albuquerque",
+     "value": 9.5,
+     "text": "127"
+    },
+    {
+     "label": "Denver",
+     "value": 14.5,
+     "text": "82"
+    },
+    {
+     "label": "Salt Lake City",
+     "value": 15.5,
+     "text": "170"
+    },
+    {
+     "label": "Los Angeles",
+     "value": 14.3,
+     "text": "76"
+    },
+    {
+     "label": "Seattle",
+     "value": 39.3,
+     "text": "58"
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-slope",
+  "name": "Slope Chart",
+  "category": "CHARTS",
+  "description": "Two axes (then and now) draw down, then each item's line draws across from its left dot to its right dot in green if it rose or red if it fell, landing with a ripple and a change label, a light spark running along the biggest mover.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "then-now",
+   "change",
+   "compare-values"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Boomtowns and Shrinking Cities",
+   "subtitle": "City population",
+   "label": "1990 | 2020",
+   "suffix": "K",
+   "items": [
+    {
+     "label": "Phoenix",
+     "value": 983,
+     "text": "1608"
+    },
+    {
+     "label": "Las Vegas",
+     "value": 258,
+     "text": "641"
+    },
+    {
+     "label": "Tucson",
+     "value": 405,
+     "text": "543"
+    },
+    {
+     "label": "Detroit",
+     "value": 1028,
+     "text": "639"
+    },
+    {
+     "label": "Flint",
+     "value": 141,
+     "text": "81"
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "cb-radar",
+  "name": "Radar Chart",
+  "category": "CHARTS",
+  "description": "A spider web of 3-8 axes draws on ring by ring, a dashed reference polygon eases out, the accent value polygon springs out vertex by vertex with overshoot and breathes, and a translucent radar beam sweeps the web while axis labels and values rise in.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "items",
+   "prefix",
+   "suffix",
+   "total"
+  ],
+  "cues": [
+   "compare-values",
+   "level"
+  ],
+  "duration": 6,
+  "sfx": "riser",
+  "sample": {
+   "text": "Water Risk Scorecard",
+   "subtitle": "Score out of 100",
+   "label": "Arizona vs U.S. Average",
+   "total": 100,
+   "items": [
+    {
+     "label": "Water Stress",
+     "value": 92,
+     "text": "48"
+    },
+    {
+     "label": "Drought",
+     "value": 86,
+     "text": "52"
+    },
+    {
+     "label": "Groundwater Loss",
+     "value": 78,
+     "text": "40"
+    },
+    {
+     "label": "Extreme Heat",
+     "value": 88,
+     "text": "50"
+    },
+    {
+     "label": "Wildfire",
+     "value": 70,
+     "text": "45"
+    },
+    {
+     "label": "Flooding",
+     "value": 24,
+     "text": "46"
+    }
+   ]
+  },
+  "family": "cb",
+  "file": "LibChartsB"
+ },
+ {
+  "id": "ca-bar-race",
+  "name": "Bar Race",
+  "category": "CHARTS",
+  "description": "Horizontal bars start one after another and race: when a bigger bar overtakes, the rows glide into rank order, values count up at the bar ends, the current leader turns to the accent and an overtaking bar flashes a green chevron; the subtitle (a year) sits as a big ghost figure in the corner.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "ranking",
+   "compare-values"
+  ],
+  "duration": 6,
+  "sfx": "riser",
+  "sample": {
+   "text": "Colorado River water rights",
+   "subtitle": "1922",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "Nevada",
+     "value": 0.3
+    },
+    {
+     "label": "Wyoming",
+     "value": 1.04
+    },
+    {
+     "label": "Utah",
+     "value": 1.71
+    },
+    {
+     "label": "Arizona",
+     "value": 2.85
+    },
+    {
+     "label": "Colorado",
+     "value": 3.86
+    },
+    {
+     "label": "California",
+     "value": 4.4
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-stacked-column",
+  "name": "Stacked Column Drop",
+  "category": "CHARTS",
+  "description": "A wireframe 3D column draws on, then each share drops in from above as a solid shaded block that lands on the stack with a squash and a white edge flash, while leader lines draw from each block to its rolling percentage and name (a missing remainder becomes 'Other').",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "shares",
+   "percent"
+  ],
+  "duration": 5.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Where America's fresh water goes",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Power plants",
+     "value": 41
+    },
+    {
+     "label": "Irrigation",
+     "value": 37
+    },
+    {
+     "label": "Public supply",
+     "value": 12
+    },
+    {
+     "label": "Industry",
+     "value": 5
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-grouped-bars",
+  "name": "Grouped Bars",
+  "category": "CHARTS",
+  "description": "Pairs of columns per label: the 'then' bar is a hatched ghost whose outline draws on like a pen stroke, the 'now' bar rises solid in the accent beside it, both values roll above, and a red or green change chip pops over each pair, with a legend naming the two series from label 'A|B'.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "then-now",
+   "compare-values",
+   "change"
+  ],
+  "duration": 6,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Western reservoirs, then and now",
+   "label": "2000|2022",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 91,
+     "text": "27"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 94,
+     "text": "24"
+    },
+    {
+     "label": "Shasta",
+     "value": 86,
+     "text": "31"
+    },
+    {
+     "label": "Oroville",
+     "value": 79,
+     "text": "28"
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-lollipop",
+  "name": "Lollipop Chart",
+  "category": "CHARTS",
+  "description": "Rows of dotted tracks where each stem shoots out from zero with a bead on its tip, the head pops to full size with a shock ring on landing and the value rolls beside it, the highlighted row in the accent, then a cyan dashed AVG line drops through all rows.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "ranking"
+  ],
+  "duration": 5.5,
+  "sfx": "pop",
+  "sample": {
+   "text": "Water used per person, per day",
+   "suffix": "L",
+   "highlight": "United States",
+   "items": [
+    {
+     "label": "United States",
+     "value": 575
+    },
+    {
+     "label": "Australia",
+     "value": 493
+    },
+    {
+     "label": "Japan",
+     "value": 374
+    },
+    {
+     "label": "United Kingdom",
+     "value": 149
+    },
+    {
+     "label": "China",
+     "value": 86
+    },
+    {
+     "label": "Kenya",
+     "value": 46
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-dot-plot",
+  "name": "Dot Plot",
+  "category": "CHARTS",
+  "description": "One long ruler draws on with its ticks popping as the line passes, then each value is a dot that slides from the left end to its mark with a comet trail, lands with a pulse ring and grows a thin stem to a tiered callout (rolling value and name) above or below the axis.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "level",
+   "measurement"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead's danger lines",
+   "suffix": "FT",
+   "highlight": "2022 record low",
+   "items": [
+    {
+     "label": "Full pool",
+     "value": 1229
+    },
+    {
+     "label": "Tier 1 shortage",
+     "value": 1075
+    },
+    {
+     "label": "2022 record low",
+     "value": 1041
+    },
+    {
+     "label": "Power pool",
+     "value": 950
+    },
+    {
+     "label": "Dead pool",
+     "value": 895
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-waterfall",
+  "name": "Waterfall Chart",
+  "category": "CHARTS",
+  "description": "A running total: the first item rises as a white starting column, each next item steps off the previous level up in green or down in red with its signed amount rising in, dashed connectors draw across between steps, and a final glowing accent column rises to the net total with a rolling figure.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "change",
+   "series"
+  ],
+  "duration": 6.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "Lake Mead's yearly water budget",
+   "label": "Net",
+   "suffix": "MAF",
+   "items": [
+    {
+     "label": "Inflow",
+     "value": 9
+    },
+    {
+     "label": "California",
+     "value": -4.4
+    },
+    {
+     "label": "Arizona",
+     "value": -2.8
+    },
+    {
+     "label": "Mexico",
+     "value": -1.5
+    },
+    {
+     "label": "Evaporation",
+     "value": -0.6
+    },
+    {
+     "label": "Nevada",
+     "value": -0.3
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-bullet",
+  "name": "Bullet Target Chart",
+  "category": "CHARTS",
+  "description": "Qualitative bands wipe open along a wide track, the white target marker drops in from above with a bounce, the accent value bar races toward it while the big number rolls, and a bracket draws the gap with a red 'SHORT' or green 'OVER' amount plus a percent-of-target readout.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "value",
+   "total",
+   "suffix",
+   "prefix",
+   "items"
+  ],
+  "cues": [
+   "percent",
+   "level"
+  ],
+  "duration": 5.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "California's water savings goal",
+   "label": "Goal",
+   "value": 7,
+   "total": 15,
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Critical",
+     "value": 5
+    },
+    {
+     "label": "Behind",
+     "value": 10
+    },
+    {
+     "label": "On track",
+     "value": 15
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-radial-bars",
+  "name": "Radial Bars",
+  "category": "CHARTS",
+  "description": "Concentric 270-degree rings sweep clockwise from twelve o'clock to each value with a bead on the tip and the live number riding just ahead of it, names sitting at each ring's start, the highlighted ring glowing in the accent with its figure rolling in the centre, and the rings unwind on exit.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "percent",
+   "compare-values"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "How full are the West's reservoirs?",
+   "subtitle": "Share of capacity, summer 2022",
+   "suffix": "%",
+   "highlight": "Lake Mead",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 27
+    },
+    {
+     "label": "Lake Powell",
+     "value": 24
+    },
+    {
+     "label": "Shasta",
+     "value": 31
+    },
+    {
+     "label": "Oroville",
+     "value": 30
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-heat-strip",
+  "name": "Heat Strip",
+  "category": "CHARTS",
+  "description": "A row of year cells coloured from dark through the accent to white-hot flips up one after another on a bottom hinge like a departures board, each value rising inside its cell, then a light sweeps along the strip, the peak cell glows under a PEAK pointer and a gradient legend wipes in with the low and high ends.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "years",
+   "series"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "Phoenix keeps getting hotter",
+   "subtitle": "Days at 110°F or hotter",
+   "items": [
+    {
+     "label": "2014",
+     "value": 13
+    },
+    {
+     "label": "2015",
+     "value": 20
+    },
+    {
+     "label": "2016",
+     "value": 28
+    },
+    {
+     "label": "2017",
+     "value": 24
+    },
+    {
+     "label": "2018",
+     "value": 20
+    },
+    {
+     "label": "2019",
+     "value": 13
+    },
+    {
+     "label": "2020",
+     "value": 53
+    },
+    {
+     "label": "2021",
+     "value": 24
+    },
+    {
+     "label": "2022",
+     "value": 28
+    },
+    {
+     "label": "2023",
+     "value": 54
+    },
+    {
+     "label": "2024",
+     "value": 70
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "ca-histogram",
+  "name": "Histogram Wave",
+  "category": "CHARTS",
+  "description": "Up to 24 thin columns rise in a left-to-right wave with a slight overshoot and then breathe in a slow travelling ripple, while the highlighted column turns to the accent and a leader line draws up from it to a callout with its rolling value and name; the columns sink back in a reverse wave at the end.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix",
+   "highlight"
+  ],
+  "cues": [
+   "series"
+  ],
+  "duration": 5.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "California wells reported dry in 2022",
+   "subtitle": "Reports that month",
+   "highlight": "Jul",
+   "items": [
+    {
+     "label": "Jan",
+     "value": 38
+    },
+    {
+     "label": "Feb",
+     "value": 45
+    },
+    {
+     "label": "Mar",
+     "value": 62
+    },
+    {
+     "label": "Apr",
+     "value": 88
+    },
+    {
+     "label": "May",
+     "value": 121
+    },
+    {
+     "label": "Jun",
+     "value": 176
+    },
+    {
+     "label": "Jul",
+     "value": 214
+    },
+    {
+     "label": "Aug",
+     "value": 198
+    },
+    {
+     "label": "Sep",
+     "value": 151
+    },
+    {
+     "label": "Oct",
+     "value": 97
+    },
+    {
+     "label": "Nov",
+     "value": 58
+    },
+    {
+     "label": "Dec",
+     "value": 41
+    }
+   ]
+  },
+  "family": "ca",
+  "file": "LibChartsA"
+ },
+ {
+  "id": "nc-speedo-gauge",
+  "name": "Speedometer Gauge",
+  "category": "NUMBERS",
+  "description": "A 220-degree speedometer dial draws on, its ticks sweep in and light up as a tapered needle springs to the share with a slight overshoot and live wobble, while the figure rolls in under the pivot and the needle drops back to zero on exit.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "prefix",
+   "total",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "percent",
+   "level",
+   "ratio"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "value": 27,
+   "suffix": "%",
+   "text": "Lake Mead capacity",
+   "subtitle": "July 2022"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-led-counter",
+  "name": "LED Digital Counter",
+  "category": "NUMBERS",
+  "description": "A dark seven-segment LED panel opens like a CRT from a bright line, flashes an 888 self-test, counts up to the figure with an amber glow, scanlines and a glass sheen, then powers off segment by segment and collapses back to a line.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "big-number",
+   "money"
+  ],
+  "duration": 5.5,
+  "sfx": "glitch-transition",
+  "sample": {
+   "value": 240000,
+   "text": "Water main breaks every year",
+   "subtitle": "US water infrastructure"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-flip-clock",
+  "name": "Split-Flap Counter",
+  "category": "NUMBERS",
+  "description": "Split-flap cards rise in and clatter through a full cycle of digits in 3D, slowing as each lands on the figure, the unit card flips in last, and the cards tip backwards one by one to exit.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "big-number",
+   "money"
+  ],
+  "duration": 5.5,
+  "sfx": "typewriter",
+  "sample": {
+   "value": 703,
+   "suffix": "M",
+   "text": "People without basic drinking water",
+   "subtitle": "Global water crisis"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-countdown-dial",
+  "name": "Countdown Dial",
+  "category": "NUMBERS",
+  "description": "A glowing ring charges full then drains backwards to the remaining share; the 60 bezel ticks dim as the pulsing head passes, the lost arc shows as dashed red, and the centre figure counts down from the total.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "prefix",
+   "total",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "percent",
+   "level",
+   "ratio"
+  ],
+  "duration": 5.5,
+  "sfx": "riser",
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "text": "Lake Powell capacity left",
+   "subtitle": "February 2023"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-battery",
+  "name": "Battery Level",
+  "category": "NUMBERS",
+  "description": "A battery outline draws on and charges full, then drains to the percentage while the fill shifts green to gold to red with a moving sheen and the percent counts beside it; low levels pulse a red warning, and label 'up' charges instead with a lightning bolt.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "total",
+   "label",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "percent",
+   "level"
+  ],
+  "duration": 5.5,
+  "sfx": "pop",
+  "sample": {
+   "value": 21,
+   "suffix": "%",
+   "label": "down",
+   "text": "Cape Town dam levels",
+   "subtitle": "Day Zero, 2018"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-thermometer",
+  "name": "Thermometer Rise",
+  "category": "NUMBERS",
+  "description": "A glass thermometer draws on beside a headline; the mercury springs up a degree scale, shifting from cool cyan through gold to heat red, the live reading rides the top of the column on a pointer, and a heat glow pulses round the bulb.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "measurement"
+  ],
+  "duration": 5.5,
+  "sfx": "riser",
+  "sample": {
+   "value": 122,
+   "suffix": "°F",
+   "text": "Phoenix all-time record high",
+   "subtitle": "June 26, 1990"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-population-clock",
+  "name": "Live Population Clock",
+  "category": "NUMBERS",
+  "description": "A lower-left tag on the footage: a cyan LIVE dot pulses, the big figure lands like an odometer and then keeps ticking upward digit by digit, with a data pulse running along its rule.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "big-number"
+  ],
+  "duration": 6,
+  "sfx": "none",
+  "sample": {
+   "value": 8100000000,
+   "text": "people sharing one planet's fresh water",
+   "subtitle": "World population"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-burst-number",
+  "name": "Impact Number Burst",
+  "category": "NUMBERS",
+  "description": "A contracting ring and inward speed lines build tension, then the figure slams in from blur with a white flash, camera shake, two shockwave rings and a radial spark burst, and gold embers drift up while it holds.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "big-number",
+   "money",
+   "percent"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "value": 2.2,
+   "suffix": "B",
+   "text": "People without safely managed drinking water",
+   "subtitle": "WHO / UNICEF 2023"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-segment-meter",
+  "name": "Segmented Meter",
+  "category": "NUMBERS",
+  "description": "Twenty slanted segments of rising height light in sequence with a bright leading edge, overshoot past the share and fall back like a VU meter while a white peak-hold segment drops after them, the figure rolling in above.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "prefix",
+   "total",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "percent",
+   "level",
+   "ratio"
+  ],
+  "duration": 5,
+  "sfx": "pop",
+  "sample": {
+   "value": 70,
+   "suffix": "%",
+   "text": "Of freshwater goes to farming",
+   "subtitle": "Global water use"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "nc-stopwatch",
+  "name": "Stopwatch Timer",
+  "category": "NUMBERS",
+  "description": "An analog stopwatch swings in, its crown clicks, the gold hand sweeps with an elapsed arc and a turning sub-dial while a mono chrono readout runs, then the crown clicks again and it stops on the duration with a pulse ring.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text"
+  ],
+  "cues": [
+   "span",
+   "measurement"
+  ],
+  "duration": 5.5,
+  "sfx": "pop",
+  "sample": {
+   "value": 57,
+   "suffix": "MIN",
+   "text": "For the flood wave to reach Johnstown"
+  },
+  "family": "nc",
+  "file": "LibCounters"
+ },
+ {
+  "id": "mv-globe-spin",
+  "name": "Spinning Globe",
+  "category": "MAPS",
+  "description": "A lit orthographic globe with an atmosphere rim spins in from the west and eases onto the place while pushing in, the country tints in the accent, a map pin drops with a spring bounce, ripples roll out and a leader line draws to the place name, kicker and coordinates rising letter by letter.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "place"
+  ],
+  "duration": 5,
+  "sfx": "map-whoosh",
+  "sample": {
+   "text": "The reservoir that keeps 25 million people alive",
+   "subtitle": "Nevada, USA",
+   "locations": [
+    {
+     "label": "Lake Mead",
+     "lat": 36.25,
+     "lon": -114.39,
+     "kind": "reservoir"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-state-glow",
+  "name": "State Glow",
+  "category": "MAPS",
+  "description": "A dark US map where the camera eases toward the state holding the place, its outline draws on, then it fills from the bottom like a tank with a wavy bright-crested surface and glows while the other states dim, the state name rising letter by letter on the opposite side (falls back to the country outside the US).",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "place",
+   "region"
+  ],
+  "duration": 4.5,
+  "sfx": "riser",
+  "sample": {
+   "text": "Wells are running dry across the valley",
+   "locations": [
+    {
+     "label": "Phoenix, Arizona",
+     "lat": 33.4484,
+     "lon": -112.074,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-arc-flight",
+  "name": "Arc Flight",
+  "category": "MAPS",
+  "description": "On a dark world map a great-circle arc lifts off the first place and draws to the second with a glowing comet head and fading trail over a faint dotted ground track, the distance (or value) rolls on an odometer at the apex and the destination bursts with rings as the head lands.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix",
+   "prefix",
+   "locations"
+  ],
+  "cues": [
+   "route",
+   "distance"
+  ],
+  "duration": 5.5,
+  "sfx": "map-whoosh",
+  "sample": {
+   "text": "The dam upstream that Egypt fears",
+   "subtitle": "The Nile",
+   "locations": [
+    {
+     "label": "Cairo, Egypt",
+     "lat": 30.0444,
+     "lon": 31.2357,
+     "kind": "city"
+    },
+    {
+     "label": "Renaissance Dam, Ethiopia",
+     "lat": 11.2153,
+     "lon": 35.093,
+     "kind": "dam"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-impact-radius",
+  "name": "Impact Radius",
+  "category": "MAPS",
+  "description": "A zone snaps open around the place at its true radius on a dark vector map, the land inside tints in the accent, a range dial of ticks writes itself around the edge and slowly turns, sonar rings run out to the boundary and a measured radius line carries the rolling value + unit.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "value",
+   "suffix",
+   "locations"
+  ],
+  "cues": [
+   "place",
+   "distance",
+   "disaster"
+  ],
+  "duration": 5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Evacuated within days, still closed today",
+   "subtitle": "Exclusion zone",
+   "value": 30,
+   "suffix": "KM",
+   "locations": [
+    {
+     "label": "Chernobyl Nuclear Plant",
+     "lat": 51.389,
+     "lon": 30.099,
+     "kind": "building"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-choropleth-lift",
+  "name": "Choropleth Lift",
+  "category": "MAPS",
+  "description": "Several states (or countries) shaded from slate to the accent by their item values rise off the dark map one by one as extruded 3D blocks, taller for bigger values, each value rolling on top while a needle on the gradient legend slides to that value.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "suffix",
+   "prefix",
+   "items",
+   "locations"
+  ],
+  "cues": [
+   "compare-values",
+   "several-places",
+   "region"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "Share of each state in severe drought",
+   "label": "% of land area",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Arizona",
+     "value": 78
+    },
+    {
+     "label": "Nevada",
+     "value": 64
+    },
+    {
+     "label": "California",
+     "value": 55
+    },
+    {
+     "label": "Utah",
+     "value": 71
+    },
+    {
+     "label": "New Mexico",
+     "value": 83
+    },
+    {
+     "label": "Colorado",
+     "value": 42
+    }
+   ],
+   "locations": [
+    {
+     "label": "Arizona",
+     "lat": 34.29,
+     "lon": -111.66,
+     "kind": "state"
+    },
+    {
+     "label": "Nevada",
+     "lat": 39.33,
+     "lon": -116.63,
+     "kind": "state"
+    },
+    {
+     "label": "California",
+     "lat": 37.18,
+     "lon": -119.47,
+     "kind": "state"
+    },
+    {
+     "label": "Utah",
+     "lat": 39.32,
+     "lon": -111.67,
+     "kind": "state"
+    },
+    {
+     "label": "New Mexico",
+     "lat": 34.41,
+     "lon": -106.11,
+     "kind": "state"
+    },
+    {
+     "label": "Colorado",
+     "lat": 39,
+     "lon": -105.55,
+     "kind": "state"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-pinboard-list",
+  "name": "Pinboard List",
+  "category": "MAPS",
+  "description": "Numbered accent badge pins fall onto a dark map one after another with a spring bounce and ground ripple, and at the same beat the matching numbered row of a list on the left rises out of its mask and takes the accent highlight.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "locations"
+  ],
+  "cues": [
+   "several-places",
+   "list"
+  ],
+  "duration": 6,
+  "sfx": "pop",
+  "sample": {
+   "text": "Cities that came close to running dry",
+   "subtitle": "Day Zero",
+   "items": [
+    {
+     "label": "Cape Town",
+     "text": "Day Zero scare, 2018"
+    },
+    {
+     "label": "Chennai",
+     "text": "Reservoirs ran dry, 2019"
+    },
+    {
+     "label": "Mexico City",
+     "text": "Sinking as aquifers drain"
+    },
+    {
+     "label": "Tehran",
+     "text": "Rationing and land subsidence"
+    },
+    {
+     "label": "Sao Paulo",
+     "text": "Cantareira crisis, 2014-15"
+    }
+   ],
+   "locations": [
+    {
+     "label": "Cape Town",
+     "lat": -33.9249,
+     "lon": 18.4241,
+     "kind": "city"
+    },
+    {
+     "label": "Chennai",
+     "lat": 13.0827,
+     "lon": 80.2707,
+     "kind": "city"
+    },
+    {
+     "label": "Mexico City",
+     "lat": 19.4326,
+     "lon": -99.1332,
+     "kind": "city"
+    },
+    {
+     "label": "Tehran",
+     "lat": 35.6892,
+     "lon": 51.389,
+     "kind": "city"
+    },
+    {
+     "label": "Sao Paulo",
+     "lat": -23.5505,
+     "lon": -46.6333,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-coordinate-hud",
+  "name": "Coordinate HUD",
+  "category": "MAPS",
+  "description": "A cyan targeting screen: a scan line sweeps the grid, a full-frame crosshair slides onto the place while mono LAT/LON readouts tick toward its coordinates and the outline map zooms in, then the reticle closes, squares up and locks in the accent with a flash before the name rises beside it.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "place",
+   "point-at"
+  ],
+  "duration": 5,
+  "sfx": "glitch-transition",
+  "sample": {
+   "text": "The reservoir behind it hit a record low",
+   "subtitle": "Location confirmed",
+   "locations": [
+    {
+     "label": "Hoover Dam",
+     "lat": 36.0161,
+     "lon": -114.7377,
+     "kind": "dam"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-river-draw",
+  "name": "River Draw",
+  "category": "MAPS",
+  "description": "On a dark dotted-ridge backdrop with frosted-glass land, a meandering glowing line draws through every place in order with bright water dashes streaming downstream along it, waypoints pop as the head passes, and the start and end are named with the value rolling at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "value",
+   "suffix",
+   "prefix",
+   "locations"
+  ],
+  "cues": [
+   "route",
+   "several-places",
+   "distance"
+  ],
+  "duration": 6.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The river that supplies 40 million people",
+   "subtitle": "Colorado River",
+   "value": 1450,
+   "suffix": "MI",
+   "locations": [
+    {
+     "label": "La Poudre Pass, Colorado",
+     "lat": 40.47,
+     "lon": -105.82,
+     "kind": "mountain"
+    },
+    {
+     "label": "Grand Junction",
+     "lat": 39.0639,
+     "lon": -108.5506,
+     "kind": "city"
+    },
+    {
+     "label": "Glen Canyon Dam",
+     "lat": 36.9375,
+     "lon": -111.4847,
+     "kind": "dam"
+    },
+    {
+     "label": "Grand Canyon",
+     "lat": 36.1069,
+     "lon": -112.1129,
+     "kind": "national_park"
+    },
+    {
+     "label": "Hoover Dam",
+     "lat": 36.0161,
+     "lon": -114.7377,
+     "kind": "dam"
+    },
+    {
+     "label": "Yuma",
+     "lat": 32.6927,
+     "lon": -114.6277,
+     "kind": "city"
+    },
+    {
+     "label": "Colorado River Delta, Mexico",
+     "lat": 31.8,
+     "lon": -114.8,
+     "kind": "water"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-country-spotlight",
+  "name": "Country Spotlight",
+  "category": "MAPS",
+  "description": "The world map dims under an accent spotlight while the country holding the place lifts off the sheet toward the camera with a 3D tilt and growing shadow, leaving a dashed hole behind, floats large with a pulsing pin, and drops back into its hole at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "place",
+   "region"
+  ],
+  "duration": 5,
+  "sfx": "riser",
+  "sample": {
+   "text": "The first major city to nearly run out of water",
+   "subtitle": "Cape Town",
+   "locations": [
+    {
+     "label": "Cape Town",
+     "lat": -33.9249,
+     "lon": 18.4241,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "mv-zoom-inset",
+  "name": "Zoom Box Inset",
+  "category": "MAPS",
+  "description": "A country (or lower-48) outline draws on at left, a focus box draws around the place, then the box itself flies out along dashed connectors and grows into a large magnified inset on the right with a fine lat/lon grid, scale bar and a dropping pin, shrinking back into the box at the end.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "place",
+   "region"
+  ],
+  "duration": 5.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Where the water crisis began",
+   "subtitle": "Michigan, 2014",
+   "locations": [
+    {
+     "label": "Flint, Michigan",
+     "lat": 43.0125,
+     "lon": -83.6875,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "mv",
+  "file": "LibVectorMaps"
+ },
+ {
+  "id": "fx-ink-bleed",
+  "name": "Ink Bleed Title",
+  "category": "TRANSITIONS",
+  "description": "Black ink blooms over the shot from three points with crinkled, creeping edges and a soft wet spread until it fills the frame, the title rises letter by letter in white under a gold kicker and rule, then the ink opens from the centre with the same ragged edge and gives the picture back.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "question"
+  ],
+  "duration": 4,
+  "sfx": "riser",
+  "sample": {
+   "text": "The Aquifer Is Running Dry",
+   "label": "Chapter Three",
+   "subtitle": "Arizona's hidden water crisis"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-light-streak",
+  "name": "Anamorphic Light Streak",
+  "category": "TRANSITIONS",
+  "description": "An anamorphic light streak with a white core, gold glow, hot spot and hexagonal lens ghosts sweeps across the footage and its light writes the title letter by letter as it passes; a weaker glint sweeps back at the end and lifts the letters away.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "date",
+   "event"
+  ],
+  "duration": 3,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Summer 1936",
+   "label": "The Dust Bowl"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-dust-motes",
+  "name": "Floating Dust Motes",
+  "category": "TRANSITIONS",
+  "description": "Soft dust motes at three depths (far specks, mid motes, near bokeh) drift and rise slowly through a warm shaft of light over the footage, flaring as they cross the beam, with an optional source line and year rising low left beside a gold rule.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "archive"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sample": {
+   "text": "Archive Footage",
+   "subtitle": "1937"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-hud-scan",
+  "name": "HUD Grid Scan",
+  "category": "TRANSITIONS",
+  "description": "A thin HUD grid draws out from the centre over the footage with closing corner brackets and a top ruler, a cyan scan line with a phosphor trail sweeps down and up lighting the grid crossings it passes, mono readouts type in, and the subject rises low left under its typed coordinates.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "warning",
+   "place"
+  ],
+  "duration": 4,
+  "sfx": "glitch-transition",
+  "sample": {
+   "text": "Lake Mead Reservoir",
+   "label": "Satellite Pass 04",
+   "locations": [
+    {
+     "label": "Lake Mead, Nevada",
+     "lat": 36.0162,
+     "lon": -114.7377
+    }
+   ]
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-film-burn",
+  "name": "Film Burn Flash",
+  "category": "TRANSITIONS",
+  "description": "Warm light floods in from the right edge with flicker and a light leak, then the film burns through with a white-hot hole, charred rim, glowing edge and flying embers before fading back to the shot, while an optional date or era rises letter by letter low left.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "archive",
+   "date"
+  ],
+  "duration": 3.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "March 1936",
+   "label": "Hoover Dam",
+   "subtitle": "Black Canyon, Nevada"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-shape-wipe",
+  "name": "Geometric Shape Wipe",
+  "category": "TRANSITIONS",
+  "description": "Skewed bars and triangles in ink, gold and white whip across the frame as a staggered group with a smeared motion blur, and the trailing gold dash parks as the underline of an optional word that rises low left, then whips out with it at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "chapter",
+   "headline"
+  ],
+  "duration": 3,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "The Turning Point",
+   "label": "Part Two"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-gradient-mesh",
+  "name": "Gradient Mesh Title",
+  "category": "TRANSITIONS",
+  "description": "A slow gold, slate and charcoal gradient mesh blooms open from the centre through a soft circular edge and keeps drifting with a sheen crossing it, while a centred title rises letter by letter with its kicker, split gold rule and subtitle.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "chapter",
+   "headline"
+  ],
+  "duration": 4,
+  "sfx": "riser",
+  "sample": {
+   "text": "Who Owns The Colorado River?",
+   "label": "Chapter Four",
+   "subtitle": "Seven states, one shrinking river"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-glitch-slice",
+  "name": "Glitch Slice Burst",
+  "category": "TRANSITIONS",
+  "description": "Three short digital bursts slice the picture into horizontal bands shifted sideways with cyan and gold colour splits, a double image, an inverted band, block artefacts and scanlines, while an optional alert line rises low left and jitters colour-split with each burst.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "warning"
+  ],
+  "duration": 3,
+  "sfx": "glitch-transition",
+  "sample": {
+   "text": "Contamination Detected",
+   "label": "Water Quality Alert"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-zoom-tunnel",
+  "name": "Speed Line Tunnel",
+  "category": "TRANSITIONS",
+  "description": "Tapered speed lines stream from the edges into the centre with a white and gold impact ring and a flash, settling to a steady drift while a short line punches in letter by letter with a scale slam inside the clear zone, then the lines rush in and vanish.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "question",
+   "event"
+  ],
+  "duration": 3,
+  "sfx": "impact",
+  "sample": {
+   "text": "Where Did The Water Go?",
+   "label": "The Question"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "fx-paper-tear",
+  "name": "Paper Tear Reveal",
+  "category": "TRANSITIONS",
+  "description": "A sheet of textured paper slides up over the shot with the title printed on it, cracks along a jagged line with a shudder and tears into two halves that hinge open and fly apart with white fibrous edges, shadows and scraps, revealing the footage beneath.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "date",
+   "chapter"
+  ],
+  "duration": 3.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Ten Years Later",
+   "label": "Flint, Michigan",
+   "subtitle": "April 2024"
+  },
+  "family": "fx",
+  "file": "LibAtmosphere"
+ },
+ {
+  "id": "al-breaking-flag",
+  "name": "Breaking Flag",
+  "category": "HEADLINES",
+  "description": "/ A red broadcast tab pops in the top-left corner; the white BREAKING panel swings out of it on a hinge, then the dark headline panel swings out of that one (each shaded while it is turned away). At the end they fold back in reverse and the tab closes. /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-alert-toast",
+  "name": "Alert Toast",
+  "category": "HEADLINES",
+  "description": "/ A push alert: a frosted card springs in from the right edge (a ghost of an earlier alert stacked behind it), the app icon pops and rings, title and message rise line by line, a timer bar drains until it slides away. /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "body"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "body": "The reservoir that supplies 25 million people has dropped to its lowest level since it was filled in 1937."
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-siren-badge",
+  "name": "Siren Badge",
+  "category": "HEADLINES",
+  "description": "/ A siren emblem low-left: the ring draws, the dome glows and double-flashes like a strobe, wail rings spread, and a two-lamp red beam sweeps round across the footage. The kicker, the label (letter by letter) and a line of context sit beside it. /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-warning-polygon",
+  "name": "Warning Polygon",
+  "category": "HEADLINES",
+  "description": "/ A storm-based warning on a radar map: a scan line sweeps and reveals the echoes drifting with the storm, the straight-edged warning polygon draws itself vertex by vertex, hatches in and pulses, a motion arrow shows where it is heading; the warning type, its end time and the areas stack beside. /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-severity-meter",
+  "name": "Severity Meter",
+  "category": "HEADLINES",
+  "description": "/ A level on a 1-5 scale: a staircase of blocks springs up, a charge climbs it (each step flashing as it lights) under a sliding pointer, the level's block fills and breathes - red when the level is in the top of the scale - while the level number rolls and its name rises beside it. /",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "total"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26,
+   "total": 100
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-countdown-timer",
+  "name": "Countdown Timer",
+  "category": "HEADLINES",
+  "description": "/ Time running out: mono digits in glass cells rise in, then tick in real time from the value - each changed digit rolls up out of its cell, the colons blink, a red pulse runs under the row on every second, and the last ten seconds turn red. /",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-live-tag",
+  "name": "Live Tag",
+  "category": "HEADLINES",
+  "description": "/ A live bug top-right: a white LIVE chip wipes open with a beating red dot, a divider draws, the place rises letter by letter over an accent rule and the local time ticks by the second, each changed digit rolling. /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-emergency-stamp",
+  "name": "Emergency Stamp",
+  "category": "HEADLINES",
+  "description": "/ A proclamation slides up onto a dark desk (a seal drawing itself, the title letter by letter, the text beneath); the DECLARED stamp drops from above with its shadow and slams down - the camera shakes, the ink bleeds a little, specks spray and dust puffs out - a double impression ghosts in, the sig",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "highlight",
+   "body"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "highlight": "record low",
+   "body": "The reservoir that supplies 25 million people has dropped to its lowest level since it was filled in 1937."
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-slim-ticker",
+  "name": "Slim Ticker",
+  "category": "HEADLINES",
+  "description": "/ A slim dark-glass ticker low on the frame (inset, never a red band): the accent chip springs up, the bar extends out of it with the sentence already crawling, a light runs along its top edge; at the end the bar retracts into the chip, taking the text with it. /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "al-storm-track",
+  "name": "Storm Track",
+  "category": "HEADLINES",
+  "description": "/ A storm (or any threat) moving over a vector coastline: the widening cone and the dashed track draw from the first place to the last behind the storm symbol, spinning the way storms turn in that hemisphere; each place pops as it is passed, its label rising outside the cone; the category rolls in a",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value"
+  ],
+  "cues": [
+   "warning",
+   "event",
+   "disaster"
+  ],
+  "duration": 4.5,
+  "sfx": "impact",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26
+  },
+  "family": "al",
+  "file": "LibAlerts"
+ },
+ {
+  "id": "cf-evidence-bag",
+  "name": "Evidence Bag",
+  "category": "DOCUMENTS",
+  "description": "/ value = item number, text = description, label = case number, subtitle = where it was collected, items = chain of custody (label who, text when). The story's still (media) sits inside the bag as a print. /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-case-stamp",
+  "name": "Case Stamp",
+  "category": "DOCUMENTS",
+  "description": "/ text = the case title, label (or value) = the case number, subtitle = the department line, highlight = an optional word stamped in red (UNSOLVED). /",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "highlight"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26,
+   "highlight": "record low"
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-redacted-doc",
+  "name": "Redacted Doc",
+  "category": "DOCUMENTS",
+  "description": "/ highlight = the key line (revealed), text = the document heading (or the key line when no highlight), body = the surrounding text (mostly redacted), subtitle = the issuing office, label = a date or file reference. /",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "highlight",
+   "body"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "highlight": "record low",
+   "body": "The reservoir that supplies 25 million people has dropped to its lowest level since it was filled in 1937."
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-fingerprint-scan",
+  "name": "Fingerprint Scan",
+  "category": "DOCUMENTS",
+  "description": "/ value = the match (percent by default), text = the result line, label = the print's name, subtitle = the database. No value: the result alone, big. /",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix"
+  ],
+  "cues": [
+   "percent",
+   "big-number",
+   "document",
+   "profile"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26,
+   "suffix": "%"
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-police-log",
+  "name": "Police Log",
+  "category": "DOCUMENTS",
+  "description": "/ items = log entries (label the time, text the event), text = the log's title, subtitle = the unit or date. The entries type in on a console. /",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada"
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-unknown-silhouette",
+  "name": "Unknown Silhouette",
+  "category": "DOCUMENTS",
+  "description": "/ label = the headline word (default UNIDENTIFIED), text = who they are, subtitle = a small line above (last seen...), items = the known details. /",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-evidence-markers",
+  "name": "Evidence Markers",
+  "category": "DOCUMENTS",
+  "description": "/ media[0] = the scene photo, items = what each marker points out (label), text = the legend title, subtitle = the place. No items: three markers. /",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada"
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-phone-records",
+  "name": "Phone Records",
+  "category": "DOCUMENTS",
+  "description": "/ items = calls (label the time, text the caller, value the duration in seconds), highlight = the call to flag, text = what it was, subtitle = whose phone. The flagged call's time and duration roll out beside it. /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "suffix",
+   "highlight"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "suffix": "%",
+   "highlight": "record low"
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-cctv-frame",
+  "name": "Cctv Frame",
+  "category": "DOCUMENTS",
+  "description": "/ On the footage: label = the camera id, text = the location, subtitle = the date and time (\"03-03-2014 23:41:07\"); the clock ticks from that time (or counts from 00:00:00 when none is given). /",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "cf-transcript",
+  "name": "Transcript",
+  "category": "DOCUMENTS",
+  "description": "/ items = the exchange (label the speaker, text the words), text = the transcript title, subtitle = when / which case, highlight = the phrase to mark. No items: text becomes one entry spoken by label (a quote). /",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "highlight"
+  ],
+  "cues": [
+   "document",
+   "profile",
+   "event"
+  ],
+  "duration": 4.5,
+  "sfx": "paper",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "highlight": "record low"
+  },
+  "family": "cf",
+  "file": "LibCaseFile"
+ },
+ {
+  "id": "sc-water-cycle",
+  "name": "Water Cycle",
+  "category": "CHARTS",
+  "description": "/ The water cycle on its own designed landscape: mountains rise, the sea line draws, then the four stages arrive in turn (vapour arrows rising off the sea, an arc carrying it to the cloud as the cloud puffs out, rain falling on the peaks, the river and an arrow running back to the sea). Once the loo",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "suffix",
+   "items"
+  ],
+  "cues": [
+   "compare-values",
+   "list",
+   "level",
+   "steps"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26,
+     "text": "2022"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "2023"
+    },
+    {
+     "label": "Shasta",
+     "value": 45,
+     "text": "2021"
+    },
+    {
+     "label": "Oroville",
+     "value": 38,
+     "text": "2021"
+    }
+   ]
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-aquifer-drop",
+  "name": "Aquifer Drop",
+  "category": "CHARTS",
+  "description": "/ The ground in section. A bright cut line sweeps down and reveals the strata (topsoil, clay, the aquifer's gravel, bedrock); the saturated aquifer glows cyan below the water table (the hydrologist's ▽ on it). The table then sinks by the value (label \"up\": rises), the lost band hatched red behind it",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix",
+   "items"
+  ],
+  "cues": [
+   "compare-values",
+   "list",
+   "percent",
+   "big-number"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26,
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26,
+     "text": "2022"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "2023"
+    },
+    {
+     "label": "Shasta",
+     "value": 45,
+     "text": "2021"
+    },
+    {
+     "label": "Oroville",
+     "value": 38,
+     "text": "2021"
+    }
+   ]
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-pipe-flow",
+  "name": "Pipe Flow",
+  "category": "CHARTS",
+  "description": "/ A pipeline on a blueprint. The pipe draws on, the gate valve's wheel spins it open and water floods the empty pipe from the left, a bright front leading it; each station (items: label, text) lights with a ping as the water reaches it. When the water reaches the inline turbine meter its rotor spins",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix",
+   "prefix",
+   "items"
+  ],
+  "cues": [
+   "compare-values",
+   "list",
+   "percent",
+   "big-number"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26,
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26,
+     "text": "2022"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "2023"
+    },
+    {
+     "label": "Shasta",
+     "value": 45,
+     "text": "2021"
+    },
+    {
+     "label": "Oroville",
+     "value": 38,
+     "text": "2021"
+    }
+   ]
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-molecule-orbit",
+  "name": "Molecule Orbit",
+  "category": "CHARTS",
+  "description": "/ A molecule built from the formula in overlay.label (or one found in the text): the central atom pops, its partners fly in from depth and their bonds snap on while the model swings into 3D; three tilted electron orbits draw on and electrons whip round them, passing in front of and behind the atoms.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "level",
+   "steps",
+   "summary"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022"
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-cause-chain",
+  "name": "Cause Chain",
+  "category": "CHARTS",
+  "description": "/ Two to five consequences as hexagon nodes in a row, dashed links between them. The outlines draw on, then a spark leaves the first node (CAUSE) and runs down each link, the lit line growing behind it; when it arrives the arrowhead snaps on and the next node ignites (fills with the accent, a hexago",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "total",
+   "items"
+  ],
+  "cues": [
+   "compare-values",
+   "list",
+   "level",
+   "steps"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "total": 100,
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26,
+     "text": "2022"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "2023"
+    },
+    {
+     "label": "Shasta",
+     "value": 45,
+     "text": "2021"
+    },
+    {
+     "label": "Oroville",
+     "value": 38,
+     "text": "2021"
+    }
+   ]
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-reservoir-levels",
+  "name": "Reservoir Levels",
+  "category": "CHARTS",
+  "description": "/ Reservoirs as valley cross-sections carved side by side into a ground slab. The outlines draw on, then each basin fills to its share of capacity (the level solved for area, so 50% sits above half depth, as in a real valley) with a slosh that dies away; the percentage rolls above each, turning red",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix",
+   "prefix",
+   "total",
+   "items",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "list",
+   "percent",
+   "big-number"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26,
+   "suffix": "%",
+   "total": 100,
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26,
+     "text": "2022"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "2023"
+    },
+    {
+     "label": "Shasta",
+     "value": 45,
+     "text": "2021"
+    },
+    {
+     "label": "Oroville",
+     "value": 38,
+     "text": "2021"
+    }
+   ],
+   "highlight": "record low"
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-warming-stripes",
+  "name": "Warming Stripes",
+  "category": "CHARTS",
+  "description": "/ The \"show your stripes\" graphic as a full-frame backdrop: one stripe per year (items, interpolated when few, or a warming curve built from the value), deep blue through white to red. The stripes grow up out of the axis behind a scanning playhead with a light at its edge that reads out the year; a",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix",
+   "items",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "list",
+   "percent",
+   "big-number"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26,
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26,
+     "text": "2022"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "2023"
+    },
+    {
+     "label": "Shasta",
+     "value": 45,
+     "text": "2021"
+    },
+    {
+     "label": "Oroville",
+     "value": 38,
+     "text": "2021"
+    }
+   ],
+   "highlight": "record low"
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-rain-gauges",
+  "name": "Rain Gauges",
+  "category": "CHARTS",
+  "description": "/ Two to five graduated glass rain gauges land in a row. Drops fall into each funnel (a streak above each) and every landing sends a ripple across the water as the column rises to its value on the shared scale; the reading rolls and rides the meniscus on the gauge's right. The narrated one (overlay.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "suffix",
+   "prefix",
+   "items",
+   "highlight"
+  ],
+  "cues": [
+   "compare-values",
+   "list",
+   "level",
+   "steps"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "suffix": "%",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26,
+     "text": "2022"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "2023"
+    },
+    {
+     "label": "Shasta",
+     "value": 45,
+     "text": "2021"
+    },
+    {
+     "label": "Oroville",
+     "value": 38,
+     "text": "2021"
+    }
+   ],
+   "highlight": "record low"
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-dam-level",
+  "name": "Dam Level",
+  "category": "CHARTS",
+  "description": "/ A dam and its reservoir in section on a canyon backdrop, an elevation scale up the left wall. The reservoir starts at full pool (overlay.total) and falls to the level (value + suffix), a pale bathtub ring appearing on the rock above it; each intake (items: label, value) flips from SUBMERGED to EXP",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "suffix",
+   "prefix",
+   "total",
+   "items"
+  ],
+  "cues": [
+   "compare-values",
+   "list",
+   "percent",
+   "big-number"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "label": "July 2022",
+   "value": 26,
+   "suffix": "%",
+   "total": 100,
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26,
+     "text": "2022"
+    },
+    {
+     "label": "Lake Powell",
+     "value": 22,
+     "text": "2023"
+    },
+    {
+     "label": "Shasta",
+     "value": 45,
+     "text": "2021"
+    },
+    {
+     "label": "Oroville",
+     "value": 38,
+     "text": "2021"
+    }
+   ]
+  },
+  "family": "sc",
+  "file": "LibScience"
+ },
+ {
+  "id": "sc-heat-sun",
+  "name": "Heat Sun",
+  "category": "CHARTS",
+  "description": "/ A tag for heat over the footage, top right: a sun pops in and turns its rays (long and short, breathing), wobbling heat rings ripple out from it and shift from gold to red as they fade. Beside it, right-aligned, a pulsing red dot and the warning (subtitle), the temperature rolling (a bare number o",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "value",
+   "suffix"
+  ],
+  "cues": [
+   "percent",
+   "big-number",
+   "level",
+   "steps"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh",
+  "sample": {
+   "text": "Lake Mead falls to a record low",
+   "subtitle": "Clark County, Nevada",
+   "value": 26,
+   "suffix": "%"
+  },
+  "family": "sc",
+  "file": "LibScience"
+ }
+]

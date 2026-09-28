@@ -144,7 +144,7 @@ def playable_video(path: str, min_seconds: float = 0.5) -> bool:
         return False
 
 
-def clip_quality(path: str) -> tuple:
+def clip_quality(path: str, min_height: int = 0) -> tuple:
     """
     (ok, reason) for a sourced file. Reason is empty when it passes.
 
@@ -182,6 +182,9 @@ def clip_quality(path: str) -> tuple:
     w, h = _video_dims(path)
     if w and h and w < h * 1.2:
         return False, "vertical or square video"
+    if min_height and h and h < min_height:
+        # A 360p upload blown up to 1080p reads as a mistake next to sharp clips.
+        return False, f"low resolution ({h}p)"
 
     dark = sum(1 for f in frames if float(f.mean()) < 26)
     if dark >= max(2, len(frames) // 2):

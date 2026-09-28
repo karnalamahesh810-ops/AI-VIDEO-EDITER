@@ -1,9 +1,11 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, staticFile, useVideoConfig } from "remotion";
 import { SceneClip } from "./components/SceneClip";
+import { BlurBackdrop } from "./components/AnimationScene";
+import { KScale } from "./components/pro/ProGraphics";
 import { Captions } from "./components/Captions";
 import { MotionWrap } from "./components/MotionWrap";
-import { resolveOverlay } from "./templates";
+import { resolveOverlay, templateFor } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
 import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
 
@@ -26,8 +28,9 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
   }
   if (!(ov.media && ov.media.length)) {
     const v = ov.variant || "";
+    const tags = templateFor(ov.template)?.tags || [];
     const at = scenes.findIndex((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
-    if (v === "collage") {
+    if (v === "collage" || tags.includes("stills")) {
       // A burst of the story's own pictures: the stills of the scenes that follow.
       const pics: SceneMedia[] = [];
       for (let i = Math.max(0, at + 1); i < scenes.length && pics.length < 6; i++) {
@@ -35,7 +38,7 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
         if (m && !pics.some((p) => p.url === m.url)) pics.push(m);
       }
       if (pics.length) ov = { ...ov, media: pics };
-    } else if (STILL_LOOKS.has(v) && at >= 0) {
+    } else if ((STILL_LOOKS.has(v) || tags.includes("still")) && at >= 0) {
       const m = stillOf(scenes[at].media);
       if (m) ov = { ...ov, media: [m] };
     }
@@ -44,12 +47,45 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
   // A document can arrive from the editor or an older schema, so an unknown
   // type is possible at runtime even though it is not at compile time.
   if (!Component) return null;
+  const scale = textScale(ov);
+  if (ov.backdrop === "blur") {
+    // Full screen for its moment only: a blurred still of the clip under it,
+    // the graphic drawn as a full-frame scene; the clip keeps its slot.
+    const under = scenes.find((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
+    const m = under?.media;
+    const still = m ? (m.type === "image" ? m.url : m.thumbnail || "") : "";
+    return (
+      <MotionWrap motion="fade" exit="fade" speed={1.6}>
+        <BlurBackdrop still={still} frames={ov.durationInFrames} />
+        <KScale.Provider value={scale}>
+          <Component overlay={{ ...ov, fullFrame: true }} accent={accentFor(ov, accent)} />
+        </KScale.Provider>
+      </MotionWrap>
+    );
+  }
   return (
     <MotionWrap motion={ov.motion} exit={ov.exit} speed={ov.speed}
       placement={{ position: ov.position, scale: ov.scale, opacity: ov.opacity }}>
-      <Component overlay={ov} accent={accentFor(ov, accent)} />
+      <KScale.Provider value={scale}>
+        <Component overlay={ov} accent={accentFor(ov, accent)} />
+      </KScale.Provider>
     </MotionWrap>
   );
+};
+
+/**
+ * How large an overlay draws (KScale, read by useK): the editor's text-size
+ * setting when set, else a fifth larger for the text families (the owner:
+ * the text went from too big to too small), else as designed.
+ */
+const TEXT_CATEGORIES = new Set(["TEXT", "HEADLINES", "QUOTES", "LOWER_THIRDS"]);
+const textScale = (ov: Overlay): number => {
+  if (typeof ov.fontScale === "number" && ov.fontScale > 0) return Math.max(0.6, Math.min(1.8, ov.fontScale));
+  const t = templateFor(ov.template);
+  if (t && TEXT_CATEGORIES.has(t.category)) return 1.2;
+  if (!t && ["typewriter", "word-type", "underline-title", "swoosh-title", "sentence-highlight", "quote", "kicker",
+    "lower-third", "chapter", "title"].includes(ov.type)) return 1.2;
+  return 1;
 };
 
 /**

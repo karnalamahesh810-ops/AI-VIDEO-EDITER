@@ -23,9 +23,16 @@ const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as 
 const expoOut = Easing.bezier(0.16, 1, 0.3, 1);
 const inOut = Easing.bezier(0.65, 0, 0.35, 1);
 
+/**
+ * A size multiplier for everything drawn with useK(): the text looks are
+ * drawn a fifth larger than the data looks (the owner: "before too big, now
+ * too small"), and an overlay's fontScale overrides it (Main.tsx).
+ */
+export const KScale = React.createContext(1);
+
 export const useK = () => {
   const { width } = useVideoConfig();
-  return width / 1920;
+  return (width / 1920) * React.useContext(KScale);
 };
 
 /** 0 -> 1 from `at` over `frames`, on an expo-out curve. */
@@ -179,6 +186,14 @@ export const Scrim: React.FC<{ ov: Overlay; at?: number; focus?: string }> = ({ 
   const frame = useCurrentFrame();
   if (isFull(ov)) return null;
   const p = ramp(frame, at, 12);
+  if (ov.compact) {
+    // A single figure riding on the clip: a soft pool of shade behind it
+    // only, the picture stays bright around it.
+    return (
+      <AbsoluteFill style={{ opacity: p * 0.9,
+        background: "radial-gradient(ellipse 46% 42% at 50% 50%, rgba(0,0,0,.55) 0%, rgba(0,0,0,.28) 55%, rgba(0,0,0,0) 100%)" }} />
+    );
+  }
   return (
     <AbsoluteFill style={{ opacity: p, backdropFilter: "grayscale(0.55) brightness(0.8)",
       WebkitBackdropFilter: "grayscale(0.55) brightness(0.8)",

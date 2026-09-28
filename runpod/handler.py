@@ -50,6 +50,7 @@ import runpod
 from src import (config, costs, director, events, fanout, geocode, library, media, pools,
                  render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
+from src import templates
 
 
 def _work_dir(job_id: str) -> str:
@@ -600,7 +601,9 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
     for n, ov in enumerate(overlays):
         if ov.get("media"):
             continue
-        if ov.get("template") == "PHOTO_PIP_V1" or (ov.get("type") == "photo-card" and ov.get("variant") == "pip"):
+        tpl = templates.get(ov.get("template") or "") or {}
+        if ov.get("template") == "PHOTO_PIP_V1" or (ov.get("type") == "photo-card" and ov.get("variant") == "pip") \
+                or ("subject-photo" in (tpl.get("cues") or []) and "still" in (tpl.get("tags") or [])):
             q = str(ov.get("text") or "").strip()
         elif ov.get("type") == "map" and ov.get("variant") == "satellite-photo":
             locs = ov.get("locations") or []

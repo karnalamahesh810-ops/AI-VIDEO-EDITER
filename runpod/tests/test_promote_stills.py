@@ -18,12 +18,13 @@ class PromoteStills(unittest.TestCase):
         self.assertEqual(shots[1]["visualType"], "image")
         self.assertEqual(shots[1]["stillReason"], "photo mentioned")
 
-    def test_variety_every_seventh_line_for_named_subjects_only(self):
+    def test_variety_every_fifth_line_for_named_subjects_only(self):
         texts = [f"Line {i}." for i in range(16)]
         segs, shots = plan(texts, ["Hoover Dam"] * 16)
         director.promote_stills(segs, shots, {})
         idx = [i for i, s in enumerate(shots) if s["visualType"] == "image"]
-        self.assertEqual(idx, [6, 13])            # the 7th and 14th lines
+        every = director.STILL_EVERY              # 5: VidRush runs about 30% stills
+        self.assertEqual(idx, list(range(every - 1, 16, every)))
         segs, shots = plan(texts, ["the workers"] * 16, kind="person")
         self.assertEqual(director.promote_stills(segs, shots, {}), 0)   # never a stranger's photo
 

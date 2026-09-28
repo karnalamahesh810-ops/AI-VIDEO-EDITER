@@ -542,6 +542,12 @@ def _template_for_cue(cue: str, pack: dict, used_recently: set,
     if cue == "chapter":
         return pack["chapter"]
     options = templates.for_cue(cue, pack.get("id", ""), exclude=used_recently)
+    if cue in SINGLE_FIGURE_CUES or (cue in TEXT_CUES and cue != "chapter"):
+        # One figure, or words: on the clip, never a card that covers it.
+        options = [t for t in options if "own-backdrop" not in (t.get("tags") or [])] or options
+    elif cue in FULL_DATA_CUES:
+        # Several values: a full-screen chart, not a tag squeezed onto the clip.
+        options = [t for t in options if t.get("kind") != "tag"] or options
     if counts:
         # The least used look for this cue first (registry order breaks ties),
         # so a video's percentages rotate gauge, ring, dots, bar... instead of
@@ -560,6 +566,7 @@ def _hint_props(overlay: dict) -> dict:
 
 
 WINDOW_GAP = 90.0        # seconds between two scenes shown in a player window
+_ARCHIVE_COUNTS: Dict[str, int] = {}
 _PIP_KINDS = {"place", "location", "landmark", "building", "structure", "object", "artifact", "thing", "document"}
 
 
@@ -590,7 +597,10 @@ def _archive_tag(scene: dict, style: str, pack: dict, fps: int, start: int, fram
         return None
     year = re.search(r"\b(1[89]\d\d)\b", title)
     props = {"text": "Archive footage", **({"subtitle": year.group(1)} if year else {})}
-    resolved = templates.resolve("TAG_SOURCE_V1", style=style, props=props, pack=pack)
+    tid = _least_used(["TAG_SOURCE_V1"] + [t for t in _lib_looks("archive", still=False)
+                                           if (templates.get(t) or {}).get("kind") == "tag"], _ARCHIVE_COUNTS) or "TAG_SOURCE_V1"
+    _ARCHIVE_COUNTS[tid] = _ARCHIVE_COUNTS.get(tid, 0) + 1
+    resolved = templates.resolve(tid, style=style, props=props, pack=pack)
     if not resolved:
         return None
     resolved.pop("seconds", None)
@@ -658,6 +668,7 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
             continue
         chosen: Optional[dict] = None
         chosen_id = ""
+        chosen_cue = ""
         props: dict = {}
         emphasis = "medium"
 
@@ -693,6 +704,7 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
                 if not t or not rhythm.allows(at, t):
                     continue
                 chosen, chosen_id, props, emphasis = t, t["id"], dict(cue["props"]), cue["emphasis"]
+                chosen_cue = cue["cue"]
                 if key:
                     seen_figures[key] = at
                 break
@@ -708,13 +720,13 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
         if chosen is None and not intro_done and at < 150.0 and _INTRO.search(seg.text or "") \
                 and len(scenes) - i > 4:
             # "This is the story of...": a burst of the video's own pictures.
-            t = templates.get("PHOTO_COLLAGE_V1")
+            t = templates.get(_least_used(["PHOTO_COLLAGE_V1"] + _lib_looks("intro", still=False), use_count) or "")
             if t and rhythm.allows(at, t):
                 chosen, chosen_id, props, emphasis = t, t["id"], {}, "high"
                 intro_done = True
         if chosen is None and media_kind == "video":
             pip = _pip_for(shot, scene)
-            t = templates.get("PHOTO_PIP_V1") if pip else None
+            t = templates.get(_least_used(["PHOTO_PIP_V1"] + _lib_looks("subject-photo"), use_count) or "") if pip else None
             if t and rhythm.allows(at, t) and not rhythm.overlaps(at):
                 chosen, chosen_id, props, emphasis = t, t["id"], pip, "medium"
         if chosen is None and at - rhythm.last_any > QUIET_MAX and intensity >= 0.6:
@@ -743,15 +755,18 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
             # On the voice: the graphic lands with the word it shows (the
             # figure, the date, the name) and leaves just after its sentence,
             # never the whole scene long (a scene can run 15 s).
-            # A chart, comparison, timeline or map needs its full hold to be
-            # read whatever the sentence; a number or a label follows the voice.
-            min_hold = hold if chosen.get("category") in DATA_CATEGORIES else MIN_HOLD
-            t_in, t_out = _voice_window(seg, props, hold, min_hold)
+            # Each layout class has its window: a figure or a line of text
+            # follows the voice (in on its word, out just after the sentence,
+            # 1.8-4 s); a chart needs 3.2-5 s to be read; a map 4-5.5 s.
+            klass = layout_class(chosen, chosen_cue)
+            lo, hi = LAYOUT_WINDOWS[klass]
+            t_in, t_out = _voice_window(seg, props, hold, lo, hi)
             o_start = max(0, min(int(round(t_in * fps)), total - 1))
             frames = max(1, min(int(round((t_out - t_in) * fps)), total - o_start))
             sfx = resolved.pop("sfx", {"name": "none", "volume": 0.0})
             overlay = {**resolved, "startFrame": o_start, "durationInFrames": frames}
             overlay.pop("seconds", None)
+            apply_layout(overlay, chosen, klass)
             overlays.append(overlay)
             rhythm.note(at, chosen, frames / fps)
             used_recently[chosen_id] = at
@@ -862,16 +877,71 @@ def _plan_music(segments: List[Segment], brief: Optional[dict], fps: int, total:
 
 FULLSCREEN_CUES = {"then-now", "compare-values", "ranking", "series", "shares", "money-compare"}
 
+# ------------------------------------------------ overlay layout (the owner, 2026-09-28 evening)
+# The clip keeps its slot and the graphic rides on top of it. One figure is a
+# compact overlay in a corner; several values (or a timeline) are full screen
+# for their moment on a blurred still of that clip; maps draw their own frame;
+# text rides on the picture. Each class has its own time on screen.
+SINGLE_FIGURE_CUES = {"percent", "change", "change-length", "big-number", "money", "measurement", "ratio"}
+FULL_DATA_CUES = {"series", "shares", "compare-values", "ranking", "then-now", "money-compare", "sequence", "years",
+                  "span", "steps"}
+TEXT_CUES = {"headline", "question", "quote", "warning", "date", "list", "summary", "age", "time-of-day", "chapter"}
+LAYOUT_WINDOWS = {"figure": (2.5, 4.0), "full": (3.2, 5.0), "map": (4.0, 5.5), "cutaway": (3.0, 4.5),
+                  "text": (1.8, 4.0)}
+COMPACT_SCALE = 0.55
+_CORNERS = ["bottom-left", "bottom-right"]
+_corner_turn = [0]
+
+
+def layout_class(template: dict, cue: str = "") -> str:
+    """figure | full | map | cutaway | text: how a chosen template sits on its clip."""
+    tags = template.get("tags") or []
+    if template.get("kind") == "map" or template.get("component") == "map":
+        return "map"
+    if "own-backdrop" in tags:
+        return "cutaway"
+    if cue in SINGLE_FIGURE_CUES:
+        return "figure"
+    if cue in FULL_DATA_CUES:
+        return "full"
+    if not cue:
+        if template.get("category") == "NUMBERS":
+            return "figure"
+        if template.get("category") in ("CHARTS", "COMPARISONS", "TIMELINES"):
+            return "full"
+    return "text"
+
+
+def apply_layout(overlay: dict, template: dict, klass: str) -> None:
+    """Mark a planned overlay compact (one figure on the clip) or full screen (several values)."""
+    if template.get("kind") == "tag":
+        return
+    if klass == "figure":
+        overlay["compact"] = True
+        overlay["position"] = _CORNERS[_corner_turn[0] % len(_CORNERS)]
+        _corner_turn[0] += 1
+        overlay["scale"] = COMPACT_SCALE
+    elif klass == "full":
+        overlay["backdrop"] = "blur"
+
 _PHOTO_CYCLE = ["PHOTO_CARD_V1", "PHOTO_GRID_V1", "PHOTO_WINDOW_V1", "PHOTO_STACK_V1", "PHOTO_BOARD_V1",
                 "PHOTO_EVIDENCE_V1"]
 _PERSON_CYCLE = ["PERSON_CARD_V1", "PHOTO_BOARD_V1"]
 _PLACE_CYCLE = ["PLACE_CARD_V1", "PHOTO_WINDOW_V1"]
 _OBJECT_CYCLE = ["OBJECT_CARD_V1", "PHOTO_BOARD_V1", "PHOTO_EVIDENCE_V1"]
 _photo_turn = [0]
-_kind_turn = {"person": [0], "place": [0], "object": [0]}
+_kind_turn = {"person": [0], "place": [0], "object": [0], "photo": [0]}
+
+
+def _lib_looks(cue: str, still: bool = True) -> List[str]:
+    """Library looks (component "motion") registered for a cue; `still`: only those that show one picture."""
+    return [t["id"] for t in templates.for_cue(cue)
+            if t.get("component") == "motion" and (not still or "still" in (t.get("tags") or []))]
 
 
 def _turn(kind: str, cycle: List[str]) -> str:
+    cue = {"person": "person", "place": "place-photo", "object": "object-photo"}.get(kind, "photo")
+    cycle = list(cycle) + [t for t in _lib_looks(cue) if t not in cycle]
     n = _kind_turn[kind]
     tid = cycle[n[0] % len(cycle)]
     n[0] += 1
@@ -895,8 +965,7 @@ def photo_template(shot: dict) -> tuple:
         return tid, {"text": subject}
     if kind in ("object", "document", "thing", "artifact") and subject:
         return _turn("object", _OBJECT_CYCLE), {"text": subject}
-    tid = _PHOTO_CYCLE[_photo_turn[0] % len(_PHOTO_CYCLE)]
-    _photo_turn[0] += 1
+    tid = _turn("photo", _PHOTO_CYCLE)
     return tid, ({"text": subject.upper()} if subject else {})
 _WEAK_REASONS = ("Best available", "Reused shot", "Repeat of an earlier shot", "No usable clip",
                  "No footage found")
@@ -905,7 +974,7 @@ _WEAK_REASONS = ("Best available", "Reused shot", "Repeat of an earlier shot", "
 DATA_CATEGORIES = {"CHARTS", "COMPARISONS", "TIMELINES", "MAPS", "DOCUMENTS"}
 
 
-def _voice_window(seg, props: dict, hold: float, min_hold: float = MIN_HOLD) -> tuple:
+def _voice_window(seg, props: dict, hold: float, min_hold: float = MIN_HOLD, max_hold: float = 0.0) -> tuple:
     """
     (in, out) seconds for a graphic on this line: in when the word carrying
     what it shows is spoken (the figure's digits, the date, the quoted words;
@@ -936,7 +1005,8 @@ def _voice_window(seg, props: dict, hold: float, min_hold: float = MIN_HOLD) -> 
                     t_in = max(start, float(ws) - PRE_ROLL)
                 break
     t_out = float(seg.end) + TAIL
-    dur = max(min_hold, min(t_out - t_in, hold + HOLD_SLACK))
+    top = min(hold + HOLD_SLACK, max_hold) if max_hold else hold + HOLD_SLACK
+    dur = max(min(min_hold, top), min(t_out - t_in, top))
     return t_in, t_in + dur
 
 
@@ -995,6 +1065,11 @@ def wants_animation(seg, shot: dict, asset, brief: Optional[dict], seen: Optiona
         return False
     if asset is None:
         return True
+    # The owner (2026-09-28): fill the clip and put the graphic on top of it.
+    # A beat that has footage keeps it; the planner lays the number, chart or
+    # map over the clip for its moment (layout_class / apply_layout).
+    if not config.ANIMATION_OVER_FOOTAGE:
+        return False
     if any(c["cue"] in FULLSCREEN_CUES for c in cues):
         return True
     score = getattr(asset, "relevance_score", None)

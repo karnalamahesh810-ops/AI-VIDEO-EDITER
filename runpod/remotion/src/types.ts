@@ -96,7 +96,9 @@ export type OverlayType =
   | "trend"
   | "year-roll"
   | "banner"
-  | "scale-compare";
+  | "scale-compare"
+  // The animation library (components/lib/*): the variant names the look.
+  | "motion";
 
 export interface SceneWord {
   text: string;
@@ -220,6 +222,10 @@ export interface Overlay {
   fontScale?: number;
   /** Set by AnimationScene: the graphic IS the frame (no scrim over footage). */
   fullFrame?: boolean;
+  /** A single figure riding on the clip: no full-frame darkening, placed small in a corner. */
+  compact?: boolean;
+  /** "blur": a full-screen graphic over the clip, drawn on a blurred still of that clip for its moment. */
+  backdrop?: "blur";
   startFrame: number;
   durationInFrames: number;
 }

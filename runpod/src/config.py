@@ -430,6 +430,16 @@ SPLIT_IMAGES_SECONDS = float(os.getenv("SPLIT_IMAGES_SECONDS", "60"))
 ANIMATION_FILL = _flag("ANIMATION_FILL", True)
 # A strong beat (figure, date, mapped place, quote) whose footage scored under
 # this becomes an animation scene instead (treatments.wants_animation).
+# A data beat that HAS footage keeps its clip and gets the graphic on top of
+# it (the owner, 2026-09-28). On = the old rule: weak footage is replaced
+# by a full-screen animation scene for the whole beat.
+ANIMATION_OVER_FOOTAGE = _flag("ANIMATION_OVER_FOOTAGE", False)
+# The owner wants 1080p-looking clips: a modern clip below this many lines is
+# replaced (downloads already take the best format up to 1080p). Archive film
+# (a title naming a year before 1990, a newsreel, Pathe...) may go down to
+# MIN_ARCHIVE_HEIGHT - a 1936 newsreel only exists small.
+MIN_CLIP_HEIGHT = int(os.getenv("MIN_CLIP_HEIGHT", "480"))
+MIN_ARCHIVE_HEIGHT = int(os.getenv("MIN_ARCHIVE_HEIGHT", "240"))
 ANIMATION_OVER_FOOTAGE_BELOW = float(os.getenv("ANIMATION_OVER_FOOTAGE_BELOW", "0.6"))
 CLIP_LIBRARY_MIN_SCORE = float(os.getenv("CLIP_LIBRARY_MIN_SCORE", "0.8"))
 CLIP_LIBRARY_MAX_PER_JOB = int(os.getenv("CLIP_LIBRARY_MAX_PER_JOB", "60"))

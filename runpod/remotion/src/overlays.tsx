@@ -31,6 +31,7 @@ import { ProChapter, ProHeadline, ProHighlight, ProQuote, ProWarning } from "./c
 import { ProBubbles, ProColumns, ProDelta, ProLine, ProMeasure, ProPie, ProRank, ProRatio, ProShares, ProSpark, ProStack,
   ProTank, ProVersus } from "./components/pro/ProCharts";
 import { ProBoard, ProCallout, ProClipping, ProEvidence, ProFile, ProSourceTag, ProWindows } from "./components/pro/ProCase";
+import { LIBRARY } from "./components/lib";
 import type { Overlay, OverlayType } from "./types";
 
 /** Colour themes an overlay can ask for instead of the brand accent. */
@@ -141,6 +142,11 @@ export const OVERLAYS: Record<OverlayType, OverlayComponent> = {
   // a small adapter instead of the shared signature.
   // Two pictures side by side with a divider (a contrast told with images).
   split: ProSplit,
+  // The animation library: one look per variant (components/lib/index.ts).
+  motion: (p) => {
+    const Look = LIBRARY[p.overlay.variant || ""];
+    return Look ? <Look {...p} /> : null;
+  },
 };
 
 /** The accent an overlay draws with: its theme colour, else the brand accent. */

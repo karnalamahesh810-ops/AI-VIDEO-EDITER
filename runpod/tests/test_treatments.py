@@ -124,7 +124,8 @@ class Registry(unittest.TestCase):
         comps = {t["component"] for t in templates.all_templates()}
         self.assertEqual(director.TEMPLATES - comps, set())
         self.assertGreaterEqual(len(templates.all_templates()), 60)
-        self.assertEqual(len(templates.by_category("MAPS")), 18)
+        # 18 built-in map looks, plus the vector maps of the animation library.
+        self.assertEqual(len([t for t in templates.by_category("MAPS") if t["component"] != "motion"]), 18)
 
     def test_resolve_keeps_only_known_props_in_range(self):
         r = templates.resolve("MAP_ROUTE_DARK_V1", style="news", entrance="whip", exit_="scale",

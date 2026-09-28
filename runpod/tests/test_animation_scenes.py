@@ -57,15 +57,25 @@ class WantsAnimation(unittest.TestCase):
             self.assertFalse(treatments.wants_animation(seg("Lake Mead is now at 26% capacity."), {"subject": "Lake Mead"},
                                                         self._asset(0.92), None))
 
-    def test_weak_or_borrowed_footage_on_a_strong_beat_becomes_a_graphic(self):
+    def test_a_beat_with_footage_keeps_its_clip_by_default(self):
+        # The owner (2026-09-28): fill the clip and put the graphic on top of it.
         with mock.patch.object(config, "ANIMATION_FILL", True):
+            for text in ("Lake Mead is now at 26% capacity.",
+                         "In 2020 the lake stood at 40 percent; by 2026 it was 26 percent."):
+                self.assertFalse(treatments.wants_animation(seg(text), {"subject": "Lake Mead"}, self._asset(0.5), None))
+            # No footage at all: the graphic fills the beat.
+            self.assertTrue(treatments.wants_animation(seg("Lake Mead is now at 26% capacity."), {"subject": "Lake Mead"},
+                                                       None, None))
+
+    def test_weak_or_borrowed_footage_on_a_strong_beat_becomes_a_graphic(self):
+        with mock.patch.object(config, "ANIMATION_FILL", True), mock.patch.object(config, "ANIMATION_OVER_FOOTAGE", True):
             self.assertTrue(treatments.wants_animation(seg("Lake Mead is now at 26% capacity."), {"subject": "Lake Mead"},
                                                        self._asset(0.5), None))
             self.assertTrue(treatments.wants_animation(seg("Lake Mead is now at 26% capacity."), {"subject": "Lake Mead"},
                                                        self._asset(0.9, "Reused shot of Lake Mead - no other footage"), None))
 
     def test_a_chart_moment_is_full_screen_even_over_good_footage(self):
-        with mock.patch.object(config, "ANIMATION_FILL", True):
+        with mock.patch.object(config, "ANIMATION_FILL", True), mock.patch.object(config, "ANIMATION_OVER_FOOTAGE", True):
             self.assertTrue(treatments.wants_animation(
                 seg("In 2020 the lake stood at 40 percent; by 2026 it was 26 percent."), {"subject": "Lake Mead"},
                 self._asset(0.95), None))
