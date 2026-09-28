@@ -1,6 +1,7 @@
 """Supabase Storage upload + generic file download."""
 import os
 import mimetypes
+import threading
 import time
 import uuid
 import requests
@@ -191,17 +192,55 @@ def check(bucket: str = None) -> dict:
     return out
 
 
-def patch_project(project_id: str, fields: dict) -> bool:
+# The running top-level job's id: the broker authorises project updates by it.
+CURRENT_JOB = [""]
+# Progress patches through the broker go out one at a time, off the job's thread.
+_PATCH_POOL = None
+_PATCH_LOCK = threading.Lock()
+
+
+def _broker_patch(project_id: str, job_id: str, fields: dict) -> bool:
+    try:
+        _broker({"action": "project_update", "project_id": project_id, "job_id": job_id,
+                 "fields": fields}, timeout=180)
+        return True
+    except Exception as e:  # noqa: BLE001 - progress must never kill a job
+        print(f"[storage] project update failed: {str(e)[:160]}", flush=True)
+        return False
+
+
+def patch_project(project_id: str, fields: dict, wait: bool = False) -> bool:
     """
     Write progress/status straight into public.video_projects.
 
     This is what removes the need for any intermediate API server: the worker
     reports its own progress into the database with the service-role key, and
-    the app just watches the row. Failures here are logged, never fatal — a
-    dropped progress ping must not kill a render.
+    the app just watches the row. Without that key (every deployed worker) it
+    goes through the app's broker, authorised by the running job's id, on a
+    background thread unless `wait` (the plan and the final fields wait).
+    Failures here are logged, never fatal — a dropped progress ping must not
+    kill a render.
     """
-    if not project_id or not config.SUPABASE_URL or not config.SUPABASE_SERVICE_KEY:
+    global _PATCH_POOL
+    if not project_id:
         return False
+    if not (config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY):
+        if not (broker_enabled() and CURRENT_JOB[0]):
+            return False
+        body = dict(fields)
+        if body.get("completed_at") == "now()":
+            body["completed_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with _PATCH_LOCK:
+            if _PATCH_POOL is None:
+                from concurrent.futures import ThreadPoolExecutor
+                _PATCH_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="project-update")
+        fut = _PATCH_POOL.submit(_broker_patch, project_id, CURRENT_JOB[0], body)
+        if wait:
+            try:
+                return bool(fut.result(timeout=240))
+            except Exception:  # noqa: BLE001
+                return False
+        return True
     url = f"{config.SUPABASE_URL.rstrip('/')}/rest/v1/video_projects?id=eq.{project_id}"
     try:
         r = requests.patch(

@@ -200,6 +200,9 @@ class Reporter:
         payload = {"current_step": step, **fields}
         if progress is not None:
             payload["progress"] = progress
+        # The app's agent screen reads job_progress (serverless: from RunPod's
+        # status; a pod has none, so the worker writes it).
+        payload["job_progress"] = {k: v for k, v in update.items() if k != "recent"}
         storage.patch_project(self.project_id, payload)
 
 
@@ -1808,6 +1811,9 @@ def handler(job):
     config_before = _apply_config(inp.get("config"))
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
+    # Project updates go through the broker as this job; parts and render
+    # chunks are not the project's job and never write the row.
+    storage.CURRENT_JOB[0] = job_id if action in ("plan", "build", "render", "resource") else ""
     # Every job keeps its own ledger and event log; a fan-out child returns
     # both in its result and the parent absorbs them.
     costs.reset(inp.get("prices") if isinstance(inp.get("prices"), dict) else None)
@@ -1994,7 +2000,8 @@ def handler(job):
             _sanitize_videos(doc)
             _keep_in_library(doc, report)
             if project_id:
-                storage.patch_project(project_id, {"scene_data": doc})
+                # Saved before the render: a failure there keeps the search.
+                storage.patch_project(project_id, {"scene_data": doc}, wait=True)
             # Render from the local files (fast), THEN save the clips, so the
             # finished video opens in the editor with every scene replaceable.
             local_doc = copy.deepcopy(doc)
