@@ -15,6 +15,10 @@ import { LOOKS as L_LibChartsA } from "./LibChartsA";
 import { LOOKS as L_LibCounters } from "./LibCounters";
 import { LOOKS as L_LibVectorMaps } from "./LibVectorMaps";
 import { LOOKS as L_LibAtmosphere } from "./LibAtmosphere";
+import { LOOKS as L_LibCinematic } from "./LibCinematic";
+import { LOOKS as L_LibDigitalUI } from "./LibDigitalUI";
+import { LOOKS as L_LibIcons } from "./LibIcons";
+import { LOOKS as L_LibComparisons } from "./LibComparisons";
 import { LOOKS as L_LibAlerts } from "./LibAlerts";
 import { LOOKS as L_LibCaseFile } from "./LibCaseFile";
 import { LOOKS as L_LibScience } from "./LibScience";
@@ -41,6 +45,10 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibCounters, ["nc-speedo-gauge", "nc-led-counter", "nc-flip-clock", "nc-countdown-dial", "nc-battery", "nc-thermometer", "nc-population-clock", "nc-burst-number", "nc-segment-meter", "nc-stopwatch"]),
   ...pick(L_LibVectorMaps, ["mv-globe-spin", "mv-state-glow", "mv-arc-flight", "mv-impact-radius", "mv-choropleth-lift", "mv-pinboard-list", "mv-coordinate-hud", "mv-river-draw", "mv-country-spotlight", "mv-zoom-inset"]),
   ...pick(L_LibAtmosphere, ["fx-ink-bleed", "fx-light-streak", "fx-dust-motes", "fx-hud-scan", "fx-film-burn", "fx-shape-wipe", "fx-gradient-mesh", "fx-glitch-slice", "fx-zoom-tunnel", "fx-paper-tear"]),
+  ...pick(L_LibCinematic, ["cn-place-stamp", "cn-true-events", "cn-letterbox-caption", "cn-bw-flash-intro", "cn-focus-vignette", "cn-spotlight-title", "cn-drift-quote", "cn-to-be-continued", "cn-sources-roll", "cn-chapter-progress"]),
+  ...pick(L_LibDigitalUI, ["ui-social-post", "ui-comment-thread", "ui-search-bar", "ui-notification-stack", "ui-chat-bubbles", "ui-phone-screen", "ui-browser-window", "ui-video-player", "ui-email-card", "ui-poll-results"]),
+  ...pick(L_LibIcons, ["ic-drop-fill", "ic-house-grid", "ic-traffic-queue", "ic-dollar-pulse", "ic-calendar-tear", "ic-hourglass", "ic-power-bolt", "ic-fire-flicker", "ic-crowd-swell", "ic-factory-smoke"]),
+  ...pick(L_LibComparisons, ["cp-split-statement", "cp-balance-scale", "cp-venn", "cp-tick-table", "cp-myth-fact", "cp-spectrum-marker", "cp-quadrant-matrix", "cp-then-now-morph", "cp-mirror-bars", "cp-photo-versus"]),
   ...pick(L_LibAlerts, ["al-breaking-flag", "al-alert-toast", "al-siren-badge", "al-warning-polygon", "al-severity-meter", "al-countdown-timer", "al-live-tag", "al-emergency-stamp", "al-slim-ticker", "al-storm-track"]),
   ...pick(L_LibCaseFile, ["cf-evidence-bag", "cf-case-stamp", "cf-redacted-doc", "cf-fingerprint-scan", "cf-police-log", "cf-unknown-silhouette", "cf-evidence-markers", "cf-phone-records", "cf-cctv-frame", "cf-transcript"]),
   ...pick(L_LibScience, ["sc-water-cycle", "sc-aquifer-drop", "sc-pipe-flow", "sc-molecule-orbit", "sc-cause-chain", "sc-reservoir-levels", "sc-warming-stripes", "sc-rain-gauges", "sc-dam-level", "sc-heat-sun"]),

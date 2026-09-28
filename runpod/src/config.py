@@ -261,6 +261,11 @@ RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "60"))
 # restores the strict "a clip never appears twice" rule, at the cost of
 # empty scenes on long videos about subjects with few real photos.
 REUSE_SHOTS_TO_FILL = _flag("REUSE_SHOTS_TO_FILL", True)
+# Before a shot is repeated, try another moment of the same on-subject video
+# (20-90 s away, a 10 s bucket no scene uses), checked like any clip. The time
+# box for all of them together, per sourcing pass.
+FRESH_MOMENTS = _flag("FRESH_MOMENTS", True)
+FRESH_MOMENT_SECONDS = float(os.getenv("FRESH_MOMENT_SECONDS", "90"))
 # Source the video in sequences (runs of lines about one subject and setting,
 # each with one pool of shots laid out by an editor call) before the
 # line-by-line search. Off ("0") restores line-by-line sourcing only.

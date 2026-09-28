@@ -2801,6 +2801,11 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
               flush=True)
         LAST_STATS.update(generated_tried=len(empties), generated_filled=filled)
 
+    fresh = fresh_moments(ordered, results, work_dir) if config.FRESH_MOMENTS else 0
+    if fresh:
+        print(f"[media] {fresh} scene(s) got another moment of a video the story already uses "
+              f"instead of a repeated shot", flush=True)
+    LAST_STATS.update(fresh_moments=fresh)
     reused = fill_from_story(ordered, results) if config.REUSE_SHOTS_TO_FILL else 0
     if reused:
         print(f"[media] reused a shot from elsewhere in the story for {reused} "
@@ -2852,6 +2857,111 @@ def same_subject(a: str, b: str) -> bool:
     if not ga or not gb:
         return ga == gb
     return bool(ga & gb)
+
+
+_FRESH_OFFSETS = (25.0, -25.0, 45.0, -45.0, 70.0, -70.0, 95.0)
+
+
+def _yt_origin(asset: MediaAsset) -> tuple:
+    """(video id, start seconds) of a YouTube clip, ("", 0.0) when unknown."""
+    m = re.search(r"yt:([\w-]{11})", asset.identity or "") or re.search(r"[?&]v=([\w-]{11})", asset.url or "")
+    vid = m.group(1) if m else ""
+    start = asset.moment.get("start") if isinstance(asset.moment, dict) else None
+    if start is None and asset.local_path:
+        name = os.path.basename(asset.local_path)
+        if name.startswith("yt_"):
+            rest = name[15:].split("_")
+            try:
+                start = int(rest[0]) / 1000.0
+            except (ValueError, IndexError):
+                start = None
+    return vid, float(start or 0.0)
+
+
+def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]], work_dir: str) -> int:
+    """
+    Fill scenes still empty with ANOTHER moment of a same-subject YouTube video
+    the story already uses - GoMotion's many-moments-per-video method - rather
+    than repeating a shot. Each try is a 10 s bucket no scene uses, 25-95 s
+    from the donor's moment, passes clip_quality and (when vision is on) the
+    judge against the scene's intent. Parallel, time boxed by
+    FRESH_MOMENT_SECONDS. Returns how many scenes were filled.
+    """
+    if not work_dir:
+        return 0
+    by_index = {j["index"]: j for j in jobs}
+    empties = [i for i in sorted(by_index) if results[i] is None and by_index[i].get("subject_type") != "person"
+               and by_index[i].get("visual_type", "footage") == "footage"]
+    if not empties:
+        return 0
+    lock = threading.Lock()
+    used = set()
+    for r in results:
+        if r is not None and r.source == "youtube":
+            vid, start = _yt_origin(r)
+            if vid:
+                used.add(f"yt:{vid}@{int(start // 10)}")
+    deadline = time.time() + config.FRESH_MOMENT_SECONDS
+
+    def donors_for(i: int) -> List[MediaAsset]:
+        subject = by_index[i].get("subject") or ""
+        out, seen = [], set()
+        for k in sorted((k for k in by_index if results[k] is not None), key=lambda k: abs(k - i)):
+            r = results[k]
+            if r.source != "youtube" or r.kind != "video" or not same_subject(subject, by_index[k].get("subject") or ""):
+                continue
+            vid, _s = _yt_origin(r)
+            if vid and vid not in seen:
+                seen.add(vid)
+                out.append(r)
+        return out[:2]
+
+    def one(i: int) -> Optional[MediaAsset]:
+        job = by_index[i]
+        need = max(2.5, min(12.0, float(job.get("seconds") or 5.0)))
+        for donor in donors_for(i):
+            vid, start = _yt_origin(donor)
+            for off in _FRESH_OFFSETS:
+                if time.time() > deadline:
+                    return None
+                at = start + off
+                if at < 3:
+                    continue
+                key = f"yt:{vid}@{int(at // 10)}"
+                with lock:
+                    if key in used:
+                        continue
+                    used.add(key)
+                path = _yt_fetch_retry(vid, work_dir, at, need, title=job.get("subject") or "")
+                if not path:
+                    continue
+                asset = MediaAsset(kind="video", source="youtube", url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
+                                   local_path=path, license=donor.license, attribution=donor.attribution,
+                                   query=job.get("query", ""), moment_key=key,
+                                   moment={"start": round(at, 1), "fresh_from": donor.identity},
+                                   relevance_score=(donor.relevance_score * 0.95 if donor.relevance_score is not None else None),
+                                   review_required=True,
+                                   review_reason=f"Another moment of a video used for {job.get('subject') or 'this subject'}")
+                ok, why = _asset_ok(asset)
+                if not ok:
+                    continue
+                if vision.enabled() and job.get("intent"):
+                    verdict = vision.judge(path, job.get("intent", ""), job.get("query", ""))
+                    if verdict is not None and float(verdict.get("score") or 0) < config.VISION_SOFT_MIN_SCORE:
+                        continue
+                    if verdict is not None:
+                        asset.relevance_score = float(verdict.get("score") or 0)
+                        asset.content_description = str(verdict.get("description") or "")[:300]
+                return asset
+        return None
+
+    filled = 0
+    with ThreadPoolExecutor(max_workers=min(6, len(empties))) as pool:
+        for i, got in zip(empties, pool.map(one, empties)):
+            if got is not None:
+                results[i] = got
+                filled += 1
+    return filled
 
 
 def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]) -> int:
