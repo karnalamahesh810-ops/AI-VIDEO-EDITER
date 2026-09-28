@@ -28,7 +28,7 @@ import time
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 import requests
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 from . import config, costs, geocode, vision
 from . import intent as scene_intent
@@ -923,58 +923,127 @@ def _json_reply(content):
 CHAT_CALLS = {"n": 0}
 
 
+def _chat_try(base: str, key: str, model: str, main: bool, attempt: int, system: str,
+              payload: dict, timeout: int, errors: Optional[List[str]]) -> Tuple[Optional[dict], bool]:
+    """One request to one model: (answer, transient) - transient when a retry may help."""
+    try:
+        r = requests.post(
+                _chat_url(model, base),
+                headers={"Authorization": f"Bearer {key}",
+                         "Content-Type": "application/json"},
+            json={"model": model,
+                  "messages": [{"role": "system", "content": system},
+                               {"role": "user", "content": json.dumps(payload)}],
+                  "response_format": {"type": "json_object"}},
+            timeout=timeout,
+        )
+        body = r.json()
+        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
+            if main and vision.is_credit_error(body["code"], body.get("msg")):
+                vision.note_out_of_credits()
+            if body["code"] >= 500:
+                vision.model_result(model, False)
+            if errors is not None:
+                errors.append(f"{model}#{attempt}: ValueError")
+            return None, body["code"] >= 500
+        data = _json_reply(body["choices"][0]["message"]["content"])
+        if isinstance(data, dict):
+            CHAT_CALLS["n"] += 1
+            costs.record("llm.director_call")
+            vision.model_result(model, True)
+            return data, False
+        if errors is not None:
+            errors.append(f"{model}#{attempt}: no JSON object")
+        return None, False
+    except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
+        if errors is not None:
+            errors.append(f"{model}#{attempt}: {type(e).__name__}")
+        # A timeout or dropped connection is worth one more go on the same model.
+        return None, isinstance(e, requests.RequestException)
+
+
+def _chat_route(route: tuple, system: str, payload: dict, timeout: int,
+                errors: Optional[List[str]], deadline: float) -> Optional[dict]:
+    """
+    One model with one retry on a transient failure (Kie answers "internal
+    error, please try again later" to Gemini Flash on long requests); a flaky
+    first call used to drop the whole batch to rule shots, i.e. searches built
+    from the subtitle words.
+    """
+    base, key, model, main = route
+    for attempt in (1, 2):
+        if attempt == 2:
+            if time.time() + 3 >= deadline or not vision.model_available(model):
+                return None
+            time.sleep(3)
+        if main and vision.out_of_credits():
+            return None
+        data, transient = _chat_try(base, key, model, main, attempt, system, payload,
+                                    int(max(5, min(timeout, deadline - time.time()))), errors)
+        if data is not None:
+            return data
+        if not transient:
+            return None
+    return None
+
+
+# Hedged director requests run here; abandoned ones finish in the background.
+_CHAT_POOL = ThreadPoolExecutor(max_workers=32, thread_name_prefix="director")
+
+
 def _chat_json(system: str, payload: dict, timeout: int = 120,
                errors: Optional[List[str]] = None) -> Optional[dict]:
     """
     One JSON completion from the director models, then the backup provider, or
-    None. `errors`, when given, collects "model: reason" for each failed try.
+    None. `errors`, when given, collects "model#attempt: reason" for each failed try.
+
+    Hedged: when the first model has not answered after DIRECTOR_HEDGE_SECONDS
+    the next is asked in parallel, a model that fails hands over at once, and
+    the first valid answer wins; the call ends after DIRECTOR_BUDGET_FACTOR x
+    its timeout.
     """
-    # Each model gets a second try on a transient failure (Kie answers
-    # "internal error, please try again later" to Gemini Flash on long
-    # requests); a flaky first call used to drop the whole batch to rule
-    # shots, i.e. searches built from the subtitle words.
-    attempts = [(b, k, m, main, n) for (b, k, m, main) in _routes() for n in (1, 2)]
-    transient: set = set()
-    for base, key, model, main, attempt in attempts:
-        if main and vision.out_of_credits():
-            continue
-        if attempt == 2 and model not in transient:
-            continue
-        if not vision.model_available(model):
-            continue
-        try:
-            r = requests.post(
-                _chat_url(model, base),
-                headers={"Authorization": f"Bearer {key}",
-                         "Content-Type": "application/json"},
-                json={"model": model,
-                      "messages": [{"role": "system", "content": system},
-                                   {"role": "user", "content": json.dumps(payload)}],
-                      "response_format": {"type": "json_object"}},
-                timeout=timeout,
-            )
-            body = r.json()
-            if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-                if main and vision.is_credit_error(body["code"], body.get("msg")):
-                    vision.note_out_of_credits()
-                if body["code"] >= 500:
-                    vision.model_result(model, False)
-                if attempt == 1 and body["code"] >= 500:
-                    transient.add(model)
-                    time.sleep(3)
-                raise ValueError(f"{model}: code {body['code']}")
-            data = _json_reply(body["choices"][0]["message"]["content"])
-            if isinstance(data, dict):
-                CHAT_CALLS["n"] += 1
-                costs.record("llm.director_call")
-                vision.model_result(model, True)
+    queue = [r for r in _routes()
+             if not (r[3] and vision.out_of_credits()) and vision.model_available(r[2])]
+    if not queue:
+        return None
+    started = time.time()
+    deadline = started + max(timeout, timeout * config.DIRECTOR_BUDGET_FACTOR)
+    hedge = config.DIRECTOR_HEDGE_SECONDS
+    if hedge <= 0:
+        for route in queue:
+            if time.time() >= deadline:
+                break
+            data = _chat_route(route, system, payload, timeout, errors, deadline)
+            if data is not None:
                 return data
-        except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as e:
-            if isinstance(e, requests.RequestException):
-                transient.add(model)          # timeout / connection: worth one more go
-            if errors is not None:
-                errors.append(f"{model}#{attempt}: {type(e).__name__}")
-            continue
+        return None
+    running: Dict = {}
+    nxt = 0
+
+    def launch() -> None:
+        nonlocal nxt
+        route = queue[nxt]
+        nxt += 1
+        running[_CHAT_POOL.submit(_chat_route, route, system, payload, timeout, errors, deadline)] = route
+
+    launch()
+    while running:
+        left = deadline - time.time()
+        if left <= 0:
+            break
+        until_hedge = (started + hedge * nxt) - time.time() if nxt < len(queue) else left
+        done, _ = wait(list(running), timeout=max(0.05, min(left, until_hedge)),
+                       return_when=FIRST_COMPLETED)
+        for fut in done:
+            running.pop(fut)
+            try:
+                data = fut.result()
+            except Exception:  # noqa: BLE001 - a crashed route is a failed one
+                data = None
+            if data is not None:
+                return data
+        if nxt < len(queue) and (not running or time.time() >= started + hedge * nxt):
+            launch()
     return None
 
 
@@ -998,7 +1067,7 @@ def story_brief(segments: List[Segment], title: str = "",
             break
         beats.append({"index": i, "text": s.text})
     raw = _chat_json(_BRIEF_PROMPT, {"title": title, "today": today.isoformat(),
-                                     "beats": beats})
+                                     "beats": beats}, timeout=config.BRIEF_TIMEOUT)
     return _validate_brief(raw, fallback, len(segments), today)
 
 

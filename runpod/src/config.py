@@ -319,6 +319,15 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY", "")
 BRIGHTDATA_SERP_ZONE = os.getenv("BRIGHTDATA_SERP_ZONE", "serp_api1")
 
+# Director calls: when the first model has been silent this long, the next one
+# is asked in parallel and the first valid answer wins. A call gives up after
+# DIRECTOR_BUDGET_FACTOR x its timeout. The story brief is one long answer
+# and gets BRIEF_TIMEOUT per request (a 22-minute story took 9 minutes of
+# 120 s timeouts and retries on 2026-09-28).
+DIRECTOR_HEDGE_SECONDS = float(os.getenv("DIRECTOR_HEDGE_SECONDS", "75"))
+DIRECTOR_BUDGET_FACTOR = float(os.getenv("DIRECTOR_BUDGET_FACTOR", "2.2"))
+BRIEF_TIMEOUT = int(os.getenv("BRIEF_TIMEOUT", "240"))
+
 # Story-planning batches (director._ai_pass) run this many at a time. At 4 the
 # owner's 111-line job planned in two waves (401 s before the first search);
 # at 8 its seven 16-line batches go in one.
