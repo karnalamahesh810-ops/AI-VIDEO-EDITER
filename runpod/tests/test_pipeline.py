@@ -2696,11 +2696,14 @@ class EventFootage(unittest.TestCase):
             media._EVENT_WINDOW.reset(tok)
 
     def test_news_outlet_titles_pass_only_for_event_stories(self):
+        # The strict mode (NEWS_FOOTAGE off); the owner's default lets news
+        # reports through everywhere (tests/test_news_mode.py).
         title = "Drone video shows flooding in Davenport | WQAD News 8"
-        self.assertTrue(media._talking_head(title))
-        self.assertFalse(self._in_window("event", lambda: media._talking_head(title)))
-        self.assertTrue(self._in_window("event", lambda: media._talking_head(
-            "Governor press conference on flood news")))
+        with mock.patch.object(config, "NEWS_FOOTAGE", False):
+            self.assertTrue(media._talking_head(title))
+            self.assertFalse(self._in_window("event", lambda: media._talking_head(title)))
+            self.assertTrue(self._in_window("event", lambda: media._talking_head(
+                "Governor press conference on flood news")))
 
     def test_a_recent_event_searches_this_years_uploads_first(self):
         searched = []

@@ -107,6 +107,10 @@ def has_burned_captions(path: str, count: int = 4) -> bool:
             texty_hits += 1
 
     need = max(2, len(frames) // 2)
+    if config.NEWS_FOOTAGE:
+        # A news report's banner, ticker or subtitle band is allowed (GoMotion
+        # shows them); a screen recording's text all over the frame is not.
+        return texty_hits >= need
     return sub_hits >= need or texty_hits >= need
 
 
@@ -197,7 +201,8 @@ def clip_quality(path: str, min_height: int = 0) -> tuple:
             return False, "frozen frame"
     if _blurry(frames, np):
         return False, "blurry"
-    if _corner_watermark(frames, np):
+    if not config.NEWS_FOOTAGE and _corner_watermark(frames, np):
+        # With news footage on, a station logo in a corner is expected.
         return False, "corner watermark"
     return True, ""
 

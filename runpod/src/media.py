@@ -927,6 +927,9 @@ def _stock_seller(*texts: str) -> bool:
     return any(t and _STOCK_SELLER.search(t) for t in texts)
 
 
+_NEWS_WORDS = {"news", "interview", "press conference", "briefing"}
+
+
 def _talking_head(title: str) -> bool:
     """
     True when the title disqualifies a candidate.
@@ -939,6 +942,11 @@ def _talking_head(title: str) -> bool:
     hits = [m.group(1).lower() for m in _TALKING_HEAD.finditer(title or "")]
     if _EVENT_WINDOW.get():
         hits = [h for h in hits if h != "news"]
+    if config.NEWS_FOOTAGE:
+        # News reports, interviews and press conferences are what GoMotion
+        # shows for the event a line names; the judge still rejects an anchor
+        # at a studio desk on the actual frames.
+        hits = [h for h in hits if h not in _NEWS_WORDS]
     return bool(hits)
 
 

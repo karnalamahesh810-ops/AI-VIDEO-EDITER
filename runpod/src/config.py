@@ -210,6 +210,10 @@ VISION_CALL_BUDGET_SECONDS = float(os.getenv("VISION_CALL_BUDGET_SECONDS", "100"
 # Vision requests in flight per worker. Ten workers each firing 20+ at once
 # drew Kie's "You've hit your attachment limit" (Glen Canyon, 2026-09-29).
 VISION_CONCURRENCY = int(os.getenv("VISION_CONCURRENCY", "8"))
+# News footage the GoMotion way: local-TV reports of the exact event, shown
+# with their station logo, headline banner and ticker as they are. Off = the
+# old rule (any other channel's text or logo rejects a clip).
+NEWS_FOOTAGE = _flag("NEWS_FOOTAGE", True)
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))

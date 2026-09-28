@@ -100,6 +100,42 @@ _SYSTEM = (
     "\"specificity\": \"event\"|\"location\"|\"generic\"}"
 )
 
+# News footage the GoMotion way (config.NEWS_FOOTAGE): the same judge, with the
+# text/logo rule swapped for one that welcomes TV-news footage as it is.
+_STRICT_TEXT_RULE = (
+    "Score 0 and set has_text_or_watermark true for ANY stock-library or channel "
+    "watermark or logo bug (ZapataStock, FootageForPro, Pond5, Storyblocks, Getty, a "
+    "channel logo in a corner), a lyric video, "
+    "glitch art or corrupted/blocky frames, or a screen "
+    "recording, software UI, a video game, a news desk or presenter talking to "
+    "camera, a thumbnail/title card, burned-in subtitles, a channel logo, a "
+    "stock-photo watermark, a product listing or poster for sale, a website "
+    "screenshot, or a meme or collage with text. Small incidental real-world text "
+    "(a street sign) is fine.\n")
+_NEWS_TEXT_RULE = (
+    "TV NEWS FOOTAGE IS WELCOME: field video, aerials, interviews and press "
+    "conferences from a news report are exactly what this documentary uses, WITH "
+    "their station logo, headline banner, lower-third name, ticker or subtitles - do "
+    "not flag those and do not lower the score for them. Score 0 and set "
+    "has_text_or_watermark true only for a stock-library watermark (ZapataStock, "
+    "FootageForPro, Pond5, Storyblocks, Getty, Shutterstock), a lyric video, glitch "
+    "art or corrupted/blocky frames, a screen recording, software UI, a video game, a "
+    "news anchor at a studio desk, a thumbnail/title card, an advertisement (a QR "
+    "code, a website or phone number to visit, a product offer), a product listing or "
+    "poster for sale, a website screenshot, or a meme or collage with text. Small "
+    "incidental real-world text (a street sign) is fine.\n")
+
+
+def _system() -> str:
+    if config.NEWS_FOOTAGE:
+        return _SYSTEM.replace(_STRICT_TEXT_RULE, _NEWS_TEXT_RULE)
+    return _SYSTEM
+
+
+_NEWS_TILE_RULE = (" A news report's station logo, headline banner or ticker over otherwise "
+                   "real footage of the subject is fine - choose it like any other shot.")
+
+
 # Added for a beat of a news, weather or disaster story. Without it "clearly fits
 # the topic ... even if not the exact subject" scored any flooded street 0.7+ for
 # a line about one particular flood, which is how random footage passed.
@@ -555,7 +591,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
                 f"These are {len(frames)} frames from the candidate."}]
     content += [{"type": "image_url",
                  "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames]
-    messages = [{"role": "system", "content": _SYSTEM + (_EVENT_RULE if event else "")},
+    messages = [{"role": "system", "content": _system() + (_EVENT_RULE if event else "")},
                 {"role": "user", "content": content}]
 
     text, model = _ask(messages, 400)
@@ -664,7 +700,7 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
     if not enabled():
         return None
     messages = [
-        {"role": "system", "content": _RATE_SYSTEM},
+        {"role": "system", "content": _RATE_SYSTEM + (_NEWS_TILE_RULE if config.NEWS_FOOTAGE else "")},
         {"role": "user", "content": [
             {"type": "text", "text": (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
              + (f"INTENT (the exact shot wanted): {intent}\n" if intent else "")
@@ -713,7 +749,7 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Opt
     if not enabled():
         return None
     messages = [
-        {"role": "system", "content": _PICK_SYSTEM},
+        {"role": "system", "content": _PICK_SYSTEM + (_NEWS_TILE_RULE if config.NEWS_FOOTAGE else "")},
         {"role": "user", "content": [
             {"type": "text", "text": (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
              + f"INTENT: {intent}\nNARRATION: {context}\n"
