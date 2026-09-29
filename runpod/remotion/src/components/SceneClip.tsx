@@ -25,8 +25,11 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
 
   const progress = durationInFrames > 1 ? frame / durationInFrames : 0;
 
-  // Slow, steady drift. Overshooting scale keeps pans from exposing edges.
-  let transform = "scale(1.06)";
+  // Slow, steady drift on photos; overshooting scale keeps pans from exposing
+  // edges. Footage plays as it is, full frame (the owner: GoMotion does not
+  // zoom into clips - a 6% crop on every clip and a 1.24x cut-in halfway
+  // through long ones read as zooming).
+  let transform = media.type === "video" ? "none" : "scale(1.06)";
   if (motion === "zoom-in" || effect === "ken-burns") {
     transform = `scale(${1.04 + progress * 0.1})`;
   } else if (motion === "zoom-out") {
@@ -43,15 +46,6 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
     transform = `translateX(${(1 - e) * side * 12}%) scale(${1.32 - 0.22 * e + progress * 0.06})`;
   } else if (motion === "push-rotate") {
     transform = `scale(${1.08 + progress * 0.1}) rotate(${interpolate(progress, [0, 1], [-1.4, 0.6])}deg)`;
-  }
-
-  // A long clip gets a cut-in halfway: a hard cut to a tighter framing of the
-  // same shot reads as a second camera angle (VidRush's shots average 3.5 s;
-  // ours ran 8 s on one framing).
-  const longClip = media.type === "video" && scene.frame !== "inset" && scene.frame !== "window" && durationInFrames > fps * 5.5;
-  if (longClip && frame >= Math.round(durationInFrames * 0.5)) {
-    const side = (scene.id.charCodeAt(scene.id.length - 1) % 2) ? 1 : -1;
-    transform = `scale(1.24) translate(${side * 3.5}%, -2%)`;
   }
 
   if (media.type === "animation") {
@@ -77,8 +71,9 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
   // A clip shorter than its scene used to run out and leave the rest of the
   // scene black (a real job: 3.48 s of footage in a 5.10 s scene). Slow it
   // just enough to fill the scene, never below 0.6x.
-  const { durationInFrames: sceneFrames, fps: sceneFps } = useVideoConfig();
-  const sceneSeconds = sceneFrames / sceneFps;
+  // (useVideoConfig was called again here, after the early returns above - a
+  // conditional hook. The values from the top of the component are the same.)
+  const sceneSeconds = durationInFrames / fps;
   const clip = media.type === "video" ? media.clipSeconds ?? 0 : 0;
   const rate = clip > 0 && clip < sceneSeconds ? Math.max(0.6, clip / sceneSeconds) : 1;
   const filters = [cssFilterFor(treatment), effectFilter(effect, frame), entrance.filter]

@@ -13,11 +13,37 @@ const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
 
 /** Offline, deterministic locator/route map. Routes connect verified places;
  * they depict a journey, never a road alignment or a hazard boundary. */
+type Place = {lat: number; lon: number; label: string};
+
+/** Where the map is centred and how far it is zoomed out for these places. */
+const framing = (places: Place[], width: number) => {
+  // Circular mean keeps a journey crossing the Pacific centred on the Pacific.
+  const rad = Math.PI / 180;
+  const centreLon = Math.atan2(places.reduce((a,p)=>a+Math.sin(p.lon*rad),0), places.reduce((a,p)=>a+Math.cos(p.lon*rad),0))/rad;
+  const centreLat = places.reduce((a,p)=>a+p.lat,0)/places.length;
+  const relativeLon = (lon: number) => ((lon-centreLon+540)%360)-180;
+  const span = Math.max(24, ...places.map(p=>Math.abs(relativeLon(p.lon))*2.6), ...places.map(p=>Math.abs(p.lat-centreLat)*4));
+  return {centreLon, centreLat, scale: width/(span*rad)};
+};
+
 export const DocumentaryMap: React.FC<{overlay: Overlay; accent: string}> = ({overlay, accent}) => {
   const frame = useCurrentFrame();
   const {width, height, fps} = useVideoConfig();
   const places = (overlay.locations || []).filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon));
-  if (!places.length) return null;
+  const placesKey = places.map(p => `${p.lon},${p.lat}`).join(';');
+  // The world and the 56 state outlines, projected once at the hold zoom. Every
+  // frame used to re-project all of it (~20 ms a frame, and ~450 KB of path data
+  // re-set in the DOM): the editor's preview dropped frames on every map.
+  const geo = React.useMemo(() => {
+    if (!places.length) return null;
+    const f = framing(places, width);
+    const p = geoPath(geoMercator().rotate([-f.centreLon,0]).center([0,f.centreLat]).scale(f.scale).translate([width/2,height*.46]));
+    return {world: p(world as never) || '',
+            states: states.features.map(st => ({d: p(st as never) || '',
+                                                 hit: places.some(pl => geoContains(st as never, [pl.lon, pl.lat]))}))};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placesKey, width, height]);
+  if (!places.length || !geo) return null;
   // VidRush's map looks: paper/dark locator, arc routes, a gold region with
   // tape labels, a warning marker, and a pulsing alert point for news.
   const v = overlay.variant || '';
@@ -27,17 +53,13 @@ export const DocumentaryMap: React.FC<{overlay: Overlay; accent: string}> = ({ov
   const land = paper ? '#e4d7b2' : '#292a2c';
   const water = paper ? '#95adb0' : '#18191b';
   const s = width / 1920;
-  // Circular mean keeps a journey crossing the Pacific centred on the Pacific.
-  const rad = Math.PI / 180;
-  const centreLon = Math.atan2(places.reduce((a,p)=>a+Math.sin(p.lon*rad),0), places.reduce((a,p)=>a+Math.cos(p.lon*rad),0))/rad;
-  const centreLat = places.reduce((a,p)=>a+p.lat,0)/places.length;
-  const relativeLon = (lon: number) => ((lon-centreLon+540)%360)-180;
-  const span = Math.max(24, ...places.map(p=>Math.abs(relativeLon(p.lon))*2.6), ...places.map(p=>Math.abs(p.lat-centreLat)*4));
-  const scale = width/(span*rad);
+  const {centreLon, centreLat, scale} = framing(places, width);
   const zoom = interpolate(frame, [0, fps*2], [.91,1], clamp);
+  // Only the few place points are projected per frame; the outlines ride on a
+  // transform (Mercator zoomed about its translate point is exactly a scale there).
   const projection = geoMercator().rotate([-centreLon,0]).center([0,centreLat]).scale(scale*zoom).translate([width/2,height*.46]);
-  const path = geoPath(projection);
   const points = places.map(p => projection([p.lon, p.lat])!);
+  const tx = width/2, ty = height*.46;
   const reveal = interpolate(frame,[fps*.3,fps*2.3],[0,1],clamp);
   const caption = overlay.text.slice(0,Math.floor(interpolate(frame,[fps*1.7,fps*3.1],[0,overlay.text.length],clamp)));
   const pad = 90*s;
@@ -46,8 +68,10 @@ export const DocumentaryMap: React.FC<{overlay: Overlay; accent: string}> = ({ov
   const outline = interpolate(frame,[fps*.4,fps*1.6],[0,1],clamp);
   return <AbsoluteFill style={{background:water, overflow:'hidden'}}>
     <svg width={width} height={height}>
-      <path d={path(world as never)||''} fill={land} stroke={paper?'#c0b99e':'#47484a'} strokeWidth={s*1.4}/>
-      {states.features.map((state,i)=><path key={i} d={path(state as never)||''} fill={places.some(p=>geoContains(state as never,[p.lon,p.lat])) ? (paper?'#c2a378':accent) : land} fillOpacity={.85} stroke={paper?'#b8af90':'#48494b'} strokeWidth={s*.9}/>)}
+      <g transform={`translate(${tx} ${ty}) scale(${zoom}) translate(${-tx} ${-ty})`}>
+        <path d={geo.world} fill={land} stroke={paper?'#c0b99e':'#47484a'} strokeWidth={s*1.4/zoom}/>
+        {geo.states.map((state,i)=><path key={i} d={state.d} fill={state.hit ? (paper?'#c2a378':accent) : land} fillOpacity={.85} stroke={paper?'#b8af90':'#48494b'} strokeWidth={s*.9/zoom}/>)}
+      </g>
       {route && points.slice(1).map((p,i)=>{
         const a=points[i]; const progress=Math.max(0,Math.min(1,reveal*(points.length-1)-i));
         return <path key={i} d={`M ${a[0]} ${a[1]} Q ${(a[0]+p[0])/2} ${(a[1]+p[1])/2-Math.min(110*s,Math.abs(a[0]-p[0])*.16)} ${p[0]} ${p[1]}`} fill="none" stroke={accent} strokeWidth={5*s} pathLength={1} strokeDasharray={1} strokeDashoffset={1-progress}/>;

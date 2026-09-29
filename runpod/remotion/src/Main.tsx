@@ -97,11 +97,20 @@ const makeMusicVolume = (props: TimelineProps) => {
   const sections = props.music?.sections || [];
   const duck = props.music?.duck ?? 0.55;
   const fps = props.fps;
-  const words: [number, number][] = [];
+  // Whether a word is being spoken, per frame (0.15 s before a word to 0.35 s
+  // after it), built once. The Player evaluates this callback for EVERY frame of
+  // the video whenever it changes, and it used to scan every word each time:
+  // 0.2-0.45 s per preview frame on a 22-minute video, so the editor played at
+  // a few frames a second.
+  const total = Math.max(1, Math.ceil(props.durationInFrames));
+  const speaking = new Uint8Array(total + 1);
   for (const sc of props.scenes) {
-    for (const w of sc.words || []) words.push([w.start, w.end]);
+    for (const w of sc.words || []) {
+      const a = Math.max(0, Math.ceil((w.start - 0.15) * fps));
+      const b = Math.min(total, Math.floor((w.end + 0.35) * fps));
+      for (let f = a; f <= b; f++) speaking[f] = 1;
+    }
   }
-  words.sort((a, b) => a[0] - b[0]);
   const ramp = Math.max(1, Math.round(fps * 1.5));
   const levelAt = (f: number): number => {
     if (!sections.length) return base;
@@ -116,13 +125,8 @@ const makeMusicVolume = (props: TimelineProps) => {
   };
   return (f: number) => {
     const level = levelAt(f);
-    const sec = f / fps;
-    let speaking = false;
-    for (const [a, b] of words) {
-      if (a > sec + 0.15) break;
-      if (sec >= a - 0.15 && sec <= b + 0.35) { speaking = true; break; }
-    }
-    return Math.max(0, Math.min(1, speaking ? level * duck : level));
+    const on = speaking[Math.min(total, Math.max(0, Math.round(f)))] === 1;
+    return Math.max(0, Math.min(1, on ? level * duck : level));
   };
 };
 
@@ -151,6 +155,15 @@ export const Main: React.FC<TimelineProps> = (props) => {
     });
     return out;
   }, [scenes]);
+  // Stable across re-renders: a new volume function makes the Player re-run it
+  // over the whole video.
+  const musicVolume = React.useMemo(
+    () => (bgm?.url ? makeMusicVolume(props) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scenes, bgm?.url, bgm?.volume, props.music, props.fps, props.durationInFrames]);
+  const overlayNodes = React.useMemo(
+    () => (overlays || []).map((ov) => renderOverlay(ov, captions.accent, scenes)),
+    [overlays, captions.accent, scenes]);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -186,17 +199,20 @@ export const Main: React.FC<TimelineProps> = (props) => {
           durationInFrames={ov.durationInFrames}
           premountFor={premount}
         >
-          {renderOverlay(ov, captions.accent, scenes)}
+          {overlayNodes[i]}
         </Sequence>
       ))}
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
       {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
-      {bgm?.url ? (
+      {bgm?.url && musicVolume ? (
         <Audio
           src={bgm.url.startsWith("bgm://") ? staticFile(`bgm/${bgm.url.slice(6)}.mp3`) : bgm.url}
-          volume={makeMusicVolume(props)}
+          volume={musicVolume}
           loop
+          // A 12-minute bed under a 22-minute video: the ducking must follow the
+          // video's frames, not restart with each loop of the track.
+          loopVolumeCurveBehavior="extend"
         />
       ) : null}
       {props.sfxEnabled !== false && (props.sfx || []).map((fx, i) => (

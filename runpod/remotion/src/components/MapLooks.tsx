@@ -315,20 +315,34 @@ export const SpreadMap: React.FC<{overlay: Overlay; accent: string}> = ({overlay
   const frame = useCurrentFrame();
   const {width, height, fps} = useVideoConfig();
   const places = (overlay.locations || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
-  if (!places.length) return null;
+  const placesKey = places.map((p) => `${p.lon},${p.lat},${p.label}`).join(';');
+  // Only the reveal timing changes from frame to frame (the zoom is a CSS
+  // transform): the outlines are projected once, not on every frame.
+  const geo = React.useMemo(() => {
+    if (!places.length) return null;
+    const us = places.every(inUS);
+    const shapes = us ? states : world;
+    // Each place lights the state/country that contains it, in narration order.
+    const found: {f: object; place: MapLocation}[] = [];
+    for (const place of places) {
+      const f = shapes.features.find((x) => geoContains(x as never, [place.lon, place.lat]));
+      if (f && !found.some((l) => l.f === f)) found.push({f, place});
+    }
+    const focus = found.length ? {type: 'FeatureCollection', features: found.map((l) => l.f)} : shapes;
+    const projection = geoMercator().fitExtent([[width * 0.22, height * 0.14], [width * 0.78, height * 0.74]], focus as never);
+    const path = geoPath(projection);
+    return {
+      us,
+      background: (us ? world.features : []).map((f) => path(f as never) || ''),
+      shapes: shapes.features.map((f) => path(f as never) || ''),
+      lit: found.map(({f, place}) => ({d: path(f as never) || '', centroid: path.centroid(f as never), place})),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placesKey, width, height]);
+  if (!places.length || !geo) return null;
   const dark = overlay.variant === 'spread-dark';
-  const us = places.every(inUS);
-  const shapes = us ? states : world;
   const k = width / 1920;
-  // Each place lights the state/country that contains it, in narration order.
-  const lit: {f: object; place: MapLocation}[] = [];
-  for (const place of places) {
-    const f = shapes.features.find((x) => geoContains(x as never, [place.lon, place.lat]));
-    if (f && !lit.some((l) => l.f === f)) lit.push({f, place});
-  }
-  const focus = lit.length ? {type: 'FeatureCollection', features: lit.map((l) => l.f)} : shapes;
-  const projection = geoMercator().fitExtent([[width * 0.22, height * 0.14], [width * 0.78, height * 0.74]], focus as never);
-  const path = geoPath(projection);
+  const lit = geo.lit;
   const zoom = interpolate(frame, [0, fps * 3], [0.94, 1], clamp);
   const land = dark ? '#262a30' : '#e6dcc0';
   const edge = dark ? '#474c55' : '#b9ae8e';
@@ -341,15 +355,15 @@ export const SpreadMap: React.FC<{overlay: Overlay; accent: string}> = ({overlay
         <defs>
           <filter id="spreadGlow"><feGaussianBlur stdDeviation={6 * k} result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
         </defs>
-        {(us ? world.features : []).map((f, i) => <path key={`w${i}`} d={path(f as never) || ''} fill={land} stroke={edge} strokeWidth={k} />)}
-        {shapes.features.map((f, i) => <path key={i} d={path(f as never) || ''} fill={land} stroke={edge} strokeWidth={1.2 * k} />)}
-        {lit.map(({f}, i) => {
+        {geo.background.map((d, i) => <path key={`w${i}`} d={d} fill={land} stroke={edge} strokeWidth={k} />)}
+        {geo.shapes.map((d, i) => <path key={i} d={d} fill={land} stroke={edge} strokeWidth={1.2 * k} />)}
+        {lit.map(({d}, i) => {
           const on = interpolate(frame, [fps * (0.5 + i * 0.4), fps * (0.8 + i * 0.4)], [0, 1], clamp);
-          return <path key={`l${i}`} d={path(f as never) || ''} fill={col} fillOpacity={0.85 * on} stroke="#fff"
+          return <path key={`l${i}`} d={d} fill={col} fillOpacity={0.85 * on} stroke="#fff"
             strokeWidth={2.5 * k * on} filter={dark ? 'url(#spreadGlow)' : undefined} />;
         })}
-        {lit.map(({f, place}, i) => {
-          const [x, y] = path.centroid(f as never);
+        {lit.map(({centroid, place}, i) => {
+          const [x, y] = centroid;
           const on = interpolate(frame, [fps * (0.7 + i * 0.4), fps * (1.0 + i * 0.4)], [0, 1], clamp);
           if (!Number.isFinite(x)) return null;
           return <text key={`t${i}`} x={x} y={y} textAnchor="middle" dominantBaseline="middle" opacity={on}
@@ -360,7 +374,7 @@ export const SpreadMap: React.FC<{overlay: Overlay; accent: string}> = ({overlay
       <div style={{position: 'absolute', left: 70 * k, top: 60 * k, fontFamily: NARROW, fontWeight: 700,
         fontSize: 64 * k, color: dark ? '#fff' : '#1d1b16', textTransform: 'uppercase', letterSpacing: '0.04em',
         opacity: interpolate(frame, [fps * 0.2, fps * 0.6], [0, 1], clamp)}}>
-        {overlay.text || `${count} ${us ? 'STATES' : 'COUNTRIES'}`}
+        {overlay.text || `${count} ${geo.us ? 'STATES' : 'COUNTRIES'}`}
       </div>
     </AbsoluteFill>
   );
