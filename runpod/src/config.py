@@ -522,6 +522,9 @@ ANIMATION_OVER_FOOTAGE = _flag("ANIMATION_OVER_FOOTAGE", False)
 # (a title naming a year before 1990, a newsreel, Pathe...) may go down to
 # MIN_ARCHIVE_HEIGHT - a 1936 newsreel only exists small.
 MIN_CLIP_HEIGHT = int(os.getenv("MIN_CLIP_HEIGHT", "480"))
+# A photo's long side must be at least this (a full-frame still at 1080p; a
+# Wikipedia "960px-" thumbnail passes). 0 turns the check off.
+MIN_IMAGE_LONG_SIDE = int(os.getenv("MIN_IMAGE_LONG_SIDE", "900"))
 MIN_ARCHIVE_HEIGHT = int(os.getenv("MIN_ARCHIVE_HEIGHT", "240"))
 ANIMATION_OVER_FOOTAGE_BELOW = float(os.getenv("ANIMATION_OVER_FOOTAGE_BELOW", "0.6"))
 CLIP_LIBRARY_MIN_SCORE = float(os.getenv("CLIP_LIBRARY_MIN_SCORE", "0.8"))

@@ -114,6 +114,29 @@ def has_burned_captions(path: str, count: int = 4) -> bool:
     return sub_hits >= need or texty_hits >= need
 
 
+def text_page_still(path: str) -> bool:
+    """
+    True for a still that is a page of text - a presentation slide, a web or
+    app screenshot, a scanned document - rather than a photograph: mostly
+    white, with rows of letters over much of it. Checked without any model,
+    because it slipped through when vision was down (a "Front Range drought
+    response" slide stood in for farms, dams and rivers).
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        return False
+    if not _is_still(path):
+        return False
+    frames = _gray_frames(path, 1, w=480, h=270)
+    if not frames:
+        return False
+    fr = frames[0]
+    bright = float((fr > 225).mean())
+    rows = _texty_rows(fr, np)
+    return bright >= 0.45 and len(rows) >= fr.shape[0] * 0.10
+
+
 def _texty_rows(frame, np) -> list:
     """Row indices whose strong-vertical-edge count looks like a line of text."""
     h, w = frame.shape
@@ -172,10 +195,16 @@ def clip_quality(path: str, min_height: int = 0) -> tuple:
         return False, "unreadable"
 
     if _is_still(path):
-        # Text on a still was already judged by vision, and a document photo
-        # is text by design - the caption detector would reject every one.
-        # Frozen means nothing for a photo. Only a black frame is a failure.
-        return (False, "near-black") if float(frames[0].mean()) < 26 else (True, "")
+        # Text on a still is judged by the caller (a document beat wants it;
+        # see text_page_still). Frozen means nothing for a photo.
+        if float(frames[0].mean()) < 26:
+            return False, "near-black"
+        # A thumbnail blown up to 1080p reads as a mistake: a 55 KB slide
+        # screenshot filled nine scenes of the Glen Canyon video.
+        w, h = _video_dims(path)
+        if config.MIN_IMAGE_LONG_SIDE and w and h and max(w, h) < config.MIN_IMAGE_LONG_SIDE:
+            return False, f"low resolution ({w}x{h})"
+        return True, ""
 
     if has_burned_captions(path):
         return False, "burned-in text or UI"

@@ -67,7 +67,7 @@ class StillQuality(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "photo.jpg")
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
-                            "testsrc2=size=640x360", "-frames:v", "1", path], check=True)
+                            "testsrc2=size=1280x720", "-frames:v", "1", path], check=True)
             self.assertEqual(len(media._gray_frames(path)), 1)
             self.assertEqual(media.clip_quality(path), (True, ""))
 

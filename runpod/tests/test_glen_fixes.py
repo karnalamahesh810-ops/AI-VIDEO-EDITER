@@ -161,6 +161,53 @@ class ReuseComesLastAndIsCapped(unittest.TestCase):
         self.assertEqual(config.REUSE_MAX_USES, 2)
 
 
+class PictureQuality(unittest.TestCase):
+    """A 55 KB slide screenshot filled nine scenes of the Glen Canyon video."""
+
+    def _img(self, w, h, kind):
+        from PIL import Image, ImageDraw
+        path = os.path.join(tempfile.mkdtemp(), f"{kind}.jpg")
+        if kind == "slide":
+            im = Image.new("RGB", (w, h), "white")
+            d = ImageDraw.Draw(im)
+            for row in range(8):                      # rows of letter-like strokes
+                y = 60 + row * 80
+                for x in range(40, w - 40, 14):
+                    d.rectangle([x, y, x + 5, y + 30], fill="black")
+        else:
+            im = Image.new("RGB", (w, h))
+            px = im.load()
+            for x in range(w):
+                for y in range(0, h, 2):
+                    px[x, y] = (40 + x * 150 // w, 90 + y * 100 // h, 160)
+                    if y + 1 < h:
+                        px[x, y + 1] = px[x, y]
+        im.save(path, quality=90)
+        return path
+
+    def test_a_slide_is_a_page_of_text_and_a_photo_is_not(self):
+        from src import filters
+        self.assertTrue(filters.text_page_still(self._img(1280, 720, "slide")))
+        self.assertFalse(filters.text_page_still(self._img(1280, 720, "photo")))
+
+    def test_a_small_picture_is_rejected_and_a_1080p_one_passes(self):
+        from src import filters
+        ok, why = filters.clip_quality(self._img(640, 360, "photo"))
+        self.assertFalse(ok)
+        self.assertIn("low resolution", why)
+        self.assertTrue(filters.clip_quality(self._img(1280, 720, "photo"))[0])
+
+    def test_a_slide_is_refused_except_for_a_document_beat(self):
+        slide = media.MediaAsset(kind="image", source="web_image", url="https://x/slide.jpg",
+                                 local_path=self._img(1280, 720, "slide"))
+        self.assertFalse(media._asset_ok(slide)[0])
+        token = media._SUBJECT_TYPE.set("document")
+        try:
+            self.assertTrue(media._asset_ok(slide)[0])
+        finally:
+            media._SUBJECT_TYPE.reset(token)
+
+
 class NewsForStoriesAboutNow(unittest.TestCase):
     TODAY = datetime.date(2026, 9, 29)
 

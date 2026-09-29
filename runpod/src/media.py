@@ -2435,6 +2435,9 @@ def _asset_ok(asset) -> tuple:
     # MIN_CLIP_HEIGHT lines (the owner: 1080p-quality clips).
     title = f"{getattr(asset, 'attribution', '') or ''} {getattr(asset, 'query', '') or ''}"
     archive = asset.source == "archive_org" or bool(_ARCHIVE_TITLE_RE.search(title))
+    # A page of text (slide, screenshot, scan) only for a beat about a document.
+    if asset.kind == "image" and _SUBJECT_TYPE.get() != "document" and _filters.text_page_still(path):
+        return False, "a page of text, not a photo"
     return clip_quality(path, config.MIN_ARCHIVE_HEIGHT if archive else config.MIN_CLIP_HEIGHT)
 
 
