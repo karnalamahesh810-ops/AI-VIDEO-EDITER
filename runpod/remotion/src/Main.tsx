@@ -137,7 +137,7 @@ const makeMusicVolume = (props: TimelineProps) => {
 const SFX_META = sfxMeta as Record<string, { duration: number; peak: number }>;
 const SFX_MAX_SECONDS = 6;
 // Sounds that can repeat seamlessly to cover a longer planned span.
-const LOOPABLE_SFX = new Set(["keys", "typewriter"]);
+const LOOPABLE_SFX = new Set(["keys", "typewriter", "keys-mech", "keys-type"]);
 
 type SfxCue = NonNullable<TimelineProps["sfx"]>[number];
 

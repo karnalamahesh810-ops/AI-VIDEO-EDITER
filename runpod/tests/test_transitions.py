@@ -157,7 +157,7 @@ class Sounds(unittest.TestCase):
         scenes = self._scenes(["none", "glitch", "none", "none", "flash", "none", "none", "whip-pan",
                                "none", "none", "shake-cut", "none", "none", "film-burn"])
         picks = timeline.plan_transition_sfx(scenes, 30, [])
-        self.assertEqual([p["name"] for p in picks], ["glitch-short", "flash-hit", "swipe", "boom-soft", "whoosh-soft"])
+        self.assertEqual([p["name"] for p in picks], ["glitch-pro", "flash-hit", "swipe", "boom-soft", "whoosh-soft"])
         cuts = [s["startFrame"] for s in scenes if s["transition"] != "none"]
         for p, cut in zip(picks, cuts):
             self.assertLessEqual(abs(p["startFrame"] + meta[p["name"]]["peak"] * 30 - cut), 1.0, p)

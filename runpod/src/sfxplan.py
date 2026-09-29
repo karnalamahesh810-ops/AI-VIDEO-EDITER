@@ -58,7 +58,8 @@ MIN_AUDIBLE = 4
 BASE_VOLUME = 0.15
 MAX_VOLUME = 0.2
 VOLUME = {
-    "keys": 0.1, "typewriter": 0.1, "typing text": 0.1,
+    "keys": 0.1, "typewriter": 0.1, "typing text": 0.1, "keys-mech": 0.1, "keys-type": 0.1,
+    "glitch-pro": 0.13,
     "count-tick": 0.12,
     "boom-soft": 0.13, "impact": 0.13, "flash-hit": 0.13,
     "marker": 0.15, "click": 0.15, "tick": 0.15,
@@ -69,9 +70,12 @@ COUNT_SOUND = "count-tick"
 # A look that does not type must not clack: a typing sound left on it (the
 # old registry gave the kicker's mask rise a typewriter) becomes one click.
 NOT_TYPING_SOUND = "click"
-_TYPING_NAMES = {"keys", "typewriter", "typing text"}
+_TYPING_NAMES = {"keys", "typewriter", "typing text", "keys-mech", "keys-type"}
+# The owner's own keyboard recordings (2026-09-29) lead; typing looks take
+# them in turn so two typed lines never sound the same. "keys" is the fallback.
+TYPING_TAKES = ["keys-type", "keys-mech", "keys"]
 # Sounds with no single hit: they run for the action and start with it.
-_CONTINUOUS = {"keys", "typewriter", "typing text", "count-tick"}
+_CONTINUOUS = {"keys", "typewriter", "typing text", "count-tick", "keys-mech", "keys-type"}
 # The only stand-in allowed for a missing file: the older typing recording.
 _FALLBACK = {"keys": "typewriter"}
 
@@ -90,9 +94,10 @@ VARIANTS = {
     "paper": ["paper-slide", "page"],
     "paper-slide": ["paper", "page"],
     "page": ["paper-slide", "paper"],
-    "glitch-transition": ["glitch-short", "glitch"],
-    "glitch": ["glitch-short", "glitch-transition"],
-    "glitch-short": ["glitch", "glitch-transition"],
+    "glitch-transition": ["glitch-pro", "glitch-short", "glitch"],
+    "glitch": ["glitch-pro", "glitch-short", "glitch-transition"],
+    "glitch-short": ["glitch-pro", "glitch", "glitch-transition"],
+    "glitch-pro": ["glitch-short", "glitch-transition"],
     "riser": ["riser-short"],
     "riser-short": ["riser"],
     "ding": ["marker"],
@@ -383,9 +388,14 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "") -> L
     out: List[dict] = []
     last_used: Dict[str, int] = {}
     window = int(round(VARY_SECONDS * fps))
+    takes = [t for t in TYPING_TAKES if exists(t)]
+    typed = 0
     for c in sorted(picks, key=lambda c: (c["hit"], c["i"])):
         if c["kind"] == "hit" and not c["explicit"]:
             name = _vary(c["name"], c["hit"], last_used, window, style)
+        elif c["kind"] == "typing" and c["name"] == TYPING_SOUND and takes:
+            name = takes[typed % len(takes)]
+            typed += 1
         else:
             name = _resolve_file(c["name"]) if c["kind"] != "hit" else (c["name"] if exists(c["name"]) else None)
         if not name:

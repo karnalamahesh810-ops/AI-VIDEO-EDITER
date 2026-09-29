@@ -2049,6 +2049,10 @@ def handler(job):
                     "machine": _machine(),
                     "potProvider": media.pot_provider_alive(),
                     **({} if media.pot_provider_alive() else {"potLog": media.pot_provider_log()}),
+                    # The baked-in CPU models (Dockerfile: scripts/fetch_models.py).
+                    "localVision": localvision.available(),
+                    "upscaler": upscale.available(),
+                    "r2": r2.enabled(),
                     # Real download check per route: {"probe_youtube": true}.
                     "proxies": media.proxy_snapshot(),
                     **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),

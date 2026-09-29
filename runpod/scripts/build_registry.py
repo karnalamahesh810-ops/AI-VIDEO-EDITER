@@ -531,6 +531,9 @@ SFX = {
     "GLITCH_SHORT": {"file": "glitch-short", "volume": 0.18}, "RISER_SHORT": {"file": "riser-short", "volume": 0.2},
     "FLASH_HIT": {"file": "flash-hit", "volume": 0.18}, "MARKER": {"file": "marker", "volume": 0.2},
     "COUNT_TICK": {"file": "count-tick", "volume": 0.16}, "PAPER_SLIDE": {"file": "paper-slide", "volume": 0.2},
+    # The owner's own recordings (2026-09-29).
+    "KEYS_MECH": {"file": "keys-mech", "volume": 0.1}, "KEYS_TYPE": {"file": "keys-type", "volume": 0.1},
+    "GLITCH_PRO": {"file": "glitch-pro", "volume": 0.13},
 }
 
 STYLE_PACKS = {

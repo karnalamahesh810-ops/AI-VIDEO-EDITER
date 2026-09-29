@@ -101,7 +101,7 @@ _MIN_OUT_FRAMES = 6
 # Its loudest point (sfx_meta.json "peak") lands on the cut. Soft transitions
 # get a whisper of air; a dip through black is silent, as an editor leaves it.
 _TRANSITION_SFX = {
-    "glitch": ("glitch-short", 0.13), "vhs-glitch": ("glitch-short", 0.12),
+    "glitch": ("glitch-pro", 0.13), "vhs-glitch": ("glitch-short", 0.12),
     "flash": ("flash-hit", 0.13), "chromatic-flash": ("flash-hit", 0.13),
     "whip-pan": ("swipe", 0.13), "zoom-punch": ("swipe", 0.12),
     "film-burn": ("whoosh-soft", 0.09), "light-leak": ("whoosh-soft", 0.07),
@@ -116,6 +116,7 @@ _TRANSITION_SFX_CLEARANCE = 1.0
 # Used when public/sfx/sfx_meta.json cannot be read (duration, peak seconds).
 _SFX_META_FALLBACK = {
     "glitch-short": {"duration": 0.5, "peak": 0.175}, "flash-hit": {"duration": 0.62, "peak": 0.075},
+    "glitch-pro": {"duration": 0.48, "peak": 0.01},
     "swipe": {"duration": 0.44, "peak": 0.195}, "whoosh-soft": {"duration": 1.12, "peak": 0.419},
     "boom-soft": {"duration": 1.71, "peak": 0.309},
 }

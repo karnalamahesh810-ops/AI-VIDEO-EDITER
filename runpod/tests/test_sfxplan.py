@@ -263,3 +263,25 @@ class RealFolder(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OwnerSounds(unittest.TestCase):
+    """The owner's own keyboard and glitch recordings (real sound folder)."""
+
+    def test_typing_looks_take_the_owner_keyboards_in_turn(self):
+        from src import templates
+        typing = [t["id"] for t in templates.all_templates() if (t.get("defaults") or {}).get("types")][:1]
+        self.assertTrue(typing)
+        ovs = [{"template": typing[0], "startFrame": 300 * i, "durationInFrames": 240, "text": "The water kept falling"}
+               for i in range(3)]
+        names = [s["name"] for s in sfxplan.plan(ovs, 30, 1.0)]
+        self.assertEqual(names[:2], ["keys-type", "keys-mech"])
+
+    def test_the_files_are_there_and_measured(self):
+        import json
+        meta = json.load(open("remotion/public/sfx/sfx_meta.json", encoding="utf-8"))
+        for name in ("keys-mech", "keys-type", "glitch-pro"):
+            self.assertTrue(sfxplan.exists(name), name)
+            self.assertIn(name, meta)
+        main = open("remotion/src/Main.tsx", encoding="utf-8").read()
+        self.assertIn('"keys-mech", "keys-type"', main)

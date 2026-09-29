@@ -27,6 +27,10 @@
     "duration": 1.656,
     "peak": 0.763
   },
+  "glitch-pro": {
+    "duration": 0.48,
+    "peak": 0.01
+  },
   "glitch-short": {
     "duration": 0.5,
     "peak": 0.175
@@ -42,6 +46,14 @@
   "keys": {
     "duration": 5.0,
     "peak": 0.399
+  },
+  "keys-mech": {
+    "duration": 3.52,
+    "peak": 1.093
+  },
+  "keys-type": {
+    "duration": 3.873,
+    "peak": 1.941
   },
   "map-whoosh": {
     "duration": 3.084,

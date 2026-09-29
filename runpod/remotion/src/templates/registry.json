@@ -64486,6 +64486,18 @@
   "PAPER_SLIDE": {
    "file": "paper-slide",
    "volume": 0.2
+  },
+  "KEYS_MECH": {
+   "file": "keys-mech",
+   "volume": 0.1
+  },
+  "KEYS_TYPE": {
+   "file": "keys-type",
+   "volume": 0.1
+  },
+  "GLITCH_PRO": {
+   "file": "glitch-pro",
+   "volume": 0.13
   }
  },
  "stylePacks": {
