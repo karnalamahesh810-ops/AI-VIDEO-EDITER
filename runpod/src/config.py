@@ -460,6 +460,12 @@ RENDER_CRF = int(os.getenv("RENDER_CRF", "21"))
 # The largest file the app's storage takes. A render over it is re-encoded to
 # fit before the upload (render.fit_size). 0 turns the check off.
 UPLOAD_MAX_MB = float(os.getenv("UPLOAD_MAX_MB", "1900"))
+# How long the final video's upload retries through an app outage (the broker
+# says "job is not running" whenever the app's database cannot be read).
+FINAL_UPLOAD_RETRY_SECONDS = float(os.getenv("FINAL_UPLOAD_RETRY_SECONDS", "900"))
+# Pods only: where a copy of the finished video is kept for the owner's laptop
+# (src/podfetch.py) - outside the job's work directory, which is deleted.
+RENDER_KEEP_DIR = os.getenv("RENDER_KEEP_DIR", "")
 # Scenes sourced at once. 8 suited the old 8-vCPU GPU pods; the 32-vCPU CPU
 # workers carry 16 (the work is mostly waiting on network and vision calls).
 SOURCE_WORKERS = int(os.getenv("SOURCE_WORKERS", "16"))

@@ -39,11 +39,46 @@ def stop_this_pod() -> None:
         time.sleep(5)
 
 
+def after_job(safe: bool, kept: bool, laptop_has_it, wait_seconds: float, sleep=time.sleep) -> str:
+    """
+    "stop" or "stay" once the job is over. The owner: never turn the pod off
+    unless the video is safe - a stopped pod's disk is wiped, and on 2026-09-28
+    that took a finished 22-minute render with it.
+
+    safe: the video is in the app (uploaded and the project row updated).
+    kept: a copy sits in RENDER_KEEP_DIR, served to the laptop (src/podfetch.py).
+    Not safe but kept: stay up serving it, until someone stops the pod by hand.
+    Safe and kept: give the laptop up to `wait_seconds` to finish its copy, then stop.
+    Nothing kept: stop (there is nothing to save).
+    """
+    if kept and not safe:
+        return "stay"
+    if kept and laptop_has_it is not None:
+        until = time.time() + wait_seconds
+        while time.time() < until and not laptop_has_it():
+            sleep(10)
+    return "stop"
+
+
 def main() -> None:
     job = json.loads(base64.b64decode(os.environ["JOB_B64"]))
-    inp = job.get("input") or {}
+    inp = job.setdefault("input", {})
     pid = inp.get("project_id") or ""
+    # This script records the final status itself (one waited, retried write).
+    # The handler's own terminal write would move the row off "rendering" first,
+    # the broker would then refuse this one, and the pod would read the video as
+    # not safe and never stop.
+    inp["_caller_writes_result"] = True
     started = time.time()
+    token = os.environ.get("POD_FETCH_TOKEN", "")
+    fetch = None
+    if token and config.RENDER_KEEP_DIR:
+        from src import podfetch
+        try:
+            fetch = podfetch.start(config.RENDER_KEEP_DIR, token, int(os.environ.get("POD_FETCH_PORT", "8888")))
+            print("[pod] serving the finished video to the laptop when it is ready", flush=True)
+        except OSError as e:
+            print(f"[pod] could not serve the video for the laptop: {e}", flush=True)
     try:
         out = handler.handler(job)
     except Exception as e:  # noqa: BLE001
@@ -65,9 +100,46 @@ def main() -> None:
             fields["scene_data"] = out["timeline"]
         if isinstance(out.get("render_manifest"), dict):
             fields["render_manifest"] = out["render_manifest"]
-    ok = storage.patch_project(pid, fields, wait=True)
+    kept = bool(config.RENDER_KEEP_DIR) and os.path.isfile(os.path.join(config.RENDER_KEEP_DIR, "final.mp4"))
+    if fields["status"] == "failed" and kept:
+        fields["error_message"] = (fields["error_message"] + " | The finished video is kept on the pod; "
+                                   "it stays on until it is saved.")[:800]
+    # The small "video is ready" fields first, the (~1 MB) timeline after, each sent
+    # straight to the broker - not behind the progress updates queued on the one
+    # background writer. On 2026-09-29 the single combined write waited out its
+    # 240 s behind that queue, the pod stopped, and the app never learned that the
+    # 1.2 GB video had uploaded. The app's database can be down for minutes, so
+    # each write is retried.
+    big = {k: fields.pop(k) for k in ("scene_data", "render_manifest") if k in fields}
+
+    def write(f: dict, seconds: float) -> bool:
+        until = time.time() + seconds
+        while True:
+            if storage.broker_enabled() and storage.CURRENT_JOB[0]:
+                done = storage._broker_patch(pid, storage.CURRENT_JOB[0], f)
+            else:
+                done = storage.patch_project(pid, f, wait=True)
+            if done or time.time() >= until:
+                return done
+            time.sleep(15)
+
+    if big:
+        # While the row is still "rendering": the broker refuses writes once it is done.
+        if not write(big, 300):
+            print("[pod] could not save the finished timeline to the app (the video itself is next)", flush=True)
+    ok = write(fields, 600)
+    succeeded = fields["status"] == "done"
     print(f"[pod] job finished in {int(time.time() - started)}s: {fields.get('status')} "
           f"(project updated: {ok}) {str(out.get('video_url') or out.get('error') or '')[:160]}", flush=True)
+    if fetch:
+        fetch.set_job("done" if succeeded and ok else "failed", "" if succeeded else fields.get("error_message", ""))
+    decision = after_job(succeeded and ok, kept, fetch.laptop_has_it if fetch else None,
+                         float(os.environ.get("POD_FETCH_WAIT_SECONDS", "1800")))
+    if decision == "stay":
+        print("[pod] the video is not safe in the app yet: staying up and serving it "
+              "(stop this pod by hand once the video is saved)", flush=True)
+        while True:
+            time.sleep(3600)
     stop_this_pod()
 
 

@@ -1637,6 +1637,27 @@ def _local_renderer(doc: dict, inp: dict, work: str, on_progress=None):
     return go
 
 
+def _keep_render(out_path: str) -> None:
+    """
+    Copy the finished video to config.RENDER_KEEP_DIR/final.mp4 (set on pods),
+    outside the job's work directory, which is deleted when the job ends. The pod
+    serves that copy to the owner's laptop (src/podfetch.py) and keeps it when the
+    upload fails. Written under a temporary name and renamed, so a reader never
+    sees half a file. Never fails the job.
+    """
+    keep = config.RENDER_KEEP_DIR
+    if not keep or not os.path.isfile(out_path):
+        return
+    try:
+        os.makedirs(keep, exist_ok=True)
+        part = os.path.join(keep, "final.mp4.part")
+        shutil.copyfile(out_path, part)
+        os.replace(part, os.path.join(keep, "final.mp4"))
+        print(f"[worker] render kept for the laptop: {os.path.getsize(out_path) / 1e6:.0f} MB", flush=True)
+    except OSError as e:
+        print(f"[worker] could not keep a copy of the render: {e}", flush=True)
+
+
 def do_render(doc: dict, inp: dict, work: str, report: Reporter,
               split: bool = False) -> dict:
     # The document may have come back from a browser, so validate before
@@ -1712,6 +1733,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     renderer.normalize_loudness(out_path)
     # Over the app's per-file storage limit: re-encode to fit, not fail the upload.
     renderer.fit_size(out_path)
+    _keep_render(out_path)
 
     report("Uploading video", 91)
     events.phase("upload")
@@ -1759,7 +1781,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         object_path = f"projects/{inp['project_id']}/final-{int(time.time())}.mp4"
         playable = storage.broker_upload(
             out_path, bucket, object_path, inp["project_id"], inp.get("_job_id", ""),
-            read_ttl=int(inp.get("signed_url_ttl", 60 * 60 * 24 * 7)))
+            read_ttl=int(inp.get("signed_url_ttl", 60 * 60 * 24 * 7)),
+            # The whole video rides on this one upload: wait out an app outage.
+            deadline=time.time() + config.FINAL_UPLOAD_RETRY_SECONDS)
         return {
             "video_url": playable,
             "public_url": "",
@@ -2042,7 +2066,7 @@ def handler(job):
             # 15 minutes of one CPU and then failed on one broken clip.
             split = bool(project_id and fanout.render_enabled(doc, project_id))
             out = do_render(doc, inp, work, report, split=split)
-            if project_id:
+            if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
             costs.measure_end()
             return {"ok": True, "action": "render", **out,
@@ -2083,7 +2107,7 @@ def handler(job):
             if not split and project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))
-            if project_id:
+            if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "build", "timeline": doc, **out, "costs": summary,
@@ -2104,9 +2128,10 @@ def handler(job):
                 events.flush(storage.broker_events)
             except Exception:  # noqa: BLE001
                 pass
-            storage.patch_project(project_id, {
-                "status": "failed", "error_message": msg, "current_step": "Failed",
-            })
+            if not inp.get("_caller_writes_result"):
+                storage.patch_project(project_id, {
+                    "status": "failed", "error_message": msg, "current_step": "Failed",
+                })
         return {"ok": False, "error": msg, "elapsed": round(time.time() - started, 1),
                 **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {}),
                 **({"timeline": dict(LAST_TIMELINE)} if inp.get("return_frames") and LAST_TIMELINE else {})}
