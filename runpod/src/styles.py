@@ -73,6 +73,15 @@ def resolve(name: str) -> str:
     return key if key in STYLES else ""
 
 
+_DENSITY = {"minimal": "minimal", "normal": "normal", "rich": "rich", "full": "rich", "less": "minimal",
+            "more": "rich"}
+
+
+def density(value) -> str:
+    """The owner's Animations choice as a graphics density, or "" (auto)."""
+    return _DENSITY.get(str(value or "").strip().lower(), "")
+
+
 def apply(inp: dict) -> str:
     """
     Fold the job's video_style into its input, in place, before config
@@ -82,18 +91,26 @@ def apply(inp: dict) -> str:
     them empty. Returns the resolved style id ("" for auto).
     """
     style = resolve(inp.get("video_style"))
+    chosen = density(inp.get("graphics_density"))
     if not style:
+        if chosen:
+            # Animations picked with no style: only the density changes.
+            cfg = dict(inp["config"]) if isinstance(inp.get("config"), dict) else {}
+            cfg.setdefault("GRAPHICS_DENSITY", chosen)
+            inp["config"] = cfg
+            inp["graphics_density"] = chosen
         return ""
     spec = STYLES[style]
     merged = dict(spec.get("config") or {})
     if isinstance(inp.get("config"), dict):
         merged.update(inp["config"])
-    merged.setdefault("GRAPHICS_DENSITY", spec["graphics"])
+    # The owner's Animations choice beats the style's own default.
+    merged.setdefault("GRAPHICS_DENSITY", chosen or spec["graphics"])
     merged.setdefault("TRANSITION_STYLE", spec["transitions"])
     inp["config"] = merged
     inp["video_style"] = style
     inp.setdefault("style", spec["transitions"])           # read by timeline.transition_style
-    inp.setdefault("graphics_density", spec["graphics"])
+    inp["graphics_density"] = merged["GRAPHICS_DENSITY"]
     if spec.get("pack") and not inp.get("style_pack"):
         inp["style_pack"] = spec["pack"]
     # Music off for styles that have none, unless the job picked a track.

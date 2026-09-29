@@ -1,8 +1,11 @@
 """
 One video on a RunPod CPU pod (no serverless).
 
-JOB_B64 = base64 of {"id": "pod-...", "input": {...}} - the same input the app's
-video-v2 function sends. The handler runs once; the result is written into the
+JOB_URL (a signed link to the job JSON, as the app's video-v2 function
+launches pods - a render's timeline is too big for an environment variable)
+or JOB_B64 = base64 of {"id": "pod-...", "input": {...}} - the same input the
+app's video-v2 function sends. An id of "pod-self" becomes "pod-<this pod's
+id>", which is what the app records as the project's job. The handler runs once; the result is written into the
 project through the app's broker (status, video, timeline), then this pod stops
 itself so nothing is billed after the video is done (the pod volume is kept).
 """
@@ -21,7 +24,32 @@ import handler  # noqa: E402
 from src import config, storage  # noqa: E402
 
 
-def stop_this_pod() -> None:
+def load_job() -> dict:
+    """The job: JOB_URL (retried, the app's storage can be slow) or JOB_B64."""
+    url = os.environ.get("JOB_URL", "")
+    if url:
+        last = None
+        for attempt in range(6):
+            try:
+                r = requests.get(url, timeout=60)
+                if r.status_code == 200:
+                    job = r.json()
+                    break
+                last = f"HTTP {r.status_code}"
+            except (requests.RequestException, ValueError) as e:
+                last = type(e).__name__
+            time.sleep(5 * (attempt + 1))
+        else:
+            raise RuntimeError(f"could not load the job from JOB_URL ({last})")
+    else:
+        job = json.loads(base64.b64decode(os.environ["JOB_B64"]))
+    if str(job.get("id") or "") in ("", "pod-self"):
+        job["id"] = "pod-" + os.environ.get("RUNPOD_POD_ID", "unknown")
+    return job
+
+
+def stop_this_pod(terminate: bool = False) -> None:
+    """Stop this pod, or terminate it (the app's pods: nothing left to keep)."""
     pod = os.environ.get("RUNPOD_POD_ID", "")
     key = os.environ.get("POD_STOP_KEY") or config.FANOUT_API_KEY or os.environ.get("RUNPOD_API_KEY", "")
     if not (pod and key):
@@ -29,9 +57,13 @@ def stop_this_pod() -> None:
         return
     for attempt in range(3):
         try:
-            r = requests.post(f"https://rest.runpod.io/v1/pods/{pod}/stop",
-                              headers={"Authorization": f"Bearer {key}"}, timeout=30)
-            print(f"[pod] stop requested: HTTP {r.status_code}", flush=True)
+            if terminate:
+                r = requests.delete(f"https://rest.runpod.io/v1/pods/{pod}",
+                                    headers={"Authorization": f"Bearer {key}"}, timeout=30)
+            else:
+                r = requests.post(f"https://rest.runpod.io/v1/pods/{pod}/stop",
+                                  headers={"Authorization": f"Bearer {key}"}, timeout=30)
+            print(f"[pod] {'terminate' if terminate else 'stop'} requested: HTTP {r.status_code}", flush=True)
             if r.status_code < 400:
                 return
         except requests.RequestException as e:
@@ -61,7 +93,7 @@ def after_job(safe: bool, kept: bool, laptop_has_it, wait_seconds: float, sleep=
 
 
 def main() -> None:
-    job = json.loads(base64.b64decode(os.environ["JOB_B64"]))
+    job = load_job()
     inp = job.setdefault("input", {})
     pid = inp.get("project_id") or ""
     # This script records the final status itself (one waited, retried write).
@@ -136,11 +168,16 @@ def main() -> None:
     decision = after_job(succeeded and ok, kept, fetch.laptop_has_it if fetch else None,
                          float(os.environ.get("POD_FETCH_WAIT_SECONDS", "1800")))
     if decision == "stay":
+        cap = float(os.environ.get("POD_STAY_MAX_SECONDS", "0") or 0)
         print("[pod] the video is not safe in the app yet: staying up and serving it "
-              "(stop this pod by hand once the video is saved)", flush=True)
-        while True:
-            time.sleep(3600)
-    stop_this_pod()
+              + (f"for up to {int(cap // 60)} min" if cap else "(stop this pod by hand once the video is saved)"),
+              flush=True)
+        until = time.time() + cap if cap else float("inf")
+        while time.time() < until:
+            time.sleep(min(600, max(1, until - time.time())))
+    # The app's pods are deleted once the video is safe (nothing left to keep,
+    # nothing billed); a failed one is only stopped, so its log can be read.
+    stop_this_pod(terminate=os.environ.get("POD_EXIT") == "terminate" and succeeded and ok)
 
 
 if __name__ == "__main__":

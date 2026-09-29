@@ -15,9 +15,9 @@ fi
 # The done-marker lives on the pod volume, so starting this stopped pod again
 # never re-runs a video it already made (give the pod a new JOB_B64 instead).
 dir=/workspace; [ -d "$dir" ] || dir=/tmp
-mark="$dir/.pod_job_$(printf '%s' "${JOB_B64:-}" | md5sum | cut -c1-16).done"
-if [ -z "${JOB_B64:-}" ]; then
-  echo "[pod] no JOB_B64; idling"
+mark="$dir/.pod_job_$(printf '%s' "${JOB_B64:-}${JOB_URL:-}" | md5sum | cut -c1-16).done"
+if [ -z "${JOB_B64:-}${JOB_URL:-}" ]; then
+  echo "[pod] no JOB_B64 or JOB_URL; idling"
 elif [ -f "$mark" ]; then
   echo "[pod] this job already ran on this pod; idling"
 else
