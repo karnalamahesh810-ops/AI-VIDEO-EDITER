@@ -209,6 +209,41 @@ class DatesAndNumbers(unittest.TestCase):
                          (75, "MILLION", "ACRE FEET"))
 
 
+class BrightDataStopsWhenItStopsWorking(unittest.TestCase):
+    def setUp(self):
+        media.reset_cache()
+
+    def tearDown(self):
+        media.reset_cache()
+
+    def _reply(self, text, status=200):
+        r = mock.Mock(status_code=status, text=text)
+        r.json.side_effect = ValueError("not json")
+        return r
+
+    def test_a_throttled_answer_turns_it_off_for_the_job(self):
+        with mock.patch.object(config, "BRIGHTDATA_API_KEY", "k"), \
+                mock.patch.object(config, "BRIGHTDATA_SERP_ZONE", "z"), \
+                mock.patch.object(media.requests, "post", return_value=self._reply(
+                    "The request was auto-throttled due to low success rate. Please decrease")) as post:
+            with self.assertRaises(ValueError):
+                media._brightdata_serp("https://www.google.com/search?q=x")
+            self.assertFalse(media.brightdata_available())
+            with self.assertRaises(ValueError):
+                media._brightdata_serp("https://www.google.com/search?q=y")
+        self.assertEqual(post.call_count, 1)
+
+    def test_three_failed_calls_in_a_row_turn_it_off(self):
+        with mock.patch.object(config, "BRIGHTDATA_API_KEY", "k"), \
+                mock.patch.object(config, "BRIGHTDATA_SERP_ZONE", "z"), \
+                mock.patch.object(media.time, "sleep"), \
+                mock.patch.object(media.requests, "post", return_value=self._reply("")):
+            for q in "abc":
+                with self.assertRaises(ValueError):
+                    media._brightdata_serp(f"https://www.google.com/search?q={q}")
+            self.assertFalse(media.brightdata_available())
+
+
 class VisionRetriesCountOnce(unittest.TestCase):
     def setUp(self):
         vision.reset()

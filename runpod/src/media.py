@@ -209,24 +209,34 @@ def _brightdata_serp(google_url: str, timeout: int = 150) -> dict:
     if _BRIGHTDATA_REFUSED["why"]:
         raise ValueError(f"Bright Data off for this worker: {_BRIGHTDATA_REFUSED['why']}")
     last = ""
-    for attempt in range(3):
+    for attempt in range(2):
         if attempt:
             costs.record("serp.call")
-            time.sleep(2.0 if attempt == 1 else 5.0)
-        with _SERP_SLOTS:
-            r = requests.post(
-                "https://api.brightdata.com/request",
-                headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
-                         "Content-Type": "application/json"},
-                json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw", "url": google_url},
-                timeout=timeout)
+            time.sleep(2.0)
+        try:
+            with _SERP_SLOTS:
+                r = requests.post(
+                    "https://api.brightdata.com/request",
+                    headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
+                             "Content-Type": "application/json"},
+                    json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw", "url": google_url},
+                    timeout=timeout)
+        except requests.RequestException as e:
+            last = type(e).__name__
+            continue
+        text = r.text if isinstance(getattr(r, "text", ""), str) else ""
         refusal = r.status_code in (401, 402, 403) or (
-            r.status_code >= 400 and any(w in (r.text or "").lower()[:400] for w in _REFUSAL_WORDS))
+            r.status_code >= 400 and any(w in text.lower()[:400] for w in _REFUSAL_WORDS))
         if refusal:
             _BRIGHTDATA_REFUSED["why"] = f"HTTP {r.status_code}"
             print(f"[media] Bright Data refused the account (HTTP {r.status_code}); "
                   "image search falls back to DuckDuckGo for the rest of this worker", flush=True)
             raise ValueError(f"Bright Data SERP refused: HTTP {r.status_code}")
+        if "throttled" in text[:300].lower():
+            # "The request was auto-throttled due to low success rate": it will
+            # not get better within this job.
+            _brightdata_off("throttled")
+            raise ValueError("Bright Data SERP: throttled")
         if r.status_code == 429 or r.status_code >= 500:
             last = f"HTTP {r.status_code}"
             continue
@@ -234,12 +244,31 @@ def _brightdata_serp(google_url: str, timeout: int = 150) -> dict:
         try:
             body = r.json()
         except ValueError:
-            last = f"not JSON: {r.text[:100]!r}"
+            last = f"not JSON: {text[:100]!r}"
             continue
         if isinstance(body, dict):
+            with _CACHE_LOCK:
+                _BRIGHTDATA_FAILS["n"] = 0
             return body
         last = f"unexpected {type(body).__name__}"
+    with _CACHE_LOCK:
+        _BRIGHTDATA_FAILS["n"] += 1
+        failing = _BRIGHTDATA_FAILS["n"] >= 3
+    if failing:
+        _brightdata_off(f"3 calls in a row failed ({last})")
     raise ValueError(f"Bright Data SERP: {last}")
+
+
+# Consecutive failed SERP calls. Throttled or empty answers used to be retried
+# three times per search (up to 150 s each) all job long, behind a two-slot
+# semaphore: clip finding queued on a service that had stopped working.
+_BRIGHTDATA_FAILS = {"n": 0}
+
+
+def _brightdata_off(why: str) -> None:
+    if not _BRIGHTDATA_REFUSED["why"]:
+        _BRIGHTDATA_REFUSED["why"] = why
+        print(f"[media] Bright Data off for the rest of this job: {why}", flush=True)
 
 
 def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
@@ -2191,6 +2220,7 @@ def reset_cache():
         _USED_CHANNELS.clear()
         _GENERATED[0] = 0
     _BRIGHTDATA_REFUSED["why"] = ""     # a topped-up account works again on the next job
+    _BRIGHTDATA_FAILS["n"] = 0
     _IMAGE_NO_CREDIT["hit"] = False
     UNJUDGED_KEPT.update(n=0, rejected=0)
     _ytdlp.reset()

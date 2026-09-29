@@ -26,8 +26,9 @@ class GoogleVideosRetry(unittest.TestCase):
                 mock.patch.object(media.requests, "post", side_effect=[bad, bad, bad]) as post, \
                 mock.patch.object(media.time, "sleep"):
             self.assertEqual(media.search_google_videos("Lake Mead bathtub ring"), [])
-        # Three tries with a pause between (ten fan-out parts at once got 212 bad pages in one job).
-        self.assertEqual(post.call_count, 3)
+        # Two tries with a pause between: a third try on a failing service only
+        # held clip finding up (three failed calls in a row now turn it off).
+        self.assertEqual(post.call_count, 2)
 
     def test_flat_searches_ask_for_twenty_results(self):
         self.assertGreaterEqual(config.YT_SEARCH_RESULTS, 20)
