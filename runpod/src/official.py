@@ -57,7 +57,15 @@ _REGIONS = {"east coast": ("GOES19", "ne"), "northeast": ("GOES19", "ne"), "new 
             "mid-atlantic": ("GOES19", "ne"), "southeast": ("GOES19", "se"), "gulf coast": ("GOES19", "se"),
             "outer banks": ("GOES19", "se"), "long island": ("GOES19", "ne"), "midwest": ("GOES19", "umv"),
             "great lakes": ("GOES19", "cgl"), "pacific northwest": ("GOES18", "pnw"),
-            "southern california": ("GOES18", "psw"), "rockies": ("GOES19", "sr")}
+            "southern california": ("GOES18", "psw"), "rockies": ("GOES19", "sr"),
+            # Look-alikes of state names: the capital is not Washington state,
+            # and Los Angeles is not Louisiana.
+            "washington, d.c.": ("GOES19", "ne"), "washington d.c.": ("GOES19", "ne"),
+            "washington, dc": ("GOES19", "ne"), "washington dc": ("GOES19", "ne"),
+            "district of columbia": ("GOES19", "ne"), "los angeles": ("GOES18", "psw"),
+            "l.a.": ("GOES18", "psw")}
+# A whole place that is only a short name ("LA", "D.C.").
+_WHOLE = {"la": ("GOES18", "psw"), "dc": ("GOES19", "ne"), "d.c.": ("GOES19", "ne")}
 
 SATELLITE_WORDS = re.compile(
     r"\b(satellite|from space|storm system|cloud (?:swirl|band|shield)|low[- ]pressure|nor'?easter|hurricane|"
@@ -88,14 +96,18 @@ def sector_for(places) -> Optional[tuple]:
     """(satellite, sector) for the first place that names a US state or region."""
     for place in places or []:
         text = f" {str(place).lower()} "
+        if text.strip() in _WHOLE:
+            return _WHOLE[text.strip()]
         for name, where in _REGIONS.items():
             if name in text:
                 return where
         for name, where in sorted(_SECTOR.items(), key=lambda kv: -len(kv[0])):
             if re.search(rf"\b{re.escape(name)}\b", text):
                 return where
+        # A postal code only after a comma ("Denver, CO"): a bare "LA", "OR",
+        # "IN" or "ME" is a city, a word or a pronoun, not a state.
         for abbr, name in _ABBR.items():
-            if re.search(rf"(?:,\s*|\b){abbr}\b", str(place)):
+            if re.search(rf",\s*{abbr}\b", str(place)):
                 return _SECTOR.get(name)
     return None
 

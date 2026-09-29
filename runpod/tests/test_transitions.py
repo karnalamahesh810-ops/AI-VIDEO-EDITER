@@ -157,7 +157,7 @@ class Sounds(unittest.TestCase):
         scenes = self._scenes(["none", "glitch", "none", "none", "flash", "none", "none", "whip-pan",
                                "none", "none", "shake-cut", "none", "none", "film-burn"])
         picks = timeline.plan_transition_sfx(scenes, 30, [])
-        self.assertEqual([p["name"] for p in picks], ["glitch-pro", "flash-hit", "swipe", "boom-soft", "whoosh-soft"])
+        self.assertEqual([p["name"] for p in picks], ["glitch-pro", "flash-hit", "swipe", "hit-deep", "whoosh-soft"])
         cuts = [s["startFrame"] for s in scenes if s["transition"] != "none"]
         for p, cut in zip(picks, cuts):
             self.assertLessEqual(abs(p["startFrame"] + meta[p["name"]]["peak"] * 30 - cut), 1.0, p)
@@ -174,6 +174,49 @@ class Sounds(unittest.TestCase):
         self.assertEqual([p["name"] for p in picks], ["flash-hit"])
         far = [{"name": "pop", "startFrame": 90 + 40, "volume": 0.3}]         # 1.3 s after it
         self.assertEqual(len(timeline.plan_transition_sfx(scenes, 30, far)), 2)
+
+    def test_a_sound_still_playing_across_the_cut_silences_the_transition(self):
+        scenes = [{"startFrame": 0, "durationInFrames": 150, "transition": "none"},
+                  {"startFrame": 150, "durationInFrames": 90, "transition": "whip-pan"}]
+        # A typing run 106-192 starts over a second before the swipe (144) but
+        # is still clacking through it: the transition keeps quiet.
+        typing = [{"name": "keys", "startFrame": 106, "durationFrames": 86, "volume": 0.08}]
+        self.assertEqual(timeline.plan_transition_sfx(scenes, 30, typing), [])
+        # No planned length: the file's own (keys runs 5 s).
+        self.assertEqual(timeline.plan_transition_sfx(scenes, 30, [{"name": "keys", "startFrame": 60}]), [])
+        # Over before the transition's sound starts: the transition plays.
+        done = [{"name": "keys", "startFrame": 60, "durationFrames": 40, "volume": 0.08}]
+        self.assertEqual([p["name"] for p in timeline.plan_transition_sfx(scenes, 30, done)], ["swipe"])
+        # The renderer skips a cue's trimmed head, so it ends that much sooner.
+        trimmed = [{"name": "whoosh", "startFrame": 100, "durationFrames": 50, "trimFrames": 20}]
+        self.assertEqual([p["name"] for p in timeline.plan_transition_sfx(scenes, 30, trimmed)], ["swipe"])
+
+    def test_transition_sounds_follow_the_packs_intensity(self):
+        scenes = self._scenes(["none", "glitch", "none", "none", "film-burn"])
+        full = timeline.plan_transition_sfx(scenes, 30, [])
+        half = timeline.plan_transition_sfx(scenes, 30, [], 0.5)
+        self.assertEqual([p["name"] for p in half], [p["name"] for p in full])
+        for a, b in zip(full, half):
+            self.assertAlmostEqual(b["volume"], round(a["volume"] * 0.5, 3))
+        self.assertEqual(timeline.plan_transition_sfx(scenes, 30, [], 0.0), [])
+
+    def test_build_passes_the_packs_intensity(self):
+        seen = []
+        real = timeline.plan_transition_sfx
+
+        def spy(scenes, fps, others, intensity=1.0):
+            seen.append(intensity)
+            return real(scenes, fps, others, intensity)
+
+        n = 6
+        segments = [_seg(i) for i in range(n)]
+        shots = [{"query": f"q{i}", "visualType": "footage", "overlay": None, "subject": f"subject {i}"}
+                 for i in range(n)]
+        assets = [_asset("video", f"file:///tmp/{i}.mp4") for i in range(n)]
+        with mock.patch.object(config, "TREATMENTS", True), mock.patch.object(timeline, "plan_transition_sfx", spy):
+            timeline.build(segments, shots, assets, audio_url="file:///tmp/vo.mp3", audio_duration=n * 3.0,
+                           inp={"style": "news", "style_pack": "minimal"})
+        self.assertEqual(seen, [templates.style_packs()["minimal"]["sfxIntensity"]])
 
     def test_a_luma_fade_is_silent(self):
         picks = timeline.plan_transition_sfx(self._scenes(["none", "luma-fade", "none", "none", "fade"]), 30, [])
@@ -282,6 +325,24 @@ class CrossfadeRhythm(unittest.TestCase):
         self.assertIn('"crossfade"', types)
         self.assertIn("CROSSFADE_FRAMES = 15", main)
         self.assertEqual(timeline.CROSSFADE_FRAMES, 15)
+
+
+class RendererSafety(unittest.TestCase):
+    def test_a_looped_sound_fades_on_its_last_frames(self):
+        # Looped keys: the volume callback must count frames across every pass
+        # ("extend"), or the planned end fade never plays and the sound clicks off.
+        with open(os.path.join(REMOTION, "Main.tsx"), encoding="utf-8") as fh:
+            main = fh.read()
+        node = main[main.index("const sfxNode"):main.index("const CROSSFADE_FRAMES")]
+        self.assertIn("loop=", node)
+        self.assertIn('loopVolumeCurveBehavior="extend"', node)
+
+    def test_photo_looks_survive_a_short_overlay(self):
+        # interpolate() throws on [30, dur] when dur <= 30 (an overlay placed
+        # near the end of the video, or trimmed short in the editor).
+        with open(os.path.join(REMOTION, "components", "lib", "LibPhotoEditor.tsx"), encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertEqual(re.findall(r"\[\s*\d+\s*,\s*dur\s*\]", src), [])
 
 
 class SfxMetaCopy(unittest.TestCase):

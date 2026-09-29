@@ -64498,6 +64498,14 @@
   "GLITCH_PRO": {
    "file": "glitch-pro",
    "volume": 0.13
+  },
+  "HIT_DEEP": {
+   "file": "hit-deep",
+   "volume": 0.13
+  },
+  "KEYS_LAPTOP": {
+   "file": "keys-laptop",
+   "volume": 0.1
   }
  },
  "stylePacks": {

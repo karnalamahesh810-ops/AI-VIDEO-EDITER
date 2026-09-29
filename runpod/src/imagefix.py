@@ -21,7 +21,10 @@ import os
 import re
 import threading
 import urllib.parse
+import uuid
 from typing import Optional
+
+import requests
 
 from . import config
 from .storage import StorageError, download
@@ -35,6 +38,10 @@ MAX_SIDE = 3840
 _HOST_LIMIT = {"upload.wikimedia.org": 4, "commons.wikimedia.org": 4}
 _HOST_SLOTS: dict = {}
 _HOST_LOCK = threading.Lock()
+# Parallel scenes can pick the same picture, and media._download names the
+# file after its URL: one download + normalize per destination at a time, or
+# one thread truncates or re-downloads raw bytes over the other's JPEG.
+_DEST_LOCKS: dict = {}
 
 try:  # HEIC/HEIF (iPhone photos) when the plugin is installed
     import pillow_heif  # type: ignore
@@ -50,6 +57,18 @@ def _slot(url: str) -> threading.BoundedSemaphore:
         if sem is None:
             sem = _HOST_SLOTS[host] = threading.BoundedSemaphore(_HOST_LIMIT.get(host, 8))
         return sem
+
+
+def _dest_lock(path: str) -> threading.Lock:
+    key = os.path.abspath(path)
+    with _HOST_LOCK:
+        lock = _DEST_LOCKS.get(key)
+        if lock is None:
+            if len(_DEST_LOCKS) > 4096:         # a long-lived worker: drop idle ones
+                for k in [k for k, v in _DEST_LOCKS.items() if not v.locked()]:
+                    del _DEST_LOCKS[k]
+            lock = _DEST_LOCKS[key] = threading.Lock()
+        return lock
 
 
 def _browser_headers(url: str, page_url: str = "") -> dict:
@@ -89,10 +108,17 @@ def _curl_cffi_get(url: str, dest: str, page_url: str = "") -> str:
         raise StorageError(f"download failed: HTTP {r.status_code}")
     if "text/html" in (r.headers.get("Content-Type") or "").lower() or not r.content:
         raise StorageError("download returned an HTML error page")
-    tmp = dest + ".cffi.part"
-    with open(tmp, "wb") as fh:
-        fh.write(r.content)
-    os.replace(tmp, dest)
+    tmp = f"{dest}.{uuid.uuid4().hex}.cffi.part"
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(r.content)
+        os.replace(tmp, dest)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
     return dest
 
 
@@ -107,12 +133,16 @@ def fetch(url: str, dest: str, page_url: str = "") -> str:
     fingerprint.
     """
     if os.path.isfile(url):
-        return normalize(url)
-    with _slot(url):
-        got = _fetch_raw(url, dest, page_url)
-    # A file that arrived but is not a photo (an SVG logo, a corrupt file) is
-    # final: asking again returns the same bytes.
-    return normalize(got)
+        with _dest_lock(url):
+            return normalize(url)
+    with _dest_lock(dest):
+        if os.path.isfile(dest) and sniff(dest) in ("jpeg", "png"):
+            return normalize(dest)          # a parallel scene already fetched this picture
+        with _slot(url):
+            got = _fetch_raw(url, dest, page_url)
+        # A file that arrived but is not a photo (an SVG logo, a corrupt file) is
+        # final: asking again returns the same bytes.
+        return normalize(got)
 
 
 def _fetch_raw(url: str, dest: str, page_url: str) -> str:
@@ -121,6 +151,11 @@ def _fetch_raw(url: str, dest: str, page_url: str) -> str:
         return download(url, dest, timeout=60)
     except StorageError as e:
         errors.append(str(e))
+        # The host never answered: other headers or a Chrome TLS fingerprint
+        # cannot help, and each retry would hold a sourcing thread another
+        # minute. (A TLS or refused connection still goes on to curl_cffi.)
+        if isinstance(e.__cause__, requests.Timeout):
+            raise StorageError("picture download failed: " + str(e)[:400]) from e
     try:
         return download(url, dest, timeout=60, headers=_browser_headers(url, page_url))
     except StorageError as e:
@@ -186,6 +221,9 @@ def normalize(path: str) -> str:
         from PIL import Image, ImageOps
     except ImportError:  # pragma: no cover
         return path
+    # A unique name: parallel scenes may normalize the same file, and a
+    # shared temp would be truncated under the other's encoder.
+    tmp = f"{path}.{uuid.uuid4().hex}.norm.part"
     try:
         with Image.open(path) as im:
             im.seek(0)                                # first frame of a GIF/animated WebP
@@ -204,7 +242,6 @@ def normalize(path: str) -> str:
             if max(im.size) > MAX_SIDE:
                 s = MAX_SIDE / max(im.size)
                 im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
-            tmp = path + ".norm.part"
             if alpha:
                 im.convert("RGBA").save(tmp, "PNG", optimize=False)
             else:
@@ -214,6 +251,10 @@ def normalize(path: str) -> str:
     except StorageError:
         raise
     except Exception as e:  # noqa: BLE001 - an unreadable picture is not a picture
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
         raise StorageError(f"unreadable picture ({kind or 'unknown'}): {type(e).__name__}") from e
 
 

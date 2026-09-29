@@ -105,7 +105,7 @@ _TRANSITION_SFX = {
     "flash": ("flash-hit", 0.13), "chromatic-flash": ("flash-hit", 0.13),
     "whip-pan": ("swipe", 0.13), "zoom-punch": ("swipe", 0.12),
     "film-burn": ("whoosh-soft", 0.09), "light-leak": ("whoosh-soft", 0.07),
-    "blur-dissolve": ("whoosh-soft", 0.07), "shake-cut": ("boom-soft", 0.13),
+    "blur-dissolve": ("whoosh-soft", 0.07), "shake-cut": ("hit-deep", 0.13),
     # The older entrances an editor can still pick.
     "whip": ("swipe", 0.12), "punch": ("swipe", 0.1), "zoom": ("whoosh-soft", 0.07),
     "slide": ("whoosh-soft", 0.07), "mosaic": ("glitch-short", 0.09),
@@ -116,7 +116,7 @@ _TRANSITION_SFX_CLEARANCE = 1.0
 # Used when public/sfx/sfx_meta.json cannot be read (duration, peak seconds).
 _SFX_META_FALLBACK = {
     "glitch-short": {"duration": 0.5, "peak": 0.175}, "flash-hit": {"duration": 0.62, "peak": 0.075},
-    "glitch-pro": {"duration": 0.48, "peak": 0.01},
+    "glitch-pro": {"duration": 0.48, "peak": 0.01}, "hit-deep": {"duration": 2.319, "peak": 0.02},
     "swipe": {"duration": 0.44, "peak": 0.195}, "whoosh-soft": {"duration": 1.12, "peak": 0.419},
     "boom-soft": {"duration": 1.71, "peak": 0.309},
 }
@@ -304,16 +304,32 @@ def _plan_crossfades(shots: List[dict], durations: Optional[List[int]] = None) -
     return out
 
 
-def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict]) -> List[dict]:
+def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
+                        intensity: float = 1.0) -> List[dict]:
     """
     A quiet sound for each transition, placed so its loudest point lands on
-    the cut. Skipped when another sound starts within a second of it: a
-    graphic's own sound on that beat wins, and two sounds never stack.
+    the cut, at the style pack's sfxIntensity like the graphics' sounds.
+    Skipped when another sound starts within a second of it or is still
+    playing across it (a typing run, a count, a riser): a graphic's own
+    sound on that beat wins, and two sounds never stack.
     """
     meta = sfx_meta()
     have = templates.sfx_files()
     near = int(round(_TRANSITION_SFX_CLEARANCE * fps))
-    taken = [int(o.get("startFrame", 0)) for o in others]
+    try:
+        level = max(0.0, float(intensity))
+    except (TypeError, ValueError):
+        level = 1.0
+    busy = []   # (start, end) of every sound already planned, as the renderer plays it
+    for o in others:
+        s = int(o.get("startFrame", 0))
+        d = o.get("durationFrames")
+        if not isinstance(d, (int, float)) or d <= 0:
+            m = meta.get(o.get("name")) or _SFX_META_FALLBACK.get(o.get("name")) or {}
+            d = math.ceil(float(m.get("duration", 1.0)) * fps)
+        # Main.tsx plays a cue for durationFrames minus its skipped head (trimFrames).
+        d = int(math.ceil(d)) - int(o.get("trimFrames") or 0)
+        busy.append((s, s + max(1, d)))
     picks = []
     for sc in scenes:
         t = sc.get("transition") or "none"
@@ -327,12 +343,17 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict]) -> Lis
         start = cut - int(round(float(m.get("peak", 0.0)) * fps))
         if cut <= 0 or start < 0:
             continue
-        if any(abs(o - start) <= near or abs(o - cut) <= near for o in taken):
+        dur = max(1, int(math.ceil(float(m.get("duration", 1.0)) * fps)))
+        end = start + dur
+        if any(abs(s - start) <= near or abs(s - cut) <= near or (s < end and start < e)
+               for s, e in busy):
             continue
-        picks.append({"name": name, "startFrame": start, "volume": volume,
-                      "durationFrames": max(1, int(math.ceil(float(m.get("duration", 1.0)) * fps))),
-                      "kind": "transition"})
-        taken.append(start)
+        vol = round(min(0.2, volume * level), 3)
+        if vol <= 0.005:
+            continue
+        picks.append({"name": name, "startFrame": start, "volume": vol,
+                      "durationFrames": dur, "kind": "transition"})
+        busy.append((start, end))
     return picks
 
 # How long each graphic wants to be on screen, in seconds, independent of the
@@ -682,7 +703,8 @@ def build(segments: List[Segment], shots: List[dict],
         treatment_counts = planned["counts"]
     # Each transition's own quiet sound, peaking on its cut, unless a
     # graphic's sound is already there.
-    sfx_list = sorted(list(sfx_list) + plan_transition_sfx(scenes, fps, sfx_list),
+    sfx_list = sorted(list(sfx_list) + plan_transition_sfx(
+                          scenes, fps, sfx_list, (pack or {}).get("sfxIntensity", 1.0)),
                       key=lambda s: int(s.get("startFrame", 0)))
 
     missing = sum(1 for a in assets if a is None)

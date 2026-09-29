@@ -325,6 +325,17 @@ class Density(unittest.TestCase):
         self.assertTrue(normal)
         self.assertFalse([o for o in normal if o.get("_group") == "filler"])
 
+    def test_a_figure_that_never_showed_does_not_hold_back_the_next(self):
+        # The date card takes the line and "3 feet" (not a clear figure) finds no
+        # room: the 45 s window starts only when a figure lands, so the clear
+        # percent 18 s later still shows.
+        texts = ["The storm kept moving east."] * 12
+        texts[2] = "On September 15, 3 feet of snow fell in Worcester."
+        texts[5] = "By then 40% of Boston had lost power."
+        out = weather_plan(texts, "minimal", kind="news", mapped=False)["overlays"]
+        self.assertFalse([o for o in out if o.get("value") == 3.0], out)
+        self.assertTrue([o for o in out if o.get("value") == 40.0], [o["template"] for o in out])
+
 
 class ForecastMap(unittest.TestCase):
     def test_a_weather_story_forecast_line_gets_the_model_map(self):
@@ -351,3 +362,132 @@ class ForecastMap(unittest.TestCase):
         out = treatments.plan(segs, shots, scenes, FPS, total, brief, treatments.pack_for(brief, "weather"),
                               timeline._OVERLAY_SECONDS)
         self.assertFalse([o for o in out["overlays"] if str(o.get("template", "")).startswith("LIB_WX_")])
+
+    def test_a_wind_line_never_gets_the_rain_map_and_the_other_way_round(self):
+        # A wind line every 80 s: once the wind map is inside LOOK_GAP the rain
+        # bands were the "fresh" forecast look - a radar titled WIND GUSTS.
+        from unittest import mock
+        from src import config
+        for line, own, other in (("Wind gusts up to 60 mph will hit the coast tonight.", "LIB_WX_WIND_FLOW",
+                                  "LIB_WX_RAIN_BANDS"),
+                                 ("Heavy rain will soak the coast tonight.", "LIB_WX_RAIN_BANDS", "LIB_WX_WIND_FLOW")):
+            for density in ("rich", "minimal"):
+                segs, shots, scenes, brief = build(80)
+                brief["kind"] = "weather"
+                shots[0] = {"subject": "Boston", "overlay": {"type": "map", "text": "Boston", "locations": BOSTON}}
+                for i in range(1, 80, 16):
+                    segs[i] = Segment(text=line, start=segs[i].start, end=segs[i].end)
+                    shots[i] = {"subject": "Boston"}
+                total = scenes[-1]["startFrame"] + scenes[-1]["durationInFrames"]
+                with mock.patch.object(config, "GRAPHICS_DENSITY", density):
+                    out = treatments.plan(segs, shots, scenes, FPS, total, brief,
+                                          treatments.pack_for(brief, "weather"), timeline._OVERLAY_SECONDS)
+                wx = [o for o in out["overlays"] if str(o.get("template", "")).startswith("LIB_WX_")]
+                self.assertTrue(wx, (line, density))
+                self.assertEqual({o["template"] for o in wx}, {own}, (line, density))
+                for o in wx:
+                    self.assertEqual(o["text"], {"LIB_WX_WIND_FLOW": "WIND GUSTS",
+                                                 "LIB_WX_RAIN_BANDS": "HEAVY RAIN"}[o["template"]])
+                self.assertFalse([o for o in wx if o["template"] == other])
+
+    def test_a_storm_name_is_not_a_forecast(self):
+        # "Nor'easter" named the storm, not a forecast: the count stays and no
+        # wind map covers the line.
+        texts = ["It sits just outside Boston."] + ["The storm kept moving east."] * 5
+        texts[2] = "The nor'easter left 12,000 people without power in Massachusetts."
+        for density in ("rich", "minimal"):
+            out = weather_plan(texts, density, kind="news")["overlays"]
+            self.assertFalse([o for o in out if str(o.get("template", "")).startswith("LIB_WX_")], density)
+            self.assertTrue([o for o in out if o.get("value") == 12000.0], density)
+
+    def test_the_line_keeps_its_figure_when_the_map_does_not_land(self):
+        texts = ["It sits just outside Boston."] + ["The storm kept moving east."] * 5
+        texts[2] = "Up to 12 inches of rain could fall by Friday."
+        for density in ("rich", "minimal"):
+            # The map lands: its legend stands for the rainfall, no separate counter.
+            out = weather_plan(texts, density)["overlays"]
+            self.assertEqual([o["template"] for o in out if str(o.get("template", "")).startswith("LIB_WX_")],
+                             ["LIB_WX_RAIN_BANDS"], density)
+            self.assertFalse([o for o in out if o.get("value") == 12.0], density)
+            # No forecast look fits: the 12 inches still show.
+            out = weather_plan(texts, density, no_forecast_looks=True)["overlays"]
+            self.assertFalse([o for o in out if str(o.get("template", "")).startswith("LIB_WX_")], density)
+            self.assertTrue([o for o in out if o.get("value") == 12.0], density)
+        # A count on a wind line is not the map's to carry: it shows, the map follows.
+        texts[2] = "Wind gusts up to 60 mph knocked out power to 12,000 people."
+        out = weather_plan(texts, "rich")["overlays"]
+        self.assertTrue([o for o in out if o.get("value") == 12000.0])
+
+
+BOSTON = [{"label": "Boston, MA", "lat": 42.36, "lon": -71.06}]
+
+
+def weather_plan(texts, density="rich", kind="weather", mapped=True, no_forecast_looks=False):
+    """A plan of 6 s lines, the first one mapped (Boston), at a graphics density."""
+    from unittest import mock
+    from src import config
+    segs = [Segment(text=t, start=i * 6.0, end=(i + 1) * 6.0) for i, t in enumerate(texts)]
+    shots = [{"subject": "Boston"} for _ in texts]
+    if mapped:
+        shots[0] = {"subject": "Boston", "overlay": {"type": "map", "text": "Boston", "locations": BOSTON}}
+    scenes = [{"id": f"s{i}", "startFrame": i * 180, "durationInFrames": 180,
+               "media": {"type": "video", "url": f"https://x/{i}"}, "transition": "none", "motion": "none",
+               "effect": "none"} for i in range(len(texts))]
+    brief = {"kind": kind, "hookBeats": [], "sections": []}
+    real_fits = treatments.look_fits
+
+    def fits(tid, text):
+        return not (no_forecast_looks and tid.startswith("LIB_WX_")) and real_fits(tid, text)
+    with mock.patch.object(config, "GRAPHICS_DENSITY", density), mock.patch.object(treatments, "look_fits", fits):
+        return treatments.plan(segs, shots, scenes, FPS, len(texts) * 180, brief, treatments.pack_for(brief, "weather"),
+                               timeline._OVERLAY_SECONDS)
+
+
+class PlacesMaps(unittest.TestCase):
+    """A map look drawn from places renders nothing without them: never planned so."""
+
+    @staticmethod
+    def _needs_places(tid):
+        t = templates.get(tid) or {}
+        return t.get("category") == "MAPS" and "locations" in (t.get("props") or {})
+
+    def test_three_places_with_values_never_get_an_empty_map(self):
+        # "Denver 16 inches, Boulder 10, Aspen 8": a compare-values line with no
+        # coordinates; the rotation used to hand it the choropleth (it returned null).
+        for n in range(8):
+            texts, shots, scenes = [], [], []
+            segs = []
+            for i in range(120):
+                if i % 3 == 0:
+                    t = (f"Denver saw {10 + (i + n) % 9} inches, Boulder {5 + n % 4} inches, "
+                         f"and Aspen {1 + i % 4} inches of snow.")
+                else:
+                    t = ("The storm kept moving east.", "Crews worked all night.", "Residents waited for news.")[i % 3]
+                segs.append(Segment(text=t, start=i * 5.0, end=(i + 1) * 5.0))
+                shots.append({"subject": "Colorado"})
+                scenes.append({"id": f"s{i}", "startFrame": i * 150, "durationInFrames": 150,
+                               "media": {"type": "video", "url": f"https://x/{i}.mp4"}, "transition": "none",
+                               "motion": "none", "effect": "none"})
+            brief = {"kind": "news", "hookBeats": [], "sections": []}
+            out = treatments.plan(segs, shots, scenes, FPS, 120 * 150, brief, treatments.pack_for(brief, "news"),
+                                  timeline._OVERLAY_SECONDS)
+            empty = [(o["startFrame"] / FPS, o["template"]) for o in out["overlays"]
+                     if self._needs_places(o["template"]) and not o.get("locations")]
+            self.assertFalse(empty, n)
+
+    def test_full_screen_and_cue_picks_skip_maps_without_places(self):
+        pack = treatments.pack_for({"kind": "news"}, "news")
+        text = "Denver saw 16 inches, Boulder 10 inches, and Aspen 8 inches of snow."
+        seg = Segment(text=text, start=0.0, end=5.0)
+        # Every other compare-values look used already: the choropleth is the least used.
+        counts = {t["id"]: 5 for t in templates.for_cue("compare-values", "news")}
+        counts["LIB_MV_CHOROPLETH_LIFT"] = 0
+        anim = treatments.animation_for(seg, {"subject": "Colorado"}, pack, None, counts=dict(counts))
+        self.assertTrue(anim)
+        self.assertFalse(self._needs_places(anim["template"]), anim["template"])
+        tid = treatments._template_for_cue("compare-values", pack, set(), dict(counts), text=text)
+        self.assertFalse(self._needs_places(tid), tid)
+        # With places the map look is fine.
+        tid = treatments._template_for_cue("compare-values", pack, set(), dict(counts), text=text,
+                                           props={"locations": BOSTON})
+        self.assertEqual(tid, "LIB_MV_CHOROPLETH_LIFT")

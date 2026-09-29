@@ -259,9 +259,14 @@ def rate_sheet(sheet_b64: str, count: int, intent: str, subject_type: str = "") 
     try:
         from PIL import Image
         sheet = Image.open(io.BytesIO(base64.b64decode(sheet_b64))).convert("RGB")
-        cols = 5 if count >= 5 else count
-        rows = (count + cols - 1) // cols
-        tw, th = sheet.width // cols, sheet.height // rows
+        # The grid moments._build_contact_sheet draws: always 5 columns of
+        # fixed 240x135 tiles packed from the top left, however few tiles
+        # (count) made it onto the sheet. Never derive it from count: a short
+        # window or a failed fragment would slice across real tiles.
+        from .moments import _TILE_H, _TILE_W
+        cols = 5
+        tw = sheet.width // cols
+        th = max(1, round(tw * _TILE_H / _TILE_W))
         tiles = []
         for n in range(count):
             r, c = divmod(n, cols)

@@ -512,6 +512,11 @@ def chunks(total_frames: int, fps: int, parts: int) -> List[tuple]:
     return [(a, min(total_frames, a + size) - 1) for a in range(0, total_frames, size)]
 
 
+# Frames a scene plays on under the next scene's "crossfade" (Main.tsx
+# CROSSFADE_FRAMES, timeline.CROSSFADE_FRAMES).
+CROSSFADE_FRAMES = 15
+
+
 def _media_ref(m: dict) -> str:
     """What identifies a scene's media across renders: its storage path, not its signed URL."""
     st = m.get("storage") or {}
@@ -525,21 +530,27 @@ def chunk_hash(doc: dict, a: int, b: int) -> str:
     A fingerprint of everything that draws frames a..b: the scenes and
     overlays that overlap the range (media by storage path, so a re-signed
     URL does not count as a change), the caption settings and the frame size.
+    A scene counts over the frames it really draws: it plays on under the
+    next scene's crossfade, and the next scene's cut transition draws its
+    out half over this scene's last frames.
     Two renders whose chunk hashes match can share the chunk file.
     """
-    def overlaps(item: dict) -> bool:
+    def overlaps(item: dict, extra: int = 0) -> bool:
         s0 = int(item.get("startFrame") or 0)
-        s1 = s0 + int(item.get("durationInFrames") or 0) - 1
+        s1 = s0 + int(item.get("durationInFrames") or 0) - 1 + extra
         return s0 <= b and s1 >= a
 
+    scene_list = doc.get("scenes") or []
     scenes = []
-    for sc in doc.get("scenes") or []:
-        if not overlaps(sc):
+    for i, sc in enumerate(scene_list):
+        nxt = (scene_list[i + 1] if i + 1 < len(scene_list) else None) or {}
+        if not overlaps(sc, CROSSFADE_FRAMES if nxt.get("transition") == "crossfade" else 0):
             continue
         m = sc.get("media") or {}
         scenes.append({k: sc.get(k) for k in ("id", "startFrame", "durationInFrames", "text",
                                                 "motion", "transition", "effect", "treatment", "frame")}
-                      | {"media": [m.get("type"), _media_ref(m), m.get("sourceStart"), m.get("sourceEnd")],
+                      | {"nextTransition": nxt.get("transition"),
+                         "media": [m.get("type"), _media_ref(m), m.get("sourceStart"), m.get("sourceEnd")],
                          "words": [(w.get("text"), w.get("start"), w.get("end")) for w in sc.get("words") or []]})
     overlays = [o for o in doc.get("overlays") or [] if overlaps(o)]
     payload = {"fps": doc.get("fps"), "width": doc.get("width"), "height": doc.get("height"),

@@ -59,6 +59,7 @@ BASE_VOLUME = 0.15
 MAX_VOLUME = 0.2
 VOLUME = {
     "keys": 0.1, "typewriter": 0.1, "typing text": 0.1, "keys-mech": 0.1, "keys-type": 0.1,
+    "keys-laptop": 0.1, "hit-deep": 0.13,
     "glitch-pro": 0.13,
     "count-tick": 0.12,
     "boom-soft": 0.13, "impact": 0.13, "flash-hit": 0.13,
@@ -70,12 +71,12 @@ COUNT_SOUND = "count-tick"
 # A look that does not type must not clack: a typing sound left on it (the
 # old registry gave the kicker's mask rise a typewriter) becomes one click.
 NOT_TYPING_SOUND = "click"
-_TYPING_NAMES = {"keys", "typewriter", "typing text", "keys-mech", "keys-type"}
+_TYPING_NAMES = {"keys", "typewriter", "typing text", "keys-mech", "keys-type", "keys-laptop"}
 # The owner's own keyboard recordings (2026-09-29) lead; typing looks take
 # them in turn so two typed lines never sound the same. "keys" is the fallback.
-TYPING_TAKES = ["keys-type", "keys-mech", "keys"]
+TYPING_TAKES = ["keys-type", "keys-laptop", "keys-mech", "keys"]
 # Sounds with no single hit: they run for the action and start with it.
-_CONTINUOUS = {"keys", "typewriter", "typing text", "count-tick", "keys-mech", "keys-type"}
+_CONTINUOUS = {"keys", "typewriter", "typing text", "count-tick", "keys-mech", "keys-type", "keys-laptop"}
 # The only stand-in allowed for a missing file: the older typing recording.
 _FALLBACK = {"keys": "typewriter"}
 
@@ -85,8 +86,9 @@ VARIANTS = {
     "whoosh-soft": ["swipe", "whoosh"],
     "swipe": ["whoosh-soft", "whoosh"],
     "map-whoosh": ["whoosh-soft", "swipe"],
-    "impact": ["boom-soft"],
-    "boom-soft": ["impact"],
+    "impact": ["hit-deep", "boom-soft"],
+    "boom-soft": ["hit-deep", "impact"],
+    "hit-deep": ["boom-soft", "impact"],
     "flash-hit": ["boom-soft"],
     "pop": ["click", "tick"],
     "click": ["tick", "pop"],
@@ -125,6 +127,11 @@ PLAYS_OWN_PREFIXES = ("LIB_CC_", "LIB_BM_")
 
 # Built-in looks that type, for registries built before the "types" flag.
 _TYPING_TEMPLATES = {"TEXT_TYPEWRITER_V1", "TEXT_QUESTION_V1", "TEXT_MEMO_V1", "TEXT_BAR_TITLE_V1"}
+# Built-in looks that type over a fixed eased window, whatever the text length
+# (TextGraphics MemoBox: typed(fps*0.2, fps*1.2); BarTitle: typed(fps*0.3, fps*1.1)):
+# (first typing frame, frames the sound runs) at 30 fps. The ease-out puts
+# nearly all the text on screen early, so the sound stops a little before the window ends.
+_FIXED_TYPING = {"memo-box": (6, 30), "bar-title": (9, 27)}
 _DATE_CUES = {"date", "time-of-day", "datetime"}
 _COUNT_CUES = {"percent", "big-number", "count", "money"}
 _RANK = {"high": 0, "medium": 1, "low": 2}
@@ -299,20 +306,24 @@ def _candidate(i: int, overlay: dict, fps: int, spans: List[tuple]) -> Optional[
         if not text.strip():
             return None
         name, kind = TYPING_SOUND, "typing"
-        begin = _scale(TYPE_START, fps)
+        fixed = _FIXED_TYPING.get(t.get("component") or "")
+        begin = _scale(fixed[0] if fixed else TYPE_START, fps)
         if end - start <= begin:
             return None
         # Never type on after the look has left the screen.
-        length = min(typing_frames(text, fps), end - start - begin)
+        span = _scale(fixed[1], fps) if fixed else typing_frames(text, fps)
+        length = min(span, end - start - begin)
     elif not explicit and _counts(t, overlay) and exists(COUNT_SOUND):
         name, kind = COUNT_SOUND, "count"
         count = int(round(COUNT_SECONDS * fps))
-        if sfx_at > 0:
-            begin = max(0, sfx_at - count)
-            length = max(1, sfx_at - begin)
+        if sfx_at >= count:
+            # sfxAt marks where the count lands: the ticks run up to it.
+            begin = sfx_at - count
         else:
-            begin = _scale(TYPE_START, fps)
-            length = count
+            # sfxAt is an entrance hit (the corner stat clicks in at 6, then
+            # counts) or absent: the count starts on it or at the usual start.
+            begin = max(sfx_at, _scale(TYPE_START, fps))
+        length = count
     elif name in _TYPING_NAMES and not explicit:
         # A typing sound on a look that does not type does not match it.
         name = NOT_TYPING_SOUND
@@ -354,9 +365,16 @@ def _select(cands: List[dict], gap: int) -> List[dict]:
     return picks
 
 
+# The owner's own recordings lead where they fit (2026-09-29): the deep hit
+# is the first choice for every impact / soft boom (date slams, bold cards).
+_PREFERRED = {"impact": "hit-deep", "boom-soft": "hit-deep"}
+
+
 def _vary(name: str, hit: int, last_used: Dict[str, int], window: int, style: str) -> Optional[str]:
     """The file to play: `name`, or a sibling when `name` was just heard."""
     first = name
+    if exists(_PREFERRED.get(name, "")):
+        first = _PREFERRED[name]
     if style in _SOFT_STYLES and exists(_SOFTER.get(name, "")):
         first = _SOFTER[name]
     order = [first] + [x for x in [name] + VARIANTS.get(first, []) + VARIANTS.get(name, []) if x != first]

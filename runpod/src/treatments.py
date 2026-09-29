@@ -44,11 +44,16 @@ QUIET_MAX = 18.0        # after this long with plain footage a light label is al
 MINIMAL_FIGURE_GAP = 45.0
 # The forecast-model map (LIB_WX_*): at most one per this many seconds.
 FORECAST_GAP = 75.0
+# (A storm's name is not a forecast: "the nor'easter left 12,000 people without
+# power" is a count, and a news story names its nor'easter on every line.)
 _FORECAST = re.compile(r"\b(gusts?|wind speeds?|winds? (?:of|up to|near)|forecast|storm (?:track|system|centre|center)|"
                        r"low[- ]pressure|inches of rain|rainfall|heavy rain|snowfall|the (?:storm|system) (?:moves|tracks|"
-                       r"will move|is moving|pushes)|nor'?easter)\b", re.I)
+                       r"will move|is moving|pushes))\b", re.I)
 _FORECAST_RAIN = re.compile(r"\b(rain|rainfall|inches|flood(?:ing)? rain|snow|downpours?)\b", re.I)
 _FORECAST_WIND = re.compile(r"\b(wind|gusts?|mph)\b", re.I)
+# The figures a forecast map's legend stands for: a wind speed, a rainfall.
+_WX_UNITS = {"MPH", "KM/H", "KPH", "KNOTS", "IN", "INCHES", '"'}
+_PER_HOUR = re.compile(r"\b(?:miles|kilometers|kilometres) (?:per|an) hour\b", re.I)
 FAMILY_GAP = 45.0       # the same category is not repeated within this
 SFX_GAP = 12.0          # seconds between two sounds
 HIGH_GAP = 5.0          # a chapter, a number or a map may follow anything after this
@@ -1149,6 +1154,22 @@ def look_fits(template_id: str, text: str) -> bool:
     return rx is None or bool(rx.search(text or ""))
 
 
+def _needs_places(t: dict, props: Optional[dict]) -> bool:
+    """A map look drawn from places, asked for with none: it would render nothing."""
+    return (t.get("category") == "MAPS" and "locations" in (t.get("props") or {})
+            and not (props or {}).get("locations"))
+
+
+def _weather_figure(req: dict, text: str) -> bool:
+    """A must-show wind speed or rainfall the forecast map's legend stands for."""
+    if req.get("figure_key") is None or not (_FORECAST_WIND.search(text) or _FORECAST_RAIN.search(text)):
+        return False
+    unit = str((req.get("props") or {}).get("suffix") or "").upper().strip()
+    if unit in ("MI", "KM") and _PER_HOUR.search(text):
+        unit = "MPH"
+    return unit in _WX_UNITS
+
+
 def date_looks(cue: str = "date", style: str = "") -> List[dict]:
     """The looks that draw a date, a time or both, the two proven date looks first."""
     ranked = {tid: n for n, tid in enumerate(DATE_LOOKS)}
@@ -1158,7 +1179,8 @@ def date_looks(cue: str = "date", style: str = "") -> List[dict]:
 
 
 def _template_for_cue(cue: str, pack: dict, used_recently: set,
-                      counts: Optional[Dict[str, int]] = None, text: str = "") -> Optional[str]:
+                      counts: Optional[Dict[str, int]] = None, text: str = "",
+                      props: Optional[dict] = None) -> Optional[str]:
     if cue == "route":
         return _least_used([pack["route"], "MAP_TRACE_V1"], counts)
     if cue == "place":
@@ -1171,7 +1193,7 @@ def _template_for_cue(cue: str, pack: dict, used_recently: set,
         options = templates.for_cue(cue, pack.get("id", ""), exclude=used_recently)
     if cue == "typewriter":
         options = [t for t in options if templates.types(t)]
-    options = [t for t in options if look_fits(t["id"], text)]
+    options = [t for t in options if look_fits(t["id"], text) and not _needs_places(t, props)]
     if cue in SINGLE_FIGURE_CUES or (cue in TEXT_CUES and cue != "chapter"):
         # One figure, or words: on the clip, never a card that covers it.
         options = [t for t in options if "own-backdrop" not in (t.get("tags") or [])] or options
@@ -1510,26 +1532,30 @@ class _Planner:
         forecast = None
         if self.last_locations and at - self.last_forecast >= FORECAST_GAP                 and self.brief.get("kind") in ("weather", "disaster", "news") and _FORECAST.search(text):
             rain = bool(_FORECAST_RAIN.search(text)) and not _FORECAST_WIND.search(text)
-            forecast = {"cues": ["forecast-rain" if rain else "forecast-wind", "forecast"], "group": "map",
+            # Only the view the title names: a wind line never gets the rain bands.
+            forecast = {"cues": ["forecast-rain" if rain else "forecast-wind"], "group": "map",
                         "emphasis": "high", "mode": "must",
                         "props": {"text": "HEAVY RAIN" if rain else "WIND GUSTS",
                                   "locations": self.last_locations[:5]}}
-            musts = [r for r in musts if r.get("figure_key") is None]
-            repeated = None
         if minimal:
             # A news compilation shows almost no graphics: the date, a figure
-            # now and then, maps. No person cards, no text looks.
+            # now and then, maps. No person cards, no text looks. (The figure
+            # window starts when a figure lands: _place.)
             kept = []
             for req in musts:
                 if req.get("group") == "person":
                     continue
-                if req.get("figure_key") is not None:
-                    if at - self.last_min_figure < MINIMAL_FIGURE_GAP:
-                        continue
-                    self.last_min_figure = at
+                if req.get("figure_key") is not None and at - self.last_min_figure < MINIMAL_FIGURE_GAP:
+                    continue
                 kept.append(req)
             musts = kept
             repeated = None
+        # The wind speed or rainfall waits for the forecast map, and shows only
+        # when the map does not land. Any other figure keeps its place.
+        weather_figs: List[dict] = []
+        if forecast:
+            weather_figs = [r for r in musts if _weather_figure(r, text)]
+            musts = [r for r in musts if not _weather_figure(r, text)]
         for req in musts:
             if len(placed) >= 2:
                 break
@@ -1541,6 +1567,13 @@ class _Planner:
             if got:
                 placed.append(got)
                 self.last_forecast = at
+                weather_figs = []
+        for req in weather_figs:
+            if len(placed) >= 2:
+                break
+            got = self._request(req, seg, scene, req.get("mode", "must"))
+            if got:
+                placed.append(got)
         # 2. The director's proposal, through the same rotation. A map may follow
         #    a must-show graphic on the same line when there is room.
         if hint:
@@ -2016,6 +2049,8 @@ class _Planner:
         fps = self.fps
         at = float(seg.start)
         props = dict(props or {})
+        if _needs_places(t, props):
+            return None
         motion = props.pop("_motion", "")
         key = props.pop("_key", "")
         resolved = templates.resolve(t["id"], style=self.style, entrance=motion, props=props, pack=self.pack)
@@ -2099,6 +2134,10 @@ class _Planner:
             self.phrases[str(props["text"]).upper()] = at
         if req.get("figure_key"):
             self.seen_figures[req["figure_key"]] = at
+            if self.density == "minimal":
+                # A news compilation's one figure per MINIMAL_FIGURE_GAP, from
+                # the figure that showed (not one that was only tried).
+                self.last_min_figure = at
         return {"idx": idx, "t": t, "cue": cue or "", "sfx": sfx, "klass": klass,
                 "emphasis": req.get("emphasis") or t["emphasis"]}
 
@@ -2525,7 +2564,8 @@ def animation_for(seg, shot: dict, pack: dict, brief: Optional[dict],
             options = []
             for name in [cue["cue"]] + (CUE_FALLBACK.get(cue["cue"], []) if cue["cue"] == "count" else []):
                 options = [t for t in templates.for_cue(name, pack.get("id", ""))
-                           if t["kind"] in CARD_KINDS and look_fits(t["id"], seg.text or "")]
+                           if t["kind"] in CARD_KINDS and look_fits(t["id"], seg.text or "")
+                           and not _needs_places(t, cue["props"])]
                 if options:
                     break
             if not options:

@@ -355,7 +355,7 @@ const HighlightBox: Look = ({ overlay }) => {
   const by = Math.max(150 * k, Math.min(H - 110 * k - bh, ay * H - bh / 2));
   const draw = ramp(frame, 16, 16, inOut);
   const dim = ramp(frame, 18, 16, inOut) * (1 - q);
-  const push = interpolate(frame, [30, dur], [0, 1], { ...clamp, easing: inOut });
+  const push = interpolate(frame, [30, Math.max(31, dur)], [0, 1], { ...clamp, easing: inOut });
   const settle = ramp(frame, 0, 18);
   const tag = fitLines(cap(overlay.text), bw / k - 40, [36, 32, 30], 0.5, 1);
   const tagIn = ramp(frame, 28, 14);
@@ -468,7 +468,7 @@ const FrameDrop: Look = ({ overlay, accent }) => {
   const bt = clamp01((frame - T) / 9);
   const bump = frame >= T ? Math.sin(bt * Math.PI) * (1 - bt) : 0;
   const settle = ramp(frame, T, 22);
-  const push = interpolate(frame, [18, dur], [0, 1], { ...clamp, easing: inOut });
+  const push = interpolate(frame, [18, Math.max(19, dur)], [0, 1], { ...clamp, easing: inOut });
   const PW = 1000 * k, PH = 600 * k, MAT = 44 * k, FR = 28 * k;
   const FW = PW + 2 * (MAT + FR), FH = PH + 2 * (MAT + FR);
   const rot = -8 * fall - 2.2 + 0.8 * settle;
@@ -625,7 +625,7 @@ const PunchIn: Look = ({ overlay, accent }) => {
   const src = photoOf(overlay);
   if (!src) return null;
   const punch = ramp(frame, 0, 10, expoOut);
-  const driftP = interpolate(frame, [8, dur], [0, 1], { ...clamp, easing: drift });
+  const driftP = interpolate(frame, [8, Math.max(9, dur)], [0, 1], { ...clamp, easing: drift });
   const s = 1.55 - 0.45 * punch + 0.07 * driftP;
   const blurAmt = 1 - ramp(frame, 0, 9);
   const dir = hashStr(src) % 2 ? 1 : -1;

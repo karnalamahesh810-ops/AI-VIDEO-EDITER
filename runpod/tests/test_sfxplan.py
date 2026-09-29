@@ -27,10 +27,13 @@ REG = {t["id"]: t for t in [
     T("LOOK_LOW", "pop", emphasis="low"),
     T("TYPE_LOOK", "none", types=True),
     T("TEXT_TYPEWRITER_V1", "typewriter", component="typewriter"),
+    T("TEXT_MEMO_V1", "typewriter", component="memo-box"),
+    T("TEXT_BAR_TITLE_V1", "typewriter", component="bar-title"),
     T("KICKER", "typewriter", types=False),
     T("DATE_LOOK", "impact", cues=["date"], emphasis="high", sfxAt=20),
     T("COUNT_LOOK", "pop", cues=["percent"]),
     T("COUNT_HIT", "pop", cues=["big-number"], sfxAt=45),
+    T("COUNT_CLICK_IN", "click", cues=["big-number"], sfxAt=6, types=False),
     T("SILENT", "none"),
     T("MISSING", "no-such-sound"),
     T("LIB_CC_TICK_BARS", "pop"), T("LIB_BM_STATE_CALLOUT", "map-whoosh"),
@@ -138,6 +141,20 @@ class Typing(SfxPlanTest):
         [s] = sfxplan.plan([ov("TEXT_TYPEWRITER_V1", 0, 90, text="Why?")], 30, 1.0)
         self.assertEqual((s["name"], s["startFrame"], s["durationFrames"]), ("keys", 6, 8))
 
+    def test_fixed_window_typing_looks_stop_when_their_text_is_typed(self):
+        # MemoBox types frames 6-42 and BarTitle 9-42 at 30 fps whatever the
+        # text length; the keys must not clack on after the last letter.
+        for text in ("THE DAM WAS NEVER BUILT FOR THIS FLOOD", "x" * 48, "y" * 120):
+            for tid, first in (("TEXT_MEMO_V1", 6), ("TEXT_BAR_TITLE_V1", 9)):
+                [s] = sfxplan.plan([ov(tid, 0, 180, text=text)], 30, 1.0)
+                self.assertEqual(s["startFrame"], first, (tid, text))
+                self.assertLessEqual(s["startFrame"] + s["durationFrames"], 42, (tid, text))
+        [s] = sfxplan.plan([ov("TEXT_MEMO_V1", 0, 360, text="x" * 48)], 60, 1.0)
+        self.assertLessEqual(s["startFrame"] + s["durationFrames"], 84)
+        # Still never past the look's own end.
+        [s] = sfxplan.plan([ov("TEXT_MEMO_V1", 0, 20, text="x" * 48)], 30, 1.0)
+        self.assertEqual(s["durationFrames"], 14)
+
     def test_a_look_that_does_not_type_never_clacks(self):
         [s] = sfxplan.plan([ov("KICKER", 0, 90, text="LAKE MEAD")], 30, 1.0)
         self.assertEqual(s["name"], "click")
@@ -159,6 +176,12 @@ class Counting(SfxPlanTest):
     def test_the_count_ends_on_the_hit(self):
         [s] = sfxplan.plan([ov("COUNT_HIT", 300, value=1200)], 30, 1.0)
         self.assertEqual((s["startFrame"], s["durationFrames"]), (306, 39))
+
+    def test_an_entrance_hit_before_the_count_starts_the_count_on_it(self):
+        # The corner stat clicks in at frame 6 (sfxAt), then counts 8-44: the
+        # ticks run with the count, not as a blip before it.
+        [s] = sfxplan.plan([ov("COUNT_CLICK_IN", 300, 135, value=42)], 30, 1.0)
+        self.assertEqual((s["name"], s["startFrame"], s["durationFrames"]), ("count-tick", 306, 39))
 
     def test_no_value_or_no_tick_file_keeps_the_looks_own_sound(self):
         [s] = sfxplan.plan([ov("COUNT_LOOK", 300)], 30, 1.0)
@@ -260,6 +283,21 @@ class RealFolder(unittest.TestCase):
         missing = sorted(n for n in names if not sfxplan.exists(n))
         self.assertEqual(missing, [])
 
+    def test_the_real_memo_and_bar_title_keys_end_with_their_typing(self):
+        for tid in ("TEXT_MEMO_V1", "TEXT_BAR_TITLE_V1"):
+            ovs = [{"template": tid, "startFrame": 0, "durationInFrames": 180,
+                    "text": "THE DAM WAS NEVER BUILT FOR THIS FLOOD"}]
+            [s] = sfxplan.plan(ovs, 30, 1.0)
+            self.assertLessEqual(s["startFrame"] + s["durationFrames"], 42, tid)
+
+    def test_the_real_corner_stat_ticks_with_its_count(self):
+        ovs = [{"template": "LIB_CT_CORNER_STAT", "startFrame": 300, "durationInFrames": 135, "value": 42}]
+        [s] = sfxplan.plan(ovs, 30, 1.0)
+        # CornerStat counts on frames 8-44 (LibCountPro ramp(frame, 8, 36)).
+        self.assertEqual(s["name"], "count-tick")
+        self.assertLessEqual(s["startFrame"], 308)
+        self.assertGreaterEqual(s["startFrame"] + s["durationFrames"], 343)
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -275,7 +313,7 @@ class OwnerSounds(unittest.TestCase):
         ovs = [{"template": typing[0], "startFrame": 300 * i, "durationInFrames": 240, "text": "The water kept falling"}
                for i in range(3)]
         names = [s["name"] for s in sfxplan.plan(ovs, 30, 1.0)]
-        self.assertEqual(names[:2], ["keys-type", "keys-mech"])
+        self.assertEqual(names[:3], ["keys-type", "keys-laptop", "keys-mech"])
 
     def test_the_files_are_there_and_measured(self):
         import json
@@ -285,3 +323,14 @@ class OwnerSounds(unittest.TestCase):
             self.assertIn(name, meta)
         main = open("remotion/src/Main.tsx", encoding="utf-8").read()
         self.assertIn('"keys-mech", "keys-type"', main)
+
+
+class DeepHit(unittest.TestCase):
+    def test_impacts_lead_with_the_owners_deep_hit(self):
+        from src import templates
+        boom = next(t["id"] for t in templates.all_templates()
+                    if ((t.get("defaults") or {}).get("sfx") or {}).get("name") in ("boom-soft", "impact")
+                    and not (t.get("defaults") or {}).get("types") and not sfxplan.plays_own_sound(t))
+        [s] = sfxplan.plan([{"template": boom, "startFrame": 300, "durationInFrames": 150, "text": "x"}], 30, 1.0)
+        self.assertEqual(s["name"], "hit-deep")
+        self.assertIn("hit-deep", open("remotion/public/sfx/sfx_meta.json", encoding="utf-8").read())

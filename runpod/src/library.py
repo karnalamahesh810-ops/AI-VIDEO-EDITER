@@ -209,6 +209,7 @@ class Library:
         if not self.enabled:
             return 0
         from .assetserver import is_local
+        from . import upscale
         from concurrent.futures import ThreadPoolExecutor, wait
         have = {e.get("id") for e in self.entries}
         added = 0
@@ -225,6 +226,11 @@ class Library:
             if float(sem.get("relevanceScore") or 0) < config.CLIP_LIBRARY_MIN_SCORE:
                 continue
             if s.get("reviewReason", "").startswith("The downloaded clip was empty"):
+                continue
+            if upscale.is_framed(url):
+                # A vertical clip framed on its blurred copy for this style: as
+                # a 1920x1080 library clip it would pass every later check and
+                # show up pillarboxed in videos that never allow vertical.
                 continue
             picks.append((s, m, sem, ident, url))
             have.add(ident)

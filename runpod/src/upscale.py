@@ -36,6 +36,19 @@ UPSCALE_AI_BELOW = int(os.getenv("UPSCALE_AI_BELOW", "1100"))
 _LOCK = threading.Lock()
 _STATE: dict = {"loaded": False}
 STATS = {"images": 0, "ai": 0, "clips": 0, "failed": 0, "seconds": 0.0}
+# Clips of this job framed in place on a blurred copy (frame_vertical). They
+# measure 1920x1080 afterwards, so only this set tells them apart: they must
+# not enter the shared clip library, where a documentary job would reuse a
+# pillarboxed phone clip as ordinary footage.
+FRAMED: set = set()
+
+
+def is_framed(path: str) -> bool:
+    """The file at `path` was framed in place by frame_vertical in this job."""
+    if not path:
+        return False
+    with _LOCK:
+        return os.path.abspath(path) in FRAMED
 
 
 def available() -> bool:
@@ -105,10 +118,17 @@ def upscale_image(path: str, target: int = 0) -> bool:
         return False
     t0 = time.time()
     try:
+        alpha = None
         with Image.open(path) as im:
             im.load()
             if im.mode not in ("RGB", "L"):
-                return False           # transparency / odd modes: leave alone
+                # RGBA/LA/P/CMYK...: a small photo accepted at the lowered
+                # floor must still be upscaled. Real transparency is kept (as
+                # PNG, the way imagefix.normalize stores it).
+                from .imagefix import _has_transparency
+                if _has_transparency(im):
+                    im = im.convert("RGBA")
+                    alpha = im.getchannel("A")
             im = im.convert("RGB")
         long_side = max(im.size)
         if long_side >= config.UPSCALE_BELOW or long_side < 64:
@@ -125,7 +145,12 @@ def upscale_image(path: str, target: int = 0) -> bool:
         if not used_ai:
             big = big.filter(ImageFilter.UnsharpMask(radius=1.6, percent=60, threshold=2))
         tmp = path + ".up.part"
-        big.save(tmp, "JPEG", quality=93, subsampling=0, optimize=True)
+        if alpha is not None:
+            big = big.convert("RGBA")
+            big.putalpha(alpha.resize(size, Image.LANCZOS))
+            big.save(tmp, "PNG")
+        else:
+            big.save(tmp, "JPEG", quality=93, subsampling=0, optimize=True)
         os.replace(tmp, path)
         with _LOCK:
             STATS["images"] += 1
@@ -223,6 +248,7 @@ def frame_vertical(path: str, width: int = 1920, height: int = 1080) -> bool:
             raise RuntimeError((p.stderr or b"")[-200:].decode("utf-8", "replace"))
         os.replace(tmp, path)
         with _LOCK:
+            FRAMED.add(os.path.abspath(path))
             STATS["framed"] = STATS.get("framed", 0) + 1
             STATS["seconds"] += time.time() - t0
         return True
@@ -237,13 +263,31 @@ def frame_vertical(path: str, width: int = 1920, height: int = 1080) -> bool:
         return False
 
 
+def _below_floor(path: str) -> bool:
+    """A photo smaller than the normal floor (MIN_IMAGE_LONG_SIDE)."""
+    if not config.MIN_IMAGE_LONG_SIDE:
+        return False
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            return max(im.size) < config.MIN_IMAGE_LONG_SIDE
+    except Exception:  # noqa: BLE001 - unreadable: upscale_image leaves it alone anyway
+        return False
+
+
 def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
     """
     Upscale the chosen photos and soft clips of a job in parallel, within the
     time box. Each asset needs `kind` and `local_path`; archive film (source
     archive_org) keeps its period softness.
+
+    Photos under MIN_IMAGE_LONG_SIDE were only accepted because the upscaler
+    is installed (filters.min_image_long_side), so they go first and are
+    exempt from the time box: skipped, they would render blown up.
     """
     deadline = time.time() + (deadline_seconds or config.UPSCALE_SECONDS)
+    with _LOCK:
+        FRAMED.clear()                  # this job's framed clips only
     seen, jobs = set(), []
     for a in assets:
         path = getattr(a, "local_path", "") or ""
@@ -251,21 +295,22 @@ def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
             continue
         seen.add(path)
         if a.kind == "image" and a.source != "generated":
-            jobs.append(("image", path))
+            jobs.append(("image", path, _below_floor(path)))
         elif a.kind == "video" and a.source not in ("archive_org",):
-            jobs.append(("clip", path))
+            jobs.append(("clip", path, False))
     if not jobs or not (config.UPSCALE_ENABLED or config.ALLOW_VERTICAL):
         return {"queued": 0}
+    jobs.sort(key=lambda j: not j[2])   # must-upscale photos first (stable: scene order otherwise)
     done = {"image": 0, "clip": 0, "framed": 0, "skipped_time": 0}
 
     def run(job):
-        kind, path = job
+        kind, path, must = job
         if kind == "clip" and config.ALLOW_VERTICAL and frame_vertical(path):
             done["framed"] += 1         # framing always runs: a raw vertical clip would be cropped away
             return
         if not config.UPSCALE_ENABLED:
             return
-        if time.time() > deadline:
+        if time.time() > deadline and not must:
             done["skipped_time"] += 1
             return
         ok = upscale_image(path) if kind == "image" else upscale_clip(path, config.MIN_CLIP_HEIGHT)

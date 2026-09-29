@@ -1164,6 +1164,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
          "queries": sec.get("footage", [])}
         for sec in (doc["meta"]["story"].get("sections") or [])]
     doc["meta"]["audioBucket"] = inp.get("audio_bucket", "video-audio")
+    # Replace Clip (resource) re-applies it: the app only sends video_style
+    # with plan/build.
+    doc["meta"]["videoStyle"] = styles.resolve(inp.get("video_style"))
     # The music sections, ducking and sound effects were laid out by the build.
     report("Mixing music and sound effects")
     # Catch a malformed plan here rather than inside headless Chrome. Media may
@@ -1339,6 +1342,19 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         _restore_config(overrides)
     if not asset:
         raise ValueError(f"no usable media found for '{query}' - try different wording")
+
+    # The same polish as a build: with the style's ALLOW_VERTICAL a vertical
+    # replacement (or choice) is framed on its blurred copy, not cropped at render.
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL:
+        try:
+            upscale.upscale_assets([asset])
+        except Exception as e:  # noqa: BLE001 - never fail a replacement over polish
+            print(f"[worker] upscale skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+    if config.ALLOW_VERTICAL:
+        for alt in list(asset.alternatives or [])[:count - 1]:
+            p = alt.get("localPath") or ""
+            if os.path.splitext(p)[1].lower() in (".mp4", ".webm", ".mov", ".mkv") and os.path.isfile(p):
+                upscale.frame_vertical(p)
 
     scene["media"] = asset.to_scene_media()
     scene["query"] = query
@@ -1938,7 +1954,13 @@ def handler(job):
     inp["_job_id"] = job_id
     # The video style (news compilation, documentary...) becomes per-job
     # config overrides before they are applied, so fan-out parts inherit it.
-    if (inp.get("action") or "build").lower() in ("plan", "build"):
+    # Replace Clip sources with the style the timeline was planned with.
+    act = (inp.get("action") or "build").lower()
+    if act == "resource" and not inp.get("video_style"):
+        tl = inp.get("timeline") if isinstance(inp.get("timeline"), dict) else {}
+        meta = tl.get("meta") if isinstance(tl.get("meta"), dict) else {}
+        inp["video_style"] = meta.get("videoStyle") or ""
+    if act in ("plan", "build", "resource"):
         vstyle = styles.apply(inp)
         if vstyle:
             print(f"[worker] video style: {vstyle}", flush=True)

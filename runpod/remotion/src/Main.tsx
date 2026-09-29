@@ -137,7 +137,7 @@ const makeMusicVolume = (props: TimelineProps) => {
 const SFX_META = sfxMeta as Record<string, { duration: number; peak: number }>;
 const SFX_MAX_SECONDS = 6;
 // Sounds that can repeat seamlessly to cover a longer planned span.
-const LOOPABLE_SFX = new Set(["keys", "typewriter", "keys-mech", "keys-type"]);
+const LOOPABLE_SFX = new Set(["keys", "typewriter", "keys-mech", "keys-type", "keys-laptop"]);
 
 type SfxCue = NonNullable<TimelineProps["sfx"]>[number];
 
@@ -161,8 +161,10 @@ const sfxNode = (fx: SfxCue, i: number, fps: number, master?: number) => {
     : level;
   return (
     <Sequence key={`sfx-${i}`} from={Math.max(0, start)} durationInFrames={Math.max(1, frames - skip)} layout="none">
+      {/* Looped, the fade must count frames across every pass, not restart each loop. */}
       <Audio src={staticFile(`sfx/${fx.name}.mp3`)} volume={volume} trimBefore={skip || undefined}
-        loop={LOOPABLE_SFX.has(fx.name) && frames > fileFrames ? true : undefined} />
+        loop={LOOPABLE_SFX.has(fx.name) && frames > fileFrames ? true : undefined}
+        loopVolumeCurveBehavior="extend" />
     </Sequence>
   );
 };

@@ -534,6 +534,7 @@ SFX = {
     # The owner's own recordings (2026-09-29).
     "KEYS_MECH": {"file": "keys-mech", "volume": 0.1}, "KEYS_TYPE": {"file": "keys-type", "volume": 0.1},
     "GLITCH_PRO": {"file": "glitch-pro", "volume": 0.13},
+    "HIT_DEEP": {"file": "hit-deep", "volume": 0.13}, "KEYS_LAPTOP": {"file": "keys-laptop", "volume": 0.1},
 }
 
 STYLE_PACKS = {

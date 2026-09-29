@@ -39,6 +39,10 @@
     "duration": 1.656,
     "peak": 0.763
   },
+  "hit-deep": {
+    "duration": 2.319,
+    "peak": 0.02
+  },
   "impact": {
     "duration": 2.463,
     "peak": 0.634
@@ -46,6 +50,10 @@
   "keys": {
     "duration": 5.0,
     "peak": 0.399
+  },
+  "keys-laptop": {
+    "duration": 4.0,
+    "peak": 2.824
   },
   "keys-mech": {
     "duration": 3.52,
