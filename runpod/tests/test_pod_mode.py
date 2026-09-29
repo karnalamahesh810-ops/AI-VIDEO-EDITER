@@ -74,3 +74,14 @@ class Animations(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Safety(unittest.TestCase):
+    def test_a_job_that_cannot_load_stops_the_pod(self):
+        with mock.patch.object(pod_job, "load_job", side_effect=RuntimeError("no job")), \
+                mock.patch.object(pod_job, "stop_this_pod") as stop, \
+                mock.patch.object(pod_job.handler, "handler") as run, \
+                mock.patch.dict(os.environ, {"POD_MAX_SECONDS": "0"}, clear=False):
+            pod_job.main()
+        stop.assert_called_once()
+        run.assert_not_called()

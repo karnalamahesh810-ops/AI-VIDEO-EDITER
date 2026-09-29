@@ -93,7 +93,26 @@ def after_job(safe: bool, kept: bool, laptop_has_it, wait_seconds: float, sleep=
 
 
 def main() -> None:
-    job = load_job()
+    # The app's pods (POD_EXIT=terminate) never outlive POD_MAX_SECONDS (5 h by
+    # default; a 22-minute video takes about 2 h): a hung job stops billing.
+    cap = float(os.environ.get("POD_MAX_SECONDS", "") or (18000 if os.environ.get("POD_EXIT") == "terminate" else 0))
+    if cap > 0:
+        import threading
+
+        def _deadline():
+            time.sleep(cap)
+            print(f"[pod] over the {int(cap // 60)} min limit: stopping this pod", flush=True)
+            stop_this_pod()
+            os._exit(3)
+        threading.Thread(target=_deadline, daemon=True, name="pod-deadline").start()
+    try:
+        job = load_job()
+    except Exception as e:  # noqa: BLE001
+        # Nothing to run: stop now instead of idling (and billing) forever. The
+        # app's status check then sees the pod gone and marks the job failed.
+        print(f"[pod] could not load the job: {type(e).__name__}: {e}", flush=True)
+        stop_this_pod()
+        return
     inp = job.setdefault("input", {})
     pid = inp.get("project_id") or ""
     # This script records the final status itself (one waited, retried write).
