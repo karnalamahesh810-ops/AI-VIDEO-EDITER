@@ -616,11 +616,11 @@ _LOOK_NEEDS = {
     "LIB_CO_MEASURE_LINE": r"\b(feet|foot|ft|inches|meters?|metres?|miles?|km|long|wide|tall|deep)\b",
 }
 _LOOK_NEEDS_RX = {k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
-# A date gets a date: the full "SEPTEMBER 15 / 2026" card first, then the
-# calendar, the date-and-place lower third and the stamps - never an effect
-# (light streak, film burn) or a year scroller standing in for it.
-DATE_LOOKS = ["TL_DATE_TITLE_V1", "LIB_TL_CALENDAR_FLIP", "LIB_LT_DATE_PLACE", "TL_DATE_STAMP_V1",
-              "LIB_TL_DATE_STAMP_CIRCLE"]
+# A date gets a date: the full "SEPTEMBER 15 / 2026" title, or the corner
+# stamp - never an effect (light streak, film burn) or a year scroller. Checked
+# on stills 2026-09-29: the calendar flip and the round stamp drew nothing from
+# a date alone and the date-and-place lower third printed the date twice.
+DATE_LOOKS = ["TL_DATE_TITLE_V1", "TL_DATE_STAMP_V1"]
 
 
 def look_fits(template_id: str, text: str) -> bool:
