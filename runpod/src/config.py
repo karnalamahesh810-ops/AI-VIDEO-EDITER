@@ -562,6 +562,13 @@ ALLOW_VERTICAL = _flag("ALLOW_VERTICAL", False)
 # Official public-domain imagery for stories about today's weather: the live
 # NOAA GOES satellite loop of the story's region (src/official.py).
 OFFICIAL_IMAGERY = _flag("OFFICIAL_IMAGERY", True)
+# Cloudflare R2 for finished videos (src/r2.py): no 2 GB file cap, no
+# download fees. All five set = the final video goes to R2 first.
+R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "").strip()
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
+R2_BUCKET = os.getenv("R2_BUCKET", "").strip()
+R2_PUBLIC_BASE = os.getenv("R2_PUBLIC_BASE", "").strip()
 # Yandex Images as a picture source after Google/Bing (media.search_yandex_images).
 ALLOW_YANDEX_IMAGES = _flag("ALLOW_YANDEX_IMAGES", True)
 # Set per job by the video style (src/styles.py): how busy the overlay planner

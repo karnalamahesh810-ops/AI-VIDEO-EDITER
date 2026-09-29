@@ -51,7 +51,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
                  render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
 from src import templates
-from src import localvision, styles, upscale
+from src import localvision, r2, styles, upscale
 
 
 def _work_dir(job_id: str) -> str:
@@ -1752,8 +1752,10 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # every competitor's render. Never fails the job.
     report("Balancing the sound", 90)
     renderer.normalize_loudness(out_path)
-    # Over the app's per-file storage limit: re-encode to fit, not fail the upload.
-    renderer.fit_size(out_path)
+    # Over the app's per-file storage limit: re-encode to fit, not fail the
+    # upload. R2 has no such cap, so the full-quality file goes there as is.
+    if not r2.enabled():
+        renderer.fit_size(out_path)
     _keep_render(out_path)
 
     report("Uploading video", 91)
@@ -1795,6 +1797,29 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
             "size_bytes": size,
             "duration": duration,
         }
+
+    # Cloudflare R2 first: no 2 GB cap, no download fees. The object name ends
+    # in a random token, so the public link is unguessable. Any failure falls
+    # through to the app's own storage below.
+    if r2.enabled():
+        project_id = inp.get("project_id") or "adhoc"
+        key = f"projects/{project_id}/final-{int(time.time())}-{uuid.uuid4().hex[:12]}.mp4"
+        try:
+            url = r2.upload(out_path, key, deadline=time.time() + config.FINAL_UPLOAD_RETRY_SECONDS)
+            print(f"[worker] final video on R2: {key}", flush=True)
+            return {
+                "video_url": url,
+                "public_url": url,
+                "object_path": key,
+                "bucket": f"r2:{config.R2_BUCKET}",
+                "uploadedVia": "r2",
+                "size_bytes": os.path.getsize(out_path),
+                "duration": duration,
+            }
+        except Exception as e:  # noqa: BLE001 - the app's storage is the fallback
+            print(f"[worker] R2 upload failed, using app storage: {type(e).__name__}: {str(e)[:200]}",
+                  flush=True)
+            renderer.fit_size(out_path)     # app storage still caps each file
 
     # No key on this worker: the app's broker signs the one destination.
     if storage.broker_enabled() and inp.get("project_id"):
