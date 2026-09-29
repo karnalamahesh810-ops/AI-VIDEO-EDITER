@@ -40,17 +40,114 @@ def by_category(category: str) -> List[dict]:
     return [t for t in load()["templates"] if t["category"] == category]
 
 
+# The owner (2026-09-29): the white words with red underline / red accent
+# blocks (the ProHeadline family) must never be used again. No planner path
+# may choose these; the editor can still open an old document that has one.
+BANNED = frozenset({"TEXT_UNDERLINE_TITLE_V1", "TEXT_SWOOSH_TITLE_V1", "TEXT_SENTENCE_HIGHLIGHT_V1",
+                    "TEXT_WORD_TYPE_V1"})
+
+
+def banned(template_id: str) -> bool:
+    return (template_id or "") in BANNED
+
+
+# The planner's cue vocabulary for the built-in looks. The library looks carry
+# the new cues in library_looks.json; the built-ins predate them, so the
+# planner reads these on top of each template's own "cues" (the registry file
+# is not changed). Only looks that draw the cue well are listed: a typed memo
+# is a typewriter line, a person card is a full-screen introduction, a date
+# stamp can type a date and a time together.
+EXTRA_CUES: Dict[str, List[str]] = {
+    "TEXT_KEY_PHRASE_V1": ["key-phrase", "caption"],
+    "TEXT_KICKER_V1": ["caption", "key-phrase"],
+    "TEXT_MEMO_V1": ["typewriter", "statement", "fact"],
+    "TEXT_BAR_TITLE_V1": ["typewriter", "headline"],
+    "TEXT_TYPEWRITER_V1": ["typewriter", "statement"],
+    "TEXT_LABEL_PILL_V1": ["count"],
+    "LIB_SP_STATEMENT_CARD": ["statement", "fact"],
+    "TL_DATE_STAMP_V1": ["datetime", "time-of-day"],
+    "TL_CLOCK_V1": ["time-of-day"],
+    "NUM_BIG_COUNTER_V1": ["count"],
+    "NUM_NUMBER_ROLL_V1": ["count"],
+    "PERSON_CARD_V1": ["photo-person", "person-full"],
+    "PLACE_CARD_V1": ["photo-place"],
+    "OBJECT_CARD_V1": ["photo-object"],
+    "PHOTO_EVIDENCE_V1": ["photo-object"],
+    "PHOTO_WINDOW_V1": ["photo-place"],
+}
+
+# Built-in components that really type their text letter by letter
+# (TextGraphics MemoBox / BarTitle, DateStamp, and the typewriter, which the
+# renderer now draws with the typing look EdTypeClean). Library looks say so
+# with "types": true in their registry defaults.
+TYPING_COMPONENTS = {"memo-box", "bar-title"}
+TYPING_IDS = {"TEXT_TYPEWRITER_V1"}
+
+
+def cues_of(t: dict) -> List[str]:
+    """Every cue a template answers to: its own, plus the planner's vocabulary for the built-ins."""
+    return list(t.get("cues") or []) + [c for c in EXTRA_CUES.get(t.get("id", ""), []) if c not in (t.get("cues") or [])]
+
+
+def types(t: Optional[dict]) -> bool:
+    """True for a look that types its text letter by letter (the typing-speed contract applies)."""
+    if not t:
+        return False
+    d = t.get("defaults") or {}
+    if "types" in d:
+        return bool(d.get("types"))
+    if t.get("id") in TYPING_IDS or t.get("component") in TYPING_COMPONENTS:
+        return True
+    return t.get("component") == "date-stamp" and not d.get("variant")
+
+
+def family(t: Optional[dict]) -> str:
+    """
+    The look family, for "never the same family twice in a row": a library
+    look's family ("ed", "dt", "ct", "pe", "hl"...), a built-in's id prefix
+    ("TEXT", "NUM", "TL", "MAP"...; the photo cards are one family).
+    """
+    if not t:
+        return ""
+    tags = t.get("tags") or []
+    if t.get("component") == "motion":
+        if len(tags) >= 2 and tags[0] == "lib":
+            return str(tags[1])
+        v = str((t.get("defaults") or {}).get("variant") or "")
+        return v.split("-", 1)[0] if v else "lib"
+    head = str(t.get("id") or "").split("_", 1)[0]
+    return {"PLACE": "PHOTO", "OBJECT": "PHOTO", "PERSON": "PHOTO", "FACTS": "CALL", "DOSSIER": "CALL",
+            "TAG": "CALL", "CMP": "CHART"}.get(head, head)
+
+
 def for_component(component: str, style: str = "") -> List[dict]:
-    """Templates drawn by one renderer component, the style pack's favourites first."""
-    found = [t for t in load()["templates"] if t["component"] == component]
+    """Templates drawn by one renderer component, the style pack's favourites first (never a banned look)."""
+    found = [t for t in load()["templates"] if t["component"] == component and t["id"] not in BANNED]
     if style:
         found.sort(key=lambda t: 0 if style in t["variants"]["style"] else 1)
     return found
 
 
+_CUE_INDEX: Dict[int, Dict[str, List[dict]]] = {}
+
+
+def _by_cue() -> Dict[str, List[dict]]:
+    """cue -> templates in registry order, built once per registry (the planner asks it on every beat)."""
+    reg = load()
+    idx = _CUE_INDEX.get(id(reg))
+    if idx is None:
+        idx = {}
+        for t in reg["templates"]:
+            for c in cues_of(t):
+                idx.setdefault(c, []).append(t)
+        _CUE_INDEX.clear()
+        _CUE_INDEX[id(reg)] = idx
+    return idx
+
+
 def for_cue(cue: str, style: str = "", exclude: Optional[set] = None) -> List[dict]:
-    """Templates the planner may use for a narration cue, in preference order."""
-    out = [t for t in load()["templates"] if cue in t["cues"] and t["id"] not in (exclude or set())]
+    """Templates the planner may use for a narration cue, in preference order (never a banned look)."""
+    out = [t for t in _by_cue().get(cue, []) if t["id"] not in (exclude or set()) and t["id"] not in BANNED]
     if style:
         out.sort(key=lambda t: (0 if style in t["tags"] else 1, 0 if style in t["variants"]["style"] else 1))
     return out
@@ -174,7 +271,10 @@ def check() -> List[str]:
         if t["defaults"]["exit"] not in reg["exits"]:
             problems.append(f"{t['id']}: exit")
         sfx_name = (t["defaults"].get("sfx") or {}).get("name", "none")
-        if sfx_name != "none" and sfx_name not in {v["file"] for v in reg["sfx"].values()}:
+        # A named semantic sound, or any file that ships in public/sfx (the
+        # sound pass added whoosh-soft, keys, tick... next to the old set).
+        if sfx_name != "none" and sfx_name not in {v["file"] for v in reg["sfx"].values()} \
+                and sfx_name not in sfx_files():
             problems.append(f"{t['id']}: sfx file {sfx_name}")
     # Every sound the registry names must ship with the renderer: a missing
     # file is a 404 that kills the whole render, not a silent beat.

@@ -25,27 +25,134 @@ from .media import MediaAsset
 
 SCHEMA_VERSION = 2
 
-# Stills need Ken Burns or they read as a stalled video. Cycled rather than
-# random so a re-plan of the same script produces the same document.
-# Stills cycle through moves so no two photos in a row move alike; the
-# side reveals are VidRush's "photo slides in and settles" look.
-_IMAGE_MOTIONS = ["reveal-left", "zoom-in", "reveal-right", "push-rotate", "pan-left", "zoom-out"]
+# Stills need movement or they read as a stalled video. Cycled rather than
+# random so a re-plan of the same script produces the same document. The
+# n-th still of the video takes the n-th move (not the scene index), so two
+# stills in a row never move alike; neighbours in the list also differ in
+# kind (a push is followed by a slide, a drift, a turn - never another push).
+# The moves are drawn by remotion/src/transitions/stillMotion.tsx.
+_IMAGE_MOTIONS = ["push-offcenter", "reveal-left", "drift-diagonal", "pull-back", "parallax",
+                  "zoom-in", "rotate-settle", "reveal-right", "pan-left", "push-rotate",
+                  "zoom-out", "pan-right"]
 
 # Scene entrances and per-clip effects. Both lists are a contract with
 # remotion/src/types.ts (SceneTransition / SceneEffect) and SceneEffects.tsx;
 # a test asserts they agree.
 TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide",
                "whip", "flash", "light-leak", "dip", "blur", "punch",
-               "split-wipe", "bar-wipe", "mosaic", "color-wash"}
+               "split-wipe", "bar-wipe", "mosaic", "color-wash",
+               # Editor cut transitions that straddle the cut (remotion/src/transitions).
+               "whip-pan", "zoom-punch", "shake-cut", "blur-dissolve", "luma-fade",
+               "chromatic-flash", "vhs-glitch",
+               # A true cross-dissolve: the outgoing shot plays on under the
+               # incoming one as it fades in (news-compilation style).
+               "crossfade"}
 EFFECTS = {"none", "ken-burns", "light-leaks", "dust", "film-flicker", "color-shift"}
 
-# Rotation for the strong transitions at section changes. Film burn leads
-# because it is VidRush's most-used transition (24 of 61 on one timeline).
-# Every entrance VidRush uses, in an order where neighbours never look alike
-# (a warm burst is never followed by another warm burst, a motion move by a
-# motion move).
+# The rotation used before transitions were planned by style; kept for any
+# caller that still reads it.
 _TRANSITION_CYCLE = ["film-burn", "whip", "flash", "zoom", "light-leak", "slide",
                      "dip", "punch", "glitch", "blur", "fade"]
+
+# How a style cuts. A documentary editor mostly hard-cuts and marks a change
+# of section with something soft (~1 cut in 6 at most); a news, compilation or
+# trending edit punctuates more (~1 cut in 3-4) with energetic transitions.
+#   cycle   - the transitions in turn; neighbours never look alike
+#   chapter - what a chapter / title card change gets
+#   gap     - fewest cuts from one transition to the next (>= 3: never on
+#             consecutive cuts)
+#   force   - after this many plain cuts a transition goes in even without a
+#             section change (0: only at section changes)
+STYLES = ("documentary", "history", "story", "news", "compilation", "trending", "explainer", "weather",
+          "crossfade")
+_STYLE_TRANSITIONS = {
+    "documentary": {"cycle": ["light-leak", "blur-dissolve", "luma-fade", "film-burn"],
+                    "chapter": "light-leak", "gap": 6, "force": 0},
+    "history": {"cycle": ["film-burn", "blur-dissolve", "light-leak", "luma-fade"],
+                "chapter": "film-burn", "gap": 6, "force": 0},
+    "story": {"cycle": ["blur-dissolve", "light-leak", "luma-fade", "film-burn"],
+              "chapter": "luma-fade", "gap": 6, "force": 0},
+    "explainer": {"cycle": ["blur-dissolve", "whip-pan", "luma-fade", "zoom-punch", "light-leak"],
+                  "chapter": "luma-fade", "gap": 5, "force": 0},
+    "weather": {"cycle": ["whip-pan", "flash", "blur-dissolve", "zoom-punch", "luma-fade", "glitch"],
+                "chapter": "flash", "gap": 4, "force": 6},
+    "news": {"cycle": ["whip-pan", "flash", "zoom-punch", "glitch", "shake-cut", "chromatic-flash"],
+             "chapter": "flash", "gap": 3, "force": 4},
+    "compilation": {"cycle": ["whip-pan", "glitch", "zoom-punch", "chromatic-flash", "shake-cut",
+                              "vhs-glitch", "flash"],
+                    "chapter": "chromatic-flash", "gap": 3, "force": 4},
+    "trending": {"cycle": ["zoom-punch", "chromatic-flash", "whip-pan", "vhs-glitch", "shake-cut",
+                           "flash", "glitch"],
+                 "chapter": "chromatic-flash", "gap": 3, "force": 4},
+}
+# The style a style pack or a story kind implies when the job names none.
+_PACK_STYLE = {"documentary": "documentary", "history": "history", "news": "news", "weather": "weather",
+               "tech": "explainer", "cinematic": "story", "minimal": "documentary",
+               "youtube_modern": "trending"}
+_KIND_STYLE = {"news": "news", "weather": "weather", "disaster": "weather", "history": "history",
+               "biography": "history", "science": "explainer", "explainer": "explainer"}
+
+# A transition needs room: the incoming shot must hold long enough to settle
+# and the outgoing one to start its half (frames).
+_MIN_IN_FRAMES = 9
+_MIN_OUT_FRAMES = 6
+
+# The sound a transition makes, and how loud (0-1 before the master slider).
+# Its loudest point (sfx_meta.json "peak") lands on the cut. Soft transitions
+# get a whisper of air; a dip through black is silent, as an editor leaves it.
+_TRANSITION_SFX = {
+    "glitch": ("glitch-short", 0.13), "vhs-glitch": ("glitch-short", 0.12),
+    "flash": ("flash-hit", 0.13), "chromatic-flash": ("flash-hit", 0.13),
+    "whip-pan": ("swipe", 0.13), "zoom-punch": ("swipe", 0.12),
+    "film-burn": ("whoosh-soft", 0.09), "light-leak": ("whoosh-soft", 0.07),
+    "blur-dissolve": ("whoosh-soft", 0.07), "shake-cut": ("boom-soft", 0.13),
+    # The older entrances an editor can still pick.
+    "whip": ("swipe", 0.12), "punch": ("swipe", 0.1), "zoom": ("whoosh-soft", 0.07),
+    "slide": ("whoosh-soft", 0.07), "mosaic": ("glitch-short", 0.09),
+}
+# Another sound this close (seconds) to a transition's sound silences the transition's.
+_TRANSITION_SFX_CLEARANCE = 1.0
+
+# Used when public/sfx/sfx_meta.json cannot be read (duration, peak seconds).
+_SFX_META_FALLBACK = {
+    "glitch-short": {"duration": 0.5, "peak": 0.175}, "flash-hit": {"duration": 0.62, "peak": 0.075},
+    "swipe": {"duration": 0.44, "peak": 0.195}, "whoosh-soft": {"duration": 1.12, "peak": 0.419},
+    "boom-soft": {"duration": 1.71, "peak": 0.309},
+}
+_SFX_META_CACHE: Dict[str, Any] = {}
+
+
+def sfx_meta() -> Dict[str, Dict[str, float]]:
+    """{name: {"duration": s, "peak": s}} for every sound file (public/sfx/sfx_meta.json)."""
+    path = os.path.join(templates.SFX_DIR, "sfx_meta.json")
+    try:
+        stamp = os.path.getmtime(path)
+    except OSError:
+        return dict(_SFX_META_FALLBACK)
+    if _SFX_META_CACHE.get("stamp") != stamp:
+        try:
+            import json
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            _SFX_META_CACHE.update(stamp=stamp, data={**_SFX_META_FALLBACK, **(data or {})})
+        except (OSError, ValueError):
+            return dict(_SFX_META_FALLBACK)
+    return _SFX_META_CACHE["data"]
+
+
+def transition_style(inp: Optional[Dict[str, Any]] = None, pack: Optional[dict] = None,
+                     brief: Optional[dict] = None) -> str:
+    """The cutting style: the job's `style`, else its style pack's, else the story kind's."""
+    inp = inp or {}
+    asked = str(inp.get("style") or "").strip().lower()
+    if asked in _STYLE_TRANSITIONS or asked == "crossfade":
+        return asked
+    pack_id = str((pack or {}).get("id") or inp.get("style_pack") or "").strip().lower()
+    if pack_id in _PACK_STYLE:
+        return _PACK_STYLE[pack_id]
+    if pack_id in _STYLE_TRANSITIONS:
+        return pack_id
+    return _KIND_STYLE.get(str((brief or {}).get("kind") or "").lower(), "documentary")
 
 # One effect per clip, weighted roughly like VidRush's own distribution
 # (colour 37, Ken Burns 34, light leaks 29, flicker 21, dust 15 per 160 clips).
@@ -123,34 +230,109 @@ def _pack_transitions(entrances: List[str], pack: dict) -> List[str]:
     return out
 
 
-def plan_transitions(shots: List[dict]) -> List[str]:
+def plan_transitions(shots: List[dict], style: str = "documentary",
+                     durations: Optional[List[int]] = None) -> List[str]:
     """
     Entrance per scene: hard cuts by default, a real transition where the
-    story changes section.
+    story changes section, in the style's own vocabulary and rhythm.
 
     A section change is a chapter/title graphic, or the named subject moving on
-    ("Lake Mead" -> "Hoover Dam"). VidRush runs about one transition per four
-    cuts; the gap rule keeps it near that and never back to back.
+    ("Lake Mead" -> "Hoover Dam"). Calm styles (documentary, history, story)
+    only mark those, softly, at most about one cut in six. Energetic styles
+    (news, compilation, trending) also punctuate a long run of plain cuts, so
+    they land near one cut in three or four. Never on consecutive cuts, never
+    the same transition twice in a row. `durations` (frames per scene), when
+    given, keeps transitions off cuts too short to carry one.
     """
+    if style == "crossfade":
+        return _plan_crossfades(shots, durations)
+    spec = _STYLE_TRANSITIONS.get(style) or _STYLE_TRANSITIONS["documentary"]
+    cycle, gap, force = spec["cycle"], max(_MIN_TRANSITION_GAP, int(spec["gap"])), int(spec["force"])
     out, last, used = [], -99, 0
-    prev_subject = None
+    prev_subject, prev_choice = None, None
     for i, shot in enumerate(shots):
+        shot = shot or {}
         subject = (shot.get("subject") or "").strip().lower()
         overlay = shot.get("overlay") or {}
         choice = "none"
-        if i > 0 and i - last >= _MIN_TRANSITION_GAP:
+        roomy = durations is None or (
+            i < len(durations) and durations[i] >= _MIN_IN_FRAMES
+            and durations[i - 1] >= _MIN_OUT_FRAMES)
+        # A human rhythm, not a metronome: now and then one more plain cut
+        # before the next transition (stable per beat, so re-plans agree).
+        need = gap + (1 if zlib.crc32(f"{i}:{subject}".encode("utf-8")) % 2 == 0 else 0)
+        if force:
+            need = min(need, force)
+        if i > 0 and i - last >= need and roomy:
             chapter = overlay.get("type") in ("chapter", "title")
             moved_on = bool(subject and prev_subject and subject != prev_subject)
+            due = force > 0 and i - (last if last >= 0 else 0) >= force
             if chapter:
-                choice = "film-burn"
-            elif moved_on:
-                choice = _TRANSITION_CYCLE[used % len(_TRANSITION_CYCLE)]
+                choice = spec["chapter"]
+            elif moved_on or due:
+                choice = cycle[used % len(cycle)]
+            if choice != "none" and choice == prev_choice:
+                # A chapter pick that repeats the last transition takes the next in turn.
+                choice = cycle[(cycle.index(choice) + 1) % len(cycle)] if choice in cycle else cycle[0]
         if choice != "none":
-            last, used = i, used + 1
+            last, used, prev_choice = i, used + 1, choice
         out.append(choice)
         if subject:
             prev_subject = subject
     return out
+
+
+# The news-compilation cut (src/styles.py, measured from the Nor'easter
+# reference channel): ~80% of changes are a soft 0.5 s cross-dissolve, the
+# rest hard cuts; no effects, no sounds.
+CROSSFADE_SHARE = 0.8
+CROSSFADE_FRAMES = 15
+
+
+def _plan_crossfades(shots: List[dict], durations: Optional[List[int]] = None) -> List[str]:
+    """ "crossfade" on about CROSSFADE_SHARE of cuts (stable per beat), a hard
+    cut on the rest and wherever either shot is too short to dissolve."""
+    out = []
+    for i, shot in enumerate(shots):
+        subject = str((shot or {}).get("subject") or "").strip().lower()
+        roomy = durations is None or (
+            i < len(durations) and durations[i] >= CROSSFADE_FRAMES * 2
+            and durations[i - 1] >= CROSSFADE_FRAMES * 2)
+        pick = (zlib.crc32(f"xf:{i}:{subject}".encode("utf-8")) % 100) < CROSSFADE_SHARE * 100
+        out.append("crossfade" if i > 0 and roomy and pick else "none")
+    return out
+
+
+def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict]) -> List[dict]:
+    """
+    A quiet sound for each transition, placed so its loudest point lands on
+    the cut. Skipped when another sound starts within a second of it: a
+    graphic's own sound on that beat wins, and two sounds never stack.
+    """
+    meta = sfx_meta()
+    have = templates.sfx_files()
+    near = int(round(_TRANSITION_SFX_CLEARANCE * fps))
+    taken = [int(o.get("startFrame", 0)) for o in others]
+    picks = []
+    for sc in scenes:
+        t = sc.get("transition") or "none"
+        if t not in _TRANSITION_SFX:
+            continue
+        name, volume = _TRANSITION_SFX[t]
+        if have and name not in have:
+            continue
+        m = meta.get(name) or _SFX_META_FALLBACK.get(name) or {"duration": 1.0, "peak": 0.0}
+        cut = int(sc.get("startFrame", 0))
+        start = cut - int(round(float(m.get("peak", 0.0)) * fps))
+        if cut <= 0 or start < 0:
+            continue
+        if any(abs(o - start) <= near or abs(o - cut) <= near for o in taken):
+            continue
+        picks.append({"name": name, "startFrame": start, "volume": volume,
+                      "durationFrames": max(1, int(math.ceil(float(m.get("duration", 1.0)) * fps))),
+                      "kind": "transition"})
+        taken.append(start)
+    return picks
 
 # How long each graphic wants to be on screen, in seconds, independent of the
 # beat that triggered it. Measured from the reference renders: supporting shots
@@ -279,7 +461,8 @@ _SFX_FOR = {
     "swoosh-title": ("whoosh", 0.3), "red-strip": ("impact", 0.3),
     "icon-pop": ("pop", 0.3), "ring-stat": ("pop", 0.3), "kicker": ("typewriter", 0.25),
 }
-SFX_NAMES = {name for name, _ in _SFX_FOR.values()} | {"glitch", "glitch-transition", "map-whoosh", "riser", "page"}
+SFX_NAMES = ({name for name, _ in _SFX_FOR.values()} | {"glitch", "glitch-transition", "map-whoosh", "riser", "page"}
+             | {name for name, _ in _TRANSITION_SFX.values()})
 
 
 def plan_sfx(overlays: List[dict], fps: int, min_gap_seconds: float) -> List[dict]:
@@ -348,17 +531,23 @@ def build(segments: List[Segment], shots: List[dict],
     # word-synced phrases instead of a scene's whole text at once.
     keep_captions = bool(inp.get("captions", False))
 
-    entrances = plan_transitions(list(shots) + [{}] * max(0, len(segments) - len(shots)))
     # The visual treatment planner (src/treatments.py): the style pack decides
     # the looks, the narration decides where a treatment goes.
     from . import director, treatments as vt
     brief = inp.get("brief") if isinstance(inp.get("brief"), dict) else dict(director.LAST_STORY)
     pack = vt.pack_for(brief, str(inp.get("style_pack") or config.STYLE_PACK or "")) if config.TREATMENTS else None
+    # Transitions follow the cutting style (a documentary mostly hard-cuts, a
+    # news edit punctuates); a job can still pin the allowed set.
+    style = transition_style(inp, pack, brief)
+    entrances = plan_transitions(list(shots) + [{}] * max(0, len(segments) - len(shots)), style,
+                                 durations=[bounds[i + 1] - bounds[i] for i in range(len(segments))])
+    if isinstance(inp.get("transitions"), list) and inp["transitions"]:
+        entrances = _pack_transitions(entrances, {"transitions": inp["transitions"]})
     if pack:
-        entrances = _pack_transitions(entrances, pack)
         image_look = templates.image_treatment(pack.get("imageTreatment", "")) or {}
     else:
         image_look = {}
+    stills_seen = 0
 
     seen_figures: Dict[tuple, float] = {}
     anim_counts: Dict[str, int] = {}
@@ -385,7 +574,11 @@ def build(segments: List[Segment], shots: List[dict],
             review, reason = True, "No media found for this beat"
         else:
             media = asset.to_scene_media()
-            motion = _IMAGE_MOTIONS[i % len(_IMAGE_MOTIONS)] if asset.kind == "image" else "none"
+            motion = "none"
+            if asset.kind == "image":
+                # The n-th still takes the n-th move: consecutive stills never match.
+                motion = _IMAGE_MOTIONS[stills_seen % len(_IMAGE_MOTIONS)]
+                stills_seen += 1
             if asset.kind == "video":
                 # The clip's real length. A clip cut for the planned line can
                 # come out shorter than the final scene (a real job: 3.48 s of
@@ -486,6 +679,10 @@ def build(segments: List[Segment], shots: List[dict],
         sfx_list = planned["sfx"]
         music = planned["music"]
         treatment_counts = planned["counts"]
+    # Each transition's own quiet sound, peaking on its cut, unless a
+    # graphic's sound is already there.
+    sfx_list = sorted(list(sfx_list) + plan_transition_sfx(scenes, fps, sfx_list),
+                      key=lambda s: int(s.get("startFrame", 0)))
 
     missing = sum(1 for a in assets if a is None)
     if missing:

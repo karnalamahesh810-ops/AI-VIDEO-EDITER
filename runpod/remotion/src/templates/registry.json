@@ -459,10 +459,10 @@
   },
   {
    "id": "TEXT_TYPEWRITER_V1",
-   "name": "Kinetic Title",
+   "name": "Typewriter",
    "category": "TEXT",
    "component": "typewriter",
-   "description": "A line rising word by word in condensed display caps with a kicker and an accent rule.",
+   "description": "The line typed letter by letter on a soft dark strip low-left, a blinking caret while it types, the key word warming into the accent once typed (frame 6 on, 2 frames a character up to 48 characters, else 1).",
    "kind": "card",
    "emphasis": "medium",
    "props": {
@@ -470,6 +470,16 @@
      "type": "string",
      "label": "Text",
      "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
     },
     "position": {
      "type": "enum",
@@ -555,13 +565,15 @@
     }
    },
    "defaults": {
-    "duration": 3.0,
+    "duration": 4.5,
     "entrance": "fade",
     "exit": "fade",
     "sfx": {
-     "name": "typewriter",
-     "volume": 0.28
-    }
+     "name": "keys",
+     "volume": 0.2
+    },
+    "types": true,
+    "sfxAt": 6
    },
    "variants": {
     "style": [
@@ -15910,7 +15922,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -16067,7 +16080,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -16223,7 +16237,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -16384,7 +16399,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -16539,7 +16555,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -16694,7 +16711,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -16850,7 +16868,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -17009,7 +17028,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -17165,7 +17185,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -17321,7 +17342,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -17477,7 +17499,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -17634,7 +17657,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -17790,7 +17814,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -17946,7 +17971,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -18103,7 +18129,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -18260,7 +18287,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -18416,7 +18444,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -18579,7 +18608,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -18742,7 +18772,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -18898,7 +18929,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -19057,7 +19089,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -19218,7 +19251,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -19379,7 +19413,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -19540,7 +19575,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -19693,7 +19729,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -19851,7 +19888,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -20017,7 +20055,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -20171,7 +20210,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -20329,7 +20369,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -20501,7 +20542,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -20658,7 +20700,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -20817,7 +20860,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -20976,7 +21020,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -21145,7 +21190,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -21299,7 +21345,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -21453,7 +21500,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -21607,7 +21655,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -21766,7 +21815,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -21931,7 +21981,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -22086,7 +22137,8 @@
     "sfx": {
      "name": "page",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -22247,7 +22299,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -22402,7 +22455,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -22563,7 +22617,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -22718,7 +22773,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -22874,7 +22930,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -23025,7 +23082,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -23176,7 +23234,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -23337,7 +23396,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -23490,7 +23550,8 @@
     "sfx": {
      "name": "page",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -23640,7 +23701,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -23804,7 +23866,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -23964,7 +24027,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -24125,7 +24189,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -24281,7 +24346,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -24438,7 +24504,8 @@
     "sfx": {
      "name": "glitch-transition",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -24594,7 +24661,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -24755,7 +24823,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -24909,7 +24978,8 @@
     "sfx": {
      "name": "map-whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -25069,7 +25139,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -25230,7 +25301,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -25382,7 +25454,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -25533,7 +25606,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -25698,7 +25772,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -25854,7 +25929,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -26020,7 +26096,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -26171,7 +26248,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -26327,7 +26405,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -26483,7 +26562,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -26634,7 +26714,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -26789,7 +26870,8 @@
     "sfx": {
      "name": "page",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -26959,7 +27041,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -27123,7 +27206,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -27292,7 +27376,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -27457,7 +27542,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -27622,7 +27708,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -27655,8 +27742,7 @@
     ]
    },
    "cues": [
-    "change",
-    "percent"
+    "change"
    ],
    "tags": [
     "lib",
@@ -27790,7 +27876,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -27953,7 +28040,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -28118,7 +28206,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -28282,7 +28371,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -28452,7 +28542,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -28603,7 +28694,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -28762,7 +28854,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -28916,7 +29009,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -29070,7 +29164,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -29232,7 +29327,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -29385,7 +29481,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -29544,7 +29641,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -29698,7 +29796,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -29883,7 +29982,8 @@
     "sfx": {
      "name": "glitch-transition",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -30042,7 +30142,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -30200,7 +30301,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -30353,7 +30455,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -30515,7 +30618,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -30675,7 +30779,8 @@
     "sfx": {
      "name": "page",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -30839,7 +30944,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -30989,7 +31095,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -31142,7 +31249,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -31312,7 +31420,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -31473,7 +31582,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -31639,7 +31749,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -31813,7 +31924,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -31983,7 +32095,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -32152,7 +32265,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -32325,7 +32439,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -32495,7 +32610,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -32664,7 +32780,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -32843,7 +32960,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -33012,7 +33130,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -33185,7 +33304,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -33363,7 +33483,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -33531,7 +33652,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -33695,7 +33817,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -33863,7 +33986,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -34032,7 +34156,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -34201,7 +34326,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -34369,7 +34495,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -34545,7 +34672,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -34719,7 +34847,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -34892,7 +35021,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -35066,7 +35196,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -35234,7 +35365,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -35400,7 +35532,8 @@
     "sfx": {
      "name": "glitch-transition",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -35565,7 +35698,8 @@
     "sfx": {
      "name": "typewriter",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -35734,7 +35868,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -35767,7 +35902,6 @@
     ]
    },
    "cues": [
-    "percent",
     "level",
     "ratio"
    ],
@@ -35904,7 +36038,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -36064,7 +36199,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -36218,7 +36354,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -36382,7 +36519,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -36552,7 +36690,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -36708,7 +36847,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -36863,7 +37003,8 @@
     "sfx": {
      "name": "map-whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -37018,7 +37159,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -37193,7 +37335,8 @@
     "sfx": {
      "name": "map-whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -37358,7 +37501,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -37538,7 +37682,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -37703,7 +37848,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -37859,7 +38005,8 @@
     "sfx": {
      "name": "glitch-transition",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -38029,7 +38176,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -38186,7 +38334,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -38342,7 +38491,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -38499,7 +38649,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -38651,7 +38802,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -38802,7 +38954,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -38961,7 +39114,8 @@
     "sfx": {
      "name": "glitch-transition",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -39117,7 +39271,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -39268,7 +39423,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -39424,7 +39580,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -39576,7 +39733,8 @@
     "sfx": {
      "name": "glitch-transition",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -39727,7 +39885,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -39883,7 +40042,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -40045,7 +40205,8 @@
     "sfx": {
      "name": "typewriter",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -40078,9 +40239,7 @@
     ]
    },
    "cues": [
-    "place",
-    "date",
-    "time-of-day"
+    "place"
    ],
    "tags": [
     "lib",
@@ -40202,7 +40361,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -40359,7 +40519,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -40515,7 +40676,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -40671,7 +40833,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -40827,7 +40990,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -40990,7 +41154,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -41146,7 +41311,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -41305,7 +41471,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -41464,7 +41631,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -41636,7 +41804,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -41796,7 +41965,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -41965,7 +42135,8 @@
     "sfx": {
      "name": "typewriter",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -42128,7 +42299,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -42283,7 +42455,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -42443,7 +42616,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -42612,7 +42786,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -42783,7 +42958,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -42951,7 +43127,8 @@
     "sfx": {
      "name": "page",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -43120,7 +43297,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -43290,7 +43468,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -43461,7 +43640,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -43627,7 +43807,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -43792,7 +43973,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -43952,7 +44134,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -44117,7 +44300,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -44282,7 +44466,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -44448,7 +44633,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -44615,7 +44801,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -44780,7 +44967,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -44940,7 +45128,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -45106,7 +45295,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -45280,7 +45470,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -45444,7 +45635,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -45600,7 +45792,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -45783,7 +45976,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -45953,7 +46147,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -46121,7 +46316,8 @@
     "sfx": {
      "name": "riser",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -46295,7 +46491,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -46464,7 +46661,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -46623,7 +46821,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -46784,7 +46983,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -46939,7 +47139,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -47106,7 +47307,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -47275,7 +47477,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -47428,7 +47631,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -47581,7 +47785,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -47746,7 +47951,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -47909,7 +48115,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -48080,7 +48287,8 @@
     "sfx": {
      "name": "impact",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -48245,7 +48453,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -48408,7 +48617,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -48574,7 +48784,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -48739,7 +48950,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -48896,7 +49108,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -49058,7 +49271,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -49215,7 +49429,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -49383,7 +49598,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -49536,7 +49752,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -49702,7 +49919,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -49864,7 +50082,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -50035,7 +50254,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -50212,7 +50432,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -50366,7 +50587,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -50526,7 +50748,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -50713,7 +50936,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -50890,7 +51114,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -51064,7 +51289,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -51245,7 +51471,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -51405,7 +51632,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -51562,7 +51790,8 @@
     "sfx": {
      "name": "map-whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -51724,7 +51953,8 @@
     "sfx": {
      "name": "map-whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -51894,7 +52124,8 @@
     "sfx": {
      "name": "map-whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -52066,7 +52297,8 @@
     "sfx": {
      "name": "map-whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -52240,7 +52472,8 @@
     "sfx": {
      "name": "map-whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -52416,7 +52649,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -52596,7 +52830,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -52777,7 +53012,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -52953,7 +53189,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -53129,7 +53366,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -53305,7 +53543,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -53485,7 +53724,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -53665,7 +53905,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -53829,7 +54070,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -53995,7 +54237,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -54150,7 +54393,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -54316,7 +54560,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -54482,7 +54727,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -54648,7 +54894,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -54810,7 +55057,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -54963,7 +55211,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -55114,7 +55363,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -55271,7 +55521,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -55431,7 +55682,8 @@
     "sfx": {
      "name": "paper",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -55590,7 +55842,8 @@
     "sfx": {
      "name": "none",
      "volume": 0.0
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -55746,7 +55999,8 @@
     "sfx": {
      "name": "pop",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -55901,7 +56155,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -56062,7 +56317,8 @@
     "sfx": {
      "name": "whoosh",
      "volume": 0.25
-    }
+    },
+    "types": false
    },
    "variants": {
     "style": [
@@ -56103,6 +56359,7786 @@
     "lib",
     "sp",
     "still"
+   ]
+  },
+  {
+   "id": "LIB_ED_TYPE_CLEAN",
+   "name": "Clean Typewriter",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "The line types letter by letter (frame 6 on, 2 frames a character up to 48 characters, else 1) in a clean white sans on a soft dark gradient strip low-left, a blinking caret in the accent while it types; once typed, the key word (overlay.highlight, else the longest word) warms into the accent. An optional small kicker (label) sits above. Fades down and out at the end.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-type-clean",
+    "sfx": {
+     "name": "keys",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": true
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "typewriter",
+    "statement",
+    "fact"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_TYPE_TERMINAL",
+   "name": "Terminal Record",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A frosted dark glass card mid-left with a window dot row and a small record label (label, default RECORD); the fact types letter by letter in a monospace face after an accent prompt, with a blinking caret. For records, figures and log entries.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-type-terminal",
+    "sfx": {
+     "name": "keys",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": true
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "typewriter",
+    "fact",
+    "term"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_WORD_BY_WORD",
+   "name": "Word by Word",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A centred kinetic caption: the words land one at a time with a small rise and settle out of a soft blur, the key word (highlight, else the longest) in the accent with a soft glow, over a gentle radial shade.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-word-by-word",
+    "sfx": {
+     "name": "click",
+     "volume": 0.25
+    },
+    "sfxAt": 8,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "key-phrase",
+    "statement",
+    "caption"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_MARKER_HIGHLIGHT",
+   "name": "Marker Highlight",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A clean white paper strip slides up low-left with dark ink text; a translucent yellow highlighter then sweeps across the key words (highlight, else the one or two longest words) in reading order. No underline, no red.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-marker-highlight",
+    "sfx": {
+     "name": "marker",
+     "volume": 0.25
+    },
+    "sfxAt": 18,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "key-phrase",
+    "fact",
+    "statement"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_BLUR_IN",
+   "name": "Cinematic Blur-In",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A cinematic letter-spaced title in the centre: the letters come out of a blur from the middle outward while the tracking tightens, a thin white rule grows beneath and an optional small line (label) fades in under it. Blurs away at the end.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-blur-in",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 14,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "term"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_SPLIT_REVEAL",
+   "name": "Split Reveal",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "The headline split into two lines that slide in from opposite sides behind their masks and meet in the centre, a short accent bar growing between them; they slide back out the way they came.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-split-reveal",
+    "sfx": {
+     "name": "swipe",
+     "volume": 0.25
+    },
+    "sfxAt": 8,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "key-phrase"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_BOX_STACK",
+   "name": "Box Stack",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "Two to four words in solid boxes stacked on the left with an offset, a warm yellow box then a white box, black condensed caps, each popping in with an overshoot; they fold away one by one at the end.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-box-stack",
+    "sfx": {
+     "name": "click",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "warning",
+    "key-phrase"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_NEWS_CLIPPING",
+   "name": "News Clipping",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A newspaper headline clipping: a heavy serif headline on textured newsprint under a double rule and a small dateline (label), torn top and bottom edges; it slides in rotated from below and settles at a slight angle with a soft shadow.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-news-clipping",
+    "sfx": {
+     "name": "paper-slide",
+     "volume": 0.25
+    },
+    "sfxAt": 14,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "quote",
+    "fact"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_GLASS_CAPTION",
+   "name": "Glass Caption",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A modern frosted-glass pill bottom-centre with a small info icon in the accent; the line reveals left to right inside it. A caption for a fact, never louder than the picture.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-glass-caption",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 10,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "caption",
+    "fact",
+    "statement"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_OUTLINE_FILL",
+   "name": "Outline Fill",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A big outlined title in condensed caps, centred; it fills with colour (the accent, lightened) left to right behind a soft glowing front, the fill landing on frame 36, then holds.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-outline-fill",
+    "sfx": {
+     "name": "riser-short",
+     "volume": 0.25
+    },
+    "sfxAt": 36,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "term"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_SIDE_NOTE",
+   "name": "Side Note",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A small editor's annotation in handwriting in the upper right, written on left to right, with a hand-drawn arrow in the accent curving down into the frame toward the subject.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-side-note",
+    "sfx": {
+     "name": "marker",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "key-phrase",
+    "caption"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_QUOTE_TYPE",
+   "name": "Typed Quote",
+   "category": "QUOTES",
+   "component": "motion",
+   "description": "A serif quotation typed letter by letter (frame 6 on, 2 frames a character up to 48 characters, else 1) over a darkened left side, large soft quote marks behind it in the accent; once typed, an accent dash and the attribution (label) slide in.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-quote-type",
+    "sfx": {
+     "name": "keys",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": true
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "quote"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_QUESTION",
+   "name": "Drawn Question",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "The narration's question in large clean type, rising word by word in the centre; a big question mark then draws itself beside it in the accent and its dot lands on frame 26.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-question",
+    "sfx": {
+     "name": "ding",
+     "volume": 0.25
+    },
+    "sfxAt": 26,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "question"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_ED_ALERT_BAR",
+   "name": "Alert Bar",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A clean warning bar upper left: an amber icon cell (red for life-threatening words such as evacuation or emergency) drops in with its triangle pulsing, a dark bar wipes out of it and the text slides in; an optional kicker (label) above. Wipes away at the end.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ed-alert-bar",
+    "sfx": {
+     "name": "boom-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 10,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "warning"
+   ],
+   "tags": [
+    "lib",
+    "ed"
+   ]
+  },
+  {
+   "id": "LIB_DT_CLEAN_CARD",
+   "name": "Clean Date Card",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A bold deep-navy date card with a yellow top edge: the month in a solid yellow block, the day huge on the left counting up to its value and landing with a small punch on frame 28, the year and the weekday (computed, or label) beside it; a place (label) under the card. Month-year or year-only dates count the year; a time alone shows big.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-clean-card",
+    "sfx": {
+     "name": "boom-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 28,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_DT_CALENDAR_PAGE",
+   "name": "Calendar Page",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A calendar month page flips down from its binding, its grid laid out from the real first weekday; a red marker circles the day (frame 22), then the weekday and full date settle under the page in a navy tag.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-calendar-page",
+    "sfx": {
+     "name": "marker",
+     "volume": 0.25
+    },
+    "sfxAt": 22,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_DT_STAMP_BAR",
+   "name": "Date Stamp Bar",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A bold lower-left bar, THURSDAY • SEPT 25, 2026 (and the time when given), revealed by a yellow block that sweeps across it and slides off; the place (label) sits under it. Wipes away to the left at the end.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-stamp-bar",
+    "sfx": {
+     "name": "swipe",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_DT_CLOCK_TIME",
+   "name": "Clock Time",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "An analog clock mid-left whose hands spin round and stop exactly on the time (frame 30), the second hand sweeping on; the digital time big beside it with AM/PM in a yellow block and the weekday, date or place under it.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-clock-time",
+    "sfx": {
+     "name": "tick",
+     "volume": 0.25
+    },
+    "sfxAt": 30,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_DT_REC_STAMP",
+   "name": "REC Timestamp",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A camcorder on-screen display over the footage: thin viewfinder corners, a blinking red REC dot and a monospace timestamp top-right, SEP 25 2026  03:45:07 PM, the seconds running. Clicks on at frame 3; good over news and phone clips.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-rec-stamp",
+    "sfx": {
+     "name": "click",
+     "volume": 0.25
+    },
+    "sfxAt": 3,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "time-of-day",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_DT_DATE_SLAM",
+   "name": "Date Slam",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A full-width band across the middle: a yellow wipe, then navy over it; the month (yellow), day and year (white numerals) slam down one after another with a small camera shake, the day landing on frame 18; the weekday or place under them. Wipes off to the right.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-date-slam",
+    "sfx": {
+     "name": "boom-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 18,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_DT_TIMELINE_TICK",
+   "name": "Timeline Tick",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A thin month ruler (a year ruler when only the year is known) slides in across the lower third and decelerates; a yellow marker drops onto the exact date (frame 22) with a navy label card, and the month's tick label turns yellow.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-timeline-tick",
+    "sfx": {
+     "name": "tick",
+     "volume": 0.25
+    },
+    "sfxAt": 22,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_DT_COUNTDOWN_DAYS",
+   "name": "Days Later",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "For a span of time in the text (3 DAYS LATER, 48 HOURS, TWO WEEKS EARLIER): the number counts up big in yellow, the unit and the word after it stacked beside it in white, a time bar filling under them with a tick per unit. Text without a span falls back to the date card.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-countdown-days",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 12,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "datetime",
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_CT_CLEAN_COUNT",
+   "name": "Clean Count",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "The figure counts up from zero in big clean tabular numerals with thousands separators and a soft eased landing; a thin accent line draws beneath it and the label rises under the line. Prefix and unit ride the same baseline.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-clean-count",
+    "sfx": {
+     "name": "count-tick",
+     "volume": 0.25
+    },
+    "sfxAt": 44,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "count",
+    "money"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_CT_ROLLING_DIGITS",
+   "name": "Rolling Digits",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "Slot-machine drums, one dark tile per digit, spin and land one by one from left to right, each tile flashing the accent as it settles; separators and the unit fade in, the label rises beneath.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-rolling-digits",
+    "sfx": {
+     "name": "count-tick",
+     "volume": 0.25
+    },
+    "sfxAt": 42,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "count"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_CT_BAR_PERCENT",
+   "name": "Bar Percent",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "On a dark glass panel the label sits left and the percent counts up right while a wide horizontal bar fills in sync with a glowing head, over 0 / 50 / 100% marks; a quiet second line underneath.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-bar-percent",
+    "sfx": {
+     "name": "riser-short",
+     "volume": 0.25
+    },
+    "sfxAt": 50,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_CT_RING_PRO",
+   "name": "Ring Gauge Pro",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A ring gauge whose gradient arc sweeps round from twelve o'clock in step with the count, rounded glowing head, a tick bezel that lights as the arc passes; the clean percent in the centre and the label below.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-ring-pro",
+    "sfx": {
+     "name": "riser-short",
+     "volume": 0.25
+    },
+    "sfxAt": 52,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_CT_DOT_GRID",
+   "name": "People Grid",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A 10 x 10 grid of little people fills in the accent to the percent while the number counts beside it, with an 'N IN EVERY 100' line, a short accent rule and the label.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-dot-grid",
+    "sfx": {
+     "name": "tick",
+     "volume": 0.25
+    },
+    "sfxAt": 54,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_CT_SPLIT_COMPARE",
+   "name": "Split Compare",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "Two dark panels swipe in from either side and meet round an accent arrow badge; each has its label and a figure counting up together (before and after, or A against B). Reads overlay.items [{label, value}].",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-split-compare",
+    "sfx": {
+     "name": "swipe",
+     "volume": 0.25
+    },
+    "sfxAt": 10,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-values"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_CT_CORNER_STAT",
+   "name": "Corner Stat",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A compact stat card clicks into the top-right corner over the footage: an accent edge, the figure counting up and a one-line label; it slides back out to the right. Rides on the picture, no scrim.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-corner-stat",
+    "sfx": {
+     "name": "click",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "percent",
+    "money",
+    "count"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_CT_PIE_SLICE",
+   "name": "Pie Slice",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A pie whose share sweeps in with the count, then the slice pulls out of the pie with a white edge and a shadow; the percent, a short accent rule and the label beside it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-pie-slice",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 46,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_CT_MONEY_STACK",
+   "name": "Money Stack",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "Money counts up with its currency sign while a stack of banknotes drops on beside it, note by note; large amounts read as '$4.2 BILLION', with the label under a short accent rule.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ct-money-stack",
+    "sfx": {
+     "name": "count-tick",
+     "volume": 0.25
+    },
+    "sfxAt": 50,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "money"
+   ],
+   "tags": [
+    "lib",
+    "ct"
+   ]
+  },
+  {
+   "id": "LIB_PE_ZOOM_CIRCLE",
+   "name": "Zoom Circle Marker",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A slow push toward a point of the photo, then a red hand-drawn marker loop is drawn round it and a white label with a red hand-drawn arrow points at it (overlay.anchor {x,y} in 0..1, else an off-centre point).",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-zoom-circle",
+    "sfx": {
+     "name": "marker",
+     "volume": 0.25
+    },
+    "sfxAt": 22,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-place",
+    "photo-object",
+    "photo-person"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_HIGHLIGHT_BOX",
+   "name": "Highlight Box",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "The photo dims and desaturates outside a red box that draws on around the point of interest, a red tag names it, then the camera pushes into the box.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-highlight-box",
+    "sfx": {
+     "name": "marker",
+     "volume": 0.25
+    },
+    "sfxAt": 18,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-object",
+    "photo-place"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_FOCUS_PULL",
+   "name": "Focus Pull",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "The still starts soft and dark and racks into focus under a diagonal light sweep and a vignette while the camera pushes; the caption fades up lower left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-focus-pull",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 20,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-place"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_SPLIT_PANELS",
+   "name": "Split Panels",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "The photo arrives as three vertical strips sliding in staggered from above and below, then the gaps close into one picture that keeps pushing; caption lower left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-split-panels",
+    "sfx": {
+     "name": "swipe",
+     "volume": 0.25
+    },
+    "sfxAt": 8,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-place"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_FRAME_DROP",
+   "name": "Framed Print Drop",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A framed print with a white mat drops onto a dark desk, lands with a small bump and settles its turn, and the camera leans in; a museum-style label card slides in beside it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-frame-drop",
+    "sfx": {
+     "name": "paper-slide",
+     "volume": 0.25
+    },
+    "sfxAt": 13,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-person",
+    "photo-object"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_PARALLAX",
+   "name": "Parallax 2.5D",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "2.5D parallax: a blurred, darkened copy of the photo drifts one way behind a sharp framed crop that drifts the other, with its caption inside the crop.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-parallax",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 14,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-place"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_NEWSPRINT",
+   "name": "Newsprint Halftone",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A newspaper page slides up and settles: a double rule, the kicker, the headline (overlay.text) in a serif strip and the photo printed in halftone dots under it, a serif-italic caption; the camera leans in.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-newsprint",
+    "sfx": {
+     "name": "paper-slide",
+     "volume": 0.25
+    },
+    "sfxAt": 12,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-person",
+    "photo-place"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_PUNCH_IN",
+   "name": "Punch In",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A fast zoom-blur punch into the photo with a light exposure flash, settling at once into a slow sideways drift; caption lower left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-punch-in",
+    "sfx": {
+     "name": "swipe",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-place",
+    "photo-object"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_DUOTONE",
+   "name": "Duotone Caption",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "The photo wipes in on a diagonal in a duotone grade (near-black to a light tint of the accent) with a big clean caption, an accent rule above it and a letter-spaced subtitle.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-duotone",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 13,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-person",
+    "photo-place"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_LIGHT_SWEEP",
+   "name": "Light Sweep Location",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A slow push with a warm diagonal light sweep, vignette and film grain; a small location label with an accent pin, a drawn hairline and a second line.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-light-sweep",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 22,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-place"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_POLAROID_PAN",
+   "name": "Polaroid Pan",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A shutter flash, then the photo is an instant print on a warm tabletop that the camera pans across; the caption is handwritten on the print letter by letter, a date beside it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-polaroid-pan",
+    "sfx": {
+     "name": "shutter",
+     "volume": 0.25
+    },
+    "sfxAt": 3,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-person",
+    "photo-object"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PF_PROFILE",
+   "name": "Profile Intro",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A blurred copy of the portrait fills the frame; the framed portrait slides in on the left with an accent bar, the name large in condensed caps on the right over an accent bar and hairline, the kicker above and the role beneath. Initials medallion when there is no portrait.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pf-profile",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 13,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "person-full"
+   ],
+   "tags": [
+    "lib",
+    "pf",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PF_DOSSIER",
+   "name": "Dossier Intro",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A manila file folder slides up on a dark desk; the portrait is paper-clipped to the sheet and the name is typed letter by letter with a caret (typing from frame 6), then highlighted; the role is filled in after it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pf-dossier",
+    "sfx": {
+     "name": "keys",
+     "volume": 0.25
+    },
+    "sfxAt": 6,
+    "types": true
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "person-full"
+   ],
+   "tags": [
+    "lib",
+    "pf",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PF_SPLIT_NAME",
+   "name": "Split Name",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "The portrait swipes in to fill the right half in a duotone of the accent behind an accent seam; the name in big clean type on the left with a line drawing under it, kicker above and role below.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pf-split-name",
+    "sfx": {
+     "name": "swipe",
+     "volume": 0.25
+    },
+    "sfxAt": 8,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "person-full"
+   ],
+   "tags": [
+    "lib",
+    "pf",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PF_SPOTLIGHT",
+   "name": "Spotlight Intro",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A dark stage: a spotlight hits the portrait with a flicker, the kicker and the name below in a serif with a thin accent underline drawing out from its centre, the role in spaced caps.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pf-spotlight",
+    "sfx": {
+     "name": "boom-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 14,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "person-full"
+   ],
+   "tags": [
+    "lib",
+    "pf",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PF_MAGAZINE",
+   "name": "Magazine Cover",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A shutter flash and the portrait fills the frame as a magazine cover: the name as a serif masthead dropping in letter by letter, a thin frame line, the kicker and the role as the cover line lower left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pf-magazine",
+    "sfx": {
+     "name": "shutter",
+     "volume": 0.25
+    },
+    "sfxAt": 3,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "person-full"
+   ],
+   "tags": [
+    "lib",
+    "pf",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_WX_WIND_FLOW",
+   "name": "Forecast Wind Flow",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The forecast-model view news-weather channels screen-record: a smooth colour field of wind speed (blue to magenta) over the region's state and coast lines, thousands of white streaks spiralling into the storm's low, city dots with names, a speed legend and a model-time chip; the camera drifts in slowly.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "wx-wind-flow",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 10,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "forecast",
+    "forecast-wind"
+   ],
+   "tags": [
+    "lib",
+    "wx",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_WX_RAIN_BANDS",
+   "name": "Forecast Rain Bands",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The same forecast-model view as precipitation: green, yellow and red rain bands wrapping around the low, slowly turning, with streaks of the flow, state lines, city names, an intensity legend and a model-time chip.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "wx-rain-bands",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 10,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "forecast",
+    "forecast-rain"
+   ],
+   "tags": [
+    "lib",
+    "wx",
+    "own-backdrop"
    ]
   }
  ],
@@ -56276,6 +64312,62 @@
    "value": "color-wash",
    "duration": 0.5,
    "use": "into a quote"
+  },
+  {
+   "id": "TR_CROSSFADE",
+   "name": "Crossfade",
+   "value": "crossfade",
+   "duration": 0.5,
+   "use": "news compilation: most cuts"
+  },
+  {
+   "id": "TR_WHIP_PAN",
+   "name": "Whip Pan",
+   "value": "whip-pan",
+   "duration": 0.35,
+   "use": "energy, a jump between places"
+  },
+  {
+   "id": "TR_ZOOM_PUNCH",
+   "name": "Zoom Punch",
+   "value": "zoom-punch",
+   "duration": 0.35,
+   "use": "an impact, a reveal"
+  },
+  {
+   "id": "TR_SHAKE_CUT",
+   "name": "Shake Cut",
+   "value": "shake-cut",
+   "duration": 0.3,
+   "use": "a hit, a collapse"
+  },
+  {
+   "id": "TR_BLUR_DISSOLVE",
+   "name": "Blur Dissolve",
+   "value": "blur-dissolve",
+   "duration": 0.5,
+   "use": "a soft change of place or time"
+  },
+  {
+   "id": "TR_LUMA_FADE",
+   "name": "Luma Fade",
+   "value": "luma-fade",
+   "duration": 0.5,
+   "use": "a section ends"
+  },
+  {
+   "id": "TR_CHROMATIC_FLASH",
+   "name": "Chromatic Flash",
+   "value": "chromatic-flash",
+   "duration": 0.35,
+   "use": "a revelation, trending energy"
+  },
+  {
+   "id": "TR_VHS_GLITCH",
+   "name": "VHS Glitch",
+   "value": "vhs-glitch",
+   "duration": 0.4,
+   "use": "into old footage, a twist"
   }
  ],
  "sfx": {
@@ -56337,6 +64429,62 @@
   },
   "TRANSITION": {
    "file": "whoosh",
+   "volume": 0.2
+  },
+  "WHOOSH_SOFT": {
+   "file": "whoosh-soft",
+   "volume": 0.2
+  },
+  "SWIPE": {
+   "file": "swipe",
+   "volume": 0.2
+  },
+  "UI_CLICK": {
+   "file": "click",
+   "volume": 0.2
+  },
+  "KEYS": {
+   "file": "keys",
+   "volume": 0.14
+  },
+  "SHUTTER": {
+   "file": "shutter",
+   "volume": 0.2
+  },
+  "BOOM_SOFT": {
+   "file": "boom-soft",
+   "volume": 0.18
+  },
+  "DING": {
+   "file": "ding",
+   "volume": 0.18
+  },
+  "CLOCK_TICK": {
+   "file": "tick",
+   "volume": 0.2
+  },
+  "GLITCH_SHORT": {
+   "file": "glitch-short",
+   "volume": 0.18
+  },
+  "RISER_SHORT": {
+   "file": "riser-short",
+   "volume": 0.2
+  },
+  "FLASH_HIT": {
+   "file": "flash-hit",
+   "volume": 0.18
+  },
+  "MARKER": {
+   "file": "marker",
+   "volume": 0.2
+  },
+  "COUNT_TICK": {
+   "file": "count-tick",
+   "volume": 0.16
+  },
+  "PAPER_SLIDE": {
+   "file": "paper-slide",
    "volume": 0.2
   }
  },

@@ -1,7 +1,11 @@
 export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right"
   // Stills (VidRush): the photo slides in from a side while it settles from a
   // close zoom, then keeps pushing; or a slow push with a slight turn.
-  | "reveal-left" | "reveal-right" | "push-rotate";
+  | "reveal-left" | "reveal-right" | "push-rotate"
+  // A documentary editor's hand moves on stills (transitions/stillMotion.tsx):
+  // push to an off-centre point, pull back to reveal, diagonal drift, a sharp
+  // print drifting over a blurred copy (parallax), a slight turn that settles.
+  | "push-offcenter" | "pull-back" | "drift-diagonal" | "parallax" | "rotate-settle";
 
 /**
  * The grade applied to a scene's footage.
@@ -15,8 +19,11 @@ export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right"
 export type Treatment = "none" | "film" | "vintage" | "archival";
 
 /**
- * How a scene enters. Most cuts are hard ("none"); real transitions are kept
- * for section changes, the way VidRush uses them (~1 cut in 4).
+ * How a scene enters. Most cuts are hard ("none"). src/timeline.py plans the
+ * rest by cutting style: documentary / history / story mark section changes
+ * softly (~1 cut in 6 at most), news / compilation / trending punctuate more
+ * (~1 cut in 3-4). The cut transitions (remotion/src/transitions) straddle
+ * the cut: the outgoing scene draws their first half.
  * Must match TRANSITIONS in src/timeline.py; a test asserts they agree.
  */
 export type SceneTransition =
@@ -24,7 +31,13 @@ export type SceneTransition =
   | "whip" | "flash" | "light-leak" | "dip" | "blur" | "punch"
   // VidRush section changes: barn-door split, a coloured bar sweep, a pixel
   // mosaic into archival material, a blue wash into a quote.
-  | "split-wipe" | "bar-wipe" | "mosaic" | "color-wash";
+  | "split-wipe" | "bar-wipe" | "mosaic" | "color-wash"
+  // Editor cut transitions that straddle the cut (remotion/src/transitions).
+  | "whip-pan" | "zoom-punch" | "shake-cut" | "blur-dissolve" | "luma-fade"
+  | "chromatic-flash" | "vhs-glitch"
+  // News-compilation cross-dissolve: the outgoing shot plays on under the
+  // incoming one while it fades in (Main.tsx extends the outgoing scene).
+  | "crossfade";
 
 /**
  * One effect per clip, so borrowed footage reads as designed.
@@ -268,7 +281,18 @@ export interface TimelineProps {
    * 20-35% volume). `name` is a file in public/sfx/. sfxVolume scales them all
    * (the editor's slider); sfxEnabled false mutes the track. Absent = on, 1.
    */
-  sfx?: { name: string; startFrame: number; volume: number }[];
+  sfx?: {
+    name: string;
+    startFrame: number;
+    volume: number;
+    /** How long the sound may play; absent = the file's length (sfx_meta.json), at most 6 s. */
+    durationFrames?: number;
+    /** Frames skipped at the head of the file, so its peak lands on the look's
+     *  hit without the sound starting before the look is on screen. */
+    trimFrames?: number;
+    /** What planned it: an overlay's animation or a scene transition. */
+    kind?: "overlay" | "transition";
+  }[];
   sfxVolume?: number;
   sfxEnabled?: boolean;
   meta?: Record<string, unknown>;

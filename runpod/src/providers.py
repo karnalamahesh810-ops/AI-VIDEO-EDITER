@@ -106,6 +106,23 @@ def _stock(search_name: str, kind: str):
     return find
 
 
+def _wants_satellite(ctx: SourceContext) -> bool:
+    """A line about the storm system itself in a story about today's weather:
+    the live NOAA satellite loop is the real shot (src/official.py)."""
+    if not ctx.wants_footage or not config.OFFICIAL_IMAGERY:
+        return False
+    from . import director, official
+    if not official.SATELLITE_WORDS.search(f"{ctx.query} {ctx.intent}"):
+        return False
+    return official.is_now(director.LAST_STORY or {})
+
+
+def _satellite(ctx: SourceContext):
+    from . import director, official
+    story = director.LAST_STORY or {}
+    return official.satellite_clip([ctx.subject], ctx.seconds, ctx.work_dir, story)
+
+
 def _generated_first(ctx: SourceContext):
     m = _m()
     ctx.tried_generation = True
@@ -147,6 +164,8 @@ def _image(ctx: SourceContext) -> bool:
 
 
 REGISTRY: List[Provider] = [
+    Provider("noaa_satellite", "footage", "public-domain", _wants_satellite, _satellite,
+             "the live GOES satellite loop of the story's region, for a line about the storm itself"),
     Provider("youtube", "footage", "unverified",
              lambda c: c.wants_footage and c.allow_youtube, _youtube,
              "yt-dlp range download, storyboard moments, the candidate pool"),
@@ -170,6 +189,8 @@ REGISTRY: List[Provider] = [
              lambda c: bool(c.subject) and c.subject_type in ("person", "place", "event"), _wikipedia_article,
              "the named subject's own article: real photos of exactly that subject"),
     Provider("web_images", "image", "unverified", lambda c: True, _image_search("search_web_images")),
+    Provider("yandex_images", "image", "unverified", lambda c: config.ALLOW_YANDEX_IMAGES,
+             _image_search("search_yandex_images"), "Yandex Images: full-size originals, strong on local news photos"),
     Provider("wikimedia_images", "image", "cc", lambda c: True, _image_search("search_wikimedia")),
     Provider("nasa_images", "image", "public-domain", lambda c: True, _image_search("search_nasa")),
     Provider("openverse", "image", "cc", lambda c: True, _image_search("search_openverse")),

@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, Sequence, staticFile, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Easing, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { SceneClip } from "./components/SceneClip";
 import { BlurBackdrop } from "./components/AnimationScene";
 import { KScale } from "./components/pro/ProGraphics";
@@ -8,6 +8,7 @@ import { MotionWrap } from "./components/MotionWrap";
 import { resolveOverlay, templateFor } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
 import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
+import sfxMeta from "../public/sfx/sfx_meta.json";
 
 const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
 // Case-file looks that show a still of the story when they were given no
@@ -24,7 +25,9 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
   if (PHOTO_CARDS.has(ov.type) && !(ov.media && ov.media.length)) {
     // A photo or person card dropped on a scene borrows that scene's image.
     const under = scenes.find((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
-    if (under && under.media.type === "image" && under.media.url) ov = { ...ov, media: [under.media] };
+    // On a clip, a frame of it (a person introduced over footage of them).
+    const m = under ? stillOf(under.media) : null;
+    if (m) ov = { ...ov, media: [m] };
   }
   if (!(ov.media && ov.media.length)) {
     const v = ov.variant || "";
@@ -82,9 +85,9 @@ const TEXT_CATEGORIES = new Set(["TEXT", "HEADLINES", "QUOTES", "LOWER_THIRDS"])
 const textScale = (ov: Overlay): number => {
   if (typeof ov.fontScale === "number" && ov.fontScale > 0) return Math.max(0.6, Math.min(1.8, ov.fontScale));
   const t = templateFor(ov.template);
-  if (t && TEXT_CATEGORIES.has(t.category)) return 1.2;
+  if (t && TEXT_CATEGORIES.has(t.category)) return 1.12;
   if (!t && ["typewriter", "word-type", "underline-title", "swoosh-title", "sentence-highlight", "quote", "kicker",
-    "lower-third", "chapter", "title"].includes(ov.type)) return 1.2;
+    "lower-third", "chapter", "title"].includes(ov.type)) return 1.12;
   return 1;
 };
 
@@ -130,6 +133,53 @@ const makeMusicVolume = (props: TimelineProps) => {
   };
 };
 
+/** Length and loudest point of every file in public/sfx (written with the files). */
+const SFX_META = sfxMeta as Record<string, { duration: number; peak: number }>;
+const SFX_MAX_SECONDS = 6;
+// Sounds that can repeat seamlessly to cover a longer planned span.
+const LOOPABLE_SFX = new Set(["keys", "typewriter"]);
+
+type SfxCue = NonNullable<TimelineProps["sfx"]>[number];
+
+const sfxNode = (fx: SfxCue, i: number, fps: number, master?: number) => {
+  const fileFrames = Math.max(1, Math.ceil((SFX_META[fx.name]?.duration ?? 3) * fps));
+  const planned = typeof fx.durationFrames === "number" && fx.durationFrames > 0 ? Math.ceil(fx.durationFrames) : 0;
+  const frames = Math.max(1, Math.min(planned || fileFrames, Math.ceil(SFX_MAX_SECONDS * fps)));
+  const start = Math.round(fx.startFrame || 0);
+  // A sound planned to peak on frame 0-ish may start before the video does:
+  // keep the timing by skipping its head instead of shifting it late.
+  // The planner also skips a head so a sound's peak lands on its look's hit
+  // without starting before the look is on screen (trimFrames).
+  const trim = typeof fx.trimFrames === "number" && fx.trimFrames > 0 ? Math.round(fx.trimFrames) : 0;
+  const skip = Math.max(start < 0 ? -start : 0, trim);
+  const level = Math.max(0, Math.min(1, (Number(fx.volume) || 0) * (master ?? 1)));
+  const cut = frames < fileFrames || (planned > 0 && LOOPABLE_SFX.has(fx.name));
+  // A sound stopped before its own end fades over its last frames (no click).
+  const fade = cut ? Math.max(1, Math.min(4, Math.floor(frames / 3))) : 0;
+  const volume = fade
+    ? (f: number) => level * Math.max(0, Math.min(1, (frames - skip - f) / fade))
+    : level;
+  return (
+    <Sequence key={`sfx-${i}`} from={Math.max(0, start)} durationInFrames={Math.max(1, frames - skip)} layout="none">
+      <Audio src={staticFile(`sfx/${fx.name}.mp3`)} volume={volume} trimBefore={skip || undefined}
+        loop={LOOPABLE_SFX.has(fx.name) && frames > fileFrames ? true : undefined} />
+    </Sequence>
+  );
+};
+
+/** Frames a "crossfade" scene takes to fade in over the previous one (0.5 s). */
+const CROSSFADE_FRAMES = 15;
+
+/** Fades its scene in over the one underneath (a true cross-dissolve). */
+const CrossfadeIn: React.FC<{ active: boolean; children: React.ReactNode }> = ({ active, children }) => {
+  const frame = useCurrentFrame();
+  if (!active) return <>{children}</>;
+  const opacity = interpolate(frame, [0, CROSSFADE_FRAMES], [0, 1], {
+    extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.quad),
+  });
+  return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
+};
+
 export const Main: React.FC<TimelineProps> = (props) => {
   const { scenes, overlays, audio, bgm, captions } = props;
   // Track toggles from the editor. Absent means on, so older timelines
@@ -164,18 +214,31 @@ export const Main: React.FC<TimelineProps> = (props) => {
   const overlayNodes = React.useMemo(
     () => (overlays || []).map((ov) => renderOverlay(ov, captions.accent, scenes)),
     [overlays, captions.accent, scenes]);
+  // Built once per sfx list: each sound plays for its planned span (a typing
+  // run lasts exactly as long as the letters appear) or, unplanned, for the
+  // file's own length - never the old fixed 3 s that cut risers and typing.
+  const sfxNodes = React.useMemo(
+    () => (props.sfxEnabled === false ? [] : (props.sfx || []).map((fx, i) => sfxNode(fx, i, fps, props.sfxVolume))),
+    [props.sfx, props.sfxEnabled, props.sfxVolume, fps]);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
       {/* Visual track — one clip per spoken clause */}
-      {scenes.map((scene) => (
+      {scenes.map((scene, i) => (
         <Sequence
           key={scene.id}
           from={scene.startFrame}
-          durationInFrames={scene.durationInFrames}
+          // A cross-dissolve into the next scene: this one plays on underneath
+          // for the length of the dissolve (the next scene is drawn on top).
+          durationInFrames={scene.durationInFrames
+            + (scenes[i + 1]?.transition === "crossfade" ? CROSSFADE_FRAMES : 0)}
           premountFor={premount}
         >
-          <SceneClip scene={scene} accent={captions.accent} backdrop={backdrops[scene.id]} />
+          {/* The next scene's transition starts over this scene's last frames. */}
+          <CrossfadeIn active={scene.transition === "crossfade" && i > 0}>
+            <SceneClip scene={scene} accent={captions.accent} backdrop={backdrops[scene.id]}
+              nextTransition={scenes[i + 1]?.transition} />
+          </CrossfadeIn>
         </Sequence>
       ))}
 
@@ -215,12 +278,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           loopVolumeCurveBehavior="extend"
         />
       ) : null}
-      {props.sfxEnabled !== false && (props.sfx || []).map((fx, i) => (
-        <Sequence key={`sfx-${i}`} from={Math.max(0, fx.startFrame)} durationInFrames={90} layout="none">
-          <Audio src={staticFile(`sfx/${fx.name}.mp3`)}
-            volume={Math.max(0, Math.min(1, fx.volume * (props.sfxVolume ?? 1)))} />
-        </Sequence>
-      ))}
+      {sfxNodes}
     </AbsoluteFill>
   );
 };

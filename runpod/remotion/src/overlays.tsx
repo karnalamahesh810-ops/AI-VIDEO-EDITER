@@ -23,7 +23,7 @@ import { AgeTag, BarTitle, ClockBadge, Kicker, MemoBox, PersonTag, RedStrip, Swo
 import { IconPop, PathSteps, ProgressSteps, Span } from "./components/DataGraphics";
 import { Banner, IconArray, ProgressBar, YearRoll } from "./components/MotionGraphics";
 import { SatelliteMap, SpreadMap } from "./components/MapLooks";
-import { ProBars, ProCompare, ProDate, ProStat, ProTimeline, ProTitle, ProTrend } from "./components/pro/ProGraphics";
+import { ProBars, ProCompare, ProDate, ProStat, ProTimeline, ProTrend } from "./components/pro/ProGraphics";
 import { ProPhoto } from "./components/pro/ProPhoto";
 import { ProKicker, ProLabels, ProList } from "./components/pro/ProTags";
 import { ProSplit } from "./components/pro/ProSplit";
@@ -32,6 +32,7 @@ import { ProBubbles, ProColumns, ProDelta, ProLine, ProMeasure, ProPie, ProRank,
   ProTank, ProVersus } from "./components/pro/ProCharts";
 import { ProBoard, ProCallout, ProClipping, ProEvidence, ProFile, ProSourceTag, ProWindows } from "./components/pro/ProCase";
 import { LIBRARY } from "./components/lib";
+import { EdTypeClean } from "./components/lib/LibEditorText";
 import type { Overlay, OverlayType } from "./types";
 
 /** Colour themes an overlay can ask for instead of the brand accent. */
@@ -65,7 +66,11 @@ export const OVERLAYS: Record<OverlayType, OverlayComponent> = {
   title: TitleOverlay,
   chapter: ProChapter,
   callout: CalloutOverlay,
-  typewriter: ProTitle,
+  // Typed letter by letter (the typing contract in LibEditorText: frame 6 on,
+  // 2 frames a character up to 48 characters, else 1), so the planner's "keys"
+  // sound matches it; a question keeps its "THE QUESTION" kicker.
+  typewriter: (p) => (/\?\s*$/.test(p.overlay.text || "") && !p.overlay.label
+    ? <EdTypeClean {...p} overlay={{ ...p.overlay, label: "The question" }} /> : <EdTypeClean {...p} />),
   stat: (p) => {
     // More number looks (ProCharts): the variant picks the drawing.
     const Look = STAT_LOOKS[p.overlay.variant || ""];

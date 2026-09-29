@@ -56,39 +56,51 @@ class Planner(unittest.TestCase):
                                treatments.pack_for(brief, pack), timeline._OVERLAY_SECONDS)
 
     def test_meaning_chooses_the_template_and_rhythm_keeps_them_apart(self):
+        # 2026-09-29: every clear figure now gets its counting look (the 150 ft
+        # measurement used to be crowded out), and the look comes out of the
+        # rotation over every look for the cue, not the first in the registry.
         out = self._plan([
-            "Lake Mead is now at 26% capacity.",                       # percent -> gauge
-            "The white bathtub ring stands 150 feet tall.",            # number, but 6 s after: skipped
+            "Lake Mead is now at 26% capacity.",                       # percent -> a percent look
+            "The white bathtub ring stands 150 feet tall.",            # a clear figure: always shown
             "Boat ramps at Boulder Harbor end in dry gravel.",         # nothing
             "So what happens next?",                                   # question, 18 s later: allowed
             "Marinas have been dragged downhill again and again.",     # nothing
-            "The lake has fallen 40 feet since 2020.",                 # change: allowed (high, 8.5 s after)
+            "The lake has fallen 40 feet since 2020.",                 # change: allowed
         ])
-        ids = [o["template"] for o in out["overlays"]]
-        self.assertEqual(ids[0], "NUM_PERCENT_V1")
-        self.assertIn("TEXT_QUESTION_V1", ids)
-        self.assertIn("NUM_TREND_V1", ids)
-        self.assertNotIn("NUM_BIG_COUNTER_V1", ids)                    # crowded out by the gauge
-        first = out["overlays"][0]
-        self.assertEqual((first["type"], first["value"], first["suffix"], first["text"]), ("stat", 26.0, "%", "CAPACITY"))
+        ovs = out["overlays"]
+        cues = lambda o: templates.cues_of(templates.get(o["template"]))
+        self.assertIn("percent", cues(ovs[0]))
+        at = {o["startFrame"] // 180: o for o in ovs}
+        self.assertIn("measurement", cues(at[1]))
+        self.assertEqual(at[1]["value"], 150.0)
+        self.assertNotIn(2, at)
+        self.assertTrue({"question", "typewriter"} & set(cues(at[3])))
+        self.assertTrue({"change", "change-length"} & set(cues(at[5])))
+        first = ovs[0]
+        self.assertEqual((first["value"], first["suffix"], first["text"]), (26.0, "%", "CAPACITY"))
         self.assertIn(first["motion"], templates.load()["entrances"])
         self.assertEqual(first["startFrame"], 0)
-        # On the voice, not the whole scene: readable, never past the template's hold + slack.
+        # On the voice, not the whole scene: readable, never past the figure window.
         self.assertGreaterEqual(first["durationInFrames"], int(treatments.MIN_HOLD * 30))
-        self.assertLessEqual(first["durationInFrames"], int((3.5 + treatments.HOLD_SLACK) * 30) + 1)
+        self.assertLessEqual(first["durationInFrames"], int(treatments.LAYOUT_WINDOWS["figure"][1] * 30) + 1)
         vt = out["treatments"][0]
-        self.assertEqual((vt["primaryType"], vt["secondaryType"], vt["template"]), ("footage", "numbers", "NUM_PERCENT_V1"))
+        self.assertEqual((vt["primaryType"], vt["template"]), ("footage", first["template"]))
         self.assertEqual(vt["data"]["value"], 26.0)
-        self.assertEqual(vt["sfx"]["name"], "pop")
         self.assertEqual(vt["musicCue"], "INTRO")
         self.assertEqual(out["treatments"][2]["template"], None)
         c = out["counts"]
-        self.assertEqual(c["data_graphics"], 2)
-        self.assertEqual(c["text_treatments"], 1)
         self.assertEqual(c["footage_scenes"], 6)
         self.assertEqual(c["music_cues"], 2)
+        self.assertEqual(sum(c["by_category"].values()), 4)
+        # Every sound is a file the renderer ships.
+        self.assertTrue(all(s["name"] in templates.sfx_files() for s in out["sfx"]))
+        # Nothing is ever the banned headline family.
+        self.assertFalse([o for o in ovs if templates.banned(o["template"])])
 
     def test_the_directors_map_and_chapter_hints_become_pack_templates(self):
+        # Beat 0 is a section start (brief sections from 0), so its short
+        # chapter title keeps the pack's chapter card; the director's
+        # satellite-dark map is honoured.
         shots = [{"subject": "Lake Mead", "overlay": {"type": "chapter", "text": "The Bathtub Ring"}},
                  {"subject": "Nevada", "overlay": {"type": "map", "variant": "satellite-dark", "text": "Nevada",
                                                    "locations": [{"label": "Nevada", "lat": 38.0, "lon": -117.0}]}},
@@ -99,17 +111,31 @@ class Planner(unittest.TestCase):
         m = out["overlays"][1]
         self.assertEqual((m["type"], m["variant"], m["locations"][0]["label"]), ("map", "satellite-dark", "Nevada"))
         self.assertEqual(out["treatments"][1]["mapData"]["locations"][0]["label"], "Nevada")
-        self.assertEqual(len(out["sfx"]), 1)                       # two sounds 6 s apart: the stronger wins
-        self.assertEqual(out["sfx"][0]["name"], "impact")
+        # The sound pass (src/sfxplan.py, or the fallback) gives each graphic
+        # at most one sound, in time order, from files that exist.
+        self.assertTrue(out["sfx"])
+        self.assertLessEqual(len(out["sfx"]), 2)
+        self.assertEqual([s["startFrame"] for s in out["sfx"]], sorted(s["startFrame"] for s in out["sfx"]))
+        self.assertTrue(all(s["name"] in templates.sfx_files() for s in out["sfx"]))
 
     def test_a_long_quiet_stretch_gets_a_light_label(self):
+        # 2026-09-29: the label rotates over the caption / key-phrase looks and
+        # shows the line's key phrase (a name the line says), not a fixed kicker.
         texts = ["Plain footage line one.", "Plain footage line two.", "Plain footage line three.",
                  "Plain footage line four.", "Plain footage line five.", "Plain footage line six.",
                  "Plain footage line seven.", "Now Hoover Dam comes into view."]
         shots = [{"subject": ""} for _ in texts[:-1]] + [{"subject": "Hoover Dam"}]
-        out = self._plan(texts, shots)
-        self.assertEqual([o["template"] for o in out["overlays"]], ["TEXT_KICKER_V1"])
-        self.assertEqual(out["overlays"][0]["text"], "HOOVER DAM")
+        segments = [seg(t, i) for i, t in enumerate(texts)]
+        scenes = [scene(i) for i in range(len(texts))]
+        brief = {"kind": "explainer", "sections": [], "hookBeats": []}
+        out = treatments.plan(segments, shots, scenes, 30, len(texts) * 180, brief, treatments.pack_for(brief),
+                              timeline._OVERLAY_SECONDS)
+        self.assertEqual(len(out["overlays"]), 1)
+        o = out["overlays"][0]
+        self.assertTrue({"caption", "key-phrase"} & set(templates.cues_of(templates.get(o["template"]))), o["template"])
+        self.assertEqual(o["text"].upper(), "HOOVER DAM")
+        self.assertEqual(o["startFrame"], 7 * 180)
+        self.assertNotEqual(o["template"], "TEXT_SENTENCE_HIGHLIGHT_V1")
 
     def test_style_pack_follows_the_story_kind_and_the_request(self):
         self.assertEqual(treatments.pack_for({"kind": "weather"})["id"], "weather")
@@ -137,6 +163,113 @@ class Registry(unittest.TestCase):
         self.assertEqual(r["scale"], 1.6)
         self.assertEqual(r["sfx"]["name"], "none")
         self.assertNotIn("bogus", r)
+
+
+class NewCues(unittest.TestCase):
+    """The cue vocabulary of the 2026-09-29 looks pass: times, spelled-out figures, counts, people, text."""
+
+    def cue(self, text, name, shot=None, brief=None):
+        found = [c for c in treatments.cues_for(seg(text, 0), shot or {"subject": "Lake Mead"}, brief) if c["cue"] == name]
+        return found[0] if found else None
+
+    def test_times_of_day_and_date_with_time(self):
+        self.assertEqual(treatments.time_in("The spillway opened at 3:45 pm.")[0], "3:45 PM")
+        self.assertEqual(treatments.time_in("By 3 p.m. the road was gone.")[0], "3 PM")
+        self.assertEqual(treatments.time_in("The call came at midnight.")[0], "12:00 AM")
+        self.assertEqual(treatments.time_in("They left at dawn.")[0], "DAWN")
+        self.assertEqual(treatments.time_in("It was seven o'clock that evening.")[0], "7:00 PM")
+        self.assertIsNone(treatments.time_in("It was the afternoon of a long day with 5 amendments."))
+        c = self.cue("At 3:45 pm on September 25, 2026, the dam released water.", "datetime")
+        self.assertEqual(c["props"]["text"], "SEPTEMBER 25, 2026 · 3:45 PM")
+        self.assertEqual((c["props"]["date"], c["props"]["time"]), ("SEPTEMBER 25, 2026", "3:45 PM"))
+        self.assertEqual(self.cue("The call came in at noon.", "time-of-day")["props"]["text"], "12:00 PM")
+
+    def test_more_ways_to_say_a_date(self):
+        self.assertEqual(treatments.date_in("Sept. 25 was the deadline.")[0], "SEPTEMBER 25")
+        self.assertEqual(treatments.date_in("Filed on 9/25/2026 in Phoenix.")[0], "SEPTEMBER 25, 2026")
+        self.assertIsNone(treatments.date_in("Nothing can mar 5 years of work."))
+        c = self.cue("On Monday, September 15, the gauge read low.", "date")
+        self.assertEqual((c["props"]["text"], c["props"]["label"]), ("SEPTEMBER 15", "MONDAY"))
+
+    def test_spelled_out_figures_and_counts(self):
+        c = self.cue("The lake is at twenty-two percent of capacity.", "percent")
+        self.assertEqual((c["props"]["value"], c["props"]["suffix"]), (22.0, "%"))
+        c = self.cue("The basin lost three million acre-feet last year.", "big-number")
+        self.assertEqual((c["props"]["value"], c["props"]["suffix"]), (3.0, "MILLION"))
+        c = self.cue("Nearly three thousand homes were evacuated.", "count")
+        self.assertEqual((c["props"]["value"], c["props"]["text"]), (3000.0, "HOMES EVACUATED"))
+        c = self.cue("Roughly 12,000 people were displaced that week.", "count")
+        self.assertEqual((c["props"]["value"], c["props"]["text"]), (12000.0, "PEOPLE DISPLACED"))
+        self.assertIsNone(self.cue("There are a million reasons to worry.", "big-number"))
+
+    def test_a_named_person_asks_for_a_full_screen_introduction(self):
+        brief = {"cast": [{"name": "Brad Udall", "aliases": ["Udall"], "role": "Water researcher"}]}
+        c = self.cue("Brad Udall has studied the river for decades.", "person-full", brief=brief)
+        self.assertEqual((c["props"]["text"], c["props"]["subtitle"], c["props"]["label"]),
+                         ("Brad Udall", "Water researcher", "WHO IS"))
+        c = self.cue("She says the numbers do not add up.", "person-full",
+                     shot={"subject": "Katie Hobbs", "subjectType": "person"})
+        self.assertEqual((c["props"]["text"], c["props"]["subtitle"]), ("Katie Hobbs", ""))
+        self.assertIsNone(self.cue("Lake Powell is shrinking.", "person-full",
+                                   shot={"subject": "Lake Powell", "subjectType": "person"}))
+
+    def test_text_cues(self):
+        self.assertEqual(self.cue("The dam changed everything.", "headline")["props"]["text"], "The dam changed everything")
+        self.assertEqual(self.cue("Now Hoover Dam comes into view.", "key-phrase", shot={})["props"]["text"], "Hoover Dam")
+        self.assertEqual(self.cue("Now Hoover Dam comes into view.", "caption", shot={})["props"]["text"], "HOOVER DAM")
+        self.assertIsNotNone(self.cue("Nobody was ready for what came next.", "typewriter"))
+        self.assertEqual(self.cue("Engineers call it the dead pool line.", "term")["props"]["text"], "Dead Pool Line")
+        self.assertIsNotNone(self.cue("It is the largest reservoir in the country by volume.", "fact"))
+        self.assertIsNone(self.cue("It happened in 2020.", "headline"))
+
+
+class LookHelpers(unittest.TestCase):
+    def test_banned_looks_are_never_offered(self):
+        for tid in templates.BANNED:
+            t = templates.get(tid)
+            if not t:
+                continue
+            for cue in templates.cues_of(t):
+                self.assertNotIn(tid, [x["id"] for x in templates.for_cue(cue)])
+            self.assertNotIn(tid, [x["id"] for x in templates.for_component(t["component"])])
+            self.assertFalse(treatments.look_fits(tid, "anything"))
+
+    def test_families_and_typing(self):
+        self.assertEqual(templates.family(templates.get("TEXT_KICKER_V1")), "TEXT")
+        self.assertEqual(templates.family(templates.get("LIB_QS_GIANT_MARKS")), "qs")
+        self.assertEqual(templates.family(templates.get("PLACE_CARD_V1")), "PHOTO")
+        self.assertTrue(templates.types(templates.get("TEXT_MEMO_V1")))
+        self.assertTrue(templates.types(templates.get("TL_DATE_STAMP_V1")))
+        self.assertFalse(templates.types(templates.get("TL_DATE_TITLE_V1")))
+        # The typewriter cue only ever offers looks that really type.
+        self.assertTrue(all(templates.types(t) for t in treatments._Planner(
+            [], [], [], 30, 1, {}, treatments.pack_for({}), {})._pool("typewriter", "x", {})))
+
+    def test_the_directors_map_variant_is_honoured_and_places_rotate_over_satellite_looks(self):
+        pack = treatments.pack_for({"kind": "history"})
+        one = {"type": "map", "locations": [{"label": "Nevada", "lat": 38.0, "lon": -117.0}]}
+        ids, first = treatments._map_ids(dict(one, variant="satellite-tilt"), pack)
+        self.assertEqual(first, "MAP_TILT_V1")
+        ids, first = treatments._map_ids(one, pack)
+        self.assertEqual(first, "")
+        self.assertTrue(set(ids) <= set(treatments.SATELLITE_PLACE_MAPS) | {"MAP_PHOTO_PIN_V1"}, ids)
+        # History mixes its paper map in, at most one map in four.
+        self.assertIn(pack["map"], treatments._map_ids(one, pack, n_maps=3)[0])
+        two = {"type": "map", "locations": one["locations"] * 2}
+        self.assertEqual(treatments._map_ids(two, pack)[0], treatments.TWO_PLACE_MAPS)
+        three = {"type": "map", "locations": one["locations"] * 3}
+        self.assertEqual(treatments._map_ids(three, pack)[0], [pack["multi"]])
+        self.assertIn("MAP_PHOTO_PIN_V1", treatments._map_ids(one, pack, still=True)[0])
+
+    def test_turn_counters_start_from_zero_every_video(self):
+        treatments._corner_turn[0] = 7
+        treatments._ARCHIVE_COUNTS["TAG_SOURCE_V1"] = 9
+        treatments._kind_turn["place"][0] = 5
+        a = Planner("_plan")._plan(["Lake Mead is now at 26% capacity."])
+        self.assertEqual(treatments._ARCHIVE_COUNTS, {})
+        self.assertEqual(treatments._kind_turn["place"][0], 0)
+        b = Planner("_plan")._plan(["Lake Mead is now at 26% capacity."])
+        self.assertEqual(a["overlays"], b["overlays"])
 
 
 class TimelineIntegration(unittest.TestCase):

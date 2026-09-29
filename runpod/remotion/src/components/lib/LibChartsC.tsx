@@ -5,6 +5,9 @@ import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { Odometer, Scrim, formatValue, lines, ramp, useHold, useK } from "../pro/ProGraphics";
 import { CaseBackdrop } from "../pro/ProCase";
 
+// The owner (2026-09-29): a look's own sounds sit at ~40% of their old level.
+const IN_LOOK_SFX_SCALE = 0.4;
+
 /**
  * Charts III (family "cc-"): charts that draw POINT BY POINT, the GoMotion
  * way. Every point, bar or node lands with its own soft tick (sfx/pop.mp3,
@@ -349,7 +352,7 @@ const Tick: React.FC<{ at: number; volume?: number }> = ({ at, volume = 0.3 }) =
   if (!Number.isFinite(from) || from < 0 || from >= durationInFrames - 1) return null;
   return (
     <Sequence from={from} durationInFrames={Math.max(1, Math.min(30, durationInFrames - from))} layout="none">
-      <Audio src={staticFile("sfx/pop.mp3")} volume={Math.max(0, Math.min(1, volume))} />
+      <Audio src={staticFile("sfx/pop.mp3")} volume={Math.max(0, Math.min(1, volume * IN_LOOK_SFX_SCALE))} />
     </Sequence>
   );
 };

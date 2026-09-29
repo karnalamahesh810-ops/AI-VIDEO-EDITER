@@ -1,13 +1,14 @@
 import React from "react";
 import {
-  AbsoluteFill, Easing, Img, OffthreadVideo, interpolate,
+  AbsoluteFill, Img, OffthreadVideo,
   useCurrentFrame, useVideoConfig,
 } from "remotion";
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
 import { EffectLayer, TransitionLayer, effectFilter, entranceStyle } from "./SceneEffects";
 import { AnimationScene } from "./AnimationScene";
 import { PlayerWindow } from "./pro/ProCase";
-import type { Scene, SceneMedia } from "../types";
+import { StillPicture, TransitionFrame } from "../transitions";
+import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
 
 /**
  * One visual for one spoken clause.
@@ -17,40 +18,37 @@ import type { Scene, SceneMedia } from "../types";
  * slideshow, not an edit. Transitions now happen only where the timeline asks
  * for one (see SceneEffects), and every clip carries one effect so borrowed
  * footage still feels designed.
+ *
+ * Cut transitions straddle the cut (../transitions): this scene draws its own
+ * entrance from frame 0 and, given `nextTransition`, the first half of the
+ * next scene's transition over its own last few frames.
  */
-export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: SceneMedia | null }> = ({ scene, accent, backdrop }) => {
+export const SceneClip: React.FC<{
+  scene: Scene; accent?: string; backdrop?: SceneMedia | null; nextTransition?: SceneTransition;
+}> = ({ scene, accent, backdrop, nextTransition }) => {
   const frame = useCurrentFrame();
-  const { durationInFrames, fps } = useVideoConfig();
+  const { durationInFrames, fps, width } = useVideoConfig();
   const { media, motion, treatment, transition, effect } = scene;
 
   const progress = durationInFrames > 1 ? frame / durationInFrames : 0;
 
-  // Slow, steady drift on photos; overshooting scale keeps pans from exposing
-  // edges. Footage plays as it is, full frame (the owner: GoMotion does not
-  // zoom into clips - a 6% crop on every clip and a 1.24x cut-in halfway
-  // through long ones read as zooming).
-  let transform = media.type === "video" ? "none" : "scale(1.06)";
-  if (motion === "zoom-in" || effect === "ken-burns") {
-    transform = `scale(${1.04 + progress * 0.1})`;
-  } else if (motion === "zoom-out") {
-    transform = `scale(${1.16 - progress * 0.1})`;
-  } else if (motion === "pan-left") {
-    transform = `scale(1.16) translateX(${interpolate(progress, [0, 1], [3, -3])}%)`;
-  } else if (motion === "pan-right") {
-    transform = `scale(1.16) translateX(${interpolate(progress, [0, 1], [-3, 3])}%)`;
-  } else if (motion === "reveal-left" || motion === "reveal-right") {
-    // In from the side, settling from a close zoom, then a slow push.
-    const side = motion === "reveal-left" ? -1 : 1;
-    const e = interpolate(frame, [0, Math.round(fps * 1.0)], [0, 1],
-      { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.bezier(0.16, 1, 0.3, 1) });
-    transform = `translateX(${(1 - e) * side * 12}%) scale(${1.32 - 0.22 * e + progress * 0.06})`;
-  } else if (motion === "push-rotate") {
-    transform = `scale(${1.08 + progress * 0.1}) rotate(${interpolate(progress, [0, 1], [-1.4, 0.6])}deg)`;
-  }
+  // Footage plays as it is, full frame, never zoomed or cropped (the owner:
+  // GoMotion does not zoom into clips - a 6% crop on every clip and a 1.24x
+  // cut-in halfway through long ones read as zooming). Stills move with the
+  // scene's own motion (timeline.py rotates it so neighbours differ); the
+  // "ken-burns" effect only stands in when a still has no motion at all. It
+  // used to be checked first, so every still in 7 of 8 style packs got the
+  // same slow zoom-in and the rotation never showed.
+  const stillMotion: Motion | undefined =
+    motion && motion !== "none" ? motion : effect === "ken-burns" ? "zoom-in" : undefined;
 
   if (media.type === "animation") {
     // The beat is a motion graphic, not a clip (VidRush's purple blocks).
-    return <AnimationScene scene={scene} accent={accent || "#d6a83c"} backdrop={backdrop} />;
+    return (
+      <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
+        <AnimationScene scene={scene} accent={accent || "#d6a83c"} backdrop={backdrop} />
+      </TransitionFrame>
+    );
   }
 
   if (media.type === "color" || !media.url) {
@@ -59,11 +57,13 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
     // broken frame, and lets a fallback text overlay (see
     // handler._fill_missing_media) actually sit on something.
     return (
-      <AbsoluteFill
-        style={{
-          background: "radial-gradient(ellipse at 50% 40%, #1b1c22 0%, #0a0a0d 75%)",
-        }}
-      />
+      <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
+        <AbsoluteFill
+          style={{
+            background: "radial-gradient(ellipse at 50% 40%, #1b1c22 0%, #0a0a0d 75%)",
+          }}
+        />
+      </TransitionFrame>
     );
   }
 
@@ -84,7 +84,6 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    transform,
     filter: filters || undefined,
   };
 
@@ -93,20 +92,22 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
     // desk (a recording, an interview, archive film shown as footage).
     const tone = scene.id.charCodeAt(scene.id.length - 1) % 2 ? "dark" : "light";
     const media100: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover",
-      transform: `scale(${1.02 + progress * 0.04})`, filter: filters || undefined };
+      transform: media.type === "video" ? undefined : `scale(${1.02 + progress * 0.04})`, filter: filters || undefined };
     return (
-      <AbsoluteFill style={{ backgroundColor: "#000" }}>
-        <PlayerWindow tone={tone} seed={scene.startFrame % 7}
-          title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
-          {media.type === "video" ? (
-            <OffthreadVideo src={media.url} style={media100} muted playbackRate={rate} />
-          ) : (
-            <Img src={media.url} style={media100} />
-          )}
-          <FilmLayer treatment={treatment} />
-        </PlayerWindow>
-        <TransitionLayer transition={transition} />
-      </AbsoluteFill>
+      <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
+        <AbsoluteFill style={{ backgroundColor: "#000" }}>
+          <PlayerWindow tone={tone} seed={scene.startFrame % 7}
+            title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
+            {media.type === "video" ? (
+              <OffthreadVideo src={media.url} style={media100} muted playbackRate={rate} />
+            ) : (
+              <Img src={media.url} style={media100} />
+            )}
+            <FilmLayer treatment={treatment} />
+          </PlayerWindow>
+          <TransitionLayer transition={transition} />
+        </AbsoluteFill>
+      </TransitionFrame>
     );
   }
 
@@ -121,61 +122,67 @@ export const SceneClip: React.FC<{ scene: Scene; accent?: string; backdrop?: Sce
       width: "auto",
       height: "auto",
       boxShadow: "0 22px 60px rgba(0,0,0,0.6)",
-      transform: `scale(${1 + progress * 0.05})`,
+      transform: media.type === "video" ? undefined : `scale(${1 + progress * 0.05})`,
       filter: filters || undefined,
     };
     return (
-      <AbsoluteFill
-        style={{
-          background: "radial-gradient(ellipse at 50% 45%, #145c46 0%, #0b3a2c 70%, #072a20 100%)",
-          justifyContent: "center",
-          alignItems: "center",
-          overflow: "hidden",
-        }}
-      >
-        <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.22 }}>
-          <filter id={`grain-${scene.id}`}>
-            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed={frame % 7} />
-          </filter>
-          <rect width="100%" height="100%" filter={`url(#grain-${scene.id})`} />
-        </svg>
+      <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
         <AbsoluteFill
           style={{
+            background: "radial-gradient(ellipse at 50% 45%, #145c46 0%, #0b3a2c 70%, #072a20 100%)",
             justifyContent: "center",
             alignItems: "center",
-            opacity: entrance.opacity ?? 1,
-            transform: entrance.transform,
+            overflow: "hidden",
           }}
         >
-          {media.type === "video" ? (
-            <OffthreadVideo src={media.url} style={inset} muted playbackRate={rate} />
-          ) : (
-            <Img src={media.url} style={inset} />
-          )}
+          <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.22 }}>
+            <filter id={`grain-${scene.id}`}>
+              <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed={frame % 7} />
+            </filter>
+            <rect width="100%" height="100%" filter={`url(#grain-${scene.id})`} />
+          </svg>
+          <AbsoluteFill
+            style={{
+              justifyContent: "center",
+              alignItems: "center",
+              opacity: entrance.opacity ?? 1,
+              transform: entrance.transform,
+            }}
+          >
+            {media.type === "video" ? (
+              <OffthreadVideo src={media.url} style={inset} muted playbackRate={rate} />
+            ) : (
+              <Img src={media.url} style={inset} />
+            )}
+          </AbsoluteFill>
+          <FilmLayer treatment={treatment} />
+          <TransitionLayer transition={transition} />
         </AbsoluteFill>
-        <FilmLayer treatment={treatment} />
-        <TransitionLayer transition={transition} />
-      </AbsoluteFill>
+      </TransitionFrame>
     );
   }
 
   return (
-    <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#000" }}>
-      <AbsoluteFill
-        style={{
-          opacity: entrance.opacity ?? 1,
-          transform: entrance.transform,
-        }}
-      >
-        {media.type === "video" ? (
-          <OffthreadVideo src={media.url} style={fill} muted playbackRate={rate} />
-        ) : (
-          <Img src={media.url} style={fill} />
-        )}
+    <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
+      <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#000" }}>
+        <AbsoluteFill
+          style={{
+            opacity: entrance.opacity ?? 1,
+            transform: entrance.transform,
+            clipPath: entrance.clipPath,
+          }}
+        >
+          {media.type === "video" ? (
+            <OffthreadVideo src={media.url} style={fill} muted playbackRate={rate} />
+          ) : (
+            <StillPicture src={media.url} motion={stillMotion} frame={frame} durationInFrames={durationInFrames}
+              fps={fps} width={width} filter={filters || undefined} />
+          )}
+        </AbsoluteFill>
+        <EffectLayer effect={effect} durationInFrames={durationInFrames} />
+        <FilmLayer treatment={treatment} />
+        <TransitionLayer transition={transition} />
       </AbsoluteFill>
-      <EffectLayer effect={effect} durationInFrames={durationInFrames} />
-      <FilmLayer treatment={treatment} />
-      <TransitionLayer transition={transition} />
-    </AbsoluteFill>
+    </TransitionFrame>
   );
 };

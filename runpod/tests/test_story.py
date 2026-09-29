@@ -129,11 +129,64 @@ class Variety(unittest.TestCase):
     def test_a_look_repeated_within_a_minute_moves_to_a_sibling(self):
         from src.transcribe import Segment
         segs = [Segment(text="x", start=i * 10.0, end=i * 10.0 + 3) for i in range(4)]
-        shots = [{"overlay": {"type": "sentence-highlight", "text": "a"}} for _ in range(4)]
+        shots = [{"overlay": {"type": "callout", "text": "a"}} for _ in range(4)]
         changed = director.diversify_overlays(segs, shots)
         kinds = [s["overlay"]["type"] for s in shots]
-        self.assertEqual(changed, 3)
-        self.assertEqual(kinds[:3], ["sentence-highlight", "red-strip", "underline-title"])
+        self.assertEqual(changed, 2)
+        self.assertEqual(kinds, ["callout", "kicker", "bar-title", "callout"])
+
+    def test_retired_headline_looks_become_key_phrases_and_are_never_rotated_into(self):
+        # The owner banned the white caps with red blocks / red underline
+        # (sentence-highlight, underline-title, swoosh-title, word-type): the
+        # old sibling rotation cycled sentence-highlight -> red-strip -> underline-title.
+        from src.transcribe import Segment
+        segs = [Segment(text="x", start=i * 10.0, end=i * 10.0 + 3) for i in range(8)]
+        kinds = ["sentence-highlight", "underline-title", "swoosh-title", "word-type",
+                 "chapter", "chapter", "typewriter", "typewriter"]
+        shots = [{"overlay": {"type": k, "text": "a", "variant": "caps" if k == "word-type" else None}}
+                 for k in kinds]
+        director.diversify_overlays(segs, shots)
+        got = [s["overlay"]["type"] for s in shots]
+        self.assertFalse(set(got) & director.BANNED_TYPES, got)
+        self.assertEqual(shots[0]["overlay"]["cue"], "key-phrase")
+        self.assertEqual(got[6:], ["typewriter", "memo-box"])
+        for fam in director._SIBLINGS:
+            self.assertFalse({k for k, _ in fam} & director.BANNED_TYPES, fam)
+
+    def test_the_model_cannot_propose_a_retired_look(self):
+        for kind in ("sentence-highlight", "underline-title", "swoosh-title", "word-type"):
+            ov = director.validate_overlay({"type": kind, "text": "Lake Mead is running dry",
+                                            "highlight": "running dry", "variant": "caps"})
+            self.assertEqual((ov["type"], ov["cue"], ov["highlight"]), ("callout", "key-phrase", "running dry"))
+            self.assertNotIn("variant", ov)
+        self.assertNotIn("sentence-highlight", director._SYSTEM_PROMPT.split("NEVER:")[0])
+
+    def test_maps_rotate_through_every_satellite_look(self):
+        one = [{"label": "Phoenix", "kind": "city"}]
+        looks = []
+        for n in range(6):
+            looks.append(director.realistic_map("", one, n, story_kind="explainer",
+                                                previous=looks[-1] if looks else ""))
+        self.assertEqual(set(looks), set(director._SATELLITE_TURNS))
+        self.assertTrue(all(a != b for a, b in zip(looks, looks[1:])))
+        self.assertNotIn("satellite-dark", looks)          # the disaster grade is for event stories
+        news = {director.realistic_map("", one, n, story_kind="disaster") for n in range(7)}
+        self.assertIn("satellite-dark", news)
+        # Asked-for looks are kept, but never the same look twice in a row.
+        self.assertEqual(director.realistic_map("satellite-focus", one, 0), "satellite-focus")
+        self.assertNotEqual(director.realistic_map("satellite-tilt", one, 0, previous="satellite-tilt"),
+                            "satellite-tilt")
+        self.assertEqual(director.realistic_map("dark", one, 0, story_kind="history"), "satellite")
+
+    def test_two_places_keep_their_route_or_distance(self):
+        two = [{"label": "Phoenix", "kind": "city"}, {"label": "Tucson", "kind": "city"}]
+        self.assertEqual(director.realistic_map("satellite-distance", two, 3), "satellite-distance")
+        self.assertEqual(director.realistic_map("route-dark", two, 3), "satellite-route")
+        self.assertEqual(director.realistic_map("satellite-route", two, 3), "satellite-route")
+        # One place cannot draw a route: it gets a satellite look instead.
+        self.assertIn(director.realistic_map("satellite-route", two[:1], 0), director._SATELLITE_TURNS)
+        states = [{"label": s, "kind": "state"} for s in ("Arizona", "Nevada", "Utah")]
+        self.assertEqual(director.realistic_map("satellite-dark", states, 0), "spread-dark")
 
     def test_far_apart_repeats_are_left_alone(self):
         from src.transcribe import Segment

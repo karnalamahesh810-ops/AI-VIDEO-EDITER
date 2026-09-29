@@ -45,10 +45,19 @@ const worldPx = (lat: number, lon: number, z: number): [number, number] => {
   return [((lon + 180) / 360) * n, (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * n];
 };
 
+const usgsZoom = (z: number, us: boolean) => us && z > GIBS_MAX - 2;
 const tileUrl = (z: number, x: number, y: number, us: boolean) =>
-  us && z > GIBS_MAX - 2
+  usgsZoom(z, us)
     ? `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/${z}/${y}/${x}`
     : `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_NextGeneration/default/GoogleMapsCompatible_Level8/${z}/${y}/${x}.jpeg`;
+// USGS imagery has no data over open water and serves those pixels black: a
+// coastal zoom showed black squares on the sea. Its tiles go through this
+// filter (near-black -> transparent) over a NASA Blue Marble underlay.
+const NO_DATA_FILTER_ID = 'usgs-no-data';
+// Blue Marble paints the open sea near-black too; under a USGS zoom its sea
+// drops out as well and a painted ocean (USGS offshore water) shows instead.
+const DARK_SEA_FILTER_ID = 'underlay-dark-sea';
+const OCEAN = '#17314f';
 
 // How close the camera lands, by what the gazetteer says the place is.
 const LANDING: Record<string, number> = {
@@ -116,7 +125,9 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
   const tilt = v === 'satellite-tilt' ? 40 * outCubic(interpolate(frame, [land * 0.4, land * 1.1], [0, 1], clamp)) : 0;
   const extraTop = tilt ? 0.9 : 0.1;
 
-  const tiles = layers.flatMap(({z, opacity}) => {
+  // Under a USGS zoom, the Blue Marble layer at its own best zoom (the sea).
+  const under: Layer[] = usgsZoom(base, us) ? [{z: Math.min(GIBS_MAX, base), opacity: 1}] : [];
+  const tileLayer = ({z, opacity}: Layer, gibs: boolean) => {
     const scale = unit * Math.pow(2, cam - z);
     const size = TILE * scale;
     const cx = centre[0] * Math.pow(2, z), cy = centre[1] * Math.pow(2, z);
@@ -130,15 +141,18 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
       for (let tx = Math.floor(left / TILE); tx <= Math.floor(right / TILE); tx++) {
         const wx = ((tx % n) + n) % n;
         out.push(
-          <Img key={`${z}-${tx}-${ty}`} src={tileUrl(z, wx, ty, us)} onError={() => undefined}
+          <Img key={`${gibs ? 'g' : ''}${z}-${tx}-${ty}`} src={tileUrl(z, wx, ty, us && !gibs)} onError={() => undefined}
             delayRenderTimeoutInMilliseconds={60000} maxRetries={3}
             style={{position: 'absolute', left: width / 2 + (tx * TILE - cx) * scale, top: height / 2 + (ty * TILE - cy) * scale,
-              width: Math.ceil(size) + 1, height: Math.ceil(size) + 1, opacity}} />,
+              width: Math.ceil(size) + 1, height: Math.ceil(size) + 1, opacity,
+              filter: gibs ? `url(#${DARK_SEA_FILTER_ID})` : usgsZoom(z, us) ? `url(#${NO_DATA_FILTER_ID})` : undefined}} />,
         );
       }
     }
     return out;
-  });
+  };
+  const underTiles = under.flatMap((l) => tileLayer(l, true));
+  const mainTiles = layers.flatMap((l) => tileLayer(l, false));
 
   const pinAt = land * 0.85;
   const pin = interpolate(frame, [pinAt, pinAt + fps * 0.4], [0, 1], clamp);
@@ -156,9 +170,21 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
       <AbsoluteFill style={{transform: tilt ? `perspective(${1500 * k}px) rotateX(${tilt}deg) scale(${1 + tilt / 110})` : undefined,
         transformOrigin: '50% 62%'}}>
         {/* The grade is on the imagery only, so pins, routes and labels keep their colour. */}
-        <AbsoluteFill style={{filter: teal ? 'grayscale(.85) sepia(.35) hue-rotate(150deg) saturate(1.3) brightness(.62) contrast(1.15)'
+        <AbsoluteFill style={{background: under.length ? OCEAN : undefined,
+          filter: teal ? 'grayscale(.85) sepia(.35) hue-rotate(150deg) saturate(1.3) brightness(.62) contrast(1.15)'
           : dark ? 'brightness(.55) contrast(1.25) saturate(.55) hue-rotate(-8deg)' : 'saturate(1.1) contrast(1.05)'}}>
-          {tiles}
+          <svg width={0} height={0} style={{position: 'absolute'}}>
+            <filter id={NO_DATA_FILTER_ID} colorInterpolationFilters="sRGB">
+              {/* alpha = 9 x (R + G + B) - 0.1: black no-data drops out, dark water stays */}
+              <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  9 9 9 0 -0.1" />
+            </filter>
+            <filter id={DARK_SEA_FILTER_ID} colorInterpolationFilters="sRGB">
+              {/* alpha = 4 x (R + G + B) - 0.4: the black sea goes, land stays */}
+              <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  4 4 4 0 -0.4" />
+            </filter>
+          </svg>
+          {underTiles}
+          {mainTiles}
         </AbsoluteFill>
         <svg width={width} height={height} style={{position: 'absolute', inset: 0}}>
           {pair && (() => {

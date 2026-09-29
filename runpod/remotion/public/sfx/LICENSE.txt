@@ -7,3 +7,11 @@ Added 2026-09-27 by the project owner (their own licensed files): "whoosh-cinema
 "typing text.mp3", "glitch fx transistion.mp3". The renderer plays the loudness-matched copies
 map-whoosh.mp3, typewriter.mp3 (first 3.5 s of the typing file) and glitch-transition.mp3.
 bell.mp3 (Mixkit 933) was removed; map pings now use map-whoosh.mp3.
+
+Added 2026-09-29 (transitions + sound pass): keys, whoosh-soft, swipe, boom-soft, glitch-short,
+riser-short and paper-slide are edits of the files above (typing text, whoosh, impact,
+glitch fx transistion, riser, page: trimmed, filtered, re-timed). click, tick, count-tick, ding,
+shutter, flash-hit and marker are synthesised from scratch (numpy sine/noise), no third-party audio.
+Every mp3 here was then loudness-matched to about -21 LUFS max momentary (all within ~3 dB),
+true peak <= -3 dBFS. sfx_meta.json lists each file's duration and the time of its loudest point
+("peak", seconds from the start) so the planner can land that point on the visual hit.

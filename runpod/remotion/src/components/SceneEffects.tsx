@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, random, useCurrentFrame } from "remotion";
 import type { SceneEffect, SceneTransition } from "../types";
+import { isCutTransition } from "../transitions/timing";
 
 /**
  * Transitions and per-clip effects, modelled on what VidRush's own timelines
@@ -15,6 +16,12 @@ import type { SceneEffect, SceneTransition } from "../types";
  *
  * Both lists are half a contract: they must match TRANSITIONS and EFFECTS in
  * src/timeline.py, and a test asserts they agree.
+ *
+ * The editor-grade cut transitions (flash, chromatic-flash, glitch, vhs-glitch,
+ * film-burn, light-leak, whip-pan, zoom-punch, shake-cut, blur-dissolve,
+ * luma-fade) live in ../transitions and straddle the cut; this file keeps the
+ * older entrance-only moves (fade, zoom, slide, whip, dip, blur, punch, the
+ * wipes, mosaic, colour wash).
  */
 
 const IN = 12; // frames an entrance transition lasts (0.4s at 30fps)
@@ -24,6 +31,7 @@ export const entranceStyle = (
   t: SceneTransition | undefined,
   frame: number
 ): React.CSSProperties => {
+  if (isCutTransition(t)) return {};   // drawn by TransitionFrame
   const p = interpolate(frame, [0, IN], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -60,14 +68,6 @@ export const entranceStyle = (
       return { clipPath: `inset(0 ${(1 - p) * 100}% 0 0)` };
     case "color-wash":
       return { filter: p < 1 ? `saturate(${0.2 + 0.8 * p}) brightness(${1.35 - 0.35 * p})` : undefined };
-    case "glitch": {
-      if (frame >= IN) return {};
-      const jitter = (random(`gx${frame}`) - 0.5) * 60 * (1 - p);
-      return {
-        transform: `translateX(${jitter}px)`,
-        filter: `hue-rotate(${Math.round(random(`gh${frame}`) * 90)}deg) saturate(1.6)`,
-      };
-    }
     default:
       return {};
   }
@@ -76,46 +76,7 @@ export const entranceStyle = (
 /** Full-frame layer drawn over the media for the entrance (flashes, bars). */
 export const TransitionLayer: React.FC<{ transition?: SceneTransition }> = ({ transition }) => {
   const frame = useCurrentFrame();
-  if (!transition || frame > IN + 4) return null;
-
-  if (transition === "film-burn") {
-    const o = interpolate(frame, [0, 3, IN + 4], [0.95, 0.85, 0], {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    });
-    return (
-      <AbsoluteFill
-        style={{
-          opacity: o,
-          mixBlendMode: "screen",
-          background:
-            "radial-gradient(ellipse at 30% 50%, rgba(255,240,200,1) 0%, " +
-            "rgba(255,140,40,0.95) 30%, rgba(200,40,0,0.6) 60%, rgba(0,0,0,0) 85%)",
-        }}
-      />
-    );
-  }
-
-  if (transition === "flash") {
-    const o = interpolate(frame, [0, 2, IN], [1, 0.9, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-    return <AbsoluteFill style={{ background: "#fff", opacity: o, pointerEvents: "none" }} />;
-  }
-
-  if (transition === "light-leak") {
-    const o = interpolate(frame, [0, 4, IN + 4], [0.9, 0.75, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-    const x = interpolate(frame, [0, IN + 4], [85, 30], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-    return (
-      <AbsoluteFill
-        style={{
-          opacity: o,
-          mixBlendMode: "screen",
-          pointerEvents: "none",
-          background: `radial-gradient(ellipse at ${x}% 40%, rgba(255,210,150,1) 0%, ` +
-            "rgba(255,120,50,0.8) 28%, rgba(230,60,30,0.35) 55%, rgba(0,0,0,0) 80%)",
-        }}
-      />
-    );
-  }
+  if (!transition || frame > IN + 4 || isCutTransition(transition)) return null;
 
   if (transition === "bar-wipe" && frame <= IN) {
     // The bar leads the reveal by a hair so the edge never shows a seam.
@@ -166,32 +127,6 @@ export const TransitionLayer: React.FC<{ transition?: SceneTransition }> = ({ tr
     );
   }
 
-  if (transition === "glitch" && frame < IN) {
-    const bars = [0, 1, 2, 3].map((i) => ({
-      top: `${Math.floor(random(`gb${frame}-${i}`) * 90)}%`,
-      height: `${2 + Math.floor(random(`gbh${frame}-${i}`) * 7)}%`,
-      shift: (random(`gbs${frame}-${i}`) - 0.5) * 120,
-    }));
-    return (
-      <AbsoluteFill style={{ pointerEvents: "none" }}>
-        {bars.map((b, i) => (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              top: b.top,
-              height: b.height,
-              transform: `translateX(${b.shift}px)`,
-              background: i % 2 ? "rgba(0,255,255,0.35)" : "rgba(255,0,80,0.35)",
-              mixBlendMode: "screen",
-            }}
-          />
-        ))}
-      </AbsoluteFill>
-    );
-  }
   return null;
 };
 

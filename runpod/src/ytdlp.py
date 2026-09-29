@@ -24,6 +24,12 @@ from . import config, costs, events, proxies
 from .errors import FailureClass, classify_ytdlp, from_reason
 from .filters import playable_video
 
+# Vertical uploads (Shorts, phone video) when a style frames them on a blurred
+# fill: `height<=1080` alone would take a 1080x1920 Short at 480x854. A
+# landscape video matches none of these and falls through to the usual list.
+_VERTICAL_FIRST = ("bv*[aspect_ratio<1.2][width<=1080][ext=mp4][protocol^=https]/"
+                   "bv*[aspect_ratio<1.2][width<=1080]/")
+
 _INFO_LOCK = threading.Lock()
 _YT_INFO_CACHE: Dict[str, tuple] = {}
 
@@ -429,8 +435,9 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         "--force-keyframes-at-cuts",
         # Direct https formats first: HLS sections go through ffmpeg's HLS
         # demuxer and its connection reuse (see _HLS_REUSE).
-        "-f", ("bv*[height<=1080][ext=mp4][protocol^=https]/bv*[height<=1080][ext=mp4]"
-               "/bv*[height<=1080]/b[height<=1080]"),
+        "-f", (_VERTICAL_FIRST if config.ALLOW_VERTICAL else "")
+        + ("bv*[height<=1080][ext=mp4][protocol^=https]/bv*[height<=1080][ext=mp4]"
+           "/bv*[height<=1080]/b[height<=1080]"),
         "--no-playlist", "--no-warnings",
         "--merge-output-format", "mp4",
         "-o", out_tpl, "--print", "after_move:filepath",

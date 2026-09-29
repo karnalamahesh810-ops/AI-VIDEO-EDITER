@@ -63,6 +63,14 @@ def T(id_, name, category, component, description, *, props, duration, sfx=None,
     }
 
 
+def _typing(t: dict) -> dict:
+    """A template that types letter by letter (typing contract: frame 6 on, 2 frames a
+    character up to 48 characters, else 1): the sound planner runs "keys" for the typing span."""
+    t["defaults"]["types"] = True
+    t["defaults"]["sfxAt"] = 6
+    return t
+
+
 TEMPLATES = [
     # ------------------------------------------------------------- TEXT
     T("TEXT_LABEL_PILL_V1", "Label Pill", "TEXT", "stat-tag",
@@ -76,10 +84,12 @@ TEMPLATES = [
       "A short typed line in the top-left corner for a place and date said in passing.",
       props=["text"], duration=3.0, variant="top-left", entrance="slide-left", kind="tag", emphasis="low",
       sfx={"name": "typewriter", "volume": 0.25}, cues=["aside"]),
-    T("TEXT_TYPEWRITER_V1", "Kinetic Title", "TEXT", "typewriter",
-      "A line rising word by word in condensed display caps with a kicker and an accent rule.",
-      props=["text"], duration=3.0, entrance="fade", sfx={"name": "typewriter", "volume": 0.28},
-      cues=["term", "verdict"]),
+    _typing(T("TEXT_TYPEWRITER_V1", "Typewriter", "TEXT", "typewriter",
+              "The line typed letter by letter on a soft dark strip low-left, a blinking caret while it types, "
+              "the key word warming into the accent once typed (frame 6 on, 2 frames a character up to 48 "
+              "characters, else 1).",
+              props=["text", "highlight", "label"], duration=4.5, entrance="fade", sfx={"name": "keys", "volume": 0.2},
+              cues=["term", "verdict"])),
     T("TEXT_QUESTION_V1", "Question", "TEXT", "typewriter",
       "The narration's question, typed and held.",
       props=["text"], duration=3.5, theme="white", entrance="fade",
@@ -492,6 +502,16 @@ TRANSITIONS = [
     {"id": "TR_BAR_WIPE", "name": "Bar Wipe", "value": "bar-wipe", "duration": 0.4, "use": "into a chapter title, once a video"},
     {"id": "TR_MOSAIC", "name": "Pixel Mosaic", "value": "mosaic", "duration": 0.5, "use": "into archival material"},
     {"id": "TR_COLOR_WASH", "name": "Colour Wash", "value": "color-wash", "duration": 0.5, "use": "into a quote"},
+    # Cut transitions that straddle the cut (remotion/src/transitions), and the
+    # true cross-dissolve of the news-compilation style.
+    {"id": "TR_CROSSFADE", "name": "Crossfade", "value": "crossfade", "duration": 0.5, "use": "news compilation: most cuts"},
+    {"id": "TR_WHIP_PAN", "name": "Whip Pan", "value": "whip-pan", "duration": 0.35, "use": "energy, a jump between places"},
+    {"id": "TR_ZOOM_PUNCH", "name": "Zoom Punch", "value": "zoom-punch", "duration": 0.35, "use": "an impact, a reveal"},
+    {"id": "TR_SHAKE_CUT", "name": "Shake Cut", "value": "shake-cut", "duration": 0.3, "use": "a hit, a collapse"},
+    {"id": "TR_BLUR_DISSOLVE", "name": "Blur Dissolve", "value": "blur-dissolve", "duration": 0.5, "use": "a soft change of place or time"},
+    {"id": "TR_LUMA_FADE", "name": "Luma Fade", "value": "luma-fade", "duration": 0.5, "use": "a section ends"},
+    {"id": "TR_CHROMATIC_FLASH", "name": "Chromatic Flash", "value": "chromatic-flash", "duration": 0.35, "use": "a revelation, trending energy"},
+    {"id": "TR_VHS_GLITCH", "name": "VHS Glitch", "value": "vhs-glitch", "duration": 0.4, "use": "into old footage, a twist"},
 ]
 
 SFX = {
@@ -503,6 +523,14 @@ SFX = {
     "PAPER": {"file": "paper", "volume": 0.35}, "PAGE": {"file": "page", "volume": 0.3},
     "GLITCH": {"file": "glitch-transition", "volume": 0.3}, "NEWS_STING": {"file": "impact", "volume": 0.35},
     "TRANSITION": {"file": "whoosh", "volume": 0.2},
+    # The quieter, matched set (remotion/public/sfx, loudness-matched).
+    "WHOOSH_SOFT": {"file": "whoosh-soft", "volume": 0.2}, "SWIPE": {"file": "swipe", "volume": 0.2},
+    "UI_CLICK": {"file": "click", "volume": 0.2}, "KEYS": {"file": "keys", "volume": 0.14},
+    "SHUTTER": {"file": "shutter", "volume": 0.2}, "BOOM_SOFT": {"file": "boom-soft", "volume": 0.18},
+    "DING": {"file": "ding", "volume": 0.18}, "CLOCK_TICK": {"file": "tick", "volume": 0.2},
+    "GLITCH_SHORT": {"file": "glitch-short", "volume": 0.18}, "RISER_SHORT": {"file": "riser-short", "volume": 0.2},
+    "FLASH_HIT": {"file": "flash-hit", "volume": 0.18}, "MARKER": {"file": "marker", "volume": 0.2},
+    "COUNT_TICK": {"file": "count-tick", "volume": 0.16}, "PAPER_SLIDE": {"file": "paper-slide", "volume": 0.2},
 }
 
 STYLE_PACKS = {
@@ -579,12 +607,19 @@ def _library() -> list:
         elif n > 1:
             tags.append("stills")
         sfx = look.get("sfx") or "none"
-        out.append(T("LIB_" + look["id"].upper().replace("-", "_"), look["name"], look["category"], "motion",
-                     look["description"], props=[p for p in look.get("props", []) if p in P],
-                     duration=float(look.get("duration") or 4.5), variant=look["id"], entrance="fade",
-                     sfx=({"name": sfx, "volume": 0.25} if sfx != "none" else None),
-                     cues=look.get("cues", []), kind=("tag" if look.get("kind") == "tag" else "card"),
-                     emphasis=("high" if look.get("kind") == "card" else "medium"), tags=tags))
+        t = T("LIB_" + look["id"].upper().replace("-", "_"), look["name"], look["category"], "motion",
+              look["description"], props=[p for p in look.get("props", []) if p in P],
+              duration=float(look.get("duration") or 4.5), variant=look["id"], entrance="fade",
+              sfx=({"name": sfx, "volume": 0.25} if sfx != "none" else None),
+              cues=look.get("cues", []), kind=("tag" if look.get("kind") == "tag" else "card"),
+              emphasis=("high" if look.get("kind") == "card" else "medium"), tags=tags)
+        # The sound planner's contract (src/sfxplan.py): the frame (30 fps, from the
+        # look's first frame) its main visual hit lands on, and whether it types
+        # letter by letter (then the "keys" sound runs for the typing span).
+        if isinstance(look.get("sfx_at"), (int, float)) and not isinstance(look.get("sfx_at"), bool):
+            t["defaults"]["sfxAt"] = int(round(look["sfx_at"]))
+        t["defaults"]["types"] = bool(look.get("types"))
+        out.append(t)
     return out
 
 

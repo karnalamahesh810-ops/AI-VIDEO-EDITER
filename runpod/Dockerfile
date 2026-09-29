@@ -42,6 +42,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# --- local models ------------------------------------------------------------
+# CLIP (local vision checks, src/localvision.py) and Real-ESRGAN (photo
+# upscaling, src/upscale.py): pinned + checksummed, ~160 MB, own layer.
+COPY scripts/fetch_models.py /tmp/fetch_models.py
+RUN python /tmp/fetch_models.py /opt/models && rm /tmp/fetch_models.py
+
 # --- remotion (install deps first for layer caching) -------------------------
 COPY remotion/package.json remotion/
 RUN cd remotion && npm install --no-audit --no-fund

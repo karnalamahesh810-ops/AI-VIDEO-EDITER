@@ -4,6 +4,9 @@ import { DISPLAY, INTER, LABEL, SERIF, SERIF_ITALIC } from "../fonts";
 import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { Scrim, lines, ramp, useHold, useK } from "../pro/ProGraphics";
 
+// The owner (2026-09-29): a look's own sounds sit at ~40% of their old level.
+const IN_LOOK_SFX_SCALE = 0.4;
+
 /**
  * Speakers & people (family "sp-"): the quote, portrait and concept cards a
  * GoMotion documentary cuts to when somebody is talking or a plan is laid out.
@@ -174,7 +177,7 @@ const Sfx: React.FC<{ name: string; at: number; volume?: number }> = ({ name, at
   if (from >= durationInFrames - 1) return null;
   return (
     <Sequence from={from} layout="none">
-      <Audio src={staticFile(`sfx/${name}.mp3`)} volume={volume} />
+      <Audio src={staticFile(`sfx/${name}.mp3`)} volume={Math.max(0, Math.min(1, volume * IN_LOOK_SFX_SCALE))} />
     </Sequence>
   );
 };

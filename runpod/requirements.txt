@@ -10,3 +10,5 @@ pillow==12.3.0
 ddgs==9.16.0
 # yt-dlp impersonates Chrome through curl_cffi; Dailymotion serves no formats without it.
 curl_cffi==0.13.0
+# iPhone HEIC/HEIF photos from the web (src/imagefix.py registers it).
+pillow-heif==1.8.0

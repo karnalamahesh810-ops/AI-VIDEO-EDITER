@@ -14,7 +14,7 @@ class StorageError(RuntimeError):
     pass
 
 
-def download(url: str, dest_path: str, timeout: int = 180) -> str:
+def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None) -> str:
     """
     Stream any http(s) URL to disk. Returns the local path.
 
@@ -40,7 +40,7 @@ def download(url: str, dest_path: str, timeout: int = 180) -> str:
     for attempt in range(1, 4):
         try:
             with requests.get(url, stream=True, timeout=(20, timeout),
-                              headers={"User-Agent": config.USER_AGENT}) as r:
+                              headers=headers or {"User-Agent": config.USER_AGENT}) as r:
                 r.raise_for_status()
                 expected = int(r.headers.get("Content-Length") or 0)
                 content_type = (r.headers.get("Content-Type") or "").lower()
@@ -73,7 +73,14 @@ def download(url: str, dest_path: str, timeout: int = 180) -> str:
                 retryable = False      # a web page where an image was expected
             if attempt == 3 or not retryable:
                 break
-            time.sleep(0.5 * attempt)
+            wait = 0.5 * attempt
+            if code == 429:
+                # A rate limit says how long to back off; honour it (bounded).
+                try:
+                    wait = max(wait, min(8.0, float(response.headers.get("Retry-After") or 0)))
+                except (TypeError, ValueError):
+                    wait = max(wait, 2.0 * attempt)
+            time.sleep(wait)
     raise StorageError(f"download failed after {attempt} attempt(s): {last_error}") from last_error
 
 

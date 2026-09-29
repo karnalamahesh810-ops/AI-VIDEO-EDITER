@@ -2347,8 +2347,7 @@
    "label"
   ],
   "cues": [
-   "change",
-   "percent"
+   "change"
   ],
   "duration": 4.5,
   "sfx": "whoosh",
@@ -4461,7 +4460,6 @@
    "subtitle"
   ],
   "cues": [
-   "percent",
    "level",
    "ratio"
   ],
@@ -5436,9 +5434,7 @@
    "locations"
   ],
   "cues": [
-   "place",
-   "date",
-   "time-of-day"
+   "place"
   ],
   "duration": 4.5,
   "sfx": "typewriter",
@@ -9342,5 +9338,1427 @@
   },
   "family": "sp",
   "file": "LibSpeakers"
+ },
+ {
+  "id": "ed-type-clean",
+  "name": "Clean Typewriter",
+  "category": "TEXT",
+  "description": "The line types letter by letter (frame 6 on, 2 frames a character up to 48 characters, else 1) in a clean white sans on a soft dark gradient strip low-left, a blinking caret in the accent while it types; once typed, the key word (overlay.highlight, else the longest word) warms into the accent. An optional small kicker (label) sits above. Fades down and out at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "label"
+  ],
+  "cues": [
+   "typewriter",
+   "statement",
+   "fact"
+  ],
+  "duration": 5.0,
+  "sfx": "keys",
+  "sfx_at": 6,
+  "types": true,
+  "sample": {
+   "text": "Nobody measured the water for eleven years",
+   "highlight": "eleven years"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-type-terminal",
+  "name": "Terminal Record",
+  "category": "TEXT",
+  "description": "A frosted dark glass card mid-left with a window dot row and a small record label (label, default RECORD); the fact types letter by letter in a monospace face after an accent prompt, with a blinking caret. For records, figures and log entries.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "typewriter",
+   "fact",
+   "term"
+  ],
+  "duration": 5.0,
+  "sfx": "keys",
+  "sfx_at": 6,
+  "types": true,
+  "sample": {
+   "text": "Well 14-B: dry since March 2019",
+   "label": "County water record"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-word-by-word",
+  "name": "Word by Word",
+  "category": "TEXT",
+  "description": "A centred kinetic caption: the words land one at a time with a small rise and settle out of a soft blur, the key word (highlight, else the longest) in the accent with a soft glow, over a gentle radial shade.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight"
+  ],
+  "cues": [
+   "key-phrase",
+   "statement",
+   "caption"
+  ],
+  "duration": 4.0,
+  "sfx": "click",
+  "sfx_at": 8,
+  "types": false,
+  "sample": {
+   "text": "The water simply stopped arriving",
+   "highlight": "stopped"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-marker-highlight",
+  "name": "Marker Highlight",
+  "category": "TEXT",
+  "description": "A clean white paper strip slides up low-left with dark ink text; a translucent yellow highlighter then sweeps across the key words (highlight, else the one or two longest words) in reading order. No underline, no red.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight"
+  ],
+  "cues": [
+   "key-phrase",
+   "fact",
+   "statement"
+  ],
+  "duration": 4.5,
+  "sfx": "marker",
+  "sfx_at": 18,
+  "types": false,
+  "sample": {
+   "text": "Lake Mead supplies water to 25 million people",
+   "highlight": "25 million people"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-blur-in",
+  "name": "Cinematic Blur-In",
+  "category": "HEADLINES",
+  "description": "A cinematic letter-spaced title in the centre: the letters come out of a blur from the middle outward while the tracking tightens, a thin white rule grows beneath and an optional small line (label) fades in under it. Blurs away at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "headline",
+   "term"
+  ],
+  "duration": 3.5,
+  "sfx": "whoosh-soft",
+  "sfx_at": 14,
+  "types": false,
+  "sample": {
+   "text": "The Last Reservoir",
+   "label": "Nevada, 2026"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-split-reveal",
+  "name": "Split Reveal",
+  "category": "HEADLINES",
+  "description": "The headline split into two lines that slide in from opposite sides behind their masks and meet in the centre, a short accent bar growing between them; they slide back out the way they came.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "headline",
+   "key-phrase"
+  ],
+  "duration": 3.5,
+  "sfx": "swipe",
+  "sfx_at": 8,
+  "types": false,
+  "sample": {
+   "text": "One river, seven states"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-box-stack",
+  "name": "Box Stack",
+  "category": "HEADLINES",
+  "description": "Two to four words in solid boxes stacked on the left with an offset, a warm yellow box then a white box, black condensed caps, each popping in with an overshoot; they fold away one by one at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "headline",
+   "warning",
+   "key-phrase"
+  ],
+  "duration": 3.5,
+  "sfx": "click",
+  "sfx_at": 6,
+  "types": false,
+  "sample": {
+   "text": "The Wells Ran Dry"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-news-clipping",
+  "name": "News Clipping",
+  "category": "HEADLINES",
+  "description": "A newspaper headline clipping: a heavy serif headline on textured newsprint under a double rule and a small dateline (label), torn top and bottom edges; it slides in rotated from below and settles at a slight angle with a soft shadow.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "headline",
+   "quote",
+   "fact"
+  ],
+  "duration": 4.5,
+  "sfx": "paper-slide",
+  "sfx_at": 14,
+  "types": false,
+  "sample": {
+   "text": "Wells Run Dry Across the Valley as Drought Deepens",
+   "label": "July 14, 2022"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-glass-caption",
+  "name": "Glass Caption",
+  "category": "TEXT",
+  "description": "A modern frosted-glass pill bottom-centre with a small info icon in the accent; the line reveals left to right inside it. A caption for a fact, never louder than the picture.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "caption",
+   "fact",
+   "statement"
+  ],
+  "duration": 4.0,
+  "sfx": "whoosh-soft",
+  "sfx_at": 10,
+  "types": false,
+  "sample": {
+   "text": "Groundwater supplies 40% of Arizona's water"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-outline-fill",
+  "name": "Outline Fill",
+  "category": "HEADLINES",
+  "description": "A big outlined title in condensed caps, centred; it fills with colour (the accent, lightened) left to right behind a soft glowing front, the fill landing on frame 36, then holds.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "headline",
+   "term"
+  ],
+  "duration": 3.5,
+  "sfx": "riser-short",
+  "sfx_at": 36,
+  "types": false,
+  "sample": {
+   "text": "Megadrought"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-side-note",
+  "name": "Side Note",
+  "category": "TEXT",
+  "description": "A small editor's annotation in handwriting in the upper right, written on left to right, with a hand-drawn arrow in the accent curving down into the frame toward the subject.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "key-phrase",
+   "caption"
+  ],
+  "duration": 4.0,
+  "sfx": "marker",
+  "sfx_at": 6,
+  "types": false,
+  "sample": {
+   "text": "This used to be underwater"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-quote-type",
+  "name": "Typed Quote",
+  "category": "QUOTES",
+  "description": "A serif quotation typed letter by letter (frame 6 on, 2 frames a character up to 48 characters, else 1) over a darkened left side, large soft quote marks behind it in the accent; once typed, an accent dash and the attribution (label) slide in.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 6.0,
+  "sfx": "keys",
+  "sfx_at": 6,
+  "types": true,
+  "sample": {
+   "text": "We have never seen the lake this low.",
+   "label": "Park ranger, Lake Mead"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-question",
+  "name": "Drawn Question",
+  "category": "TEXT",
+  "description": "The narration's question in large clean type, rising word by word in the centre; a big question mark then draws itself beside it in the accent and its dot lands on frame 26.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "question"
+  ],
+  "duration": 4.0,
+  "sfx": "ding",
+  "sfx_at": 26,
+  "types": false,
+  "sample": {
+   "text": "So where did the water go?"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "ed-alert-bar",
+  "name": "Alert Bar",
+  "category": "TEXT",
+  "description": "A clean warning bar upper left: an amber icon cell (red for life-threatening words such as evacuation or emergency) drops in with its triangle pulsing, a dark bar wipes out of it and the text slides in; an optional kicker (label) above. Wipes away at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "warning"
+  ],
+  "duration": 4.0,
+  "sfx": "boom-soft",
+  "sfx_at": 10,
+  "types": false,
+  "sample": {
+   "text": "Evacuation order for three counties",
+   "label": "Emergency alert"
+  },
+  "family": "ed",
+  "file": "LibEditorText"
+ },
+ {
+  "id": "dt-clean-card",
+  "name": "Clean Date Card",
+  "category": "TIMELINES",
+  "description": "A bold deep-navy date card with a yellow top edge: the month in a solid yellow block, the day huge on the left counting up to its value and landing with a small punch on frame 28, the year and the weekday (computed, or label) beside it; a place (label) under the card. Month-year or year-only dates count the year; a time alone shows big.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "value"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 4.0,
+  "sfx": "boom-soft",
+  "sfx_at": 28,
+  "types": false,
+  "sample": {
+   "text": "SEPTEMBER 25, 2026",
+   "label": "Lake Mead, Nevada"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "dt-calendar-page",
+  "name": "Calendar Page",
+  "category": "TIMELINES",
+  "description": "A calendar month page flips down from its binding, its grid laid out from the real first weekday; a red marker circles the day (frame 22), then the weekday and full date settle under the page in a navy tag.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 4.5,
+  "sfx": "marker",
+  "sfx_at": 22,
+  "types": false,
+  "sample": {
+   "text": "SEPTEMBER 25, 2026"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "dt-stamp-bar",
+  "name": "Date Stamp Bar",
+  "category": "TIMELINES",
+  "description": "A bold lower-left bar, THURSDAY • SEPT 25, 2026 (and the time when given), revealed by a yellow block that sweeps across it and slides off; the place (label) sits under it. Wipes away to the left at the end.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 4.0,
+  "sfx": "swipe",
+  "sfx_at": 6,
+  "types": false,
+  "sample": {
+   "text": "SEPT. 25, 2026 · 3:45 PM",
+   "label": "Phoenix, Arizona"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "dt-clock-time",
+  "name": "Clock Time",
+  "category": "TIMELINES",
+  "description": "An analog clock mid-left whose hands spin round and stop exactly on the time (frame 30), the second hand sweeping on; the digital time big beside it with AM/PM in a yellow block and the weekday, date or place under it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "time-of-day",
+   "datetime"
+  ],
+  "duration": 4.5,
+  "sfx": "tick",
+  "sfx_at": 30,
+  "types": false,
+  "sample": {
+   "text": "3:45 PM",
+   "label": "Thursday"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "dt-rec-stamp",
+  "name": "REC Timestamp",
+  "category": "TIMELINES",
+  "description": "A camcorder on-screen display over the footage: thin viewfinder corners, a blinking red REC dot and a monospace timestamp top-right, SEP 25 2026  03:45:07 PM, the seconds running. Clicks on at frame 3; good over news and phone clips.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "date",
+   "time-of-day",
+   "datetime"
+  ],
+  "duration": 5.0,
+  "sfx": "click",
+  "sfx_at": 3,
+  "types": false,
+  "sample": {
+   "text": "SEPTEMBER 25, 2026 · 3:45 PM"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "dt-date-slam",
+  "name": "Date Slam",
+  "category": "TIMELINES",
+  "description": "A full-width band across the middle: a yellow wipe, then navy over it; the month (yellow), day and year (white numerals) slam down one after another with a small camera shake, the day landing on frame 18; the weekday or place under them. Wipes off to the right.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 3.5,
+  "sfx": "boom-soft",
+  "sfx_at": 18,
+  "types": false,
+  "sample": {
+   "text": "MARCH 3, 2026"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "dt-timeline-tick",
+  "name": "Timeline Tick",
+  "category": "TIMELINES",
+  "description": "A thin month ruler (a year ruler when only the year is known) slides in across the lower third and decelerates; a yellow marker drops onto the exact date (frame 22) with a navy label card, and the month's tick label turns yellow.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 4.5,
+  "sfx": "tick",
+  "sfx_at": 22,
+  "types": false,
+  "sample": {
+   "text": "SEPT. 25, 2026",
+   "label": "Colorado River"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "dt-countdown-days",
+  "name": "Days Later",
+  "category": "TIMELINES",
+  "description": "For a span of time in the text (3 DAYS LATER, 48 HOURS, TWO WEEKS EARLIER): the number counts up big in yellow, the unit and the word after it stacked beside it in white, a time bar filling under them with a tick per unit. Text without a span falls back to the date card.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "datetime",
+   "date"
+  ],
+  "duration": 3.5,
+  "sfx": "whoosh-soft",
+  "sfx_at": 12,
+  "types": false,
+  "sample": {
+   "text": "3 DAYS LATER"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "ct-clean-count",
+  "name": "Clean Count",
+  "category": "NUMBERS",
+  "description": "The figure counts up from zero in big clean tabular numerals with thousands separators and a soft eased landing; a thin accent line draws beneath it and the label rises under the line. Prefix and unit ride the same baseline.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "big-number",
+   "count",
+   "money"
+  ],
+  "duration": 4.5,
+  "sfx": "count-tick",
+  "sample": {
+   "value": 75000000,
+   "suffix": "ACRE-FT",
+   "text": "Water promised every year"
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 44,
+  "types": false
+ },
+ {
+  "id": "ct-rolling-digits",
+  "name": "Rolling Digits",
+  "category": "NUMBERS",
+  "description": "Slot-machine drums, one dark tile per digit, spin and land one by one from left to right, each tile flashing the accent as it settles; separators and the unit fade in, the label rises beneath.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "big-number",
+   "count"
+  ],
+  "duration": 4.5,
+  "sfx": "count-tick",
+  "sample": {
+   "value": 12400,
+   "text": "Wells gone dry",
+   "subtitle": "Central Valley, 2022"
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 42,
+  "types": false
+ },
+ {
+  "id": "ct-bar-percent",
+  "name": "Bar Percent",
+  "category": "NUMBERS",
+  "description": "On a dark glass panel the label sits left and the percent counts up right while a wide horizontal bar fills in sync with a glowing head, over 0 / 50 / 100% marks; a quiet second line underneath.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "percent"
+  ],
+  "duration": 4.5,
+  "sfx": "riser-short",
+  "sample": {
+   "value": 27,
+   "suffix": "%",
+   "text": "Lake Mead capacity",
+   "subtitle": "Lowest since it was filled"
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 50,
+  "types": false
+ },
+ {
+  "id": "ct-ring-pro",
+  "name": "Ring Gauge Pro",
+  "category": "NUMBERS",
+  "description": "A ring gauge whose gradient arc sweeps round from twelve o'clock in step with the count, rounded glowing head, a tick bezel that lights as the arc passes; the clean percent in the centre and the label below.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "percent"
+  ],
+  "duration": 4.5,
+  "sfx": "riser-short",
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "text": "of capacity remaining",
+   "subtitle": "Lake Powell"
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 52,
+  "types": false
+ },
+ {
+  "id": "ct-dot-grid",
+  "name": "People Grid",
+  "category": "NUMBERS",
+  "description": "A 10 x 10 grid of little people fills in the accent to the percent while the number counts beside it, with an 'N IN EVERY 100' line, a short accent rule and the label.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "percent"
+  ],
+  "duration": 4.5,
+  "sfx": "tick",
+  "sample": {
+   "value": 40,
+   "suffix": "%",
+   "text": "of households affected"
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 54,
+  "types": false
+ },
+ {
+  "id": "ct-split-compare",
+  "name": "Split Compare",
+  "category": "NUMBERS",
+  "description": "Two dark panels swipe in from either side and meet round an accent arrow badge; each has its label and a figure counting up together (before and after, or A against B). Reads overlay.items [{label, value}].",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "compare-values"
+  ],
+  "duration": 5.0,
+  "sfx": "swipe",
+  "sample": {
+   "text": "Water level at Lake Mead",
+   "suffix": "FT",
+   "items": [
+    {
+     "label": "1983",
+     "value": 1225
+    },
+    {
+     "label": "2022",
+     "value": 1040
+    }
+   ]
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 10,
+  "types": false
+ },
+ {
+  "id": "ct-corner-stat",
+  "name": "Corner Stat",
+  "category": "NUMBERS",
+  "description": "A compact stat card clicks into the top-right corner over the footage: an accent edge, the figure counting up and a one-line label; it slides back out to the right. Rides on the picture, no scrim.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "big-number",
+   "percent",
+   "money",
+   "count"
+  ],
+  "duration": 4.5,
+  "sfx": "click",
+  "sample": {
+   "value": 4.2,
+   "prefix": "$",
+   "suffix": "B",
+   "text": "Federal relief package"
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 6,
+  "types": false
+ },
+ {
+  "id": "ct-pie-slice",
+  "name": "Pie Slice",
+  "category": "NUMBERS",
+  "description": "A pie whose share sweeps in with the count, then the slice pulls out of the pie with a white edge and a shadow; the percent, a short accent rule and the label beside it.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "percent"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh-soft",
+  "sample": {
+   "value": 70,
+   "suffix": "%",
+   "text": "goes to agriculture"
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 46,
+  "types": false
+ },
+ {
+  "id": "ct-money-stack",
+  "name": "Money Stack",
+  "category": "NUMBERS",
+  "description": "Money counts up with its currency sign while a stack of banknotes drops on beside it, note by note; large amounts read as '$4.2 BILLION', with the label under a short accent rule.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "prefix",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "money"
+  ],
+  "duration": 4.5,
+  "sfx": "count-tick",
+  "sample": {
+   "value": 4.2,
+   "prefix": "$",
+   "suffix": "B",
+   "text": "Cost of the new pipeline"
+  },
+  "family": "ct",
+  "file": "LibCountPro",
+  "sfx_at": 50,
+  "types": false
+ },
+ {
+  "id": "pe-zoom-circle",
+  "name": "Zoom Circle Marker",
+  "category": "IMAGES",
+  "description": "A slow push toward a point of the photo, then a red hand-drawn marker loop is drawn round it and a white label with a red hand-drawn arrow points at it (overlay.anchor {x,y} in 0..1, else an off-centre point).",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-place",
+   "photo-object",
+   "photo-person"
+  ],
+  "duration": 5.0,
+  "sfx": "marker",
+  "sample": {
+   "text": "The intake tower",
+   "anchor": {
+    "x": 0.62,
+    "y": 0.42
+   }
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 22,
+  "types": false
+ },
+ {
+  "id": "pe-highlight-box",
+  "name": "Highlight Box",
+  "category": "IMAGES",
+  "description": "The photo dims and desaturates outside a red box that draws on around the point of interest, a red tag names it, then the camera pushes into the box.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-object",
+   "photo-place"
+  ],
+  "duration": 5.0,
+  "sfx": "marker",
+  "sample": {
+   "text": "Bathtub ring",
+   "anchor": {
+    "x": 0.55,
+    "y": 0.5
+   }
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 18,
+  "types": false
+ },
+ {
+  "id": "pe-focus-pull",
+  "name": "Focus Pull",
+  "category": "IMAGES",
+  "description": "The still starts soft and dark and racks into focus under a diagonal light sweep and a vignette while the camera pushes; the caption fades up lower left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-place"
+  ],
+  "duration": 5.0,
+  "sfx": "whoosh-soft",
+  "sample": {
+   "text": "Hoover Dam",
+   "subtitle": "Black Canyon, Nevada-Arizona",
+   "label": "1936"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 20,
+  "types": false
+ },
+ {
+  "id": "pe-split-panels",
+  "name": "Split Panels",
+  "category": "IMAGES",
+  "description": "The photo arrives as three vertical strips sliding in staggered from above and below, then the gaps close into one picture that keeps pushing; caption lower left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-place"
+  ],
+  "duration": 5.0,
+  "sfx": "swipe",
+  "sample": {
+   "text": "Glen Canyon",
+   "subtitle": "Before the dam",
+   "label": "Archive"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 8,
+  "types": false
+ },
+ {
+  "id": "pe-frame-drop",
+  "name": "Framed Print Drop",
+  "category": "IMAGES",
+  "description": "A framed print with a white mat drops onto a dark desk, lands with a small bump and settles its turn, and the camera leans in; a museum-style label card slides in beside it.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-person",
+   "photo-object"
+  ],
+  "duration": 5.0,
+  "sfx": "paper-slide",
+  "sample": {
+   "text": "Floyd Dominy",
+   "subtitle": "Commissioner, 1959-1969"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 13,
+  "types": false
+ },
+ {
+  "id": "pe-parallax",
+  "name": "Parallax 2.5D",
+  "category": "IMAGES",
+  "description": "2.5D parallax: a blurred, darkened copy of the photo drifts one way behind a sharp framed crop that drifts the other, with its caption inside the crop.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-place"
+  ],
+  "duration": 5.0,
+  "sfx": "whoosh-soft",
+  "sample": {
+   "text": "Lake Powell",
+   "subtitle": "Utah-Arizona border",
+   "label": "Today"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 14,
+  "types": false
+ },
+ {
+  "id": "pe-newsprint",
+  "name": "Newsprint Halftone",
+  "category": "IMAGES",
+  "description": "A newspaper page slides up and settles: a double rule, the kicker, the headline (overlay.text) in a serif strip and the photo printed in halftone dots under it, a serif-italic caption; the camera leans in.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-person",
+   "photo-place"
+  ],
+  "duration": 5.0,
+  "sfx": "paper-slide",
+  "sample": {
+   "text": "Drought forces first-ever water cuts",
+   "label": "August 2021",
+   "subtitle": "Arizona loses a fifth of its share"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 12,
+  "types": false
+ },
+ {
+  "id": "pe-punch-in",
+  "name": "Punch In",
+  "category": "IMAGES",
+  "description": "A fast zoom-blur punch into the photo with a light exposure flash, settling at once into a slow sideways drift; caption lower left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-place",
+   "photo-object"
+  ],
+  "duration": 5.0,
+  "sfx": "swipe",
+  "sample": {
+   "text": "The spillway",
+   "subtitle": "Oroville Dam, 2017"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 6,
+  "types": false
+ },
+ {
+  "id": "pe-duotone",
+  "name": "Duotone Caption",
+  "category": "IMAGES",
+  "description": "The photo wipes in on a diagonal in a duotone grade (near-black to a light tint of the accent) with a big clean caption, an accent rule above it and a letter-spaced subtitle.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-person",
+   "photo-place"
+  ],
+  "duration": 5.0,
+  "sfx": "whoosh-soft",
+  "sample": {
+   "text": "The last drop",
+   "subtitle": "Colorado River Delta"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 13,
+  "types": false
+ },
+ {
+  "id": "pe-light-sweep",
+  "name": "Light Sweep Location",
+  "category": "IMAGES",
+  "description": "A slow push with a warm diagonal light sweep, vignette and film grain; a small location label with an accent pin, a drawn hairline and a second line.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-place"
+  ],
+  "duration": 5.0,
+  "sfx": "whoosh-soft",
+  "sample": {
+   "text": "Imperial Valley",
+   "subtitle": "California"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 22,
+  "types": false
+ },
+ {
+  "id": "pe-polaroid-pan",
+  "name": "Polaroid Pan",
+  "category": "IMAGES",
+  "description": "A shutter flash, then the photo is an instant print on a warm tabletop that the camera pans across; the caption is handwritten on the print letter by letter, a date beside it.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-person",
+   "photo-object"
+  ],
+  "duration": 5.0,
+  "sfx": "shutter",
+  "sample": {
+   "text": "Summer at the lake",
+   "label": "1998"
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor",
+  "sfx_at": 3,
+  "types": false
+ },
+ {
+  "id": "pf-profile",
+  "name": "Profile Intro",
+  "category": "IMAGES",
+  "description": "A blurred copy of the portrait fills the frame; the framed portrait slides in on the left with an accent bar, the name large in condensed caps on the right over an accent bar and hairline, the kicker above and the role beneath. Initials medallion when there is no portrait.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person-full"
+  ],
+  "duration": 5.0,
+  "sfx": "whoosh-soft",
+  "sample": {
+   "text": "Camille Calimlim Touton",
+   "subtitle": "Commissioner, U.S. Bureau of Reclamation",
+   "label": "WHO IS"
+  },
+  "family": "pf",
+  "file": "LibPersonFull",
+  "sfx_at": 13,
+  "types": false
+ },
+ {
+  "id": "pf-dossier",
+  "name": "Dossier Intro",
+  "category": "IMAGES",
+  "description": "A manila file folder slides up on a dark desk; the portrait is paper-clipped to the sheet and the name is typed letter by letter with a caret (typing from frame 6), then highlighted; the role is filled in after it.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person-full"
+  ],
+  "duration": 5.0,
+  "sfx": "keys",
+  "sample": {
+   "text": "Camille Calimlim Touton",
+   "subtitle": "Commissioner, U.S. Bureau of Reclamation",
+   "label": "WHO IS"
+  },
+  "family": "pf",
+  "file": "LibPersonFull",
+  "sfx_at": 6,
+  "types": true
+ },
+ {
+  "id": "pf-split-name",
+  "name": "Split Name",
+  "category": "IMAGES",
+  "description": "The portrait swipes in to fill the right half in a duotone of the accent behind an accent seam; the name in big clean type on the left with a line drawing under it, kicker above and role below.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person-full"
+  ],
+  "duration": 5.0,
+  "sfx": "swipe",
+  "sample": {
+   "text": "Camille Calimlim Touton",
+   "subtitle": "Commissioner, U.S. Bureau of Reclamation",
+   "label": "WHO IS"
+  },
+  "family": "pf",
+  "file": "LibPersonFull",
+  "sfx_at": 8,
+  "types": false
+ },
+ {
+  "id": "pf-spotlight",
+  "name": "Spotlight Intro",
+  "category": "IMAGES",
+  "description": "A dark stage: a spotlight hits the portrait with a flicker, the kicker and the name below in a serif with a thin accent underline drawing out from its centre, the role in spaced caps.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person-full"
+  ],
+  "duration": 5.0,
+  "sfx": "boom-soft",
+  "sample": {
+   "text": "Camille Calimlim Touton",
+   "subtitle": "Commissioner, U.S. Bureau of Reclamation",
+   "label": "WHO IS"
+  },
+  "family": "pf",
+  "file": "LibPersonFull",
+  "sfx_at": 14,
+  "types": false
+ },
+ {
+  "id": "pf-magazine",
+  "name": "Magazine Cover",
+  "category": "IMAGES",
+  "description": "A shutter flash and the portrait fills the frame as a magazine cover: the name as a serif masthead dropping in letter by letter, a thin frame line, the kicker and the role as the cover line lower left.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person-full"
+  ],
+  "duration": 5.0,
+  "sfx": "shutter",
+  "sample": {
+   "text": "Camille Calimlim Touton",
+   "subtitle": "Commissioner, U.S. Bureau of Reclamation",
+   "label": "WHO IS"
+  },
+  "family": "pf",
+  "file": "LibPersonFull",
+  "sfx_at": 3,
+  "types": false
+ },
+ {
+  "id": "wx-wind-flow",
+  "name": "Forecast Wind Flow",
+  "category": "MAPS",
+  "description": "The forecast-model view news-weather channels screen-record: a smooth colour field of wind speed (blue to magenta) over the region's state and coast lines, thousands of white streaks spiralling into the storm's low, city dots with names, a speed legend and a model-time chip; the camera drifts in slowly.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "locations"
+  ],
+  "cues": [
+   "forecast",
+   "forecast-wind"
+  ],
+  "duration": 6.0,
+  "sfx": "whoosh-soft",
+  "sfx_at": 10,
+  "types": false,
+  "sample": {
+   "text": "Wind gusts",
+   "label": "SAT 26 SEP · 18:00",
+   "locations": [
+    {
+     "label": "Atlantic City, NJ",
+     "lat": 39.36,
+     "lon": -74.42
+    },
+    {
+     "label": "New York",
+     "lat": 40.71,
+     "lon": -74.0
+    }
+   ]
+  },
+  "family": "wx",
+  "file": "LibWeatherMaps"
+ },
+ {
+  "id": "wx-rain-bands",
+  "name": "Forecast Rain Bands",
+  "category": "MAPS",
+  "description": "The same forecast-model view as precipitation: green, yellow and red rain bands wrapping around the low, slowly turning, with streaks of the flow, state lines, city names, an intensity legend and a model-time chip.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "locations"
+  ],
+  "cues": [
+   "forecast",
+   "forecast-rain"
+  ],
+  "duration": 6.0,
+  "sfx": "whoosh-soft",
+  "sfx_at": 10,
+  "types": false,
+  "sample": {
+   "text": "Heavy rain",
+   "label": "SUN 27 SEP · 06:00",
+   "locations": [
+    {
+     "label": "Atlantic City, NJ",
+     "lat": 39.36,
+     "lon": -74.42
+    }
+   ]
+  },
+  "family": "wx",
+  "file": "LibWeatherMaps"
  }
 ]

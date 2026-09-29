@@ -171,6 +171,20 @@ def playable_video(path: str, min_seconds: float = 0.5) -> bool:
         return False
 
 
+def min_image_long_side() -> int:
+    """The smallest usable photo: lower when the Real-ESRGAN upscaler is
+    installed, because a 700 px photo then reaches 1920 px with real detail."""
+    if not config.MIN_IMAGE_LONG_SIDE:
+        return 0
+    try:
+        from . import upscale
+        if upscale.available():
+            return min(config.MIN_IMAGE_LONG_SIDE, config.MIN_IMAGE_LONG_SIDE_UPSCALED)
+    except Exception:  # noqa: BLE001
+        pass
+    return config.MIN_IMAGE_LONG_SIDE
+
+
 def clip_quality(path: str, min_height: int = 0) -> tuple:
     """
     (ok, reason) for a sourced file. Reason is empty when it passes.
@@ -202,7 +216,8 @@ def clip_quality(path: str, min_height: int = 0) -> tuple:
         # A thumbnail blown up to 1080p reads as a mistake: a 55 KB slide
         # screenshot filled nine scenes of the Glen Canyon video.
         w, h = _video_dims(path)
-        if config.MIN_IMAGE_LONG_SIDE and w and h and max(w, h) < config.MIN_IMAGE_LONG_SIDE:
+        floor = min_image_long_side()
+        if floor and w and h and max(w, h) < floor:
             return False, f"low resolution ({w}x{h})"
         return True, ""
 
@@ -214,7 +229,11 @@ def clip_quality(path: str, min_height: int = 0) -> tuple:
     # into a real render as a vertical dashboard capture).
     w, h = _video_dims(path)
     if w and h and w < h * 1.2:
-        return False, "vertical or square video"
+        if not config.ALLOW_VERTICAL:
+            return False, "vertical or square video"
+        # Framed on a blurred fill before render (upscale.frame_vertical):
+        # its width is what ends up as the picture's height.
+        h = min(w, h)
     if min_height and h and h < min_height:
         # A 360p upload blown up to 1080p reads as a mistake next to sharp clips.
         return False, f"low resolution ({h}p)"

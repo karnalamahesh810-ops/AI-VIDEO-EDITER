@@ -7,6 +7,9 @@ import { DISPLAY, LABEL, MONO } from "../fonts";
 import type { MapLocation, Overlay, OverlayItem } from "../../types";
 import { Odometer, lines, ramp, useHold, useK } from "../pro/ProGraphics";
 
+// The owner (2026-09-29): a look's own sounds sit at ~40% of their old level.
+const IN_LOOK_SFX_SCALE = 0.4;
+
 /**
  * Basin maps (family "bm-"): full-frame dark-navy vector maps of the United
  * States and the Colorado River Basin, drawn from the bundled state outlines
@@ -237,7 +240,7 @@ const Tick: React.FC<{ at: number; name?: string; volume?: number }> = ({ at, na
   if (!Number.isFinite(f) || f < 0 || f >= durationInFrames - 2) return null;
   return (
     <Sequence from={f} layout="none">
-      <Audio src={staticFile(`sfx/${name}.mp3`)} volume={volume} />
+      <Audio src={staticFile(`sfx/${name}.mp3`)} volume={Math.max(0, Math.min(1, volume * IN_LOOK_SFX_SCALE))} />
     </Sequence>
   );
 };

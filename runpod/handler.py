@@ -51,6 +51,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
                  render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
 from src import templates
+from src import localvision, styles, upscale
 
 
 def _work_dir(job_id: str) -> str:
@@ -1089,6 +1090,15 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             assets[j["index"]] = results_by_index[j["index"]]
         pool_stats["rescue"] = rescued
     _ytdlp_mod.set_deadline(0.0)               # later steps (resource, render) are not time boxed here
+    # Small photos get Real-ESRGAN detail and soft clips a sharpen pass to
+    # 1080p, before anything is uploaded or rendered (time-boxed; a failure
+    # keeps the original file).
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL:
+        report("Enhancing pictures and clips to HD", 64)
+        try:
+            pool_stats["upscale"] = upscale.upscale_assets([a for a in assets if a is not None])
+        except Exception as e:  # noqa: BLE001 - never fail a video over polish
+            print(f"[worker] upscale skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
     vision.require_credits()
@@ -1494,6 +1504,13 @@ def _sanitize_stills(doc: dict, work: str) -> int:
         ok = False
         if src and os.path.isfile(src):
             try:
+                # Pillow first: AVIF/HEIC/CMYK/animated WebP and EXIF-rotated
+                # phone photos come out as an upright RGB JPEG ffmpeg can read.
+                from src import imagefix
+                imagefix.normalize(src)
+            except Exception:  # noqa: BLE001 - ffmpeg below is the real test
+                pass
+            try:
                 subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-frames:v", "1",
                                 "-vf", "scale='min(2560,iw)':-2", "-q:v", "3", out],
                                capture_output=True, timeout=60)
@@ -1843,7 +1860,11 @@ def _done_fields(out: dict) -> dict:
 CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
                       "POOL_EXTRA_QUERIES", "POOL_SCOUT", "INTENT_QUERIES_MAX",
                       "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS",
-                      "TREATMENTS", "STYLE_PACK", "MOMENT_FINE_PASS", "CLEAN_CUTS")
+                      "TREATMENTS", "STYLE_PACK", "MOMENT_FINE_PASS", "CLEAN_CUTS",
+                      # Video styles (src/styles.py) ride on these.
+                      "MIN_SCENE_SECONDS", "TARGET_SCENE_SECONDS", "MAX_SCENE_SECONDS",
+                      "ALLOW_VERTICAL", "VERTICAL_BAND_ASPECT", "NEWS_FOOTAGE", "GRAPHICS_DENSITY",
+                      "TRANSITION_STYLE", "UPSCALE_ENABLED", "LOCAL_VISION_ENABLED")
 
 
 def _apply_config(overrides) -> dict:
@@ -1890,6 +1911,12 @@ def handler(job):
     inp = job.get("input") or {}
     # The storage broker authorises uploads by the running job's id.
     inp["_job_id"] = job_id
+    # The video style (news compilation, documentary...) becomes per-job
+    # config overrides before they are applied, so fan-out parts inherit it.
+    if (inp.get("action") or "build").lower() in ("plan", "build"):
+        vstyle = styles.apply(inp)
+        if vstyle:
+            print(f"[worker] video style: {vstyle}", flush=True)
     config_before = _apply_config(inp.get("config"))
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""

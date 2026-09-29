@@ -481,8 +481,28 @@ def _fingerprint(path: str) -> str:
     return h.hexdigest()
 
 
+# Frames of recent candidates: the local CLIP check and the remote judge look
+# at the same frames, and each ffmpeg seek costs ~0.2 s.
+_FRAMES_CACHE: dict = {}
+
+
 def sample_frames(path: str, count: int = 3, width: int = 512) -> List[str]:
     """`count` evenly spaced JPEG frames as base64 strings. [] when unreadable."""
+    key = (_fingerprint(path), count, width)
+    with _LOCK:
+        hit = _FRAMES_CACHE.get(key)
+    if hit is not None:
+        return list(hit)
+    frames = _sample_frames(path, count, width)
+    if frames:
+        with _LOCK:
+            if len(_FRAMES_CACHE) > 96:
+                _FRAMES_CACHE.pop(next(iter(_FRAMES_CACHE)))
+            _FRAMES_CACHE[key] = list(frames)
+    return frames
+
+
+def _sample_frames(path: str, count: int = 3, width: int = 512) -> List[str]:
     ext = os.path.splitext(path)[1].lower()
     if ext in {".jpg", ".jpeg", ".png", ".webp"}:
         # A still: one downscaled copy is enough.
@@ -774,7 +794,10 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
     with _LOCK:
         _CALLS["n"] += 1
     if not text:
-        return None
+        # Every model failed: the local CLIP pass rates the tiles instead, so
+        # the video still gets its best moments rather than none.
+        from . import localvision
+        return localvision.rate_sheet(sheet_b64, count, intent or subject)
     costs.record("vision.rate_tiles")
     m = re.search(r"\{[\s\S]*\}", text)
     try:
@@ -821,6 +844,13 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Opt
     with _LOCK:
         _CALLS["n"] += 1
     if not text:
+        # Every model failed: the best tile by the local CLIP pass, if any
+        # clears the floor.
+        from . import localvision
+        rated = localvision.rate_sheet(sheet_b64, count, intent) or []
+        best = max(rated, key=lambda r: r["score"], default=None)
+        if best and best["score"] >= config.VISION_MIN_SCORE:
+            return dict(best, model="local-clip")
         return None
     costs.record("vision.pick_tile")
     m = re.search(r"\{[\s\S]*\}", text)

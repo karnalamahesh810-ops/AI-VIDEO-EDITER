@@ -38,6 +38,8 @@ import uuid
 import requests
 
 from . import candidates, config, costs, events, intent, moments, providers, proxies, vision
+from . import imagefix as _imagefix
+from . import localvision as _localvision
 from .errors import RETRY, FailureClass, classify_exception, classify_ytdlp, from_reason
 from .storage import download
 
@@ -356,6 +358,62 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
             review_reason="Web image: licence unverified"))
         if len(out) >= limit:
             break
+    return out
+
+
+_YANDEX_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+
+
+def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
+    """
+    Full-size photos from Yandex Images - GoMotion's picture source, strong on
+    local news photos (a "Long Beach Island flooding" search returns the
+    stations' own pictures). Keyless: the results page carries each original
+    as an img_url parameter. Asked directly first, then through the proxy pool
+    when a datacenter address gets a captcha instead of results.
+    """
+    if not config.ALLOW_YANDEX_IMAGES or not query.strip():
+        return []
+    headers = {"User-Agent": _YANDEX_UA, "Accept-Language": "en-US,en;q=0.9"}
+    params = {"text": query, "isize": "large"}
+    found: List[str] = []
+    proxy = _next_proxy()
+    for via in ([None, proxy] if proxy else [None]):
+        try:
+            r = requests.get("https://yandex.com/images/search", params=params, headers=headers,
+                             timeout=20, proxies={"http": via, "https": via} if via else None)
+        except requests.RequestException as e:
+            _source_error("yandex_images", e)
+            continue
+        text = r.text.replace("\\u002F", "/")
+        if "captcha" in (r.url or "") or "SmartCaptcha" in text:
+            _source_error("yandex_images", RuntimeError("captcha"))
+            continue
+        found = [urllib.parse.unquote(u) for u in re.findall(r"img_url=(https?%3A[^&\"']+)", text)]
+        found += re.findall(r'"origUrl":"(https?:[^"]+)"', text)
+        if found:
+            break
+    import html as _html
+    out, seen = [], set()
+    for url in found:
+        url = _html.unescape(url)
+        if url in seen or not url.startswith("http"):
+            continue
+        seen.add(url)
+        # Stock sellers' watermarked comps never make a cut.
+        host = urllib.parse.urlparse(url).netloc.lower()
+        if any(s in host for s in ("alamy", "gettyimages", "shutterstock", "istockphoto", "dreamstime",
+                                   "depositphotos", "123rf", "adobe")):
+            continue
+        out.append(MediaAsset(
+            kind="image", source="yandex_image", url=url,
+            attribution=f"Yandex image result — {host}"[:300],
+            license="unverified — web image, confirm you hold the rights",
+            query=query, review_required=True, review_reason="Web image: licence unverified"))
+        if len(out) >= limit:
+            break
+    costs.record("yandex.search")
     return out
 
 
@@ -961,7 +1019,7 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0) -> bool:
         return False
     if _talking_head(title or ""):
         return False
-    if aspect and aspect < 1.2:
+    if aspect and aspect < 1.2 and not config.ALLOW_VERTICAL:
         return False                        # vertical, unusable in 16:9
     return True
 
@@ -1039,6 +1097,49 @@ def _image_label(asset) -> str:
     return " | ".join(p for p in parts if p)[:300]
 
 
+# Candidates the local CLIP pass rejected before any remote call.
+LOCAL_REJECTED = {"n": 0}
+
+
+def _local_check(path: str, intent_text: str) -> Optional[dict]:
+    """The local model's verdict for this scene's candidate, or None when the
+    model is not installed (tests, a laptop without /opt/models)."""
+    if not config.LOCAL_VISION_ENABLED or not _localvision.available():
+        return None
+    si = _SCENE_INTENT.get() or {}
+    wants = ""
+    if isinstance(si, dict):
+        v = str(si.get("visualType") or si.get("visual_type") or "").lower()
+        if v in ("map", "chart", "document"):
+            wants = v
+    return _localvision.check(path, intent_text, subject_type=_SUBJECT_TYPE.get() or "",
+                              subject=str((si or {}).get("subject") or "") if isinstance(si, dict) else "",
+                              wants=wants)
+
+
+def _local_keep(local: dict, label: str, intent_text: str, why: str) -> bool:
+    """Keep/reject from the local verdict when no remote model answered:
+    close enough to the line, or named after it and not far off."""
+    floor = config.LOCAL_VISION_MIN_RELEVANCE
+    rel = float(local.get("relevance") or 0.0)
+    keep = rel >= floor or (rel >= floor - 0.035 and _title_fits(label, intent_text))
+    with _CACHE_LOCK:
+        UNJUDGED_KEPT["n" if keep else "rejected"] += 1
+        _localvision.STATS["decided"] += 1
+    print(f"[vision] no verdict ({why}): {'keep' if keep else 'REJECT'} by local check "
+          f"(relevance {rel:.3f}, {local.get('kind')}) {label[:50]!r}", flush=True)
+    return keep
+
+
+def _rescue_local_ok(path: str, intent_text: str) -> bool:
+    """The last-pass fill has no remote check; the local one still keeps out
+    slides, cartoons, logos and clearly off-topic frames."""
+    local = _local_check(path, intent_text) if intent_text else None
+    if local is None:
+        return True
+    return not local["reject"] and local["relevance"] >= config.LOCAL_VISION_MIN_RELEVANCE - 0.035
+
+
 def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
     (keep, verdict) for a downloaded candidate.
@@ -1047,7 +1148,19 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     None — both keep the candidate, so vision can only ever remove bad clips,
     never empty a timeline because an API is down.
     """
-    if not intent or not vision.enabled():
+    if not intent:
+        return True, None
+    # The local CLIP pass first: the wrong KIND of picture (slide, text page,
+    # cartoon, logo, a portrait on a place line) never costs a Gemini call.
+    local = _local_check(path, intent)
+    if local is not None and local["reject"]:
+        with _CACHE_LOCK:
+            LOCAL_REJECTED["n"] += 1
+        print(f"[vision] REJECT locally: {local['reject']} {label[:50]!r}", flush=True)
+        return False, None
+    if not vision.enabled():
+        if local is not None:
+            return _local_keep(local, label, intent, "no remote model"), None
         return True, None
     scene = _SCENE_INTENT.get()
     verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()),
@@ -1055,8 +1168,11 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     if verdict is None and not config.ACCEPT_UNJUDGED:
         # Every model failed on this clip. Google answered "high demand" for
         # half an hour on 2026-09-29 and rejecting all of those left most of a
-        # 22-minute video empty (then filled with repeats). The title decides:
-        # a video named after what the line is about stays, anything else goes.
+        # 22-minute video empty (then filled with repeats). The local model
+        # decides now; without it, the title: a video named after what the
+        # line is about stays, anything else goes.
+        if local is not None:
+            return _local_keep(local, label, intent, "models busy"), None
         keep = _title_fits(label, intent)
         with _CACHE_LOCK:
             UNJUDGED_KEPT["n" if keep else "rejected"] += 1
@@ -1102,7 +1218,10 @@ def _score_candidate(title: str, duration: float, aspect: float,
     elif 60 <= (duration or 0) <= 900:
         score += 1.0
     if aspect and aspect < 1.2:
-        score -= 5.0          # vertical; object-fit would crop it to nothing
+        # Vertical; object-fit would crop it to nothing. News-compilation
+        # styles frame it on a blurred fill instead (upscale.frame_vertical),
+        # so there it only ranks a little behind landscape video.
+        score -= 1.0 if config.ALLOW_VERTICAL else 5.0
     elif aspect and aspect >= 1.7:
         score += 1.0
     # The typed intent: a title that names the entity, the place or what the
@@ -1301,7 +1420,7 @@ def _scout(candidate: dict, grab: float, intent: str, context: str) -> Optional[
     if not info:
         return None
     w, h = info.get("width") or 0, info.get("height") or 0
-    if w and h and w / h < 1.2:
+    if w and h and w / h < 1.2 and not config.ALLOW_VERTICAL:
         # Vertical. The flat search cannot see this; a zero score drops it
         # before anything is downloaded.
         got = {"start": 0.0, "score": 0.0, "description": "vertical video", "tile": 0}
@@ -1808,7 +1927,7 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
         if not path:
             continue
         w, h = _video_dims(path)
-        if (w and h and w < h * 1.2) or has_burned_captions(path):
+        if (w and h and w < h * 1.2 and not config.ALLOW_VERTICAL) or has_burned_captions(path):
             try:
                 os.remove(path)
             except OSError:
@@ -2230,6 +2349,9 @@ def reset_cache():
         _USED_CHANNELS.clear()
         _GENERATED[0] = 0
     _BRIGHTDATA_REFUSED["why"] = ""     # a topped-up account works again on the next job
+    from . import official
+    official.reset()                    # each satellite sector once per video
+    LOCAL_REJECTED["n"] = 0
     _BRIGHTDATA_FAILS["n"] = 0
     _IMAGE_NO_CREDIT["hit"] = False
     UNJUDGED_KEPT.update(n=0, rejected=0)
@@ -2302,7 +2424,13 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
     dest = os.path.join(
         work_dir, f"{candidate.source}_{safe}_{abs(hash(candidate.url)) % 999999}{ext}")
     try:
-        candidate.local_path = download(candidate.url, dest)
+        if candidate.kind == "image":
+            # Browser-style retries for hotlink blocks, and whatever format
+            # arrived (WebP, AVIF, HEIC, CMYK...) rewritten as a clean JPEG.
+            candidate.local_path = _imagefix.fetch(candidate.url, dest,
+                                                   getattr(candidate, "page_url", "") or "")
+        else:
+            candidate.local_path = download(candidate.url, dest)
         return candidate
     except Exception as e:  # noqa: BLE001
         _source_error(f"download_{candidate.source}", e)
@@ -3086,6 +3214,9 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                 ok, why = _asset_ok(asset)
                 if not ok:
                     continue
+                local = _local_check(path, job.get("intent", "")) if job.get("intent") else None
+                if local is not None and local["reject"]:
+                    continue
                 if vision.enabled() and job.get("intent"):
                     verdict = vision.judge(path, job.get("intent", ""), job.get("query", ""))
                     if verdict is not None and float(verdict.get("score") or 0) < config.VISION_SOFT_MIN_SCORE:
@@ -3180,6 +3311,8 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 ok, _why = _asset_ok(asset)
                 if not ok:
                     continue
+                if not _rescue_local_ok(path, intent_text):
+                    continue
                 asset.review_required = True
                 asset.review_reason = "Found in the last pass without an AI check - make sure it fits the line"
                 return asset
@@ -3192,6 +3325,8 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 if not claim(cand.identity, used_images):
                     continue
                 got = _download(_dc_replace(cand), q, work_dir)
+                if got and (not _asset_ok(got)[0] or not _rescue_local_ok(got.local_path, intent_text)):
+                    got = None
                 if got:
                     got.intent = intent_text
                     got.review_required = True

@@ -526,6 +526,50 @@ MIN_CLIP_HEIGHT = int(os.getenv("MIN_CLIP_HEIGHT", "480"))
 # Wikipedia "960px-" thumbnail passes). 0 turns the check off.
 MIN_IMAGE_LONG_SIDE = int(os.getenv("MIN_IMAGE_LONG_SIDE", "900"))
 MIN_ARCHIVE_HEIGHT = int(os.getenv("MIN_ARCHIVE_HEIGHT", "240"))
+
+# --- local vision + upscaling (CPU, no API) -----------------------------------
+# CLIP (ONNX, baked into the image under /opt/models) judges every candidate
+# before Gemini: slides, text pages, cartoons/games, logos and a portrait on a
+# place beat are rejected on the spot, and when every Gemini model is busy the
+# local verdict decides instead of the title alone.
+LOCAL_VISION_ENABLED = _flag("LOCAL_VISION_ENABLED", True)
+LOCAL_VISION_DIR = os.getenv("LOCAL_VISION_DIR", "/opt/models/clip-vit-base-patch16")
+LOCAL_VISION_THREADS = int(os.getenv("LOCAL_VISION_THREADS", "4"))
+# Cosine similarity (CLIP B/16) of a frame to "a photo of <intent>" below
+# which a candidate is off-topic when no remote model can judge it.
+LOCAL_VISION_MIN_RELEVANCE = float(os.getenv("LOCAL_VISION_MIN_RELEVANCE", "0.215"))
+# Share of the frames' class probability that makes a hard reject.
+LOCAL_VISION_REJECT_SHARE = float(os.getenv("LOCAL_VISION_REJECT_SHARE", "0.80"))
+# Real-ESRGAN general x4v3 (ONNX): a photo whose long side is under
+# UPSCALE_BELOW is upscaled to UPSCALE_TARGET before render; clips under
+# UPSCALE_CLIP_BELOW lines get a Lanczos + sharpen pass to 1080p.
+UPSCALE_ENABLED = _flag("UPSCALE_ENABLED", True)
+UPSCALE_MODEL = os.getenv("UPSCALE_MODEL", "/opt/models/real_esrgan_general_x4v3.onnx")
+UPSCALE_BELOW = int(os.getenv("UPSCALE_BELOW", "1600"))
+UPSCALE_TARGET = int(os.getenv("UPSCALE_TARGET", "1920"))
+UPSCALE_CLIP_BELOW = int(os.getenv("UPSCALE_CLIP_BELOW", "900"))
+UPSCALE_SECONDS = float(os.getenv("UPSCALE_SECONDS", "180"))
+UPSCALE_PARALLEL = int(os.getenv("UPSCALE_PARALLEL", "4"))
+# With the upscaler, a photo this small is still usable (it is upscaled 2-4x
+# with real detail instead of blown up blurry).
+MIN_IMAGE_LONG_SIDE_UPSCALED = int(os.getenv("MIN_IMAGE_LONG_SIDE_UPSCALED", "640"))
+# Vertical / square phone video (news-compilation styles, src/styles.py):
+# accepted and framed on a blurred copy of itself before render, the way news
+# compilation channels show TikTok/X clips. The sharp band keeps the middle
+# VERTICAL_BAND_ASPECT (width/height) of the clip, trimming platform
+# captions and UI at the top and bottom.
+ALLOW_VERTICAL = _flag("ALLOW_VERTICAL", False)
+# Official public-domain imagery for stories about today's weather: the live
+# NOAA GOES satellite loop of the story's region (src/official.py).
+OFFICIAL_IMAGERY = _flag("OFFICIAL_IMAGERY", True)
+# Yandex Images as a picture source after Google/Bing (media.search_yandex_images).
+ALLOW_YANDEX_IMAGES = _flag("ALLOW_YANDEX_IMAGES", True)
+# Set per job by the video style (src/styles.py): how busy the overlay planner
+# is ("minimal" | "normal" | "rich") and the transition rhythm
+# ("documentary" | "energetic" | "crossfade"). "" = the planner's defaults.
+GRAPHICS_DENSITY = os.getenv("GRAPHICS_DENSITY", "").strip().lower()
+TRANSITION_STYLE = os.getenv("TRANSITION_STYLE", "").strip().lower()
+VERTICAL_BAND_ASPECT = float(os.getenv("VERTICAL_BAND_ASPECT", "0.8"))
 ANIMATION_OVER_FOOTAGE_BELOW = float(os.getenv("ANIMATION_OVER_FOOTAGE_BELOW", "0.6"))
 CLIP_LIBRARY_MIN_SCORE = float(os.getenv("CLIP_LIBRARY_MIN_SCORE", "0.8"))
 CLIP_LIBRARY_MAX_PER_JOB = int(os.getenv("CLIP_LIBRARY_MAX_PER_JOB", "60"))

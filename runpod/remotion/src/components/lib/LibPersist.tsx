@@ -4,6 +4,9 @@ import { DISPLAY, HAND, LABEL, MONO } from "../fonts";
 import type { Overlay } from "../../types";
 import { Odometer, lines, ramp, useK } from "../pro/ProGraphics";
 
+// The owner (2026-09-29): a look's own sounds sit at ~40% of their old level.
+const IN_LOOK_SFX_SCALE = 0.4;
+
 /**
  * Persistent tags (family "ps-"): looks built to ride on footage ACROSS cuts,
  * the way GoMotion's "22% OF CAPACITY REMAINING" ring stayed up over three
@@ -132,7 +135,7 @@ const Tick: React.FC<{ at: number; name?: string; volume?: number }> = ({ at, na
   if (at < 0 || at >= durationInFrames - 2) return null;
   return (
     <Sequence from={at} layout="none">
-      <Audio src={staticFile(`sfx/${name}.mp3`)} volume={volume} />
+      <Audio src={staticFile(`sfx/${name}.mp3`)} volume={Math.max(0, Math.min(1, volume * IN_LOOK_SFX_SCALE))} />
     </Sequence>
   );
 };
