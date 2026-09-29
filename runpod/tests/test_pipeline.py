@@ -817,10 +817,9 @@ class PipelineProgress(unittest.TestCase):
         # A real job had several empty scenes in a row each independently
         # pick their single nearest real neighbour, so all of them piled onto
         # THAT one scene's clip - a visible run of the identical shot,
-        # repeated back to back. Reproduced here with one real scene sitting
-        # right next to a run of four empty ones and the only other real
-        # scene far away: "always nearest" would put all four on the close
-        # one every time. Spreading by least-borrowed-first must not.
+        # repeated back to back. The Glen Canyon video then showed ~19 clips
+        # about eight times each. Now a shot is borrowed at most once and
+        # never right next to itself; the rest show their line as text.
         import handler
         doc = build_doc(n=101, seconds=3.0)
         for i, s in enumerate(doc["scenes"]):
@@ -828,9 +827,13 @@ class PipelineProgress(unittest.TestCase):
                           if i in (0, 100) else {"type": "color", "url": "", "source": "none"})
         patched = _fill_no_anim(doc)
         self.assertEqual(patched, 99)
-        urls = [doc["scenes"][i]["media"]["url"] for i in range(1, 5)]  # right next to scene 0
-        self.assertLessEqual(urls.count("https://x/real0.mp4"), 2)
-        self.assertGreaterEqual(urls.count("https://x/real100.mp4"), 2)
+        urls = [s["media"].get("url") for s in doc["scenes"]]
+        self.assertEqual(urls.count("https://x/real0.mp4"), 2)       # itself + one borrow
+        self.assertEqual(urls.count("https://x/real100.mp4"), 2)
+        for i in (1, 2, 3):                                          # never right beside itself
+            self.assertNotEqual(urls[i], "https://x/real0.mp4")
+        cards = [o for o in doc["overlays"] if o.get("type") == "highlight"]
+        self.assertGreaterEqual(len(cards), 90)
 
 
 class VisionFailuresAreReported(unittest.TestCase):
@@ -867,7 +870,7 @@ class VisionFailuresAreReported(unittest.TestCase):
             text, model = self.vision._ask([], 100)
         self.assertIsNone(text)
         stats = self.vision.stats()
-        self.assertEqual(stats["failures"], 4)  # main model and fallback, each retried once
+        self.assertEqual(stats["failures"], 6)  # main model and fallback, each tried three times
         self.assertIn("code 500: server exception", stats["recentErrors"][0])
 
     def test_a_transient_server_error_is_retried_on_the_same_model(self):

@@ -313,11 +313,10 @@ def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
 # Circuit breaker shared with the director. On 2026-09-26 Kie's Gemini
 # channels answered every call with "internal error" after ~35 s; each vision
 # check waited out two of those before falling back to gpt-5-2, and a 23-scene
-# job crawled at one scene a minute. Two consecutive failures now take a
-# model out of rotation for MODEL_COOLDOWN_SECONDS.
+# job crawled at one scene a minute. Two consecutive failed calls now take a
+# model out of rotation for config.VISION_MODEL_COOLDOWN_SECONDS.
 _MODEL_FAILS: Dict[str, int] = {}
 _MODEL_DOWN_UNTIL: Dict[str, float] = {}
-MODEL_COOLDOWN_SECONDS = 300
 
 
 def model_available(model: str) -> bool:
@@ -335,10 +334,10 @@ def model_result(model: str, ok: bool) -> None:
             return
         _MODEL_FAILS[model] = _MODEL_FAILS.get(model, 0) + 1
         if _MODEL_FAILS[model] >= 2:
-            _MODEL_DOWN_UNTIL[model] = _t.time() + MODEL_COOLDOWN_SECONDS
+            cooldown = config.VISION_MODEL_COOLDOWN_SECONDS
+            _MODEL_DOWN_UNTIL[model] = _t.time() + cooldown
             _MODEL_FAILS[model] = 0
-            print(f"[ai] {model} failing - skipped for {MODEL_COOLDOWN_SECONDS // 60} min",
-                  flush=True)
+            print(f"[ai] {model} failing - skipped for {cooldown:.0f} s", flush=True)
 
 
 def _routes() -> list:
@@ -352,25 +351,30 @@ def _routes() -> list:
 
 
 def _route_call(route: tuple, messages: list, max_tokens: int, deadline: float) -> Optional[str]:
-    """One model, retried once on a transient failure while the call's budget lasts."""
+    """
+    One model, retried with a doubling pause on a transient failure while the
+    call's budget lasts. The circuit breaker counts the call once, when every
+    try failed: counting each try benched a model on its first 503 burst.
+    """
     model, url, key, main = route
+    failed = False
     for attempt in range(1 + config.VISION_RETRIES):
         if attempt:
-            if time.time() + config.VISION_RETRY_WAIT >= deadline:
+            wait = config.VISION_RETRY_WAIT * (2 ** (attempt - 1))
+            if time.time() + wait >= deadline or not model_available(model):
                 break
-            time.sleep(config.VISION_RETRY_WAIT)
+            time.sleep(wait)
         if main and _OUT_OF_CREDITS["hit"]:
             break
         text, retryable = _ask_once(model, messages, max_tokens, url, key, main)
         if text:
             model_result(model, True)
             return text
-        if retryable:
-            model_result(model, False)
-            if not model_available(model):
-                break
-        else:
+        failed = retryable
+        if not retryable:
             break
+    if failed:
+        model_result(model, False)
     return None
 
 

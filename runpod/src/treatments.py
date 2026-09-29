@@ -51,14 +51,54 @@ SCENE_CUES = {"percent", "change", "then-now", "big-number", "money", "money-com
 _MONTHS = "january|february|march|april|may|june|july|august|september|october|november|december"
 _PERCENT = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*(?:%|percent\b)", re.I)
 _NUMBER_UNIT = re.compile(
-    r"(\$?\d[\d,]*(?:\.\d+)?)\s*(million|billion|thousand|feet|foot|ft|miles?|meters?|metres?|km|"
-    r"acres?|gallons?|acre-feet|people|homes?|structures?|deaths?|hours?|minutes?|days?|"
+    r"(\$?\d[\d,]*(?:\.\d+)?)\s*(million|billion|thousand|acre[- ]feet|acre[- ]foot|feet|foot|ft|miles?|"
+    r"meters?|metres?|km|acres?|gallons?|people|homes?|structures?|deaths?|hours?|minutes?|days?|"
     r"tons?|degrees|inches|dollars|residents|families|vehicles|square miles)\b", re.I)
 _CHANGE = re.compile(
     r"\b(fell|fallen|dropped|declined|decreased|lost|shrank|rose|risen|increased|climbed|gained|"
     r"jumped|surged|grew)\b[^.]{0,60}?(\d[\d,]*(?:\.\d+)?)\s*(percent|%|feet|ft|miles|meters|inches|"
     r"degrees|million|billion|thousand)?", re.I)
 _DATE = re.compile(rf"\b(({_MONTHS})\s+\d{{1,2}}(?:st|nd|rd|th)?,?\s*(?:1[89]|20)\d\d|({_MONTHS})\s+(?:1[89]|20)\d\d)\b", re.I)
+# Dates as narrators say them: "on the fifteenth of September", "August 21st",
+# "September 15, 2026". The old pattern needed a year, so the Glen Canyon
+# opening line got a typed sentence instead of a date card.
+_ORDINAL_DAYS = {w: i + 1 for i, w in enumerate(
+    "first second third fourth fifth sixth seventh eighth ninth tenth eleventh twelfth thirteenth fourteenth "
+    "fifteenth sixteenth seventeenth eighteenth nineteenth twentieth".split())}
+_ORDINAL_DAYS.update({f"twenty-{w}": 20 + n for w, n in list(_ORDINAL_DAYS.items())[:9]})
+_ORDINAL_DAYS.update({"thirtieth": 30, "thirty-first": 31})
+_DAY = (r"(\d{1,2})(?:st|nd|rd|th)?|("
+        + "|".join(sorted((re.escape(w).replace(r"\-", "[- ]") for w in _ORDINAL_DAYS), key=len, reverse=True))
+        + ")")
+_DATE_DM = re.compile(rf"\b(?:the\s+)?(?:{_DAY})\s+of\s+({_MONTHS})\b(?:,?\s+((?:1[89]|20)\d\d)\b)?", re.I)
+_DATE_MD = re.compile(rf"\b({_MONTHS})\s+(?:the\s+)?(?:{_DAY})\b(?:,?\s+((?:1[89]|20)\d\d)\b)?", re.I)
+_DATE_MY = re.compile(rf"\b({_MONTHS})\s+((?:1[89]|20)\d\d)\b", re.I)
+
+
+def date_in(text: str) -> Optional[tuple]:
+    """(label, offset) of the first calendar date a line names - 'SEPTEMBER 15',
+    'AUGUST 21, 2026', 'MARCH 2026' - or None."""
+    found = []
+    for rx, kind in ((_DATE_DM, "dm"), (_DATE_MD, "md"), (_DATE_MY, "my")):
+        for m in rx.finditer(text or ""):
+            if kind == "dm":
+                num, word, month, year = m.group(1), m.group(2), m.group(3), m.group(4)
+            elif kind == "md":
+                month, num, word, year = m.group(1), m.group(2), m.group(3), m.group(4)
+            else:
+                month, year, num, word = m.group(1), m.group(2), None, None
+            day = int(num) if num else (_ORDINAL_DAYS.get(re.sub(r"\s+", "-", word.lower())) if word else None)
+            if kind != "my" and not (day and 1 <= day <= 31):
+                continue
+            label = month.upper() + (f" {day}" if day else "")
+            if year:
+                label += f", {year}" if day else f" {year}"
+            found.append((m.start(), -len(label), label))
+            break
+    if not found:
+        return None
+    start, _neg, label = min(found)
+    return label, start
 _YEAR = re.compile(r"\b((?:1[89]|20)\d\d)\b")
 _QUOTE = re.compile(r"[“\"]([^”\"]{12,160})[”\"]")
 _SAID = re.compile(r"\b(said|says|warned|warns|according to|told|wrote|called it|described it as|put it)\b", re.I)
@@ -70,7 +110,8 @@ _TWO_YEARS = re.compile(r"\b((?:19|20)\d\d)\b[^.]{0,40}?(\d[\d,]*(?:\.\d+)?)\s*(
 _UNIT_SHORT = {"feet": "FT", "foot": "FT", "ft": "FT", "mile": "MI", "miles": "MI", "meter": "M", "meters": "M",
                "metre": "M", "metres": "M", "km": "KM", "percent": "%", "%": "%", "million": "MILLION",
                "billion": "BILLION", "thousand": "THOUSAND", "degrees": "°", "inches": "IN", "dollars": "USD",
-               "acre-feet": "ACRE-FT", "acres": "ACRES", "acre": "ACRES", "gallons": "GAL", "gallon": "GAL",
+               "acre-feet": "ACRE-FT", "acre-foot": "ACRE-FT", "acres": "ACRES", "acre": "ACRES",
+               "gallons": "GAL", "gallon": "GAL",
                "square miles": "SQ MI"}
 
 CARD_KINDS = {"card", "map"}
@@ -104,7 +145,9 @@ def _subject_words(shot: dict, seg: Segment, n: int = 4) -> str:
 _LABEL_SKIP = set("""a an the its their his her our this that these those of in for at to on by from with as
 and or but so than then now just only still more less most over under down up since during about around nearly
 almost roughly some all is are was were be been being will would could can may might must should has have had
-do does did means meant mean says said shows showed which who whom whose what when where while it they we you""".split())
+do does did means meant mean says said shows showed which who whom whose what when where while it they we you
+beneath below above across along behind beyond inside outside through toward towards within without underneath
+per each every away ago later before after""".split())
 
 
 def _noun_after(text: str, match_end: int) -> str:
@@ -350,10 +393,12 @@ def cues_for(seg: Segment, shot: dict, brief: Optional[dict]) -> List[dict]:
                               "text": _noun_after(text, m.end()) or _subject_words(shot, seg).upper()}})
     m = _NUMBER_UNIT.search(text)
     if m and _num(m.group(1)) is not None and not out:
-        unit = m.group(2).lower()
+        unit = re.sub(r"\s+", "-", m.group(2).lower())
+        # The label says what the figure counts ("75 MILLION / ACRE FEET"); the
+        # story's subject under every number read "75 MILLION / GLEN CANYON DAM".
         out.append({"cue": "big-number", "emphasis": "high",
                     "props": {"value": _num(m.group(1)), "suffix": _UNIT_SHORT.get(unit, unit.upper()[:8]),
-                              "text": _subject_words(shot, seg).upper()}})
+                              "text": _noun_after(text, m.end()) or _subject_words(shot, seg).upper()}})
     m = _QUOTE.search(text)
     if m:
         out.append({"cue": "quote", "emphasis": "high",
@@ -386,9 +431,15 @@ def cues_for(seg: Segment, shot: dict, brief: Optional[dict]) -> List[dict]:
     if m and locs and len(locs) >= 2:
         out.append({"cue": "route", "emphasis": "high",
                     "props": {"text": f"{m.group(1)} to {m.group(2)}", "locations": locs[:2]}})
-    m = _DATE.search(text)
-    if m:
-        out.append({"cue": "date", "emphasis": "medium", "props": {"text": m.group(1).upper()}})
+    date = date_in(text)
+    if date:
+        label, at = date
+        if at <= 25:
+            # The line opens on its date ("On the fifteenth of September, ..."):
+            # that is the moment for the date card, ahead of any figure after it.
+            out.insert(0, {"cue": "date", "emphasis": "high", "props": {"text": label}})
+        else:
+            out.append({"cue": "date", "emphasis": "medium", "props": {"text": label}})
     return _more_cues(text, seg, shot, out)
 
 
@@ -520,7 +571,7 @@ def _from_hint(overlay: dict, pack: dict, n_locs: int, text: str,
         return pack["chapter"]
     if kind == "lower-third":
         return pack["lowerThird"]
-    options = templates.for_component(kind, pack.get("id", ""))
+    options = [t for t in templates.for_component(kind, pack.get("id", "")) if look_fits(t["id"], text)]
     if not options:
         return None
     if variant:
@@ -533,8 +584,53 @@ def _from_hint(overlay: dict, pack: dict, n_locs: int, text: str,
     return options[0]["id"]
 
 
+# Looks that picture one particular thing, and the words a line needs for it.
+# Rotating every look of a cue for variety put a thermometer on "13 miles
+# beneath Rocky Mountain National Park" and a block chart on "75 million
+# acre-feet"; GoMotion shows the plain figure ("13 MILES") on the footage.
+_LOOK_NEEDS = {
+    "LIB_NC_THERMOMETER": r"\b(degrees?|temperatures?|heat|hott?er|warm\w*|cold\w*|fahrenheit|celsius)\b|°",
+    "LIB_NC_STOPWATCH": r"\b(seconds?|minutes?|stopwatch|race|fastest|record time)\b",
+    "LIB_IC_POWER_BOLT": r"\b(power|electric\w*|megawatts?|gigawatts?|kilowatts?|energy|grid|turbines?|hydropower)\b",
+    "LIB_IC_FIRE_FLICKER": r"\b(fires?|wildfires?|burn\w*|blaze|flames?)\b",
+    "LIB_IC_FACTORY_SMOKE": r"\b(factor(?:y|ies)|emissions?|pollut\w*|smoke\w*|carbon)\b",
+    "LIB_IC_TRAFFIC_QUEUE": r"\b(cars?|traffic|vehicles?|trucks?|commut\w*|drivers?)\b",
+    "LIB_IC_CROWD_SWELL": r"\b(people|residents|population|crowds?|voters?|workers|families|visitors|tourists)\b",
+    "LIB_NC_POPULATION_CLOCK": r"\b(population|residents|births?|born)\b",
+    "LIB_IC_HOUSE_GRID": r"\b(homes?|houses?|households?|housing)\b",
+    "LIB_IC_DROP_FILL": r"\b(water|drops?|rain\w*|drink\w*)\b",
+    "LIB_SC_AQUIFER_DROP": r"\b(aquifers?|groundwater|wells?)\b",
+    "LIB_SC_DAM_LEVEL": r"\b(dams?|reservoirs?|capacity|full)\b",
+    "NUM_TANK_V1": r"\b(reservoirs?|lakes?|tanks?|capacity|full|storage)\b",
+    "LIB_NC_BATTERY": r"\b(battery|batteries|charg\w*)\b",
+    "LIB_NC_SPEEDO_GAUGE": r"\b(speed|mph|km/?h|miles per hour|pace)\b",
+    "LIB_NC_COUNTDOWN_DIAL": r"\b(countdown|remaining|deadline|days? left|left to)\b",
+    "LIB_UI_POLL_RESULTS": r"\b(polls?|survey\w*|voters?|respondents|votes?|approv\w*)\b",
+    "LIB_NC_FLIP_CLOCK": r"\b(clock|o'clock|countdown)\b",
+    "LIB_NC_LED_COUNTER": r"\b(counter|counting|tally|scoreboard)\b",
+    "LIB_NS_GOAL_TRACK": r"\b(goals?|targets?|promised|promise|pledge\w*|quota|required|owed)\b",
+    "LIB_NS_BLOCK_STACK": r"\b(blocks?|stack\w*|pallets?|bricks?)\b",
+    "LIB_CP_SPECTRUM_MARKER": r"\b(scale|spectrum|index|category)\b",
+    "NUM_MEASURE_V1": r"\b(feet|foot|ft|inches|meters?|metres?|deep|depth|height|level|elevation|fell|fallen|"
+                      r"dropp?ed|rose|risen|lower|higher)\b",
+    "LIB_CO_MEASURE_LINE": r"\b(feet|foot|ft|inches|meters?|metres?|miles?|km|long|wide|tall|deep)\b",
+}
+_LOOK_NEEDS_RX = {k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
+# A date gets a date: the full "SEPTEMBER 15 / 2026" card first, then the
+# calendar, the date-and-place lower third and the stamps - never an effect
+# (light streak, film burn) or a year scroller standing in for it.
+DATE_LOOKS = ["TL_DATE_TITLE_V1", "LIB_TL_CALENDAR_FLIP", "LIB_LT_DATE_PLACE", "TL_DATE_STAMP_V1",
+              "LIB_TL_DATE_STAMP_CIRCLE"]
+
+
+def look_fits(template_id: str, text: str) -> bool:
+    """False for a look that pictures one particular thing the line does not mention."""
+    rx = _LOOK_NEEDS_RX.get(template_id)
+    return rx is None or bool(rx.search(text or ""))
+
+
 def _template_for_cue(cue: str, pack: dict, used_recently: set,
-                      counts: Optional[Dict[str, int]] = None) -> Optional[str]:
+                      counts: Optional[Dict[str, int]] = None, text: str = "") -> Optional[str]:
     if cue == "route":
         return _least_used([pack["route"], "MAP_TRACE_V1"], counts)
     if cue == "place":
@@ -542,6 +638,10 @@ def _template_for_cue(cue: str, pack: dict, used_recently: set,
     if cue == "chapter":
         return pack["chapter"]
     options = templates.for_cue(cue, pack.get("id", ""), exclude=used_recently)
+    if cue == "date":
+        ranked = {tid: n for n, tid in enumerate(DATE_LOOKS)}
+        options = sorted((t for t in options if t["id"] in ranked), key=lambda t: ranked[t["id"]])
+    options = [t for t in options if look_fits(t["id"], text)]
     if cue in SINGLE_FIGURE_CUES or (cue in TEXT_CUES and cue != "chapter"):
         # One figure, or words: on the clip, never a card that covers it.
         options = [t for t in options if "own-backdrop" not in (t.get("tags") or [])] or options
@@ -708,7 +808,7 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
                     repeated = cue
                     continue
                 recent = {k for k, v in used_recently.items() if at - v < FAMILY_GAP}
-                tid = _template_for_cue(cue["cue"], pack, recent, use_count)
+                tid = _template_for_cue(cue["cue"], pack, recent, use_count, text=seg.text or "")
                 t = templates.get(tid or "")
                 if not t or not rhythm.allows(at, t):
                     continue
@@ -1188,7 +1288,8 @@ def animation_for(seg, shot: dict, pack: dict, brief: Optional[dict],
             # The least used full-frame look for the cue, so a video's
             # full-screen numbers rotate (tank, pie, gauge, dots...) instead of
             # one gauge every time. Tags that ride on footage are not candidates.
-            options = [t for t in templates.for_cue(cue["cue"], pack.get("id", "")) if t["kind"] in CARD_KINDS]
+            options = [t for t in templates.for_cue(cue["cue"], pack.get("id", ""))
+                       if t["kind"] in CARD_KINDS and look_fits(t["id"], seg.text or "")]
             if not options:
                 continue
             if counts:

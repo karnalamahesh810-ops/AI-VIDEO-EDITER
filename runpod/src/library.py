@@ -31,7 +31,10 @@ import requests
 from . import config, media, storage
 
 INDEX_PATH = "library/index.json"
-QUERY_LIMIT = 500
+# The broker signs two URLs per row it returns: 500 rows meant ~1000 storage
+# calls in one burst against the app's small database, two minutes before it
+# stopped answering on 2026-09-29.
+QUERY_LIMIT = 250
 
 
 def _key(subject: str) -> str:

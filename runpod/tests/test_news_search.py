@@ -344,8 +344,10 @@ class DirectorNewsQueries(unittest.TestCase):
     def test_left_alone(self):
         shot = {"subject": "Lake Powell", "subjectType": "place", "visualType": "footage"}
         text = "Lake Powell dropped."
-        self.assertEqual(director.news_queries(shot, text, dict(BRIEF, kind="history")), [])
-        self.assertEqual(director.news_queries(shot, text, dict(BRIEF, kind="explainer", event="")), [])
+        # A story long past gets no news searches (a story about now does,
+        # whatever its kind: see test_glen_fixes).
+        self.assertEqual(director.news_queries(shot, text, dict(BRIEF, kind="history", year=1922)), [])
+        self.assertEqual(director.news_queries(shot, text, dict(BRIEF, kind="explainer", event="", year=1963)), [])
         self.assertEqual(director.news_queries(dict(shot, anchor=False), text, BRIEF), [])
         self.assertEqual(director.news_queries(dict(shot, visualType="image"), text, BRIEF), [])
         self.assertEqual(director.news_queries(dict(shot, subject=""), text, BRIEF), [])
@@ -399,7 +401,7 @@ class DirectorPlan(unittest.TestCase):
             self.assertEqual(director.prefer_interviews(again, segs, BRIEF), 0)     # idempotent
             self.assertEqual(director.prefer_interviews(
                 [{"query": "Katie Hobbs speech footage", "subject": "Katie Hobbs", "subjectType": "person",
-                  "visualType": "footage", "fallbacks": []}], segs[:1], dict(BRIEF, kind="history")), 0)
+                  "visualType": "footage", "fallbacks": []}], segs[:1], dict(BRIEF, kind="history", year=1922)), 0)
 
     def test_rule_queries_carry_interview_or_news_for_event_stories(self):
         def rule_shots():

@@ -964,6 +964,42 @@ def _talking_head(title: str) -> bool:
     return bool(hits)
 
 
+# Candidates kept (n) or dropped (rejected) on their title alone because no
+# vision model could judge them.
+UNJUDGED_KEPT = {"n": 0, "rejected": 0}
+_GENERIC_TITLE_WORDS = set("""footage video videos clip clips stock aerial aerials drone drones view views shot
+shots cinematic 4k hd uhd 8k broll b-roll film filmed scenery landscape landscapes beautiful amazing relaxing music
+ambient timelapse lapse slow motion best top new official full part episode story documentary the and for with from
+into over under near about this that these those what when where which who how why its their his her our your
+you are was were been being has have had not but all any one two three""".split())
+
+
+def _salient_words(text: str) -> set:
+    out = set()
+    for w in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", text or ""):
+        w = w.lower().strip("'-")
+        if w in _GENERIC_TITLE_WORDS:
+            continue
+        out.add(w[:-1] if w.endswith("s") and len(w) > 4 else w)
+    return out
+
+
+def _title_fits(title: str, intent_text: str) -> bool:
+    """Does a candidate's title name what the line is about? The scene's typed
+    entities and places decide when there are any (one of them plus one more
+    hit), else the intent's own words (two of them, one when it has only two)."""
+    si = _SCENE_INTENT.get()
+    if si:
+        ents, locs, subj = intent.SceneIntent.from_dict(si).title_match(title)
+        if ents + locs >= 1 and ents + locs + subj >= 2:
+            return True
+    want = _salient_words(intent_text)
+    if not want:
+        return False
+    hits = len(want & _salient_words(title))
+    return hits >= (2 if len(want) >= 3 else 1)
+
+
 def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
     (keep, verdict) for a downloaded candidate.
@@ -977,6 +1013,17 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     scene = _SCENE_INTENT.get()
     verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()),
                            **({"scene": scene} if scene else {}))
+    if verdict is None and not config.ACCEPT_UNJUDGED:
+        # Every model failed on this clip. Google answered "high demand" for
+        # half an hour on 2026-09-29 and rejecting all of those left most of a
+        # 22-minute video empty (then filled with repeats). The title decides:
+        # a video named after what the line is about stays, anything else goes.
+        keep = _title_fits(label, intent)
+        with _CACHE_LOCK:
+            UNJUDGED_KEPT["n" if keep else "rejected"] += 1
+        print(f"[vision] no verdict (models busy): {'keep' if keep else 'REJECT'} by title {label[:60]!r}",
+              flush=True)
+        return keep, None
     keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person")
     if verdict is not None:
         mark = "keep" if keep else "REJECT"
@@ -2145,6 +2192,7 @@ def reset_cache():
         _GENERATED[0] = 0
     _BRIGHTDATA_REFUSED["why"] = ""     # a topped-up account works again on the next job
     _IMAGE_NO_CREDIT["hit"] = False
+    UNJUDGED_KEPT.update(n=0, rejected=0)
     _ytdlp.reset()
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
@@ -3010,6 +3058,133 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                 results[i] = got
                 filled += 1
     return filled
+
+
+def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]], work_dir: str,
+                youtube_only: bool = False) -> Dict[str, int]:
+    """
+    The last pass over scenes still empty after sourcing, before any shot is
+    repeated (handler._fill_missing_media borrows one). In order: another
+    moment of a same-subject video already on the timeline (fresh_moments),
+    the best-titled YouTube result no scene uses, then a web picture. No
+    vision call - it is the step that failed - so the title has to name what
+    the line is about (_title_fits), and everything found here is flagged for
+    review. Parallel, time boxed by RESCUE_SECONDS past any sourcing
+    deadline. Fills `results` in place; returns how many per step.
+    """
+    out = {"fresh": 0, "search": 0, "image": 0, "asked": 0}
+    by_index = {j["index"]: j for j in jobs if j["index"] < len(results)}
+
+    def empty() -> List[int]:
+        return [i for i in sorted(by_index) if results[i] is None]
+
+    if not work_dir or config.RESCUE_SECONDS <= 0 or not empty():
+        return out
+    out["asked"] = len(empty())
+    old = _ytdlp.DEADLINE[0]
+    until = time.time() + config.RESCUE_SECONDS
+    _ytdlp.set_deadline(until)
+    try:
+        if config.FRESH_MOMENTS:
+            out["fresh"] = fresh_moments(jobs, results, work_dir)
+        # Beats the director meant as a graphic stay a graphic.
+        todo = [i for i in empty() if (by_index[i].get("visual_type") or "footage") in ("footage", "image")]
+        used = set()
+        for r in results:
+            if r is not None and r.source == "youtube":
+                vid, _s = _yt_origin(r)
+                if vid:
+                    used.add(vid)
+        used_images = {r.identity for r in results if r is not None and r.kind == "image"}
+        lock = threading.Lock()
+
+        def claim(key: str, pool: set) -> bool:
+            with lock:
+                if key in pool:
+                    return False
+                pool.add(key)
+                return True
+
+        def footage(job: dict, q: str, intent_text: str, need: float) -> Optional[MediaAsset]:
+            try:
+                cands = _yt_candidates(f"ytsearch8:{q}", False, limit=8, timeout=40)
+            except Exception:  # noqa: BLE001
+                return None
+            cands = [c for c in cands if float(c.get("duration") or 0) >= need + 8
+                     and not _talking_head(c.get("title") or "")
+                     and _title_fits(c.get("title") or "", intent_text)]
+            cands.sort(key=lambda c: -_score_candidate(c.get("title") or "", float(c.get("duration") or 0),
+                                                       float(c.get("aspect") or 0), need))
+            for c in cands[:4]:
+                if time.time() > until - 15:
+                    return None
+                if not claim(c["id"], used):
+                    continue
+                dur = float(c.get("duration") or 0)
+                point = max(5.0, dur * 0.35)
+                path, clean, cuts = fetch_clean_clip(c["id"], work_dir, point, need, c.get("title") or "")
+                if not path:
+                    continue
+                if _filters.has_burned_captions(path):
+                    continue
+                asset = _asset_for(path, q, need, False, title=c.get("title") or "")
+                asset.url = f"https://www.youtube.com/watch?v={c['id']}&t={int(point)}"
+                asset.intent = intent_text
+                asset.moment_key = f"yt:{c['id']}@{int(point // 10)}"
+                asset.moment = {"start": round(point, 1), "clean": clean, "cuts": cuts, "rescue": True}
+                ok, _why = _asset_ok(asset)
+                if not ok:
+                    continue
+                asset.review_required = True
+                asset.review_reason = "Found in the last pass without an AI check - make sure it fits the line"
+                return asset
+            return None
+
+        def picture(job: dict, q: str, intent_text: str) -> Optional[MediaAsset]:
+            for cand in _cached_search(search_web_images, q)[:5]:
+                if time.time() > until - 10:
+                    return None
+                if not claim(cand.identity, used_images):
+                    continue
+                got = _download(_dc_replace(cand), q, work_dir)
+                if got:
+                    got.intent = intent_text
+                    got.review_required = True
+                    got.review_reason = "Picture found in the last pass without an AI check - make sure it fits"
+                    return got
+            return None
+
+        def one(i: int) -> Optional[MediaAsset]:
+            job = by_index[i]
+            q = " ".join(str(job.get("query") or job.get("subject") or "").split())
+            if not q or time.time() > until - 20:
+                return None
+            if job.get("subject_type") == "person":
+                return None        # a searched face can be the wrong person; the scene gets a graphic
+            intent_text = job.get("intent") or q
+            need = max(2.5, min(12.0, float(job.get("seconds") or 5.0)))
+            token = _SCENE_INTENT.set(job.get("scene_intent") or None)
+            try:
+                got = None
+                if job.get("visual_type", "footage") != "image":
+                    got = footage(job, q, intent_text, need)
+                if got is None and not youtube_only and config.ALLOW_WEB_IMAGES:
+                    got = picture(job, q, intent_text)
+                return got
+            finally:
+                _SCENE_INTENT.reset(token)
+
+        if todo:
+            with ThreadPoolExecutor(max_workers=max(1, min(config.RESCUE_PARALLEL, len(todo)))) as pool:
+                for i, got in zip(todo, pool.map(one, todo)):
+                    if got is not None and results[i] is None:
+                        results[i] = got
+                        out["image" if got.kind == "image" else "search"] += 1
+    finally:
+        _ytdlp.set_deadline(old)
+    print(f"[rescue] {out['asked']} empty scene(s): {out['fresh']} other moments, {out['search']} searched clips, "
+          f"{out['image']} pictures; {len(empty())} still empty", flush=True)
+    return out
 
 
 def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]) -> int:

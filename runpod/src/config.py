@@ -196,9 +196,14 @@ VISION_REASONING_EFFORT = os.getenv("VISION_REASONING_EFFORT", "low").strip()
 VISION_GEMINI_REASONING = os.getenv("VISION_GEMINI_REASONING", "none").strip()
 VISION_FRAMES = int(os.getenv("VISION_FRAMES", "3"))
 # Retries per model on a transient failure (timeout, 5xx, 429), before the
-# fallback model is tried, and the pause before each.
-VISION_RETRIES = int(os.getenv("VISION_RETRIES", "1"))
+# fallback model is tried, and the pause before the first (doubling after).
+# Google answered "high demand" (503) in bursts all night on 2026-09-29: one
+# quick retry lost 56 of 101 verdicts on the parent alone.
+VISION_RETRIES = int(os.getenv("VISION_RETRIES", "2"))
 VISION_RETRY_WAIT = float(os.getenv("VISION_RETRY_WAIT", "2"))
+# How long a model that failed twice in a row sits out. A provider-wide 503
+# burst is over in a minute or two; five minutes benched every model at once.
+VISION_MODEL_COOLDOWN_SECONDS = float(os.getenv("VISION_MODEL_COOLDOWN_SECONDS", "90"))
 # One request's timeout. gpt-5-2 answers a clip check in ~14 s at "low"; the
 # old 90 s wait, retried and then repeated on the fallback, let one verdict
 # hold a scene for ~6 minutes when Kie's channels stalled (job 16c80a8b:
@@ -401,6 +406,19 @@ FANOUT_TIMEOUT_SECONDS = float(os.getenv("FANOUT_TIMEOUT_SECONDS", "1500"))
 # Leftover scenes after round 1 go back out across the workers from this many
 # up; a real job kept 9 for the parent alone ("Filling the last 9 scenes").
 FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "3"))
+# Getting found clips back to the parent. A part retries its uploads until
+# its round deadline plus this; a clip that still cannot be handed over is
+# fetched again by the parent from its source (REFETCH_*), in parallel, in
+# its own time box past the sourcing deadline. The Glen Canyon job lost 148
+# of 167 found scenes here while the app's database was restarting.
+PART_UPLOAD_GRACE_SECONDS = float(os.getenv("PART_UPLOAD_GRACE_SECONDS", "30"))
+REFETCH_SECONDS = float(os.getenv("REFETCH_SECONDS", "300"))
+REFETCH_PARALLEL = int(os.getenv("REFETCH_PARALLEL", "12"))
+# The last pass over scenes still empty after sourcing, before any shot is
+# repeated: another moment of a same-subject video, then the best-titled
+# search result nobody uses (no vision call), then a web picture. Time boxed.
+RESCUE_SECONDS = float(os.getenv("RESCUE_SECONDS", "300"))
+RESCUE_PARALLEL = int(os.getenv("RESCUE_PARALLEL", "12"))
 # One wall-clock budget for all footage finding, across every worker: a
 # real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
 # and searches stop at once and the beats still without footage become

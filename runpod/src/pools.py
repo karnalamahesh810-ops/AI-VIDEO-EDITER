@@ -107,12 +107,16 @@ def subject_story(sjobs: List[dict]) -> dict:
     event = str(brief.get("event") or si.get("event_type") or "").replace("/", " ")
     event = " ".join(event.split())
     when = str(si.get("time_context") or "")
-    year = brief.get("year") or (int(when) if re.fullmatch(r"20\d\d", when) else None)
+    year = brief.get("year") or (int(when) if re.fullmatch(r"20\d\d", when) else None) \
+        or (datetime.date.today().year if when == "current" else None)
     window = "year" if "year" in windows else ("event" if windows else "")
     if window == "year" and not year:
         year = datetime.date.today().year
+    # A story about now gets news searches too, whatever its kind (the Glen
+    # Canyon narration came back "history" and got none).
+    current = director.current_story({"kind": kind, "year": year})
     is_event = bool(config.NEWS_FOOTAGE) and (
-        kind in _EVENT_KINDS or bool(windows) or (kind == "explainer" and bool(event)))
+        kind in _EVENT_KINDS or bool(windows) or (kind == "explainer" and bool(event)) or current)
     return {"kind": kind, "event": event, "year": year, "window": window, "is_event": is_event}
 
 

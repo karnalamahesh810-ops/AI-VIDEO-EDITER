@@ -31,6 +31,7 @@ import os
 import subprocess
 import threading
 import time
+import urllib.parse
 from dataclasses import asdict, fields
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional
@@ -297,6 +298,60 @@ def _dedupe(results: List[Optional[media.MediaAsset]], jobs: List[dict],
     return redo
 
 
+def _refetch_one(i: int, d: dict, work: str) -> Optional[media.MediaAsset]:
+    """A lost part clip fetched again from where it came from: the same YouTube
+    moment, or the picture's own URL. None when that is not possible."""
+    asset = _asset_from(d, "")
+    path = ""
+    try:
+        if asset.source == "youtube" and asset.kind == "video":
+            vid, start = media._yt_origin(asset)
+            if not vid:
+                return None
+            seconds = max(2.5, min(15.0, float(asset.duration or 0) or 6.0))
+            path, _clean, _cuts = media.fetch_clean_clip(vid, work, start, seconds, (asset.attribution or "")[:60])
+        elif asset.kind == "image" and str(asset.url or "").startswith("http"):
+            ext = os.path.splitext(urllib.parse.urlparse(asset.url).path)[1].lower()
+            ext = ext if ext in (".jpg", ".jpeg", ".png", ".webp") else ".jpg"
+            path = storage.download(asset.url, os.path.join(work, f"refetch_{i:04d}{ext}"))
+        else:
+            return None
+    except Exception as e:  # noqa: BLE001 - the scene stays empty for the rescue pass
+        print(f"[fanout] scene {i + 1}: refetch failed ({str(e)[:100]})", flush=True)
+        return None
+    if not path or not os.path.isfile(path):
+        return None
+    asset.local_path = path
+    return asset
+
+
+def refetch_lost(lost: List[tuple], results: List[Optional[media.MediaAsset]], work: str) -> int:
+    """
+    Fetch again, in parallel, the clips parts chose but could not hand over:
+    [(scene index, the part's asset record)]. Fills `results` in place and
+    returns how many came back. The choice and its vision verdict were made
+    on the part; only the download is left, so it gets its own short time
+    box (REFETCH_SECONDS) even past the sourcing deadline.
+    """
+    todo = [(i, d) for i, d in lost if 0 <= i < len(results) and results[i] is None]
+    if not todo:
+        return 0
+    old = ytdlp.DEADLINE[0]
+    ytdlp.set_deadline(max(old, time.time() + config.REFETCH_SECONDS))
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, min(config.REFETCH_PARALLEL, len(todo)))) as ex:
+            got = list(ex.map(lambda it: _refetch_one(it[0], it[1], work), todo))
+    finally:
+        ytdlp.set_deadline(old)
+    n = 0
+    for (i, _d), a in zip(todo, got):
+        if a is not None and results[i] is None:
+            results[i] = a
+            n += 1
+    print(f"[fanout] fetched {n}/{len(todo)} lost part clip(s) again from their source", flush=True)
+    return n
+
+
 def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_id: str,
            project_id: str, bucket: str, work: str, flags: dict,
            report: Callable, local: Callable[[List[dict], set], List[Optional[media.MediaAsset]]],
@@ -314,7 +369,11 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
     n = max(j["index"] for j in jobs) + 1
     results: List[Optional[media.MediaAsset]] = [None] * n
     total_scenes = len(jobs)
-    stats: Dict[str, int] = {"parts": 0, "stolen_back": 0, "failed_parts": 0, "rounds": 0}
+    stats: Dict[str, int] = {"parts": 0, "stolen_back": 0, "failed_parts": 0, "rounds": 0, "refetched": 0,
+                             "refetch_asked": 0}
+    # Clips a part chose but could not hand over (the app's storage down):
+    # (scene index, the part's asset record), fetched again from their source.
+    lost: List[tuple] = []
 
     def fetch(unit: dict, out: Any, remote: bool) -> bool:
         if not remote:
@@ -326,14 +385,26 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
             return False
         for key, d in assets.items():
             i = int(key)
+            if d.get("refetch") or not d.get("remote_url"):
+                lost.append((i, d))
+                continue
             ext = os.path.splitext((d.get("storage_path") or "x.bin"))[1] or ".bin"
             path = os.path.join(work, f"part_{i:04d}{ext}")
             try:
                 storage.download(d.get("remote_url") or "", path)
                 results[i] = _asset_from(d, path)
-            except Exception as e:  # noqa: BLE001 - redone in the next round
+            except Exception as e:  # noqa: BLE001 - fetched again from its source below
                 print(f"[fanout] scene {i + 1}: download failed ({e})", flush=True)
+                lost.append((i, d))
         return True
+
+    def recover() -> None:
+        if not lost:
+            return
+        stats["refetch_asked"] += len(lost)
+        got = refetch_lost(list(lost), results, work)
+        stats["refetched"] += got
+        lost.clear()
 
     # IMAGE_MAX_PER_VIDEO is per VIDEO: each first-round part gets its share,
     # gap-filling parts none (they exist to find footage), and the parent
@@ -367,6 +438,7 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
             report=show,
             deadline=_round_deadline(len(round_jobs)))
         failed = units.run(label)
+        recover()
         stats["parts"] += len(parts)
         stats["stolen_back"] += units.stolen
         stats["failed_parts"] += len(failed)
@@ -630,20 +702,26 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
     bucket = inp.get("bucket") or config.MEDIA_BUCKET
     out: Dict[str, dict] = {}
     global_of = {k: g for g, k in local_of.items()}
+    # Uploads may be retried until just before the parent stops waiting for
+    # this part (its round deadline is the sourcing deadline plus 45 s).
+    upload_until = (float(inp["deadline_at"]) + config.PART_UPLOAD_GRACE_SECONDS
+                    if inp.get("deadline_at") else time.time() + 60.0)
 
     def upload(k_a):
         k, a = k_a
         g = global_of[k]
         ext = os.path.splitext(a.local_path)[1] or ".bin"
         obj = f"projects/{project_id}/parts/{parent}/{g:04d}{ext}"
-        try:
-            url = storage.broker_upload(a.local_path, bucket, obj, project_id, parent,
-                                        read_ttl=60 * 60 * 6)
-        except Exception as e:  # noqa: BLE001 - the parent re-sources it
-            print(f"[part] scene {g + 1}: upload failed ({e})", flush=True)
-            return None
         d = asdict(a)
         d.pop("local_path", None)
+        try:
+            url = storage.broker_upload(a.local_path, bucket, obj, project_id, parent,
+                                        read_ttl=60 * 60 * 6, deadline=upload_until)
+        except Exception as e:  # noqa: BLE001 - the parent fetches it again from its source
+            print(f"[part] scene {g + 1}: upload failed ({str(e)[:120]}); "
+                  "handing back where it came from instead", flush=True)
+            d.update(remote_url="", storage_path="", refetch=True)
+            return str(g), d
         d.update(remote_url=url, storage_path=obj)
         return str(g), d
 
@@ -654,4 +732,5 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
         for got in ex.map(upload, ready):
             if got:
                 out[got[0]] = got[1]
-    return {"assets": out, "delivered": len(out), "asked": len(jobs)}
+    delivered = sum(1 for d in out.values() if not d.get("refetch"))
+    return {"assets": out, "delivered": delivered, "refetch": len(out) - delivered, "asked": len(jobs)}

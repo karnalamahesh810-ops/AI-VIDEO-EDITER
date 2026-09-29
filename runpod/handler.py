@@ -780,6 +780,9 @@ def _fill_missing_media(doc: dict) -> int:
         return ((scenes[idx].get("semanticMetadata") or {}).get("subject") or "").strip().lower()
 
     borrowed = {h: 0 for h in have}
+    # How far a borrowed shot must sit from where it already plays: none for a
+    # handful of scenes, six scenes on a long video.
+    gap = 1 if len(scenes) <= 12 else min(6, 2 + len(scenes) // 40)
     patched = 0
     for i, s in enumerate(scenes):
         if (s.get("media") or {}).get("type") == "color":
@@ -807,14 +810,27 @@ def _fill_missing_media(doc: dict) -> int:
                 continue
             want = subject_of(i)
             same_subject = [h for h in have if want and subject_of(h) == want]
-            pool = same_subject or have
+            # A shot is borrowed at most once, never near itself: the owner saw
+            # ~19 clips each repeated about eight times across a 22-minute video.
+            same_pool = [h for h in same_subject if borrowed[h] < 1 and abs(h - i) >= gap]
+            pool = same_pool or [h for h in have if borrowed[h] < 1 and abs(h - i) >= gap]
+            if not pool:
+                text = (s.get("text") or "").strip()
+                if text:
+                    doc.setdefault("overlays", []).append({
+                        "type": "highlight", "text": text[:180],
+                        "startFrame": s["startFrame"], "durationInFrames": s["durationInFrames"]})
+                s["reviewRequired"] = True
+                s["reviewReason"] = "No usable clip found — the line is shown as text; use Find footage to add one"
+                patched += 1
+                continue
             pick = min(pool, key=lambda h: (borrowed[h], abs(h - i)))
             borrowed[pick] += 1
             s["media"] = dict(scenes[pick]["media"])
             s["motion"] = scenes[pick].get("motion", "none")
             s["reviewRequired"] = True
             reason = ("No usable clip found — reused a shot of the same subject; use Find footage to replace it"
-                     if pool is same_subject else
+                     if same_pool else
                      "No usable clip found — reused another scene; use Find footage to replace it")
             s["reviewReason"] = reason
             patched += 1
@@ -1056,6 +1072,18 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             pool_stats["reserve_filled"] = len(extra)
             print(f"[worker] {len(extra)}/{len(redo)} empty or repeated line(s) filled from "
                   "spare pool moments", flush=True)
+    # Still empty: one last time-boxed pass before the render repeats a shot
+    # (the Glen Canyon job repeated ~19 clips across 148 empty scenes).
+    if any(a is None for a in assets):
+        n_empty = sum(1 for a in assets if a is None)
+        report(f"Finding footage for {n_empty} empty scenes", 62)
+        results_by_index = [None] * (max(j["index"] for j in jobs) + 1)
+        for j in jobs:
+            results_by_index[j["index"]] = assets[j["index"]]
+        rescued = media.rescue_fill(jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")))
+        for j in jobs:
+            assets[j["index"]] = results_by_index[j["index"]]
+        pool_stats["rescue"] = rescued
     _ytdlp_mod.set_deadline(0.0)               # later steps (resource, render) are not time boxed here
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
@@ -1855,6 +1883,9 @@ def handler(job):
             def set_story(brief):
                 vision.set_story(brief)
                 media.set_story_kind((brief or {}).get("kind", ""))
+                # The pools read the story (year, kind) to decide on news searches.
+                director.LAST_STORY.clear()
+                director.LAST_STORY.update(brief or {})
 
             def part_progress(done, n):
                 # The parent sums these across parts for the app's progress bar.

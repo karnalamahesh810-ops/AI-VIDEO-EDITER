@@ -1,6 +1,7 @@
 """Supabase Storage upload + generic file download."""
 import os
 import mimetypes
+import re
 import threading
 import time
 import uuid
@@ -127,14 +128,45 @@ def broker_read_url(bucket: str, object_path: str, project_id: str, job_id: str,
                     "expires_in": read_ttl})["readUrl"]
 
 
+def _transient(e: Exception) -> bool:
+    """
+    A failure worth waiting out: the network, a 5xx, or the broker's "job is
+    not running" - which it also answers when it cannot read the project
+    because the app's database is down. On 2026-09-29 a database restart
+    refused every part's upload for ~30 minutes and a 22-minute video lost
+    148 of its 167 clips on the way back to the parent.
+    """
+    if isinstance(e, requests.RequestException):
+        return True
+    text = str(e)
+    m = re.search(r"\((\d{3})\)", text)
+    code = int(m.group(1)) if m else 0
+    return code >= 500 or code == 429 or (code == 403 and "not running" in text)
+
+
+def _retrying(fn, deadline: float, what: str):
+    """fn() retried on transient failures, backing off, until `deadline` (epoch seconds)."""
+    wait = 2.0
+    while True:
+        try:
+            return fn()
+        except (StorageError, requests.RequestException) as e:
+            if not deadline or time.time() + wait >= deadline or not _transient(e):
+                raise
+            print(f"[storage] {what} failed ({str(e)[:90]}); retrying in {wait:.0f}s", flush=True)
+            time.sleep(wait)
+            wait = min(wait * 2, 20.0)
+
+
 def broker_upload(local_path: str, bucket: str, object_path: str, project_id: str,
-                  job_id: str, read_ttl: int = 60 * 60 * 24 * 7) -> str:
+                  job_id: str, read_ttl: int = 60 * 60 * 24 * 7, deadline: float = 0.0) -> str:
     """
     Upload one file through the app's broker and return a signed read URL.
 
     The broker checks that `job_id` is the job currently running for
     `project_id` and that the path sits under projects/<project_id>/, so a
     leaked request can only ever write into that one project's folder.
+    With `deadline` (epoch seconds), transient failures are retried until then.
     """
     ref = {"project_id": project_id, "job_id": job_id,
            "bucket": bucket, "path": object_path.lstrip("/")}
@@ -143,8 +175,11 @@ def broker_upload(local_path: str, bucket: str, object_path: str, project_id: st
             raise StorageError("parallel uploads need worker-storage or Supabase service credentials")
         upload_to_supabase(local_path, ref["path"], bucket=bucket)
         return signed_url(ref["path"], bucket=bucket, expires_in=read_ttl)
-    upload_to_signed_url(local_path, _broker({**ref, "action": "upload"})["uploadUrl"])
-    return _broker({**ref, "action": "read", "expires_in": read_ttl})["readUrl"]
+
+    def once() -> str:
+        upload_to_signed_url(local_path, _broker({**ref, "action": "upload"})["uploadUrl"])
+        return _broker({**ref, "action": "read", "expires_in": read_ttl})["readUrl"]
+    return _retrying(once, deadline, f"upload of {os.path.basename(object_path)}")
 
 
 def check(bucket: str = None) -> dict:

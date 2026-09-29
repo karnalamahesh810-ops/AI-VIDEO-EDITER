@@ -744,7 +744,9 @@ _BRIEF_PROMPT = (
     "\"cast\":[{\"name\":str,\"aliases\":[str]}],"
     "\"sections\":[{\"from\":int,\"to\":int,\"when\":str,\"where\":str,\"footage\":[str]}]}.\n"
     "- kind: one of news, weather, disaster, history, biography, science, nature, "
-    "explainer, other.\n"
+    "explainer, other. A story about something happening now (this year or last: a "
+    "drought, water cuts, a court fight, a new law) is news or explainer, never history; "
+    "history is for events long past.\n"
     "- summary: two sentences: what the video is about and how it unfolds.\n"
     "- event: for a story about one specific real occurrence, its searchable name "
     "with place and year (\"2026 Midwest flooding Iowa\", \"Hurricane Helene 2024 "
@@ -1167,8 +1169,29 @@ _MEDIUM_WORDS = re.compile(r"\b(interview|press conference|news|speech|footage)\
 
 
 def _event_topic(brief: dict) -> str:
-    """The story's event without its year: '2026 Colorado River water cuts' -> 'Colorado River water cuts'."""
-    return " ".join(w for w in (brief.get("event") or "").split() if not _YEAR.fullmatch(w)).strip()
+    """The story's event without its year: '2026 Colorado River water cuts' -> 'Colorado River water cuts'.
+    A current story without a named event falls back to its first place ("Lake Powell")."""
+    topic = " ".join(w for w in (brief.get("event") or "").split() if not _YEAR.fullmatch(w)).strip()
+    if not topic and current_story(brief):
+        places = [p for p in (brief.get("places") or []) if isinstance(p, str) and len(p) > 3]
+        topic = places[0].split(",")[0].strip() if places else ""
+    return topic
+
+
+def current_story(brief: dict, today: Optional[datetime.date] = None) -> bool:
+    """
+    A story about now: a news/weather/disaster story, or any story whose main
+    events are this year or last. The Glen Canyon narration (2026 gauge
+    readings, cuts and court fights) came back as kind "history", so it got
+    no news searches while GoMotion's version of it was 12% local-TV reports.
+    """
+    if not isinstance(brief, dict):
+        return False
+    if brief.get("kind") in EVENT_KINDS:
+        return True
+    year = brief.get("year")
+    today = today or _today()
+    return isinstance(year, int) and not isinstance(year, bool) and year >= today.year - 1
 
 
 def _person_beat(shot: dict, brief: dict) -> bool:
@@ -1203,7 +1226,8 @@ def news_queries(shot: dict, text: str, brief: dict) -> List[str]:
     topic = _event_topic(brief)
     if not config.NEWS_FOOTAGE:
         return []
-    if kind not in _NEWS_QUERY_KINDS or (kind == "explainer" and not topic):
+    news_kind = kind in _NEWS_QUERY_KINDS and not (kind == "explainer" and not topic)
+    if not (news_kind or current_story(brief)):
         return []
     if shot.get("anchor") is False or shot.get("visualType") == "image":
         return []
@@ -1239,7 +1263,8 @@ def prefer_interviews(shots: List[dict], segments: List[Segment], brief: dict) -
     is. The old query stays as the first fallback. Returns how many changed.
     """
     topic = _event_topic(brief)
-    if not config.NEWS_FOOTAGE or brief.get("kind") not in _NEWS_QUERY_KINDS or not topic:
+    if not config.NEWS_FOOTAGE or not topic or not (brief.get("kind") in _NEWS_QUERY_KINDS
+                                                   or current_story(brief)):
         return 0
     changed = 0
     for shot, seg in zip(shots, segments):
