@@ -1,0 +1,110 @@
+{
+  "boom-soft": {
+    "duration": 1.71,
+    "peak": 0.309
+  },
+  "click": {
+    "duration": 0.11,
+    "peak": 0.005
+  },
+  "count-tick": {
+    "duration": 1.32,
+    "peak": 0.963
+  },
+  "ding": {
+    "duration": 1.5,
+    "peak": 0.02
+  },
+  "flash-hit": {
+    "duration": 0.62,
+    "peak": 0.075
+  },
+  "glitch": {
+    "duration": 1.023,
+    "peak": 0.429
+  },
+  "glitch fx transistion": {
+    "duration": 1.656,
+    "peak": 0.763
+  },
+  "glitch-short": {
+    "duration": 0.5,
+    "peak": 0.175
+  },
+  "glitch-transition": {
+    "duration": 1.656,
+    "peak": 0.763
+  },
+  "impact": {
+    "duration": 2.463,
+    "peak": 0.634
+  },
+  "keys": {
+    "duration": 5.0,
+    "peak": 0.399
+  },
+  "map-whoosh": {
+    "duration": 3.084,
+    "peak": 0.703
+  },
+  "marker": {
+    "duration": 0.7,
+    "peak": 0.16
+  },
+  "page": {
+    "duration": 2.5,
+    "peak": 0.429
+  },
+  "paper": {
+    "duration": 1.094,
+    "peak": 0.344
+  },
+  "paper-slide": {
+    "duration": 0.58,
+    "peak": 0.389
+  },
+  "pop": {
+    "duration": 0.479,
+    "peak": 0.035
+  },
+  "riser": {
+    "duration": 5.068,
+    "peak": 2.005
+  },
+  "riser-short": {
+    "duration": 1.55,
+    "peak": 1.497
+  },
+  "shutter": {
+    "duration": 0.26,
+    "peak": 0.01
+  },
+  "swipe": {
+    "duration": 0.44,
+    "peak": 0.195
+  },
+  "tick": {
+    "duration": 0.085,
+    "peak": 0.005
+  },
+  "typewriter": {
+    "duration": 3.474,
+    "peak": 0.539
+  },
+  "typing text": {
+    "duration": 6.374,
+    "peak": 0.539
+  },
+  "whoosh": {
+    "duration": 2.321,
+    "peak": 0.713
+  },
+  "whoosh-cinematic-for-maps": {
+    "duration": 3.082,
+    "peak": 0.703
+  },
+  "whoosh-soft": {
+    "duration": 1.12,
+    "peak": 0.419
+  }
+}

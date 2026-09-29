@@ -282,3 +282,13 @@ class CrossfadeRhythm(unittest.TestCase):
         self.assertIn('"crossfade"', types)
         self.assertIn("CROSSFADE_FRAMES = 15", main)
         self.assertEqual(timeline.CROSSFADE_FRAMES, 15)
+
+
+class SfxMetaCopy(unittest.TestCase):
+    def test_the_renderer_copy_matches_the_sound_folder(self):
+        # Main.tsx imports src/data/sfx_meta.json so the Lovable preview copy of
+        # src/ works too; it must stay equal to public/sfx/sfx_meta.json.
+        import json
+        a = json.load(open("remotion/public/sfx/sfx_meta.json", encoding="utf-8"))
+        b = json.load(open("remotion/src/data/sfx_meta.json", encoding="utf-8"))
+        self.assertEqual(a, b)

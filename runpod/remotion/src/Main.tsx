@@ -8,7 +8,7 @@ import { MotionWrap } from "./components/MotionWrap";
 import { resolveOverlay, templateFor } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
 import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
-import sfxMeta from "../public/sfx/sfx_meta.json";
+import sfxMeta from "./data/sfx_meta.json";   // a copy of public/sfx/sfx_meta.json (a test keeps them equal)
 
 const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
 // Case-file looks that show a still of the story when they were given no
