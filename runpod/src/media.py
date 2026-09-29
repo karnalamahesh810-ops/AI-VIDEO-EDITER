@@ -1029,6 +1029,16 @@ def _title_fits(title: str, intent_text: str) -> bool:
     return hits >= (2 if len(want) >= 3 else 1)
 
 
+def _image_label(asset) -> str:
+    """What a picture is called, for the title check when no model can judge it:
+    its file or page name ("Glen Canyon Dam 1964.jpg") and any caption, not only
+    the credit line ("Tuxyso", "C. S. Fly"), which names nothing in the picture."""
+    name = urllib.parse.unquote(os.path.basename(urllib.parse.urlparse(asset.url or "").path))
+    name = re.sub(r"^\d+px-", "", os.path.splitext(name)[0]).replace("_", " ").replace("-", " ")
+    parts = [name, asset.attribution or "", asset.content_description or ""]
+    return " | ".join(p for p in parts if p)[:300]
+
+
 def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
     (keep, verdict) for a downloaded candidate.
@@ -2311,8 +2321,7 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
         if not got:
             continue
         judged += 1
-        keep, verdict = _vision_gate(got.local_path, intent, context,
-                                     got.attribution or got.url)
+        keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got))
         if keep:
             return got.apply_verdict(verdict, intent)
         if judged >= config.VISION_MAX_CANDIDATES:
@@ -3391,8 +3400,7 @@ def _image_pool(queries: List[str], subject: str, subject_type: str, need: int,
         got = _download(_dc_replace(cand), cand.query or subject, out_dir)
         if not got:
             continue
-        keep, verdict = _vision_gate(got.local_path, intent, context,
-                                     got.attribution or got.url)
+        keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got))
         if keep:
             shots.append({"kind": "image", "video": "", "asset": got.apply_verdict(verdict, intent)})
     return shots

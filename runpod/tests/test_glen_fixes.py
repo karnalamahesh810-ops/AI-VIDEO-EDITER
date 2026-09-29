@@ -90,6 +90,16 @@ class UnjudgedByTitle(unittest.TestCase):
                                            "Arizona desert golf course aerial footage"))
         self.assertFalse(media._title_fits("", "Lake Powell"))
 
+    def test_a_picture_is_judged_by_its_file_name_not_its_credit_line(self):
+        a = media.MediaAsset(kind="image", source="wikimedia", attribution="Tuxyso", query="Glen Canyon Dam",
+                             url="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/"
+                                 "Glen_Canyon_Dam_and_Lake_Powell.jpg/960px-Glen_Canyon_Dam_and_Lake_Powell.jpg")
+        self.assertIn("Glen Canyon Dam and Lake Powell", media._image_label(a))
+        self.assertTrue(media._title_fits(media._image_label(a), "Glen Canyon Dam aerial view Lake Powell"))
+        b = media.MediaAsset(kind="image", source="wikimedia", attribution="C. S. Fly", query="Glen Canyon Dam",
+                             url="https://upload.wikimedia.org/wikipedia/commons/a/ab/Apache_camp_1886.jpg")
+        self.assertFalse(media._title_fits(media._image_label(b), "Glen Canyon Dam aerial view Lake Powell"))
+
     def test_no_verdict_keeps_a_clip_named_after_the_line_and_drops_the_rest(self):
         media.reset_cache()
         with mock.patch.object(vision, "enabled", return_value=True), \
