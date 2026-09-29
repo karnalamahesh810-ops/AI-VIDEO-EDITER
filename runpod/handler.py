@@ -1081,6 +1081,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         for j in jobs:
             results_by_index[j["index"]] = assets[j["index"]]
         rescued = media.rescue_fill(jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")))
+        # Only now, with nothing fresh left to find, may a shot be reused - and
+        # never more than REUSE_MAX_USES times in the video.
+        if config.REUSE_SHOTS_TO_FILL and config.RESCUE_BEFORE_REUSE:
+            rescued["reused"] = media.fill_from_story(jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
         for j in jobs:
             assets[j["index"]] = results_by_index[j["index"]]
         pool_stats["rescue"] = rescued

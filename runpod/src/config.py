@@ -419,6 +419,11 @@ REFETCH_PARALLEL = int(os.getenv("REFETCH_PARALLEL", "12"))
 # search result nobody uses (no vision call), then a web picture. Time boxed.
 RESCUE_SECONDS = float(os.getenv("RESCUE_SECONDS", "300"))
 RESCUE_PARALLEL = int(os.getenv("RESCUE_PARALLEL", "12"))
+# Fresh footage before repeats: per-scene sourcing leaves a beat empty rather
+# than reusing a shot, the job's rescue pass looks for new footage, and only
+# then is a shot reused - at most REUSE_MAX_USES times in the whole video.
+RESCUE_BEFORE_REUSE = os.getenv("RESCUE_BEFORE_REUSE", "1").strip().lower() not in ("0", "false", "no")
+REUSE_MAX_USES = int(os.getenv("REUSE_MAX_USES", "2"))
 # One wall-clock budget for all footage finding, across every worker: a
 # real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
 # and searches stop at once and the beats still without footage become

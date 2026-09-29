@@ -1813,7 +1813,10 @@ class NoDuplicateShots(unittest.TestCase):
         # creator's rule after a long biography came out 86% empty), but a
         # repeat never lands within REUSE_MIN_GAP scenes of the same shot and
         # is always flagged - the original complaint was silent, close repeats.
-        out, _ = self._run(["the lake"] * 8, per_query=2)
+        # (Reuse inside per-scene sourcing: the legacy order. By default the job's
+        # rescue pass runs first and reuse is capped - see test_glen_fixes.)
+        with mock.patch.object(config, "RESCUE_BEFORE_REUSE", False):
+            out, _ = self._run(["the lake"] * 8, per_query=2)
         placed = [(i, a) for i, a in enumerate(out) if a]
         self.assertGreater(len(placed), 2)
         for i, a in placed:

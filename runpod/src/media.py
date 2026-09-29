@@ -2941,7 +2941,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         print(f"[media] {fresh} scene(s) got another moment of a video the story already uses "
               f"instead of a repeated shot", flush=True)
     LAST_STATS.update(fresh_moments=fresh)
-    reused = fill_from_story(ordered, results) if config.REUSE_SHOTS_TO_FILL else 0
+    # Reusing a shot waits until after the job's rescue pass has looked for fresh
+    # footage (handler): run here first, it filled 51 of 164 scenes with repeats.
+    reused = (fill_from_story(ordered, results)
+              if config.REUSE_SHOTS_TO_FILL and not config.RESCUE_BEFORE_REUSE else 0)
     if reused:
         print(f"[media] reused a shot from elsewhere in the story for {reused} "
               f"scene(s) nothing else could fill", flush=True)
@@ -3226,7 +3229,8 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
     return out
 
 
-def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]) -> int:
+def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
+                    max_uses: Optional[int] = None) -> int:
     """
     Give every scene still empty a real shot from elsewhere in the same story.
 
@@ -3237,10 +3241,19 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
     away, then a shot from a nearby scene - never a photo of a different
     person, which would put the wrong face on screen - and last the same
     subject's farthest shot, never on the scene right next to it. Every reuse
-    is flagged for review. Returns how many scenes were filled.
+    is flagged for review. With `max_uses`, a shot appears at most that many
+    times in the video (the owner: no clip shown again and again). Returns how
+    many scenes were filled.
     """
     by_index = {j["index"]: j for j in jobs}
     order = sorted(by_index)
+    uses: Dict[str, int] = {}
+    for r in results:
+        if r is not None:
+            uses[r.identity] = uses.get(r.identity, 0) + 1
+
+    def spent(k: int) -> bool:
+        return max_uses is not None and uses.get(results[k].identity, 0) >= max_uses
 
     def placed_near(identity: str, i: int) -> bool:
         return any(results[k] is not None and results[k].identity == identity
@@ -3255,7 +3268,7 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
         subject = job.get("subject") or ""
         person = job.get("subject_type") == "person"
         # Nearest donors first; a donor is any scene that has media.
-        donors = sorted((k for k in order if k != i and results[k] is not None),
+        donors = sorted((k for k in order if k != i and results[k] is not None and not spent(k)),
                         key=lambda k: abs(k - i))
         pick = None
         for k in donors:                       # 1. the same subject
@@ -3281,6 +3294,7 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
         if pick is None:
             continue
         donor = results[pick]
+        uses[donor.identity] = uses.get(donor.identity, 0) + 1
         results[i] = _dc_replace(
             donor, review_required=True,
             review_reason=(f"Reused shot of {by_index[pick].get('subject') or 'another scene'}"

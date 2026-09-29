@@ -146,6 +146,21 @@ class RescuePass(unittest.TestCase):
         search.assert_not_called()
 
 
+class ReuseComesLastAndIsCapped(unittest.TestCase):
+    def test_a_shot_appears_at_most_twice(self):
+        a = media.MediaAsset(kind="video", source="youtube", url="https://www.youtube.com/watch?v=aaaaaaaaaaa",
+                             local_path="/w/yt_aaaaaaaaaaa.mp4")
+        jobs = [{"index": i, "subject": "Lake Powell", "subject_type": "place"} for i in range(10)]
+        results = [a] + [None] * 9
+        filled = media.fill_from_story(jobs, results, max_uses=2)
+        self.assertEqual(filled, 1)
+        self.assertEqual(sum(1 for r in results if r is not None and r.identity == a.identity), 2)
+
+    def test_per_scene_sourcing_leaves_reuse_to_the_rescue_pass_by_default(self):
+        self.assertTrue(config.RESCUE_BEFORE_REUSE)
+        self.assertEqual(config.REUSE_MAX_USES, 2)
+
+
 class NewsForStoriesAboutNow(unittest.TestCase):
     TODAY = datetime.date(2026, 9, 29)
 
