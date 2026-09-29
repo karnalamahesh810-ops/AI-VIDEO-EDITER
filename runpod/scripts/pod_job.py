@@ -155,11 +155,14 @@ def main() -> None:
                 return done
             time.sleep(15)
 
+    if not pid:
+        # No project (a health check or a benchmark): nothing to record.
+        big = {}
     if big:
         # While the row is still "rendering": the broker refuses writes once it is done.
         if not write(big, 300):
             print("[pod] could not save the finished timeline to the app (the video itself is next)", flush=True)
-    ok = write(fields, 600)
+    ok = write(fields, 600) if pid else True
     succeeded = fields["status"] == "done"
     print(f"[pod] job finished in {int(time.time() - started)}s: {fields.get('status')} "
           f"(project updated: {ok}) {str(out.get('video_url') or out.get('error') or '')[:160]}", flush=True)
