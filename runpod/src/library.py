@@ -31,6 +31,16 @@ Without R2 the old behaviour stands (clips uploaded to
 video-media/library/clips through the broker; an app without the table falls
 back to library/index.json). A missing or unreachable library is simply
 empty; failures are logged, never fatal.
+
+No reuse across videos (the owner, 2026-09-30: "the same clip was literally
+used in the previous video"). With the cross-video ledger on (src/ledger.py)
+find() never offers a clip an earlier video showed - its asset id or its
+YouTube moment is in the ledger - and record_from_doc keeps each job's
+approved clips the video did NOT show instead of the ones it did
+(LIBRARY_SAVE_UNUSED): the runner-ups the judge passed (their files kept for
+this while the job runs: media.keep_alternatives_for_library) and up to
+LIBRARY_SPARES_MAX of the subject pools' spare moments (downloaded here). The
+library still saves later videos their searches, and never with a repeat.
 """
 from __future__ import annotations
 
@@ -47,7 +57,7 @@ from typing import Dict, List, Optional
 
 import requests
 
-from . import config, libstore, media, storage
+from . import config, ledger, libstore, media, storage
 
 INDEX_PATH = "library/index.json"
 # The broker signs two URLs per row it returns: 500 rows meant ~1000 storage
@@ -190,6 +200,20 @@ def _current(brief: dict) -> bool:
         return False
 
 
+def saves_unused() -> bool:
+    """The library keeps a job's unused approved moments, not its shown clips (the ledger keeps those out)."""
+    return bool(config.LIBRARY_SAVE_UNUSED and ledger.on())
+
+
+def _strip_local_alternatives(doc: dict) -> None:
+    """The runner-ups' local files were only for the library: no work-dir path goes into the saved timeline."""
+    for s in (doc or {}).get("scenes") or []:
+        sem = s.get("semanticMetadata") if isinstance(s, dict) else None
+        for alt in (sem or {}).get("alternatives") or []:
+            if isinstance(alt, dict):
+                alt.pop("localPath", None)
+
+
 class Library:
     def __init__(self, project_id: str = "", job_id: str = "", bucket: str = ""):
         self.project_id, self.job_id = project_id, job_id
@@ -216,6 +240,9 @@ class Library:
         lib = cls(project_id, job_id, bucket)
         if not lib.enabled:
             return lib
+        # The judge's runner-ups stay on disk for record_from_doc: the video
+        # does not show them, so the library keeps them for later videos.
+        media.keep_alternatives_for_library(saves_unused() and libstore.enabled())
         # The pass started with this job may still be moving a clip: let it
         # finish what it holds, then use the rows it loaded and updated (one
         # library query per job, not two).
@@ -384,7 +411,9 @@ class Library:
         hits = [e for e in self.entries
                 if e.get("kind", "video") == kind and e.get("saved", True)
                 and matches(e) and e.get("id") not in used
-                and float(e.get("relevance") or 0) >= floor and not self._stale(e, ctx)]
+                and float(e.get("relevance") or 0) >= floor and not self._stale(e, ctx)
+                # Never a clip an earlier video showed (src/ledger.py).
+                and not ledger.library_used(e)]
         hits.sort(key=lambda e: (e.get("subject_key") != key, -self._hits(e, ctx, subject), -self._fresh(e, ctx),
                                  -float(e.get("relevance") or 0), -float(e.get("quality") or 0)))
         return hits[:n]
@@ -462,6 +491,20 @@ class Library:
             return None
         if kind == "video" and not media.playable_video(path):
             return None
+        # AI slop and not-footage never come back out of the library either
+        # (src/slop.py): rows kept before the filter existed are checked as
+        # they are fetched and taken out of the library, reversibly.
+        from . import slop
+        why = "" if _user_kept(entry) else (slop.metadata_reason(entry.get("attribution"), entry.get("description"))
+                                            or media.slop_reason(path, entry.get("attribution") or ""))
+        if why:
+            v = libstore.Verdict(kind=kind)
+            v.bad(why)
+            with self._lock:
+                entry["saved"] = False
+                self.pending[entry["id"]] = _removal_row(entry, v)
+            print(f"[library] {entry['id']} removed from the library: {why}", flush=True)
+            return None
         if self._legacy(entry) and libstore.enabled() and kind in _CHECKED_KINDS and not _user_kept(entry):
             # Not checked yet (the maintenance pass has not reached it): judged
             # now, before a bad old clip lands in another video.
@@ -492,10 +535,14 @@ class Library:
 
     def record_from_doc(self, doc: dict) -> int:
         """
-        Keep this job's good clips (and, on R2, photos): local scenes scored
-        >= the floor that the library does not have yet. On R2 each passes
-        the quality gate and the duplicate rule first. Uploads the files
-        first; an entry is only written for one that made it to storage.
+        Keep this job's good clips (and, on R2, photos). With the cross-video
+        ledger on (saves_unused) and the library on R2: the approved moments
+        the video did NOT show - the judge's runner-ups and the subject pools'
+        spare moments (_unused_picks) - since the shown ones are kept out of
+        later videos anyway. Otherwise the shown clips: local scenes scored >=
+        the floor that the library does not have yet. On R2 each passes the
+        quality gate and the duplicate rule first. Uploads the files first; an
+        entry is only written for one that made it to storage.
         """
         if not self.enabled:
             return 0
@@ -503,7 +550,10 @@ class Library:
         from . import upscale
         on_r2 = libstore.enabled()
         have = {e.get("id") for e in self.entries}
-        added = 0
+        if on_r2 and saves_unused():
+            picks = self._unused_picks(doc, have)
+            _strip_local_alternatives(doc)
+            return self._keep(doc, picks, on_r2)
         picks = []
         for s in doc.get("scenes", []):
             if len(picks) >= config.CLIP_LIBRARY_MAX_PER_JOB:
@@ -536,12 +586,114 @@ class Library:
                 continue
             picks.append((s, m, sem, ident, url, kind))
             have.add(ident)
+        return self._keep(doc, picks, on_r2)
 
+    def _unused_picks(self, doc: dict, have: set) -> list:
+        """
+        The job's approved moments the video does not show, as picks: each
+        scene's runner-ups the judge passed (their files kept for this) and up
+        to LIBRARY_SPARES_MAX of the subject pools' spare moments (downloaded
+        when their turn comes). Never a moment within CROSS_VIDEO_GAP_SECONDS
+        of one this video or an earlier one shows.
+        """
+        fps = max(1, int(doc.get("fps") or 30))
+        shown = ledger.Ledger(days=0)
+        for item in ledger.items_from_doc(doc):
+            shown.add(item)
+        gap = max(1.0, float(config.POOL_MIN_GAP_SECONDS))
+
+        def free(vid: str, start: float, secs: float) -> bool:
+            return not shown.moment_used(vid, start, start + secs) and not ledger.moment_used(vid, start,
+                                                                                              start + secs)
+
+        picks: list = []
+        cap = config.CLIP_LIBRARY_MAX_PER_JOB
+        for s in doc.get("scenes", []):
+            sem = s.get("semanticMetadata") or {}
+            for alt in sem.get("alternatives") or []:
+                if len(picks) >= cap:
+                    break
+                path = alt.get("localPath") or ""
+                if not path or not os.path.isfile(path) or (alt.get("source") or "youtube") in _NEVER_SOURCES:
+                    continue
+                if float(alt.get("score") or 0) < config.CLIP_LIBRARY_MIN_SCORE:
+                    continue
+                vid = ledger.youtube_id(alt.get("url"), alt.get("assetId"))
+                start = (alt.get("moment") or {}).get("start")
+                if start is None:
+                    start = ledger.url_start(alt.get("url") or "")
+                secs = max(2.0, int(s.get("durationInFrames") or fps) / fps)
+                if vid and start is not None:
+                    if not free(vid, float(start), secs):
+                        continue
+                    ident = f"yt:{vid}@{int(float(start) // gap)}"
+                else:
+                    ident = str(alt.get("assetId") or "")
+                if not ident or ident in have:
+                    continue
+                have.add(ident)
+                m = {"type": "video", "source": alt.get("source") or "youtube",
+                     "attribution": alt.get("title") or "", "license": "unverified — you must hold the rights"}
+                asem = {"assetId": ident, "subject": sem.get("subject") or "",
+                        "contentDescription": alt.get("description") or "", "relevanceScore": alt.get("score"),
+                        "qualityScore": alt.get("quality"), "sceneIntent": sem.get("sceneIntent"),
+                        "sourceUrl": alt.get("url") or "", "eventWindow": sem.get("eventWindow") or ""}
+                picks.append(({"durationInFrames": s.get("durationInFrames"), "reviewRequired": True,
+                               "reviewReason": "Licence unverified — confirm you hold the rights"},
+                              m, asem, ident, path, "video"))
+        try:
+            from . import pools
+            spares = pools.spare_moments()
+        except Exception:  # noqa: BLE001
+            spares = []
+        taken = 0
+        work = media._WORK.get("dir") or tempfile.gettempdir()
+        for sp in spares:
+            if len(picks) >= cap or taken >= max(0, int(config.LIBRARY_SPARES_MAX)):
+                break
+            cand, mo, meta = sp["cand"], sp["moment"], sp.get("meta") or {}
+            vid = str(cand.get("id") or "")
+            if not re.fullmatch(r"[\w-]{11}", vid) or float(mo.get("score") or 0) < config.CLIP_LIBRARY_MIN_SCORE:
+                continue
+            start = float(mo.get("start") or 0.0)
+            secs = float(meta.get("seconds") or 6.5)
+            ident = f"yt:{vid}@{int(start // gap)}"
+            if ident in have or not free(vid, start, secs):
+                continue
+            have.add(ident)
+            taken += 1
+            title = cand.get("title") or ""
+
+            def fetch(vid=vid, start=start, secs=secs, title=title) -> str:
+                path = media.fetch_clean_clip(vid, work, start, secs, title)[0]
+                return path if path and not media.slop_reason(path, title) else ""
+
+            m = {"type": "video", "source": "youtube", "attribution": f"YouTube: {title}"[:200],
+                 "license": "unverified — you must hold the rights"}
+            asem = {"assetId": ident, "subject": sp.get("name") or "",
+                    "contentDescription": mo.get("description") or "", "relevanceScore": mo.get("score"),
+                    "qualityScore": None, "sceneIntent": meta.get("scene_intent"),
+                    "sourceUrl": f"https://www.youtube.com/watch?v={vid}&t={int(start)}",
+                    "eventWindow": meta.get("event_window") or ""}
+            picks.append(({"durationInFrames": int(secs * fps), "reviewRequired": True,
+                           "reviewReason": "Licence unverified — confirm you hold the rights"},
+                          m, asem, ident, fetch, "video"))
+        print(f"[library] keeping the job's unused approved moments: {len(picks) - taken} runner-up(s), "
+              f"{taken} spare pool moment(s)", flush=True)
+        return picks
+
+    def _keep(self, doc: dict, picks: list, on_r2: bool) -> int:
+        """Check, upload and catalogue the picks: (scene, media, semantic, id, local path or a fetch, kind)."""
+        added = 0
         known = {"video": self.known_hashes("video"), "image": self.known_hashes("image")}
         rejected: Dict[str, int] = {}
 
         def keep_r2(item):
             s, m, sem, ident, url, kind = item
+            if callable(url):
+                url = url()                             # a spare moment, downloaded now
+                if not url:
+                    return None
             intent = sem.get("sceneIntent") if isinstance(sem.get("sceneIntent"), dict) else {}
             v = libstore.check(url, kind=kind, subject=sem.get("subject") or "",
                                event=intent.get("event_type") or "")
@@ -614,7 +766,7 @@ class Library:
                 "description": (sem.get("contentDescription") or "")[:300],
                 "relevance": sem.get("relevanceScore"), "quality": sem.get("qualityScore"),
                 "seconds": (round(v.seconds, 2) if v is not None and kind == "video" and v.seconds
-                            else round(s.get("durationInFrames", 0) / max(1, doc.get("fps", 30)), 2)),
+                            else round((s.get("durationInFrames") or 0) / max(1, doc.get("fps", 30)), 2)),
                 "url": sem.get("sourceUrl") or "", "attribution": (m.get("attribution") or "")[:200],
                 "license": m.get("license") or "", "review_required": bool(s.get("reviewRequired")),
                 "review_reason": (s.get("reviewReason") or "")[:120],

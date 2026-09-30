@@ -164,13 +164,21 @@ const Reveal: React.FC<{ at: number; frames?: number; dir?: 1 | -1; style?: Reac
     );
   };
 
+/**
+ * The owner's text language (2026-09-30): bold letters with a black outline
+ * painted under the fill and a soft shadow - legible on any footage without a
+ * box behind them. Shared by every callout's kicker and title.
+ */
+const stroke = (px: number, k: number): React.CSSProperties => ({
+  WebkitTextStroke: `${Math.max(4.5 * k, Math.min(12 * k, px * 0.1)).toFixed(2)}px #000`, paintOrder: "stroke fill",
+} as React.CSSProperties);
 const kickerStyle = (k: number, accent: string, align: "left" | "right" | "center" = "left"): React.CSSProperties => ({
-  fontFamily: LABEL, fontWeight: 800, fontSize: 28 * k, letterSpacing: "0.24em", color: accent, textShadow: TS,
-  whiteSpace: "nowrap", textAlign: align,
+  fontFamily: LABEL, fontWeight: 800, fontSize: 40 * k, letterSpacing: "0.12em", color: accent, textShadow: TS,
+  whiteSpace: "nowrap", textAlign: align, ...stroke(40 * k, k),
 });
 const titleStyle = (k: number, size: number, align: "left" | "right" | "center" = "left"): React.CSSProperties => ({
   fontFamily: DISPLAY, fontSize: size * k, lineHeight: 1, color: "#fff", letterSpacing: "0.03em", textShadow: TS,
-  whiteSpace: "nowrap", textAlign: align,
+  whiteSpace: "nowrap", textAlign: align, ...stroke(size * k, k),
 });
 
 // ================================================================== 1. circle pulse
@@ -395,7 +403,7 @@ const BracketLabel: Look = ({ overlay, accent }) => {
   const gid = `co-br-${overlay.startFrame}`;
   const lx = B.x + sd * 50 * k;
   const room = Math.min(640 * k, labelRight ? width - 90 * k - lx : lx - 90 * k);
-  const tx = value !== null ? fit(text, room, [34, 30], 0.52, k, 2, 30) : fit(text, room, [64, 54], 0.44, k, 2, 20);
+  const tx = value !== null ? fit(text, room, [48, 42, 36], 0.52, k, 2, 30) : fit(text, room, [84, 72, 60], 0.44, k, 2, 20);
   const at = Math.round(fps * 0.45);
   const align = labelRight ? "left" : "right";
   const textW = Math.min(room, Math.max(260 * k, ...tx.ls.map((l) => estW(l, tx.size * k))));
@@ -432,14 +440,16 @@ const BracketLabel: Look = ({ overlay, accent }) => {
         {sub ? <LetterLine text={sub} at={at} step={0.6} style={kickerStyle(k, accent, align)} /> : null}
         {value !== null ? (
           <Reveal at={at + 2}>
-            <Odometer value={value} at={at + 2} frames={Math.round(fps * 1.1)} size={104 * k} color="#fff"
-              prefix={overlay.prefix || ""} suffix={sfx(overlay.suffix)} suffixScale={0.45} suffixColor={accent} />
+            <div style={{ ...stroke(84 * k, k), textShadow: TS }}>
+              <Odometer value={value} at={at + 2} frames={Math.round(fps * 1.1)} size={140 * k} color="#fff"
+                prefix={overlay.prefix || ""} suffix={sfx(overlay.suffix)} suffixScale={0.45} suffixColor={accent} />
+            </div>
           </Reveal>
         ) : null}
         {tx.ls.map((ln, i) => (
           <LetterLine key={i} text={ln} at={at + 6 + i * 4} step={0.7} style={value !== null
-            ? { fontFamily: LABEL, fontWeight: 800, fontSize: tx.size * k, letterSpacing: "0.1em", color: "rgba(255,255,255,.94)",
-              textShadow: TS, whiteSpace: "nowrap", textAlign: align, lineHeight: 1.05 }
+            ? { fontFamily: LABEL, fontWeight: 800, fontSize: tx.size * k, letterSpacing: "0.06em", color: "#fff",
+              textShadow: TS, whiteSpace: "nowrap", textAlign: align, lineHeight: 1.05, ...stroke(tx.size * k, k) }
             : titleStyle(k, tx.size, align)} />
         ))}
       </div>

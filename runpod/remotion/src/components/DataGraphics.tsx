@@ -1,7 +1,9 @@
 import React from "react";
-import { AbsoluteFill, interpolate } from "remotion";
+import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { TEXT_SHADOW, formatNumber, useOverlayAnim, useScale } from "./layout";
 import { INTER, SERIF, SERIF_ITALIC, TYPEWRITER } from "./fonts";
+import { useK } from "./pro/ProGraphics";
+import { EASE, F, boldCaps, bright, caps, fit, str, tween, useExit } from "./pro/Kit";
 import type { Overlay } from "../types";
 
 /**
@@ -106,43 +108,81 @@ export const PathSteps: React.FC<{ overlay: Overlay; accent: string }> = ({ over
   );
 };
 
-export const ProgressSteps: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay }) => {
-  const { frame, fps, opacity } = useOverlayAnim(10, 10);
-  const s = useScale();
-  const items = (overlay.items || []).slice(0, 4);
-  const n = Math.max(2, items.length);
-  const panel = ease(frame, 0, fps * 0.35);
+/**
+ * TL_PROGRESS_STEPS_V1, rebuilt 2026-09-30: a change told in two to four
+ * steps across the frame. The title sits top-left in outlined bold caps; a
+ * thick outlined rail draws across, and an accent fill travels along it from
+ * node to node: each node pops (numbered), its label rises under it in
+ * outlined bold caps; the last node glows in the accent and pulses. Labels
+ * are fitted to their column (two lines at most). Everything leaves in the
+ * last 12 frames, right to left.
+ */
+export const ProgressSteps: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, accent }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height, durationInFrames: D } = useVideoConfig();
+  const k = useK();
+  const q = useExit(12);
+  const items = (overlay.items || []).map((it) => str(it.label) || str(it.text)).filter(Boolean).slice(0, 4);
+  if (items.length < 2) return null;
+  const n = items.length;
+  const hot = bright(accent);
+  // Each label owns a column; the outer columns end at the 96 px margins, so nothing can clip.
+  const col = Math.min(480 * k, ((width - 192 * k) / n) * 0.94);
+  const X0 = 96 * k + col / 2, X1 = width - 96 * k - col / 2;
+  const cy = height * 0.5;
+  const xs = items.map((_, i) => X0 + ((X1 - X0) * i) / (n - 1));
+  const fits = items.map((t) => fit(t.toUpperCase(), F.label, 64 * k, 36 * k, col, 2, 0.02));
+  const size = Math.min(...fits.map((f) => f.size));
+  const rows = items.map((t) => fit(t.toUpperCase(), F.label, size, size, col, 2, 0.02));
+  const title = fit(caps(overlay.text), F.label, 84 * k, 48 * k, width - 240 * k, 1, 0.02);
+  const railP = tween(frame, 2, 16, EASE.inOut);
+  const step = Math.max(8, Math.min(Math.round(fps * 0.5), Math.floor((D * 0.5) / n)));
+  const nodeAt = (i: number) => 10 + i * step;
+  // The accent fill runs from node to node as each one lands.
+  const fillX = (() => {
+    let x = X0;
+    for (let i = 1; i < n; i++) x += (xs[i] - xs[i - 1]) * tween(frame, nodeAt(i) - 8, 8, EASE.inOut);
+    return x;
+  })();
+  const R = 30 * k;
   return (
-    <AbsoluteFill style={{ opacity, justifyContent: "center" }}>
-      <div style={{ marginLeft: s(90), width: "52%", padding: s(46), transform: `translateX(${(1 - panel) * -s(40)}px)`,
-        background: "#ecebe6", backgroundImage:
-          "linear-gradient(rgba(0,0,0,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.07) 1px, transparent 1px)",
-        backgroundSize: `${s(34)}px ${s(34)}px`, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }}>
-        <div style={{ fontFamily: INTER, fontWeight: 700, fontSize: s(40), color: "#111", textAlign: "center" }}>
-          {overlay.text}
-        </div>
-        <div style={{ position: "relative", height: s(60), margin: `${s(26)}px ${s(60)}px` }}>
-          <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: s(4), background: "#111" }} />
-          {Array.from({ length: n }, (_, i) => {
-            const on = ease(frame, fps * 0.3 + i * fps * 0.35, 6);
-            const lit = i === n - 1;
-            return (
-              <div key={i} style={{ position: "absolute", top: "50%", left: `${(i / (n - 1)) * 100}%`,
-                width: s(34), height: s(34), borderRadius: "50%", transform: `translate(-50%,-50%) scale(${on})`,
-                background: lit ? "#f5d000" : "#111" }} />
-            );
-          })}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: s(24),
-          fontFamily: INTER, fontSize: s(36), color: "#111" }}>
-          {items.map((it, i) => (
-            <React.Fragment key={i}>
-              {i ? <span style={{ opacity: ease(frame, fps * 0.3 + i * fps * 0.35, 6) }}>⟶</span> : null}
-              <span style={{ opacity: ease(frame, fps * 0.3 + i * fps * 0.35, 6) }}>{it.label || it.text}</span>
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
+    <AbsoluteFill>
+      {title.lines.length ? (
+        <div style={{ position: "absolute", left: 120 * k, top: height * 0.2, ...boldCaps(title.size, "#fff", k, 0.02),
+          clipPath: `inset(-20% ${((1 - tween(frame, 0, 14)) * 100).toFixed(2)}% -20% 0)`, opacity: 1 - q }}>{title.lines[0]}</div>
+      ) : null}
+      <div style={{ position: "absolute", left: X0, top: cy - 7 * k, height: 14 * k, width: (X1 - X0) * railP * (1 - q), borderRadius: 7 * k,
+        background: "rgba(255,255,255,.9)", boxShadow: `0 0 0 ${3 * k}px #000, 0 10px 30px rgba(0,0,0,.5)` }} />
+      <div style={{ position: "absolute", left: X0, top: cy - 7 * k, height: 14 * k, width: Math.max(0, fillX - X0) * (1 - q), borderRadius: 7 * k,
+        background: hot, boxShadow: `0 0 ${18 * k}px ${hot}` }} />
+      {items.map((_, i) => {
+        const at = nodeAt(i);
+        const pop = tween(frame, at, 14, EASE.back);
+        const qi = tween(frame, D - 13 + (n - 1 - i) * 1.2, 9, EASE.in);
+        const last = i === n - 1;
+        const lit = frame >= at;
+        const pulse = last && lit ? 1 + 0.08 * Math.sin((frame - at) * 0.25) : 1;
+        return (
+          <React.Fragment key={i}>
+            <div style={{ position: "absolute", left: xs[i] - R, top: cy - R, width: 2 * R, height: 2 * R, borderRadius: "50%",
+              background: lit ? (last ? hot : "#fff") : "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+              transform: `scale(${(pop * (1 - qi) * pulse).toFixed(4)})`,
+              boxShadow: `0 0 0 ${4 * k}px #000${last ? `, 0 0 ${30 * k}px ${hot}` : ""}` }}>
+              <span style={{ fontFamily: INTER, fontWeight: 800, fontSize: 30 * k, color: last ? "#fff" : "#000", lineHeight: 1 }}>{i + 1}</span>
+            </div>
+            <div style={{ position: "absolute", left: xs[i] - col / 2, width: col, top: cy + R + 26 * k, display: "flex",
+              flexDirection: "column", alignItems: "center" }}>
+              {rows[i].lines.map((ln, j) => {
+                const lp = tween(frame, at + 3 + j * 3, 14);
+                return (
+                  <div key={j} style={{ ...boldCaps(size, last ? hot : "#fff", k, 0.02),
+                    transform: `translateY(${((1 - lp) * 30 * k + qi * 30 * k).toFixed(2)}px)`, opacity: Math.min(1, lp * 2) * (1 - qi) }}>{ln}</div>
+                );
+              })}
+            </div>
+          </React.Fragment>
+        );
+      })}
     </AbsoluteFill>
   );
 };
@@ -193,33 +233,61 @@ export const ICONS: Record<string, string> = {
   people: "M22 24a7 7 0 1 0 0-.1 M42 24a7 7 0 1 0 0-.1 M10 50c2-10 22-10 24 0 M30 50c2-10 22-10 24 0",
 };
 
+/**
+ * CALL_ICON_POP_V1, rebuilt 2026-09-30 in the owner's text language: low on
+ * the left, an accent ring draws round a pictogram whose thick white strokes
+ * (outlined in black, so they read on any footage) draw themselves on while
+ * the ring pops; the caption rises beside it in big outlined bold caps, the
+ * label (overlay.label) under it in the accent. No dark blob behind. It all
+ * drops away in the last 12 frames.
+ */
 export const IconPop: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, accent }) => {
-  const { frame, fps, opacity } = useOverlayAnim(8, 10);
-  const s = useScale();
+  const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
+  const k = useK();
+  const q = useExit(12);
+  const hot = bright(accent);
   const icon = ICONS[overlay.variant || ""] || ICONS.warning;
-  const pop = ease(frame, 0, fps * 0.35);
-  const ring = ease(frame, fps * 0.1, fps * 0.6);
-  const size = s(240);
+  const pop = tween(frame, 0, 16, EASE.back) * (1 - q);
+  const ring = tween(frame, 2, 18, EASE.inOut);
+  const draw = tween(frame, 6, 20, EASE.inOut);
+  const S = 190 * k;
+  const room = Math.min(1100 * k, width - 96 * k * 2 - S - 40 * k);
+  const cap1 = fit(caps(overlay.text), F.label, 96 * k, 52 * k, room, 2, 0.02);
+  const cap2 = fit(caps(overlay.label), F.label, 52 * k, 34 * k, room, 1, 0.06);
+  const top = height * 0.7 - S;
   return (
-    <AbsoluteFill style={{ opacity, alignItems: "center", justifyContent: "center",
-      background: "radial-gradient(circle at 50% 46%, rgba(0,0,0,.55) 0%, rgba(0,0,0,0) 38%)" }}>
-      <div style={{ position: "relative", width: size, height: size, transform: `scale(${0.7 + 0.3 * pop})` }}>
-        <svg width={size} height={size} viewBox="0 0 100 100" style={{ position: "absolute", inset: 0 }}>
-          <circle cx={50} cy={50} r={46} fill="rgba(20,20,22,.55)" stroke="rgba(255,255,255,.85)"
-            strokeWidth={2} pathLength={1} strokeDasharray={1} strokeDashoffset={1 - ring} />
-          <g transform="translate(18 18) scale(1.0)">
-            <path d={icon} fill="none" stroke="#fff" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" />
-          </g>
-        </svg>
-        <div style={{ position: "absolute", right: -s(6), bottom: s(20), width: s(26), height: s(26),
-          borderRadius: "50%", background: accent || "#d62828", opacity: ring }} />
-      </div>
-      {overlay.text ? (
-        <div style={{ marginTop: s(26), fontFamily: TYPEWRITER, fontWeight: 700, fontSize: s(46), color: "#fff",
-          textShadow: TEXT_SHADOW, textTransform: "uppercase", opacity: ease(frame, fps * 0.3, 8) }}>
-          {overlay.text}
+    <AbsoluteFill>
+      <div style={{ position: "absolute", left: 96 * k, top, display: "flex", alignItems: "center", gap: 36 * k }}>
+        <div style={{ position: "relative", width: S, height: S, flexShrink: 0, transform: `scale(${(0.6 + 0.4 * pop).toFixed(4)})`,
+          opacity: Math.min(1, pop * 3) }}>
+          <svg width={S} height={S} viewBox="0 0 100 100" style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+            <circle cx={50} cy={50} r={45} fill="none" stroke="#000" strokeWidth={9} pathLength={1} strokeDasharray={1}
+              strokeDashoffset={1 - ring} transform="rotate(-90 50 50)" />
+            <circle cx={50} cy={50} r={45} fill="none" stroke={hot} strokeWidth={5} pathLength={1} strokeDasharray={1}
+              strokeDashoffset={1 - ring} transform="rotate(-90 50 50)" style={{ filter: `drop-shadow(0 0 ${6 * k}px ${hot})` }} />
+            <g transform="translate(18 18)">
+              <path d={icon} fill="none" stroke="#000" strokeWidth={8.5} strokeLinecap="round" strokeLinejoin="round"
+                pathLength={1} strokeDasharray={1} strokeDashoffset={1 - draw} />
+              <path d={icon} fill="none" stroke="#fff" strokeWidth={4.6} strokeLinecap="round" strokeLinejoin="round"
+                pathLength={1} strokeDasharray={1} strokeDashoffset={1 - draw} />
+            </g>
+          </svg>
         </div>
-      ) : null}
+        <div>
+          {cap1.lines.map((ln, i) => {
+            const lp = tween(frame, 8 + i * 4, 14);
+            return (
+              <div key={i} style={{ ...boldCaps(cap1.size, "#fff", k, 0.02), transform: `translateY(${((1 - lp) * 30 * k + q * 30 * k).toFixed(2)}px)`,
+                opacity: Math.min(1, lp * 2) * (1 - q) }}>{ln}</div>
+            );
+          })}
+          {cap2.lines.length ? (
+            <div style={{ ...boldCaps(cap2.size, hot, k, 0.06), marginTop: 6 * k, opacity: tween(frame, 16, 10) * (1 - q),
+              transform: `translateY(${((1 - tween(frame, 16, 14)) * 20 * k).toFixed(2)}px)` }}>{cap2.lines[0]}</div>
+          ) : null}
+        </div>
+      </div>
     </AbsoluteFill>
   );
 };

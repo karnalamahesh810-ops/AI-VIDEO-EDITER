@@ -38,7 +38,7 @@ import urllib.parse
 import uuid
 import requests
 
-from . import candidates, config, costs, events, intent, moments, providers, proxies, vision
+from . import candidates, config, costs, events, intent, ledger, moments, providers, proxies, vision
 from . import imagefix as _imagefix
 from . import localvision as _localvision
 from .errors import RETRY, FailureClass, classify_exception, classify_ytdlp, from_reason
@@ -1079,6 +1079,10 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0) -> bool:
         return False
     if aspect and aspect < 1.2 and not config.ALLOW_VERTICAL:
         return False                        # vertical, unusable in 16:9
+    # AI-made (an "AI story", Sora, Midjourney...) or a game: never real footage (src/slop.py).
+    from . import slop
+    if slop.enabled() and slop.metadata_reason(title, channel):
+        return False
     return True
 
 
@@ -1198,6 +1202,50 @@ def _rescue_local_ok(path: str, intent_text: str) -> bool:
     return not local["reject"] and local["relevance"] >= config.LOCAL_VISION_MIN_RELEVANCE - 0.035
 
 
+# Candidates the AI-slop / not-footage filters turned down, by reason (job stats).
+SLOP_REJECTED: Dict[str, int] = {}
+
+
+def judge_clip(path: str, job: Dict[str, Any], label: str = "") -> tuple:
+    """
+    (keep, verdict) for a clip found outside the per-scene search (a subject
+    pool's moment): the same gate a searched clip passes - the AI-slop and
+    not-footage filters, the local model and the vision judge - against the
+    line's own intent, place and event.
+    """
+    tokens = [(_SUBJECT_TYPE, _SUBJECT_TYPE.set(job.get("subject_type") or "")),
+              (_EVENT_WINDOW, _EVENT_WINDOW.set(job.get("event_window") or "")),
+              (_SCENE_INTENT, _SCENE_INTENT.set(job.get("scene_intent") or None)),
+              (_IN_HOOK, _IN_HOOK.set(bool(job.get("hook"))))]
+    try:
+        return _vision_gate(path, job.get("intent") or job.get("query") or "", job.get("context") or "", label)
+    finally:
+        for var, token in reversed(tokens):
+            var.reset(token)
+
+
+def slop_reason(path: str, label: str = "") -> str:
+    """Why src/slop.py turns a downloaded candidate down for this scene ("" = keep), counted."""
+    from . import slop
+    if not slop.enabled():
+        return ""
+    si = _SCENE_INTENT.get() or {}
+    wants = str((si.get("visualType") or si.get("visual_type") or "") if isinstance(si, dict) else "").lower()
+    kind = "image" if _is_still(path) else "video"
+    try:
+        why = slop.metadata_reason(label) or slop.check_file(
+            path, kind, allow_people=_SUBJECT_TYPE.get() == "person",
+            allow_maps=wants in ("map", "chart", "document") or _SUBJECT_TYPE.get() == "document")
+    except Exception as e:  # noqa: BLE001 - a filter error never drops a clip
+        print(f"[slop] check failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
+        return ""
+    if why:
+        with _CACHE_LOCK:
+            key = why.split(" (")[0]
+            SLOP_REJECTED[key] = SLOP_REJECTED.get(key, 0) + 1
+    return why
+
+
 def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     """
     (keep, verdict) for a downloaded candidate.
@@ -1205,7 +1253,16 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     No intent means nothing to judge against, and an unreachable model returns
     None — both keep the candidate, so vision can only ever remove bad clips,
     never empty a timeline because an API is down.
+
+    Before any of it, the AI-slop and not-footage filters (src/slop.py): an
+    AI-made or painted picture, a still or slideshow posing as footage,
+    another creator's captions, a TV studio, presenter, stream or TV map is
+    turned down on the spot, intent or not (the owner, 2026-09-30).
     """
+    why = slop_reason(path, label)
+    if why:
+        print(f"[slop] REJECT {why}: {label[:60]!r}", flush=True)
+        return False, None
     if not intent:
         return True, None
     # The local CLIP pass first: the wrong KIND of picture (slide, text page,
@@ -1253,6 +1310,337 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     return keep, verdict
 
 
+# --------------------------------------------------------------------------- #
+# The Nature & Weather edit (src/styles.py): eyewitness titles, motion, photos
+# --------------------------------------------------------------------------- #
+
+# What eyewitness footage of an event is called on YouTube and TikTok: phone,
+# drone, storm-chaser and news-helicopter video (config.EYEWITNESS_SEARCHES).
+_EYEWITNESS = re.compile(
+    r"\b(caught on (?:camera|video|tape)|video shows|viewer (?:video|submitted)|phone video|cell ?phone|"
+    r"dash ?cam|ring (?:camera|doorbell)|storm chas\w+|chaser|helicopter|chopper|sky ?\d+|drone|"
+    r"eyewitness|witness(?:es)?|raw (?:video|footage)|live (?:look|view|cam)|web ?cam|timelapse|"
+    r"this morning|right now)\b", re.I)
+# A compilation mixes other storms and other places; a "top 10" ranks them.
+_COMPILATION = re.compile(r"\b(compilation|top \d+|worst \w+ (?:ever|of all time)|most (?:shocking|terrifying|"
+                          r"insane|extreme)|scariest|best of|caught on camera compilation|mother nature'?s)\b",
+                          re.I)
+
+
+def eyewitness_bonus(title: str) -> float:
+    """Title evidence that a clip is an eyewitness recording of the event (+1.5), or a compilation (-2)."""
+    if not config.EYEWITNESS_SEARCHES:
+        return 0.0
+    t = title or ""
+    if _COMPILATION.search(t):
+        return -2.0
+    return 1.5 if _EYEWITNESS.search(t) else 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Another place, storm, kind of weather or year in the title (the Texas test)
+# --------------------------------------------------------------------------- #
+#
+# The Texas flood-threat test (2026-09-30, news_compilation) showed "RUIDOSO,
+# NM", "VENTURA COUNTY", "CAMERON, LOUISIANA", the 2021 Fort Worth I-35 ice
+# pileup and 2020's "Tropical Storm Edouard" under a Texas rain story. For an
+# event story (news, weather, disaster, or a story about now) a candidate
+# whose title names another US state or country than the story and the line,
+# another named storm, another kind of weather, or another year is not
+# looked at. On-screen chyrons are the vision judge's (src/vision.py).
+
+_COUNTRIES = (
+    "mexico canada india pakistan bangladesh china japan philippines indonesia italy spain france germany "
+    "england britain scotland wales ireland australia brazil turkey greece libya nigeria kenya vietnam "
+    "thailand malaysia korea taiwan russia ukraine poland romania dubai emirates saudi iran afghanistan nepal "
+    "sri lanka chile peru colombia argentina venezuela cuba haiti jamaica bahamas zealand portugal austria "
+    "switzerland slovenia croatia belgium netherlands norway sweden egypt morocco algeria sudan ethiopia "
+    "somalia congo ghana singapore hong kong myanmar cambodia laos mongolia kazakhstan uzbekistan iraq syria "
+    "israel lebanon jordan yemen oman qatar kuwait bosnia serbia hungary slovakia czech bulgaria albania "
+    "guatemala honduras nicaragua salvador panama ecuador bolivia paraguay uruguay dominican")
+_COUNTRY_RE = re.compile(r"\b(" + "|".join(sorted({c for c in _COUNTRIES.split(" ") if len(c) > 3} |
+                                                  {"sri lanka", "hong kong", "new zealand", "united kingdom",
+                                                   "south africa", "north korea", "south korea",
+                                                   "costa rica", "puerto rico"}, key=len, reverse=True))
+                         + r")\b", re.I)
+_NAMED_STORM = re.compile(r"\b(?:[Hh]urricane|HURRICANE|[Tt]ropical [Ss]torm|TROPICAL STORM|[Tt]ropical [Dd]epression|"
+                          r"[Tt]yphoon|TYPHOON|[Ss]uper [Tt]yphoon|[Cc]yclone|CYCLONE|[Ww]inter [Ss]torm|WINTER STORM)"
+                          r"\s+([A-Z][A-Za-z]{2,})\b")
+_NOT_STORM_NAMES = {"surge", "damage", "chaser", "chasers", "team", "tracker", "update", "warning", "watch",
+                    "season", "center", "centre", "coverage", "footage", "video", "news", "live", "alert",
+                    "shelter", "cleanup", "recovery", "impact", "impacts", "system", "cell", "front", "drain",
+                    "drains", "prep", "preps", "preparations", "hits", "slams", "brings", "flooding", "floods",
+                    "prediction", "watches", "warnings", "landfall", "makes", "making", "remnants", "force"}
+# Kinds of weather a title can name that a story about something else must not show.
+_WEATHER_KINDS = {
+    "winter": re.compile(r"\b(snow\w*|blizzard\w*|ice storm|icy|black ice|freez\w*|sleet|frost\w*|"
+                         r"winter storm|pile-?ups?|avalanche)\b", re.I),
+    "fire": re.compile(r"\b(wild ?fires?|brush ?fires?|forest ?fires?|bush ?fires?|blaze|burn scar|"
+                       r"inferno|evacuation fire)\b", re.I),
+    "tornado": re.compile(r"\b(tornado\w*|twisters?|funnel cloud)\b", re.I),
+    "tropical": re.compile(r"\b(hurricane\w*|tropical storm|tropical depression|typhoon\w*|cyclone\w*)\b", re.I),
+    "quake": re.compile(r"\b(earthquake\w*|quake|tsunami\w*)\b", re.I),
+    "heat": re.compile(r"\b(heat ?wave\w*|extreme heat|heat dome)\b", re.I),
+    "drought": re.compile(r"\b(drought\w*|dried up|dry lake)\b", re.I),
+}
+_TITLE_YEAR = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
+
+
+def _state_names() -> Dict[str, str]:
+    from .official import _ABBR
+    return dict(_ABBR)
+
+
+def _regions_in(text: str, codes: bool = False) -> set:
+    """US states and countries a text names (states as their full lower-case names)."""
+    out: set = set()
+    t = text or ""
+    low = f" {t.lower()} "
+    abbr = _state_names()
+    for name in abbr.values():
+        if re.search(rf"\b{re.escape(name)}\b", low):
+            out.add(name)
+    # "Washington, D.C." is not the state; "Kansas City" is Missouri's too - left as named.
+    if "washington" in out and re.search(r"washington,? d\.?c\.?", low):
+        out.discard("washington")
+    if codes:
+        # A postal code after a comma or in capitals on its own: "RUIDOSO, NM", "Norfolk VA".
+        for m in re.finditer(r"(?:,\s*|\s)([A-Z]{2})\b(?![a-z])", t):
+            name = abbr.get(m.group(1))
+            if name and m.group(1) not in ("IN", "OR", "ME", "OK", "HI", "US", "AL", "LA", "PA", "MA", "DE",
+                                           "CO", "MO", "ID", "MI"):
+                out.add(name)
+            elif name and re.search(rf",\s*{m.group(1)}\b", t):
+                out.add(name)
+    # "New Mexico" is a state, not the country.
+    for m in _COUNTRY_RE.finditer(re.sub(r"(?i)new mexico", " ", t)):
+        out.add(m.group(1).lower())
+    return out
+
+
+def _story_blob(context: str = "") -> tuple:
+    """(story brief, its text: event, summary, places, title and the line) for the title checks."""
+    try:
+        from . import director
+        brief = dict(director.LAST_STORY or {})
+    except Exception:  # noqa: BLE001
+        brief = {}
+    si = _SCENE_INTENT.get() or {}
+    locs = si.get("locations") if isinstance(si, dict) else None
+    parts = [brief.get("event") or "", brief.get("summary") or "", " ".join(brief.get("places") or []),
+             " ".join(locs or []), context or ""]
+    return brief, " ".join(p for p in parts if p)
+
+
+def _event_story(brief: dict) -> bool:
+    if not config.NEWS_FOOTAGE or not isinstance(brief, dict) or not brief:
+        return False
+    try:
+        from . import director
+        return brief.get("kind") in director.EVENT_KINDS or bool(director.current_story(brief))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def title_conflict(title: str, context: str = "") -> str:
+    """
+    Why a candidate's title rules it out for this event story's line ("" =
+    fine): another US state or country than the story's and the line's,
+    another named storm, another kind of weather than the story talks about,
+    or another year than the story's (the line's own years excepted).
+    """
+    t = str(title or "")
+    if not t:
+        return ""
+    brief, story = _story_blob(context)
+    if not _event_story(brief):
+        return ""
+    want = _regions_in(story, codes=True)
+    named = _regions_in(t, codes=True)
+    if want and named and not (named & want):
+        return f"another place ({', '.join(sorted(named))[:40]})"
+    for m in _NAMED_STORM.finditer(t):
+        name = m.group(1)
+        if name.lower() in _NOT_STORM_NAMES:
+            continue
+        if not re.search(rf"\b{re.escape(name)}\b", story, re.I):
+            return f"another named storm ({name})"
+    for kind, pattern in _WEATHER_KINDS.items():
+        if pattern.search(t) and not pattern.search(story):
+            return f"another kind of event ({kind})"
+    year = brief.get("year")
+    if isinstance(year, int) and not isinstance(year, bool):
+        own = {int(y) for y in _TITLE_YEAR.findall(story)} | {year}
+        years = {int(y) for y in _TITLE_YEAR.findall(t)}
+        if years and not (years & own):
+            return f"another year ({min(years)})"
+    return ""
+
+
+def upload_conflict(info: Optional[dict]) -> str:
+    """
+    An upload that cannot show this event: named for AI (src/slop.py
+    metadata), or - for a line that must show this event in a story about
+    now - uploaded before the story's year.
+    """
+    if not isinstance(info, dict):
+        return ""
+    from . import slop
+    why = slop.metadata_reason(info.get("title"), info.get("channel") or info.get("uploader"),
+                               str(info.get("description") or "")[:800], " ".join(info.get("tags") or [])[:400])
+    if why:
+        return why
+    brief, _story = _story_blob()
+    if not _event_story(brief):
+        return ""
+    si = _SCENE_INTENT.get() or {}
+    if isinstance(si, dict) and si.get("specificity") not in (None, "", "event"):
+        return ""                               # a place or illustrative shot may be older
+    year = brief.get("year")
+    up = str(info.get("upload_date") or "")
+    if isinstance(year, int) and not isinstance(year, bool) and re.fullmatch(r"\d{8}", up):
+        grace = 1 if datetime.date.today().month <= 2 else 0
+        if int(up[:4]) < year - grace:
+            return f"uploaded in {up[:4]}, before this {year} story"
+    return ""
+
+
+# Measured motion of a cut clip (config.MOTION_PREFERENCE): mean change
+# between 5 frames at 160x90, median over the 4 gaps, so one shot change
+# inside the cut does not count as action.
+MOTION_FRAMES = 5
+MOTION_FULL = 12.0        # mean grey change that counts as full motion (a wave, a rushing street)
+MOTION_FLOOR = 1.5        # below this the shot is nearly still
+
+
+def motion_of(path: str) -> Optional[dict]:
+    """
+    {"motion": 0..1, "raw", "static", "slideshow"} of a clip, or None when it
+    cannot be read (a still, a missing file, no ffmpeg). Four gaps between
+    five frames at 160 px - a few milliseconds of numpy after one ffmpeg call.
+    """
+    p = str(path or "")
+    if not p or not os.path.isfile(p) or _is_still(p):
+        return None
+    try:
+        key = f"{p}|{os.path.getsize(p)}|{os.path.getmtime(p)}"
+    except OSError:
+        return None
+    with _MOTION_LOCK:
+        if key in _MOTION_CACHE:
+            return _MOTION_CACHE[key]
+    try:
+        import numpy as np
+        frames = _filters._gray_frames(p, MOTION_FRAMES, 160, 90)
+    except Exception:  # noqa: BLE001 - unmeasured is neutral
+        frames = []
+    got = None
+    if len(frames) >= 3:
+        diffs = [float(np.abs(a.astype(np.int16) - b.astype(np.int16)).mean()) for a, b in zip(frames, frames[1:])]
+        raw = sorted(diffs)[len(diffs) // 2]
+        still = sum(1 for d in diffs if d < 0.8)
+        got = {"motion": round(max(0.0, min(1.0, (raw - MOTION_FLOOR) / (MOTION_FULL - MOTION_FLOOR))), 3),
+               "raw": round(raw, 2),
+               "static": max(diffs) < 1.2,
+               "slideshow": still >= max(2, len(diffs) - 2) and any(d > 20 for d in diffs)}
+    with _MOTION_LOCK:
+        _MOTION_CACHE[key] = got
+    return got
+
+
+_MOTION_CACHE: Dict[str, Optional[dict]] = {}
+_MOTION_LOCK = threading.Lock()
+
+
+def _motion_weight(hook: Optional[bool] = None) -> float:
+    w = max(0.0, float(config.MOTION_PREFERENCE or 0.0))
+    return w * (2.0 if (_IN_HOOK.get() if hook is None else hook) else 1.0)
+
+
+def motion_rejects(path: str) -> str:
+    """Why a clip is turned down on its motion ("" = kept): a frozen shot or a slideshow, with MOTION_PREFERENCE on."""
+    if not config.MOTION_PREFERENCE:
+        return ""
+    m = motion_of(path)
+    if m is None:
+        return ""
+    if m["slideshow"]:
+        return "a slideshow of stills"
+    if m["static"]:
+        return "a frozen, motionless shot"
+    return ""
+
+
+def apply_motion(asset: "MediaAsset", measured: Optional[dict] = None) -> Optional[dict]:
+    """
+    Fold measured motion into a passed clip's combined score: +/- the weight
+    around the middle, doubled in the hook, a still shot at the full penalty.
+    Returns the measure (None when unmeasured or the preference is off).
+    """
+    w = _motion_weight()
+    if not w or asset is None or asset.kind != "video":
+        return None
+    m = measured if measured is not None else motion_of(asset.local_path)
+    if m is None:
+        return None
+    adj = w * (m["motion"] - 0.5) * 2.0
+    if m["static"] or m["slideshow"]:
+        adj = -w * 2.0
+    base = asset.final_score if asset.final_score is not None else vision.appeal(asset.relevance_score, asset.quality)
+    asset.final_score = round(max(0.0, min(1.0, float(base) + adj)), 4)
+    asset.score_parts = dict(asset.score_parts or {}, motion=m["motion"], motionAdj=round(adj, 3))
+    return m
+
+
+# Real photos per video (config.PHOTO_MAX_PER_10MIN): this process's share,
+# set from the lines it sources (a fan-out part: its lines), and how many it
+# placed. The parent's variety pass counts the whole video.
+_PHOTOS: Dict[str, Any] = {"cap": None, "used": 0}
+
+
+def photo_cap(seconds: float) -> Optional[int]:
+    """Photos allowed in `seconds` of video, None without a cap."""
+    per = float(config.PHOTO_MAX_PER_10MIN or 0.0)
+    if per <= 0:
+        return None
+    return max(1, int(round(per * max(0.0, float(seconds)) / 600.0)))
+
+
+def _jobs_seconds(jobs: List[Dict[str, Any]]) -> float:
+    return sum(float(j.get("seconds") or 0.0) for j in jobs or [])
+
+
+def _photos_left() -> bool:
+    with _CACHE_LOCK:
+        cap = _PHOTOS["cap"]
+        return cap is None or _PHOTOS["used"] < cap
+
+
+def _count_photo(asset: Optional["MediaAsset"]) -> None:
+    if asset is not None and asset.kind == "image" and asset.source != "generated":
+        with _CACHE_LOCK:
+            _PHOTOS["used"] += 1
+
+
+_FOOTAGE_PROVIDERS: Optional[set] = None
+
+
+def _footage_providers() -> set:
+    global _FOOTAGE_PROVIDERS
+    if _FOOTAGE_PROVIDERS is None:
+        _FOOTAGE_PROVIDERS = {p.name for p in providers.REGISTRY if p.kind == "footage"}
+    return _FOOTAGE_PROVIDERS
+
+
+# The library keeps a job's approved-but-unused clips (library.record_from_doc):
+# while on, the runner-up files that passed the judge stay on disk.
+_LIBRARY_KEEP = {"on": False}
+
+
+def keep_alternatives_for_library(on: bool) -> None:
+    _LIBRARY_KEEP["on"] = bool(on)
+
+
 def _score_candidate(title: str, duration: float, aspect: float,
                      seconds: float) -> float:
     """
@@ -1268,6 +1656,7 @@ def _score_candidate(title: str, duration: float, aspect: float,
         score += 3.0
     if _talking_head(title):
         score -= 4.0
+    score += eyewitness_bonus(title)
     # Too short to cut from, or so long it is a stream/compilation.
     if duration and duration < max(20.0, seconds + 8):
         score -= 3.0
@@ -1498,7 +1887,13 @@ def _scout(candidate: dict, grab: float, intent: str, context: str) -> Optional[
     if not info:
         return None
     w, h = info.get("width") or 0, info.get("height") or 0
-    if w and h and w / h < 1.2 and not config.ALLOW_VERTICAL:
+    why = upload_conflict(info) or title_conflict(info.get("title") or "", context)
+    if why:
+        # An AI story, or an upload from before this story's year (the owner's
+        # Texas test, 2026-09-30): dropped before any storyboard is read.
+        print(f"[media] skip {candidate['id']}: {why}", flush=True)
+        got = {"start": 0.0, "score": 0.0, "description": why, "tile": 0}
+    elif w and h and w / h < 1.2 and not config.ALLOW_VERTICAL:
         # Vertical. The flat search cannot see this; a zero score drops it
         # before anything is downloaded.
         got = {"start": 0.0, "score": 0.0, "description": "vertical video", "tile": 0}
@@ -1622,10 +2017,14 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
             "score": a.relevance_score, "quality": a.quality, "finalScore": a.final_score,
             "specificity": a.specificity, "moment": dict(a.moment or {}),
             "description": (a.content_description or "")[:160], "source": a.source}
-        if keep_files:
+        # The library keeps approved clips the video does not show
+        # (library.record_from_doc): their files stay until the job ends.
+        keep = keep_files or (_LIBRARY_KEEP["on"] and a.kind == "video" and not a.review_reason.startswith(
+            "Best available") and (a.relevance_score or 0) >= config.CLIP_LIBRARY_MIN_SCORE)
+        if keep:
             entry["localPath"] = a.local_path
         winner.alternatives.append(entry)
-        if keep_files:
+        if keep:
             continue
         try:
             if a.local_path and os.path.exists(a.local_path):
@@ -1684,6 +2083,11 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         if recency in _RECENT_SP:
             searches += [(f"{query_or_url} footage", f"{recency}-footage", recency),
                          (query_or_url, recency, recency)]
+            # The Nature & Weather edit: the eyewitness searches the director
+            # wrote for the line ("Atlantic City flooding video"), among the
+            # same recent uploads.
+            searches += [(q, f"{recency}-eyewitness{n}", recency)
+                         for n, q in enumerate(_eyewitness_queries(query_or_url)[:2])]
         searches += [(f"{query_or_url} footage", "recent-footage", True),
                       (query_or_url, "recent", True)]
     elif b_roll_intent:
@@ -1746,6 +2150,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # previous shot.
             if not _usable_title(candidate["title"], candidate.get("channel", ""), candidate["aspect"]):
                 continue
+            if title_conflict(candidate["title"], context):
+                continue                            # another state, storm, kind of weather or year
             eligible.append(candidate)
         if not eligible:
             continue
@@ -1757,6 +2163,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             if judged >= _judge_limits()["candidates"] or _scene_cap_reached() or _good_enough(passed):
                 break
             tried.add(candidate["id"])
+            if ledger.moment_used(candidate["id"], point, point + grab):
+                continue                            # an earlier video showed this moment
             path = _yt_fetch_retry(candidate["id"], out_dir, point, grab,
                                    candidate["title"])
             if not path:
@@ -1785,10 +2193,21 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                 continue
             asset = _asset_for(path, query_or_url, grab, require_cc,
                                title=candidate["title"])
+            asset.moment = {"start": round(float(point), 1), "score": (moment or {}).get("score")}
             # Not returned yet: the first clip to clear the floor is rarely the
             # best one available. Up to JUDGE_BEST_OF passing clips are compared.
             passed.append(asset.apply_verdict(verdict, intent))
     return _best_of(passed)
+
+
+def _eyewitness_queries(query: str) -> List[str]:
+    """The line's eyewitness searches (director.eyewitness_queries, carried in its scene intent)."""
+    if not config.EYEWITNESS_SEARCHES:
+        return []
+    si = _SCENE_INTENT.get() or {}
+    got = si.get("eyewitness") if isinstance(si, dict) else None
+    low = (query or "").strip().lower()
+    return [q for q in (got or []) if isinstance(q, str) and q.strip() and q.strip().lower() != low]
 
 
 def search_dailymotion(query: str, limit: int = 12, created_after: int = 0) -> List[dict]:
@@ -1920,18 +2339,20 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
         page = f"https://www.dailymotion.com/video/{c['id']}"
         if used and f"dailymotion:{page}" in used:
             continue
-        if not _usable_title(c["title"], c.get("channel", ""), c["aspect"]):
+        if not _usable_title(c["title"], c.get("channel", ""), c["aspect"]) or title_conflict(c["title"], context):
             continue
         if c["duration"] and c["duration"] < grab + 4:
             continue
         point = _fixed_point(c, grab, 10.0)
+        if ledger.url_used(page, point, point + grab):
+            continue                                # an earlier video showed this moment
         margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
         path = _dm_fetch(c["id"], out_dir, max(0.0, point - margin), grab + 2 * margin)
         if path and margin:
             path = tidy_clip(path, grab, prefer=min(point, margin))[0]
         if not path:
             continue
-        if has_burned_captions(path):
+        if has_burned_captions(path) or motion_rejects(path):
             try:
                 os.remove(path)
             except OSError:
@@ -1951,6 +2372,8 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
             license="unverified — you must hold the rights", query=query,
             review_required=True,
             review_reason="Licence unverified — confirm you hold the rights",
+            # Where it was cut: the cross-video ledger records the range.
+            moment={"start": round(float(point), 1)},
         ).apply_verdict(verdict, intent)
     return None
 
@@ -2007,15 +2430,22 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
     for row in search_google_videos(query):
         if any(s in row["site"] for s in _WEB_VIDEO_SKIP):
             continue
-        if used and f"web:{row['url']}" in used:
+        # A web clip's identity is "web_video:<url>" (MediaAsset.identity);
+        # the old "web:" key never matched, so one could play twice.
+        if used and (f"web_video:{row['url']}" in used or f"web:{row['url']}" in used):
             continue
         if _talking_head(row["title"]) or _stock_seller(row["title"], row["site"]):
+            continue
+        from . import slop
+        if slop.metadata_reason(row["title"], row["site"], row["url"]) or title_conflict(row["title"], context):
             continue
         if row["seconds"] and row["seconds"] < grab + 2:
             continue
         if judged >= config.VISION_MAX_CANDIDATES:
             break
         start = _fixed_point({"duration": row["seconds"]}, grab, 5.0) if row["seconds"] else 5.0
+        if ledger.url_used(row["url"], start, start + grab):
+            continue                                # an earlier video showed this moment
         margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
         path = _web_fetch(row["url"], out_dir, max(0.0, start - margin), grab + 2 * margin)
         if path and margin:
@@ -2023,7 +2453,8 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
         if not path:
             continue
         w, h = _video_dims(path)
-        if (w and h and w < h * 1.2 and not config.ALLOW_VERTICAL) or has_burned_captions(path):
+        if (w and h and w < h * 1.2 and not config.ALLOW_VERTICAL) or has_burned_captions(path) \
+                or motion_rejects(path):
             try:
                 os.remove(path)
             except OSError:
@@ -2043,6 +2474,7 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
             license="unverified — you must hold the rights", query=query,
             review_required=True,
             review_reason="Licence unverified — confirm you hold the rights",
+            moment={"start": round(float(start), 1)},
         ).apply_verdict(verdict, intent)
     return None
 
@@ -2140,7 +2572,12 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             pool.add(rows, query=t[0], variant=t[1], via=via)
 
     ranked = [c for c in pool.ranked()
-              if c.id not in tried and _usable_title(c.title, c.channel, c.aspect)]
+              if c.id not in tried and _usable_title(c.title, c.channel, c.aspect)
+              and not title_conflict(c.title, context)]
+    if config.EYEWITNESS_SEARCHES:
+        # Phone, drone, chaser and helicopter titles first, compilations last
+        # (the Nature & Weather edit), on top of the metadata score.
+        ranked.sort(key=lambda c: -(c.metadata + 0.06 * eyewitness_bonus(c.title)))
     if skip:
         ranked = ranked[skip:] + ranked[:skip]
     if not ranked:
@@ -2189,12 +2626,19 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             moment = _refine_moment(row, moment, grab, intent_text, context)
         if moment and moment.get("fine"):
             point = moment["start"]
+        if ledger.moment_used(c.id, point, point + grab):
+            # An earlier video showed this moment of this video (the owner,
+            # 2026-09-30): the next candidate instead.
+            print(f"[ledger] skip {c.id} @ {point:.0f}s: shown in an earlier video", flush=True)
+            _release_inflight(c.id)
+            continue
         path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title)
         if not path:
             _release_inflight(c.id)
             continue
-        if has_burned_captions(path):
-            print(f"[media] hardsubs, skipping: {c.title[:60]}", flush=True)
+        still = motion_rejects(path)
+        if has_burned_captions(path) or still:
+            print(f"[media] {still or 'hardsubs'}, skipping: {c.title[:60]}", flush=True)
             try:
                 os.remove(path)
             except OSError:
@@ -2207,7 +2651,8 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         if not keep:
             v = verdict or {}
             score = float(v.get("score") or 0.0)
-            clear_no = bool(v.get("has_text_or_watermark")) or bool(v.get("is_talking_head"))
+            clear_no = bool(v.get("has_text_or_watermark")) or bool(v.get("is_talking_head")) \
+                or bool(v.get("ai_generated")) or bool(v.get("studio"))
             if (score >= config.VISION_SOFT_MIN_SCORE and not clear_no
                     and (soft is None or score > soft["score"])):
                 # The best near-miss so far: kept in case nothing passes.
@@ -2237,6 +2682,9 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         asset.moment = {"start": round(float(point), 1), "score": (moment or {}).get("score"),
                         "fine": bool((moment or {}).get("fine")), "span": (moment or {}).get("span"),
                         "clean": clean, "cuts": cuts}
+        # Footage that moves wins over a still shot of the same thing
+        # (MOTION_PREFERENCE, doubled in the hook).
+        apply_motion(asset)
         print(f"[pool] judged {c.id} final {asset.final_score:.2f} "
               f"(visual {asset.relevance_score or 0:.2f}, meta {c.metadata:.2f}, "
               f"{asset.specificity or 'unclassed'})", flush=True)
@@ -2491,6 +2939,11 @@ def reset_cache():
         _SOURCE_STATS.clear()
         _USED_CHANNELS.clear()
         _GENERATED[0] = 0
+        _PHOTOS.update(cap=None, used=0)
+    with _MOTION_LOCK:
+        _MOTION_CACHE.clear()
+    SLOP_REJECTED.clear()
+    _LIBRARY_KEEP["on"] = False         # the job's Library.load turns it on
     _BRIGHTDATA_REFUSED["why"] = ""     # a topped-up account works again on the next job
     from . import official
     official.reset()                    # each satellite sector once per video
@@ -2599,6 +3052,20 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
         return None
 
 
+def _photo_seen_before(path: str) -> bool:
+    """A downloaded photo whose perceptual hash matches one an earlier video showed (removed if so)."""
+    if not ledger.on() or not path or not ledger.current().photo_hashes:
+        return False
+    h = ledger.photo_hash(path)
+    if h is None or not ledger.photo_used("", h):
+        return False
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return True
+
+
 def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
                  query: str, work_dir: str, intent: str = "",
                  context: str = "") -> Optional[MediaAsset]:
@@ -2607,8 +3074,19 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
     for candidate in candidates:
         if used is not None and candidate.identity in used:
             continue
+        # Shown in an earlier video (src/ledger.py): the page, the photo URL.
+        if (candidate.kind == "image" and ledger.photo_used(candidate.url)) or \
+                (candidate.kind == "video" and ledger.url_used(candidate.url)):
+            continue
+        # An AI picture site or an AI-made picture by its name (src/slop.py).
+        from . import slop
+        if slop.enabled() and (slop.ai_host(candidate.url, getattr(candidate, "page_url", "") or "")
+                               or slop.metadata_reason(candidate.attribution)):
+            continue
         got = _download(candidate, query, work_dir)
         if not got:
+            continue
+        if got.kind == "image" and _photo_seen_before(got.local_path):
             continue
         judged += 1
         keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got))
@@ -2661,6 +3139,14 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     tried_token = _SCENE_TRIED.set(set())
     hook_token = _IN_HOOK.set(bool(hook))
     recency_token = _RECENCY.set(recency or "")
+    # A footage beat falls back to a photo only while the style's photo cap
+    # (PHOTO_MAX_PER_10MIN) has room; after that it stays a footage search
+    # and an empty beat goes to the spare moments and the rescue pass.
+    allowed = _ENABLED_PROVIDERS.get()
+    providers_token = None
+    if visual_type == "footage" and not _photos_left():
+        only = _footage_providers() if allowed is None else set(allowed) & _footage_providers()
+        providers_token = _ENABLED_PROVIDERS.set(only)
     try:
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
@@ -2672,9 +3158,12 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                               intent=intent or query, context=context,
                               subject=subject)
             if got:
+                _count_photo(got)
                 return got
         return None
     finally:
+        if providers_token is not None:
+            _ENABLED_PROVIDERS.reset(providers_token)
         _RECENCY.reset(recency_token)
         _IN_HOOK.reset(hook_token)
         _SCENE_TRIED.reset(tried_token)
@@ -2857,6 +3346,15 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     t_start = time.time()
     LAST_STATS.clear()
     LAST_STATS.update(scenes=len(jobs))
+    with _CACHE_LOCK:
+        if _PHOTOS["cap"] is None:
+            # This worker's share of the video's photos (a fan-out part: its lines').
+            _PHOTOS["cap"] = photo_cap(_jobs_seconds(jobs))
+    if work_dir:
+        _WORK["dir"] = work_dir
+    # Chain lines are not searched: they continue the line before's clip
+    # (fill_chains, after sourcing). Any still empty then go to the rescue.
+    chained = {j["index"] for j in ordered if is_chain(j)}
 
     # How many earlier scenes already drew from the same candidate list, so
     # each reaches a different entry of it. Keyed on the SUBJECT when there is
@@ -2928,7 +3426,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
               f"{len(sequences)} sequence(s)", flush=True)
     # Only the lines still empty go to the one-by-one search; every line,
     # pooled or not, still goes through the duplicate/quality pass below.
-    pass1 = [(j, nth) for j, nth in plan if results[j["index"]] is None]
+    pass1 = [(j, nth) for j, nth in plan if results[j["index"]] is None and j["index"] not in chained]
     done = len(plan) - len(pass1)
 
     def attempt(job, nth):
@@ -3042,6 +3540,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         i = job["index"]
         asset = results[i]
         if asset is None:
+            if i in chained:
+                continue                    # filled from the line before's clip later
             empty += 1
             todo.append((job, nth, "", False))
             continue
@@ -3172,7 +3672,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 "shows": shows, "repeat": is_repeat(results[i])}
 
     empties = [job for job, _ in plan
-               if results[job["index"]] is None or is_repeat(results[job["index"]])]
+               if (results[job["index"]] is None and job["index"] not in chained) or is_repeat(results[job["index"]])]
     if empties and rescue:
         if on_recheck:
             on_recheck(len(empties))
@@ -3227,7 +3727,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # fabrication, and the editor can Find footage for that scene instead.
     # Never in the hook either (the owner, 2026-09-30): the opening scenes
     # stay empty for the job's rescue pass to find footage for.
-    empties = [job for job, _ in plan if results[job["index"]] is None and _may_generate_for(job)]
+    empties = [job for job, _ in plan if results[job["index"]] is None and _may_generate_for(job)
+               and job["index"] not in chained]
     if empties:
         def gen(job):
             if not _generation_budget_left():
@@ -3243,7 +3744,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
               flush=True)
         LAST_STATS.update(generated_tried=len(empties), generated_filled=filled)
 
-    fresh = fresh_moments(ordered, results, work_dir) if config.FRESH_MOMENTS else 0
+    fresh = fresh_moments([j for j in ordered if j["index"] not in chained], results, work_dir) \
+        if config.FRESH_MOMENTS else 0
     if fresh:
         print(f"[media] {fresh} scene(s) got another moment of a video the story already uses "
               f"instead of a repeated shot", flush=True)
@@ -3255,6 +3757,13 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     if reused:
         print(f"[media] reused a shot from elsewhere in the story for {reused} "
               f"scene(s) nothing else could fill", flush=True)
+    try:
+        LAST_STATS["ledger"] = ledger.stats()           # what earlier videos kept out of this one
+    except Exception:  # noqa: BLE001 - stats only
+        pass
+    with _CACHE_LOCK:
+        LAST_STATS["photos"] = {"cap": _PHOTOS["cap"], "used": _PHOTOS["used"]}
+        LAST_STATS["slop_rejected"] = dict(SLOP_REJECTED)
     LAST_STATS.update(total_seconds=round(time.time() - t_start, 1),
                       reused_to_fill=reused,
                       still_empty=sum(1 for r in results if r is None),
@@ -3392,8 +3901,8 @@ def placements(results, starts: Dict[int, float], skip=()) -> Dict[str, List[Opt
     items = results.items() if isinstance(results, dict) else enumerate(results or [])
     out: Dict[str, List[Optional[float]]] = {}
     for i, a in items:
-        if a is None or i in skip or a.kind != "video":
-            continue
+        if a is None or i in skip or a.kind != "video" or _chain_member(a):
+            continue            # a chain's later moments count with the line that opened it
         out.setdefault(video_key(a), []).append(starts.get(i))
     return out
 
@@ -3410,8 +3919,9 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
                REUSE_MIN_GAP_SECONDS of its twin - the same shot twice, a
                video past MAX_MOMENTS_PER_VIDEO scenes, or one playing again
                within SAME_VIDEO_GAP_SECONDS;
-      upgrade  a hook scene on a still: footage is looked for, and the still
-               stays when none is found.
+      upgrade  a hook scene on a still, or a photo past the style's photo cap
+               (PHOTO_MAX_PER_10MIN over the lines' seconds): footage is
+               looked for, and the still stays when none is found.
     """
     starts = scene_starts(jobs)
     by_index = {j["index"]: j for j in jobs or []}
@@ -3419,6 +3929,8 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
     shots: set = set()
     shown: Dict[str, int] = {}
     out: Dict[int, tuple] = {}
+    cap = photo_cap(_jobs_seconds(jobs))
+    photos = 0
     for i in sorted(by_index):
         a = _asset_at(results, i)
         if a is None:
@@ -3440,9 +3952,15 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
             shown[a.identity] = shown.get(a.identity, 0) + 1
             if hook and job.get("subject_type") != "document":
                 out[i] = ("a still in the opening", "upgrade")
+            elif cap is not None and job.get("subject_type") != "document":
+                photos += 1
+                if photos > cap:
+                    out[i] = (f"more than the style's {cap} photos", "upgrade")
             continue
         key = video_key(a)
         prev = kept.setdefault(key, [])
+        if _chain_member(a):
+            continue            # the next moment of the line before's clip: one source with it
         if a.identity in shots:
             out[i] = ("the same shot again", "soft")
             continue
@@ -3456,12 +3974,97 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
     return out
 
 
+def is_chain(job: Optional[Dict[str, Any]]) -> bool:
+    """A line that plays the next moment of the previous line's clip (director.chain_shots)."""
+    si = (job or {}).get("scene_intent")
+    return isinstance(si, dict) and si.get("role") == "chain"
+
+
+def _chain_member(asset: Optional[MediaAsset]) -> bool:
+    return bool(asset is not None and isinstance(asset.moment, dict) and asset.moment.get("chain"))
+
+
+# Where this job's files go, for the passes the handler calls without one
+# (fill_chains inside hold_violations): set by source_many and the pools.
+_WORK: Dict[str, str] = {"dir": ""}
+# Forward past the previous shot's moment: a cut, not a continuous take.
+CHAIN_SKIP_SECONDS = 0.8
+
+
+def fill_chains(jobs: List[Dict[str, Any]], results, work_dir: str = "") -> int:
+    """
+    Every chain line (director.chain_shots) plays the next moment of the
+    previous line's YouTube clip - jumped forward CHAIN_SKIP_SECONDS past what
+    that line showed - checked like any clip (quality, the AI-slop and still
+    filters, the cross-video ledger). A chain whose clip cannot continue is
+    left empty for the rescue pass. Chains run in parallel, each in order.
+    Returns how many lines were filled.
+    """
+    work_dir = work_dir or _WORK["dir"]
+    by_index = {j["index"]: j for j in jobs or []}
+    todo = [i for i in sorted(by_index) if is_chain(by_index[i]) and _asset_at(results, i) is None]
+    if not todo or not work_dir:
+        return 0
+    runs: List[List[int]] = []
+    for i in todo:
+        if runs and runs[-1][-1] == i - 1:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+
+    def put(i: int, asset: MediaAsset) -> None:
+        results[i] = asset                          # a list by index or a dict alike
+
+    def one(run: List[int]) -> int:
+        filled = 0
+        for i in run:
+            prev = _asset_at(results, i - 1)
+            if prev is None or prev.kind != "video":
+                break
+            vid, start = _yt_origin(prev)
+            if not vid:
+                break
+            prev_job = by_index.get(i - 1) or {}
+            job = by_index[i]
+            shown = float(prev_job.get("seconds") or prev.duration or 5.0)
+            at = float(start) + shown + CHAIN_SKIP_SECONDS
+            need = max(2.0, float(job.get("seconds") or 5.0)) + SEQ_SHOT_PAD
+            if ledger.moment_used(vid, at, at + need):
+                break
+            path, clean, cuts = fetch_clean_clip(vid, work_dir, at, need, prev.attribution or "")
+            if not path:
+                break
+            if not _asset_ok(MediaAsset(kind="video", source="youtube", url="", local_path=path))[0] \
+                    or motion_rejects(path) or slop_reason(path, prev.attribution or ""):
+                break
+            asset = _dc_replace(prev, local_path=path, url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
+                                duration=need, moment_key=f"yt:{vid}@{int(at // max(1.0, float(config.POOL_MIN_GAP_SECONDS)))}",
+                                moment={"start": round(at, 1), "chain": True, "chain_of": prev.identity,
+                                        "clean": clean, "cuts": cuts},
+                                alternatives=[], intent=job.get("intent") or prev.intent)
+            put(i, asset)
+            filled += 1
+        return filled
+
+    total = 0
+    with ThreadPoolExecutor(max_workers=max(1, min(6, len(runs)))) as ex:
+        for got in ex.map(one, runs):
+            total += got
+    print(f"[media] clip chains: {total}/{len(todo)} line(s) continue the clip before them", flush=True)
+    return total
+
+
 def hold_violations(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]) -> Dict[int, tuple]:
     """
     Clear every scene variety_violations names, so the reserve and rescue
     passes treat it like an empty one; returns {index: (asset, reason, kind)}
-    for restore_held.
+    for restore_held. Chain lines are filled first (fill_chains): a chain
+    continues its clip whatever the variety rules say about the video.
     """
+    try:
+        fill_chains(jobs, results)
+    except Exception as e:  # noqa: BLE001 - a chain left empty goes to the rescue pass
+        print(f"[media] clip chains skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     held: Dict[int, tuple] = {}
     for i, (reason, kind) in variety_violations(jobs, results).items():
         held[i] = (results[i], reason, kind)
@@ -3587,8 +4190,12 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                     if key in used:
                         continue
                     used.add(key)
+                if ledger.moment_used(vid, at, at + need):
+                    continue                        # shown in an earlier video
                 path = _yt_fetch_retry(vid, work_dir, at, need, title=job.get("subject") or "")
                 if not path:
+                    continue
+                if motion_rejects(path):
                     continue
                 asset = MediaAsset(kind="video", source="youtube", url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
                                    local_path=path, license=donor.license, attribution=donor.attribution,
@@ -3600,12 +4207,15 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                 ok, why = _asset_ok(asset)
                 if not ok:
                     continue
+                if slop_reason(path, donor.attribution):
+                    continue                        # AI-made, a still, a studio... (src/slop.py)
                 local = _local_check(path, job.get("intent", "")) if job.get("intent") else None
                 if local is not None and local["reject"]:
                     continue
                 if vision.enabled() and job.get("intent"):
                     verdict = vision.judge(path, job.get("intent", ""), job.get("query", ""))
-                    if verdict is not None and float(verdict.get("score") or 0) < config.VISION_SOFT_MIN_SCORE:
+                    if verdict is not None and (float(verdict.get("score") or 0) < config.VISION_SOFT_MIN_SCORE
+                                                or verdict.get("ai_generated") or verdict.get("studio")):
                         continue
                     if verdict is not None:
                         asset.relevance_score = float(verdict.get("score") or 0)
@@ -3690,6 +4300,8 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 found = [c for c in found if c.get("id") not in seen_ids
                          and float(c.get("duration") or 0) >= need + 8
                          and not _talking_head(c.get("title") or "")
+                         and _usable_title(c.get("title") or "", c.get("channel") or "", float(c.get("aspect") or 0))
+                         and not title_conflict(c.get("title") or "", job.get("context") or "")
                          and _title_fits(c.get("title") or "", intent_text)]
                 seen_ids.update(c.get("id") for c in found)
                 found.sort(key=lambda c: -_score_candidate(c.get("title") or "", float(c.get("duration") or 0),
@@ -3702,10 +4314,12 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                     continue
                 dur = float(c.get("duration") or 0)
                 point = max(5.0, dur * 0.35)
+                if ledger.moment_used(c["id"], point, point + need):
+                    continue                        # shown in an earlier video
                 path, clean, cuts = fetch_clean_clip(c["id"], work_dir, point, need, c.get("title") or "")
                 if not path:
                     continue
-                if _filters.has_burned_captions(path):
+                if _filters.has_burned_captions(path) or motion_rejects(path) or slop_reason(path, c.get("title") or ""):
                     continue
                 asset = _asset_for(path, q, need, False, title=c.get("title") or "")
                 asset.url = f"https://www.youtube.com/watch?v={c['id']}&t={int(point)}"
@@ -3722,16 +4336,37 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 return asset
             return None
 
+        # The style's photo cap (PHOTO_MAX_PER_10MIN) over the whole video:
+        # a picture only while there is room, else the scene becomes an
+        # animation or a reused shot.
+        cap = photo_cap(_jobs_seconds(jobs))
+        room = [None if cap is None else cap - sum(
+            1 for r in results if r is not None and r.kind == "image" and r.source != "generated")]
+
         def picture(job: dict, q: str, intent_text: str) -> Optional[MediaAsset]:
+            with lock:
+                if room[0] is not None and room[0] <= 0:
+                    return None
             for cand in _cached_search(search_web_images, q)[:5]:
                 if time.time() > until - 10:
                     return None
+                if ledger.photo_used(cand.url):
+                    continue                        # shown in an earlier video
                 if not claim(cand.identity, used_images):
                     continue
+                from . import slop
+                if slop.ai_host(cand.url, getattr(cand, "page_url", "") or "") or slop.metadata_reason(cand.attribution):
+                    continue
                 got = _download(_dc_replace(cand), q, work_dir)
-                if got and (not _asset_ok(got)[0] or not _rescue_local_ok(got.local_path, intent_text)):
+                if got and (not _asset_ok(got)[0] or not _rescue_local_ok(got.local_path, intent_text)
+                            or _photo_seen_before(got.local_path) or slop_reason(got.local_path)):
                     got = None
                 if got:
+                    with lock:
+                        if room[0] is not None:
+                            if room[0] <= 0:
+                                return None
+                            room[0] -= 1
                     got.intent = intent_text
                     got.review_required = True
                     got.review_reason = "Picture found in the last pass without an AI check - make sure it fits"
@@ -3942,6 +4577,8 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
     for cand, start, _moment in _plan_grabs(eligible, window, 30.0, intent, context):
         if len(shots) >= need or videos >= SEQ_MAX_VIDEOS:
             break
+        if ledger.moment_used(cand["id"], start, start + window):
+            continue                                # shown in an earlier video
         path = _yt_fetch_retry(cand["id"], out_dir, start, window, cand["title"])
         if not path:
             continue
@@ -3981,11 +4618,11 @@ def _image_pool(queries: List[str], subject: str, subject_type: str, need: int,
     for cand in found:
         if len(shots) >= need:
             break
-        if cand.identity in seen or cand.identity in used:
+        if cand.identity in seen or cand.identity in used or ledger.photo_used(cand.url):
             continue
         seen.add(cand.identity)
         got = _download(_dc_replace(cand), cand.query or subject, out_dir)
-        if not got:
+        if not got or _photo_seen_before(got.local_path):
             continue
         keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got))
         if keep:

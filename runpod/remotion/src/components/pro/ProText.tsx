@@ -1,7 +1,8 @@
 import React from "react";
-import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { DISPLAY, LABEL } from "../fonts";
 import { LetterLine, MaskLine, Scrim, Tag, lines, ramp, useK } from "./ProGraphics";
+import { EASE, F, boldCaps, bright, caps, fit, tween, useExit } from "./Kit";
 import type { Overlay } from "../../types";
 
 /**
@@ -169,24 +170,79 @@ export const ProQuote: React.FC<{ overlay: Overlay; accent: string }> = ({ overl
   );
 };
 
+/**
+ * A chapter break (HEADLINE_CHAPTER_GHOST_V1 "echo", HEADLINE_EDITORIAL_V1),
+ * rebuilt 2026-09-30 in the owner's text language: the footage dims, the
+ * kicker ("CHAPTER TWO") types on in outlined accent caps, the title slams up
+ * letter by letter in big outlined bold caps (fitted, two lines at most) with
+ * its key word in the accent, and an accent bar draws under it. "echo" adds
+ * the title's key word as a giant hollow ghost behind, drifting slowly.
+ * Everything drops out in the last 12 frames.
+ */
 export const ProChapter: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, accent }) => {
   const frame = useCurrentFrame();
+  const { width, durationInFrames: D } = useVideoConfig();
   const k = useK();
-  const title = (overlay.text || "").toUpperCase();
-  const ls = lines(title, 22).slice(0, 3);
-  const bar = ramp(frame, 0, 16);
+  const q = useExit(12);
+  const hot = bright(accent);
+  const title = caps(overlay.text);
+  if (!title) return null;
+  const kicker = caps(overlay.subtitle) || "CHAPTER";
+  const f = fit(title, F.label, 150 * k, 80 * k, Math.min(1500 * k, width - 240 * k), 2, 0.01);
+  const key = keyWord(title);
+  const echo = overlay.variant === "echo";
+  const ghost = echo ? keyWord(title) || title.split(" ")[0] : "";
+  const ghostSize = ghost ? Math.min(560 * k, (width * 0.92) / Math.max(0.5, measureCaps(ghost))) : 0;
+  const drift = interpolate(frame, [0, D], [30 * k, -30 * k]);
+  const bar = tween(frame, 16, 18, EASE.inOut) * (1 - q);
+  let n = 0;
   return (
     <AbsoluteFill>
       <Scrim ov={overlay} />
-      <AbsoluteFill style={{ justifyContent: "center", paddingLeft: "10%" }}>
-        <MaskLine at={0}><span style={{ fontFamily: LABEL, fontWeight: 800, fontSize: 32 * k, letterSpacing: "0.34em",
-          color: accent }}>{(overlay.subtitle || "Chapter").toUpperCase()}</span></MaskLine>
-        <div style={{ width: 160 * k * bar, height: 7 * k, background: accent, margin: `${14 * k}px 0 ${18 * k}px` }} />
-        {ls.map((ln, i) => (
-          <LetterLine key={i} text={ln} at={4 + i * 5} style={{ fontFamily: DISPLAY, fontSize: 84 * k, lineHeight: 0.98,
-            color: "#fff", textShadow: "0 8px 30px rgba(0,0,0,.5)" }} />
+      {ghost ? (
+        <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", opacity: tween(frame, 2, 24) * (1 - q) }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: ghostSize, lineHeight: 1, color: "transparent", whiteSpace: "nowrap",
+            WebkitTextStroke: `${Math.max(2, 3 * k)}px rgba(255,255,255,.3)`, transform: `translateX(${drift.toFixed(2)}px)`,
+            letterSpacing: "0.02em" }}>{ghost}</span>
+        </AbsoluteFill>
+      ) : null}
+      <AbsoluteFill style={{ justifyContent: "center", paddingLeft: 120 * k }}>
+        <div style={{ ...boldCaps(50 * k, hot, k, 0.18), marginBottom: 8 * k,
+          clipPath: `inset(0 ${((1 - tween(frame, 0, 12)) * 100).toFixed(2)}% 0 0)`, opacity: 1 - q }}>{kicker}</div>
+        {f.lines.map((ln, li) => (
+          <div key={li} style={{ display: "flex", whiteSpace: "pre" }}>
+            {Array.from(ln).map((c, ci) => {
+              const i = n++;
+              const p = tween(frame, 3 + i * 0.55, 11, EASE.out);
+              const qi = tween(frame, D - 13 + i * 0.25, 9, EASE.in);
+              const inKey = key && wordAt(ln, ci) === key;
+              if (c === " ") return <span key={ci} style={{ display: "inline-block", width: f.size * 0.24 }} />;
+              return (
+                <span key={ci} style={{ ...boldCaps(f.size, inKey ? hot : "#fff", k, 0.01), display: "inline-block",
+                  transform: `translateY(${((1 - p) * 70 + qi * 70).toFixed(2)}%)`, opacity: Math.min(1, p * 3) * (1 - qi) }}>{c}</span>
+              );
+            })}
+          </div>
         ))}
+        <div style={{ width: Math.min(420 * k, f.size * 3) * bar, height: 12 * k, borderRadius: 3 * k, background: hot, marginTop: 16 * k,
+          boxShadow: `0 0 0 ${3 * k}px #000, 0 0 ${20 * k}px ${hot}` }} />
       </AbsoluteFill>
     </AbsoluteFill>
   );
 };
+
+const CH_STOP = new Set(["THE", "A", "AN", "OF", "IN", "ON", "AT", "TO", "FOR", "AND", "OR", "IS", "ARE", "WAS", "WHAT", "WHY",
+  "HOW", "WHO", "THIS", "THAT", "IT", "ITS", "WITH", "FROM", "BY", "AS", "BE", "DO", "DOES", "DID", "WHEN", "WHERE"]);
+/** The title's key word: its longest content word (the one the accent and the ghost carry). */
+const keyWord = (title: string): string =>
+  title.split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}'-]/gu, "")).filter((w) => w && !CH_STOP.has(w))
+    .sort((a, b) => b.length - a.length)[0] || "";
+/** The (cleaned) word a character index of a line belongs to. */
+const wordAt = (line: string, idx: number): string => {
+  let a = idx, b = idx;
+  while (a > 0 && line[a - 1] !== " ") a--;
+  while (b < line.length && line[b] !== " ") b++;
+  return line.slice(a, b).replace(/[^\p{L}\p{N}'-]/gu, "");
+};
+/** Bebas Neue caps width in em. */
+const measureCaps = (s: string): number => Array.from(s).length * 0.4;

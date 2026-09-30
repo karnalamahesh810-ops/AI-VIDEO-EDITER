@@ -9983,6 +9983,59 @@
   "file": "LibDateTime"
  },
  {
+  "id": "dt-letter-drop",
+  "name": "Bold Date (Letter Drop)",
+  "category": "TIMELINES",
+  "description": "The date and nothing else: huge bold white condensed letters with a black outline and a soft shadow, no box or band behind them, dropping in one by one with a small bounce - a crisp tick as each letter lands, a deep hit on the last - then the weekday, year, time or place in a smaller outlined line under it. Low on the left, the right or the centre (Placement). Reads 'WEDNESDAY', 'SEPTEMBER 30', 'TUESDAY NIGHT', '3:45 PM', 'WED → THU'.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "date",
+   "datetime",
+   "time-of-day"
+  ],
+  "duration": 3.5,
+  "sfx": "none",
+  "sfx_at": 26,
+  "types": false,
+  "sounds": [
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 10,
+    "gain_db": -6
+   },
+   {
+    "name": "date-slam",
+    "alt": [
+     "hit-deep"
+    ],
+    "at": 26,
+    "fixed": true
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "SEPTEMBER 30, 2026",
+   "label": "WEDNESDAY"
+  },
+  "family": "dt",
+  "file": "LibBoldText",
+  "exit": "none"
+ },
+ {
   "id": "ct-clean-count",
   "name": "Clean Count",
   "category": "NUMBERS",
@@ -11046,5 +11099,69 @@
   },
   "family": "vm",
   "file": "LibVideoMarks"
+ },
+ {
+  "id": "bt-count",
+  "name": "Bold Count",
+  "category": "NUMBERS",
+  "description": "The number and nothing else: huge bold white outlined digits counting up to the figure (90,000 / 22% / $1.2M) with a digit tick on every change and a hit as it lands, the words it counts in bold outlined caps beside or under it, no box behind them. Low on the left, the right or the centre (Placement).",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "align"
+  ],
+  "cues": [
+   "big-number",
+   "count",
+   "percent",
+   "money",
+   "age"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 40,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick"
+    ],
+    "at": 6,
+    "every": 2,
+    "count": 16,
+    "gain_db": -5,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "hit-deep"
+    ],
+    "at": 40,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 8,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 90000,
+   "text": "PEOPLE WITHOUT POWER"
+  },
+  "family": "bt",
+  "file": "LibBoldText",
+  "exit": "none"
  }
 ]

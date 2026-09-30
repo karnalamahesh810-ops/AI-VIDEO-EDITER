@@ -122,8 +122,10 @@ class PoolRanking(unittest.TestCase):
         self.assertIn("ABC70000000", by_id)
         self.assertIn("KUTV0000000", by_id)          # the event words and the call sign, no "Lake Powell"
         self.assertGreaterEqual(by_id["ABC70000000"]["_rank"], by_id["DRONE000000"]["_rank"] - 0.5)
-        self.assertLess(by_id["OLD00000000"]["_rank"], by_id["ABC70000000"]["_rank"])
-        self.assertLess(by_id["OLD00000000"]["_rank"], by_id["KUTV0000000"]["_rank"])
+        # Another year's report used to rank last; since the owner's Texas test
+        # (2026-09-30: the 2021 I-35 pileup under a 2026 story) a title naming
+        # another year is not a candidate at all (media.title_conflict).
+        self.assertNotIn("OLD00000000", by_id)
         self.assertNotIn("POD00000000", by_id)
         self.assertNotIn("CAT00000000", by_id)
         self.assertTrue(by_id["ABC70000000"]["_news"])

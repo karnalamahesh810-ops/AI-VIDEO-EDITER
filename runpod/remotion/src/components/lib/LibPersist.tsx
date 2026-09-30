@@ -130,7 +130,7 @@ const MaskIO: React.FC<{ pin: number; pout: number; children: React.ReactNode; s
   );
 
 /** A short pop, played once at `at` (never past the end of the graphic). */
-const Tick: React.FC<{ at: number; name?: string; volume?: number }> = ({ at, name = "pop", volume = 0.3 }) => {
+const Tick: React.FC<{ at: number; name?: string; volume?: number }> = ({ at, name = "ui-tick", volume = 0.3 }) => {
   const { durationInFrames } = useVideoConfig();
   if (at < 0 || at >= durationInFrames - 2) return null;
   return (

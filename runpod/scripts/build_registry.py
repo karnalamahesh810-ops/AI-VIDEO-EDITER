@@ -8,12 +8,30 @@ already exists (its `component` is an OverlayType), with the props a user
 may change, the style / entrance / exit variants it offers, its default
 duration and sound, and the narration cues the planner matches it on.
 Run after editing the tables below:  python scripts/build_registry.py
+
+Every look carries its own sound design (the owner, 2026-09-30: "when you
+make an animation, the animation needs its specific sound BUILT IN - not us
+adding sounds on the timeline"): defaults.sounds, a list of cues the
+renderer plays inside the overlay (remotion/src/components/lib/LookSounds.tsx,
+cue fields in src/sfxplan.py). They are written here from the look's sound
+and hit frame as the timeline planner used them (so nothing loses its
+sound): a date's deep hit, a typing look's keys for its typing span, a
+counting look's ticks up to its number, else the look's sound landing on its
+hit. A library look may give its own "sounds" (library_looks.json), and
+"sound_timing": "look" when its component schedules them from its real
+animation frames (useLookSound). defaults.sfx is left at "none": no look
+asks for a timeline row any more.
 """
+import copy
 import json
 import os
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "remotion", "src", "templates", "registry.json")
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from src import sfxplan  # noqa: E402  (the sound contract: cue fields, levels, the planner's old rules)
 
 ENTRANCES = ["fade", "rise", "drop", "slide-left", "slide-right", "zoom-in", "zoom-out",
              "blur", "wipe", "wipe-up", "flip", "glitch"]
@@ -41,10 +59,14 @@ P = {
     "duration": {"type": "number", "label": "Duration (s)", "min": 1.5, "max": 15},
     "speed": {"type": "number", "label": "Animation speed", "min": 0.5, "max": 2.0, "default": 1.0},
     "theme": {"type": "enum", "label": "Colour", "options": ["accent", "gold", "red", "teal", "blue", "white", "amber"], "default": "accent"},
-    "sfx": {"type": "enum", "label": "Sound", "options": ["default", "none", "impact", "whoosh", "map-whoosh", "riser", "pop", "typewriter", "paper", "page", "glitch", "glitch-transition"], "default": "default"},
-    "sfxVolume": {"type": "number", "label": "Sound volume", "min": 0.0, "max": 1.0, "default": 0.3},
+    # The look's own sound (built in, defaults.sounds): on ("default") or off ("none").
+    "sfx": {"type": "enum", "label": "Sound", "options": ["default", "none"], "default": "default"},
+    # A trim on the look's built-in sound, 1 = as designed against the voice (never above the one cap).
+    "soundGain": {"type": "number", "label": "Sound level", "min": 0.0, "max": 1.5, "default": 1.0},
+    # Where a text-only look sits on the footage (the bold text looks).
+    "align": {"type": "enum", "label": "Placement", "options": ["auto", "left", "right", "center"], "default": "auto"},
 }
-COMMON = ["position", "scale", "opacity", "duration", "speed", "theme", "sfx", "sfxVolume"]
+COMMON = ["position", "scale", "opacity", "duration", "speed", "theme", "sfx", "soundGain"]
 
 
 def T(id_, name, category, component, description, *, props, duration, sfx=None,
@@ -65,9 +87,139 @@ def T(id_, name, category, component, description, *, props, duration, sfx=None,
 
 def _typing(t: dict) -> dict:
     """A template that types letter by letter (typing contract: frame 6 on, 2 frames a
-    character up to 48 characters, else 1): the sound planner runs "keys" for the typing span."""
+    character up to 48 characters, else 1): its built-in "keys" run for the typing span."""
     t["defaults"]["types"] = True
     t["defaults"]["sfxAt"] = 6
+    return t
+
+
+# ---------------------------------------------------------------- sounds
+# Cue fields (src/sfxplan.py): name, alt, at, align, until, kind, every, count,
+# gain_db, fade, when, fixed, scale, pitch.
+CUE_FIELDS = {"name": str, "alt": list, "at": (int, float), "align": str, "until": (int, float), "kind": str,
+              "every": (int, float), "count": (int, float, str), "gain_db": (int, float), "fade": (int, float),
+              "when": str, "fixed": bool, "scale": bool, "pitch": (int, float)}
+COUNT_RUN = 39      # a count ticks for about 1.3 s at 30 fps (the planner's COUNT_SECONDS)
+
+
+def _cue(cue: dict, where: str) -> dict:
+    """A cue from library_looks.json, checked field by field (a typo fails the build, not a render)."""
+    if not isinstance(cue, dict) or not isinstance(cue.get("name"), str) or not isinstance(cue.get("at"), (int, float)):
+        raise ValueError(f"{where}: a sound cue needs a name and an at frame: {cue!r}")
+    for k, v in cue.items():
+        kinds = CUE_FIELDS.get(k)
+        if kinds is None or isinstance(v, bool) and kinds is not bool or not isinstance(v, kinds):
+            raise ValueError(f"{where}: sound cue field {k}={v!r}")
+    if cue.get("align") not in (None, "peak", "start") or cue.get("kind") not in (None, "typing") \
+            or cue.get("when") not in (None, "value", "no-value") \
+            or isinstance(cue.get("count"), str) and cue["count"] not in ("items", "locations"):
+        raise ValueError(f"{where}: sound cue {cue!r}")
+    return dict(cue)
+
+
+DESIGN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "look_sounds.json")
+_TEXT_FAMILIES = {"TEXT", "HEADLINES", "LOWER_THIRDS", "QUOTES"}
+
+
+def designer() -> dict:
+    """The sound designer's map (look_sounds.json): {"looks": {id: {sounds, sfx, sfx_at, types?}}, "replace": {...}}."""
+    if not os.path.exists(DESIGN):
+        return {"looks": {}, "replace": {}}
+    with open(DESIGN, encoding="utf-8") as fh:
+        got = json.load(fh)
+    return {"looks": got.get("looks") or {}, "replace": got.get("replace") or {}}
+
+
+def _hit_cue(name: str, t: dict, at: int, replace: dict) -> dict:
+    """
+    A look's one sound as a cue, by the planner's rules and the designer's
+    upgrades: a look that does not type never clacks (one click), an impact
+    leads with the owner's deep hit, an older file plays its premium
+    successor (the older one stays as its stand-in), a plain whoosh is the
+    text swoosh on words and the soft whoosh on panels.
+    """
+    if name in sfxplan._TYPING_NAMES and not sfxplan._types(t):
+        name = sfxplan.NOT_TYPING_SOUND
+    old = name
+    name = sfxplan._PREFERRED.get(name, name) if name == "impact" else name
+    if name == "whoosh":
+        name = "swoosh-text" if t.get("category") in _TEXT_FAMILIES else "whoosh-soft-v2"
+    name = replace.get(name, name)
+    cue = {"name": name, "at": at}
+    if name != old:
+        cue["alt"] = [old]
+    if name in sfxplan._CONTINUOUS:
+        cue["align"] = "start"                   # no single peak: it starts with the move
+    return cue
+
+
+def sound_design(t: dict, replace: dict = None) -> list:
+    """
+    The cues of a look the designer's map does not list, from its sound and
+    hit frame as the timeline planner used them (src/sfxplan.py _candidate):
+    a calendar date lands on the date slam at the date level; a look that
+    types runs the keys for its typing span (the take turns per video); a
+    counting look rolls up to its number and lands on the final click (its
+    own sound when it has no number); else its sound lands on its hit.
+    """
+    replace = replace or {}
+    d = t["defaults"]
+    name = str((d.get("sfx") or {}).get("name") or "none")
+    at = d.get("sfxAt")
+    hit = int(at) if isinstance(at, (int, float)) and not isinstance(at, bool) and at else sfxplan.DEFAULT_HIT
+    if sfxplan.is_calendar_date(t):
+        return [{"name": sfxplan.DATE_SOUND, "alt": list(sfxplan.DATE_SOUND_ALT), "at": hit, "fixed": True}]
+    if sfxplan._types(t):
+        fixed = sfxplan._FIXED_TYPING.get(t.get("component") or "")
+        if fixed:
+            return [{"name": sfxplan.TYPING_SOUND, "kind": "typing", "at": fixed[0], "until": fixed[0] + fixed[1]}]
+        return [{"name": sfxplan.TYPING_SOUND, "kind": "typing", "at": sfxplan.TYPE_START}]
+    one = [_hit_cue(name, t, hit, replace)] if name != "none" else []
+    counts = d["counts"] if "counts" in d else bool(set(t.get("cues") or []) & sfxplan._COUNT_CUES)
+    if counts:
+        raw = int(at) if isinstance(at, (int, float)) and not isinstance(at, bool) else 0
+        # sfxAt marks where the count lands: the roll runs up to it; else it starts with it.
+        begin = raw - COUNT_RUN if raw >= COUNT_RUN else max(raw, sfxplan.TYPE_START)
+        return [{"name": sfxplan.COUNT_SOUND, "alt": ["count-tick"], "at": begin, "until": begin + COUNT_RUN,
+                 "gain_db": -4.0, "when": "value"},
+                {"name": sfxplan.COUNT_FINAL, "alt": ["tick"], "at": begin + COUNT_RUN, "when": "value"}] \
+            + [dict(c, when="no-value") for c in one]
+    return one
+
+
+def with_sound(t: dict, look: dict = None, designed: dict = None, replace: dict = None) -> dict:
+    """
+    The template with its built-in sound design (defaults.sounds): a library
+    look's own "sounds" (library_looks.json) first, else the sound
+    designer's (look_sounds.json), else the one written from its old sound.
+    defaults.sfx / sfxAt keep the look's main sound and its hit frame for
+    older documents and the planner's timing; no new timeline row uses them.
+    """
+    d = t["defaults"]
+    look = look or {}
+    designed = designed or {}
+    if designed.get("types"):
+        d["types"] = True                        # the typing contract spans its letters
+    at = designed.get("sfx_at")
+    if isinstance(at, (int, float)) and not isinstance(at, bool):
+        d["sfxAt"] = int(at)
+    main = str(designed.get("sfx") or "")
+    if sfxplan.plays_own_sound(t) or look.get("own_sound"):
+        d["ownSound"] = True                     # the component plays its own <Audio>
+        d["sounds"] = []
+    elif "sounds" in look:
+        d["sounds"] = [_cue(c, t["id"]) for c in look["sounds"]]
+        if look.get("sound_timing") == "look":
+            d["soundTiming"] = "look"            # the component schedules them (useLookSound)
+        main = ""
+    elif isinstance(designed.get("sounds"), list):
+        d["sounds"] = [_cue(c, t["id"]) for c in designed["sounds"]]
+    else:
+        d["sounds"] = sound_design(t, replace)
+        main = ""
+    if not main and d["sounds"] and not d.get("ownSound"):
+        main = d["sounds"][-1]["name"] if d["sounds"][0].get("when") == "value" else d["sounds"][0]["name"]
+    d["sfx"] = {"name": main or "none", "volume": 0.3 if main else 0.0}
     return t
 
 
@@ -535,6 +687,37 @@ SFX = {
     "KEYS_MECH": {"file": "keys-mech", "volume": 0.1}, "KEYS_TYPE": {"file": "keys-type", "volume": 0.1},
     "GLITCH_PRO": {"file": "glitch-pro", "volume": 0.13},
     "HIT_DEEP": {"file": "hit-deep", "volume": 0.13}, "KEYS_LAPTOP": {"file": "keys-laptop", "volume": 0.1},
+    # The sound designer's premium set (2026-09-30), for the editor's own sounds on the timeline.
+    "DATE_SLAM": {"file": "date-slam", "volume": 0.25}, "LETTER_TICK": {"file": "letter-tick", "volume": 0.25},
+    "UI_TICK": {"file": "ui-tick", "volume": 0.25}, "UI_POP": {"file": "ui-pop", "volume": 0.25},
+    "UI_CLICK": {"file": "ui-click", "volume": 0.25}, "UI_SWIPE": {"file": "ui-swipe", "volume": 0.25},
+    "SWOOSH_TEXT": {"file": "swoosh-text", "volume": 0.25}, "WHOOSH_FAST": {"file": "whoosh-fast", "volume": 0.25},
+    "WHOOSH_SOFT_V2": {"file": "whoosh-soft-v2", "volume": 0.25},
+    "WHOOSH_CINEMATIC": {"file": "whoosh-cinematic", "volume": 0.25},
+    "ZOOM_IN_WHOOSH": {"file": "zoom-in-whoosh", "volume": 0.25},
+    "MAP_SWOOP": {"file": "map-swoop", "volume": 0.25}, "PIN_DROP": {"file": "pin-drop", "volume": 0.25},
+    "RADAR_PING": {"file": "radar-ping", "volume": 0.25}, "COUNT_ROLL": {"file": "count-roll", "volume": 0.25},
+    "COUNT_FINAL": {"file": "count-final", "volume": 0.25},
+    "IMPACT_PUNCH": {"file": "impact-punch", "volume": 0.25}, "BOOM_SUB": {"file": "boom-sub", "volume": 0.25},
+    "STAMP": {"file": "stamp", "volume": 0.25}, "FRAME_DROP": {"file": "frame-drop", "volume": 0.25},
+    "PAPER_SLIDE_V2": {"file": "paper-slide-v2", "volume": 0.25},
+    "PAGE_FLIP": {"file": "page-flip", "volume": 0.25}, "FOLDER_OPEN": {"file": "folder-open", "volume": 0.25},
+    "PAPER_PIN": {"file": "paper-pin", "volume": 0.25}, "PAPER_TEAR": {"file": "paper-tear", "volume": 0.25},
+    "TAPE_RIP": {"file": "tape-rip", "volume": 0.25}, "SHUTTER_SLIDE": {"file": "shutter-slide", "volume": 0.25},
+    "MARKER_DRAW": {"file": "marker-draw", "volume": 0.25},
+    "MARKER_UNDERLINE": {"file": "marker-underline", "volume": 0.25},
+    "PEN_SCRIBBLE": {"file": "pen-scribble", "volume": 0.25},
+    "CAMERA_SHUTTER": {"file": "camera-shutter", "volume": 0.25},
+    "CAMERA_FLASH_POP": {"file": "camera-flash-pop", "volume": 0.25},
+    "RECORD_BEEP": {"file": "record-beep", "volume": 0.25}, "PHONE_BUZZ": {"file": "phone-buzz", "volume": 0.25},
+    "ALERT_TONE": {"file": "alert-tone", "volume": 0.25},
+    "GLITCH_DIGITAL": {"file": "glitch-digital", "volume": 0.25},
+    "GLITCH_SHORT_V2": {"file": "glitch-short-v2", "volume": 0.25},
+    "RISER_SHORT_V2": {"file": "riser-short-v2", "volume": 0.25},
+    "REVERSE_SWELL": {"file": "reverse-swell", "volume": 0.25},
+    "LIGHT_SHIMMER": {"file": "light-shimmer", "volume": 0.25},
+    "MAGNIFIER_GLIDE": {"file": "magnifier-glide", "volume": 0.25},
+    "TYPEWRITER_CLEAN": {"file": "typewriter-clean", "volume": 0.25},
 }
 
 STYLE_PACKS = {
@@ -558,7 +741,8 @@ STYLE_PACKS = {
                 "multi": "MAP_SPREAD_V1", "lowerThird": "LT_SERIF_V1", "caption": "documentary",
                 "transitions": ["film-burn", "light-leak", "fade", "dip"], "animationIntensity": 0.7,
                 "sfxIntensity": 0.7, "imageTreatment": "IMAGE_ARCHIVAL_V1"},
-    "tech": {"name": "Tech", "theme": "teal", "fontFamily": "Inter", "chapter": "HEADLINE_TITLE_V1",
+    # (The plain title card is banned, 2026-09-30 audit: the rebuilt ghost / editorial chapter cards lead.)
+    "tech": {"name": "Tech", "theme": "teal", "fontFamily": "Inter", "chapter": "HEADLINE_CHAPTER_GHOST_V1",
              "map": "MAP_DARK_V1", "route": "MAP_ROUTE_DARK_V1", "region": "MAP_REGION_V1",
              "multi": "MAP_SPREAD_DARK_V1", "lowerThird": "LT_LINE_V1", "caption": "modern",
              "transitions": ["blur", "zoom", "slide", "glitch"], "animationIntensity": 0.9,
@@ -568,7 +752,7 @@ STYLE_PACKS = {
                   "multi": "MAP_SPREAD_V1", "lowerThird": "LT_SERIF_V1", "caption": "documentary",
                   "transitions": ["fade", "blur", "dip"], "animationIntensity": 0.6,
                   "sfxIntensity": 0.6, "imageTreatment": "IMAGE_SLOW_PUSH_V1"},
-    "minimal": {"name": "Minimal", "theme": "white", "fontFamily": "Inter", "chapter": "HEADLINE_TITLE_V1",
+    "minimal": {"name": "Minimal", "theme": "white", "fontFamily": "Inter", "chapter": "HEADLINE_EDITORIAL_V1",
                 "map": "MAP_LOCATION_ZOOM_V1", "route": "MAP_ROUTE_SAT_V1", "region": "MAP_REGION_V1",
                 "multi": "MAP_SPREAD_V1", "lowerThird": "LT_LINE_V1", "caption": "documentary",
                 "transitions": ["fade", "dip"], "animationIntensity": 0.5, "sfxIntensity": 0.5,
@@ -601,6 +785,7 @@ def _library() -> list:
     if not os.path.exists(path):
         return []
     out = []
+    design = designer()
     for look in json.load(open(path, encoding="utf-8")):
         tags = ["lib", look["family"]]
         if look.get("own_backdrop"):
@@ -614,6 +799,7 @@ def _library() -> list:
         t = T("LIB_" + look["id"].upper().replace("-", "_"), look["name"], look["category"], "motion",
               look["description"], props=[p for p in look.get("props", []) if p in P],
               duration=float(look.get("duration") or 4.5), variant=look["id"], entrance="fade",
+              exit_=look.get("exit") or "fade",
               sfx=({"name": sfx, "volume": 0.25} if sfx != "none" else None),
               cues=look.get("cues", []), kind=("tag" if look.get("kind") == "tag" else "card"),
               emphasis=("high" if look.get("kind") == "card" else "medium"), tags=tags)
@@ -623,16 +809,19 @@ def _library() -> list:
         if isinstance(look.get("sfx_at"), (int, float)) and not isinstance(look.get("sfx_at"), bool):
             t["defaults"]["sfxAt"] = int(round(look["sfx_at"]))
         t["defaults"]["types"] = bool(look.get("types"))
-        out.append(t)
+        out.append(with_sound(t, look, design["looks"].get(t["id"]), design["replace"]))
     return out
 
 
-def main() -> None:
-    reg = {
+def build() -> dict:
+    """The registry, as written to OUT (every template with its built-in sound design)."""
+    design = designer()
+    return {
         "version": 1,
         "categories": ["TEXT", "HEADLINES", "LOWER_THIRDS", "NUMBERS", "CHARTS", "COMPARISONS", "TIMELINES",
                        "MAPS", "CALLOUTS", "QUOTES", "DOCUMENTS", "IMAGES", "TRANSITIONS", "CAPTIONS"],
-        "templates": TEMPLATES + _library(),
+        "templates": [with_sound(copy.deepcopy(t), None, design["looks"].get(t["id"]), design["replace"])
+                      for t in TEMPLATES] + _library(),
         "imageTreatments": IMAGE_TREATMENTS,
         "transitions": TRANSITIONS,
         "sfx": SFX,
@@ -642,11 +831,17 @@ def main() -> None:
         "entrances": ENTRANCES,
         "exits": EXITS,
         "positions": POSITIONS,
+        # What the renderer's LookSounds sets every cue against (src/sfxplan.py).
+        "soundLevels": sfxplan.sound_levels(),
     }
+
+
+def main() -> None:
+    reg = build()
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(reg, fh, indent=1, ensure_ascii=False)
-    print(f"{len(TEMPLATES)} templates, {len(IMAGE_TREATMENTS)} image treatments, "
+    print(f"{len(reg['templates'])} templates ({len(TEMPLATES)} built in), {len(IMAGE_TREATMENTS)} image treatments, "
           f"{len(TRANSITIONS)} transitions, {len(STYLE_PACKS)} style packs -> {OUT}")
 
 

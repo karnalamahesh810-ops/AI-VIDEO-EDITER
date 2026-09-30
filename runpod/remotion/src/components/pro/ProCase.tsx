@@ -3,6 +3,10 @@ import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig
 import { DISPLAY, HAND, INTER, LABEL, MARKER, MONO, NARROW } from "../fonts";
 import type { Overlay, SceneMedia } from "../../types";
 import { LetterLine, MaskLine, ramp, useK } from "./ProGraphics";
+import {
+  Chip as KChip, EASE as KEASE, F as KF, Rise as KRise, TEXT_SHADOW as KTEXT_SHADOW, alpha as kAlpha, bright, fit as kfit,
+  labelCaps as kLabelCaps, sentence as kSentence, str as kstr, tween as kTween,
+} from "./Kit";
 
 /**
  * The "case file" graphics, read off a Dr Insanity documentary (2026-09-28
@@ -580,6 +584,115 @@ export const ProClipping: React.FC<{ overlay: Overlay; accent: string }> = ({ ov
   );
 };
 
+// ================================================================== facts card
+/**
+ * FACTS_CARD_V1, rebuilt 2026-09-30: the scene's own picture fills the right
+ * of the frame under a slow push, graded and fading into a deep charcoal on
+ * the left, where a kicker chip ("WHAT WE KNOW"), an optional title and the
+ * points sit as numbered rows: an accent numeral, a hairline that draws, the
+ * point in bold Inter that rises out of its mask, one after another. Every
+ * row is fitted (2 lines at most) so nothing ever runs off the frame; with
+ * four or five points the rows tighten. A sweep crosses the title, and the
+ * rows leave in reverse order in the last 12 frames.
+ */
+const FactsCard: React.FC<{ overlay: Overlay; accent: string; pic: string }> = ({ overlay, accent, pic }) => {
+  const frame = useCurrentFrame();
+  const { width, height, fps, durationInFrames: D } = useVideoConfig();
+  const k = useK();
+  const q = kitExit(frame, D);
+  const pts = (overlay.items || []).map((it) => {
+    const a = kstr(it.label), b = kstr(it.text);
+    return a && b ? `${a}: ${b}` : a || b;
+  }).filter(Boolean).slice(0, 5);
+  const n = pts.length;
+  const hot = bright(accent);
+  const title = kstr(overlay.text);
+  const kicker = kstr(overlay.subtitle) || (title ? "" : "What we know");
+  const COLW = Math.min(900 * k, width * 0.5);
+  const NUMW = 92 * k;
+  const room = COLW - NUMW - 28 * k;
+  const base = n <= 3 ? 50 : n === 4 ? 44 : 40;
+  const fits = pts.map((t) => kfit(t, KF.inter, base * k, 30 * k, room, 2));
+  const size = Math.min(...fits.map((f) => f.size), base * k);
+  const rows = pts.map((t) => kfit(t, KF.inter, size, size, room, 2));
+  const tf = title ? kfit(title.toUpperCase(), KF.label, 92 * k, 54 * k, COLW, 2, 0.01) : null;
+  const push = interpolate(frame, [0, D], [1.06, 1.14], clamp);
+  const picIn = kTween(frame, 0, 22, KEASE.out);
+  const step = Math.max(7, Math.min(Math.round(fps * 0.42), Math.floor((D * 0.5) / Math.max(1, n))));
+  const at0 = (tf ? 12 : 8) + (kicker ? 3 : 0);
+  const rowAt = (i: number) => at0 + i * step;
+  return (
+    <AbsoluteFill style={{ background: "linear-gradient(100deg, #07090d 0%, #0b0e14 48%, #111620 100%)", overflow: "hidden" }}>
+      {pic ? (
+        <div style={{ position: "absolute", right: 0, top: 0, width: width * 0.62, height, opacity: picIn * (1 - q * 0.6),
+          maskImage: "linear-gradient(to left, #000 50%, rgba(0,0,0,.35) 78%, transparent 100%)",
+          WebkitMaskImage: "linear-gradient(to left, #000 50%, rgba(0,0,0,.35) 78%, transparent 100%)" }}>
+          <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
+            filter: "saturate(.85) contrast(1.08) brightness(.82)" }} />
+          <AbsoluteFill style={{ background: "linear-gradient(0deg, rgba(5,7,10,.7) 0%, transparent 38%, transparent 70%, rgba(5,7,10,.45) 100%)" }} />
+        </div>
+      ) : (
+        <AbsoluteFill style={{ background: `radial-gradient(ellipse at 78% 40%, ${kAlpha(accent, 0.16)} 0%, transparent 55%)` }} />
+      )}
+      <AbsoluteFill style={{ boxShadow: `inset 0 0 ${320 * k}px rgba(0,0,0,.65)` }} />
+      <div style={{ position: "absolute", left: 128 * k, top: 0, bottom: 0, width: COLW, display: "flex", flexDirection: "column",
+        justifyContent: "center" }}>
+        {kicker ? <div style={{ marginBottom: 20 * k }}><KChip text={kicker} at={2} accent={accent} size={28} q={q} /></div> : null}
+        {tf ? (
+          <div style={{ position: "relative", marginBottom: 26 * k }}>
+            {tf.lines.map((ln, i) => (
+              <KRise key={i} at={5 + i * 3} q={q}>
+                <div style={{ ...kLabelCaps(tf.size, "#fff", 0.01), textShadow: KTEXT_SHADOW }}>{ln}</div>
+              </KRise>
+            ))}
+          </div>
+        ) : null}
+        {rows.map((r, i) => {
+          const at = rowAt(i);
+          const line = kTween(frame, at - 2, 16, KEASE.inOut);
+          const qi = kTween(frame, D - 14 + (n - 1 - i) * 0.8, 10, KEASE.in);
+          const numIn = kTween(frame, at, 14, KEASE.back);
+          return (
+            <div key={i} style={{ position: "relative", padding: `${(n > 3 ? 16 : 22) * k}px 0` }}>
+              <div style={{ position: "absolute", left: 0, top: 0, height: 2 * k, width: `${(line * (1 - qi) * 100).toFixed(2)}%`,
+                background: `linear-gradient(90deg, ${kAlpha(hot, 0.9)} 0%, rgba(255,255,255,.18) 40%, rgba(255,255,255,.06) 100%)` }} />
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 28 * k }}>
+                <div style={{ width: NUMW, flexShrink: 0, transform: `translateY(${((1 - numIn) * 30 * k + qi * 30 * k).toFixed(2)}px)`,
+                  opacity: Math.min(1, numIn * 3) * (1 - qi) }}>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 84 * k, lineHeight: 0.86, color: hot, letterSpacing: "0.01em",
+                    textShadow: `0 0 ${24 * k}px ${kAlpha(hot, 0.35)}` }}>{String(i + 1).padStart(2, "0")}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0, paddingTop: 4 * k }}>
+                  {r.lines.map((ln, j) => (
+                    <KRise key={j} at={at + 3 + j * 3} q={qi}>
+                      <div style={{ ...kSentence(size), whiteSpace: "nowrap", textShadow: KTEXT_SHADOW }}>{ln}</div>
+                    </KRise>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {n ? <KSweepBand at={rowAt(n - 1) + 14} /> : null}
+    </AbsoluteFill>
+  );
+};
+
+/** A faint diagonal light band across the whole card, once. */
+const KSweepBand: React.FC<{ at: number }> = ({ at }) => {
+  const frame = useCurrentFrame();
+  const p = kTween(frame, at, 26, KEASE.inOut);
+  if (p <= 0 || p >= 1) return null;
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: "-30%", bottom: "-30%", width: "22%", left: `${-30 + p * 140}%`, transform: "rotate(14deg)",
+        background: "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.07), rgba(255,255,255,0))" }} />
+    </AbsoluteFill>
+  );
+};
+const kitExit = (frame: number, D: number) => kTween(frame, Math.max(0, D - 13), 12, KEASE.in);
+
 // ================================================================== file cards
 /**
  * variant "dossier": a file window on the red desk, fields (items: label ->
@@ -594,43 +707,7 @@ export const ProFile: React.FC<{ overlay: Overlay; accent: string }> = ({ overla
   const pic = stillOf((overlay.media || [])[0]);
   const items = (overlay.items || []).filter((i) => (i.label || i.text || "").trim());
 
-  if (overlay.variant === "facts") {
-    const push = interpolate(frame, [0, durationInFrames], [1.04, 1.1], clamp);
-    return (
-      <AbsoluteFill style={{ background: "radial-gradient(ellipse at 70% 45%, #123a40 0%, #081a1d 55%, #020607 100%)", overflow: "hidden" }}>
-        {pic ? (
-          <div style={{ position: "absolute", right: 0, top: 0, width: width * 0.56, height,
-            maskImage: "linear-gradient(to left, #000 55%, transparent 100%)", WebkitMaskImage: "linear-gradient(to left, #000 55%, transparent 100%)",
-            opacity: ramp(frame, 0, 18) }}>
-            <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
-              filter: "saturate(.8) contrast(1.05) brightness(.9)" }} />
-            <AbsoluteFill style={{ background: "linear-gradient(0deg, rgba(2,6,7,.75) 0%, transparent 40%)" }} />
-          </div>
-        ) : null}
-        <AbsoluteFill style={{ boxShadow: `inset 0 0 ${300 * k}px rgba(0,0,0,.7)` }} />
-        <div style={{ position: "absolute", left: 130 * k, top: 0, bottom: 0, width: 820 * k, display: "flex", flexDirection: "column",
-          justifyContent: "center", gap: 14 * k }}>
-          <LetterLine text={(overlay.text || "What we know").replace(/:?$/, ":")} at={4} style={{ fontFamily: LABEL, fontWeight: 800,
-            fontSize: 58 * k, color: "#fff", letterSpacing: "0.02em" }} />
-          {items.map((it, i) => (
-            <MaskLine key={i} at={14 + i * 9}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 16 * k, fontFamily: LABEL, fontWeight: 600, fontSize: 38 * k,
-                color: "rgba(235,245,245,.9)", lineHeight: 1.2 }}>
-                <span style={{ color: accent, fontWeight: 800 }}>–</span>
-                <span>{it.label || it.text}{it.label && it.text ? <span style={{ opacity: 0.7 }}> · {it.text}</span> : null}</span>
-              </div>
-            </MaskLine>
-          ))}
-          {overlay.subtitle ? (
-            <div style={{ marginTop: 24 * k }}>
-              <LetterLine text={overlay.subtitle} at={20 + items.length * 9} style={{ fontFamily: LABEL, fontWeight: 800, fontSize: 44 * k,
-                color: accent }} />
-            </div>
-          ) : null}
-        </div>
-      </AbsoluteFill>
-    );
-  }
+  if (overlay.variant === "facts") return <FactsCard overlay={overlay} accent={accent} pic={pic} />;
 
   // dossier
   const scan = ramp(frame, 10, Math.round(fps * 1.1), inOut);

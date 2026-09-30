@@ -1,9 +1,37 @@
 {
+  "alert-tone": {
+    "category": "ui",
+    "duration": 1.0,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.01
+  },
   "boom-soft": {
     "category": "impact",
     "duration": 1.71,
     "loop": false,
     "peak": 0.309
+  },
+  "boom-sub": {
+    "category": "impact",
+    "duration": 1.76,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.005
+  },
+  "camera-flash-pop": {
+    "category": "camera",
+    "duration": 0.2,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.01
+  },
+  "camera-shutter": {
+    "category": "camera",
+    "duration": 0.45,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.04
   },
   "click": {
     "category": "ui",
@@ -11,11 +39,32 @@
     "loop": false,
     "peak": 0.005
   },
+  "count-final": {
+    "category": "ui",
+    "duration": 0.221,
+    "loop": false,
+    "lufs": -21.6,
+    "peak": 0.02
+  },
+  "count-roll": {
+    "category": "tick",
+    "duration": 2.25,
+    "loop": true,
+    "lufs": -20.4,
+    "peak": 0.0
+  },
   "count-tick": {
     "category": "tick",
     "duration": 1.32,
     "loop": false,
     "peak": 0.963
+  },
+  "date-slam": {
+    "category": "impact",
+    "duration": 0.674,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.025
   },
   "ding": {
     "category": "ui",
@@ -29,6 +78,20 @@
     "loop": false,
     "peak": 0.075
   },
+  "folder-open": {
+    "category": "paper",
+    "duration": 0.668,
+    "loop": false,
+    "lufs": -27.0,
+    "peak": 0.569
+  },
+  "frame-drop": {
+    "category": "impact",
+    "duration": 0.39,
+    "loop": false,
+    "lufs": -21.4,
+    "peak": 0.03
+  },
   "glitch": {
     "category": "glitch",
     "duration": 1.023,
@@ -41,6 +104,13 @@
     "loop": false,
     "peak": 0.763
   },
+  "glitch-digital": {
+    "category": "glitch",
+    "duration": 0.68,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.14
+  },
   "glitch-pro": {
     "category": "glitch",
     "duration": 0.48,
@@ -52,6 +122,13 @@
     "duration": 0.5,
     "loop": false,
     "peak": 0.175
+  },
+  "glitch-short-v2": {
+    "category": "glitch",
+    "duration": 0.35,
+    "loop": false,
+    "lufs": -20.1,
+    "peak": 0.02
   },
   "glitch-transition": {
     "category": "glitch",
@@ -70,6 +147,13 @@
     "duration": 2.463,
     "loop": false,
     "peak": 0.634
+  },
+  "impact-punch": {
+    "category": "impact",
+    "duration": 0.42,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.005
   },
   "keys": {
     "category": "typing",
@@ -95,6 +179,34 @@
     "loop": true,
     "peak": 1.941
   },
+  "letter-tick": {
+    "category": "tick",
+    "duration": 0.058,
+    "loop": false,
+    "lufs": -29.4,
+    "peak": 0.01
+  },
+  "light-shimmer": {
+    "category": "shimmer",
+    "duration": 1.127,
+    "loop": false,
+    "lufs": -20.7,
+    "peak": 0.449
+  },
+  "magnifier-glide": {
+    "category": "shimmer",
+    "duration": 0.719,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.404
+  },
+  "map-swoop": {
+    "category": "whoosh",
+    "duration": 1.476,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.269
+  },
   "map-whoosh": {
     "category": "whoosh",
     "duration": 3.084,
@@ -107,11 +219,32 @@
     "loop": false,
     "peak": 0.16
   },
+  "marker-draw": {
+    "category": "marker",
+    "duration": 0.88,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.683
+  },
+  "marker-underline": {
+    "category": "marker",
+    "duration": 0.423,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.13
+  },
   "page": {
     "category": "paper",
     "duration": 2.5,
     "loop": false,
     "peak": 0.429
+  },
+  "page-flip": {
+    "category": "paper",
+    "duration": 0.59,
+    "loop": false,
+    "lufs": -21.4,
+    "peak": 0.304
   },
   "paper": {
     "category": "paper",
@@ -119,17 +252,80 @@
     "loop": false,
     "peak": 0.344
   },
+  "paper-pin": {
+    "category": "paper",
+    "duration": 0.206,
+    "loop": false,
+    "lufs": -27.0,
+    "peak": 0.03
+  },
   "paper-slide": {
     "category": "paper",
     "duration": 0.58,
     "loop": false,
     "peak": 0.389
   },
+  "paper-slide-v2": {
+    "category": "paper",
+    "duration": 0.68,
+    "loop": false,
+    "lufs": -20.4,
+    "peak": 0.15
+  },
+  "paper-tear": {
+    "category": "paper",
+    "duration": 0.696,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.494
+  },
+  "pen-scribble": {
+    "category": "marker",
+    "duration": 1.0,
+    "loop": false,
+    "lufs": -20.6,
+    "peak": 0.883
+  },
+  "phone-buzz": {
+    "category": "ui",
+    "duration": 0.6,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.005
+  },
+  "pin-drop": {
+    "category": "ui",
+    "duration": 0.45,
+    "loop": false,
+    "lufs": -23.7,
+    "peak": 0.035
+  },
   "pop": {
     "category": "ui",
     "duration": 0.479,
     "loop": false,
     "peak": 0.035
+  },
+  "radar-ping": {
+    "category": "ui",
+    "duration": 1.28,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.005
+  },
+  "record-beep": {
+    "category": "camera",
+    "duration": 0.159,
+    "loop": false,
+    "lufs": -24.0,
+    "peak": 0.04
+  },
+  "reverse-swell": {
+    "category": "riser",
+    "duration": 0.8,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.718
   },
   "riser": {
     "category": "riser",
@@ -143,17 +339,52 @@
     "loop": false,
     "peak": 1.497
   },
+  "riser-short-v2": {
+    "category": "riser",
+    "duration": 1.406,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.993
+  },
   "shutter": {
     "category": "camera",
     "duration": 0.26,
     "loop": false,
     "peak": 0.01
   },
+  "shutter-slide": {
+    "category": "paper",
+    "duration": 0.88,
+    "loop": false,
+    "lufs": -20.4,
+    "peak": 0.055
+  },
+  "stamp": {
+    "category": "impact",
+    "duration": 0.222,
+    "loop": false,
+    "lufs": -23.5,
+    "peak": 0.02
+  },
   "swipe": {
     "category": "whoosh",
     "duration": 0.44,
     "loop": false,
     "peak": 0.195
+  },
+  "swoosh-text": {
+    "category": "whoosh",
+    "duration": 0.68,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.06
+  },
+  "tape-rip": {
+    "category": "paper",
+    "duration": 0.5,
+    "loop": false,
+    "lufs": -20.4,
+    "peak": 0.07
   },
   "tick": {
     "category": "tick",
@@ -167,11 +398,46 @@
     "loop": true,
     "peak": 0.539
   },
+  "typewriter-clean": {
+    "category": "typing",
+    "duration": 2.25,
+    "loop": true,
+    "lufs": -20.4,
+    "peak": 0.0
+  },
   "typing text": {
     "category": "typing",
     "duration": 6.374,
     "loop": true,
     "peak": 0.539
+  },
+  "ui-click": {
+    "category": "ui",
+    "duration": 0.2,
+    "loop": false,
+    "lufs": -28.9,
+    "peak": 0.02
+  },
+  "ui-pop": {
+    "category": "ui",
+    "duration": 0.13,
+    "loop": false,
+    "lufs": -21.7,
+    "peak": 0.005
+  },
+  "ui-swipe": {
+    "category": "whoosh",
+    "duration": 0.445,
+    "loop": false,
+    "lufs": -20.6,
+    "peak": 0.18
+  },
+  "ui-tick": {
+    "category": "tick",
+    "duration": 0.048,
+    "loop": false,
+    "lufs": -24.6,
+    "peak": 0.005
   },
   "whoosh": {
     "category": "whoosh",
@@ -179,16 +445,44 @@
     "loop": false,
     "peak": 0.713
   },
+  "whoosh-cinematic": {
+    "category": "whoosh",
+    "duration": 0.84,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.16
+  },
   "whoosh-cinematic-for-maps": {
     "category": "whoosh",
     "duration": 3.082,
     "loop": false,
     "peak": 0.703
   },
+  "whoosh-fast": {
+    "category": "whoosh",
+    "duration": 0.223,
+    "loop": false,
+    "lufs": -20.3,
+    "peak": 0.055
+  },
   "whoosh-soft": {
     "category": "whoosh",
     "duration": 1.12,
     "loop": false,
     "peak": 0.419
+  },
+  "whoosh-soft-v2": {
+    "category": "whoosh",
+    "duration": 0.798,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.125
+  },
+  "zoom-in-whoosh": {
+    "category": "whoosh",
+    "duration": 0.543,
+    "loop": false,
+    "lufs": -20.2,
+    "peak": 0.381
   }
 }

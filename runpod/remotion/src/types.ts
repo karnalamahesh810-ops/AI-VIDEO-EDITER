@@ -239,6 +239,20 @@ export interface Overlay {
   compact?: boolean;
   /** "blur": a full-screen graphic over the clip, drawn on a blurred still of that clip for its moment. */
   backdrop?: "blur";
+  /** Where a text-only look sits (LibBoldText): low "left", "right" or "center"; "auto" = left. */
+  align?: string;
+  /**
+   * The look's own sound (built in, components/lib/LookSounds.tsx): "none"
+   * silences it; another file name plays that one sound on its hit instead.
+   * The planner leaves it out; older documents may carry {name, volume}.
+   */
+  sfx?: string | { name: string; volume?: number };
+  /** Older editors' absolute level for the look's timeline sound (unused by built-in sounds). */
+  sfxVolume?: number;
+  /** A trim on the look's built-in sound: 1 = as designed against the voice, 0 = silent (never above the cap). */
+  soundGain?: number;
+  /** high | medium | low: of two looks landing together, the stronger one keeps its sound. */
+  emphasis?: string;
   startFrame: number;
   durationInFrames: number;
 }
@@ -277,9 +291,10 @@ export interface TimelineProps {
   /** Editor track toggle for text animations / graphics. Absent = on. */
   overlaysEnabled?: boolean;
   /**
-   * Sound effects, each tied to an animation moment (VidRush: ~1 per 2-3 min,
-   * 20-35% volume). `name` is a file in public/sfx/. sfxVolume scales them all
-   * (the editor's slider); sfxEnabled false mutes the track. Absent = on, 1.
+   * Sounds on the timeline: the transitions' sounds and the editor's own
+   * (and, in documents from before lookSounds, one per animation). `name` is a
+   * file in public/sfx/. sfxVolume scales every sound, the looks' own
+   * included (the editor's slider); sfxEnabled false mutes them all. Absent = on, 1.
    */
   sfx?: {
     name: string;
@@ -290,11 +305,20 @@ export interface TimelineProps {
     /** Frames skipped at the head of the file, so its peak lands on the look's
      *  hit without the sound starting before the look is on screen. */
     trimFrames?: number;
-    /** What planned it: an overlay's animation or a scene transition. */
+    /** What planned it: an overlay's animation (older documents), a scene transition; absent = the editor's. */
     kind?: "overlay" | "transition";
   }[];
   sfxVolume?: number;
   sfxEnabled?: boolean;
+  /**
+   * Present on documents planned since 2026-09-30: every overlay and every
+   * full-screen animation scene plays the sound built into its look
+   * (registry defaults.sounds, components/lib/LookSounds.tsx), set against
+   * meta.voiceLufs at the style pack's `intensity`; sfx rows of kind
+   * "overlay" are then ignored (they would double it). Absent (older
+   * documents): the sfx rows carry every sound, exactly as before.
+   */
+  lookSounds?: { intensity?: number } | null;
   meta?: Record<string, unknown>;
   /**
    * Remotion requires composition props to be assignable to

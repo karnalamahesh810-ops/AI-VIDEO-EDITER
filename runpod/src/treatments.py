@@ -1337,18 +1337,35 @@ _LOOK_NEEDS = {
     "LIB_CO_MEASURE_LINE": r"\b(feet|foot|ft|inches|meters?|metres?|miles?|km|long|wide|tall|deep)\b",
 }
 _LOOK_NEEDS_RX = {k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
-# A date gets a date in BOLD TYPE (the owner, 2026-09-30: "when a day/date is
-# mentioned you show a simple calendar - I need BOLD TEXT date"): a date or a
-# date-and-time takes its turn over the bold typography looks only - the date
-# slam, the bold headline, the big stack, the clean card, the spaced title -
-# whichever of them the registry has. Never a calendar page, a stamp bar, a
-# REC stamp, a timeline tick or the countdown, and never an effect, a
-# year-only look or a photo plate. A time of day on its own keeps the clock
-# looks; the countdown is only for a span of time ("3 days later", "48 hours").
-BOLD_DATE_LOOKS = ["TL_DATE_TITLE_V1", "LIB_DT_DATE_SLAM", "LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK",
-                   "LIB_DT_CLEAN_CARD"]
-# The one bold look that cannot print a time: a date-and-time line tries it last, with the date alone.
-DATE_ONLY_LOOKS = {"TL_DATE_TITLE_V1"}
+# A date is BOLD TEXT and nothing else (the owner, 2026-09-30: "when a
+# day/date is mentioned ... I need BOLD TEXT date", then: "NO background layout,
+# ONLY TEXT: the date in white BOLD, on the sides, with a black stroke"): every
+# date, date-and-time and time of day is the letter-drop look (LibBoldText),
+# its letters dropping in one by one with a tick each and a deep hit on the
+# last, placed low on the left, the right or the centre in turn (_align_for).
+# The older bold cards on a band or a block (the date slam, the bold headline,
+# the big stack, the clean card, the spaced title) stand in only when the
+# registry has no letter drop. Never a calendar page, a stamp bar, a REC
+# stamp, a timeline tick, an effect, a year-only look or a photo plate; the
+# countdown is only for a span of time ("3 days later", "48 hours").
+TEXT_DATE_LOOK = "LIB_DT_LETTER_DROP"
+BOLD_DATE_LOOKS = [TEXT_DATE_LOOK]
+# Only if the registry lacks the letter drop: the two bold type looks left
+# (the date slam, the clean card and the spaced title are banned, 2026-09-30 audit).
+LEGACY_DATE_LOOKS = ["LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK"]
+# A figure is bold text too (the owner: "also for other numbers, count text like
+# that, with a digit count sound"): the bold count leads for a number, a count,
+# a percentage, money and an age; the other number looks come in for variety,
+# once after every BOLD_COUNT_RUN bold counts in a row.
+BOLD_COUNT_LOOK = "LIB_BT_COUNT"
+BOLD_COUNT_CUES = {"big-number", "count", "percent", "money", "age"}
+BOLD_COUNT_RUN = 2
+# Where the text-only looks sit, in turn (the owner: "on the sides"); the
+# centre never on a person's shot (a face is most likely there).
+TEXT_LOOK_ALIGNS = {TEXT_DATE_LOOK: ["left", "right", "center"], BOLD_COUNT_LOOK: ["right", "left", "center"]}
+# A bold look that cannot print a time would take a date-and-time line's date alone (none is left in use).
+DATE_ONLY_LOOKS: set = set()
+# A span of time ("3 DAYS LATER") counted up: the countdown card is banned (boxed), so the bold count does it.
 COUNTDOWN_LOOK = "LIB_DT_COUNTDOWN_DAYS"
 DATE_LOOKS = BOLD_DATE_LOOKS
 NOT_FOR_A_DATE = {"LIB_TL_CALENDAR_FLIP", "LIB_TL_DATE_STAMP_CIRCLE", "LIB_LT_DATE_PLACE", "LIB_FX_LIGHT_STREAK",
@@ -1380,31 +1397,45 @@ def _weather_figure(req: dict, text: str) -> bool:
     return unit in _WX_UNITS
 
 
-def bold_date_looks(cue: str = "date") -> List[dict]:
-    """The bold typography looks in the registry that carry a date (or a date and a time)."""
+def _looks_for(ids: List[str], cue: str) -> List[dict]:
     out = []
-    for tid in BOLD_DATE_LOOKS:
+    for tid in ids:
         t = templates.get(tid)
         if t and not templates.banned(tid) and cue in templates.cues_of(t):
             out.append(t)
     return out
 
 
+def bold_date_looks(cue: str = "date") -> List[dict]:
+    """The text-only date look for a cue (the letter drop); the old bold cards when the registry lacks it."""
+    return _looks_for(BOLD_DATE_LOOKS, cue) or ([] if cue == "time-of-day" else _looks_for(LEGACY_DATE_LOOKS, cue))
+
+
 def date_looks(cue: str = "date", style: str = "") -> List[dict]:
     """
-    The looks that draw a date, a time or both: bold typography for a date or
-    a date and a time (BOLD_DATE_LOOKS), the clock looks for a time of day.
+    The looks that draw a date, a time or both: bold text for a date, a date
+    and a time or a time of day (BOLD_DATE_LOOKS); the clock looks for a time
+    of day only when the registry has no letter drop.
     """
-    if cue in ("date", "datetime"):
-        bold = bold_date_looks(cue)
-        if bold:
-            return bold
+    bold = bold_date_looks(cue)
+    if bold:
+        return bold
     options = [t for t in templates.for_cue(cue, style) if t["id"] not in NOT_FOR_A_DATE
                and "stills" not in (t.get("tags") or []) and t.get("category") != "IMAGES"]
     if cue == "time-of-day":
         # A clock, never a bold date card that happens to take a time.
-        options = [t for t in options if t["id"] not in BOLD_DATE_LOOKS] or options
+        options = [t for t in options if t["id"] not in LEGACY_DATE_LOOKS] or options
     return options
+
+
+def lead_look(tid: str) -> Optional[str]:
+    """`tid` when the registry has it and it is not banned, else None."""
+    return tid if templates.get(tid) and not templates.banned(tid) else None
+
+
+def span_look() -> str:
+    """The look for a span of time: the countdown while it may be used, else the bold count."""
+    return lead_look(COUNTDOWN_LOOK) or BOLD_COUNT_LOOK
 
 
 def _template_for_cue(cue: str, pack: dict, used_recently: set,
@@ -1445,8 +1476,9 @@ def _hint_date_cue(hint: Optional[dict]) -> str:
     """
     if not isinstance(hint, dict) or hint.get("type") != "motion" or not hint.get("variant"):
         return ""
-    t = next((x for x in templates.for_component("motion")
-              if (x.get("defaults") or {}).get("variant") == hint["variant"]), None)
+    # (Any look of the library, a banned one included: only its cues are read.)
+    t = next((x for x in templates.all_templates() if x.get("component") == "motion"
+              and (x.get("defaults") or {}).get("variant") == hint["variant"]), None)
     if not t or t.get("category") != "TIMELINES":
         return ""
     cues = set(templates.cues_of(t))
@@ -1698,6 +1730,9 @@ class _Planner:
         self.last_locations: List[dict] = []
         self.last_forecast = -1e9
         self.first_date_done = False
+        # The text-only looks' placements in turn, and the figure looks shown (the bold count's run).
+        self.align_turn: Dict[str, int] = {}
+        self.figure_looks: List[str] = []
         # The case-file devices, each rationed: one intro collage, a player
         # window at most every WINDOW_GAP seconds, an archive tag per archival run.
         self.intro_done = False
@@ -1756,7 +1791,10 @@ class _Planner:
                 if i < len(self.scenes) else None
             entry["musicCue"] = cue
         return {"overlays": self.overlays, "treatments": self.treatments, "sfx": sfx, "music": music,
-                "counts": counts(self.scenes, self.overlays, sfx, music, self.treatments)}
+                "counts": counts(self.scenes, self.overlays, sfx, music, self.treatments),
+                # Every look plays the sound built into it (LookSounds.tsx), at the
+                # pack's intensity against the voice; `sfx` holds no row for them.
+                "lookSounds": {"intensity": round(max(0.0, float(self.pack.get("sfxIntensity", 1.0))), 3)}}
 
     def _sfx(self) -> List[dict]:
         """The sound pass (src/sfxplan.py) when it is there, else one sound per graphic moment."""
@@ -2105,9 +2143,15 @@ class _Planner:
         req = {"cues": cues, "props": props, "props_by_cue": by_cue, "props_by_id": by_id, "demote": demote,
                "mode": "must", "group": "date",
                "emphasis": c.get("emphasis") or "high", "offset": _offset(text, props.get("_key", ""))}
-        if not self.first_date_done and c["cue"] in ("date", "datetime"):
+        lead = lead_look(TEXT_DATE_LOOK)
+        if lead:
+            # Every date is the letter drop, whenever it was last shown: its
+            # placement turns instead (no group keeps it from following itself).
+            req.update(lead=lead, group="")
+        elif not self.first_date_done and c["cue"] in ("date", "datetime"):
             # The story's first date is a statement: a bold full card, not a thin strip.
             req["prefer"] = _date_cards()
+        if c["cue"] in ("date", "datetime"):
             self.first_date_done = True
         return req
 
@@ -2116,6 +2160,11 @@ class _Planner:
         req = {"cues": [c["cue"]] + CUE_FALLBACK.get(c["cue"], []), "props": props, "mode": "normal",
                "group": "text" if c["cue"] in TEXT_BEAT_CUES else c["cue"], "emphasis": c.get("emphasis") or "medium",
                "offset": _offset(seg.text or "", props.get("_key") or _num(str(props.get("value") or "")))}
+        lead = lead_look(BOLD_COUNT_LOOK) if c["cue"] in BOLD_COUNT_CUES else None
+        recent = self.figure_looks[-BOLD_COUNT_RUN:]
+        if lead and not (len(recent) == BOLD_COUNT_RUN and all(x == lead for x in recent)):
+            # The bold count leads; after BOLD_COUNT_RUN of them in a row, one other look for variety.
+            req["lead"] = lead
         if c["cue"] == "route":
             req.update(ids=[self.pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"], cues=[], cue="route",
                        group="map", mode="seq")
@@ -2123,7 +2172,7 @@ class _Planner:
             # "3 DAYS LATER", "48 HOURS": the countdown look, and only for a real
             # span of time. It is the one look for a span, so no group keeps it
             # from following itself.
-            req.update(ids=[COUNTDOWN_LOOK], cues=[], cue="time-span", group="")
+            req.update(ids=[span_look()], cues=[], cue="time-span", group="")
         return req
 
     def _fact_request(self, seg, repeated: dict) -> Optional[dict]:
@@ -2344,6 +2393,15 @@ class _Planner:
                         merged.append(t)
             stages = [(merged, None, owner)]
         last = self.looks.last_in.get(group) if req.get("never_again") else None
+        lead = req.get("lead")
+        if not lead and "age" in ([req.get("cue")] + list(req.get("cues") or [])):
+            lead = lead_look(BOLD_COUNT_LOOK)       # an age is a bold count too ("87 YEARS OLD")
+        if lead and lead != last:
+            # The look this cue always tries first, however recently it was shown.
+            t = templates.get(lead)
+            if t and look_fits(lead, text) and not _needs_places(t, by_id.get(lead, req["props"])):
+                cue0 = req.get("cue") or ((req.get("cues") or [""])[0])
+                yield t, cue0, dict(by_id.get(lead, by_cue.get(cue0, req["props"])))
         asked_demote = set(req.get("demote") or ())
         demote = set(asked_demote)
         stale_all = []
@@ -2469,6 +2527,8 @@ class _Planner:
         overlay = {**resolved, "startFrame": o_start, "durationInFrames": frames}
         overlay.pop("seconds", None)
         apply_layout(overlay, t, klass)
+        if t["id"] in TEXT_LOOK_ALIGNS and overlay.get("align") in (None, "auto"):
+            overlay["align"] = self._align_for(t["id"], scene)
         if t.get("category") in _TEXT_CATEGORIES and "fontScale" not in overlay:
             overlay["fontScale"] = 1.0 if t.get("kind") == "tag" else TEXT_FONT_SCALE
         media = req.get("media") or (req.get("media_for") or {}).get(t["id"])
@@ -2499,6 +2559,8 @@ class _Planner:
             self.last_person_full = o_start / fps
         if cue in ("key-phrase", "caption") and props.get("text"):
             self.phrases[str(props["text"]).upper()] = at
+        if req.get("figure_key") is not None or (cue or "") in BOLD_COUNT_CUES:
+            self.figure_looks.append(t["id"])      # every figure shown: the bold count's run is counted over them
         if req.get("figure_key"):
             self.seen_figures[req["figure_key"]] = at
             if self.density == "minimal":
@@ -2507,6 +2569,20 @@ class _Planner:
                 self.last_min_figure = at
         return {"idx": idx, "t": t, "cue": cue or "", "sfx": sfx, "klass": klass,
                 "emphasis": req.get("emphasis") or t["emphasis"]}
+
+    def _align_for(self, tid: str, scene: dict) -> str:
+        """The next placement of a text-only look (TEXT_LOOK_ALIGNS), never the centre on a person's shot."""
+        turn = TEXT_LOOK_ALIGNS[tid]
+        shot = self.shots[self.i] if 0 <= self.i < len(self.shots) else {}
+        person = (shot or {}).get("subjectType") == "person" or bool((shot or {}).get("mention")) \
+            or "person" in str(((scene or {}).get("semanticMetadata") or {}).get("intent") or "").lower()
+        n = self.align_turn.get(tid, 0)
+        for k in range(len(turn)):
+            pick = turn[(n + k) % len(turn)]
+            if not (person and pick == "center"):
+                self.align_turn[tid] = n + k + 1
+                return pick
+        return turn[0]
 
     def _still_about(self, seg, props: dict) -> Optional[float]:
         """

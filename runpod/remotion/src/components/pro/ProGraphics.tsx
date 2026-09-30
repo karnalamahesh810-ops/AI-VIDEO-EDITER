@@ -2,6 +2,11 @@ import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { DISPLAY, INTER, LABEL } from "../fonts";
 import type { Overlay, OverlayItem } from "../../types";
+// Kit imports useK from this file; its exports are only used inside components here (render time), never at load.
+import {
+  Count as KCount, EASE as KEASE, F as KF, boldCaps as kBoldCaps, bright, caps as kcaps, figureEm, fit as kfit, numOf,
+  outline as koutline, tween as kTween,
+} from "./Kit";
 
 /**
  * The "pro" graphics: the number, chart and title moments rebuilt from the
@@ -201,6 +206,62 @@ export const Scrim: React.FC<{ ov: Overlay; at?: number; focus?: string }> = ({ 
   );
 };
 
+/**
+ * NUM_PILL_V1, rebuilt 2026-09-30 in the owner's text language ("count text
+ * like that": no pill, no box): the figure counts up big on the lower left in
+ * outlined Inter 800 tabular digits, its unit in the accent, a small punch as
+ * it lands (frame 40); then what it counts rises under it in outlined bold
+ * caps. Fitted to the side of the frame; everything drops away in the last
+ * 12 frames.
+ */
+const SideFigure: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, accent }) => {
+  const frame = useCurrentFrame();
+  const { width, height, durationInFrames: D } = useVideoConfig();
+  const k = useK();
+  const n = numOf(overlay);
+  if (!n) return null;
+  const q = kTween(frame, D - 13, 12, KEASE.in);
+  const hot = bright(accent);
+  const COUNT_AT = 4, LAND = 40;
+  const p = kTween(frame, COUNT_AT, LAND - COUNT_AT, KEASE.count);
+  const punch = frame >= LAND ? 1 + 0.07 * Math.exp(-(frame - LAND) / 3.5) * Math.cos((frame - LAND) / 2.2) : 1;
+  const room = Math.min(1150 * k, width * 0.62);
+  const size = Math.max(90 * k, Math.min(190 * k, room / Math.max(0.1, figureEm(n, 0.5))));
+  const label = kfit(kcaps(overlay.text), KF.label, 76 * k, 44 * k, room, 2, 0.03);
+  const enter = kTween(frame, 0, 14);
+  // "MILLION", "ACRE FEET": a word in bold caps; "%", "M", "FT": glued to the digits in the accent.
+  const unitWord = Boolean(n.unit) && n.unit !== "%" && n.unit.length > 2;
+  const numStyle: React.CSSProperties = { fontFamily: INTER, fontWeight: 800, fontSize: size, lineHeight: 0.95, letterSpacing: "-0.02em",
+    ...koutline(size * 0.6, "#fff", k) };
+  const blockH = size * 0.95 + label.lines.length * label.size * 1.04 + 10 * k;
+  return (
+    <AbsoluteFill>
+      <div style={{ position: "absolute", left: 96 * k, top: height * 0.73 - blockH,
+        opacity: Math.min(1, enter * 2) * (1 - q), transform: `translateY(${((1 - enter) * 24 * k + q * 34 * k).toFixed(2)}px)` }}>
+        <div style={{ display: "flex", alignItems: "baseline", whiteSpace: "nowrap", transform: `scale(${punch.toFixed(4)})`,
+          transformOrigin: "0% 80%" }}>
+          {n.prefix ? <span style={{ ...numStyle, fontSize: size * 0.62, color: hot, marginRight: size * 0.03 }}>{n.prefix}</span> : null}
+          <KCount n={n} p={p} style={numStyle} />
+          {n.unit ? (
+            <span style={{ ...(unitWord ? kBoldCaps(size * 0.46, hot, k, 0.02) : { ...numStyle, ...koutline(size * 0.45, hot, k),
+              fontSize: size * (n.unit === "%" ? 0.62 : 0.72) }),
+              marginLeft: unitWord ? size * 0.1 : size * 0.03, opacity: kTween(frame, unitWord ? LAND - 12 : 6, 10) }}>{n.unit}</span>
+          ) : null}
+        </div>
+        <div style={{ marginTop: 6 * k }}>
+          {label.lines.map((ln, i) => {
+            const lp = kTween(frame, LAND - 6 + i * 4, 14);
+            return (
+              <div key={i} style={{ ...kBoldCaps(label.size, "#fff", k, 0.03), transform: `translateY(${((1 - lp) * 30 * k).toFixed(2)}px)`,
+                opacity: Math.min(1, lp * 2) }}>{ln}</div>
+            );
+          })}
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 export const useHold = () => {
   // A slow push while the graphic holds: never quite still.
   const frame = useCurrentFrame();
@@ -358,26 +419,7 @@ export const ProStat: React.FC<{ overlay: Overlay; accent: string; variant?: str
     );
   }
 
-  if (v === "pill") {
-    // VidRush's "~8 | states it sits beneath": a glass pill low-left, on the footage.
-    return (
-      <AbsoluteFill>
-        <div style={{ position: "absolute", left: 110 * k, bottom: 150 * k, display: "flex", alignItems: "center",
-          gap: 26 * k, padding: `${18 * k}px ${40 * k}px ${18 * k}px ${30 * k}px`, borderRadius: 22 * k,
-          background: "linear-gradient(135deg, rgba(14,14,18,.82), rgba(14,14,18,.62))", backdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,.14)", boxShadow: "0 18px 50px rgba(0,0,0,.45)",
-          opacity: ramp(frame, 0, 10), transform: `translateY(${(1 - ramp(frame, 0, 16)) * 30 * k}px)` }}>
-          <Odometer value={value} at={numAt} frames={numFrames} size={100 * k} color="#fff" suffix={suffix}
-            suffixColor={accent} prefix={overlay.prefix || ""} />
-          <div style={{ width: 4 * k, height: 90 * k, background: accent }} />
-          <MaskLine at={numAt + 8}>
-            <span style={{ fontFamily: LABEL, fontWeight: 700, fontSize: 44 * k, color: "#fff", letterSpacing: "0.04em",
-              lineHeight: 1.05, display: "inline-block", maxWidth: 520 * k }}>{(overlay.text || "").toLowerCase()}</span>
-          </MaskLine>
-        </div>
-      </AbsoluteFill>
-    );
-  }
+  if (v === "pill") return <SideFigure overlay={overlay} accent={accent} />;
 
   if (v === "split") {
     // The number on the left, a line of context on the right, an accent rule between.

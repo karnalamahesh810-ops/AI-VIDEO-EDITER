@@ -277,6 +277,17 @@ class SplitRules(Base):
 
 
 class TrailingNames(Base):
+    def setUp(self):
+        super().setUp()
+        # These fixtures are the OLD clause rhythm's beats (a beat ending
+        # "...Governor Katie Hobbs ordered a stop"), which is what the move
+        # pass repairs. The human cutter (2026-09-30, the default) already
+        # cuts in front of "and then Governor Katie Hobbs" - see
+        # tests/test_human_cuts.py - so the rhythm is pinned here.
+        p = mock.patch.object(config, "HUMAN_CUTS", False)
+        p.start()
+        self.addCleanup(p.stop)
+
     NARRATION = ("The wells outside Willcox started to fail in the spring of this year. "
                  "Farmers watched the water table drop by several feet in a matter of weeks, and then "
                  "Governor Katie Hobbs ordered a stop to every new well in the basin. "
@@ -490,6 +501,13 @@ class EndToEnd(Base):
         super().setUp()
         saved = dict(director.LAST_STORY)
         self.addCleanup(lambda: (director.LAST_STORY.clear(), director.LAST_STORY.update(saved)))
+        # The old clause rhythm put the name 3.2 s into a beat for prepare() to
+        # split; the human cutter (the default since 2026-09-30) starts the
+        # beat on "Governor" itself (tests/test_human_cuts.py), so this test
+        # of the split pins the rhythm.
+        p = mock.patch.object(config, "HUMAN_CUTS", False)
+        p.start()
+        self.addCleanup(p.stop)
 
     def test_the_cut_lands_on_the_name_and_the_shot_is_the_person(self):
         narration = ("Crews at Lake Mead measured the water again on Monday. The reading was the lowest since the "

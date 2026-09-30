@@ -5,7 +5,7 @@ import {feature} from 'topojson-client';
 import topology from 'world-atlas/countries-110m.json';
 import statesTopology from '../data/us-states.json';
 import type {MapLocation, Overlay} from '../types';
-import {INTER, NARROW} from './fonts';
+import {INTER, LABEL, NARROW} from './fonts';
 
 /**
  * Realistic maps. The satellite looks zoom from space onto a verified place
@@ -338,30 +338,44 @@ const Inset: React.FC<{place: MapLocation; accent: string}> = ({place, accent}) 
 };
 
 export const SpreadMap: React.FC<{overlay: Overlay; accent: string}> = ({overlay, accent}) => {
+  // Rebuilt 2026-09-30 ("maps must look premium"): an eased camera push, the
+  // named states / countries lighting one after another with a glowing accent
+  // edge and a white flash, outlined bold labels, a pulsing pin for a named
+  // city, and the title in outlined bold caps top-left. Everything fades in
+  // its last 12 frames.
   const frame = useCurrentFrame();
-  const {width, height, fps} = useVideoConfig();
+  const {width, height, fps, durationInFrames: D} = useVideoConfig();
   const places = (overlay.locations || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
   const placesKey = places.map((p) => `${p.lon},${p.lat},${p.label}`).join(';');
-  // Only the reveal timing changes from frame to frame (the zoom is a CSS
-  // transform): the outlines are projected once, not on every frame.
   const geo = React.useMemo(() => {
     if (!places.length) return null;
     const us = places.every(inUS);
     const shapes = us ? states : world;
-    // Each place lights the state/country that contains it, in narration order.
-    const found: {f: object; place: MapLocation}[] = [];
+    type Feat = {properties?: {name?: string}};
+    const found: {f: Feat; place: MapLocation}[] = [];
     for (const place of places) {
-      const f = shapes.features.find((x) => geoContains(x as never, [place.lon, place.lat]));
+      const f = shapes.features.find((x) => geoContains(x as never, [place.lon, place.lat])) as Feat | undefined;
       if (f && !found.some((l) => l.f === f)) found.push({f, place});
     }
     const focus = found.length ? {type: 'FeatureCollection', features: found.map((l) => l.f)} : shapes;
-    const projection = geoMercator().fitExtent([[width * 0.22, height * 0.14], [width * 0.78, height * 0.74]], focus as never);
+    const projection = geoMercator().fitExtent([[width * 0.2, height * 0.22], [width * 0.8, height * 0.8]], focus as never);
     const path = geoPath(projection);
+    const norm = (t: string) => t.toLowerCase().replace(/[^a-z]/g, '');
+    // A place that is not itself the state / country (a city, a landmark) also gets a pin.
+    const pins = places.map((place) => {
+      const f = found.find((l) => geoContains(l.f as never, [place.lon, place.lat]));
+      const region = f ? String(f.f.properties?.name || '') : '';
+      const isRegion = !f || norm(shortLabel(place.label)) === norm(region) || place.kind === 'state' || place.kind === 'country';
+      const pt = projection([place.lon, place.lat]);
+      return isRegion || !pt ? null : {x: pt[0], y: pt[1], label: shortLabel(place.label)};
+    }).filter(Boolean) as {x: number; y: number; label: string}[];
     return {
       us,
       background: (us ? world.features : []).map((f) => path(f as never) || ''),
       shapes: shapes.features.map((f) => path(f as never) || ''),
-      lit: found.map(({f, place}) => ({d: path(f as never) || '', centroid: path.centroid(f as never), place})),
+      lit: found.map(({f, place}) => ({d: path(f as never) || '', centroid: path.centroid(f as never), place,
+        name: String(f.properties?.name || '') || shortLabel(place.label)})),
+      pins,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placesKey, width, height]);
@@ -369,39 +383,84 @@ export const SpreadMap: React.FC<{overlay: Overlay; accent: string}> = ({overlay
   const dark = overlay.variant === 'spread-dark';
   const k = width / 1920;
   const lit = geo.lit;
-  const zoom = interpolate(frame, [0, fps * 3], [0.94, 1], clamp);
-  const land = dark ? '#262a30' : '#e6dcc0';
-  const edge = dark ? '#474c55' : '#b9ae8e';
-  const sea = dark ? '#121418' : '#9fb6ba';
   const col = accent || '#e63946';
-  const count = lit.filter((_, i) => frame > fps * (0.5 + i * 0.4)).length;
+  const out = interpolate(frame, [D - 13, D - 1], [0, 1], {...clamp, easing: (t) => t * t});
+  // Camera: an eased settle from wide, then a slow push for the rest of the shot.
+  const settle = outCubic(interpolate(frame, [0, fps * 1.2], [0, 1], clamp));
+  const zoom = (0.9 + 0.1 * settle) * interpolate(frame, [0, D], [1, 1.05], clamp);
+  const litAt = (i: number) => fps * 0.45 + i * fps * Math.max(0.18, Math.min(0.35, 1.6 / Math.max(1, lit.length)));
+  const count = lit.filter((_, i) => frame > litAt(i)).length;
+  const land = dark ? '#1b212b' : '#efe7d2';
+  const edge = dark ? '#3a4350' : '#c2b797';
+  const worldLand = dark ? '#151a22' : '#e6dcc2';
+  const labelPx = (lit.length <= 2 ? 54 : lit.length <= 5 ? 42 : 34) * k;
+  const outline = (px: number) => ({WebkitTextStroke: `${Math.max(4 * k, px * 0.11).toFixed(2)}px #000`, paintOrder: 'stroke fill',
+    textShadow: `0 ${3 * k}px ${4 * k}px rgba(0,0,0,.35), 0 ${8 * k}px ${24 * k}px rgba(0,0,0,.5)`}) as React.CSSProperties;
+  const title = (overlay.text || '').trim() || `${count} ${geo.us ? 'STATES' : 'COUNTRIES'}`;
+  const titlePx = Math.max(56, Math.min(92, 1500 / Math.max(8, title.length * 0.55))) * k;
   return (
-    <AbsoluteFill style={{background: sea, overflow: 'hidden'}}>
-      <svg width={width} height={height} style={{transform: `scale(${zoom})`}}>
-        <defs>
-          <filter id="spreadGlow"><feGaussianBlur stdDeviation={6 * k} result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-        </defs>
-        {geo.background.map((d, i) => <path key={`w${i}`} d={d} fill={land} stroke={edge} strokeWidth={k} />)}
-        {geo.shapes.map((d, i) => <path key={i} d={d} fill={land} stroke={edge} strokeWidth={1.2 * k} />)}
-        {lit.map(({d}, i) => {
-          const on = interpolate(frame, [fps * (0.5 + i * 0.4), fps * (0.8 + i * 0.4)], [0, 1], clamp);
-          return <path key={`l${i}`} d={d} fill={col} fillOpacity={0.85 * on} stroke="#fff"
-            strokeWidth={2.5 * k * on} filter={dark ? 'url(#spreadGlow)' : undefined} />;
-        })}
-        {lit.map(({centroid, place}, i) => {
+    <AbsoluteFill style={{background: dark ? 'radial-gradient(ellipse at 50% 45%, #111a26 0%, #080b11 70%)'
+      : 'radial-gradient(ellipse at 50% 45%, #b8c9cc 0%, #93aab0 75%)', overflow: 'hidden'}}>
+      <AbsoluteFill style={{transform: `scale(${zoom.toFixed(5)})`}}>
+        <AbsoluteFill style={{opacity: dark ? 0.06 : 0.1, backgroundImage:
+          `linear-gradient(${dark ? '#9fb4ff' : '#29424a'} 1px, transparent 1px), linear-gradient(90deg, ${dark ? '#9fb4ff' : '#29424a'} 1px, transparent 1px)`,
+          backgroundSize: `${96 * k}px ${96 * k}px`}} />
+        <svg width={width} height={height} style={{position: 'absolute', inset: 0}}>
+          <defs>
+            <filter id="spreadGlow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation={9 * k} /></filter>
+          </defs>
+          {geo.background.map((d, i) => <path key={`w${i}`} d={d} fill={worldLand} stroke={edge} strokeWidth={k} />)}
+          {geo.shapes.map((d, i) => <path key={i} d={d} fill={land} stroke={edge} strokeWidth={1.3 * k} />)}
+          {lit.map(({d}, i) => {
+            const at = litAt(i);
+            const on = outCubic(interpolate(frame, [at, at + fps * 0.35], [0, 1], clamp)) * (1 - out);
+            const flash = interpolate(frame, [at, at + 4, at + 16], [0, 1, 0], clamp);
+            return (
+              <g key={`l${i}`}>
+                <path d={d} fill="none" stroke={col} strokeWidth={10 * k} strokeOpacity={0.75 * on} filter="url(#spreadGlow)" />
+                <path d={d} fill={col} fillOpacity={(dark ? 0.46 : 0.55) * on} stroke={flash > 0.02 ? '#fff' : col}
+                  strokeWidth={(3.5 + 3 * flash) * k * on} strokeLinejoin="round" />
+              </g>
+            );
+          })}
+        </svg>
+        {lit.map(({centroid, name}, i) => {
           const [x, y] = centroid;
-          const on = interpolate(frame, [fps * (0.7 + i * 0.4), fps * (1.0 + i * 0.4)], [0, 1], clamp);
           if (!Number.isFinite(x)) return null;
-          return <text key={`t${i}`} x={x} y={y} textAnchor="middle" dominantBaseline="middle" opacity={on}
-            fontFamily={INTER} fontWeight={800} fontSize={Math.max(20, 32 - 1.5 * lit.length) * k} letterSpacing={1.5 * k}
-            fill="#fff" stroke="rgba(0,0,0,.55)" strokeWidth={3 * k} paintOrder="stroke">{shortLabel(place.label).toUpperCase()}</text>;
+          const at = litAt(i) + fps * 0.15;
+          const p = outCubic(interpolate(frame, [at, at + fps * 0.3], [0, 1], clamp));
+          return (
+            <div key={`t${i}`} style={{position: 'absolute', left: x, top: y, transform: `translate(-50%, -50%) translateY(${((1 - p) * 16 * k).toFixed(2)}px)`,
+              opacity: p * (1 - out), fontFamily: LABEL, fontWeight: 800, fontSize: labelPx, letterSpacing: '0.04em', color: '#fff',
+              whiteSpace: 'nowrap', textTransform: 'uppercase', ...outline(labelPx)}}>{name}</div>
+          );
         })}
-      </svg>
-      <div style={{position: 'absolute', left: 70 * k, top: 60 * k, fontFamily: NARROW, fontWeight: 700,
-        fontSize: 64 * k, color: dark ? '#fff' : '#1d1b16', textTransform: 'uppercase', letterSpacing: '0.04em',
-        opacity: interpolate(frame, [fps * 0.2, fps * 0.6], [0, 1], clamp)}}>
-        {overlay.text || `${count} ${geo.us ? 'STATES' : 'COUNTRIES'}`}
-      </div>
+        {geo.pins.map((pin, i) => {
+          const at = litAt(lit.length) + i * fps * 0.25;
+          const p = outCubic(interpolate(frame, [at, at + fps * 0.3], [0, 1], clamp)) * (1 - out);
+          const ring = ((frame - at) / (fps * 1.2)) % 1;
+          return (
+            <React.Fragment key={`p${i}`}>
+              {frame > at ? <div style={{position: 'absolute', left: pin.x - 60 * k, top: pin.y - 60 * k, width: 120 * k, height: 120 * k,
+                borderRadius: '50%', border: `${3 * k}px solid ${col}`, transform: `scale(${(0.2 + 0.8 * ring).toFixed(3)})`,
+                opacity: (1 - ring) * p}} /> : null}
+              <div style={{position: 'absolute', left: pin.x - 13 * k, top: pin.y - 13 * k, width: 26 * k, height: 26 * k, borderRadius: '50%',
+                background: col, border: `${4 * k}px solid #fff`, boxShadow: `0 0 0 ${2.5 * k}px #000, 0 0 ${18 * k}px ${col}`,
+                transform: `scale(${p.toFixed(3)})`}} />
+              <div style={{position: 'absolute', left: pin.x + 26 * k, top: pin.y - labelPx * 0.62, opacity: p, fontFamily: LABEL, fontWeight: 800,
+                fontSize: labelPx * 0.9, letterSpacing: '0.04em', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase',
+                ...outline(labelPx * 0.9)}}>{pin.label}</div>
+            </React.Fragment>
+          );
+        })}
+      </AbsoluteFill>
+      <div style={{position: 'absolute', left: 96 * k, top: 80 * k, fontFamily: LABEL, fontWeight: 800, fontSize: titlePx, color: '#fff',
+        textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap', ...outline(titlePx),
+        clipPath: `inset(-30% ${((1 - outCubic(interpolate(frame, [fps * 0.1, fps * 0.6], [0, 1], clamp))) * 100).toFixed(2)}% -30% 0)`,
+        opacity: 1 - out}}>{title}</div>
+      <div style={{position: 'absolute', left: 96 * k, top: 80 * k + titlePx * 1.2, height: 10 * k, borderRadius: 3 * k, background: col,
+        width: 200 * k * outCubic(interpolate(frame, [fps * 0.4, fps * 0.9], [0, 1], clamp)) * (1 - out),
+        boxShadow: `0 0 0 ${2.5 * k}px #000, 0 0 ${14 * k}px ${col}`}} />
     </AbsoluteFill>
   );
 };

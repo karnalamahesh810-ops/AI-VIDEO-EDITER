@@ -157,7 +157,9 @@ class Sounds(unittest.TestCase):
         scenes = self._scenes(["none", "glitch", "none", "none", "flash", "none", "none", "whip-pan",
                                "none", "none", "shake-cut", "none", "none", "film-burn"])
         picks = timeline.plan_transition_sfx(scenes, 30, [])
-        self.assertEqual([p["name"] for p in picks], ["glitch-pro", "flash-hit", "swipe", "hit-deep", "whoosh-soft"])
+        # The sound designer's premium set (2026-09-30); the owner's glitch and deep hit stay.
+        self.assertEqual([p["name"] for p in picks],
+                         ["glitch-pro", "camera-flash-pop", "whoosh-fast", "hit-deep", "light-shimmer"])
         cuts = [s["startFrame"] for s in scenes if s["transition"] != "none"]
         for p, cut in zip(picks, cuts):
             self.assertLessEqual(abs(p["startFrame"] + meta[p["name"]]["peak"] * 30 - cut), 1.0, p)
@@ -182,7 +184,7 @@ class Sounds(unittest.TestCase):
         scenes = self._scenes(["none", "glitch", "none", "none", "flash"])
         others = [{"name": "pop", "startFrame": 90 + 20, "volume": 0.3}]      # 0.67 s after the first cut
         picks = timeline.plan_transition_sfx(scenes, 30, others)
-        self.assertEqual([p["name"] for p in picks], ["flash-hit"])
+        self.assertEqual([p["name"] for p in picks], ["camera-flash-pop"])
         far = [{"name": "pop", "startFrame": 90 + 40, "volume": 0.3}]         # 1.3 s after it
         self.assertEqual(len(timeline.plan_transition_sfx(scenes, 30, far)), 2)
 
@@ -197,10 +199,10 @@ class Sounds(unittest.TestCase):
         self.assertEqual(timeline.plan_transition_sfx(scenes, 30, [{"name": "keys", "startFrame": 60}]), [])
         # Over before the transition's sound starts: the transition plays.
         done = [{"name": "keys", "startFrame": 60, "durationFrames": 40, "volume": 0.08}]
-        self.assertEqual([p["name"] for p in timeline.plan_transition_sfx(scenes, 30, done)], ["swipe"])
+        self.assertEqual([p["name"] for p in timeline.plan_transition_sfx(scenes, 30, done)], ["whoosh-fast"])
         # The renderer skips a cue's trimmed head, so it ends that much sooner.
         trimmed = [{"name": "whoosh", "startFrame": 100, "durationFrames": 50, "trimFrames": 20}]
-        self.assertEqual([p["name"] for p in timeline.plan_transition_sfx(scenes, 30, trimmed)], ["swipe"])
+        self.assertEqual([p["name"] for p in timeline.plan_transition_sfx(scenes, 30, trimmed)], ["whoosh-fast"])
 
     def test_transition_sounds_follow_the_packs_intensity(self):
         scenes = self._scenes(["none", "glitch", "none", "none", "film-burn"])

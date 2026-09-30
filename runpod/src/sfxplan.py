@@ -1,6 +1,18 @@
 """
 The overlay sound planner: which sound each graphic gets, how loud, and exactly when.
 
+Since 2026-09-30 (the owner: "when you make an animation, the animation needs
+its specific sound BUILT IN - not us adding sounds on the timeline") every
+look in the registry carries its own sound design (defaults.sounds, written
+by scripts/build_registry.py) and the renderer plays it inside the overlay
+(remotion/src/components/lib/LookSounds.tsx): such a look gets NO timeline
+row here. The second half of this module is the Python twin of the
+renderer's schedule (look_sounds, plan_looks, builtin_busy): the same frames,
+files and levels, so the planner can keep the transition sounds clear of the
+looks' own sounds and the tests can check the renderer's arithmetic. The
+row planner below remains for documents and registries from before that
+(a template without "sounds"):
+
 A human editor lays a sound on the frame where a graphic lands, not where
 its clip starts, keeps it under the voice, and never plays the same whoosh
 six times a minute. This module does that for the planned overlays:
@@ -89,29 +101,47 @@ CATEGORY = {
     "impact": "impact", "hit-deep": "impact", "boom-soft": "impact", "flash-hit": "impact",
     "glitch": "glitch", "glitch-pro": "glitch", "glitch-short": "glitch", "glitch-transition": "glitch",
     "glitch fx transistion": "glitch", "riser": "riser", "riser-short": "riser",
+    # The sound designer's premium set (2026-09-30; sfx_meta.json carries the
+    # same categories): a look asking for one that does not ship plays its stand-in.
+    "alert-tone": "ui", "boom-sub": "impact", "camera-flash-pop": "camera", "camera-shutter": "camera",
+    "count-final": "ui", "count-roll": "tick", "date-slam": "impact", "folder-open": "paper",
+    "frame-drop": "impact", "glitch-digital": "glitch", "glitch-short-v2": "glitch", "impact-punch": "impact",
+    "letter-tick": "tick", "light-shimmer": "shimmer", "magnifier-glide": "shimmer", "map-swoop": "whoosh",
+    "marker-draw": "marker", "marker-underline": "marker", "page-flip": "paper", "paper-pin": "paper",
+    "paper-slide-v2": "paper", "paper-tear": "paper", "pen-scribble": "marker", "phone-buzz": "ui",
+    "pin-drop": "ui", "radar-ping": "ui", "record-beep": "camera", "reverse-swell": "riser",
+    "riser-short-v2": "riser", "shutter-slide": "paper", "stamp": "impact", "swoosh-text": "whoosh",
+    "tape-rip": "paper", "typewriter-clean": "typing", "ui-click": "ui", "ui-pop": "ui", "ui-swipe": "whoosh",
+    "ui-tick": "tick", "whoosh-cinematic": "whoosh", "whoosh-fast": "whoosh", "whoosh-soft-v2": "whoosh",
+    "zoom-in-whoosh": "whoosh",
 }
 # ... and never closer to it than this: the one cap every sound is held to
 # (planned, transition, or an editor's 100% slider). It is the level of the
 # loudest category, so nothing ever stands out over the hits.
 CAP_UNDER_DB = 5.0
 
-# Every calendar date lands on the owner's deep hit (2026-09-30: "BOLD TEXT
-# date with a better sound"), at the hits' level.
-DATE_SOUND = "hit-deep"
+# Every calendar date lands on a bold hit (the owner, 2026-09-30: "BOLD TEXT
+# date with a better sound"), at the hits' level: the designer's date slam,
+# the owner's deep hit its sibling (a sub hit a phone speaker barely hears).
+DATE_SOUND = "date-slam"
+DATE_SOUND_ALT = ("hit-deep",)
 
 TYPING_SOUND = "keys"
-COUNT_SOUND = "count-tick"
+# A number counts up on the counter's roll and lands on its final click.
+COUNT_SOUND = "count-roll"
+COUNT_FINAL = "count-final"
 # A look that does not type must not clack: a typing sound left on it (the
 # old registry gave the kicker's mask rise a typewriter) becomes one click.
 NOT_TYPING_SOUND = "click"
-_TYPING_NAMES = {"keys", "typewriter", "typing text", "keys-mech", "keys-type", "keys-laptop"}
+_TYPING_NAMES = {"keys", "typewriter", "typing text", "keys-mech", "keys-type", "keys-laptop", "typewriter-clean"}
 # The owner's own keyboard recordings (2026-09-29) lead; typing looks take
 # them in turn so two typed lines never sound the same. "keys" is the fallback.
 TYPING_TAKES = ["keys-type", "keys-laptop", "keys-mech", "keys"]
 # Sounds with no single hit: they run for the action and start with it.
-_CONTINUOUS = {"keys", "typewriter", "typing text", "count-tick", "keys-mech", "keys-type", "keys-laptop"}
-# The only stand-in allowed for a missing file: the older typing recording.
-_FALLBACK = {"keys": "typewriter"}
+_CONTINUOUS = {"keys", "typewriter", "typing text", "count-tick", "keys-mech", "keys-type", "keys-laptop",
+               "count-roll", "typewriter-clean"}
+# The only stand-ins allowed for a missing file: the older recordings.
+_FALLBACK = {"keys": "typewriter", "count-roll": "count-tick", "date-slam": "hit-deep"}
 
 # Siblings a repeated sound alternates with, in order of preference.
 VARIANTS = {
@@ -137,6 +167,18 @@ VARIANTS = {
     "riser-short": ["riser"],
     "ding": ["marker"],
     "marker": ["ding"],
+    # The sound designer's premium set (2026-09-30).
+    "whoosh-cinematic": ["whoosh-soft-v2", "map-swoop"], "whoosh-soft-v2": ["swoosh-text", "ui-swipe"],
+    "swoosh-text": ["ui-swipe", "whoosh-soft-v2"], "whoosh-fast": ["ui-swipe", "swoosh-text"],
+    "ui-swipe": ["whoosh-fast", "swoosh-text"], "map-swoop": ["whoosh-cinematic", "map-whoosh"],
+    "zoom-in-whoosh": ["whoosh-fast"], "impact-punch": ["hit-deep", "date-slam"],
+    "date-slam": ["hit-deep", "impact-punch"], "boom-sub": ["hit-deep"], "ui-pop": ["ui-click", "ui-tick"],
+    "ui-click": ["ui-tick", "ui-pop"], "ui-tick": ["ui-click"], "paper-slide-v2": ["page-flip", "folder-open"],
+    "page-flip": ["paper-slide-v2"], "folder-open": ["paper-slide-v2"], "tape-rip": ["paper-tear"],
+    "paper-tear": ["tape-rip"], "marker-draw": ["marker-underline"], "marker-underline": ["marker-draw"],
+    "glitch-digital": ["glitch-pro", "glitch-short-v2"], "glitch-short-v2": ["glitch-pro", "glitch-digital"],
+    "riser-short-v2": ["reverse-swell"], "reverse-swell": ["riser-short-v2"], "light-shimmer": ["whoosh-soft-v2"],
+    "camera-shutter": ["camera-flash-pop"], "camera-flash-pop": ["camera-shutter"], "pin-drop": ["ui-pop"],
 }
 # Quiet style packs start from the softer take of a sound.
 _SOFTER = {"whoosh": "whoosh-soft", "impact": "boom-soft", "riser": "riser-short",
@@ -164,7 +206,7 @@ _TYPING_TEMPLATES = {"TEXT_TYPEWRITER_V1", "TEXT_QUESTION_V1", "TEXT_MEMO_V1", "
 # (TextGraphics MemoBox: typed(fps*0.2, fps*1.2); BarTitle: typed(fps*0.3, fps*1.1)):
 # (first typing frame, frames the sound runs) at 30 fps. The ease-out puts
 # nearly all the text on screen early, so the sound stops a little before the window ends.
-_FIXED_TYPING = {"memo-box": (6, 30), "bar-title": (9, 27)}
+_FIXED_TYPING = {"memo-box": (6, 36), "bar-title": (9, 33)}      # the rebuilt looks type 6..42 and 9..42 (2026-09-30 audit)
 _DATE_CUES = {"date", "time-of-day", "datetime"}
 _COUNT_CUES = {"percent", "big-number", "count", "money"}
 _RANK = {"high": 0, "medium": 1, "low": 2}
@@ -310,9 +352,16 @@ def clamp(volume, voice_lufs=None, master=1.0) -> float:
 # --------------------------------------------------------------------------- #
 
 def plays_own_sound(template: dict) -> bool:
+    """A look whose component plays its own <Audio> (LibSpeakers, LibPersist, LibChartsC, LibBasinMap)."""
     tid = template.get("id") or ""
     d = template.get("defaults") or {}
-    return bool(d.get("ownSfx")) or tid in PLAYS_OWN_SOUND or tid.startswith(PLAYS_OWN_PREFIXES)
+    return bool(d.get("ownSfx") or d.get("ownSound")) or tid in PLAYS_OWN_SOUND or tid.startswith(PLAYS_OWN_PREFIXES)
+
+
+def has_builtin_sound(template: Optional[dict]) -> bool:
+    """A look with its sound design built in (the registry's defaults.sounds, even an empty one)."""
+    d = (template or {}).get("defaults") or {}
+    return isinstance(d.get("sounds"), list)
 
 
 def _types(template: dict) -> bool:
@@ -396,18 +445,21 @@ def _resolve_file(name: str) -> Optional[str]:
 
 def _candidate(i: int, overlay: dict, fps: int, spans: List[tuple]) -> Optional[dict]:
     t = templates.get(overlay.get("template") or "")
-    if not t or plays_own_sound(t):
+    if not t or plays_own_sound(t) or has_builtin_sound(t):
+        # A look with its sound built in plays it itself (LookSounds.tsx):
+        # a timeline row on top of it would double it.
         return None
     name, explicit, vol = _choice(overlay, t)
     if name is None:                       # silenced on purpose
         return None
-    # A calendar date always lands on the deep hit (an editor's own pick still wins).
-    date = not explicit and is_calendar_date(t) and exists(DATE_SOUND)
+    # A calendar date always lands on the date slam (an editor's own pick still wins).
+    date_sound = _resolve_file(DATE_SOUND)
+    date = not explicit and is_calendar_date(t) and bool(date_sound)
     # A look that types always gets its keys (typing contract), even when
     # the registry left its sound at "none"; an explicit other sound wins.
     typing = _types(t) and not date and not (explicit and name not in _TYPING_NAMES)
     if date:
-        name = DATE_SOUND
+        name = date_sound
     if not typing and (not name or name == "none"):
         return None
     d = t.get("defaults") or {}
@@ -426,7 +478,7 @@ def _candidate(i: int, overlay: dict, fps: int, spans: List[tuple]) -> Optional[
         # Never type on after the look has left the screen.
         span = _scale(fixed[1], fps) if fixed else typing_frames(text, fps)
         length = min(span, end - start - begin)
-    elif not explicit and not date and _counts(t, overlay) and exists(COUNT_SOUND):
+    elif not explicit and not date and _counts(t, overlay) and _resolve_file(COUNT_SOUND):
         name, kind = COUNT_SOUND, "count"
         count = int(round(COUNT_SECONDS * fps))
         if sfx_at >= count:
@@ -587,5 +639,403 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "",
         if trim:
             cue["trimFrames"] = int(trim)
         out.append(cue)
+        if c["kind"] == "count" and exists(COUNT_FINAL):
+            # The count lands on its final click, never after the look has left.
+            land = int(start) + int(length)
+            raw = land - peak_frames(COUNT_FINAL, fps)
+            audible = min(duration_frames(COUNT_FINAL, fps), c["end"] - max(0, raw))
+            if land < c["end"] - _scale(MIN_AUDIBLE, fps) and audible >= _scale(MIN_AUDIBLE, fps):
+                out.append({"name": COUNT_FINAL, "startFrame": max(0, raw), "kind": "overlay", "durationFrames": audible,
+                            "volume": round(min(top, level(COUNT_FINAL, voice) * strength
+                                                if c["volume"] is None else c["volume"]), 3)})
     out.sort(key=lambda s: s["startFrame"])
     return out
+
+
+# =========================================================================== #
+# Sounds built into the looks: the Python twin of lookSoundPlan.ts
+# =========================================================================== #
+#
+# A look's sound design is a list of cues (registry defaults.sounds, or the
+# cues a component schedules from its own animation with useLookSound):
+#
+#   name       a file in remotion/public/sfx (no extension)
+#   alt        stand-ins, in order, while `name` does not ship
+#   at         30-fps frame from the look's first frame: where the sound's
+#              loudest moment lands (align "peak", the default for one-shots)
+#              or where it starts (align "start", the default for loops)
+#   align      "peak" | "start"
+#   until      a run: it plays from `at` to this frame (a loopable file loops)
+#   kind       "typing": the video's current typing take, for the typing
+#              contract's span of the overlay's text
+#   every, count   the cue again every `every` frames, `count` times in all
+#              ("items" / "locations": once per overlay item / place)
+#   gain_db    dB against the sound's category level for this voice
+#   fade       fade-out frames at its end (a sound cut by the look's end always fades)
+#   when       "value" | "no-value": only when the overlay has (no) number
+#   fixed      not scaled by the style pack's intensity (a date's deep hit)
+#   scale      cue frames stretch with the look's duration against its default
+#   pitch      the render's tone change (1 = as recorded)
+#
+# Every cue is set against the narration like the rows above: level() for
+# its file's category, times 10^(gain_db/20), the pack's intensity (unless
+# fixed), the overlay's soundGain trim and the document's sfxVolume, never
+# above cap(). Both twins round like JavaScript (_jr) so they agree frame
+# for frame; tests/test_builtin_sounds.py runs the TypeScript against this.
+
+# Stand-ins by category for a file that does not ship (the first that does wins).
+CATEGORY_FALLBACK = {
+    "impact": ["hit-deep", "impact-punch", "boom-sub", "boom-soft", "impact"],
+    "tick": ["ui-tick", "tick", "letter-tick", "click"], "ui": ["ui-click", "ui-pop", "click", "pop"],
+    "whoosh": ["whoosh-soft-v2", "swoosh-text", "whoosh-soft", "swipe"],
+    "paper": ["paper-slide-v2", "paper-slide", "paper", "page"], "marker": ["marker-draw", "marker", "tick"],
+    "typing": ["keys", "typewriter-clean", "typewriter"], "camera": ["camera-shutter", "shutter", "click"],
+    "glitch": ["glitch-short-v2", "glitch-short", "glitch-pro"], "riser": ["riser-short-v2", "riser-short", "riser"],
+    "shimmer": ["light-shimmer", "whoosh-soft-v2", "whoosh-soft"],
+}
+# Files that loop seamlessly when sfx_meta.json does not say ("loop").
+LOOP_NAMES = {"keys", "typewriter", "keys-mech", "keys-type", "keys-laptop", "typing text", "count-roll",
+              "typewriter-clean"}
+MAX_REPEATS = 200
+PROTECTED_COMPONENTS = ("date-stamp", "clock-badge")
+
+
+def _jr(x) -> int:
+    """JavaScript's Math.round (halves up), so the two twins agree frame for frame."""
+    return int(math.floor(float(x) + 0.5))
+
+
+def _r4(x: float) -> float:
+    return math.floor(x * 10000 + 0.5) / 10000
+
+
+def shipped(name) -> bool:
+    """A file the renderer can play: in public/sfx and in sfx_meta.json (all the renderer can see)."""
+    return isinstance(name, str) and bool(name) and name in _meta() and exists(name)
+
+
+def resolve_sound(name, alt=None) -> Optional[str]:
+    """`name` if it ships, else its first shipped stand-in (`alt`, then its category's), else None."""
+    order = [name] + [a for a in (alt or []) if isinstance(a, str)] \
+        + CATEGORY_FALLBACK.get(category(str(name or "")), [])
+    return next((x for x in order if shipped(x)), None)
+
+
+def loopable(name: str) -> bool:
+    got = (_meta().get(name) or {}).get("loop")
+    return got if isinstance(got, bool) else name in LOOP_NAMES
+
+
+def _file_frames(name: str, fps: int) -> int:
+    d = _number((_meta().get(name) or {}).get("duration"))
+    return max(1, int(math.ceil((d if d is not None and d > 0 else DEFAULT_SOUND_SECONDS) * fps)))
+
+
+def _peak(name: str, fps: int) -> int:
+    p = _number((_meta().get(name) or {}).get("peak"))
+    return max(0, _jr((p if p is not None else 0.0) * fps))
+
+
+def value_of(overlay: dict) -> Optional[float]:
+    """The overlay's number, when it has one."""
+    v = (overlay or {}).get("value")
+    return float(v) if not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(v) else None
+
+
+def cue_live(cue: dict, text: str = "", value: Optional[float] = None) -> bool:
+    """Whether a cue plays for this overlay (its `when`; a typing run needs words)."""
+    when = cue.get("when")
+    if (when == "value" and value is None) or (when == "no-value" and value is not None):
+        return False
+    return not (cue.get("kind") == "typing" and not str(text or "").strip())
+
+
+def typing_span(text: str, fps: int) -> int:
+    """The typing contract's span in frames: 2 frames a character up to 48, else 1 (30 fps), at most 6 s."""
+    n = len(text or "")
+    return min(_jr((2 if n <= 48 else 1) * n * fps / BASE_FPS), _jr(TYPING_MAX_SECONDS * fps))
+
+
+def _num_or(value, default: float) -> float:
+    v = _number(value)
+    return default if v is None else v
+
+
+def look_sounds(cues, *, fps: int, frames: int, text: str = "", value: Optional[float] = None,
+                take: Optional[str] = None, default_frames: int = 0, voice_lufs=None, intensity: float = 1.0,
+                gain: float = 1.0, master: float = 1.0, items: int = 0, locations: int = 0) -> List[dict]:
+    """
+    The sounds one look plays, as the renderer schedules them: [{name, from,
+    frames, trim, loop, fade, volume, pitch}], `from` counted from the look's
+    first frame, `trim` frames skipped at the file's head (a peak landing
+    early), `frames` played. Nothing rings past the look: a sound running
+    over its last frame is cut there and fades, a hit that would land in its
+    last MIN_AUDIBLE frames does not play, and neither does a sound cut to
+    less than that.
+    """
+    fps = int(fps or BASE_FPS)
+    frames = int(frames or 0)
+    if frames <= 0:
+        return []
+    s = fps / BASE_FPS
+    voice = voice_level(voice_lufs)
+    top = cap(voice)
+    stretch = frames / default_frames if default_frames and default_frames > 0 else 1.0
+    least = _jr(MIN_AUDIBLE * s)
+    longest = _jr(MAX_SOUND_SECONDS * fps)
+    trim_gain = max(0.0, _num_or(gain, 1.0))
+    level_master = max(0.0, _num_or(master, 1.0))
+    level_pack = max(0.0, _num_or(intensity, 1.0))
+    out: List[dict] = []
+    for cue in cues or []:
+        if not isinstance(cue, dict) or not cue_live(cue, text, value):
+            continue
+        at0 = _num_or(cue.get("at"), 0.0)
+        every = _num_or(cue.get("every"), 0.0)
+        per = cue.get("count")
+        if every <= 0:
+            count = 1
+        elif per in ("items", "locations"):
+            count = max(0, min(MAX_REPEATS, int(items if per == "items" else locations)))
+        else:
+            count = max(1, min(MAX_REPEATS, int(math.floor(_num_or(per, 1.0)))))
+        k = stretch if cue.get("scale") else 1.0
+        until = _number(cue.get("until"))
+        typing = cue.get("kind") == "typing"
+        for r in range(count):
+            at = _jr((at0 + r * every) * s * k)
+            name = (take if typing and take else None) or resolve_sound(cue.get("name"), cue.get("alt"))
+            if not name:
+                continue
+            file_frames = _file_frames(name, fps)
+            loops = loopable(name)
+            if typing:
+                start, trim = at, 0
+                want = _jr(until * s * k) - at if until is not None else typing_span(text, fps)
+            else:
+                align = cue.get("align") or ("start" if loops or until is not None else "peak")
+                if until is None and align == "peak" and at >= frames - least:
+                    continue                  # its hit would land as the look leaves
+                raw = at - (_peak(name, fps) if align == "peak" else 0)
+                start = max(0, raw)
+                trim = start - raw
+                want = _jr(until * s * k) - start if until is not None else file_frames - trim
+            if start >= frames:
+                continue
+            natural = file_frames - trim
+            if not loops:
+                want = min(want, natural)
+            want = min(want, longest)
+            if want <= 0:
+                continue
+            n = min(want, frames - start)
+            if n < want and n < least:
+                continue                      # cut by the look's end to almost nothing
+            looped = loops and n > natural
+            fade_asked = _number(cue.get("fade"))
+            if fade_asked is not None and fade_asked > 0:
+                fade = _jr(fade_asked * s)
+            else:
+                fade = max(1, min(_jr(4 * s), n // 3)) if (n < natural or looped) else 0
+            fade = min(fade, n)
+            db = _num_or(cue.get("gain_db"), 0.0)
+            vol = level(name, voice) * 10 ** (db / 20.0) * (1.0 if cue.get("fixed") else level_pack) \
+                * trim_gain * level_master
+            vol = _r4(min(top, max(0.0, vol)))
+            if vol <= 0.001:
+                continue
+            pitch = _number(cue.get("pitch"))
+            out.append({"name": name, "from": int(start), "frames": int(n), "trim": int(trim), "loop": bool(looped),
+                        "fade": int(fade), "volume": vol, "pitch": pitch if pitch is not None and pitch > 0 else 1.0})
+    out.sort(key=lambda x: x["from"])
+    return out
+
+
+def sfx_choice(overlay: dict, template: dict) -> Optional[str]:
+    """
+    The editor's pick for a look's sound: "none" silences it (the string
+    "none" always), another name replaces its design with that one hit, None
+    keeps the design (a resolved {name, volume} equal to the default included).
+    """
+    default = _default_name(template)
+    raw = (overlay or {}).get("sfx")
+    if isinstance(raw, dict):
+        got = str(raw.get("name") or "")
+        return got if got and got not in ("default", default) else None
+    if isinstance(raw, str) and raw:
+        if raw == "none":
+            return "none"
+        return raw if raw not in ("default", default) else None
+    return None
+
+
+def look_mode(template: Optional[dict], overlay: dict, built_in: bool = True) -> str:
+    """
+    How a look sounds: "own" (its component plays its own <Audio>), "self"
+    (the component schedules its cues, useLookSound), "cues" (the registry
+    design, LookSounds), "none". Registry designs play only on documents that
+    carry them (built_in: doc.lookSounds); older ones keep their sfx rows.
+    """
+    if not template:
+        return "none"
+    d = template.get("defaults") or {}
+    if plays_own_sound(template):
+        return "own"
+    choice = sfx_choice(overlay, template)
+    if choice == "none":
+        return "none"
+    if d.get("soundTiming") == "look":
+        return "self"
+    if not built_in or not isinstance(d.get("sounds"), list):
+        return "none"
+    if choice:
+        return "cues"
+    text, value = str((overlay or {}).get("text") or ""), value_of(overlay)
+    return "cues" if any(isinstance(c, dict) and cue_live(c, text, value) for c in d["sounds"]) else "none"
+
+
+def entry_cues(template: dict, overlay: dict, mode: str) -> List[dict]:
+    """The cues a look plays: its design, or the editor's one sound on its hit."""
+    d = template.get("defaults") or {}
+    choice = sfx_choice(overlay, template) if mode == "cues" else None
+    if choice and choice != "none":
+        at = _number(d.get("sfxAt"))
+        return [{"name": choice, "at": at if at else DEFAULT_HIT}]
+    return [c for c in (d.get("sounds") or []) if isinstance(c, dict)]
+
+
+def look_entries(overlays: List[dict], scenes: List[dict]) -> List[dict]:
+    """Every look of a document, as the renderer walks them: the overlays, then the full-screen animation scenes."""
+    out = []
+    for ov in overlays or []:
+        if isinstance(ov, dict):
+            out.append({"start": int(_num_or(ov.get("startFrame"), 0)),
+                        "frames": int(_num_or(ov.get("durationInFrames"), 0)),
+                        "template": templates.get(ov.get("template") or ""), "overlay": ov})
+    for sc in scenes or []:
+        if not isinstance(sc, dict) or (sc.get("media") or {}).get("type") != "animation":
+            continue
+        spec = sc.get("animation") if isinstance(sc.get("animation"), dict) else {}
+        out.append({"start": int(_num_or(sc.get("startFrame"), 0)),
+                    "frames": int(_num_or(sc.get("durationInFrames"), 0)),
+                    "template": templates.get(spec.get("template") or ""),
+                    "overlay": {**spec, "text": spec.get("text") or sc.get("text") or ""}})
+    return out
+
+
+def _protected_kind(template: dict) -> bool:
+    """A typing or date look: alone on screen it keeps its sound over any rival (the rows' rule)."""
+    cues = (template.get("defaults") or {}).get("sounds") or []
+    if any(isinstance(c, dict) and (c.get("kind") == "typing" or c.get("fixed")) for c in cues):
+        return True
+    return bool(set(template.get("cues") or []) & _DATE_CUES) or template.get("component") in PROTECTED_COMPONENTS
+
+
+def plan_looks(entries: List[dict], fps: int, built_in: bool = True) -> List[dict]:
+    """
+    The document's one pass over its looks, as Main.tsx makes it: each look's
+    mode, whether it is muted (of two looks starting within CLASH_SECONDS only
+    the stronger sounds: emphasis, then a typing or date look alone on screen,
+    then the first), and the typing take it plays (the owner's keyboards in turn).
+    """
+    fps = int(fps or BASE_FPS)
+    clash = _jr(CLASH_SECONDS * fps)
+    states = [{"mode": look_mode(e.get("template"), e.get("overlay") or {}, built_in), "muted": False, "take": None}
+              for e in entries]
+    spans = [(int(e["start"]), int(e["start"]) + max(1, int(e["frames"]))) for e in entries]
+
+    def alone(i: int) -> bool:
+        a, b = spans[i]
+        return not any(j != i and spans[j][0] < b and a < spans[j][1] for j in range(len(spans)))
+
+    def rank(i: int) -> tuple:
+        t = entries[i].get("template") or {}
+        ov = entries[i].get("overlay") or {}
+        emph = ov.get("emphasis") if ov.get("emphasis") in _RANK else t.get("emphasis")
+        protected = _protected_kind(t) and alone(i)
+        return _RANK.get(emph, 1), 0 if protected else 1, spans[i][0], i
+
+    order = sorted((i for i, s in enumerate(states) if s["mode"] in ("cues", "self")), key=lambda i: (spans[i][0], i))
+    kept: List[int] = []
+    for i in order:
+        rival = next((k for k in kept if abs(spans[i][0] - spans[k][0]) <= clash), None)
+        if rival is None:
+            kept.append(i)
+        elif rank(i) < rank(rival):
+            kept[kept.index(rival)] = i
+            states[rival]["muted"] = True
+        else:
+            states[i]["muted"] = True
+    takes = [t for t in TYPING_TAKES if shipped(t)]
+    n = 0
+    for i in order:
+        st = states[i]
+        if st["muted"] or st["mode"] != "cues" or not takes:
+            continue
+        cues = entry_cues(entries[i]["template"], entries[i].get("overlay") or {}, st["mode"])
+        if any(c.get("kind") == "typing" for c in cues):
+            st["take"] = takes[n % len(takes)]
+            n += 1
+    return states
+
+
+def look_sounds_on(doc: dict) -> bool:
+    """Whether a document's looks play their built-in sounds (doc.lookSounds present: an object, or true)."""
+    v = (doc or {}).get("lookSounds")
+    return isinstance(v, dict) or v is True
+
+
+def doc_look_sounds(doc: dict, built_in: Optional[bool] = None) -> List[dict]:
+    """
+    Every sound the renderer's looks will play in a document, in absolute
+    frames: [{name, startFrame, from, frames, trim, loop, fade, volume, pitch,
+    look}] (`look` = the index in look_entries). Self-timed looks count with
+    their registry design (their component's exact frames depend on the drawing).
+    """
+    fps = int(doc.get("fps") or BASE_FPS)
+    if built_in is None:
+        built_in = look_sounds_on(doc)
+    if doc.get("sfxEnabled") is False:
+        return []
+    entries = look_entries(doc.get("overlays") or [], doc.get("scenes") or [])
+    states = plan_looks(entries, fps, built_in)
+    settings = doc.get("lookSounds") if isinstance(doc.get("lookSounds"), dict) else {}
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    out: List[dict] = []
+    for idx, (e, st) in enumerate(zip(entries, states)):
+        if st["muted"] or st["mode"] not in ("cues", "self"):
+            continue
+        t, ov = e["template"], e.get("overlay") or {}
+        d = t.get("defaults") or {}
+        for snd in look_sounds(entry_cues(t, ov, st["mode"]), fps=fps, frames=e["frames"],
+                               text=str(ov.get("text") or ""), value=value_of(ov), take=st["take"],
+                               default_frames=_jr(_num_or(d.get("duration"), 0.0) * fps),
+                               voice_lufs=meta.get("voiceLufs"),
+                               intensity=_num_or(settings.get("intensity"), 1.0),
+                               gain=_num_or(ov.get("soundGain"), 1.0),
+                               master=_num_or(doc.get("sfxVolume"), 1.0),
+                               items=len(ov["items"]) if isinstance(ov.get("items"), list) else 0,
+                               locations=len(ov["locations"]) if isinstance(ov.get("locations"), list) else 0):
+            out.append({**snd, "startFrame": e["start"] + snd["from"], "look": idx})
+    out.sort(key=lambda x: (x["startFrame"], x["look"]))
+    return out
+
+
+def builtin_busy(overlays: List[dict], scenes: List[dict], fps: int) -> List[dict]:
+    """The looks' own sounds as sfx-row shapes ({name, startFrame, durationFrames}), to keep other sounds clear."""
+    doc = {"fps": fps, "overlays": overlays, "scenes": scenes, "lookSounds": {}}
+    return [{"name": s["name"], "startFrame": s["startFrame"], "durationFrames": s["frames"], "kind": "look"}
+            for s in doc_look_sounds(doc, built_in=True)]
+
+
+def sound_levels() -> dict:
+    """The level and timing constants the renderer's twin reads (registry.json "soundLevels")."""
+    return {
+        "refLufs": SFX_REF_LUFS, "voiceDefault": VOICE_LUFS_DEFAULT, "underDefault": UNDER_VOICE_DB,
+        "capUnder": CAP_UNDER_DB, "categoryUnder": dict(CATEGORY_UNDER_DB), "nameCategory": dict(CATEGORY),
+        "categoryFallback": {k: list(v) for k, v in CATEGORY_FALLBACK.items()}, "loopNames": sorted(LOOP_NAMES),
+        "typingTakes": list(TYPING_TAKES), "typeStart": TYPE_START, "typingMaxSeconds": TYPING_MAX_SECONDS,
+        "maxSeconds": MAX_SOUND_SECONDS, "minAudible": MIN_AUDIBLE, "clashSeconds": CLASH_SECONDS,
+        "defaultHit": DEFAULT_HIT, "maxRepeats": MAX_REPEATS, "dateCues": sorted(_DATE_CUES),
+        "protectedComponents": list(PROTECTED_COMPONENTS),
+    }

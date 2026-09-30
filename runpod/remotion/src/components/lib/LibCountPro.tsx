@@ -285,92 +285,113 @@ const CleanCount: Look = ({ overlay, accent }) => {
 };
 
 // ================================================================== ct-rolling-digits
-/** One slot-machine drum: spins from `start`, lands on `d` at `land` with a small settle, flashes the accent. */
-const Drum: React.FC<{ d: number; start: number; land: number; turns: number; size: number; accent: string }> =
-  ({ d, start, land, turns, size, accent }) => {
+/**
+ * One odometer column of outlined digits: spins from `start`, lands on `d` at
+ * `land` with a small settle; a motion blur while it moves. No tile behind it
+ * (the owner: only text, bold white with a black outline).
+ */
+const Reel: React.FC<{ d: number; start: number; land: number; turns: number; size: number; style: React.CSSProperties; flash: string }> =
+  ({ d, start, land, turns, size, style, flash }) => {
     const frame = useCurrentFrame();
-    const h = size * 1.24;
+    const h = size * 1.08;
     const travel = turns * 10 + d;
     const span = Math.max(1, land - start);
     const t = clamp01((frame - start) / span);
     const main = travel * (1 - Math.pow(1 - t, 3));
     const s = frame - land;
-    const settle = s > 0 ? -0.2 * Math.sin(s * 0.75) * Math.exp(-s * 0.3) : 0;
+    const settle = s > 0 ? -0.18 * Math.sin(s * 0.8) * Math.exp(-s * 0.32) : 0;
     const pos = main + settle;
     const frac = ((pos % 10) + 10) % 10;
     const speed = t < 1 ? (3 * travel * Math.pow(1 - t, 2)) / span : 0;
-    const flash = s >= 0 ? Math.exp(-s * 0.16) : 0;
-    const edge = flash > 0.02 ? rgba(accent, 0.25 + 0.75 * flash) : "rgba(255,255,255,.1)";
+    const hot = s >= 0 ? Math.exp(-s * 0.18) : 0;
     return (
-      <div style={{ position: "relative", width: size * 0.76, height: h, borderRadius: size * 0.1, overflow: "hidden",
-        margin: `0 ${size * 0.035}px`, background: "linear-gradient(180deg, #1b1e26 0%, #101218 50%, #1b1e26 100%)",
-        boxShadow: `inset 0 0 0 ${Math.max(1, size * 0.014)}px ${edge}, 0 ${size * 0.08}px ${size * 0.22}px rgba(0,0,0,.5)${flash > 0.02 ? `, 0 0 ${size * 0.3 * flash}px ${rgba(accent, 0.45 * flash)}` : ""}` }}>
-        <div style={{ position: "absolute", left: 0, right: 0, top: 0, transform: `translateY(${(-(frac + 1) * h).toFixed(2)}px)`,
+      <span style={{ position: "relative", display: "inline-block", height: h, width: size * 0.64, overflow: "hidden",
+        // the reel's own mask: digits fade in and out at its top and bottom edges
+        maskImage: "linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%)",
+        WebkitMaskImage: "linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%)" }}>
+        <span style={{ position: "absolute", left: 0, right: 0, top: 0, transform: `translateY(${(-(frac + 1) * h).toFixed(2)}px)`,
           filter: speed > 0.35 ? `blur(${Math.min(5, speed * 1.1).toFixed(2)}px)` : undefined }}>
           {Array.from({ length: 12 }, (_, i) => i - 1).map((v) => (
-            <div key={v} style={{ height: h, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: INTER,
-              fontWeight: 800, fontSize: size, color: "#fff", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+            <span key={v} style={{ height: h, display: "flex", alignItems: "center", justifyContent: "center", ...style,
+              color: hot > 0.03 ? mix("#ffffff", flash, hot * 0.85) : "#fff" }}>
               {((v % 10) + 10) % 10}
-            </div>
+            </span>
           ))}
-        </div>
-        <div style={{ position: "absolute", inset: 0, background:
-          "linear-gradient(180deg, rgba(0,0,0,.7) 0%, rgba(0,0,0,0) 27%, rgba(0,0,0,0) 73%, rgba(0,0,0,.7) 100%)" }} />
-        <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: Math.max(1, size * 0.01), background: "rgba(0,0,0,.35)" }} />
-      </div>
+        </span>
+      </span>
     );
   };
 
-// The drums land between frames 16 and 42; the last landing is the hit (sfx_at 42).
+/** Outlined text style for the count looks (bold white, black outline under the fill, a soft shadow). */
+const outlined = (size: number, color: string, k: number): React.CSSProperties => {
+  const sw = Math.max(5 * k, Math.min(13 * k, size * 0.105));
+  return {
+    color, WebkitTextStroke: `${sw.toFixed(2)}px #000`, paintOrder: "stroke fill",
+    textShadow: `0 ${3 * k}px ${4 * k}px rgba(0,0,0,.35), 0 ${8 * k}px ${26 * k}px rgba(0,0,0,.5)`,
+  } as React.CSSProperties;
+};
+
+// The reels land between frames 16 and 42, left to right; the last landing is the hit (sfx_at 42).
 const RollingDigits: Look = ({ overlay, accent }) => {
   const frame = useCurrentFrame();
   const k = useK();
-  const hold = useHold();
+  const { width, height } = useVideoConfig();
   const q = useOut();
   const n = numOf(overlay);
   if (!n) return null;
-  const cz = overlay.compact ? 1.35 : 1;
   const text = fmt(n.value, n.dec, n.grouping);
   const chars = Array.from(text);
   const nd = chars.filter((c) => /\d/.test(c)).length;
   const FIRST = 16, LAST = 42;
-  const em = nd * 0.85 + (chars.length - nd) * 0.34 + (n.prefix ? 0.5 * n.prefix.length : 0)
-    + (n.unit ? (n.unit === "%" ? 0.5 : 0.2 + n.unit.length * 0.2) : 0);
-  const size = Math.max(48, Math.min(128 * (overlay.compact ? 1.15 : 1), 1500 / em));
   const acc = readable(accent);
+  const unitWord = Boolean(n.unit) && n.unit !== "%" && n.unit.length > 2;
+  const em = nd * 0.64 + (chars.length - nd) * 0.3 + (n.prefix ? 0.42 * n.prefix.length : 0)
+    + (n.unit ? (n.unit === "%" ? 0.5 : unitWord ? 0.12 + n.unit.length * 0.2 : 0.2 + n.unit.length * 0.44) : 0);
+  const size = Math.max(90 * k, Math.min(260 * k * (overlay.compact ? 1.1 : 1), (width - 280 * k) / em));
+  const digit: React.CSSProperties = { fontFamily: INTER, fontWeight: 800, fontSize: size, lineHeight: 1, letterSpacing: "-0.02em",
+    fontVariantNumeric: "tabular-nums", ...outlined(size * 0.62, "#fff", k) };
+  const label = cap(overlay.text) || (str(overlay.label) ? cap(overlay.label) : "");
+  const labelFit = fitLines(label, Math.min(1400, (width / k) - 280), [72, 64, 56, 48], 0.5, 2);
+  const enter = ramp(frame, 0, 14);
   let j = 0;
   const cells = chars.map((c, i) => {
     if (!/\d/.test(c)) {
       return (
-        <span key={i} style={{ fontFamily: INTER, fontWeight: 800, fontSize: size * k, color: SOFT, alignSelf: "flex-end",
-          marginBottom: size * 0.2 * k, opacity: ramp(frame, 4, 10) }}>{c}</span>
+        <span key={i} style={{ ...digit, width: size * 0.3, textAlign: "center", opacity: ramp(frame, 6, 10) }}>{c}</span>
       );
     }
     const land = nd > 1 ? FIRST + (j * (LAST - FIRST)) / (nd - 1) : LAST;
     const turns = 2 + j;
     j += 1;
-    return <Drum key={i} d={Number(c)} start={3} land={Math.round(land)} turns={turns} size={size * k} accent={accent} />;
+    return <Reel key={i} d={Number(c)} start={3} land={Math.round(land)} turns={turns} size={size} style={digit} flash={acc} />;
   });
-  const enter = ramp(frame, 0, 16);
+  const punch = frame >= LAST ? 1 + 0.05 * Math.exp(-(frame - LAST) / 3.5) * Math.cos((frame - LAST) / 2.2) : 1;
   return (
     <AbsoluteFill>
-      <Scrim ov={overlay} />
-      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", transform: `scale(${hold})` }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 34 * k, opacity: 1 - q,
-          transform: `translateY(${(-q * 26 * k).toFixed(2)}px)` }}>
-          <div style={{ display: "flex", alignItems: "center", opacity: enter,
-            transform: `translateY(${((1 - enter) * 30 * k).toFixed(2)}px) scale(${0.96 + 0.04 * enter})` }}>
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: -height * 0.06,
+          opacity: (1 - q) * Math.min(1, enter * 2), transform: `translateY(${((1 - enter) * 26 * k + q * 34 * k).toFixed(2)}px)` }}>
+          <div style={{ display: "flex", alignItems: "center", transform: `scale(${punch.toFixed(4)})` }}>
             {n.prefix ? (
-              <span style={{ fontFamily: INTER, fontWeight: 800, fontSize: size * 0.62 * k, color: acc, marginRight: size * 0.08 * k }}>{n.prefix}</span>
+              <span style={{ ...digit, ...outlined(size * 0.4, acc, k), fontSize: size * 0.62, marginRight: size * 0.04 }}>{n.prefix}</span>
             ) : null}
             {cells}
             {n.unit ? (
-              <span style={{ fontFamily: n.unit === "%" ? INTER : LABEL, fontWeight: 800, color: n.unit === "%" ? acc : SOFT,
-                fontSize: size * (n.unit === "%" ? 0.62 : 0.34) * k, letterSpacing: n.unit === "%" ? 0 : "0.08em",
-                marginLeft: size * 0.1 * k, opacity: ramp(frame, LAST - 4, 10) }}>{n.unit}</span>
+              <span style={unitWord
+                ? { fontFamily: LABEL, fontWeight: 800, fontSize: size * 0.4, letterSpacing: "0.04em", marginLeft: size * 0.1,
+                  ...outlined(size * 0.4, acc, k), opacity: ramp(frame, LAST - 6, 10), alignSelf: "flex-end", marginBottom: size * 0.16 }
+                : { ...digit, ...outlined(size * 0.45, acc, k), fontSize: size * (n.unit === "%" ? 0.62 : 0.72), marginLeft: size * 0.03,
+                  opacity: ramp(frame, 6, 10) }}>{n.unit}</span>
             ) : null}
           </div>
-          <Caption ov={overlay} at={LAST - 6} q={0} room={1200} cz={cz} />
+          {labelFit.ls.map((ln, i) => {
+            const lp = ramp(frame, LAST - 8 + i * 4, 16);
+            return (
+              <div key={i} style={{ fontFamily: LABEL, fontWeight: 800, fontSize: labelFit.size * k, lineHeight: 1.04, letterSpacing: "0.03em",
+                whiteSpace: "nowrap", marginTop: i ? 0 : 4 * k, ...outlined(labelFit.size * k, "#fff", k),
+                transform: `translateY(${((1 - lp) * 28 * k).toFixed(2)}px)`, opacity: Math.min(1, lp * 2) }}>{ln}</div>
+            );
+          })}
         </div>
       </AbsoluteFill>
     </AbsoluteFill>
@@ -666,7 +687,13 @@ const SplitCompare: Look = ({ overlay, accent }) => {
 };
 
 // ================================================================== ct-corner-stat
-// A tag riding the footage, top right. The card clicks into place at frame 6 (sfx_at 6); the count runs 8 -> 44.
+/**
+ * A figure riding the footage top right, in the owner's text language (no
+ * card): the count in outlined Inter 800 right-aligned at the 96 px margin,
+ * its unit in the accent, a short accent tick drawing under it, then the
+ * label in outlined bold caps. It clicks in at frame 6 (sfx_at 6); the count
+ * runs 8 -> 40 and lands with a small punch; it slides back out at the end.
+ */
 const CornerStat: Look = ({ overlay, accent }) => {
   const frame = useCurrentFrame();
   const k = useK();
@@ -674,29 +701,45 @@ const CornerStat: Look = ({ overlay, accent }) => {
   const q = useOut();
   const n = numOf(overlay);
   if (!n) return null;
-  const e = ramp(frame, 0, 12, backOut);
-  const o = ramp(frame, 0, 6);
-  const p = ramp(frame, 8, 36, countEase);
-  const size = figSize(n, 520, 84, 44);
+  const acc = readable(accent);
+  const e = ramp(frame, 0, 14, expoOut);
+  const p = ramp(frame, 8, 32, countEase);
+  const LAND = 40;
+  const room = Math.min(760 * k, width * 0.42);
+  const size = Math.max(70 * k, Math.min(150 * k, room / Math.max(0.1, figEm(n))));
   const label = cap(overlay.text) || cap(overlay.label);
-  const fitL = fitLines(label, 520, [32, 30, 28], 0.5, 1);
-  const edge = ramp(frame, 4, 14, inOut);
+  const fitL = fitLines(label, room / k, [52, 46, 40, 36], 0.5, 2);
+  const unitWord = Boolean(n.unit) && n.unit !== "%" && n.unit.length > 2;
+  const digit: React.CSSProperties = { fontFamily: INTER, fontWeight: 800, fontSize: size, lineHeight: 1, letterSpacing: "-0.02em",
+    ...outlined(size * 0.6, "#fff", k) };
+  const punch = frame >= LAND ? 1 + 0.06 * Math.exp(-(frame - LAND) / 3.5) * Math.cos((frame - LAND) / 2.2) : 1;
+  const tick = ramp(frame, LAND - 4, 14, inOut) * (1 - q);
   return (
     <AbsoluteFill>
-      <div style={{ position: "absolute", top: 96 * k, right: 96 * k, maxWidth: Math.min(640 * k, width * 0.4), display: "flex",
-        borderRadius: 14 * k, overflow: "hidden", background: "rgba(10,12,18,.8)", backdropFilter: "blur(12px)",
-        boxShadow: "0 18px 50px rgba(0,0,0,.45)", border: "1px solid rgba(255,255,255,.08)", opacity: o * (1 - q),
-        transform: `translateX(${((1 - e) * 46 * k + q * 70 * k).toFixed(2)}px) scale(${0.94 + 0.06 * e})`, transformOrigin: "100% 0" }}>
-        <div style={{ width: 7 * k, background: readable(accent), transform: `scaleY(${edge})`, transformOrigin: "50% 0" }} />
-        <div style={{ padding: `${22 * k}px ${34 * k}px ${22 * k}px ${28 * k}px`, display: "flex", flexDirection: "column", gap: 8 * k }}>
-          <Figure n={n} p={p} size={size * k} accent={accent} />
-          {fitL.ls.length ? (
-            <Rise at={12} q={0}>
-              <div style={{ fontFamily: LABEL, fontWeight: 700, fontSize: fitL.size * k, letterSpacing: "0.12em", color: SOFT,
-                whiteSpace: "nowrap" }}>{fitL.ls[0]}</div>
-            </Rise>
+      <div style={{ position: "absolute", top: 90 * k, right: 96 * k, display: "flex", flexDirection: "column", alignItems: "flex-end",
+        opacity: Math.min(1, e * 2) * (1 - q), transform: `translateX(${((1 - e) * 60 * k + q * 60 * k).toFixed(2)}px)` }}>
+        <div style={{ display: "flex", alignItems: "baseline", whiteSpace: "nowrap", transform: `scale(${punch.toFixed(4)})`,
+          transformOrigin: "100% 80%" }}>
+          {n.prefix ? <span style={{ ...digit, ...outlined(size * 0.4, acc, k), fontSize: size * 0.62, marginRight: size * 0.03 }}>{n.prefix}</span> : null}
+          <Count n={n} p={p} style={digit} />
+          {n.unit ? (
+            <span style={unitWord
+              ? { fontFamily: LABEL, fontWeight: 800, fontSize: size * 0.44, letterSpacing: "0.04em", marginLeft: size * 0.1,
+                ...outlined(size * 0.44, acc, k) }
+              : { ...digit, ...outlined(size * 0.45, acc, k), fontSize: size * (n.unit === "%" ? 0.62 : 0.72), marginLeft: size * 0.03 }}>
+              {n.unit}</span>
           ) : null}
         </div>
+        <div style={{ width: 120 * k * tick, height: 8 * k, borderRadius: 2 * k, background: acc, margin: `${10 * k}px 0 ${8 * k}px`,
+          boxShadow: `0 0 0 ${2.5 * k}px #000, 0 0 ${14 * k}px ${acc}` }} />
+        {fitL.ls.map((ln, i) => {
+          const lp = ramp(frame, 12 + i * 4, 16);
+          return (
+            <div key={i} style={{ fontFamily: LABEL, fontWeight: 800, fontSize: fitL.size * k, lineHeight: 1.04, letterSpacing: "0.04em",
+              whiteSpace: "nowrap", textAlign: "right", ...outlined(fitL.size * k, "#fff", k),
+              transform: `translateY(${((1 - lp) * 24 * k).toFixed(2)}px)`, opacity: Math.min(1, lp * 2) }}>{ln}</div>
+          );
+        })}
       </div>
     </AbsoluteFill>
   );

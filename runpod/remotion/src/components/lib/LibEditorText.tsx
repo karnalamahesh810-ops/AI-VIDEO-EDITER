@@ -326,38 +326,35 @@ export const EdTypeClean: Look = ({ overlay, accent }) => {
   const text = str(overlay.text);
   if (!text) return null;
   const kicker = str(overlay.label).toUpperCase();
-  const { lines: ls, size } = fitText(text, F_INTER, px(54), px(40), width * 0.56, 3);
+  // The owner (2026-09-30): no strip or box behind the words - bold white letters with a black outline.
+  const { lines: ls, size } = fitText(text, F_INTER_HEAVY, px(84), px(52), width * 0.64, 3);
   const shown = typedAt(frame, rawText, text.length);
   const done = typingEnds(rawText);
   const keys = keyWords(text, overlay.highlight);
   const hot = vivid(accent);
   const shift = ramp(frame, done + 2, 12, inOut);
   const keyCol = interpolateColors(shift, [0, 1], ["#ffffff", hot]);
-  const lineH = size * 1.24;
-  const textW = Math.max(...ls.map((l) => measure(l, F_INTER))) * size;
-  const kickH = kicker ? px(30) * 1.6 : 0;
+  const lineH = size * 1.18;
+  const kickPx = px(44);
+  const kickH = kicker ? kickPx * 1.4 : 0;
   const blockH = ls.length * lineH + kickH;
-  const left = 120 * u;
-  const bottom = 200 * u;
-  const stripIn = ramp(frame, 0, 12);
+  const left = 124 * u;
+  const bottom = 300 * u;
   const barIn = ramp(frame, 2, 14);
+  const stroke = (s: number): React.CSSProperties => ({
+    WebkitTextStroke: `${Math.max(4.5 * u, Math.min(12 * u, s * 0.1)).toFixed(2)}px #000`, paintOrder: "stroke fill",
+    textShadow: `0 ${3 * u}px ${4 * u}px rgba(0,0,0,.35), 0 ${8 * u}px ${26 * u}px rgba(0,0,0,.5)`,
+  } as React.CSSProperties);
   return (
     <AbsoluteFill style={{ opacity: 1 - out, transform: `translateY(${(out * 14 * u).toFixed(2)}px)` }}>
-      {overlay.fullFrame ? null : (
-        <div style={{ position: "absolute", left: 0, bottom: bottom - 40 * u, height: blockH + 80 * u,
-          width: Math.min(width, left + textW + 360 * u),
-          clipPath: `inset(0 ${((1 - stripIn) * 100).toFixed(2)}% 0 0)`,
-          background: "linear-gradient(90deg, rgba(6,8,12,.84) 0%, rgba(6,8,12,.74) 50%, rgba(6,8,12,0) 100%)",
-          WebkitMaskImage: "linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%)",
-          maskImage: "linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%)" }} />
-      )}
-      <div style={{ position: "absolute", left: left - 22 * u, bottom, width: Math.max(3, 4 * u), height: blockH,
-        background: hot, transform: `scaleY(${barIn})`, transformOrigin: "bottom", borderRadius: 2 }} />
-      <div style={{ position: "absolute", left, bottom, fontFamily: INTER, fontWeight: 700, fontSize: size,
-        lineHeight: `${lineH}px`, color: "#fff", textShadow: "0 2px 14px rgba(0,0,0,.45)" }}>
+      <div style={{ position: "absolute", left: left - 26 * u, bottom, width: Math.max(4, 8 * u), height: blockH,
+        background: hot, transform: `scaleY(${barIn})`, transformOrigin: "bottom", borderRadius: 2 * u,
+        boxShadow: `0 0 0 ${2.5 * u}px #000, 0 0 ${14 * u}px ${hot}` }} />
+      <div style={{ position: "absolute", left, bottom, fontFamily: INTER, fontWeight: 800, fontSize: size, letterSpacing: "-0.01em",
+        lineHeight: `${lineH}px`, color: "#fff", ...stroke(size) }}>
         {kicker ? (
-          <div style={{ fontSize: px(30), lineHeight: 1.6, fontWeight: 800, letterSpacing: "0.16em", color: hot,
-            opacity: ramp(frame, 2, 10), transform: `translateY(${((1 - ramp(frame, 2, 12)) * 10).toFixed(2)}px)` }}>
+          <div style={{ fontFamily: LABEL, fontSize: kickPx, lineHeight: 1.4, fontWeight: 800, letterSpacing: "0.12em", color: hot,
+            ...stroke(kickPx), opacity: ramp(frame, 2, 10), transform: `translateY(${((1 - ramp(frame, 2, 12)) * 10).toFixed(2)}px)` }}>
             {kicker}
           </div>
         ) : null}
@@ -441,18 +438,21 @@ const EdWordByWord: Look = ({ overlay, accent }) => {
   if (!text) return null;
   const hot = vivid(accent);
   const keys = keyWords(text, overlay.highlight);
-  const { lines: ls, size } = fitText(text, F_INTER_HEAVY, px(66), px(46), width * 0.66, 3);
+  // Big, outlined, no dark pool behind (the owner: bold white text with a black stroke).
+  const { lines: ls, size } = fitText(text.toUpperCase(), F_LABEL, px(120), px(72), width * 0.78, 2, 0.01);
+  const sw = Math.max(5 * (width / 1920), Math.min(13 * (width / 1920), size * 0.1));
   const total = ls.reduce((a, l) => a + l.split(" ").length, 0);
   const step = Math.max(2, Math.min(5, Math.floor((Math.min(dur, 120) * 0.45) / Math.max(1, total))));
   let idx = 0;
   return (
     <AbsoluteFill style={{ opacity: 1 - out }}>
       <Shade ov={overlay} out={out}
-        background="radial-gradient(ellipse 62% 34% at 50% 54%, rgba(0,0,0,.66) 0%, rgba(0,0,0,.42) 55%, rgba(0,0,0,.08) 100%)" />
-      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", paddingTop: height * 0.04 }}>
+        background="radial-gradient(ellipse 62% 34% at 50% 58%, rgba(0,0,0,.22) 0%, rgba(0,0,0,.1) 55%, rgba(0,0,0,0) 100%)" />
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", paddingTop: height * 0.1 }}>
         {ls.map((line, i) => (
-          <div key={i} style={{ display: "flex", gap: size * 0.26, fontFamily: INTER, fontWeight: 800, fontSize: size,
-            lineHeight: 1.16, color: "#fff" }}>
+          <div key={i} style={{ display: "flex", gap: size * 0.22, fontFamily: LABEL, fontWeight: 800, fontSize: size,
+            lineHeight: 1.04, color: "#fff", letterSpacing: "0.01em", WebkitTextStroke: `${sw.toFixed(2)}px #000`,
+            paintOrder: "stroke fill" } as React.CSSProperties}>
             {line.split(" ").map((w, j) => {
               const at = 3 + idx * step;
               idx += 1;
@@ -464,8 +464,8 @@ const EdWordByWord: Look = ({ overlay, accent }) => {
                   transform: `translateY(${((1 - p) * size * 0.34 - out * size * 0.2).toFixed(2)}px) scale(${(0.86 + 0.14 * p).toFixed(4)})`,
                   filter: p < 0.98 ? `blur(${((1 - Math.min(1, p)) * 6).toFixed(2)}px)` : undefined,
                   color: isKey ? hot : "#fff",
-                  textShadow: isKey ? `0 0 ${size * 0.45}px ${alpha(hot, 0.55)}, 0 3px 16px rgba(0,0,0,.6)`
-                    : "0 3px 16px rgba(0,0,0,.7)" }}>{w}</span>
+                  textShadow: isKey ? `0 0 ${size * 0.35}px ${alpha(hot, 0.5)}, 0 4px 6px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.5)`
+                    : "0 4px 6px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.5)" }}>{w}</span>
               );
             })}
           </div>
@@ -981,12 +981,14 @@ const EdQuoteType: Look = ({ overlay, accent }) => {
   if (!text) return null;
   const who = (str(overlay.label) || str(overlay.subtitle)).toUpperCase().slice(0, 60);
   const hot = vivid(accent);
-  let fit = fitText(text, F_SERIF, px(54), px(38), width * 0.6, 3);
-  if (/…$/.test(fit.lines[fit.lines.length - 1] || "")) fit = fitText(text, F_SERIF, px(38), px(34), width * 0.64, 4);
+  // Heavy serif with a black outline (the owner: bold text that reads on any footage), never a thin light serif.
+  let fit = fitText(text, F_SERIF_HEAVY, px(70), px(48), width * 0.64, 3);
+  if (/…$/.test(fit.lines[fit.lines.length - 1] || "")) fit = fitText(text, F_SERIF_HEAVY, px(48), px(42), width * 0.68, 4);
   const { lines: ls, size } = fit;
   const shown = Math.max(0, Math.min(text.length, typedAt(frame, rawText, full.length) - lead));
   const done = typingEnds(rawText);
-  const lineH = size * 1.36;
+  const lineH = size * 1.26;
+  const sw = (s2: number) => Math.max(4.5 * u, Math.min(11 * u, s2 * 0.09));
   const blockH = ls.length * lineH;
   const left = 170 * u;
   const top = height * 0.5 - blockH / 2 - (who ? 30 * u : 0);
@@ -995,19 +997,22 @@ const EdQuoteType: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ opacity: 1 - out }}>
       <Shade ov={overlay} out={out}
-        background="linear-gradient(90deg, rgba(0,0,0,.66) 0%, rgba(0,0,0,.5) 40%, rgba(0,0,0,.12) 75%, rgba(0,0,0,0) 100%)" />
-      <div style={{ position: "absolute", left: left - 86 * u, top: top - 212 * u, fontFamily: PLAYFAIR_HEAVY, fontWeight: 800,
-        fontSize: 440 * u, lineHeight: 1, color: alpha(hot, 0.32), opacity: marks,
-        transform: `translateY(${((1 - marks) * 30 * u).toFixed(2)}px)` }}>“</div>
-      <div style={{ position: "absolute", left, top, fontFamily: SERIF, fontWeight: 400, fontSize: size, lineHeight: `${lineH}px`,
-        color: "#fff", textShadow: "0 3px 16px rgba(0,0,0,.5)" }}>
+        background="linear-gradient(90deg, rgba(0,0,0,.5) 0%, rgba(0,0,0,.34) 40%, rgba(0,0,0,.08) 75%, rgba(0,0,0,0) 100%)" />
+      <div style={{ position: "absolute", left: left - 70 * u, top: top - 150 * u, fontFamily: PLAYFAIR_HEAVY, fontWeight: 800,
+        fontSize: 300 * u, lineHeight: 1, color: hot, opacity: marks, WebkitTextStroke: `${(6 * u).toFixed(2)}px #000`,
+        paintOrder: "stroke fill", textShadow: `0 ${10 * u}px ${30 * u}px rgba(0,0,0,.45)`,
+        transform: `translateY(${((1 - marks) * 30 * u).toFixed(2)}px) scale(${(0.8 + 0.2 * marks).toFixed(4)})` } as React.CSSProperties}>“</div>
+      <div style={{ position: "absolute", left, top, fontFamily: PLAYFAIR_HEAVY, fontWeight: 800, fontSize: size, lineHeight: `${lineH}px`,
+        color: "#fff", WebkitTextStroke: `${sw(size).toFixed(2)}px #000`, paintOrder: "stroke fill",
+        textShadow: `0 ${3 * u}px ${4 * u}px rgba(0,0,0,.35), 0 ${8 * u}px ${26 * u}px rgba(0,0,0,.5)` } as React.CSSProperties}>
         <TypedLines lines={ls} shown={shown} caret={frame < done + 24} caretColor={hot} />
         {who ? (
           <div style={{ display: "flex", alignItems: "center", gap: 18 * u, marginTop: 26 * u, opacity: tail,
             transform: `translateX(${((1 - tail) * -16 * u).toFixed(2)}px)` }}>
-            <div style={{ width: 44 * u, height: Math.max(3, 4 * u), background: hot }} />
-            <div style={{ fontFamily: INTER, fontWeight: 700, fontSize: px(30), letterSpacing: "0.16em", color: "rgba(255,255,255,.88)",
-              textShadow: "none" }}>{who}</div>
+            <div style={{ width: 56 * u, height: Math.max(4, 8 * u), background: hot, borderRadius: 2 * u,
+              boxShadow: `0 0 0 ${2.5 * u}px #000` }} />
+            <div style={{ fontFamily: LABEL, fontWeight: 800, fontSize: px(44), letterSpacing: "0.1em", color: "#fff",
+              WebkitTextStroke: `${sw(px(44)).toFixed(2)}px #000`, paintOrder: "stroke fill" } as React.CSSProperties}>{who}</div>
           </div>
         ) : null}
       </div>

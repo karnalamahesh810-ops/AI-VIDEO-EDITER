@@ -33,6 +33,7 @@ import { LOOKS as L_LibCountPro } from "./LibCountPro";
 import { LOOKS as L_LibPhotoEditor } from "./LibPhotoEditor";
 import { LOOKS as L_LibPersonFull } from "./LibPersonFull";
 import { LOOKS as L_LibVideoMarks } from "./LibVideoMarks";
+import { LOOKS as L_LibBoldText } from "./LibBoldText";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -74,4 +75,6 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibPhotoEditor, ["pe-zoom-circle", "pe-highlight-box", "pe-focus-pull", "pe-split-panels", "pe-frame-drop", "pe-parallax", "pe-newsprint", "pe-punch-in", "pe-duotone", "pe-light-sweep", "pe-polaroid-pan", "pe-case-file", "pe-circle-spotlight", "pe-magnify", "pe-red-arrow"]),
   ...pick(L_LibPersonFull, ["pf-profile", "pf-dossier", "pf-split-name", "pf-spotlight", "pf-magazine"]),
   ...pick(L_LibVideoMarks, ["vm-arrow", "vm-circle", "vm-box"]),
+  // Text only, the sound built in (LookSounds): the letter-drop date and the bold count.
+  ...pick(L_LibBoldText, ["dt-letter-drop", "bt-count"]),
 };

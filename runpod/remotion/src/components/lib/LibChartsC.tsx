@@ -345,14 +345,14 @@ const tickerPlan = (fps: number, dur: number, n: number, share = 0.45, dwell = 4
 };
 
 // ------------------------------------------------------------------ shared pieces
-/** One soft tick at frame `at` (pop.mp3): a Sequence of its own, never past the overlay's end. */
+/** One soft tick at frame `at` (ui-tick.mp3): a Sequence of its own, never past the overlay's end. */
 const Tick: React.FC<{ at: number; volume?: number }> = ({ at, volume = 0.3 }) => {
   const { durationInFrames } = useVideoConfig();
   const from = Math.round(at);
   if (!Number.isFinite(from) || from < 0 || from >= durationInFrames - 1) return null;
   return (
     <Sequence from={from} durationInFrames={Math.max(1, Math.min(30, durationInFrames - from))} layout="none">
-      <Audio src={staticFile("sfx/pop.mp3")} volume={Math.max(0, Math.min(1, volume * IN_LOOK_SFX_SCALE))} />
+      <Audio src={staticFile("sfx/ui-tick.mp3")} volume={Math.max(0, Math.min(1, volume * IN_LOOK_SFX_SCALE))} />
     </Sequence>
   );
 };

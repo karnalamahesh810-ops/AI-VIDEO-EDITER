@@ -59,11 +59,18 @@ def judge(grays, probe=None, clip=None, known=None, kind="video", subject="Lake 
                               event=event, known=known)
 
 
-def make_clip(path, source, seconds, size=None):
+def make_clip(path, source, seconds, size=None, vf=None):
     src = source if size is None else f"{source}=s={size}:rate=15"
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", src, "-t", str(seconds), "-c:v", "libx264",
-                    "-preset", "ultrafast", "-pix_fmt", "yuv420p", path], check=True, capture_output=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", src, "-t", str(seconds)]
+                   + (["-vf", vf] if vf else []) + ["-c:v", "libx264",
+                   "-preset", "ultrafast", "-pix_fmt", "yuv420p", path], check=True, capture_output=True)
     return path
+
+
+# The "mandelbrot" source is a smooth zoom into one still picture, which the
+# library gate now turns down as a still passed off as footage (src/slop.py,
+# 2026-09-30); a good clip changes inside the picture as well.
+MOVING = "hue=H=2*PI*t:s=1"
 
 
 # --------------------------------------------------------------------------- #
@@ -307,9 +314,12 @@ class Gate(unittest.TestCase):
     def test_real_files_through_ffmpeg(self):
         d = tempfile.mkdtemp()
         try:
-            good = make_clip(os.path.join(d, "good.mp4"), "mandelbrot", 3.5, "1280x720")
+            good = make_clip(os.path.join(d, "good.mp4"), "mandelbrot", 3.5, "1280x720", vf=MOVING)
             v = libstore.check(good, clip=False)
             self.assertTrue(v.ok, v.reasons)
+            # The same zoom with nothing moving inside it is a still, not footage.
+            zoom = libstore.check(make_clip(os.path.join(d, "z.mp4"), "mandelbrot", 3.5, "1280x720"), clip=False)
+            self.assertIn("a still with a pan or zoom, not footage", zoom.reasons)
             self.assertEqual((v.width, v.height), (1280, 720))
             self.assertEqual(libstore.check(make_clip(os.path.join(d, "s.mp4"), "mandelbrot", 3.5, "640x360"),
                                             clip=False).reasons, ["below 720p (640x360)"])
@@ -557,7 +567,11 @@ class RecordOnR2(unittest.TestCase):
             return by_path[path]
         lib = library.Library("proj", "job")
         lib.loaded = lib.db = True
+        # The shown-clip path (the ledger off, or LIBRARY_SAVE_UNUSED=0). With
+        # the cross-video ledger on, the library keeps the job's UNUSED
+        # moments instead (2026-09-30; tests/test_ledger.py).
         with mock.patch.multiple(config, **R2ON), mock.patch.object(config, "CLIP_LIBRARY", True), \
+                mock.patch.object(config, "LIBRARY_SAVE_UNUSED", False), \
                 mock.patch.object(storage, "broker_enabled", return_value=True), \
                 mock.patch.object(storage, "broker_upload", side_effect=AssertionError("no app storage on R2")), \
                 mock.patch.object(libstore, "check", side_effect=check) as chk, \

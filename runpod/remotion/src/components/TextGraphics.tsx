@@ -1,8 +1,10 @@
 import React from "react";
-import { AbsoluteFill, interpolate } from "remotion";
+import { AbsoluteFill, interpolate, interpolateColors, useCurrentFrame, useVideoConfig } from "remotion";
 import { TEXT_SHADOW, useOverlayAnim, useScale } from "./layout";
-import { INTER, NARROW, SERIF, SERIF_ITALIC } from "./fonts";
+import { INTER, LABEL, NARROW, SERIF, SERIF_ITALIC, TYPEWRITER } from "./fonts";
 import { Rule, Shade, Words, run, useDrift } from "./kinetic";
+import { useK } from "./pro/ProGraphics";
+import { EASE, F, bright, fit, measure, outline, str, tween } from "./pro/Kit";
 import type { Overlay } from "../types";
 
 /**
@@ -82,29 +84,107 @@ export const Kicker: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay
   );
 };
 
-/** A glass memo plate of large typewriter text, an accent bar down its side. */
+/**
+ * Typed lines in the owner's text language (no plate: outlined letters, the
+ * key words turning to the accent once typed). `shown` characters of the
+ * joined lines are visible (one space between lines counts); the rest are
+ * laid out invisibly so nothing shifts; a block caret sits after the last
+ * character while typing. Whitespace lives inside one inline run per line
+ * (a flex container drops whitespace-only text between its items).
+ */
+const TypedLines: React.FC<{ lines: string[]; shown: number; typing: boolean; hot: Set<string>; hotP: number; accent: string;
+  style: React.CSSProperties; size: number; lineH: number; caretColor: string; q: number }> =
+  ({ lines, shown, typing, hot, hotP, accent, style, size, lineH, caretColor, q }) => {
+    const frame = useCurrentFrame();
+    let used = 0;
+    return (
+      <div>
+        {lines.map((ln, li) => {
+          const lineStart = used;
+          used += ln.length + 1;
+          let pos = lineStart;
+          const words = ln.split(" ");
+          const qi = Math.max(0, Math.min(1, q * 1.4 - li * 0.2));
+          return (
+            <div key={li} style={{ height: lineH, display: "flex", alignItems: "center", whiteSpace: "pre",
+              transform: `translateY(${(qi * size * 0.5).toFixed(2)}px)`, opacity: 1 - qi }}>
+              <span style={style}>
+                {words.map((wd, wi) => {
+                  const start = pos;
+                  pos += wd.length + 1;
+                  const vis = Math.max(0, Math.min(wd.length, shown - start));
+                  const isHot = hot.has(normWord(wd));
+                  const caretHere = typing && shown >= start && shown <= start + wd.length;
+                  const colour = isHot && !typing ? interpolateColors(hotP, [0, 1], ["#ffffff", accent]) : "#ffffff";
+                  return (
+                    <React.Fragment key={wi}>
+                      <span style={{ color: colour }}>{wd.slice(0, vis)}</span>
+                      {caretHere ? (
+                        <span style={{ display: "inline-block", width: 0, position: "relative" }}>
+                          <span style={{ position: "absolute", left: size * 0.04, top: -size * 0.72, width: size * 0.36, height: size * 0.8,
+                            background: caretColor, boxShadow: "0 0 0 2px #000", opacity: Math.floor(frame / 4) % 2 ? 0.4 : 1 }} />
+                        </span>
+                      ) : null}
+                      <span style={{ visibility: "hidden" }}>{wd.slice(vis)}</span>
+                      {wi < words.length - 1 ? " " : ""}
+                    </React.Fragment>
+                  );
+                })}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+/**
+ * A typed note (TEXT_MEMO_V1), in the owner's text language: the line typed
+ * in bold Courier with a black outline, low-left clear of the captions, a
+ * block caret while it types (the sound planner's window: from 0.2 s over
+ * 1.2 s, eased out); once typed its key words warm into the accent and a
+ * short accent rule draws under the last line. The lines drop away at the end.
+ */
 export const MemoBox: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, accent }) => {
-  const { frame, fps, opacity } = useOverlayAnim(8, 10);
-  const s = useScale();
-  const drift = useDrift(6);
-  const box = run(frame, 0, fps * 0.4);
-  const text = overlay.text || "";
-  const size = text.length > 70 ? 54 : 70;
+  const frame = useCurrentFrame();
+  const { fps, durationInFrames, height } = useVideoConfig();
+  const k = useK();
+  const text = str(overlay.text);
+  if (!text) return null;
+  const q = tween(frame, durationInFrames - 13, 12, EASE.in);
+  const f = fit(text, F.mono, 64 * k, 44 * k, 1400 * k, 4);
+  const LINE = f.size * 1.2;
+  const total = f.lines.join(" ").length;
+  const shown = Math.floor(total * ease(frame, fps * 0.2, fps * 1.2));
+  const doneAt = Math.round(fps * 1.4);
+  const typing = frame < doneAt;
+  const hot = bright(accent);
+  const rule = tween(frame, doneAt, 14, EASE.inOut) * (1 - q);
+  const blockH = f.lines.length * LINE;
+  const top = height * 0.72 - blockH - 20 * k;
   return (
-    <AbsoluteFill style={{ opacity }}>
-      <div style={{ position: "absolute", left: s(96), bottom: s(130), maxWidth: "62%", display: "flex", alignItems: "stretch",
-        transform: drift, opacity: box, filter: "drop-shadow(0 24px 60px rgba(0,0,0,.55))" }}>
-        <div style={{ width: s(12), background: accent || "#d62828", transform: `scaleY(${box})`, transformOrigin: "bottom" }} />
-        <div style={{ padding: `${s(26)}px ${s(40)}px`, background: "linear-gradient(135deg, rgba(16,16,20,.86), rgba(10,10,13,.7))",
-          backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,.08)", borderLeft: "none",
-          clipPath: `inset(0 ${(1 - box) * 100}% 0 0)`, fontFamily: INTER, fontWeight: 600, fontSize: s(size), lineHeight: 1.3,
-          color: "rgba(244,242,238,.96)", letterSpacing: "-0.01em" }}>
-          {typed(text, frame, fps * 0.2, fps * 1.2)}
-          <span style={{ color: accent, opacity: Math.floor(frame / Math.max(1, Math.round(fps * 0.4))) % 2 ? 0.2 : 1 }}>|</span>
-        </div>
+    <AbsoluteFill>
+      <div style={{ position: "absolute", left: 96 * k, top }}>
+        <TypedLines lines={f.lines} shown={shown} typing={typing} hot={memoMarks(text, overlay.highlight)}
+          hotP={tween(frame, doneAt, 12)} accent={hot} size={f.size} lineH={LINE} caretColor={hot} q={q}
+          style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: f.size, letterSpacing: "-0.01em", ...outline(f.size, "#fff", k) }} />
+        <div style={{ marginTop: 10 * k, width: 180 * k * rule, height: 8 * k, borderRadius: 2 * k, background: hot,
+          boxShadow: `0 0 0 ${2.5 * k}px #000, 0 0 ${16 * k}px ${hot}` }} />
       </div>
     </AbsoluteFill>
   );
+};
+
+const normWord = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+const MEMO_STOP = new Set(["the", "a", "an", "of", "in", "on", "at", "to", "for", "and", "or", "but", "is", "are", "was", "were",
+  "be", "it", "its", "this", "that", "with", "from", "by", "as", "into", "than", "they", "their", "have", "has", "had", "not"]);
+/** The words to mark once typed: the highlight prop's, else the longest content word. */
+const memoMarks = (text: string, highlight?: string): Set<string> => {
+  const words = text.split(/\s+/).map(normWord).filter(Boolean);
+  const given = (highlight || "").split(/[\s,]+/).map(normWord).filter((w) => w && words.includes(w));
+  if (given.length) return new Set(given);
+  const best = words.filter((w) => !MEMO_STOP.has(w) && w.length >= 5).sort((a, b) => b.length - a.length)[0];
+  return new Set(best ? [best] : []);
 };
 
 /** One to three words, huge, rising out of a blur one after another ("WATER", "SHE LEFT"). */
@@ -156,24 +236,40 @@ export const UnderlineTitle: React.FC<{ overlay: Overlay; accent: string }> = ({
   );
 };
 
-/** A dark bar across the left of the frame, typewriter text typing into it. */
+/**
+ * A typed headline (TEXT_BAR_TITLE_V1), in the owner's text language: big
+ * bold condensed caps with a black outline, typed at the left margin (the
+ * sound planner's window: from 0.3 s over 1.1 s, eased out) behind a block
+ * caret; once typed the key word turns to the accent and a thick accent bar
+ * (outlined, not a box behind the words) draws under the line. It drops away
+ * line by line at the end.
+ */
 export const BarTitle: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, accent }) => {
-  const { frame, fps, opacity } = useOverlayAnim(8, 10);
-  const s = useScale();
-  const bar = run(frame, 0, fps * 0.45);
-  const text = overlay.text || "";
-  const size = text.length > 50 ? 56 : 74;
+  const frame = useCurrentFrame();
+  const { fps, durationInFrames, height } = useVideoConfig();
+  const k = useK();
+  const text = str(overlay.text).toUpperCase();
+  if (!text) return null;
+  const q = tween(frame, durationInFrames - 13, 12, EASE.in);
+  const f = fit(text, F.label, 104 * k, 56 * k, 1300 * k, 2, 0.02);
+  const LINE = f.size * 1.04;
+  const textW = Math.max(...f.lines.map((l) => measure(l, F.label, 0.02))) * f.size;
+  const total = f.lines.join(" ").length;
+  const shown = Math.floor(total * ease(frame, fps * 0.3, fps * 1.1));
+  const doneAt = Math.round(fps * 1.4);
+  const typing = frame < doneAt;
+  const hot = bright(accent);
+  const under = tween(frame, doneAt - 2, 16, EASE.inOut) * (1 - q);
+  const blockH = f.lines.length * LINE;
+  const top = height * 0.6 - blockH;
   return (
-    <AbsoluteFill style={{ opacity, justifyContent: "center" }}>
-      <div style={{ width: `${70 * bar}%`, display: "flex", alignItems: "stretch", overflow: "hidden",
-        boxShadow: "0 24px 70px rgba(0,0,0,.5)" }}>
-        <div style={{ width: s(16), background: accent || "#d62828", flexShrink: 0 }} />
-        <div style={{ flex: 1, background: "linear-gradient(90deg, rgba(20,24,32,.9) 0%, rgba(20,24,32,.72) 100%)",
-          backdropFilter: "blur(10px)", padding: `${s(30)}px ${s(56)}px`, fontFamily: NARROW, fontWeight: 700, fontSize: s(size + 6),
-          lineHeight: 1.16, color: "#f2f2ee", whiteSpace: "pre-wrap", minHeight: s(100), textTransform: "uppercase",
-          letterSpacing: "0.03em" }}>
-          {typed(text, frame, fps * 0.3, fps * 1.1)}
-        </div>
+    <AbsoluteFill>
+      <div style={{ position: "absolute", left: 96 * k, top }}>
+        <TypedLines lines={f.lines} shown={shown} typing={typing} hot={memoMarks(text, overlay.highlight)} hotP={tween(frame, doneAt, 10)}
+          accent={hot} size={f.size} lineH={LINE} caretColor={hot} q={q}
+          style={{ fontFamily: LABEL, fontWeight: 800, fontSize: f.size, letterSpacing: "0.02em", ...outline(f.size, "#fff", k) }} />
+        <div style={{ marginTop: 8 * k, width: Math.max(160 * k, textW * 0.42) * under, height: 12 * k, borderRadius: 3 * k, background: hot,
+          boxShadow: `0 0 0 ${3 * k}px #000, 0 0 ${18 * k}px ${hot}` }} />
       </div>
     </AbsoluteFill>
   );

@@ -1,0 +1,6427 @@
+{
+ "version": 2,
+ "about": "The sound designer's map (2026-09-30), read by scripts/build_registry.py: per look its built-in cues (defaults.sounds, lookSoundPlan.ts schema; `alt` = the older file played while the new one does not ship), its main sound and the frame its loudest point lands on (defaults.sfx / sfxAt, for older documents and the planner's timing), and whether it types. `replace` upgrades the older files in the designs written for the looks not listed here. Frames are at 30 fps from the look's first frame; `scale` cues stretch with the look's length.",
+ "replace": {
+  "pop": "ui-pop",
+  "click": "ui-click",
+  "tick": "ui-tick",
+  "ding": "ui-pop",
+  "shutter": "camera-shutter",
+  "flash-hit": "camera-flash-pop",
+  "marker": "marker-draw",
+  "paper-slide": "paper-slide-v2",
+  "paper": "paper-slide-v2",
+  "page": "page-flip",
+  "swipe": "ui-swipe",
+  "whoosh-soft": "whoosh-soft-v2",
+  "map-whoosh": "map-swoop",
+  "riser": "riser-short-v2",
+  "riser-short": "riser-short-v2",
+  "boom-soft": "boom-sub",
+  "glitch": "glitch-digital",
+  "glitch-short": "glitch-short-v2"
+ },
+ "letter_by_letter_date": [
+  {
+   "name": "letter-tick",
+   "alt": [
+    "tick"
+   ],
+   "at": "first letter frame",
+   "align": "peak",
+   "every": 2,
+   "count": "letters",
+   "gain_db": -6.0,
+   "note": "one per letter (2 frames per letter at 30 fps)"
+  },
+  {
+   "name": "date-slam",
+   "alt": [
+    "hit-deep"
+   ],
+   "at": "frame the whole date lands",
+   "align": "peak",
+   "gain_db": 0.0
+  }
+ ],
+ "looks": {
+  "CALL_ARROW_V1": {
+   "sfx": "ui-swipe",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "an arrow points in",
+   "event": "arrow draws 0-22 (90% at 12)"
+  },
+  "CALL_HIGHLIGHT_BOX_V1": {
+   "sfx": "marker-underline",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 8,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "a highlighter fill sweeps behind the words",
+   "event": "highlighter sweep 8-48 (cubic-out)"
+  },
+  "CALL_ICON_POP_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "at": 4,
+     "alt": [
+      "pop"
+     ]
+    },
+    {
+     "name": "whoosh-soft-v2",
+     "at": 8,
+     "alt": [
+      "whoosh-soft"
+     ]
+    }
+   ],
+   "why": "animation audit 2026-09-30: rebuilt: ring pops 0-16, icon draws 6-26, caption rises at 8, label at 16"
+  },
+  "CHART_PIE_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "slices sweep in turn",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "CHART_SHARES_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "segments fill one by one",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "CMP_BUBBLES_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "circles grow in turn",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "CMP_COLUMNS_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "tiles stack up",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "CMP_DELTA_V1": {
+   "sfx": "ui-swipe",
+   "sfx_at": 26,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 21,
+     "align": "start"
+    }
+   ],
+   "why": "the arrow draws down to the new value",
+   "event": "arrow draws 21-37"
+  },
+  "DOC_ARTICLE_V1": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 7,
+     "align": "peak"
+    }
+   ],
+   "why": "newspaper/report card lands",
+   "event": "page lands (90% at 7)"
+  },
+  "DOC_CLIPPING_V1": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 7,
+     "align": "peak"
+    },
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 30,
+     "align": "start",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "newspaper page lands on the desk",
+   "event": "page lands (90% at 7)"
+  },
+  "DOC_PAPER_V1": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 7,
+     "align": "peak"
+    }
+   ],
+   "why": "archival paper record slides in",
+   "event": "page lands (90% at 7)"
+  },
+  "DOC_WINDOW_V1": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 6,
+     "align": "peak"
+    },
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 30,
+     "align": "start",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "report page lands in its window",
+   "event": "window lands (full size ~6)"
+  },
+  "DOSSIER_V1": {
+   "sfx": "folder-open",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "folder-open",
+     "alt": [
+      "paper"
+     ],
+     "at": 6,
+     "align": "peak",
+     "gain_db": 3.5
+    },
+    {
+     "name": "stamp",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 48,
+     "align": "peak",
+     "gain_db": -2.2
+    }
+   ],
+   "types": true,
+   "why": "file window opens on the red desk",
+   "event": "file window lands (~6)"
+  },
+  "FACTS_CARD_V1": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "portrait fades, points list in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "HEADLINE_BANNER_V1": {
+   "sfx": "swoosh-text",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 7,
+     "align": "peak"
+    }
+   ],
+   "why": "the banner headline flies in",
+   "event": "banner slides in (90% at 7)"
+  },
+  "HEADLINE_NEWS_V1": {
+   "sfx": "alert-tone",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "alert-tone",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "breaking-news chyron",
+   "event": "chyron slides in (90% at 8)"
+  },
+  "LIB_AL_ALERT_TOAST": {
+   "sfx": "phone-buzz",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "phone-buzz",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "a push alert springs in (the phone buzzes)",
+   "event": "alert card passes rest at 8 (settles 20)"
+  },
+  "LIB_AL_BREAKING_FLAG": {
+   "sfx": "alert-tone",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "alert-tone",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 5,
+     "align": "peak"
+    }
+   ],
+   "why": "BREAKING panel swings out",
+   "event": "red tab pops (full 5), BREAKING panel lands ~12"
+  },
+  "LIB_AL_COUNTDOWN_TIMER": {
+   "sfx": "ui-tick",
+   "sfx_at": 21,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 21,
+     "align": "peak",
+     "gain_db": 2.3
+    }
+   ],
+   "why": "digits tick in real time",
+   "event": "countdown starts at 21, then ticks every 30f"
+  },
+  "LIB_AL_EMERGENCY_STAMP": {
+   "sfx": "stamp",
+   "sfx_at": 32,
+   "sounds": [
+    {
+     "name": "stamp",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 32,
+     "align": "peak",
+     "gain_db": 1.8
+    },
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "the emergency stamp comes down on the proclamation",
+   "event": "stamp contact at 32 (sheet lands 8)"
+  },
+  "LIB_AL_LIVE_TAG": {
+   "sfx": "record-beep",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "record-beep",
+     "alt": [
+      "click"
+     ],
+     "at": 6,
+     "align": "peak",
+     "gain_db": 2.0
+    }
+   ],
+   "why": "LIVE bug with a beating red dot",
+   "event": "LIVE chip wipes open (95% at 6), dot beats every 30f"
+  },
+  "LIB_AL_SEVERITY_METER": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 52,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 52,
+     "align": "peak"
+    }
+   ],
+   "why": "a charge climbs the level staircase",
+   "event": "steps light at 28+6i: the last lit step (52 for level 5 of 5)"
+  },
+  "LIB_AL_SIREN_BADGE": {
+   "sfx": "alert-tone",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "alert-tone",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 6,
+     "align": "peak"
+    }
+   ],
+   "why": "siren emblem strobes",
+   "event": "badge pops (full 6), strobes 0,6,24,30..."
+  },
+  "LIB_AL_SLIM_TICKER": {
+   "sfx": "ui-swipe",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 6,
+     "align": "start"
+    }
+   ],
+   "why": "chip springs up, bar extends",
+   "event": "bar extends 6-24 (chip full at 5)"
+  },
+  "LIB_AL_STORM_TRACK": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 22,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 18,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "cone and track draw over the coastline",
+   "event": "cone and track draw 18-90"
+  },
+  "LIB_AL_WARNING_POLYGON": {
+   "sfx": "radar-ping",
+   "sfx_at": 21,
+   "sounds": [
+    {
+     "name": "radar-ping",
+     "alt": [
+      "ding"
+     ],
+     "at": 21,
+     "align": "peak"
+    }
+   ],
+   "why": "radar scan reveals the storm",
+   "event": "radar scan 4-36 crosses centre at 21, pin pops 24"
+  },
+  "LIB_CA_BAR_RACE": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "bars race",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CA_DOT_PLOT": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "dots slide",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CA_GROUPED_BARS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "columns grow",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CA_HEAT_STRIP": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "cells flip up",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CA_HISTOGRAM": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "columns rise in a wave",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CA_LOLLIPOP": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "heads pop",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CA_RADIAL_BARS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "rings sweep",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CA_WATERFALL": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "running total steps up",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_DONUT_LEGEND": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "comet sweeps the ring",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_FLOW_SPLIT": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "flow pours and splits",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_RADAR": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "value polygon grows",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_RANGE_BARS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "ranges grow",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_SCATTER": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "bubbles land with a ripple",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_SLOPE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "slope lines draw across",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_STEP_CHART": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "flags rise at each step",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_STREAM": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "ribbons inflate",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_TREEMAP": {
+   "sfx": "whoosh-fast",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "a knife edge cuts the tiles",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CB_TWIN_LINES": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "lines draw together",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CF_CASE_STAMP": {
+   "sfx": "stamp",
+   "sfx_at": 30,
+   "sounds": [
+    {
+     "name": "stamp",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 30,
+     "align": "peak",
+     "gain_db": 1.8,
+     "scale": true
+    },
+    {
+     "name": "folder-open",
+     "alt": [
+      "paper"
+     ],
+     "at": 11,
+     "align": "peak",
+     "gain_db": -0.5,
+     "scale": true
+    }
+   ],
+   "why": "the case stamp comes down",
+   "event": "case-number box stamp contact 30 (folder lands 11; digit stamps from 34)"
+  },
+  "LIB_CF_CCTV_FRAME": {
+   "sfx": "record-beep",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "record-beep",
+     "alt": [
+      "click"
+     ],
+     "at": 7,
+     "align": "peak",
+     "gain_db": 2.0
+    }
+   ],
+   "why": "CCTV display over the footage",
+   "event": "REC dot pops (full 7), blinks every 30f"
+  },
+  "LIB_CF_EVIDENCE_BAG": {
+   "sfx": "folder-open",
+   "sfx_at": 9,
+   "sounds": [
+    {
+     "name": "folder-open",
+     "alt": [
+      "paper"
+     ],
+     "at": 9,
+     "align": "peak",
+     "gain_db": 3.5,
+     "scale": true
+    }
+   ],
+   "why": "evidence item on the case desk",
+   "event": "bag lands (95% at 9)"
+  },
+  "LIB_CF_EVIDENCE_MARKERS": {
+   "sfx": "ui-click",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 20,
+     "align": "peak",
+     "gain_db": 4.4,
+     "scale": true
+    },
+    {
+     "name": "camera-flash-pop",
+     "alt": [
+      "flash-hit"
+     ],
+     "at": 22,
+     "align": "peak",
+     "gain_db": -4.0,
+     "scale": true
+    }
+   ],
+   "why": "numbered evidence markers land on the scene photo",
+   "event": "markers touch down 20, 30, 40"
+  },
+  "LIB_CF_FINGERPRINT_SCAN": {
+   "sfx": "radar-ping",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "radar-ping",
+     "alt": [
+      "ding"
+     ],
+     "at": 11,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "print scan and match",
+   "event": "scan sweep 11-47 (SCAN COMPLETE 53)"
+  },
+  "LIB_CF_PHONE_RECORDS": {
+   "sfx": "ui-swipe",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 11,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "the phone turns in",
+   "event": "phone turns in (95% at 11)"
+  },
+  "LIB_CF_POLICE_LOG": {
+   "sfx": "typewriter-clean",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "typewriter-clean",
+     "alt": [
+      "typewriter"
+     ],
+     "at": 7,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "types": true,
+   "why": "log rows type in on the console (flag types:true for the typing contract)",
+   "event": "console lands 7; rows type ~28-47, 56-72, 81-94"
+  },
+  "LIB_CF_REDACTED_DOC": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 11,
+     "align": "peak",
+     "scale": true
+    },
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 16,
+     "align": "start",
+     "gain_db": -4.0,
+     "scale": true
+    }
+   ],
+   "why": "the page tilts in",
+   "event": "page tilts in (95% at 11)"
+  },
+  "LIB_CF_TRANSCRIPT": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 9,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 9,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "transcript sheet",
+   "event": "page slides up (95% at 9)"
+  },
+  "LIB_CF_UNKNOWN_SILHOUETTE": {
+   "sfx": "camera-flash-pop",
+   "sfx_at": 15,
+   "sounds": [
+    {
+     "name": "camera-flash-pop",
+     "alt": [
+      "flash-hit"
+     ],
+     "at": 15,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "a camera flash hits the unidentified silhouette",
+   "event": "camera flash peaks at 15 (bust rises 3-27)"
+  },
+  "LIB_CH_CHROME_SWEEP": {
+   "sfx": "light-shimmer",
+   "sfx_at": 28,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 28,
+     "align": "peak"
+    }
+   ],
+   "why": "light sweeps across the chrome title",
+   "event": "light sweep on the letters 25-31 (mid 28)"
+  },
+  "LIB_CH_COORDINATES": {
+   "sfx": "map-swoop",
+   "sfx_at": 10,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 2,
+     "align": "start"
+    },
+    {
+     "name": "radar-ping",
+     "alt": [
+      "ding"
+     ],
+     "at": 41,
+     "align": "peak",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "globe spins onto the place",
+   "event": "globe spins 2-41; brackets lock and pin at 40-41"
+  },
+  "LIB_CH_COUNTDOWN": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 36,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 36,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "the build runs through 3-2-1 and hits on the resolve burst",
+   "event": "3-2-1 land at 3, 15, 27; resolve burst flash at 36"
+  },
+  "LIB_CH_EPISODE_CARD": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 11,
+     "align": "peak"
+    }
+   ],
+   "why": "card flips in on a 3D turn",
+   "event": "card flip lands (95% at 11)"
+  },
+  "LIB_CH_FRACTION_TAG": {
+   "sfx": "count-final",
+   "sfx_at": 24,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 2,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 24,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 24,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "02 / 05 digits spin into place",
+   "event": "digits read 16-24"
+  },
+  "LIB_CH_GLITCH_RESOLVE": {
+   "sfx": "glitch-digital",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "glitch-digital",
+     "alt": [
+      "glitch-pro"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "the title glitches 0-13 and resolves at 14 (glitch-transition peaks 0.76 s in)",
+   "event": "glitch 0-13, resolves at 14"
+  },
+  "LIB_CH_LETTERBOX": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "cinema bars slide in",
+   "event": "bars land (95% at 8)"
+  },
+  "LIB_CH_NUMBER_ROLL": {
+   "sfx": "count-final",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 3,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 20,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 20,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "chapter number spins into place on odometer wheels",
+   "event": "digits read the number at 19-20 (settle 33-36)"
+  },
+  "LIB_CH_PART_DIVIDER": {
+   "sfx": "impact",
+   "sfx_at": 29,
+   "sounds": [
+    {
+     "name": "impact",
+     "at": 29,
+     "align": "peak"
+    }
+   ],
+   "why": "the sound stays; only its hit frame changes",
+   "event": "title lands ~29 (rules 3-28)"
+  },
+  "LIB_CH_YEAR_TAPE": {
+   "sfx": "date-slam",
+   "sfx_at": 45,
+   "sounds": [
+    {
+     "name": "date-slam",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 45,
+     "align": "peak"
+    },
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 6,
+     "align": "start",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "year counter rolls and lands on the year",
+   "event": "year counter rolls 6-51 (fastest 16), reads the year at 45"
+  },
+  "LIB_CN_BW_FLASH_INTRO": {
+   "sfx": "camera-flash-pop",
+   "sfx_at": 3,
+   "sounds": [
+    {
+     "name": "camera-flash-pop",
+     "alt": [
+      "flash-hit"
+     ],
+     "at": 3,
+     "align": "peak"
+    }
+   ],
+   "why": "a camera flash drops the footage to black and white",
+   "event": "camera flash peak at 3"
+  },
+  "LIB_CN_CHAPTER_PROGRESS": {
+   "sfx": "ui-tick",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": 2.3
+    }
+   ],
+   "why": "chapter progress bar fills",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CN_FOCUS_VIGNETTE": {
+   "sfx": "reverse-swell",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "reverse-swell",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "iris vignette closes in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CN_LETTERBOX_CAPTION": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 7,
+     "align": "peak"
+    },
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "cinema bars slide over the footage",
+   "event": "bars land (95% at 7), glint 8-44"
+  },
+  "LIB_CN_PLACE_STAMP": {
+   "sfx": "typewriter-clean",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "typewriter-clean",
+     "alt": [
+      "typewriter"
+     ],
+     "at": 6,
+     "align": "start",
+     "until": 52
+    }
+   ],
+   "types": true,
+   "why": "thriller location stamp typed in",
+   "event": "the place types 6-51 (no stamp in the code)"
+  },
+  "LIB_CN_SPOTLIGHT_TITLE": {
+   "sfx": "impact-punch",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "impact-punch",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 5,
+     "align": "peak"
+    },
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 3,
+     "align": "start",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "a hanging lamp clunks on",
+   "event": "lamp flickers on 1-5 (beam sweeps 3-35)"
+  },
+  "LIB_CN_TO_BE_CONTINUED": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 10,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 10,
+     "align": "peak"
+    }
+   ],
+   "why": "chevrons sweep across",
+   "event": "chevrons sweep 0-19 (mid 8-11), tip snaps 30"
+  },
+  "LIB_CN_TRUE_EVENTS": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 26,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 26,
+     "align": "peak"
+    }
+   ],
+   "why": "letters rise from the centre",
+   "event": "the line lands ~26"
+  },
+  "LIB_CO_BRACKET_LABEL": {
+   "sfx": "ui-swipe",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 2,
+     "align": "start"
+    }
+   ],
+   "why": "bracket grows from its centre",
+   "event": "bracket grows 2-19"
+  },
+  "LIB_CO_CHIP_STACK": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "chips drop from the spine",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CO_CIRCLE_PULSE": {
+   "sfx": "marker-draw",
+   "sfx_at": 23,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 3,
+     "align": "start",
+     "until": 24,
+     "fade": 4
+    }
+   ],
+   "why": "a marker loop draws round the subject",
+   "event": "marker loop draws 3-21"
+  },
+  "LIB_CO_DRAW_ARROW": {
+   "sfx": "marker-draw",
+   "sfx_at": 29,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 9,
+     "align": "start",
+     "until": 31,
+     "fade": 4
+    }
+   ],
+   "why": "a hand-drawn arrow with a pigtail draws out",
+   "event": "arrow draws 9-28"
+  },
+  "LIB_CO_MEASURE_LINE": {
+   "sfx": "ui-swipe",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 6,
+     "align": "start"
+    }
+   ],
+   "why": "dimension line shoots out",
+   "event": "dimension line shoots 6-26"
+  },
+  "LIB_CO_RIPPLE_POINTER": {
+   "sfx": "pin-drop",
+   "sfx_at": 9,
+   "sounds": [
+    {
+     "name": "pin-drop",
+     "alt": [
+      "pop"
+     ],
+     "at": 9,
+     "align": "peak",
+     "gain_db": 1.8
+    }
+   ],
+   "why": "a drop falls onto the point and ripples",
+   "event": "the drop lands at 9"
+  },
+  "LIB_CO_SCRIBBLE_UNDERLINE": {
+   "sfx": "marker-draw",
+   "sfx_at": 36,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 16,
+     "align": "start",
+     "until": 36,
+     "fade": 4
+    }
+   ],
+   "why": "three-pass marker scribble under the statement",
+   "event": "3-pass scribble 16-33"
+  },
+  "LIB_CO_SPEECH_BUBBLE": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "bubble springs out",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CO_SPOTLIGHT": {
+   "sfx": "light-shimmer",
+   "sfx_at": 15,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 2,
+     "align": "start",
+     "until": 32,
+     "fade": 4
+    }
+   ],
+   "why": "a pool of light sweeps onto the subject",
+   "event": "light sweeps in 2-29"
+  },
+  "LIB_CO_TARGET_LOCK": {
+   "sfx": "radar-ping",
+   "sfx_at": 29,
+   "sounds": [
+    {
+     "name": "radar-ping",
+     "alt": [
+      "ding"
+     ],
+     "at": 29,
+     "align": "peak"
+    }
+   ],
+   "why": "reticle hunts, then locks",
+   "event": "reticle snaps shut at 29"
+  },
+  "LIB_CP_BALANCE_SCALE": {
+   "sfx": "impact",
+   "sfx_at": 17,
+   "sounds": [
+    {
+     "name": "impact",
+     "at": 17,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "the sound stays; only its hit frame changes",
+   "event": "first weight lands ~17, tip 28-62"
+  },
+  "LIB_CP_MIRROR_BARS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "bars grow both ways",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CP_MYTH_FACT": {
+   "sfx": "marker-draw",
+   "sfx_at": 42,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 22,
+     "align": "start",
+     "scale": true,
+     "until": 41,
+     "fade": 4
+    }
+   ],
+   "why": "the red cross draws over the myth",
+   "event": "red cross draws 22-38 (board turns 72-102)"
+  },
+  "LIB_CP_PHOTO_VERSUS": {
+   "sfx": "impact",
+   "sfx_at": 25,
+   "sounds": [
+    {
+     "name": "impact",
+     "at": 25,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "the sound stays; only its hit frame changes",
+   "event": "VS slams at 25"
+  },
+  "LIB_CP_QUADRANT_MATRIX": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "dot flies to its quadrant",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CP_SPECTRUM_MARKER": {
+   "sfx": "magnifier-glide",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "magnifier-glide",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "a lens marker springs along the band",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CP_SPLIT_STATEMENT": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "halves slide and lock",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CP_THEN_NOW_MORPH": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "disc morphs THEN to NOW",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CP_TICK_TABLE": {
+   "sfx": "ui-tick",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": 2.3
+    }
+   ],
+   "why": "marks tick in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CP_VENN": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "rings slide together",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_CT_BAR_PERCENT": {
+   "sfx": "count-final",
+   "sfx_at": 50,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 50,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 50,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "bar fills while the percent counts",
+   "event": "count 8 -> 50 (LibCountPro's own comment); the final click on the landing"
+  },
+  "LIB_CT_CLEAN_COUNT": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 6,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "count-roll over the count, count-final on the landing",
+   "event": "count 6 -> 44 (LibCountPro's own comment); the final click on the landing"
+  },
+  "LIB_CT_CORNER_STAT": {
+   "sfx": "ui-click",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "at": 6,
+     "alt": [
+      "click"
+     ]
+    },
+    {
+     "name": "count-roll",
+     "at": 8,
+     "until": 40,
+     "alt": [
+      "count-tick"
+     ],
+     "gain_db": -4.0,
+     "when": "value",
+     "align": "start"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 40,
+     "when": "value"
+    }
+   ],
+   "why": "animation audit 2026-09-30: rebuilt as outlined text top-right: slides in 0-14 (click at 6), counts 8 -> 40, punch + accent tick at 40"
+  },
+  "LIB_CT_DOT_GRID": {
+   "sfx": "count-final",
+   "sfx_at": 54,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 10,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 54,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 54,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "grid fills while the number counts",
+   "event": "count 10 -> 54 (LibCountPro's own comment); the final click on the landing"
+  },
+  "LIB_CT_MONEY_STACK": {
+   "sfx": "count-final",
+   "sfx_at": 50,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 10,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 50,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 50,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "money counts while notes drop",
+   "event": "count 10 -> 50 (LibCountPro's own comment); the final click on the landing"
+  },
+  "LIB_CT_PIE_SLICE": {
+   "sfx": "count-final",
+   "sfx_at": 40,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 40,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 40,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "share sweeps in with the count",
+   "event": "count 8 -> 40 (LibCountPro's own comment); the final click on the landing"
+  },
+  "LIB_CT_RING_PRO": {
+   "sfx": "count-final",
+   "sfx_at": 52,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 10,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 52,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 52,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "ring sweeps with the count",
+   "event": "count 10 -> 52 (LibCountPro's own comment); the final click on the landing"
+  },
+  "LIB_CT_ROLLING_DIGITS": {
+   "sfx": "count-final",
+   "sfx_at": 42,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "at": 3,
+     "until": 42,
+     "alt": [
+      "count-tick"
+     ],
+     "gain_db": -4.0,
+     "when": "value",
+     "align": "start"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 42,
+     "when": "value"
+    }
+   ],
+   "why": "animation audit 2026-09-30: rebuilt as outlined odometer reels (no tiles): reels spin from 3 and land left to right 16 -> 42; the last landing (42) is the hit"
+  },
+  "LIB_CT_SPLIT_COMPARE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 10,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 10,
+     "align": "peak"
+    }
+   ],
+   "why": "two panels swipe in and meet",
+   "event": "registry sfxAt"
+  },
+  "LIB_DT_CALENDAR_PAGE": {
+   "sfx": "marker-draw",
+   "sfx_at": 40,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 20,
+     "align": "start",
+     "until": 37,
+     "fade": 4
+    },
+    {
+     "name": "page-flip",
+     "alt": [
+      "page"
+     ],
+     "at": 9,
+     "align": "peak",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "red marker circles the day",
+   "event": "marker circles the day 20-34 (page flips 0-18)"
+  },
+  "LIB_DT_CLEAN_CARD": {
+   "sfx": "date-slam",
+   "sfx_at": 28,
+   "sounds": [
+    {
+     "name": "date-slam",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 28,
+     "align": "peak"
+    }
+   ],
+   "why": "bold date card lands",
+   "event": "count lands and the punch starts at 28"
+  },
+  "LIB_DT_CLOCK_TIME": {
+   "sfx": "ui-tick",
+   "sfx_at": 30,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 30,
+     "align": "peak",
+     "gain_db": 2.3
+    }
+   ],
+   "why": "hands stop exactly on the time",
+   "event": "hands stop at 30"
+  },
+  "LIB_DT_COUNTDOWN_DAYS": {
+   "sfx": "count-final",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 0,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 12,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 12,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "the span counts up and lands",
+   "event": "registry sfxAt"
+  },
+  "LIB_DT_DATE_SLAM": {
+   "sfx": "date-slam",
+   "sfx_at": 17,
+   "sounds": [
+    {
+     "name": "date-slam",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 17,
+     "align": "peak"
+    }
+   ],
+   "why": "full-width date band slams in",
+   "event": "month 13, day 17, year 21 slam (registry 18 is 1f late)"
+  },
+  "LIB_DT_REC_STAMP": {
+   "sfx": "record-beep",
+   "sfx_at": 3,
+   "sounds": [
+    {
+     "name": "record-beep",
+     "alt": [
+      "click"
+     ],
+     "at": 3,
+     "align": "peak",
+     "gain_db": 2.0
+    }
+   ],
+   "why": "camcorder REC display",
+   "event": "OSD clicks on at 3"
+  },
+  "LIB_DT_STAMP_BAR": {
+   "sfx": "swoosh-text",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 6,
+     "align": "peak"
+    }
+   ],
+   "why": "a yellow block sweeps the date bar in",
+   "event": "registry sfxAt"
+  },
+  "LIB_DT_TIMELINE_TICK": {
+   "sfx": "ui-tick",
+   "sfx_at": 16,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 16,
+     "align": "peak",
+     "gain_db": 2.3
+    }
+   ],
+   "why": "month ruler decelerates onto the date",
+   "event": "marker drop contact ~16 (landed flag 22)"
+  },
+  "LIB_ED_ALERT_BAR": {
+   "sfx": "alert-tone",
+   "sfx_at": 10,
+   "sounds": [
+    {
+     "name": "alert-tone",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 10,
+     "align": "peak"
+    }
+   ],
+   "why": "warning bar",
+   "event": "registry sfxAt"
+  },
+  "LIB_ED_BLUR_IN": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 14,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 14,
+     "align": "peak"
+    }
+   ],
+   "why": "letters come out of a blur",
+   "event": "registry sfxAt"
+  },
+  "LIB_ED_BOX_STACK": {
+   "sfx": "ui-pop",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 6,
+     "align": "peak"
+    }
+   ],
+   "why": "words in solid boxes stack in",
+   "event": "registry sfxAt"
+  },
+  "LIB_ED_GLASS_CAPTION": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 10,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 10,
+     "align": "peak"
+    }
+   ],
+   "why": "frosted pill reveals the line",
+   "event": "registry sfxAt"
+  },
+  "LIB_ED_MARKER_HIGHLIGHT": {
+   "sfx": "marker-underline",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 16,
+     "align": "start"
+    }
+   ],
+   "why": "a highlighter sweeps the key words",
+   "event": "highlighter stroke 16-26 (2nd word 24-34)"
+  },
+  "LIB_ED_NEWS_CLIPPING": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 14,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 14,
+     "align": "peak"
+    }
+   ],
+   "why": "newspaper clipping lands",
+   "event": "registry sfxAt"
+  },
+  "LIB_ED_OUTLINE_FILL": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 36,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 36,
+     "align": "peak"
+    }
+   ],
+   "why": "outlined title fills left to right",
+   "event": "registry sfxAt"
+  },
+  "LIB_ED_QUESTION": {
+   "sfx": "marker-draw",
+   "sfx_at": 26,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 26,
+     "align": "peak"
+    }
+   ],
+   "why": "the big question mark draws on",
+   "event": "registry sfxAt"
+  },
+  "LIB_ED_SIDE_NOTE": {
+   "sfx": "pen-scribble",
+   "sfx_at": 30,
+   "sounds": [
+    {
+     "name": "pen-scribble",
+     "alt": [
+      "marker"
+     ],
+     "at": 4,
+     "align": "start"
+    }
+   ],
+   "why": "a handwritten note is written on",
+   "event": "pen stroke 4-18, handwriting 8-34"
+  },
+  "LIB_ED_SPLIT_REVEAL": {
+   "sfx": "swoosh-text",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "two lines slide in from opposite sides",
+   "event": "registry sfxAt"
+  },
+  "LIB_ED_WORD_BY_WORD": {
+   "sfx": "ui-click",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": 4.4
+    }
+   ],
+   "why": "words land one at a time",
+   "event": "registry sfxAt"
+  },
+  "LIB_FX_FILM_BURN": {
+   "sfx": "light-shimmer",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 7,
+     "align": "peak"
+    }
+   ],
+   "why": "warm light floods in and burns through",
+   "event": "burn-through white-hot at 7 (flood peaks 14)"
+  },
+  "LIB_FX_GLITCH_SLICE": {
+   "sfx": "glitch-digital",
+   "sfx_at": 1,
+   "sounds": [
+    {
+     "name": "glitch-digital",
+     "alt": [
+      "glitch-pro"
+     ],
+     "at": 1,
+     "align": "peak"
+    }
+   ],
+   "why": "three digital bursts slice the picture",
+   "event": "bursts peak at 1, D/2, D-13"
+  },
+  "LIB_FX_GRADIENT_MESH": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "gradient blooms open",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_FX_HUD_SCAN": {
+   "sfx": "radar-ping",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "radar-ping",
+     "alt": [
+      "ding"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "HUD grid and scan line",
+   "event": "scan line sweeps down 8-46"
+  },
+  "LIB_FX_INK_BLEED": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "ink blooms over the shot (a dark swell with the spread)",
+   "event": "ink blooms 0-32"
+  },
+  "LIB_FX_LIGHT_STREAK": {
+   "sfx": "light-shimmer",
+   "sfx_at": 15,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 15,
+     "align": "peak"
+    }
+   ],
+   "why": "anamorphic light streak sweeps across",
+   "event": "streak crosses the centre at 15"
+  },
+  "LIB_FX_PAPER_TEAR": {
+   "sfx": "tape-rip",
+   "sfx_at": 69,
+   "sounds": [
+    {
+     "name": "tape-rip",
+     "alt": [
+      "paper"
+     ],
+     "at": 67,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "the paper cracks and tears",
+   "event": "tear at duration-38 (67 for 3.5 s), split 76; sheet slides up 0-13"
+  },
+  "LIB_FX_SHAPE_WIPE": {
+   "sfx": "whoosh-fast",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 5,
+     "align": "peak"
+    }
+   ],
+   "why": "shapes whip across the frame",
+   "event": "shapes whip in fast to ~8, glide to 30"
+  },
+  "LIB_FX_ZOOM_TUNNEL": {
+   "sfx": "impact-punch",
+   "sfx_at": 9,
+   "sounds": [
+    {
+     "name": "impact-punch",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 9,
+     "align": "peak"
+    },
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "peak",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "the text slams in with an impact ring and flash",
+   "event": "text slams at 9 (flash 3, ring 2-18)"
+  },
+  "LIB_HL_CENTER_STACK": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "title rises",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_HL_FOCUS_PULL": {
+   "sfx": "reverse-swell",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "reverse-swell",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "words pull from blur into focus",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_HL_KEYWORD_POP": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "the key word grows",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_HL_LETTER_FLIP": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "letters roll in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_HL_MARKER_SWEEP": {
+   "sfx": "marker-underline",
+   "sfx_at": 40,
+   "sounds": [
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 36,
+     "align": "start"
+    }
+   ],
+   "why": "highlighter sweeps the words",
+   "event": "highlighter sweeps 36-46 (8-word headline)"
+  },
+  "LIB_HL_OUTLINE_FILL": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "stroked title rises, then fills",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_HL_SPLIT_LINE": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "hairline splits, headline appears",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_HL_TICKER_SLIDE": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "band slides in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_HL_WIPE_BAR": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "block reveal",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_IC_CALENDAR_TEAR": {
+   "sfx": "tape-rip",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "tape-rip",
+     "alt": [
+      "paper"
+     ],
+     "at": 18,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "day pages rip away",
+   "event": "pages rip 18, 26, 32, 37 ..."
+  },
+  "LIB_IC_CROWD_SWELL": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "crowd gathers",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_IC_DOLLAR_PULSE": {
+   "sfx": "impact",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "impact",
+     "at": 11,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "the sound stays; only its hit frame changes",
+   "event": "coin beats at 11, 43, 75 (double thump)"
+  },
+  "LIB_IC_DROP_FILL": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "a droplet falls in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_IC_FACTORY_SMOKE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "factory rises, smoke",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_IC_FIRE_FLICKER": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "a spark ignites the flame",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_IC_HOURGLASS": {
+   "sfx": "ui-swipe",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "hourglass flips over",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_IC_HOUSE_GRID": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "house icons land",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_IC_POWER_BOLT": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "bolt charges up",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_IC_TRAFFIC_QUEUE": {
+   "sfx": "whoosh-fast",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "cars race in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LS_CHECKLIST_TICKS": {
+   "sfx": "ui-tick",
+   "sfx_at": 27,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 27,
+     "align": "peak",
+     "gain_db": 2.3,
+     "scale": true
+    }
+   ],
+   "why": "boxes tick in sequence",
+   "event": "first box ticks at 27 (then every 17f)"
+  },
+  "LIB_LS_CYCLE_LOOP": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "nodes and arcs",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LS_FUNNEL_STAGES": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "accent pours down the funnel",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LS_ICON_GRID": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "icons draw in each cell",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LS_NUMBERED_CASCADE": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "paper-white cards fall into a cascade",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LS_PROCESS_CHEVRONS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "chevrons light in turn",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LS_PROS_CONS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "columns split",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LS_TAB_REVEAL": {
+   "sfx": "page-flip",
+   "sfx_at": 17,
+   "sounds": [
+    {
+     "name": "page-flip",
+     "alt": [
+      "page"
+     ],
+     "at": 17,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "tabs open one at a time",
+   "event": "first tab opens at 17 (then every ~41f)"
+  },
+  "LIB_LS_TOP_COUNTDOWN": {
+   "sfx": "count-final",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 0,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 8,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 8,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "rank numeral rolls 5 to 1 and lands",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LT_ACCENT_LINE": {
+   "sfx": "light-shimmer",
+   "sfx_at": 13,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "a glowing line grows with a bright node at its head",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LT_CORNER_BRACKETS": {
+   "sfx": "ui-click",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": 4.4
+    }
+   ],
+   "why": "brackets lock onto the text",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LT_DATE_PLACE": {
+   "sfx": "swoosh-text",
+   "sfx_at": 9,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 7,
+     "align": "start"
+    }
+   ],
+   "why": "date and place slide out of the divider (a lower-third date: no slam)",
+   "event": "date slides 7-23"
+  },
+  "LIB_LT_GLASS_CARD": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "glass card tilts up, icon pops",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LT_LOCATION_PIN": {
+   "sfx": "pin-drop",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "pin-drop",
+     "alt": [
+      "pop"
+     ],
+     "at": 12,
+     "align": "peak",
+     "gain_db": 1.8
+    }
+   ],
+   "why": "map pin drops, squashes and hops",
+   "event": "pin lands at 12, hops 12-23"
+  },
+  "LIB_LT_ROLE_BADGE": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "initials coin flips in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_LT_SLANT_BAR": {
+   "sfx": "whoosh-fast",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 4,
+     "align": "peak"
+    }
+   ],
+   "why": "skewed bar whips in with speed streaks",
+   "event": "bar whips in (90% at 5)"
+  },
+  "LIB_LT_STACKED_INDEX": {
+   "sfx": "count-final",
+   "sfx_at": 22,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 0,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 22,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 22,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "index number rolls in like an odometer and lands",
+   "event": "odometer settles ~22"
+  },
+  "LIB_LT_TWO_TONE": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "block wipes in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_MV_ARC_FLIGHT": {
+   "sfx": "map-swoop",
+   "sfx_at": 22,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 14,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "great-circle arc flies to the second place",
+   "event": "arc flies 14-70"
+  },
+  "LIB_MV_CHOROPLETH_LIFT": {
+   "sfx": "ui-pop",
+   "sfx_at": 24,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 24,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "states rise one by one",
+   "event": "first state lifts, contact ~24 (+14f each)"
+  },
+  "LIB_MV_COORDINATE_HUD": {
+   "sfx": "radar-ping",
+   "sfx_at": 48,
+   "sounds": [
+    {
+     "name": "radar-ping",
+     "alt": [
+      "ding"
+     ],
+     "at": 48,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "targeting screen: scan, crosshair lands",
+   "event": "crosshair locks at 48 (scan 0-36)"
+  },
+  "LIB_MV_COUNTRY_SPOTLIGHT": {
+   "sfx": "map-swoop",
+   "sfx_at": 19,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 11,
+     "align": "start"
+    }
+   ],
+   "why": "the country lifts toward the camera",
+   "event": "country lifts 11-41, pin pops 40"
+  },
+  "LIB_MV_GLOBE_SPIN": {
+   "sfx": "map-swoop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 0,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "globe spins in and eases onto the place",
+   "event": "globe spins in 0-51, pin lands ~52"
+  },
+  "LIB_MV_IMPACT_RADIUS": {
+   "sfx": "boom-sub",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "boom-sub",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 12,
+     "align": "peak"
+    }
+   ],
+   "why": "a disaster zone snaps open",
+   "event": "zone snaps open 11-34"
+  },
+  "LIB_MV_PINBOARD_LIST": {
+   "sfx": "pin-drop",
+   "sfx_at": 19,
+   "sounds": [
+    {
+     "name": "pin-drop",
+     "alt": [
+      "pop"
+     ],
+     "at": 19,
+     "align": "peak",
+     "gain_db": 1.8,
+     "scale": true
+    }
+   ],
+   "why": "numbered pins fall onto the map",
+   "event": "pins land 19, 34, 49 ..."
+  },
+  "LIB_MV_RIVER_DRAW": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 18,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 14,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "a glowing line draws through the places",
+   "event": "river draws 14-83"
+  },
+  "LIB_MV_STATE_GLOW": {
+   "sfx": "map-swoop",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 4,
+     "align": "start"
+    }
+   ],
+   "why": "camera eases to the state",
+   "event": "camera eases 4-55"
+  },
+  "LIB_MV_ZOOM_INSET": {
+   "sfx": "zoom-in-whoosh",
+   "sfx_at": 45,
+   "sounds": [
+    {
+     "name": "zoom-in-whoosh",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 45,
+     "align": "peak"
+    }
+   ],
+   "why": "the focus box flies up and zooms",
+   "event": "box zooms 27-48, pin ~49"
+  },
+  "LIB_NC_BATTERY": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "battery charges (count contract when it has a value)",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NC_BURST_NUMBER": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 15,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 15,
+     "align": "peak"
+    }
+   ],
+   "why": "tension builds, then the figure slams in with a flash",
+   "event": "tension builds 0-15, the figure slams at 15"
+  },
+  "LIB_NC_COUNTDOWN_DIAL": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "ring charges and drains",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NC_FLIP_CLOCK": {
+   "sfx": "count-final",
+   "sfx_at": 58,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 11,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 58,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 58,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "split-flap cards clatter and land",
+   "event": "flaps clatter 11-58, last digit lands 58"
+  },
+  "LIB_NC_LED_COUNTER": {
+   "sfx": "count-final",
+   "sfx_at": 54,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 22,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 54,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 54,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    },
+    {
+     "name": "glitch-short-v2",
+     "alt": [
+      "glitch-short"
+     ],
+     "at": 13,
+     "align": "peak",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "LED panel counts up",
+   "event": "counts 22-67, land flash 54"
+  },
+  "LIB_NC_SEGMENT_METER": {
+   "sfx": "ui-tick",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": 2.3
+    }
+   ],
+   "why": "segments light in sequence",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NC_SPEEDO_GAUGE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "needle springs to the share (count contract when it has a value)",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NC_STOPWATCH": {
+   "sfx": "ui-click",
+   "sfx_at": 13,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 13,
+     "align": "peak",
+     "gain_db": 4.4
+    }
+   ],
+   "why": "the crown clicks, the hand sweeps",
+   "event": "crown clicks at 13 (stop click 55)"
+  },
+  "LIB_NC_THERMOMETER": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "mercury springs up",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NS_BEFORE_AFTER": {
+   "sfx": "ui-swipe",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "slider handle wipes across",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NS_BLOCK_STACK": {
+   "sfx": "ui-pop",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 20,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "blocks drop and stack",
+   "event": "first block lands at 20"
+  },
+  "LIB_NS_CHANGE_METER": {
+   "sfx": "ui-swipe",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "needle springs",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NS_DUAL_GAUGE": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "needles spring up",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NS_FRACTION_PIE": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "slices fly in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NS_GOAL_TRACK": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "runner streaks to the goal",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NS_KPI_FLIP_GRID": {
+   "sfx": "ui-swipe",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "glass tiles flip in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NS_PODIUM": {
+   "sfx": "impact",
+   "sfx_at": 60,
+   "sounds": [
+    {
+     "name": "impact",
+     "at": 60,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "the sound stays; only its hit frame changes",
+   "event": "1st-place block lands at 60 (3rd 27, 2nd 40)"
+  },
+  "LIB_NS_TIMES_BIGGER": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "accent bar grows notch by notch",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_NS_TUG_OF_WAR": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "rope tension",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_PA_BLINDS_REVEAL": {
+   "sfx": "shutter-slide",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "shutter-slide",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 3,
+     "align": "start"
+    }
+   ],
+   "why": "blind slats turn open",
+   "event": "slats turn 3-31"
+  },
+  "LIB_PA_FILM_STRIP": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "film strip races in and stops (~0.8 s)",
+   "event": "strip races in 0-36, stops ~24"
+  },
+  "LIB_PA_LOUPE_ZOOM": {
+   "sfx": "magnifier-glide",
+   "sfx_at": 32,
+   "sounds": [
+    {
+     "name": "magnifier-glide",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 32,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "loupe glides in and enlarges",
+   "event": "loupe glides 0-32 and settles (glass ting at the settle)"
+  },
+  "LIB_PA_MOSAIC_ASSEMBLE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 4,
+     "align": "start"
+    }
+   ],
+   "why": "forty tiles fly in",
+   "event": "tiles fly 4-37"
+  },
+  "LIB_PA_POLAROID_DROP": {
+   "sfx": "frame-drop",
+   "sfx_at": 13,
+   "sounds": [
+    {
+     "name": "frame-drop",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 13,
+     "align": "peak"
+    }
+   ],
+   "why": "polaroid lands on the desk",
+   "event": "print lands on the desk at 13"
+  },
+  "LIB_PA_SCAN_ID": {
+   "sfx": "glitch-digital",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "glitch-digital",
+     "alt": [
+      "glitch-pro"
+     ],
+     "at": 8,
+     "align": "start"
+    }
+   ],
+   "why": "scan line resolves the pixelated portrait",
+   "event": "scan line 8-41; brackets snap 2-16"
+  },
+  "LIB_PA_SPOTLIGHT_FOCUS": {
+   "sfx": "light-shimmer",
+   "sfx_at": 17,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 4,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "spotlight searches and settles",
+   "event": "spotlight sweeps 4-42 (lamp strike 3-12)"
+  },
+  "LIB_PA_TILT_CARD": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 11,
+     "align": "peak"
+    }
+   ],
+   "why": "photo block flips in",
+   "event": "flip lands ~11"
+  },
+  "LIB_PA_TORN_REVEAL": {
+   "sfx": "paper-tear",
+   "sfx_at": 17,
+   "sounds": [
+    {
+     "name": "paper-tear",
+     "alt": [
+      "paper"
+     ],
+     "at": 2,
+     "align": "start"
+    }
+   ],
+   "why": "the sheet tears away over 0.8 s (a longer, stepped tear)",
+   "event": "paper tears 2-26 (half at 11)"
+  },
+  "LIB_PB_ANNOTATED": {
+   "sfx": "ui-pop",
+   "sfx_at": 24,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 24,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "numbered markers pop",
+   "event": "markers pop 24, 39, 54, 69"
+  },
+  "LIB_PB_CAROUSEL": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "3D ring spins in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_PB_CORKBOARD": {
+   "sfx": "paper-pin",
+   "sfx_at": 28,
+   "sounds": [
+    {
+     "name": "paper-pin",
+     "alt": [
+      "click"
+     ],
+     "at": 28,
+     "align": "peak",
+     "gain_db": 3.5,
+     "scale": true
+    }
+   ],
+   "why": "cards and photos pinned to cork",
+   "event": "first photo pinned at 28 (+9f each)"
+  },
+  "LIB_PB_DATE_PLATE": {
+   "sfx": "date-slam",
+   "sfx_at": 55,
+   "sounds": [
+    {
+     "name": "date-slam",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 55,
+     "align": "peak"
+    }
+   ],
+   "why": "the date lands on the photo",
+   "event": "the date rolls 22-64 and settles ~55"
+  },
+  "LIB_PB_DOUBLE_EXPOSURE": {
+   "sfx": "light-shimmer",
+   "sfx_at": 13,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "second photo blends in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_PB_GRID_POP": {
+   "sfx": "camera-shutter",
+   "sfx_at": 3,
+   "sounds": [
+    {
+     "name": "camera-shutter",
+     "alt": [
+      "shutter"
+     ],
+     "at": 3,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "each cell pops with a camera-flash flicker",
+   "event": "cells pop with a flash at 3, 8, 10, 15"
+  },
+  "LIB_PB_PARALLAX_STACK": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "front print flies in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_PB_TRIPTYCH": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "three tall panels rise in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_PB_WIPE_COMPARE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 24,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 20,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "divider handle dragged across (a slow 26-frame drag)",
+   "event": "divider drags 20-46 and back 54-80"
+  },
+  "LIB_PB_ZOOM_THROUGH": {
+   "sfx": "zoom-in-whoosh",
+   "sfx_at": 68,
+   "sounds": [
+    {
+     "name": "zoom-in-whoosh",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 68,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "zoom through the window",
+   "event": "zoom dive 44-68, land flash 68"
+  },
+  "LIB_PE_DUOTONE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 13,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 13,
+     "align": "peak"
+    }
+   ],
+   "why": "diagonal wipe",
+   "event": "registry sfxAt"
+  },
+  "LIB_PE_FOCUS_PULL": {
+   "sfx": "light-shimmer",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 20,
+     "align": "peak"
+    }
+   ],
+   "why": "racks into focus under a light sweep",
+   "event": "racks into focus (registry sfxAt 20)"
+  },
+  "LIB_PE_FRAME_DROP": {
+   "sfx": "frame-drop",
+   "sfx_at": 13,
+   "sounds": [
+    {
+     "name": "frame-drop",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 13,
+     "align": "peak"
+    }
+   ],
+   "why": "framed print drops onto the desk",
+   "event": "print lands at 14 (1f lead)"
+  },
+  "LIB_PE_HIGHLIGHT_BOX": {
+   "sfx": "marker-draw",
+   "sfx_at": 36,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 16,
+     "align": "start",
+     "until": 35,
+     "fade": 4
+    }
+   ],
+   "why": "red box draws on",
+   "event": "box stroke 16-32"
+  },
+  "LIB_PE_LIGHT_SWEEP": {
+   "sfx": "light-shimmer",
+   "sfx_at": 19,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 6,
+     "align": "start"
+    }
+   ],
+   "why": "warm diagonal light sweep",
+   "event": "light sweep 6-40"
+  },
+  "LIB_PE_NEWSPRINT": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 12,
+     "align": "peak"
+    }
+   ],
+   "why": "newspaper page slides up",
+   "event": "registry sfxAt"
+  },
+  "LIB_PE_PARALLAX": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 14,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 14,
+     "align": "peak"
+    }
+   ],
+   "why": "2.5D parallax drift",
+   "event": "registry sfxAt"
+  },
+  "LIB_PE_POLAROID_PAN": {
+   "sfx": "camera-shutter",
+   "sfx_at": 3,
+   "sounds": [
+    {
+     "name": "camera-shutter",
+     "alt": [
+      "shutter"
+     ],
+     "at": 3,
+     "align": "peak"
+    }
+   ],
+   "why": "shutter flash, then the instant print",
+   "event": "shutter flash peak at 3"
+  },
+  "LIB_PE_PUNCH_IN": {
+   "sfx": "whoosh-fast",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 6,
+     "align": "peak"
+    }
+   ],
+   "why": "fast zoom-blur punch in (peak early: zoom-in-whoosh peaks too late for frame 6)",
+   "event": "punch 0-10, flash at 6"
+  },
+  "LIB_PE_SPLIT_PANELS": {
+   "sfx": "whoosh-fast",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "three strips slide in staggered",
+   "event": "registry sfxAt"
+  },
+  "LIB_PE_ZOOM_CIRCLE": {
+   "sfx": "marker-draw",
+   "sfx_at": 40,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 20,
+     "align": "start",
+     "until": 41,
+     "fade": 4
+    }
+   ],
+   "why": "red marker loop drawn round the point",
+   "event": "marker loop 20-38"
+  },
+  "LIB_PF_DOSSIER": {
+   "sfx": "folder-open",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "folder-open",
+     "alt": [
+      "paper"
+     ],
+     "at": 6,
+     "align": "peak",
+     "gain_db": 3.5
+    }
+   ],
+   "types": true,
+   "why": "manila folder slides up (the name still types with the keyboard takes)",
+   "event": "typing starts at 6 (folder slides up before)"
+  },
+  "LIB_PF_MAGAZINE": {
+   "sfx": "camera-flash-pop",
+   "sfx_at": 3,
+   "sounds": [
+    {
+     "name": "camera-flash-pop",
+     "alt": [
+      "flash-hit"
+     ],
+     "at": 3,
+     "align": "peak"
+    }
+   ],
+   "why": "shutter flash, magazine cover",
+   "event": "shutter flash peak at 3"
+  },
+  "LIB_PF_PROFILE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 13,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 13,
+     "align": "peak"
+    }
+   ],
+   "why": "framed portrait slides in",
+   "event": "registry sfxAt"
+  },
+  "LIB_PF_SPLIT_NAME": {
+   "sfx": "whoosh-fast",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "portrait swipes in",
+   "event": "registry sfxAt"
+  },
+  "LIB_PF_SPOTLIGHT": {
+   "sfx": "impact-punch",
+   "sfx_at": 14,
+   "sounds": [
+    {
+     "name": "impact-punch",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 14,
+     "align": "peak"
+    }
+   ],
+   "why": "a spotlight hits the portrait",
+   "event": "registry sfxAt"
+  },
+  "LIB_PS_STAT_RIDE": {
+   "sfx": "count-final",
+   "sfx_at": 23,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 0,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 23,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 23,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "a bare bold figure lands",
+   "event": "digits settle ~23"
+  },
+  "LIB_QS_BUT_PIVOT": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "the BUT drops between the rules",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_QS_DOUBLE_CARDS": {
+   "sfx": "page-flip",
+   "sfx_at": 17,
+   "sounds": [
+    {
+     "name": "page-flip",
+     "alt": [
+      "page"
+     ],
+     "at": 17,
+     "align": "peak"
+    }
+   ],
+   "why": "cards flip over",
+   "event": "card flips edge-on at 17 and 26"
+  },
+  "LIB_QS_GIANT_MARKS": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "quote marks spin in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_QS_SAID_STAMP": {
+   "sfx": "stamp",
+   "sfx_at": 43,
+   "sounds": [
+    {
+     "name": "stamp",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 43,
+     "align": "peak",
+     "gain_db": 1.8
+    }
+   ],
+   "why": "a circular seal slams down",
+   "event": "seal slams at 43 (up to 51 for long quotes)"
+  },
+  "LIB_QS_SIDE_PANEL": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "glass panel slides in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_QS_STRIKE_CORRECTION": {
+   "sfx": "marker-underline",
+   "sfx_at": 37,
+   "sounds": [
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 33,
+     "align": "start"
+    }
+   ],
+   "why": "a red bar strikes through each line",
+   "event": "strike bar 33-44 (+4f per line), correction lands 49"
+  },
+  "LIB_QS_TESTIMONY_RAIL": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "rail draws down",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_QS_ZOOM_WORD": {
+   "sfx": "zoom-in-whoosh",
+   "sfx_at": 60,
+   "sounds": [
+    {
+     "name": "zoom-in-whoosh",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 60,
+     "align": "peak"
+    }
+   ],
+   "why": "the camera dives into the key word",
+   "event": "camera dives 39-63"
+  },
+  "LIB_SC_AQUIFER_DROP": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "cut line sweeps down the strata",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_CAUSE_CHAIN": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "hexagon chain lights in turn",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_DAM_LEVEL": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "reservoir level moves",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_HEAT_SUN": {
+   "sfx": "light-shimmer",
+   "sfx_at": 13,
+   "sounds": [
+    {
+     "name": "light-shimmer",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "a sun pops in and turns its rays",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_MOLECULE_ORBIT": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "the central atom pops, partners orbit",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_PIPE_FLOW": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "valve opens, water floods the pipe",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_RAIN_GAUGES": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "gauges land and fill",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_RESERVOIR_LEVELS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "reservoir sections fill",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_WARMING_STRIPES": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "stripes sweep in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SC_WATER_CYCLE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "landscape builds",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SP_NAME_TAG": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "name bar slides in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SP_PORTRAIT_QUOTE": {
+   "sfx": "swoosh-text",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "quote rises line by line",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_SP_TWO_VOICES": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "two portraits turn toward each other",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_TL_CALENDAR_FLIP": {
+   "sfx": "page-flip",
+   "sfx_at": 19,
+   "sounds": [
+    {
+     "name": "page-flip",
+     "alt": [
+      "page"
+     ],
+     "at": 19,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "calendar pages flip over the binding",
+   "event": "pages flip 19,22,24,...,47; last lands 69; marker circle 67-83"
+  },
+  "LIB_TL_CURVED_PATH": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "line draws along the road",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_TL_DATE_STAMP_CIRCLE": {
+   "sfx": "stamp",
+   "sfx_at": 10,
+   "sounds": [
+    {
+     "name": "stamp",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 10,
+     "align": "peak",
+     "gain_db": 1.8
+    }
+   ],
+   "why": "round rubber stamp slams onto the footage",
+   "event": "stamp contact at 10"
+  },
+  "LIB_TL_DECADE_GRID": {
+   "sfx": "count-final",
+   "sfx_at": 71,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 17,
+     "align": "start",
+     "gain_db": -4.0,
+     "scale": true,
+     "until": 71,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 71,
+     "align": "peak",
+     "scale": true,
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "scale": true,
+     "when": "no-value"
+    }
+   ],
+   "why": "selector hops like a roulette wheel and lands",
+   "event": "selector hops 17-66 and lands at 71"
+  },
+  "LIB_TL_ERA_BANDS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "era bands wipe in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_TL_THEN_NOW_YEARS": {
+   "sfx": "page-flip",
+   "sfx_at": 14,
+   "sounds": [
+    {
+     "name": "page-flip",
+     "alt": [
+      "page"
+     ],
+     "at": 14,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "THEN card flips on a hinge",
+   "event": "card A flip lands 14 (card B 62)"
+  },
+  "LIB_TL_TIME_PASSING": {
+   "sfx": "count-final",
+   "sfx_at": 63,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 6,
+     "align": "start",
+     "gain_db": -4.0,
+     "scale": true,
+     "until": 63,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 63,
+     "align": "peak",
+     "scale": true,
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "scale": true,
+     "when": "no-value"
+    }
+   ],
+   "why": "clock hands whirl (count-roll) and settle",
+   "event": "hands whirl 6-63 (fastest 24) and stop"
+  },
+  "LIB_TL_VERTICAL_MILESTONES": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "milestone nodes pop",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_TL_YEARS_LATER": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 0,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "why": "time jump: hairline flash and iris open",
+   "event": "hairline flash 0-9, iris opens 5-18"
+  },
+  "LIB_TL_YEAR_SCROLLER": {
+   "sfx": "magnifier-glide",
+   "sfx_at": 56,
+   "sounds": [
+    {
+     "name": "magnifier-glide",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 56,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "ruler races under a glass lens and clicks into place",
+   "event": "ruler races from 6 (fastest 25) and locks under the lens at 56"
+  },
+  "LIB_UI_BROWSER_WINDOW": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start",
+     "scale": true
+    }
+   ],
+   "types": true,
+   "why": "browser swings in",
+   "event": "browser swings in 0-24"
+  },
+  "LIB_UI_CHAT_BUBBLES": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "chat bubbles pop",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_UI_COMMENT_THREAD": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "comments pop in",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_UI_EMAIL_CARD": {
+   "sfx": "ui-click",
+   "sfx_at": 33,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 33,
+     "align": "peak",
+     "gain_db": 4.4,
+     "scale": true
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 10,
+     "align": "peak",
+     "gain_db": -4.0,
+     "scale": true
+    }
+   ],
+   "why": "the message row is clicked open",
+   "event": "row clicked at 33 (inbox lands 0-18)"
+  },
+  "LIB_UI_NOTIFICATION_STACK": {
+   "sfx": "phone-buzz",
+   "sfx_at": 15,
+   "sounds": [
+    {
+     "name": "phone-buzz",
+     "alt": [
+      "pop"
+     ],
+     "at": 15,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "phone notifications drop in with a buzz",
+   "event": "notifications land ~15, 40, 65"
+  },
+  "LIB_UI_PHONE_SCREEN": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "phone rises, screen wakes",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_UI_POLL_RESULTS": {
+   "sfx": "ui-click",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": 4.4
+    }
+   ],
+   "why": "an option is tapped",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_UI_SEARCH_BAR": {
+   "sfx": "ui-click",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 4,
+     "align": "peak",
+     "gain_db": 4.4,
+     "scale": true
+    }
+   ],
+   "types": true,
+   "why": "search bar opens (the query types 15-42: flag types:true for the keyboard takes)",
+   "event": "bar opens (typing 15-42)"
+  },
+  "LIB_UI_SOCIAL_POST": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "post card tilts up",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "LIB_UI_VIDEO_PLAYER": {
+   "sfx": "ui-click",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": 4.4,
+     "scale": true
+    }
+   ],
+   "why": "play button pops",
+   "event": "play button pops ~8"
+  },
+  "LIB_WX_RAIN_BANDS": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 10,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 10,
+     "align": "peak"
+    }
+   ],
+   "why": "rain bands fade in",
+   "event": "registry sfxAt"
+  },
+  "LIB_WX_WIND_FLOW": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 10,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 10,
+     "align": "peak"
+    }
+   ],
+   "why": "forecast field fades in",
+   "event": "registry sfxAt"
+  },
+  "MAP_DARK_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "at": 0,
+     "alt": [
+      "whoosh-cinematic-for-maps"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "ui-pop",
+     "at": 17,
+     "alt": [
+      "pop"
+     ]
+    }
+   ],
+   "why": "animation audit 2026-09-30: rebuilt DocumentaryMap: camera settles 0-36, state glows 10-27, pin pops at 17 (+10 per place)"
+  },
+  "MAP_DISASTER_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 51,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 51,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "night satellite zoom lands",
+   "event": "zoom 0-102"
+  },
+  "MAP_FOCUS_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 51,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 51,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "teal satellite zoom, box draws round the place",
+   "event": "zoom 0-102, box draws 90-108"
+  },
+  "MAP_INSET_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 51,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 51,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "zoom with a locator inset",
+   "event": "zoom 0-102"
+  },
+  "MAP_LOCATION_PULSE_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 51,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 51,
+     "align": "peak",
+     "scale": true
+    },
+    {
+     "name": "radar-ping",
+     "alt": [
+      "ding"
+     ],
+     "at": 90,
+     "align": "peak",
+     "gain_db": -4.0,
+     "scale": true
+    }
+   ],
+   "why": "zoom lands, alert pulse",
+   "event": "zoom 0-102; pin 87-97; rings from 90"
+  },
+  "MAP_LOCATION_ZOOM_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 51,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 51,
+     "align": "peak",
+     "scale": true
+    },
+    {
+     "name": "pin-drop",
+     "alt": [
+      "pop"
+     ],
+     "at": 92,
+     "align": "peak",
+     "gain_db": -2.2,
+     "scale": true
+    }
+   ],
+   "why": "zoom from space lands on the place",
+   "event": "zoom 0-102 fastest at ~51; pin lands 87-97"
+  },
+  "MAP_MARKER_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "at": 0,
+     "alt": [
+      "whoosh-cinematic-for-maps"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "ui-pop",
+     "at": 17,
+     "alt": [
+      "pop"
+     ]
+    }
+   ],
+   "why": "animation audit 2026-09-30: DocumentaryMap"
+  },
+  "MAP_PAPER_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "at": 0,
+     "alt": [
+      "whoosh-cinematic-for-maps"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "ui-pop",
+     "at": 17,
+     "alt": [
+      "pop"
+     ]
+    }
+   ],
+   "why": "animation audit 2026-09-30: DocumentaryMap"
+  },
+  "MAP_PHOTO_PIN_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 51,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 51,
+     "align": "peak",
+     "scale": true
+    },
+    {
+     "name": "pin-drop",
+     "alt": [
+      "pop"
+     ],
+     "at": 92,
+     "align": "peak",
+     "gain_db": -2.2,
+     "scale": true
+    }
+   ],
+   "why": "zoom and pin, then a framed photo pops",
+   "event": "zoom 0-102, pin 87-97, photo pops 97-109"
+  },
+  "MAP_ROUTE_DARK_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 17,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "at": 0,
+     "alt": [
+      "whoosh-cinematic-for-maps"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "whoosh-soft-v2",
+     "at": 15,
+     "alt": [
+      "whoosh-soft"
+     ]
+    }
+   ],
+   "why": "animation audit 2026-09-30: DocumentaryMap: route draws 15-66"
+  },
+  "MAP_ROUTE_PAPER_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 17,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "at": 0,
+     "alt": [
+      "whoosh-cinematic-for-maps"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "whoosh-soft-v2",
+     "at": 15,
+     "alt": [
+      "whoosh-soft"
+     ]
+    }
+   ],
+   "why": "animation audit 2026-09-30: DocumentaryMap: route draws 15-66"
+  },
+  "MAP_ROUTE_SAT_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 56,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 56,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "camera settles; the path draws",
+   "event": "zoom ends 112; path draws 95-131"
+  },
+  "MAP_TILT_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 51,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 51,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "camera tilts into 3D as it lands",
+   "event": "zoom 0-102, tilt 41-113"
+  },
+  "MAP_TRACE_V1": {
+   "sfx": "map-swoop",
+   "sfx_at": 56,
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "alt": [
+      "map-whoosh"
+     ],
+     "at": 56,
+     "align": "peak",
+     "scale": true
+    }
+   ],
+   "why": "dashed route between glowing dots",
+   "event": "zoom ends 112, route 95-131"
+  },
+  "NUM_BAR_V1": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "bar fills to the share",
+   "event": "bar + count 8-47"
+  },
+  "NUM_BIG_COUNTER_V1": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "counts up: count-roll over the count, count-final on the landing",
+   "event": "count 8-47 (cubic-out; last digit settles ~40-45)"
+  },
+  "NUM_MEASURE_V1": {
+   "sfx": "riser-short-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "riser-short-v2",
+     "alt": [
+      "riser-short"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "the level rises/falls to the amount",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "NUM_MONEY_STACK_V1": {
+   "sfx": "count-final",
+   "sfx_at": 48,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 9,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 48,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 48,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "amount rolls while bundles drop",
+   "event": "count 9-51"
+  },
+  "NUM_NUMBER_ROLL_V1": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "digits roll into place (registry sfx is none: give it count-final so the count contract runs)",
+   "event": "digits roll 8-47"
+  },
+  "NUM_PERCENT_V1": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "percent counts up",
+   "event": "count 8-47"
+  },
+  "NUM_PIE_V1": {
+   "sfx": "count-final",
+   "sfx_at": 45,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 9,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 45,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 45,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "slice sweeps while the percent rolls",
+   "event": "slice + count 9-48"
+  },
+  "NUM_RATIO_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 6,
+     "align": "peak"
+    }
+   ],
+   "why": "people pictograms pop in, the counted ones light up",
+   "event": "people pop from 6 (+2f each)"
+  },
+  "NUM_RING_V1": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "ring fills while the percent counts",
+   "event": "ring + count 8-47"
+  },
+  "NUM_SPARK_V1": {
+   "sfx": "whoosh-fast",
+   "sfx_at": 14,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swipe"
+     ],
+     "at": 12,
+     "align": "start"
+    }
+   ],
+   "why": "the trend line races across the frame",
+   "event": "trend line races 2-47 (fastest mid)"
+  },
+  "NUM_SPLIT_V1": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "big number counts",
+   "event": "count 8-47"
+  },
+  "NUM_TANK_V1": {
+   "sfx": "count-final",
+   "sfx_at": 50,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 9,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 50,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 50,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "tank fills while the number rolls",
+   "event": "water + count 9-54"
+  },
+  "NUM_TREND_V1": {
+   "sfx": "ui-swipe",
+   "sfx_at": 9,
+   "sounds": [
+    {
+     "name": "ui-swipe",
+     "alt": [
+      "swipe"
+     ],
+     "at": 4,
+     "align": "start"
+    }
+   ],
+   "why": "the rise/fall arrow draws in",
+   "event": "arrow draws 4-26"
+  },
+  "NUM_WAFFLE_V1": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "dots fill to the share",
+   "event": "dots + count 8-47"
+  },
+  "PERSON_CARD_V1": {
+   "sfx": "swoosh-text",
+   "sfx_at": 9,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "swipe"
+     ],
+     "at": 9,
+     "align": "peak"
+    }
+   ],
+   "why": "portrait slides in, the name in big caps (not a typing look)",
+   "event": "portrait slides in (90% at 9)"
+  },
+  "PHOTO_BOARD_V1": {
+   "sfx": "marker-draw",
+   "sfx_at": 35,
+   "sounds": [
+    {
+     "name": "marker-draw",
+     "alt": [
+      "marker"
+     ],
+     "at": 15,
+     "align": "start"
+    },
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 7,
+     "align": "peak",
+     "gain_db": -4.0
+    }
+   ],
+   "why": "red marker circles the photo",
+   "event": "red marker circle 15-39"
+  },
+  "PHOTO_CARD_V1": {
+   "sfx": "frame-drop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "frame-drop",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "the photo drops in with its white border",
+   "event": "photo drops (90% at 8)"
+  },
+  "PHOTO_COLLAGE_V1": {
+   "sfx": "whoosh-cinematic",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "whoosh-cinematic",
+     "alt": [
+      "whoosh"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "why": "the story's pictures burst onto the desk",
+   "event": "windows burst 0-27"
+  },
+  "PHOTO_EVIDENCE_V1": {
+   "sfx": "camera-shutter",
+   "sfx_at": 22,
+   "sounds": [
+    {
+     "name": "camera-shutter",
+     "alt": [
+      "shutter"
+     ],
+     "at": 22,
+     "align": "peak"
+    }
+   ],
+   "why": "viewfinder brackets close: a photo is taken",
+   "event": "viewfinder brackets close 4-22"
+  },
+  "PHOTO_GRID_V1": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "the photo rises onto graph paper (the code draws no pin)",
+   "event": "photo rises onto the grid (90% at 8)"
+  },
+  "PHOTO_PIP_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "small photo window pops",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "PHOTO_STACK_V1": {
+   "sfx": "frame-drop",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "frame-drop",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 6,
+     "align": "peak"
+    }
+   ],
+   "why": "photos drop onto a pile",
+   "event": "photo lands (90% at 6; next ones +24f)"
+  },
+  "PHOTO_WINDOW_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 6,
+     "align": "peak"
+    }
+   ],
+   "why": "viewer window opens",
+   "event": "window opens (full size ~6)"
+  },
+  "PLACE_CARD_V1": {
+   "sfx": "pin-drop",
+   "sfx_at": 20,
+   "sounds": [
+    {
+     "name": "pin-drop",
+     "alt": [
+      "pop"
+     ],
+     "at": 20,
+     "align": "peak",
+     "gain_db": 1.8
+    }
+   ],
+   "why": "a location pin drops on the place photo",
+   "event": "pin drops 15-29 (90% at 20)"
+  },
+  "QUOTE_AUDIO_V1": {
+   "sfx": "record-beep",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "record-beep",
+     "alt": [
+      "click"
+     ],
+     "at": 12,
+     "align": "peak",
+     "gain_db": 2.0
+    }
+   ],
+   "why": "a recording starts playing",
+   "event": "playhead starts at 12"
+  },
+  "TEXT_KICKER_V1": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 2,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "at": 2,
+     "alt": [
+      "whoosh-soft"
+     ]
+    }
+   ],
+   "why": "animation audit 2026-09-30: rebuilt: outlined caps slug; it never typed (the old 'typewriter' sound did not match); letters rise from frame 2, the second line at ~10"
+  },
+  "TEXT_SWOOSH_TITLE_V1": {
+   "sfx": "marker-underline",
+   "sfx_at": 16,
+   "sounds": [
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 12,
+     "align": "start"
+    }
+   ],
+   "why": "the hand-drawn swoosh underline is a marker stroke",
+   "event": "accent bar draws 12-26"
+  },
+  "TEXT_UNDERLINE_TITLE_V1": {
+   "sfx": "marker-underline",
+   "sfx_at": 16,
+   "sounds": [
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker"
+     ],
+     "at": 12,
+     "align": "start"
+    }
+   ],
+   "why": "the underline stroke draws under the title",
+   "event": "underline draws 12-26"
+  },
+  "TEXT_WARNING_V1": {
+   "sfx": "alert-tone",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "alert-tone",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 4,
+     "align": "peak"
+    }
+   ],
+   "why": "red alert strip: a tasteful news alert, not a boom",
+   "event": "alert pill pops (90% at 4)"
+  },
+  "TEXT_WORD_TYPE_V1": {
+   "sfx": "typewriter-clean",
+   "sfx_at": 0,
+   "sounds": [
+    {
+     "name": "typewriter-clean",
+     "alt": [
+      "typewriter"
+     ],
+     "at": 0,
+     "align": "start"
+    }
+   ],
+   "types": true,
+   "why": "one or two words typed large: crisp single strikes (flag types:true so the typing contract spans the letters)",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "TL_CLOCK_V1": {
+   "sfx": "ui-click",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 4,
+     "align": "peak",
+     "gain_db": 4.4
+    }
+   ],
+   "why": "time-of-day badge drops in (the code draws no clock hands)",
+   "event": "badge drops (90% at 4); there are no clock hands"
+  },
+  "TL_DATE_STAMP_V1": {
+   "sfx": "ui-click",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 4,
+     "align": "peak",
+     "gain_db": 4.4
+    }
+   ],
+   "why": "a small corner date: a soft click, not a slam (bold dates get date-slam)",
+   "event": "slides in (90% at 4), types 0-27"
+  },
+  "TL_DATE_TITLE_V1": {
+   "sfx": "date-slam",
+   "sfx_at": 34,
+   "sounds": [
+    {
+     "name": "date-slam",
+     "alt": [
+      "hit-deep"
+     ],
+     "at": 34,
+     "align": "peak"
+    }
+   ],
+   "why": "full date card: bold text slam",
+   "event": "date lands (year roll 6-48, visual land ~34; month/day 2-18)"
+  },
+  "TL_LINE_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "nodes pop along the line",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "TL_PATH_STEPS_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "numbered steps pop",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "TL_RULER_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "ruler marks pop",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "TL_SPAN_V1": {
+   "sfx": "ui-pop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    }
+   ],
+   "why": "span ends pop",
+   "event": "entrance lands (MotionWrap: 90% of the entrance by frame 8)"
+  },
+  "TL_YEAR_ROLL_V1": {
+   "sfx": "count-final",
+   "sfx_at": 44,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 6,
+     "align": "start",
+     "gain_db": -4.0,
+     "until": 44,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 44,
+     "align": "peak",
+     "when": "value"
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak",
+     "gain_db": -2.0,
+     "when": "no-value"
+    }
+   ],
+   "why": "years roll and land on the named one",
+   "event": "years roll 6-54, visual land ~36-46"
+  },
+  "TEXT_DUAL_LABELS_V1": {
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "at": 4,
+     "every": 6,
+     "count": "items",
+     "alt": [
+      "pop"
+     ]
+    },
+    {
+     "name": "ui-tick",
+     "at": 11,
+     "alt": [
+      "tick"
+     ]
+    }
+   ],
+   "sfx_at": 4,
+   "sfx": "ui-pop",
+   "why": "animation audit 2026-09-30: rebuilt: labels letter-rise at 3 + 6*i, connector node pops at 11 (+6 per connector)"
+  },
+  "CALL_BULLETS_V1": {
+   "sounds": [
+    {
+     "name": "ui-click",
+     "at": 3,
+     "every": 10,
+     "count": "items",
+     "alt": [
+      "click"
+     ]
+    }
+   ],
+   "sfx_at": 3,
+   "sfx": "ui-click",
+   "why": "animation audit 2026-09-30: rebuilt: outlined list rows slide in at 3 (+5 with a title) + i*step, step = min(10, 0.45*duration/items) frames (10 at the default 5.5 s)"
+  },
+  "TEXT_MEMO_V1": {
+   "sounds": [
+    {
+     "name": "keys",
+     "at": 6,
+     "until": 42,
+     "kind": "typing"
+    },
+    {
+     "name": "ui-tick",
+     "at": 42,
+     "alt": [
+      "tick"
+     ]
+    }
+   ],
+   "sfx": "keys",
+   "why": "animation audit 2026-09-30: rebuilt as outlined typed Courier: typing window unchanged (6..42), key words warm to the accent + rule draws at 42"
+  },
+  "TEXT_BAR_TITLE_V1": {
+   "sounds": [
+    {
+     "name": "keys",
+     "at": 9,
+     "until": 42,
+     "kind": "typing"
+    },
+    {
+     "name": "whoosh-soft-v2",
+     "at": 40,
+     "alt": [
+      "whoosh-soft"
+     ]
+    }
+   ],
+   "sfx": "keys",
+   "why": "animation audit 2026-09-30: rebuilt as outlined typed caps: typing window unchanged (9..42), key word turns accent + underline bar draws at 40"
+  },
+  "NUM_PILL_V1": {
+   "sounds": [
+    {
+     "name": "count-roll",
+     "at": 4,
+     "until": 40,
+     "alt": [
+      "count-tick"
+     ],
+     "gain_db": -4.0,
+     "when": "value",
+     "align": "start"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "tick"
+     ],
+     "at": 40,
+     "when": "value"
+    }
+   ],
+   "sfx_at": 40,
+   "sfx": "count-final",
+   "why": "animation audit 2026-09-30: rebuilt as an outlined side figure: counts up 4 -> 40 (digit count sound), lands with a punch at 40, label rises at 34"
+  },
+  "HEADLINE_CHAPTER_GHOST_V1": {
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "at": 0,
+     "alt": [
+      "whoosh-soft"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "hit-deep",
+     "at": 12,
+     "alt": [
+      "impact"
+     ]
+    }
+   ],
+   "sfx": "whoosh-soft-v2",
+   "why": "animation audit 2026-09-30: rebuilt: kicker wipes 0-12, title letters land from ~14, bar draws 16-34"
+  },
+  "HEADLINE_EDITORIAL_V1": {
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "at": 0,
+     "alt": [
+      "whoosh-soft"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "hit-deep",
+     "at": 12,
+     "alt": [
+      "impact"
+     ]
+    }
+   ],
+   "sfx": "whoosh-soft-v2",
+   "why": "animation audit 2026-09-30: same component as the chapter ghost (ProChapter)"
+  },
+  "TL_PROGRESS_STEPS_V1": {
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "at": 10,
+     "every": 15,
+     "count": "items",
+     "alt": [
+      "pop"
+     ]
+    }
+   ],
+   "sfx_at": 10,
+   "sfx": "ui-pop",
+   "why": "animation audit 2026-09-30: rebuilt: rail draws 2-18, nodes land at 10 + i*step, step = min(15, 0.5*duration/items) (15 at the default 4.5 s)"
+  },
+  "MAP_SPREAD_DARK_V1": {
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "at": 0,
+     "alt": [
+      "whoosh-cinematic-for-maps"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "ui-tick",
+     "at": 14,
+     "every": 10,
+     "count": "locations",
+     "alt": [
+      "tick"
+     ]
+    }
+   ],
+   "sfx": "map-swoop",
+   "why": "animation audit 2026-09-30: rebuilt: camera settles 0-36, each named state lights at 14 + i*step (step 5-10 frames), pins after"
+  },
+  "MAP_SPREAD_V1": {
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "at": 0,
+     "alt": [
+      "whoosh-cinematic-for-maps"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "ui-tick",
+     "at": 14,
+     "every": 10,
+     "count": "locations",
+     "alt": [
+      "tick"
+     ]
+    }
+   ],
+   "sfx": "map-swoop",
+   "why": "animation audit 2026-09-30: same component as MAP_SPREAD_DARK_V1"
+  },
+  "MAP_REGION_V1": {
+   "sounds": [
+    {
+     "name": "map-swoop",
+     "at": 0,
+     "alt": [
+      "whoosh-cinematic-for-maps"
+     ],
+     "align": "start"
+    },
+    {
+     "name": "ui-tick",
+     "at": 21,
+     "alt": [
+      "tick"
+     ]
+    }
+   ],
+   "sfx": "map-swoop",
+   "why": "animation audit 2026-09-30: DocumentaryMap: state label lands at 21"
+  }
+ }
+}

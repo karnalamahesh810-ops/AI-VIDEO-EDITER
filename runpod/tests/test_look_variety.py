@@ -138,6 +138,8 @@ class TwentyMinutes(unittest.TestCase):
             last = {}
             for o in sorted(out["overlays"], key=lambda o: o["startFrame"]):
                 at = o["startFrame"] / FPS
+                if o["template"] in (treatments.TEXT_DATE_LOOK, treatments.BOLD_COUNT_LOOK):
+                    continue    # the bold-text date and count lead their cues every time (their placement turns)
                 if o["template"] in last:
                     self.assertGreaterEqual(at - last[o["template"]], treatments.LOOK_GAP,
                                             f"{pack}: {o['template']} at {at:.1f}s and {last[o['template']]:.1f}s")
@@ -165,7 +167,11 @@ class TwentyMinutes(unittest.TestCase):
             self.assertTrue(got, f"line {i}: {v}%")
             self.assertIn("percent", cues(got[0]), got[0]["template"])
             looks.append(got[0]["template"])
-        self.assertGreaterEqual(len(set(looks[:8])), 4, looks)
+        # The bold count leads; another look comes in after two of them in a row.
+        bold = treatments.BOLD_COUNT_LOOK
+        self.assertEqual(looks[0], bold, looks)
+        self.assertFalse(any(looks[i:i + 3] == [bold] * 3 for i in range(len(looks))), looks)
+        self.assertGreaterEqual(len(set(looks[:8])), 3, looks)
         # A compact figure over footage: cards in a corner, never full screen.
         for i in PERCENTS:
             for o in on_line(self.ovs, self.segs[i]):
@@ -281,7 +287,10 @@ class Rules(unittest.TestCase):
         out = small(texts)
         values = sorted(o.get("value") for o in out["overlays"] if o.get("value") is not None)
         self.assertEqual(values, [18.0, 26.0, 31.0, 40.0])
-        self.assertEqual(len({o["template"] for o in out["overlays"]}), 4)
+        # The bold count leads, one other look after two in a row.
+        looks = [o["template"] for o in sorted(out["overlays"], key=lambda o: o["startFrame"])]
+        self.assertEqual(looks.count(treatments.BOLD_COUNT_LOOK), 3, looks)
+        self.assertNotEqual(looks[2], treatments.BOLD_COUNT_LOOK, looks)
 
 
 if __name__ == "__main__":

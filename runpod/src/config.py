@@ -472,6 +472,10 @@ MENTION_CUTS = _flag("MENTION_CUTS", True)
 MARKS_ENABLED = _flag("MARKS_ENABLED", True)
 MARKS_MAX = int(os.getenv("MARKS_MAX", "5"))
 MARKS_GAP_SECONDS = float(os.getenv("MARKS_GAP_SECONDS", "60"))
+# How still photos move: "" rotates the timeline's camera moves (push, reveal,
+# drift...); "none" holds them still (the reference weather channel's ~150
+# photos have no zoom or pan; nature_weather sets it).
+STILL_MOTION = os.getenv("STILL_MOTION", "").strip().lower()
 # One wall-clock budget for all footage finding, across every worker: a
 # real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
 # and searches stop at once and the beats still without footage become
@@ -750,3 +754,93 @@ LIBRARY_MAINTENANCE_MAX = int(os.getenv("LIBRARY_MAINTENANCE_MAX", "25"))
 # A current news story prefers library clips recorded within this many days
 # and never takes one dated to another year.
 LIBRARY_FRESH_DAYS = int(os.getenv("LIBRARY_FRESH_DAYS", "45"))
+
+# --- human-like cuts (src/transcribe.py) ----------------------------------------
+# The owner (2026-09-30): "7 s max, but clips don't all need to be 7 s - cut
+# based on the narration like a human editor." On: every beat ends where an
+# editor would cut (a sentence end, a clause break or breath, a new named
+# place or person, a number or danger word that needs its proof shot), its
+# length follows what it says (an intense line near CUT_FAST_SECONDS, an
+# establishing one near CUT_SLOW_SECONDS, the rest near TARGET_SCENE_SECONDS),
+# MIN_SCENE_SECONDS and MAX_SCENE_SECONDS bound its time ON SCREEN (the pause
+# after its last word included), and the opening HOOK_SECONDS cut
+# CUT_HOOK_FACTOR faster. 0 = the old clause rhythm around TARGET (kept for A/B).
+HUMAN_CUTS = _flag("HUMAN_CUTS", True)
+# 0 = derived from TARGET_SCENE_SECONDS (x0.65 and x1.3, inside MIN..MAX).
+CUT_FAST_SECONDS = float(os.getenv("CUT_FAST_SECONDS", "0"))
+CUT_SLOW_SECONDS = float(os.getenv("CUT_SLOW_SECONDS", "0"))
+CUT_HOOK_FACTOR = float(os.getenv("CUT_HOOK_FACTOR", "0.85"))
+
+# --- no reuse across videos (src/ledger.py) ---------------------------------------
+# The owner (2026-09-30): "the same clip was literally used in the previous
+# video." Every moment, photo and library clip a finished video used is
+# recorded in the library bucket (ledger/). For CROSS_VIDEO_REUSE_DAYS no
+# video shows a moment of the same source video that overlaps a used one or
+# starts within CROSS_VIDEO_GAP_SECONDS of it, nor a photo whose URL or
+# perceptual hash (within LEDGER_PHOTO_BITS of 64) matches. 0 days = off.
+CROSS_VIDEO_REUSE_DAYS = int(os.getenv("CROSS_VIDEO_REUSE_DAYS", "120"))
+CROSS_VIDEO_GAP_SECONDS = float(os.getenv("CROSS_VIDEO_GAP_SECONDS", "30"))
+LEDGER_PHOTO_BITS = int(os.getenv("LEDGER_PHOTO_BITS", "6"))
+# The ledger is read in the background from the job's start; sourcing waits
+# for it at most this long after that (then goes on with what was read).
+LEDGER_LOAD_SECONDS = float(os.getenv("LEDGER_LOAD_SECONDS", "8"))
+LEDGER_PREFIX = os.getenv("LEDGER_PREFIX", "ledger/").strip()
+# A finishing job rewrites ledger/index.json when at least this many job
+# files are not in it yet.
+LEDGER_COMPACT_EVERY = int(os.getenv("LEDGER_COMPACT_EVERY", "10"))
+# With the ledger on, the clip library keeps each job's approved moments that
+# the video did NOT use - the runner-up clips judges passed and the subject
+# pools' spare moments (at most LIBRARY_SPARES_MAX of those, downloaded for
+# it) - instead of the clips the video showed, which the ledger now keeps out
+# of later videos anyway. Off = keep the used clips as before.
+LIBRARY_SAVE_UNUSED = _flag("LIBRARY_SAVE_UNUSED", True)
+LIBRARY_SPARES_MAX = int(os.getenv("LIBRARY_SPARES_MAX", "16"))
+
+# --- the Nature & Weather edit (src/styles.py: nature_weather) -------------------
+# Per job through the video style; all off by default.
+# EYEWITNESS_SEARCHES: every line's searches name the place it mentions and
+# the event, the way eyewitness uploads are titled ("Atlantic City flooding
+# video", "Long Beach Island storm surge footage"), and phone, drone,
+# storm-chaser and news-helicopter titles rank ahead (a compilation behind).
+EYEWITNESS_SEARCHES = _flag("EYEWITNESS_SEARCHES", False)
+# COMING_SHOTS: a forward-looking line ("tonight", "the worst is still to
+# come", "brace for...") shows what is coming - storm clouds rolling in, a
+# shelf cloud, a rain curtain, the radar or the live satellite loop.
+COMING_SHOTS = _flag("COMING_SHOTS", False)
+# HOOK_INTENSITY: the opening asks for the most dramatic real footage of the
+# event (water over roads and seawalls, cars in water, waves, rescues).
+HOOK_INTENSITY = _flag("HOOK_INTENSITY", False)
+# MOTION_PREFERENCE: weight of measured on-screen motion (4 frames at 160 px of
+# the cut clip) in picking between clips that passed the judge; a frozen
+# shot or a slideshow is turned down. Doubled in the hook. 0 = off.
+MOTION_PREFERENCE = float(os.getenv("MOTION_PREFERENCE", "0"))
+# PHOTO_MAX_PER_10MIN: real photos per 10 minutes of video (the planner's
+# photo beats, and footage beats that fall back to a photo); 0 = no cap.
+PHOTO_MAX_PER_10MIN = float(os.getenv("PHOTO_MAX_PER_10MIN", "0"))
+
+# REGION_BLOCKS: a line is searched in the region the narration is in (the
+# story's first place until "Down in North Carolina" / "Now let's head to
+# Delaware" turns it), a line naming its own town keeps the town. The
+# reference channel matched regions, not every town name.
+REGION_BLOCKS = _flag("REGION_BLOCKS", False)
+# CHAIN_SHOTS: a footage beat that carries on the previous beat's sentence
+# about the same place plays the next moment of that beat's clip (a long take
+# cut forward, at most CHAIN_MAX beats; one source for the variety rules).
+CHAIN_SHOTS = _flag("CHAIN_SHOTS", False)
+CHAIN_MAX = int(os.getenv("CHAIN_MAX", "3"))
+# A beat that starts a new sentence is cut this many seconds before its first
+# word, in the breath (the reference: 0.14 s); never before the last word of
+# the beat in front of it. 0 = on the word.
+CUT_LEAD_SECONDS = float(os.getenv("CUT_LEAD_SECONDS", "0"))
+
+# --- AI slop and not-footage (src/slop.py, the owner's Texas test 2026-09-30) ---
+# Every candidate video and photo, in every style: AI-made or painted pictures
+# (titles and tags naming an AI generator, the local CLIP model, the judge's
+# ai_generated answer), a still or slideshow posing as footage, another
+# creator's burned-in captions, a TV studio, presenter, streamer or TV weather
+# map. 0 = off (A/B only).
+AI_SLOP_FILTER = _flag("AI_SLOP_FILTER", True)
+# A subject pool's moment is rated on storyboard tiles only; on = each pooled
+# clip also goes through the vision judge against its own line (the news and
+# weather styles: a chyron naming another town is only readable full size).
+POOL_JUDGE_CLIPS = _flag("POOL_JUDGE_CLIPS", False)

@@ -234,7 +234,7 @@ const useExit = () => {
 };
 
 /** One short sound at a frame (a pop tick, a whoosh); nothing outside the beat. */
-const Tick: React.FC<{ at: number; name?: string; volume?: number }> = ({ at, name = "pop", volume = 0.22 }) => {
+const Tick: React.FC<{ at: number; name?: string; volume?: number }> = ({ at, name = "ui-pop", volume = 0.22 }) => {
   const { durationInFrames } = useVideoConfig();
   const f = Math.round(at);
   if (!Number.isFinite(f) || f < 0 || f >= durationInFrames - 2) return null;

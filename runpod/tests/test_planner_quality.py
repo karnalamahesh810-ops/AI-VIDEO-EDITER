@@ -133,14 +133,23 @@ class SoundLevels(unittest.TestCase):
         doc = build_doc(FLOOD, inp={"voice_lufs": -20.0})
         self.assertEqual((doc["meta"]["voiceLufs"], doc["meta"]["voiceLufsSource"]), (-20.0, "given"))
         top = round(sfxplan.cap(-20.0), 3)
-        self.assertTrue(doc["sfx"])
+        # Every look plays its own sound (doc.lookSounds, LookSounds.tsx): the
+        # rows are the transitions' only, and nothing is above the one cap.
+        self.assertIn("lookSounds", doc)
+        self.assertFalse([s for s in doc["sfx"] if s.get("kind") == "overlay"])
         for s in doc["sfx"]:
             self.assertLessEqual(s["volume"], top, s)
-            self.assertGreaterEqual(s["volume"], 0.2, s)        # the old plan played 0.07-0.135
-        # The deep hit of a date is the loudest thing there is.
-        hits = [s["volume"] for s in doc["sfx"] if s["name"] == "hit-deep"]
+        sounds = sfxplan.doc_look_sounds(doc)
+        self.assertTrue(sounds)
+        for s in sounds:
+            self.assertLessEqual(s["volume"], sfxplan.cap(-20.0) + 1e-4, s)
+        # Each look's loudest moment is no whisper (the old plan played 0.07-0.135).
+        for look in {s["look"] for s in sounds}:
+            self.assertGreaterEqual(max(s["volume"] for s in sounds if s["look"] == look), 0.2, look)
+        # The date's slam is the loudest thing there is.
+        hits = [s["volume"] for s in sounds if s["name"] in ("date-slam", "hit-deep")]
         self.assertTrue(hits)
-        self.assertEqual(max(hits), top)
+        self.assertAlmostEqual(max(hits), top, places=3)
 
     def test_the_editors_full_volume_comes_back_under_the_cap(self):
         doc = build_doc(FLOOD[:3], inp={"voice_lufs": -20.0})
@@ -215,16 +224,18 @@ def build_doc(lines, inp=None, audio_url="https://signed.example/narration.mp3",
 class SoundFollowsTheLook(unittest.TestCase):
     def test_every_graphic_sound_starts_with_its_look_and_is_over_when_it_leaves(self):
         _segs, _scenes, out = plan(FLOOD, flood_shots(), FLOOD_BRIEF)
-        spans = [span(o) for o in out["overlays"]]
-        self.assertTrue(out["sfx"])
-        for s in out["sfx"]:
-            home = [(a, b) for a, b in spans if a <= s["startFrame"] < b]
-            self.assertTrue(home, s)
-            a, b = home[0]
-            self.assertLessEqual(sound_end(s), b, s)
-        # One look, one sound; two looks landing within half a second: one sound.
-        starts = sorted(s["startFrame"] for s in out["sfx"])
-        self.assertTrue(all(y - x > 15 for x, y in zip(starts, starts[1:])), starts)
+        # The sound is built into each look (LookSounds.tsx): no row on the timeline.
+        self.assertEqual(out["sfx"], [])
+        doc = {"fps": FPS, "overlays": out["overlays"], "lookSounds": out["lookSounds"]}
+        sounds = sfxplan.doc_look_sounds(doc)
+        self.assertTrue(sounds)
+        for s in sounds:
+            a, b = span(out["overlays"][s["look"]])
+            self.assertTrue(a <= s["startFrame"] < b, s)
+            self.assertLessEqual(s["startFrame"] + s["frames"], b, s)
+        # Two looks landing within half a second: only one of them sounds.
+        heard = sorted({span(out["overlays"][s["look"]])[0] for s in sounds})
+        self.assertTrue(all(y - x > 15 for x, y in zip(heard, heard[1:])), heard)
 
 
 # --------------------------------------------------------------------------- B. dates
@@ -266,18 +277,22 @@ class Dates(unittest.TestCase):
         _s, _sc, out = plan(["Three days later, crews were still searching the riverbanks.",
                              "Plain words about the recovery.", "Plain words about the town.",
                              "Over the next 48 hours, more storms are expected."])
-        downs = [o for o in out["overlays"] if o["template"] == treatments.COUNTDOWN_LOOK]
-        self.assertEqual([o["text"] for o in downs], ["3 DAYS LATER", "48 HOURS"])
+        # The countdown card is banned (boxed, 2026-09-30 audit): the bold count counts the span.
+        self.assertEqual(treatments.span_look(), treatments.BOLD_COUNT_LOOK)
+        downs = [o for o in out["overlays"] if o["template"] == treatments.span_look()]
+        self.assertEqual([(o["text"], o["value"]) for o in downs], [("3 DAYS LATER", 3.0), ("48 HOURS", 48.0)])
         # Never a big number for the span as well.
-        self.assertFalse([o for o in out["overlays"] if o.get("value") in (3.0, 48.0)])
+        self.assertEqual([o for o in out["overlays"] if o.get("value") in (3.0, 48.0)], downs)
         self.assertNotIn(treatments.COUNTDOWN_LOOK, [t["id"] for t in treatments.date_looks("date")])
         self.assertNotIn(treatments.COUNTDOWN_LOOK, [t["id"] for t in treatments.date_looks("datetime")])
 
-    def test_a_time_of_day_keeps_its_clock(self):
+    def test_a_time_of_day_is_bold_text_too(self):
+        # The owner (2026-09-30): the date or time as bold text only - the letter drop.
         _s, _sc, out = plan(["The call came in at 3:45 pm.", "Plain words follow here."])
         [o] = [o for o in out["overlays"] if cues_of(o) & {"time-of-day", "datetime", "date"}]
-        self.assertNotIn(o["template"], BOLD)
+        self.assertEqual(o["template"], treatments.TEXT_DATE_LOOK)
         self.assertIn("time-of-day", cues_of(o))
+        self.assertEqual(o["text"], "3:45 PM")
 
     def test_every_date_lands_on_the_deep_hit(self):
         lines = ["On July 2, the rain began.", "Plain words about the river.", "Plain words about the town.",
@@ -286,21 +301,31 @@ class Dates(unittest.TestCase):
         _s, _sc, out = plan(lines, pack="documentary", brief={"kind": "explainer", "hookBeats": [], "sections": []})
         dated = [o for o in out["overlays"] if o["template"] in BOLD]
         self.assertGreaterEqual(len(dated), 3)
+        # The sound is the look's own: its ticks, then the date slam (the deep hit
+        # its stand-in) at the date level whatever the pack's intensity.
+        self.assertEqual(out["sfx"], [])
+        sounds = sfxplan.doc_look_sounds({"fps": FPS, "overlays": out["overlays"], "lookSounds": out["lookSounds"]})
         for o in dated:
-            a, b = span(o)
-            sounds = [s for s in out["sfx"] if a <= s["startFrame"] < b]
-            self.assertEqual([s["name"] for s in sounds], ["hit-deep"], o["template"])
-            self.assertEqual(sounds[0]["volume"], round(sfxplan.level("hit-deep"), 3))
+            mine = [s for s in sounds if out["overlays"][s["look"]] is o]
+            hits = [s for s in mine if s["name"] in ("date-slam", "hit-deep")]
+            self.assertEqual(len(hits), 1, o["template"])
+            self.assertEqual(hits[0], mine[-1])
+            self.assertAlmostEqual(hits[0]["volume"], sfxplan.level(hits[0]["name"]), places=3)
 
     def test_the_bold_looks_work_with_or_without_the_newest_ones(self):
-        self.assertTrue({"LIB_DT_DATE_SLAM", "LIB_DT_CLEAN_CARD", "TL_DATE_TITLE_V1"}
-                        <= {t["id"] for t in treatments.date_looks("date")})
+        # Bold text only: the letter drop for a date, a date and a time, a time of day.
+        for cue in ("date", "datetime", "time-of-day"):
+            self.assertEqual([t["id"] for t in treatments.date_looks(cue)], [treatments.TEXT_DATE_LOOK], cue)
+        # A registry without it falls back to the bold type looks left (the boxed
+        # and banded date cards are banned: the 2026-09-30 audit); never a banned look.
         real = templates.get
-        hidden = {"LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK"}
+        hidden = {treatments.TEXT_DATE_LOOK}
         with mock.patch.object(templates, "get", lambda tid: None if tid in hidden else real(tid)):
-            ids = [t["id"] for t in treatments.date_looks("date")]
-            self.assertEqual(set(ids), {"LIB_DT_DATE_SLAM", "LIB_DT_CLEAN_CARD", "TL_DATE_TITLE_V1"})
-            self.assertEqual([t["id"] for t in treatments.date_looks("datetime")], ["LIB_DT_CLEAN_CARD"])
+            for cue in ("date", "datetime"):
+                self.assertEqual([t["id"] for t in treatments.date_looks(cue)],
+                                 ["LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK"], cue)
+            for cue in ("date", "datetime", "time-of-day"):
+                self.assertFalse([t["id"] for t in treatments.date_looks(cue) if templates.banned(t["id"])], cue)
 
 
 # --------------------------------------------------------------------------- C. labels and person cards

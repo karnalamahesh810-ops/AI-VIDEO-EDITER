@@ -31,7 +31,9 @@ import { lines, ramp, useK } from "../pro/ProGraphics";
  * nothing is larger than 140 px except the two bold looks, whose date is the
  * headline itself (up to 214 px, the stack's day 330 px). Every look leaves
  * in its last 12 frames. No
- * sound is played here (the timeline sound lands on the look's sfx_at).
+ * sound is played here: each look's sound is built in (registry defaults.sounds,
+ * played by LookSounds on the look's sfx_at). The text-only date look,
+ * dt-letter-drop, lives in LibBoldText.tsx.
  */
 
 type Look = React.FC<{ overlay: Overlay; accent: string }>;
@@ -50,12 +52,12 @@ const INK = "#0A0F1A";
 const RED = "#E5202A";
 
 // ------------------------------------------------------------------ parsing
-const MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER",
+export const MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER",
   "NOVEMBER", "DECEMBER"];
 const MON3 = MONTHS.map((m) => m.slice(0, 3));
 /** Newsroom abbreviations: short months spelled out, the rest cut (SEPT, not SEP.). */
-const MON_AP = ["JAN", "FEB", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUG", "SEPT", "OCT", "NOV", "DEC"];
-const WEEKDAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+export const MON_AP = ["JAN", "FEB", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUG", "SEPT", "OCT", "NOV", "DEC"];
+export const WEEKDAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 
 const str = (v: unknown): string =>
   (typeof v === "string" ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : "").replace(/\s+/g, " ").trim();

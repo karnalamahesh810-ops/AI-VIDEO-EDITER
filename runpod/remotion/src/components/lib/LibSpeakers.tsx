@@ -301,7 +301,7 @@ const QuotePortrait: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <DarkGround focus="28% 50%" />
-      <Sfx name="typewriter" at={typeAt} volume={0.28} />
+      <Sfx name="keys-type" at={typeAt} volume={0.28} />
       <AbsoluteFill style={{ transform: `scale(${hold})` }}>
         <div style={{ position: "absolute", left: left + R - R * picP - (exit * 260) * k, top: cy - R * picP,
           width: 2 * R * picP, height: 2 * R * picP, borderRadius: "50%", opacity: (1 - exit) * Math.min(1, picP * 2),
@@ -522,7 +522,7 @@ const StatementCard: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill>
       <Scrim ov={overlay} />
-      <Sfx name="paper" at={0} volume={0.3} />
+      <Sfx name="paper-slide-v2" at={0} volume={0.3} />
       <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: W, padding: `${64 * k}px ${76 * k}px ${52 * k}px`, background: PAPER, borderRadius: 6 * k,
           boxShadow: `0 ${34 * k}px ${80 * k}px rgba(0,0,0,.55), 0 ${2 * k}px ${4 * k}px rgba(0,0,0,.25)`,
@@ -599,8 +599,8 @@ const Checklist: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill>
       <Scrim ov={overlay} />
-      <Sfx name="paper" at={0} volume={0.3} />
-      {rows.map((_r, i) => <Sfx key={i} name="pop" at={tickAt(i)} volume={0.28} />)}
+      <Sfx name="paper-slide-v2" at={0} volume={0.3} />
+      {rows.map((_r, i) => <Sfx key={i} name="ui-pop" at={tickAt(i)} volume={0.28} />)}
       <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: W, padding: `${46 * k}px ${56 * k}px ${40 * k}px`, borderRadius: 4 * k, position: "relative",
           background: PAPER, boxShadow: `0 ${34 * k}px ${80 * k}px rgba(0,0,0,.55), 0 ${2 * k}px ${4 * k}px rgba(0,0,0,.25)`,
@@ -691,7 +691,7 @@ const CircleList: Look = ({ overlay, accent }) => {
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, #121318 0%, #07070a 55%, #030304 100%)" }} />
       <AbsoluteFill style={{ boxShadow: `inset 0 0 ${300 * k}px rgba(0,0,0,.8)` }} />
-      {rows.map((_r, i) => <Sfx key={i} name="pop" at={atOf(i)} volume={0.3} />)}
+      {rows.map((_r, i) => <Sfx key={i} name="ui-pop" at={atOf(i)} volume={0.3} />)}
       <AbsoluteFill style={{ transform: `scale(${hold})` }}>
         {title ? (
           <div style={{ position: "absolute", left: 0, right: 0, top: 150 * k, display: "flex", justifyContent: "center" }}>
@@ -791,7 +791,7 @@ const Network: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill>
       <Scrim ov={overlay} />
-      {nodes.map((nd, i) => <Sfx key={i} name="pop" at={nd.at + 10} volume={0.26} />)}
+      {nodes.map((nd, i) => <Sfx key={i} name="ui-pop" at={nd.at + 10} volume={0.26} />)}
       <AbsoluteFill style={{ transform: `scale(${hold})` }}>
         <svg width={VW} height={VH} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
           {nodes.map((nd, i) => {
@@ -887,7 +887,7 @@ const ConceptWave: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill>
       <Scrim ov={overlay} />
-      <Sfx name="whoosh" at={drawAt} volume={0.3} />
+      <Sfx name="swoosh-text" at={drawAt} volume={0.3} />
       <AbsoluteFill style={{ transform: `scale(${hold})` }}>
         {title ? (
           <div style={{ position: "absolute", left: 120 * k, top: 110 * k }}>

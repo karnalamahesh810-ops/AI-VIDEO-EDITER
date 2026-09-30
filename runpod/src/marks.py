@@ -138,6 +138,10 @@ def _still_for(ov: dict, scene: Optional[dict]) -> str:
 def _sfx_cue(template_id: str, start: int, frames: int, fps: int, voice_lufs) -> Optional[dict]:
     """The look's own sound, peaking on its hit, at the voice-relative level (src/sfxplan)."""
     t = templates.get(template_id) or {}
+    if sfxplan.has_builtin_sound(t):
+        # The renderer plays this look's registry sound design inside the
+        # overlay (LookSounds); a timeline row would only clutter the editor.
+        return None
     d = t.get("defaults") or {}
     name = str((d.get("sfx") or {}).get("name") or "")
     if not name or name == "none" or not sfxplan.exists(name):

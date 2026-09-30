@@ -5,6 +5,7 @@ import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { LetterLine, Odometer, Scrim, lines, ramp, useHold, useK } from "../pro/ProGraphics";
 import { Heading } from "../pro/ProCharts";
 import { CaseBackdrop } from "../pro/ProCase";
+import { F as KF, fit as kfit } from "../pro/Kit";
 
 /**
  * Digital & social UI mockups (family "ui-", registry category DOCUMENTS):
@@ -826,14 +827,17 @@ const NotificationStack: Look = ({ overlay, accent: acc }) => {
   if (!src.length && clean(overlay.text)) src = [{ app: clean(overlay.label, 26), msg: unquote(clean(overlay.text, 110)) }];
   src = src.filter((s) => s.msg).slice(0, 4);
   if (!src.length) return null;
-  const CW = 640 * k, PAD = 22 * k, IC = 64 * k, LH = 34 * k, GAP = 14 * k, PEEK = 16 * k, HEADER = 66 * k;
+  const CW = 860 * k, PAD = 28 * k, IC = 84 * k, LH = 50 * k, GAP = 16 * k, PEEK = 18 * k, HEADER = 88 * k;
   const notes: Note[] = src.map((s) => {
     const app = s.app || clean(overlay.label, 26) || "Notification";
     const all = `${app} ${s.msg}`;
     const danger = DANGER.test(all);
     const glyph = danger ? I.alert : WATERY.test(all) ? I.drop : HOT.test(all) ? I.heat : I.bell;
-    const msg = wrap(s.msg, 31, 2);
-    return { app, msg, danger, glyph, h: PAD + 28 * k + 8 * k + msg.length * LH + PAD };
+    // Measured, not counted: caps are wider than lower case. A shouted (all caps) line reads as a sentence.
+    const said = s.msg === s.msg.toUpperCase() && /[A-Z]{4}/.test(s.msg)
+      ? s.msg.charAt(0) + s.msg.slice(1).toLowerCase() : s.msg;
+    const msg = kfit(said, KF.inter, 40 * k, 40 * k, CW - PAD * 2 - IC - 22 * k, 3).lines;
+    return { app, msg, danger, glyph, h: PAD + 36 * k + 10 * k + msg.length * LH + PAD };
   });
   const n = notes.length;
   const t0 = T(0.35);
@@ -856,19 +860,20 @@ const NotificationStack: Look = ({ overlay, accent: acc }) => {
   return (
     <AbsoluteFill>
       <AbsoluteFill style={{ opacity: ramp(frame, 0, 12) * (1 - out),
-        background: "radial-gradient(ellipse 46% 60% at 88% 34%, rgba(0,0,0,.44) 0%, rgba(0,0,0,.16) 50%, rgba(0,0,0,0) 100%)" }} />
-      <div style={{ position: "absolute", right: 90 * k, top: 110 * k, width: CW, height: 760 * k, transform: `translateY(${drift}px)` }}>
-        <div style={{ position: "absolute", left: 8 * k, right: 8 * k, top: 0, height: 48 * k, display: "flex", alignItems: "center",
+        background: "radial-gradient(ellipse 50% 64% at 84% 36%, rgba(0,0,0,.5) 0%, rgba(0,0,0,.2) 50%, rgba(0,0,0,0) 100%)" }} />
+      <div style={{ position: "absolute", right: 96 * k, top: 96 * k, width: CW, height: 820 * k, transform: `translateY(${drift}px)` }}>
+        <div style={{ position: "absolute", left: 8 * k, right: 8 * k, top: 0, height: 60 * k, display: "flex", alignItems: "center",
           gap: 14 * k, opacity: 1 - out }}>
-          <Icon d={I.bell} size={30 * k} color="#fff" width={2} draw={ramp(frame, 2, T(0.5), inOut)} />
+          <Icon d={I.bell} size={42 * k} color="#fff" width={2.2} draw={ramp(frame, 2, T(0.5), inOut)} />
           <Rise at={4} out={end}>
-            <span style={{ fontFamily: LABEL, fontWeight: 700, fontSize: 28 * k, letterSpacing: "0.2em", color: "#fff" }}>
+            <span style={{ fontFamily: LABEL, fontWeight: 800, fontSize: 38 * k, letterSpacing: "0.16em", color: "#fff",
+              textShadow: "0 3px 12px rgba(0,0,0,.7)" }}>
               NOTIFICATIONS</span>
           </Rise>
-          <div style={{ minWidth: 44 * k, height: 40 * k, borderRadius: 20 * k, background: accent, display: "flex",
+          <div style={{ minWidth: 56 * k, height: 52 * k, borderRadius: 26 * k, background: accent, display: "flex",
             alignItems: "center", justifyContent: "center", padding: `0 ${10 * k}px`, boxSizing: "border-box",
             transform: `scale(${ramp(frame, T(0.3), 14, backOut) * (1 - ramp(frame, end + 2, 8, easeIn))})` }}>
-            <span style={{ fontFamily: INTER, fontWeight: 800, fontSize: 26 * k, color: inkOn(accent), lineHeight: 1 }}>
+            <span style={{ fontFamily: INTER, fontWeight: 800, fontSize: 32 * k, color: inkOn(accent), lineHeight: 1 }}>
               {Math.max(1, count)}</span>
           </div>
           <div style={{ flex: 1, height: 1.5 * k, background: "rgba(255,255,255,.35)", transformOrigin: "left",
@@ -885,31 +890,31 @@ const NotificationStack: Look = ({ overlay, accent: acc }) => {
             : `linear-gradient(145deg, ${tint(accent, 0.2)} 0%, ${shade(accent, 0.72)} 100%)`;
           const age = AGES[n - 1 - j] || "now";
           return (
-            <div key={j} style={{ position: "absolute", right: 0, top: HEADER + ys[j], width: CW, height: nt.h, borderRadius: 28 * k,
+            <div key={j} style={{ position: "absolute", right: 0, top: HEADER + ys[j], width: CW, height: nt.h, borderRadius: 32 * k,
               zIndex: j + 1, background: "linear-gradient(180deg, rgba(47,48,55,.95) 0%, rgba(28,29,34,.95) 100%)",
               border: `${1.2 * k}px solid rgba(255,255,255,.14)`, boxShadow: `0 ${18 * k}px ${44 * k}px rgba(0,0,0,.45)`,
               opacity: ramp(frame, at(j), 6) * (1 - 0.35 * c) * (1 - e), transformOrigin: "50% 0%",
               transform: `translate(${dx + e * 140 * k}px, ${(1 - a) * -60 * k}px) scale(${(1 - 0.06 * c) * (0.9 + 0.1 * a)})` }}>
-              <div style={{ position: "absolute", left: PAD, top: PAD, width: IC, height: IC, borderRadius: 17 * k, background: icBg,
+              <div style={{ position: "absolute", left: PAD, top: PAD, width: IC, height: IC, borderRadius: 22 * k, background: icBg,
                 display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "inset 0 1px 0 rgba(255,255,255,.25)",
                 transform: `scale(${ramp(frame, at(j) + 2, 14, backOut)})` }}>
-                <Icon d={nt.glyph} size={38 * k} color={nt.danger ? "#fff" : inkOn(accent)} width={2.2}
+                <Icon d={nt.glyph} size={50 * k} color={nt.danger ? "#fff" : inkOn(accent)} width={2.2}
                   draw={ramp(frame, at(j) + 4, 12, inOut)} />
               </div>
-              <div style={{ position: "absolute", left: PAD + IC + 18 * k, right: PAD, top: PAD - 2 * k, opacity: 1 - c }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: 28 * k }}>
+              <div style={{ position: "absolute", left: PAD + IC + 22 * k, right: PAD, top: PAD - 2 * k, opacity: 1 - c }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: 36 * k }}>
                   <Rise at={at(j) + 5} out={end} style={{ minWidth: 0 }}>
-                    <span style={{ fontFamily: LABEL, fontWeight: 700, fontSize: 24 * k, letterSpacing: "0.14em",
-                      color: "rgba(255,255,255,.62)", whiteSpace: "nowrap" }}>{nt.app.toUpperCase()}</span>
+                    <span style={{ fontFamily: LABEL, fontWeight: 800, fontSize: 32 * k, letterSpacing: "0.1em",
+                      color: "rgba(255,255,255,.72)", whiteSpace: "nowrap" }}>{nt.app.toUpperCase()}</span>
                   </Rise>
                   <Rise at={at(j) + 6} out={end}>
-                    <span style={{ fontFamily: INTER, fontWeight: 400, fontSize: 24 * k, color: "rgba(255,255,255,.45)" }}>{age}</span>
+                    <span style={{ fontFamily: INTER, fontWeight: 500, fontSize: 28 * k, color: "rgba(255,255,255,.5)" }}>{age}</span>
                   </Rise>
                 </div>
-                <div style={{ marginTop: 8 * k }}>
+                <div style={{ marginTop: 10 * k }}>
                   {nt.msg.map((ln, l) => (
                     <Rise key={l} at={at(j) + 8 + l * 3} out={end}>
-                      <span style={{ display: "block", fontFamily: INTER, fontWeight: 700, fontSize: 26 * k, lineHeight: `${LH}px`,
+                      <span style={{ display: "block", fontFamily: INTER, fontWeight: 700, fontSize: 40 * k, lineHeight: `${LH}px`, letterSpacing: "-0.01em",
                         color: "#fff", whiteSpace: "pre" }}>{ln}</span>
                     </Rise>
                   ))}

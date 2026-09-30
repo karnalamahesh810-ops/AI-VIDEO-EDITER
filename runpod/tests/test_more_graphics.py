@@ -210,8 +210,12 @@ class OverlayPolicy(unittest.TestCase):
                 self.assertIn(o.get("position"), ("bottom-left", "bottom-right"))
                 self.assertAlmostEqual(o.get("scale"), treatments.COMPACT_SCALE)
             self.assertLessEqual(o["durationInFrames"] / 30, 4.0 + 1e-6)
-        # Four different percentages, four different looks.
-        self.assertEqual(len({o["template"] for o in ovs}), len(ovs))
+        # The bold count leads (the owner, 2026-09-30: numbers as bold text with a
+        # digit count sound); after two of them in a row another look comes in.
+        looks = [o["template"] for o in sorted(ovs, key=lambda o: o["startFrame"])]
+        self.assertEqual(looks[0], treatments.BOLD_COUNT_LOOK)
+        self.assertFalse(any(looks[i:i + 3] == [treatments.BOLD_COUNT_LOOK] * 3 for i in range(len(looks))), looks)
+        self.assertGreaterEqual(len(set(looks)), 2, looks)
 
     def test_several_values_are_full_screen_for_their_moment_only(self):
         ovs = self._plan(["In 2000 the lake was 95 percent full, in 2010 it held 60 percent, and today it is at 26 percent."])

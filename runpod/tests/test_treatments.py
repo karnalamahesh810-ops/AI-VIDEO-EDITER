@@ -111,12 +111,19 @@ class Planner(unittest.TestCase):
         m = out["overlays"][1]
         self.assertEqual((m["type"], m["variant"], m["locations"][0]["label"]), ("map", "satellite-dark", "Nevada"))
         self.assertEqual(out["treatments"][1]["mapData"]["locations"][0]["label"], "Nevada")
-        # The sound pass (src/sfxplan.py, or the fallback) gives each graphic
-        # at most one sound, in time order, from files that exist.
-        self.assertTrue(out["sfx"])
-        self.assertLessEqual(len(out["sfx"]), 2)
-        self.assertEqual([s["startFrame"] for s in out["sfx"]], sorted(s["startFrame"] for s in out["sfx"]))
-        self.assertTrue(all(s["name"] in templates.sfx_files() for s in out["sfx"]))
+        # Each graphic carries its own sound (built in, LookSounds.tsx): no
+        # timeline row for it; the renderer's schedule plays files that ship,
+        # inside each look, at the pack's intensity.
+        from src import sfxplan
+        self.assertEqual(out["sfx"], [])
+        self.assertEqual(out["lookSounds"], {"intensity": templates.style_packs()["weather"]["sfxIntensity"]})
+        doc = {"fps": 30, "overlays": out["overlays"], "lookSounds": out["lookSounds"]}
+        sounds = sfxplan.doc_look_sounds(doc)
+        self.assertEqual({s["look"] for s in sounds}, {0, 1})
+        for s in sounds:
+            o = out["overlays"][s["look"]]
+            self.assertIn(s["name"], templates.sfx_files())
+            self.assertLessEqual(s["startFrame"] + s["frames"], o["startFrame"] + o["durationInFrames"])
 
     def test_a_long_quiet_stretch_gets_a_light_label(self):
         # 2026-09-29: the label rotates over the caption / key-phrase looks and

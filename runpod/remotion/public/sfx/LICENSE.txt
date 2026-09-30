@@ -15,3 +15,13 @@ shutter, flash-hit and marker are synthesised from scratch (numpy sine/noise), n
 Every mp3 here was then loudness-matched to about -21 LUFS max momentary (all within ~3 dB),
 true peak <= -3 dBFS. sfx_meta.json lists each file's duration and the time of its loudest point
 ("peak", seconds from the start) so the planner can land that point on the visual hit.
+
+Added 2026-09-30 (premium sound pass): 42 sounds generated with ElevenLabs sound effects
+(eleven_text_to_sound v2, the owner's pay-as-you-go account, which allows commercial use), then
+trimmed (onset within a few ms), faded, DC/subsonic-filtered, narrowed where L/R cancelled in mono,
+loudness-matched to about -20 LUFS max momentary (short clicks sit lower: the true-peak cap of
+-3.5 dBFS binds first; "lufs" in sfx_meta.json) and encoded MP3 192 kbps 44.1 kHz stereo.
+Sound-designed from those takes: riser-short-v2 (rising sweep into the impact-punch hit),
+zoom-in-whoosh (reversed whoosh into a soft thump), count-final (lock click with a low body),
+ui-tick and letter-tick (single ticks cut from tick takes), paper-tear (a take of tape-rip).
+New names never overwrite an older file; "-v2" marks the better take of an existing name.

@@ -43,8 +43,22 @@ def by_category(category: str) -> List[dict]:
 # The owner (2026-09-29): the white words with red underline / red accent
 # blocks (the ProHeadline family) must never be used again. No planner path
 # may choose these; the editor can still open an old document that has one.
+#
+# The animation audit (2026-09-30, grades D/F): amateur or broken renders, and
+# every boxed or banded date, time and age look (the owner: "NO background
+# layout, ONLY TEXT: the date in white BOLD ... with a black stroke") - dates,
+# times and ages go to the text-only looks (LibBoldText). They stay renderable.
+AUDIT_BANNED = frozenset({
+    "HEADLINE_TITLE_V1", "HEADLINE_NEWS_V1", "TL_RULER_V1", "TL_SPAN_V1", "TL_DATE_STAMP_V1", "TL_DATE_TITLE_V1",
+    "TL_AGE_TAG_V1", "TL_CLOCK_V1", "DOC_ARTICLE_V1", "QUOTE_CALLOUT_V1", "LIB_PB_DATE_PLATE", "LIB_CO_SPEECH_BUBBLE",
+    "LIB_CO_CHIP_STACK", "LIB_NS_DUAL_GAUGE", "LIB_CA_RADIAL_BARS", "LIB_AL_COUNTDOWN_TIMER", "LIB_AL_LIVE_TAG",
+    "LIB_AL_SLIM_TICKER", "LIB_SC_WATER_CYCLE", "LIB_SC_MOLECULE_ORBIT", "LIB_SC_HEAT_SUN", "LIB_CC_CIRCLE_ROW",
+    "LIB_CC_WAVE_CHAIN", "LIB_SP_CIRCLE_LIST", "LIB_ED_GLASS_CAPTION", "LIB_DT_CLEAN_CARD", "LIB_DT_CALENDAR_PAGE",
+    "LIB_DT_STAMP_BAR", "LIB_DT_CLOCK_TIME", "LIB_DT_REC_STAMP", "LIB_DT_DATE_SLAM", "LIB_DT_TIMELINE_TICK",
+    "LIB_DT_COUNTDOWN_DAYS", "LIB_PE_ZOOM_CIRCLE", "NUM_DONUT_V1", "NUM_NUMBER_ROLL_V1", "CHART_PIE_V1",
+})
 BANNED = frozenset({"TEXT_UNDERLINE_TITLE_V1", "TEXT_SWOOSH_TITLE_V1", "TEXT_SENTENCE_HIGHLIGHT_V1",
-                    "TEXT_WORD_TYPE_V1"})
+                    "TEXT_WORD_TYPE_V1"}) | AUDIT_BANNED
 
 
 def banned(template_id: str) -> bool:

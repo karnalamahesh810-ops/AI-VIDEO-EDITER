@@ -51,7 +51,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
                  render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
 from src import templates
-from src import localvision, marks, r2, styles, upscale
+from src import ledger, localvision, marks, r2, styles, upscale
 
 
 def _work_dir(job_id: str) -> str:
@@ -936,7 +936,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         on_progress=lambda f: report("Aligning narration", 8 + int(5 * f)))
     if not words:
         raise ValueError("no speech detected in the narration audio")
-    segments = transcribe.segment_words(words)
+    # Cut where an editor would (src/transcribe.py human_cuts): the visual
+    # track runs from frame 0 to the narration's end.
+    segments = transcribe.segment_words(words, origin=0.0, until=audio_duration or None)
     if inp.get("script"):
         segments = transcribe.align_to_script(segments, inp["script"])
     if not audio_duration:
@@ -2020,7 +2022,14 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "IMAGE_MAX_PER_VIDEO", "PREFER_GENERATED_IMAGES", "GENERATED_IMAGES_IN_HOOK",
                       "HOOK_SECONDS", "MAX_MOMENTS_PER_VIDEO", "SAME_VIDEO_GAP_SECONDS",
                       "REUSE_MIN_GAP_SECONDS", "IMAGE_MAX_USES", "RECENT_FOOTAGE_FIRST",
-                      "MENTION_CUTS", "MARKS_ENABLED", "MARKS_MAX")
+                      "MENTION_CUTS", "MARKS_ENABLED", "MARKS_MAX", "STILL_MOTION",
+                      # Human cuts, the Nature & Weather edit, no reuse across
+                      # videos and the AI-slop filter (2026-09-30).
+                      "HUMAN_CUTS", "CUT_FAST_SECONDS", "CUT_SLOW_SECONDS", "CUT_HOOK_FACTOR",
+                      "CUT_LEAD_SECONDS", "EYEWITNESS_SEARCHES", "COMING_SHOTS", "HOOK_INTENSITY",
+                      "MOTION_PREFERENCE", "PHOTO_MAX_PER_10MIN", "REGION_BLOCKS", "CHAIN_SHOTS",
+                      "CHAIN_MAX", "POOL_JUDGE_CLIPS", "AI_SLOP_FILTER", "CROSS_VIDEO_REUSE_DAYS",
+                      "CROSS_VIDEO_GAP_SECONDS", "LIBRARY_SAVE_UNUSED")
 
 
 def _apply_config(overrides) -> dict:
@@ -2095,6 +2104,10 @@ def handler(job):
     work = _work_dir(job_id)
 
     try:
+        if action in ("plan", "build", "resource", "source_part"):
+            # What earlier videos showed (src/ledger.py), read in the background
+            # while the narration is transcribed; sourcing never repeats it.
+            ledger.start_loading(job_id, project_id)
         if action == "source_part":
             # One part of a long video, queued by its parent job (src/fanout.py).
             def set_story(brief):
@@ -2221,6 +2234,7 @@ def handler(job):
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
             _keep_in_library(doc, report)
+            ledger.note(doc)                    # while the photos are still here to hash
             # Without this the timeline points at files this job is about to
             # delete. See publish_media().
             if project_id and inp.get("publish_media", True):
@@ -2234,6 +2248,7 @@ def handler(job):
                     "scene_data": doc, "status": "editing",
                     "current_step": "Timeline ready", "progress": 68,
                 })
+                ledger.save(job_id, project_id)     # later videos never show these moments again
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "plan", "timeline": doc, "costs": summary,
                     "events": doc["meta"]["events"],
@@ -2274,6 +2289,8 @@ def handler(job):
             out = do_render(doc, inp, work, report, split=split)
             if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
+            if project_id:
+                ledger.save(job_id, project_id, doc=doc)    # the edited, rendered video's own shots
             costs.measure_end()
             return {"ok": True, "action": "render", **out,
                     "render_manifest": media.LAST_STATS.get("render_manifest"),
@@ -2286,6 +2303,7 @@ def handler(job):
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
             _keep_in_library(doc, report)
+            ledger.note(doc)                    # while the photos are still here to hash
             if project_id:
                 # Saved before the render: a failure there keeps the search.
                 storage.patch_project(project_id, {"scene_data": doc}, wait=True)
@@ -2315,6 +2333,8 @@ def handler(job):
                               report, job_id=job_id, band=(93, 99))
             if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
+            if project_id:
+                ledger.save(job_id, project_id)     # later videos never show these moments again
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "build", "timeline": doc, **out, "costs": summary,
                     "events": doc["meta"]["events"],

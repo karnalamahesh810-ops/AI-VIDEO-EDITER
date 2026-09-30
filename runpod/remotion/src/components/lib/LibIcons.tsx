@@ -87,6 +87,16 @@ const isLight = (c: string): boolean => {
   const b = n & 255;
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.72;
 };
+/**
+ * The owner's text language (2026-09-30: "NO background layout, ONLY TEXT: bold
+ * white text with a black stroke"): the letters carry a black outline painted
+ * under the fill and a soft shadow, so they read on bright sky and night alike.
+ * Inherited by every glyph inside (the odometer's digits too).
+ */
+const outline = (size: number, k: number): React.CSSProperties => ({
+  WebkitTextStroke: `${Math.max(4.5 * k, Math.min(12 * k, size * 0.1)).toFixed(2)}px #000`, paintOrder: "stroke fill",
+  textShadow: `0 ${3 * k}px ${4 * k}px rgba(0,0,0,.35), 0 ${8 * k}px ${24 * k}px rgba(0,0,0,.5)`,
+} as React.CSSProperties);
 const fmt = (v: number): string => formatValue(v).text;
 const f1 = (v: number): string => (Number.isFinite(v) ? v.toFixed(1) : "0");
 /** Two significant digits ("each figure is about 44,000", not 44,127). */
@@ -222,17 +232,18 @@ const TagOut: React.FC<{ text: string; at: number; accent: string; size?: number
     );
   };
 
-/** What the figure counts: a Tag when short, one or two condensed caps lines when long. */
+/** What the figure counts: one or two lines of outlined bold caps (no tag box). */
 const Caption: React.FC<{ text: string; at: number; accent: string; align?: "left" | "center" | "right";
-  size?: number; chars?: number }> = ({ text, at, accent, align = "left", size = 32, chars = 30 }) => {
+  size?: number; chars?: number }> = ({ text, at, align = "left", size = 32, chars = 30 }) => {
   const k = useK();
   const t = cap(text);
   if (!t) return null;
-  if (t.length <= 22) return <TagOut text={t} at={at} accent={accent} size={size - 2} />;
+  // At least 44 px at 1080p: a phone shows the frame at a third of that.
+  const px = Math.max(44, size * 1.45);
+  const per = Math.max(10, Math.round((chars * size) / px * 1.15));
   return (
-    <Lines text={t} chars={chars} max={2} at={at} align={align} style={{ fontFamily: LABEL, fontWeight: 700,
-      fontSize: size * k, letterSpacing: "0.06em", color: "#fff", lineHeight: 1.08,
-      textShadow: "0 4px 18px rgba(0,0,0,.65)" }} />
+    <Lines text={t} chars={per} max={3} at={at} align={align} style={{ fontFamily: LABEL, fontWeight: 800,
+      fontSize: px * k, letterSpacing: "0.03em", color: "#fff", lineHeight: 1.04, ...outline(px * k, k) }} />
   );
 };
 
@@ -243,9 +254,8 @@ const Kicker: React.FC<{ text: string; accent: string; at?: number; size?: numbe
     const t = clip(cap(text), max);
     if (!t) return null;
     return (
-      <Letters text={t} at={at} step={0.6} style={{ fontFamily: LABEL, fontWeight: 800, fontSize: size * k,
-        letterSpacing: "0.26em", color: accent, textAlign: align, lineHeight: 1.1,
-        textShadow: "0 3px 14px rgba(0,0,0,.6)" }} />
+      <Letters text={t} at={at} step={0.6} style={{ fontFamily: LABEL, fontWeight: 800, fontSize: Math.max(34, size * 1.3) * k,
+        letterSpacing: "0.1em", color: accent, textAlign: align, lineHeight: 1.1, ...outline(Math.max(34, size * 1.3) * k, k) }} />
     );
   };
 
@@ -258,8 +268,8 @@ const Readout: React.FC<{ text: string; at: number; color?: string; size?: numbe
     if (!text) return null;
     return (
       <MaskIO pin={ramp(frame, at, 14)} pout={exit}>
-        <span style={{ display: "block", fontFamily: MONO, fontWeight: 500, fontSize: size * k, letterSpacing: "0.12em",
-          color, whiteSpace: "nowrap", lineHeight: 1.25, textShadow: "0 2px 10px rgba(0,0,0,.75)" }}>{text}</span>
+        <span style={{ display: "block", fontFamily: LABEL, fontWeight: 800, fontSize: Math.max(32, size * 1.3) * k, letterSpacing: "0.06em",
+          color, whiteSpace: "nowrap", lineHeight: 1.2, ...outline(Math.max(32, size * 1.3) * k, k) }}>{text}</span>
       </MaskIO>
     );
   };
@@ -278,7 +288,7 @@ const Figure: React.FC<{ value: number; at: number; frames: number; size: number
     const m = magnitude(value, u.short);
     const wordPx = Math.max(26 * k, Math.min(40 * k, size * 0.3));
     return (
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 12 * k, textShadow: "0 6px 26px rgba(0,0,0,.5)",
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 12 * k, ...outline(size * 0.62, k),
         justifyContent: align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start" }}>
         <MaskIO pin={ramp(frame, at - 6, 14)} pout={exit}>
           <Odometer value={m.v} at={at} frames={frames} size={size} color={color} prefix={prefix.trim()} suffix={m.short}
@@ -286,8 +296,8 @@ const Figure: React.FC<{ value: number; at: number; frames: number; size: number
         </MaskIO>
         {u.word ? (
           <MaskIO pin={ramp(frame, at + 8, 14)} pout={exit} style={{ marginBottom: size * 0.1 }}>
-            <span style={{ display: "block", fontFamily: LABEL, fontWeight: 800, fontSize: wordPx, lineHeight: 1,
-              letterSpacing: "0.1em", color: wordColor || accent, whiteSpace: "nowrap" }}>{u.word}</span>
+            <span style={{ display: "block", fontFamily: LABEL, fontWeight: 800, fontSize: wordPx * 1.25, lineHeight: 1,
+              letterSpacing: "0.06em", color: wordColor || accent, whiteSpace: "nowrap", ...outline(wordPx * 1.25, k) }}>{u.word}</span>
           </MaskIO>
         ) : null}
       </div>
@@ -304,7 +314,7 @@ const Shade: React.FC<{ ov: Overlay; x: number; y: number; rx?: number; ry?: num
     if (ov.fullFrame) return null;
     return (
       <AbsoluteFill style={{ opacity: ramp(frame, 0, 12) * (1 - exit), background:
-        `radial-gradient(ellipse ${rx}% ${ry}% at ${x}% ${y}%, rgba(0,0,0,.62) 0%, rgba(0,0,0,.3) 45%, rgba(0,0,0,0) 76%)` }} />
+        `radial-gradient(ellipse ${rx}% ${ry}% at ${x}% ${y}%, rgba(0,0,0,.34) 0%, rgba(0,0,0,.14) 45%, rgba(0,0,0,0) 76%)` }} />
     );
   };
 
@@ -1374,10 +1384,10 @@ const FireFlicker: Look = ({ overlay, accent }) => {
 const BUST = "M1 30 C1 21 4.5 16.5 10 16.5 C15.5 16.5 19 21 19 30 Z";
 /** Back row to front row: smaller and dimmer behind, the front row nearly white. */
 const CROWD_ROWS = [
-  { n: 14, sc: 0.74, base: 66, tone: "rgba(255,255,255,.34)" },
-  { n: 13, sc: 0.83, base: 90, tone: "rgba(255,255,255,.5)" },
-  { n: 12, sc: 0.92, base: 116, tone: "rgba(255,255,255,.7)" },
-  { n: 11, sc: 1.0, base: 144, tone: "rgba(255,255,255,.92)" },
+  { n: 14, sc: 0.74, base: 66, tone: "#9aa0a8" },
+  { n: 13, sc: 0.83, base: 90, tone: "#b9bec5" },
+  { n: 12, sc: 0.92, base: 116, tone: "#dcdfe3" },
+  { n: 11, sc: 1.0, base: 144, tone: "#ffffff" },
 ];
 
 /**
@@ -1437,7 +1447,7 @@ const CrowdSwell: Look = ({ overlay, accent }) => {
           <div style={{ marginBottom: 12 * k, maxWidth: 400 * k }}>
             <Caption text={S(overlay.text)} at={swellAt + T(0.5)} accent={accent} align="right" size={30} chars={24} />
           </div>
-          <Figure value={value} at={swellAt} frames={swellF} size={108 * k} accent={accent} prefix={S(overlay.prefix)}
+          <Figure value={value} at={swellAt} frames={swellF} size={150 * k} accent={accent} prefix={S(overlay.prefix)}
             suffix={suffix} align="right" />
         </div>
         <svg width={CW} height={CH} style={{ display: "block", overflow: "visible" }}>
@@ -1457,6 +1467,9 @@ const CrowdSwell: Look = ({ overlay, accent }) => {
             return (
               <g key={i} opacity={1 - q}
                 transform={`translate(${f1(P.x - 10 * sz)} ${f1(P.base - 30 * sz + bob + lift)}) scale(${sz.toFixed(4)})`}>
+                {/* a black outline under each figure, so the crowd reads on bright footage */}
+                <circle cx={10} cy={8.5} r={5.6} fill="#000" stroke="#000" strokeWidth={2.6} />
+                <path d={BUST} fill="#000" stroke="#000" strokeWidth={2.6} strokeLinejoin="round" />
                 <circle cx={10} cy={8.5} r={5.6} fill={col} />
                 <path d={BUST} fill={col} />
               </g>

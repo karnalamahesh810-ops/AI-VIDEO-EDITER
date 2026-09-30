@@ -69,10 +69,11 @@ class VideoMarks(unittest.TestCase):
         # On the words "you can see" (word 1 at 10.3 s), at most 2 frames early.
         self.assertEqual(ov["startFrame"], int(round(10.3 * FPS)) - 2)
         self.assertEqual(find.call_args[0][1], "water line")
-        # One sound for the mark, under the voice.
-        self.assertEqual(len(d["sfx"]), 1)
-        self.assertLessEqual(d["sfx"][0]["volume"], 1.0)
-        self.assertGreaterEqual(d["sfx"][0]["startFrame"], ov["startFrame"])
+        # The mark's sound is built into the look (registry defaults.sounds,
+        # played by the renderer's LookSounds), so no timeline row is added.
+        from src import sfxplan, templates
+        self.assertTrue(sfxplan.has_builtin_sound(templates.get(ov["template"])))
+        self.assertEqual(d["sfx"], [])
 
     def test_no_mark_when_vision_does_not_find_it(self):
         d = self.doc([scene(0, 0, 6, "Look at this bridge", url=self.clip)])

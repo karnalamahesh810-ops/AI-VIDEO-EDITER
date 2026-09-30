@@ -259,8 +259,9 @@ class DatesAndNumbers(unittest.TestCase):
         self.assertEqual(cues[0]["cue"], "date")
         self.assertEqual(cues[0]["props"]["text"], "SEPTEMBER 15")
         pack = treatments.pack_for({}, "")
+        # A date is bold text and nothing else (the owner, 2026-09-30): the letter drop.
         self.assertEqual(treatments._template_for_cue("date", pack, set(), {}, text="On the 15th of September"),
-                         "TL_DATE_TITLE_V1")
+                         treatments.TEXT_DATE_LOOK)
 
     def test_a_metaphor_look_needs_its_subject_in_the_line(self):
         self.assertFalse(treatments.look_fits("LIB_NC_THERMOMETER", "13 miles beneath Rocky Mountain National Park"))

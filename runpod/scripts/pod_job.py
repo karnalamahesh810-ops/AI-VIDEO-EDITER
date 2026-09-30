@@ -12,6 +12,7 @@ itself so nothing is billed after the video is done (the pod volume is kept).
 import base64
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -69,6 +70,51 @@ def stop_this_pod(terminate: bool = False) -> None:
         except requests.RequestException as e:
             print(f"[pod] stop failed: {type(e).__name__}", flush=True)
         time.sleep(5)
+
+
+def audit_rows(timeline: dict) -> list:
+    """One row per scene: what it shows and where from (source, title, URL, moment, scores, review)."""
+    rows = []
+    fps = max(1, int((timeline or {}).get("fps") or 30))
+    for i, s in enumerate((timeline or {}).get("scenes") or []):
+        m = s.get("media") or {}
+        sem = s.get("semanticMetadata") or {}
+        rows.append({"i": i, "start": round(int(s.get("startFrame") or 0) / fps, 2),
+                     "seconds": round(int(s.get("durationInFrames") or 0) / fps, 2),
+                     "text": (s.get("text") or "")[:200], "type": m.get("type"), "source": m.get("source"),
+                     "title": (m.get("attribution") or "")[:160], "sourceUrl": sem.get("sourceUrl") or "",
+                     "assetId": sem.get("assetId") or "", "moment": sem.get("moment") or {},
+                     "query": s.get("query") or "", "intent": (sem.get("intent") or "")[:200],
+                     "relevance": sem.get("relevanceScore"), "quality": sem.get("qualityScore"),
+                     "finalScore": sem.get("finalScore"), "scoreParts": sem.get("scoreParts") or {},
+                     "description": (sem.get("contentDescription") or "")[:300],
+                     "review": s.get("reviewReason") or ""})
+    return rows
+
+
+def save_adhoc_result(job: dict, out: dict) -> str:
+    """
+    A test or benchmark job (no project) keeps its result for an audit: the
+    job result - timeline with its meta (sourcing stats, per-scene media) -
+    plus a per-scene audit table, as projects/adhoc/<job id>/result.json in
+    the R2 videos bucket. Returns the public URL ("" when R2 is off or it failed).
+    """
+    from src import r2
+    if not r2.enabled():
+        return ""
+    job_id = re.sub(r"[^A-Za-z0-9_-]+", "_", str(job.get("id") or "job"))[:80]
+    body = dict(out)
+    if isinstance(out.get("timeline"), dict):
+        body["audit"] = audit_rows(out["timeline"])
+    try:
+        data = json.dumps(body, default=str, separators=(",", ":")).encode("utf-8")
+        url = r2.upload_bytes(data, f"projects/adhoc/{job_id}/result.json", content_type="application/json",
+                              deadline=time.time() + 120, cache_control="no-store")
+        print(f"[pod] job result saved for the audit: {url}", flush=True)
+        return url
+    except Exception as e:  # noqa: BLE001 - an audit copy never fails the job
+        print(f"[pod] could not save the job result to R2: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        return ""
 
 
 def after_job(safe: bool, kept: bool, laptop_has_it, wait_seconds: float, sleep=time.sleep) -> str:
@@ -175,8 +221,10 @@ def main() -> None:
             time.sleep(15)
 
     if not pid:
-        # No project (a health check or a benchmark): nothing to record.
+        # No project (a health check or a benchmark): nothing to record in the
+        # app - the result goes to R2 for an audit instead.
         big = {}
+        save_adhoc_result(job, out)
     if big:
         # While the row is still "rendering": the broker refuses writes once it is done.
         if not write(big, 300):

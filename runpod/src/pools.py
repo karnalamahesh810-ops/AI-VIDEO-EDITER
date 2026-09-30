@@ -49,6 +49,7 @@ story about now, among the last month's uploads first.
 from __future__ import annotations
 
 import datetime
+import os
 import re
 import threading
 import urllib.parse
@@ -56,7 +57,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Dict, List, Optional, Set
 
-from . import config, media, moments, vision, ytdlp
+from . import config, ledger, media, moments, vision, ytdlp
 
 _PUNCT = re.compile(r"[^a-z0-9 ]+")
 _ARTICLES = re.compile(r"\b(the|a|an)\b")
@@ -183,6 +184,9 @@ def groups(jobs: List[dict]) -> Dict[str, List[dict]]:
             continue
         if job.get("hook"):
             continue
+        si = job.get("scene_intent") if isinstance(job.get("scene_intent"), dict) else {}
+        if si.get("role") in ("coming", "chain"):
+            continue                   # "what's coming" shots have their own searches; a chain continues its clip
         key = subject_key(_pool_name(job))
         if key:
             out.setdefault(key, []).append(job)
@@ -225,12 +229,19 @@ def _searches(subject: str, story: Optional[dict] = None,
                  (f"{what} news", "news-now", now),
                  (f"{what} {year}".strip(), "event", ""),
                  (f"{what} drone", "drone-now", now)]
+        cap = POOL_SEARCHES_MAX if limit is None else max(1, limit)
+        if config.EYEWITNESS_SEARCHES:
+            # The Nature & Weather edit: the way eyewitness uploads of the
+            # event are titled ("Atlantic City flooding video"), among the
+            # last month's uploads, right after the event search.
+            first.insert(1, (f"{what} video", "eyewitness-now", now))
+            cap += 1
         seen, out = set(), []
         for q, v, r in first:
             if (q.lower(), r) not in seen:
                 seen.add((q.lower(), r))
                 out.append((q, v, r))
-        return out[:POOL_SEARCHES_MAX if limit is None else max(1, limit)]
+        return out[:cap]
     recent = "year" if story.get("window") == "year" else ""
     topic = _event_words(story.get("event") or "", subject)
     news = [(f"{subject} news {year}".strip(), "news", recent)]
@@ -280,6 +291,9 @@ def _rank(c: dict, words: List[str], story: Optional[dict], via: str) -> Optiona
     """
     title, chan = c.get("title") or "", c.get("channel") or ""
     on_topic = sum(w in title.lower() for w in words) / max(1, len(words))
+    # media._score_candidate carries the eyewitness preference too
+    # (media.eyewitness_bonus: phone, drone, chaser, helicopter titles; a
+    # compilation behind) when the style asks for it.
     score = media._score_candidate(title, c.get("duration") or 0,
                                    c.get("aspect") or 0, 7.0) + 2.0 * on_topic
     if not (story and story.get("is_event")):
@@ -348,6 +362,8 @@ def candidates(subject: str, require_cc: bool, skip_ids: Set[str],
         title, chan = c.get("title") or "", c.get("channel") or ""
         if not media._usable_title(title, chan, c.get("aspect") or 0.0):
             continue
+        if media.title_conflict(title, subject):
+            continue                    # another state, storm, kind of weather or year (the Texas test)
         news = event and _news_title(title, chan)
         floor = NEWS_MIN_SECONDS if news else 60
         if c.get("duration") and c["duration"] < floor:
@@ -390,6 +406,10 @@ def rate_video(cand: dict, subject: str, context: str, seconds: float,
     """
     info, proxy = media._yt_info(cand["id"])
     if not info:
+        return []
+    why = media.upload_conflict(info) or media.title_conflict(info.get("title") or "", subject)
+    if why:
+        print(f"[pools] {subject}: skip {cand['id']}: {why}", flush=True)
         return []
     made = moments.contact_sheet(info, seconds, proxy, config.MOMENT_TILES)
     if not made:
@@ -531,6 +551,9 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
             break
         found = spaced(rate_video(cand, subject, context, seconds, intent=intent),
                        config.POOL_MIN_GAP_SECONDS)
+        # Never a moment an earlier video showed (src/ledger.py); the
+        # video's other moments stay.
+        found = [m for m in found if not ledger.moment_used(cand["id"], m["start"], m["start"] + seconds)]
         if per_video and len(found) > per_video:
             # The best-scored few of this video, back in time order.
             found = sorted(sorted(found, key=lambda m: -m["score"])[:per_video],
@@ -550,6 +573,25 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
 # Spare approved moments of this job's pools: (subject key, candidate, moment).
 _RESERVE: List[tuple] = []
 _RESERVE_LOCK = threading.Lock()
+# What each pool was about (subject key -> {"name", "scene_intent", "event_window",
+# "seconds"}), so the clip library can keep the spares no line took.
+_RESERVE_META: Dict[str, dict] = {}
+
+
+def spare_moments(limit: int = 0) -> List[dict]:
+    """
+    The pools' approved moments no line took, best first, for the clip
+    library (library.record_from_doc keeps them instead of the clips the
+    video showed): [{"key", "name", "cand", "moment", "meta"}]. The reserve
+    itself is left as it is.
+    """
+    with _RESERVE_LOCK:
+        spare = list(_RESERVE)
+        meta = dict(_RESERVE_META)
+    out = [{"key": k, "name": (meta.get(k) or {}).get("name") or k, "cand": c, "moment": m,
+            "meta": meta.get(k) or {}} for k, c, m in spare if c.get("_library") is None]
+    out.sort(key=lambda s: -float(s["moment"].get("score") or 0.0))
+    return out[:limit] if limit else out
 
 
 def _same_pool(pool_key: str, key: str) -> bool:
@@ -581,8 +623,8 @@ def fill_from_reserve(jobs: List[dict], indices: List[int], work: str,
     out: Dict[int, media.MediaAsset] = {}
     for i in sorted(indices):
         job = by_index.get(i)
-        if job is None or not spare:
-            continue
+        if job is None or not spare or media.is_chain(job):
+            continue                    # a chain line continues the clip before it (media.fill_chains)
         key = subject_key(_pool_name(job))
         own = [s for s in spare if _same_pool(s[0], key)]
         others = [] if job.get("place") else [s for s in spare if not _same_pool(s[0], key)]
@@ -605,7 +647,24 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
         return library.fetch(cand["_library"], work, seconds, job)
     path, clean, cuts = media.fetch_clean_clip(cand["id"], work, m["start"], seconds,
                                                cand.get("title", ""))
-    if not path or media.has_burned_captions(path):
+    if not path or media.has_burned_captions(path) or media.motion_rejects(path):
+        return None
+    # A pooled moment is rated on storyboard tiles only, where a chyron naming
+    # another town cannot be read: the AI-slop and not-footage filters look at
+    # the real frames (src/slop.py), and with POOL_JUDGE_CLIPS (the news and
+    # weather styles) the vision judge checks the clip against the line.
+    verdict = None
+    if config.POOL_JUDGE_CLIPS:
+        keep, verdict = media.judge_clip(path, job, cand.get("title", ""))
+        why = "" if keep else "turned down by the judge"
+    else:
+        why = media.slop_reason(path, cand.get("title", ""))
+    if why:
+        print(f"[pools] {subject}: dropped {cand['id']} @ {m['start']:.0f}s: {why}", flush=True)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
         return None
     return media.MediaAsset(
         kind="video", source="youtube",
@@ -617,8 +676,9 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
         query=subject, intent=job.get("intent") or subject,
         review_required=not require_cc,
         review_reason="" if require_cc else "Licence unverified — confirm you hold the rights",
-        content_description=m.get("description", ""),
-        relevance_score=m.get("score"),
+        content_description=(verdict or {}).get("description") or m.get("description", ""),
+        relevance_score=(verdict or {}).get("score", m.get("score")),
+        quality=(verdict or {}).get("quality"),
         moment_key=moment_key(cand["id"], m["start"]),
         moment={"start": round(float(m["start"]), 1), "score": m.get("score"), "fine": False,
                 "clean": clean, "cuts": cuts})
@@ -631,8 +691,11 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
     need_min = config.POOL_MIN_SCENES if min_scenes is None else min_scenes
     todo = {k: v for k, v in groups(jobs).items() if len(v) >= need_min}
     results: Dict[int, media.MediaAsset] = {}
+    if work:
+        media._WORK["dir"] = work                # for the passes that run without one (media.fill_chains)
     with _RESERVE_LOCK:
         _RESERVE.clear()
+        _RESERVE_META.clear()
     if not todo:
         return results
     lock = threading.Lock()
@@ -671,6 +734,11 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
                                   plan))
             with _RESERVE_LOCK:
                 _RESERVE.extend((key, c, m) for c, m in spare)
+                first = sjobs[0] if sjobs else {}
+                _RESERVE_META[key] = {"name": name, "scene_intent": first.get("scene_intent") or None,
+                                      "event_window": first.get("event_window") or "",
+                                      "seconds": max(float(j.get("seconds") or 6.0) for j in sjobs)
+                                      + media.SEQ_SHOT_PAD if sjobs else 6.5}
         except Exception as e:  # noqa: BLE001 - its lines fall back to per-scene sourcing
             print(f"[pools] {name}: {type(e).__name__}: {e}", flush=True)
             got = []

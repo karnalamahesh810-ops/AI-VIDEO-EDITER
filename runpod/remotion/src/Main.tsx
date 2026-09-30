@@ -9,6 +9,8 @@ import { resolveOverlay, templateFor } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
 import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
 import sfxMeta from "./data/sfx_meta.json";   // a copy of public/sfx/sfx_meta.json (a test keeps them equal)
+import { LookSoundContext, LookSounds, type LookSoundScope } from "./components/lib/LookSounds";
+import { lookSoundsOn, planDocSounds, type SoundCue, type SoundTemplate } from "./components/lib/lookSoundPlan";
 
 const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
 // Case-file looks that show a still of the story when they were given no
@@ -18,7 +20,36 @@ const STILL_LOOKS = new Set(["board", "clipping", "doc", "facts", "dossier", "wi
 const stillOf = (m?: SceneMedia | null) =>
   m && m.url ? (m.type === "image" ? m : m.thumbnail ? { ...m, type: "image" as const, url: m.thumbnail } : null) : null;
 
-const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scenes"]) => {
+/** A look's built-in sound: its scope (LookSounds.tsx) and, for a registry design, the cues to play. */
+type LookSound = { scope: LookSoundScope; cues: SoundCue[] | null };
+
+/** A look with its sound: the scope around it (useLookSound reads it) and its registry design beside it. */
+const withSound = (node: React.ReactNode, sound?: LookSound | null) => (sound ? (
+  <LookSoundContext.Provider value={sound.scope}>
+    {node}
+    {sound.cues && sound.scope.on ? <LookSounds cues={sound.cues} /> : null}
+  </LookSoundContext.Provider>
+) : node);
+
+const soundTemplate = (id?: string) => templateFor(id) as unknown as SoundTemplate | undefined;
+
+/**
+ * Every look's sound, from one pass over the document (lookSoundPlan.ts
+ * planDocSounds: of two looks landing within half a second only the
+ * stronger sounds; typing looks take the keyboards in turn), keyed
+ * "o<index>" for an overlay and "s<index>" for an animation scene. Registry
+ * designs play only on documents that carry lookSounds; a look that
+ * schedules its own cues (useLookSound) plays on any document.
+ */
+const planLookSounds = (props: TimelineProps, fps: number): Record<string, LookSound> => {
+  const out: Record<string, LookSound> = {};
+  for (const p of planDocSounds(props, fps, soundTemplate)) {
+    out[p.key] = { scope: { ...p.ctx, on: p.on, mode: p.state.mode }, cues: p.state.mode === "cues" ? p.design : null };
+  }
+  return out;
+};
+
+const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scenes"], sound?: LookSound | null) => {
   // An overlay that names a template gets its unset fields from the
   // registry, so the editor's pick and the planner's draw the same way.
   let ov = resolveOverlay(raw);
@@ -57,23 +88,21 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
     const under = scenes.find((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
     const m = under?.media;
     const still = m ? (m.type === "image" ? m.url : m.thumbnail || "") : "";
-    return (
+    return withSound(
       <MotionWrap motion="fade" exit="fade" speed={1.6}>
         <BlurBackdrop still={still} frames={ov.durationInFrames} />
         <KScale.Provider value={scale}>
           <Component overlay={{ ...ov, fullFrame: true }} accent={accentFor(ov, accent)} />
         </KScale.Provider>
-      </MotionWrap>
-    );
+      </MotionWrap>, sound);
   }
-  return (
+  return withSound(
     <MotionWrap motion={ov.motion} exit={ov.exit} speed={ov.speed}
       placement={{ position: ov.position, scale: ov.scale, opacity: ov.opacity }}>
       <KScale.Provider value={scale}>
         <Component overlay={ov} accent={accentFor(ov, accent)} />
       </KScale.Provider>
-    </MotionWrap>
-  );
+    </MotionWrap>, sound);
 };
 
 /**
@@ -137,7 +166,8 @@ const makeMusicVolume = (props: TimelineProps) => {
 const SFX_META = sfxMeta as Record<string, { duration: number; peak: number }>;
 const SFX_MAX_SECONDS = 6;
 // Sounds that can repeat seamlessly to cover a longer planned span.
-const LOOPABLE_SFX = new Set(["keys", "typewriter", "keys-mech", "keys-type", "keys-laptop"]);
+const LOOPABLE_SFX = new Set(["keys", "typewriter", "keys-mech", "keys-type", "keys-laptop", "count-roll",
+  "typewriter-clean"]);
 
 type SfxCue = NonNullable<TimelineProps["sfx"]>[number];
 
@@ -167,6 +197,29 @@ const sfxNode = (fx: SfxCue, i: number, fps: number, master?: number) => {
         loopVolumeCurveBehavior="extend" />
     </Sequence>
   );
+};
+
+/**
+ * On a document whose looks carry their own sounds, the sfx rows that would
+ * play a look's sound a second time: a row planned for an overlay (kind
+ * "overlay", from an older planner or a pass that still writes one), and the
+ * row an older editor adds when its per-overlay sound menu is touched - no
+ * kind, starting on the overlay's first frame, playing that look's sound.
+ */
+const doublesLook = (overlays: Overlay[], sounds: Record<string, { scope: LookSoundScope }>) => {
+  const own = new Map<number, Set<string>>();
+  overlays.forEach((ov, i) => {
+    if (!sounds[`o${i}`]) return;
+    const names = own.get(ov.startFrame) || new Set<string>();
+    const d = soundTemplate(ov.template)?.defaults;
+    const main = d && typeof d.sfx === "object" && d.sfx ? d.sfx.name : typeof d?.sfx === "string" ? d.sfx : "";
+    if (main) names.add(main);
+    if (typeof ov.sfx === "string") names.add(ov.sfx);
+    for (const c of d?.sounds || []) names.add(c.name);
+    own.set(ov.startFrame, names);
+  });
+  return (fx: SfxCue) => fx.kind === "overlay"
+    || (!fx.kind && Boolean(own.get(Math.round(fx.startFrame || 0))?.has(fx.name)));
 };
 
 /** Frames a "crossfade" scene takes to fade in over the previous one (0.5 s). */
@@ -213,15 +266,25 @@ export const Main: React.FC<TimelineProps> = (props) => {
     () => (bgm?.url ? makeMusicVolume(props) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scenes, bgm?.url, bgm?.volume, props.music, props.fps, props.durationInFrames]);
+  // The sound built into each look (LookSounds.tsx), from one pass over the document.
+  const lookSounds = React.useMemo(
+    () => planLookSounds(props, fps),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [overlays, scenes, props.lookSounds, props.meta, props.sfxEnabled, props.sfxVolume, fps]);
   const overlayNodes = React.useMemo(
-    () => (overlays || []).map((ov) => renderOverlay(ov, captions.accent, scenes)),
-    [overlays, captions.accent, scenes]);
+    () => (overlays || []).map((ov, i) => renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`])),
+    [overlays, captions.accent, scenes, lookSounds]);
   // Built once per sfx list: each sound plays for its planned span (a typing
   // run lasts exactly as long as the letters appear) or, unplanned, for the
   // file's own length - never the old fixed 3 s that cut risers and typing.
-  const sfxNodes = React.useMemo(
-    () => (props.sfxEnabled === false ? [] : (props.sfx || []).map((fx, i) => sfxNode(fx, i, fps, props.sfxVolume))),
-    [props.sfx, props.sfxEnabled, props.sfxVolume, fps]);
+  // When the looks carry their own sounds, a row planned for an overlay
+  // would double its look's sound: only transitions and the editor's own play.
+  const builtIn = lookSoundsOn(props);
+  const sfxNodes = React.useMemo(() => {
+    if (props.sfxEnabled === false) return [];
+    const doubles = builtIn ? doublesLook(overlays || [], lookSounds) : () => false;
+    return (props.sfx || []).map((fx, i) => (doubles(fx) ? null : sfxNode(fx, i, fps, props.sfxVolume)));
+  }, [props.sfx, props.sfxEnabled, props.sfxVolume, fps, builtIn, overlays, lookSounds]);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -238,8 +301,9 @@ export const Main: React.FC<TimelineProps> = (props) => {
         >
           {/* The next scene's transition starts over this scene's last frames. */}
           <CrossfadeIn active={scene.transition === "crossfade" && i > 0}>
-            <SceneClip scene={scene} accent={captions.accent} backdrop={backdrops[scene.id]}
-              nextTransition={scenes[i + 1]?.transition} />
+            {/* A full-screen animation scene plays its look's own sound too. */}
+            {withSound(<SceneClip scene={scene} accent={captions.accent} backdrop={backdrops[scene.id]}
+              nextTransition={scenes[i + 1]?.transition} />, lookSounds[`s${i}`])}
           </CrossfadeIn>
         </Sequence>
       ))}

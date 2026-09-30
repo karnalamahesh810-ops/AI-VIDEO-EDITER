@@ -104,16 +104,23 @@ _MIN_OUT_FRAMES = 6
 # transition is punctuation, not a moment: each sits a little under its
 # sound's own category level (hits and glitches 5 dB, air 9 dB), the soft
 # dissolves quietest - a whisper of air; a dip through black is silent.
+# The sound designer's premium set (2026-09-30): a whip is a fast whoosh, a
+# zoom punch lands its thump on the cut, a light leak or film burn shimmers,
+# a flash pops; the owner's glitch and deep hit stay.
 _TRANSITION_SFX = {
-    "glitch": ("glitch-pro", 7.0), "vhs-glitch": ("glitch-short", 7.5),
-    "flash": ("flash-hit", 7.0), "chromatic-flash": ("flash-hit", 7.0),
-    "whip-pan": ("swipe", 9.0), "zoom-punch": ("swipe", 9.5),
-    "film-burn": ("whoosh-soft", 10.0), "light-leak": ("whoosh-soft", 11.0),
-    "blur-dissolve": ("whoosh-soft", 11.0), "shake-cut": ("hit-deep", 7.0),
+    "glitch": ("glitch-pro", 7.0), "vhs-glitch": ("glitch-short-v2", 7.5),
+    "flash": ("camera-flash-pop", 7.0), "chromatic-flash": ("camera-flash-pop", 7.0),
+    "whip-pan": ("whoosh-fast", 9.0), "zoom-punch": ("zoom-in-whoosh", 9.5),
+    "film-burn": ("light-shimmer", 10.0), "light-leak": ("light-shimmer", 11.0),
+    "blur-dissolve": ("whoosh-soft-v2", 11.0), "shake-cut": ("hit-deep", 7.0),
     # The older entrances an editor can still pick.
-    "whip": ("swipe", 9.5), "punch": ("swipe", 10.0), "zoom": ("whoosh-soft", 11.0),
-    "slide": ("whoosh-soft", 11.0), "mosaic": ("glitch-short", 9.0),
+    "whip": ("whoosh-fast", 9.5), "punch": ("zoom-in-whoosh", 10.0), "zoom": ("whoosh-soft-v2", 11.0),
+    "slide": ("ui-swipe", 11.0), "mosaic": ("glitch-short-v2", 9.0),
 }
+# The older file a transition plays while its premium one does not ship.
+_TRANSITION_ALT = {"glitch-short-v2": "glitch-short", "camera-flash-pop": "flash-hit", "whoosh-fast": "swipe",
+                   "zoom-in-whoosh": "swipe", "light-shimmer": "whoosh-soft", "whoosh-soft-v2": "whoosh-soft",
+                   "ui-swipe": "whoosh-soft"}
 # Another sound this close (seconds) to a transition's sound silences the transition's.
 _TRANSITION_SFX_CLEARANCE = 1.0
 
@@ -123,6 +130,10 @@ _SFX_META_FALLBACK = {
     "glitch-pro": {"duration": 0.48, "peak": 0.01}, "hit-deep": {"duration": 2.319, "peak": 0.02},
     "swipe": {"duration": 0.44, "peak": 0.195}, "whoosh-soft": {"duration": 1.12, "peak": 0.419},
     "boom-soft": {"duration": 1.71, "peak": 0.309},
+    "glitch-short-v2": {"duration": 0.35, "peak": 0.02}, "camera-flash-pop": {"duration": 0.2, "peak": 0.01},
+    "whoosh-fast": {"duration": 0.223, "peak": 0.055}, "zoom-in-whoosh": {"duration": 0.543, "peak": 0.381},
+    "light-shimmer": {"duration": 1.127, "peak": 0.449}, "whoosh-soft-v2": {"duration": 0.798, "peak": 0.125},
+    "ui-swipe": {"duration": 0.445, "peak": 0.18},
 }
 _SFX_META_CACHE: Dict[str, Any] = {}
 
@@ -605,7 +616,9 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
             continue
         name, under = _TRANSITION_SFX[t]
         if have and name not in have:
-            continue
+            name = _TRANSITION_ALT.get(name, "")
+            if name not in have:
+                continue
         m = meta.get(name) or _SFX_META_FALLBACK.get(name) or {"duration": 1.0, "peak": 0.0}
         cut = int(sc.get("startFrame", 0))
         start = cut - int(round(float(m.get("peak", 0.0)) * fps))
@@ -874,7 +887,13 @@ def build(segments: List[Segment], shots: List[dict],
             motion = "none"
             if asset.kind == "image":
                 # The n-th still takes the n-th move: consecutive stills never match.
-                motion = _IMAGE_MOTIONS[stills_seen % len(_IMAGE_MOTIONS)]
+                # A style may hold real photos still (config.STILL_MOTION "none"):
+                # the reference weather channel shows ~150 photos, none with a
+                # zoom or pan (measured 2026-09-30).
+                if str(getattr(config, "STILL_MOTION", "") or "").lower() == "none":
+                    motion = "none"
+                else:
+                    motion = _IMAGE_MOTIONS[stills_seen % len(_IMAGE_MOTIONS)]
                 stills_seen += 1
             if asset.kind == "video":
                 # The clip's real length. A clip cut for the planned line can
@@ -965,6 +984,9 @@ def build(segments: List[Segment], shots: List[dict],
     music: Dict[str, Any] = {"sections": [], "duck": 0.55}
     treatment_counts: Dict[str, Any] = {}
     sfx_list = plan_sfx(overlays, fps, config.SFX_MIN_GAP_SECONDS)
+    # The looks' own sounds (remotion LookSounds): set by the planner that
+    # knows them; without it the rows above carry every sound, as before.
+    look_sounds: Optional[Dict[str, Any]] = None
     if pack:
         title_card = [o for o in overlays if o.get("type") == "title" and inp.get("title_overlay")
                       and o.get("text") == str(inp["title_overlay"])[:240]]
@@ -979,10 +1001,13 @@ def build(segments: List[Segment], shots: List[dict],
         sfx_list = planned["sfx"]
         music = planned["music"]
         treatment_counts = planned["counts"]
+        look_sounds = planned.get("lookSounds")
     # Each transition's own sound, peaking on its cut, unless a graphic's
-    # sound is already there; then every sound under the one cap.
+    # sound is already there (a row, or the sound built into a look); then
+    # every sound under the one cap.
+    busy = list(sfx_list) + (sfxplan.builtin_busy(overlays, scenes, fps) if look_sounds is not None else [])
     sfx_list = sorted(list(sfx_list) + plan_transition_sfx(
-                          scenes, fps, sfx_list, (pack or {}).get("sfxIntensity", 1.0), voice_lufs=voice_lufs),
+                          scenes, fps, busy, (pack or {}).get("sfxIntensity", 1.0), voice_lufs=voice_lufs),
                       key=lambda s: int(s.get("startFrame", 0)))
     top = sfxplan.cap(voice_lufs)
     for fx in sfx_list:
@@ -1024,6 +1049,9 @@ def build(segments: List[Segment], shots: List[dict],
         "sfx": (sfx_list if inp.get("sfx", config.SFX_ENABLED) else []),
         "sfxVolume": float(inp.get("sfx_volume", config.SFX_VOLUME)),
         "sfxEnabled": bool(inp.get("sfx", config.SFX_ENABLED)),
+        # Present: every look plays the sound built into it (at this intensity,
+        # against meta.voiceLufs); the sfx rows are transitions and the editor's own.
+        **({"lookSounds": look_sounds} if look_sounds is not None else {}),
         "meta": {
             "schemaVersion": SCHEMA_VERSION,
             "sceneCount": len(scenes),

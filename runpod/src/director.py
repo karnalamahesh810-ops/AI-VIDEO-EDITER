@@ -2688,6 +2688,353 @@ def _thin_overlays(segments: List[Segment], shots: List[dict]) -> int:
 
 
 # The last plan()'s whole-story read, for the job result and the editor.
+# --------------------------------------------------------------------------- #
+# The Nature & Weather edit (src/styles.py: nature_weather, news_compilation)
+# --------------------------------------------------------------------------- #
+#
+# Measured on the reference channel (scratchpad ref_noreaster, 2026-09-30):
+# the footage follows the REGION the narration is in ("Down in North
+# Carolina ...", "Moving north into Virginia ...", "Now let's head to
+# Delaware") rather than chasing every town name; a quarter of the shots
+# continue the previous shot's clip, one strong clip cut into several shots;
+# real photos are first-class but a minority; the opening holds the most
+# dramatic real clips of the hardest-hit area; eyewitness phone and drone
+# video of THIS event, never TV studios or AI. Each pass is off unless its
+# config switch is on (the style turns them on).
+
+_FORWARD = re.compile(
+    r"\b(?:still (?:coming|going)|(?:is|are) coming|on (?:the|its) way|not over|isn'?t over|brac(?:e|ing) for|"
+    r"next (?:few |couple of )?(?:hours|days|week|weekend|night|round|48|24|36|72)|tonight|tomorrow|"
+    r"later (?:today|this week|tonight)|expected to|forecast(?:ed|s)? to|will (?:bring|hit|slam|move|arrive|"
+    r"reach|intensify|strengthen|dump)|still to come|yet to come|round two|second (?:round|wave)|"
+    r"another (?:storm|round|wave)|the worst (?:is|may|could) (?:still|yet)|what'?s (?:next|coming))\b", re.I)
+_REGION_TURN = re.compile(
+    r"^\W*(?:(?:all right|alright|okay|ok|so|now|next|and)[,.]?\s+)*(?:"
+    r"(?:let'?s|we'?ll|we are going to|we're going to)\s+(?:head|move|go|turn|look|swing|jump|shift|start|"
+    r"begin|check in)\b|"
+    r"(?:moving|heading|turning|swinging|shifting|continuing)\s+(?:north|south|east|west|up|down|over|inland|"
+    r"along)?\b|"
+    r"(?:down|up|over|out)\s+(?:in|on|along)\b|"
+    r"(?:farther|further)\s+(?:north|south|east|west|up|down)\b|"
+    r"(?:starting|beginning)\s+(?:in|with|at|where)\b)", re.I)
+# What the hook asks the footage for, by the event's word: the most dramatic
+# real moments of it.
+_HOOK_VISUALS = {
+    "flash flooding": "flash flood water rushing through streets, cars swept or stranded in floodwater, "
+                      "creeks over the road, water rescues",
+    "flooding": "water over roads and seawalls, cars in floodwater, flooded streets and homes, water rescues",
+    "hurricane": "storm surge over seawalls, huge waves crashing, wind-whipped trees, flooded streets",
+    "tropical storm": "storm surge over seawalls, waves crashing, flooded streets, sheets of rain",
+    "storm": "storm surge and waves crashing over seawalls, flooded streets, cars in water, sheets of rain",
+    "winter storm": "whiteout snow, cars stuck on icy highways, drifts burying streets",
+    "tornado": "a tornado on the ground, debris flying, destroyed homes",
+    "wildfire": "wildfire flames at night, walls of smoke, evacuation traffic through fire",
+    "fire": "flames and thick smoke over homes",
+    "heat wave": "shimmering heat over roads, crowds at cooling centres",
+    "drought": "cracked dry lakebeds, stranded docks",
+    "earthquake": "collapsed buildings, rescue crews in rubble",
+}
+# The line's own phenomenon, for its eyewitness search ("Long Beach Island storm surge footage").
+_PHENOMENA = (
+    (re.compile(r"\bstorm surge\b", re.I), "storm surge"), (re.compile(r"\boverwash\w*\b", re.I), "overwash"),
+    (re.compile(r"\bhigh tide\b", re.I), "high tide flooding"), (re.compile(r"\bwaves?\b", re.I), "waves"),
+    (re.compile(r"\bwater rescue|\brescu\w+", re.I), "water rescue"),
+    (re.compile(r"\bflooded (?:roads?|streets?|highway|homes?)\b", re.I), "flooded streets"),
+    (re.compile(r"\bwashed (?:out|away)\b", re.I), "washed out road"),
+    (re.compile(r"\bbeach erosion\b|\berod\w+", re.I), "beach erosion"),
+    (re.compile(r"\bpower (?:outages?|out)\b|\bwithout power\b", re.I), "power lines down"),
+    (re.compile(r"\bdowned trees?\b|\btrees? down\b", re.I), "trees down"),
+    (re.compile(r"\bheavy rain\b|\bdownpour\w*\b|\brain\w*\b", re.I), "heavy rain"),
+    (re.compile(r"\bwind\w*\b|\bgusts?\b", re.I), "high winds"),
+    (re.compile(r"\bsnow\w*\b|\bblizzard\b", re.I), "snow"),
+)
+
+
+def _sentences(text: str) -> List[str]:
+    return [s for s in re.split(r"(?<=[.!?])\s+", text or "") if s.strip()]
+
+
+def forward_looking(text: str) -> bool:
+    """A line that says what is still coming ("tonight", "the worst is yet to come", "brace for...")."""
+    return bool(_FORWARD.search(text or ""))
+
+
+def region_turn(text: str) -> bool:
+    """A sentence that moves the story to another region ("Now let's head to Delaware", "Down in North Carolina")."""
+    return bool(_REGION_TURN.search(text or ""))
+
+
+def limit_stills(segments: List[Segment], shots: List[dict]) -> int:
+    """
+    At most PHOTO_MAX_PER_10MIN planned photo beats per 10 minutes (a
+    document's scan does not count): the rest become footage beats, the
+    furthest from the kept ones first. Returns how many changed.
+    """
+    per = float(getattr(config, "PHOTO_MAX_PER_10MIN", 0) or 0)
+    if per <= 0 or not segments:
+        return 0
+    total = max(float(segments[-1].end) - float(segments[0].start), 1.0)
+    cap = max(1, int(round(per * total / 600.0)))
+    photos = [i for i, sh in enumerate(shots) if sh.get("visualType") == "image"
+              and sh.get("subjectType") != "document"]
+    if len(photos) <= cap:
+        return 0
+    # Keep an even spread: every k-th photo beat, the ones a line asks for first.
+    asked = [i for i in photos if shots[i].get("stillReason") == "photo mentioned"
+             or shots[i].get("subjectType") == "person"]
+    rest = [i for i in photos if i not in asked]
+    keep = set(asked[:cap])
+    if len(keep) < cap and rest:
+        step = len(rest) / float(cap - len(keep))
+        keep |= {rest[min(len(rest) - 1, int(k * step))] for k in range(cap - len(keep))}
+    changed = 0
+    for i in photos:
+        if i in keep:
+            continue
+        shot = shots[i]
+        shot["query"] = " ".join(_STILL_QUERY_WORDS.sub(" ", shot.get("query") or "").split()) or shot.get("query", "")
+        shot["visualType"] = "footage"
+        shot.pop("stillReason", None)
+        shape_query(shot)
+        changed += 1
+    return changed
+
+
+def _event_now(brief: dict) -> bool:
+    return isinstance(brief, dict) and current_story(brief) and brief.get("kind") in _NEWS_QUERY_KINDS
+
+
+def region_blocks(segments: List[Segment], shots: List[dict], brief: dict) -> int:
+    """
+    The region each line is in (REGION_BLOCKS): the story's first place until
+    a sentence turns to another region ("Down in North Carolina", "Now let's
+    head to Delaware"), then that region. A footage line that names no place
+    of its own is searched in its region ("North Carolina flooding 2026"); a
+    line that names a town keeps the town, with its region as the fallback.
+    Sets shot["region"]; returns how many lines took their region's place.
+    """
+    if not getattr(config, "REGION_BLOCKS", False) or not _event_now(brief):
+        return 0
+    places = [p for p in (brief.get("places") or []) if isinstance(p, str) and p.strip()]
+    region = places[0].split(",")[0].strip() if places else ""
+    year = brief.get("year")
+    year = str(year) if isinstance(year, int) and not isinstance(year, bool) else ""
+    word = event_word(brief)
+    changed = 0
+    for i, (seg, shot) in enumerate(zip(segments, shots)):
+        for sent in _sentences(seg.text):
+            if region_turn(sent):
+                found = line_places(sent, brief)
+                if found:
+                    # The widest place the turn names: the region ("Virginia" in
+                    # "Moving north into Virginia, Norfolk has been flooded").
+                    region = max(found, key=lambda t: t[1])[0]
+        shot["region"] = region
+        if not region or shot.get("visualType") != "footage" or shot.get("anchor") is False:
+            continue
+        if shot.get("subjectType") == "person":
+            continue
+        if shot.get("linePlace"):
+            head = f"{region} {event_word(brief, seg.text) or word}".strip()
+            if not _names_place(shot["linePlace"], region) and head not in (shot.get("fallbacks") or []):
+                shot["fallbacks"] = list(shot.get("fallbacks") or []) + [head]
+            continue
+        w = event_word(brief, seg.text) or word
+        query = shot.get("query") or ""
+        if not _names_place(query, region):
+            shot["fallbacks"] = [query] + [f for f in (shot.get("fallbacks") or []) if f != query] if query else \
+                list(shot.get("fallbacks") or [])
+            query = " ".join(f"{region} {w} {year}".split())
+        shot["query"] = query[:240]
+        shot["linePlace"] = region
+        shot["linePlaces"] = [region]
+        if not _names_place(shot.get("subject") or "", region):
+            shot["subject"] = region
+        intent = shot.get("intent") or ""
+        if not _names_place(intent, region):
+            shot["intent"] = f"{intent} ({region})".strip()[:300]
+        changed += 1
+    return changed
+
+
+def eyewitness_queries(shot: dict, text: str, brief: dict) -> List[str]:
+    """
+    The searches eyewitness uploads of the event answer to, for a footage line
+    of a story about now (EYEWITNESS_SEARCHES): the place it names (or its
+    region) with the event - "Atlantic City flooding video", "Long Beach
+    Island storm surge footage", "... drone".
+    """
+    if not getattr(config, "EYEWITNESS_SEARCHES", False) or not _event_now(brief):
+        return []
+    if shot.get("visualType") != "footage" or shot.get("subjectType") == "person" or shot.get("anchor") is False:
+        return []
+    place = (shot.get("linePlace") or shot.get("region") or "").split(",")[0].strip()
+    if not place:
+        return []
+    word = event_word(brief, text)
+    what = next((name for pattern, name in _PHENOMENA if pattern.search(text or "")), "")
+    out = []
+    if word:
+        out.append(f"{place} {word} video")
+    if what and what != word:
+        out.append(f"{place} {what} footage")
+    if word:
+        out.append(f"{place} {word} drone")
+    return list(dict.fromkeys(" ".join(q.split()) for q in out))[:3]
+
+
+def coming_shots(segments: List[Segment], shots: List[dict], brief: dict) -> int:
+    """
+    "Something is coming" (COMING_SHOTS): a forward-looking line that names no
+    place of its own shows what is coming - storm clouds rolling in, a shelf
+    cloud, a rain curtain, or the live satellite loop of the storm - never a TV
+    forecast. The reference keeps most forward lines on footage, so at most
+    one in COMING_GAP_SECONDS, never in the first two lines, never a chain.
+    Returns how many lines changed.
+    """
+    if not getattr(config, "COMING_SHOTS", False) or not _event_now(brief):
+        return 0
+    places = [p for p in (brief.get("places") or []) if isinstance(p, str) and p.strip()]
+    word = event_word(brief) or "storm"
+    last = -1e9
+    changed = 0
+    for i, (seg, shot) in enumerate(zip(segments, shots)):
+        if i < 2 or shot.get("visualType") != "footage" or shot.get("subjectType") == "person":
+            continue
+        if shot.get("chain") or not forward_looking(seg.text):
+            continue
+        own = [p for p, tier in line_places(seg.text, brief) if tier < 2]
+        if own or float(seg.start) - last < COMING_GAP_SECONDS:
+            continue
+        region = (shot.get("region") or (places[0] if places else "")).split(",")[0].strip()
+        where = f" over {region}" if region else ""
+        rain = bool(re.search(r"\brain|flood|downpour|inches\b", seg.text or "", re.I))
+        what = "a rain curtain and dark storm clouds" if rain else "dark storm clouds and a shelf cloud"
+        shot["query"] = f"storm clouds rolling in{where}"[:240]
+        shot["fallbacks"] = [f"{region} {word} satellite".strip(), f"shelf cloud {region}".strip(),
+                             "dark storm clouds approaching timelapse", "rain curtain approaching"]
+        shot["intent"] = (f"what is coming: {what} rolling in{where}, or a satellite view of the {word} "
+                          f"from space - real outdoor footage, never a TV studio or forecast graphic")[:300]
+        shot["subject"] = f"{word} approaching"
+        shot["subjectType"] = "event"
+        shot.pop("linePlace", None)
+        shot.pop("linePlaces", None)
+        shot["coming"] = True
+        last = float(seg.start)
+        changed += 1
+    return changed
+
+
+COMING_GAP_SECONDS = 40.0
+
+
+def hook_intensity(segments: List[Segment], shots: List[dict], brief: dict) -> int:
+    """
+    The opening (HOOK_INTENSITY): every footage line within HOOK_SECONDS asks
+    for the most dramatic real footage of the event at the hardest-hit place
+    (the story's first place) - water over roads and seawalls, cars in water,
+    waves, rescues. Returns how many lines changed.
+    """
+    if not getattr(config, "HOOK_INTENSITY", False) or not _event_now(brief):
+        return 0
+    word = event_word(brief)
+    dramatic = _HOOK_VISUALS.get(word) or _HOOK_VISUALS["storm"]
+    places = [p for p in (brief.get("places") or []) if isinstance(p, str) and p.strip()]
+    hardest = places[0].split(",")[0].strip() if places else ""
+    changed = 0
+    for seg, shot in zip(segments, shots):
+        if float(seg.start) >= config.HOOK_SECONDS:
+            break
+        if shot.get("visualType") != "footage" or shot.get("subjectType") in ("person", "document") \
+                or shot.get("coming"):
+            continue
+        where = shot.get("linePlace") or hardest
+        intent = shot.get("intent") or ""
+        extra = f"the most dramatic real footage of it{(' in ' + where) if where else ''}: {dramatic}"
+        if "most dramatic" not in intent:
+            shot["intent"] = f"{intent}; {extra}".strip("; ")[:300]
+        shot["dramatic"] = dramatic
+        changed += 1
+    return changed
+
+
+def chain_shots(segments: List[Segment], shots: List[dict]) -> int:
+    """
+    One strong clip cut into several shots (CHAIN_SHOTS; a quarter of the
+    reference's shots continue the previous shot's clip): a footage beat that
+    carries on the previous beat's sentence, about the same place, plays the
+    next moment of the previous beat's clip - a long take, cut forward - at
+    most CHAIN_MAX beats per clip. Sets shot["chain"]; returns how many.
+    """
+    if not getattr(config, "CHAIN_SHOTS", False):
+        return 0
+    cap = max(2, int(getattr(config, "CHAIN_MAX", 3) or 3))
+    run = 1
+    changed = 0
+    for i in range(1, min(len(segments), len(shots))):
+        prev, shot = shots[i - 1], shots[i]
+        seg_prev = segments[i - 1]
+        words = list(getattr(seg_prev, "words", None) or [])
+        last = words[-1].text if words else ((seg_prev.text or "").split() or [""])[-1]
+        ok = (shot.get("visualType") == "footage" and prev.get("visualType") == "footage"
+              and shot.get("subjectType") not in ("person", "document") and prev.get("subjectType") not in (
+                  "person", "document")
+              and not shot.get("coming") and not prev.get("coming")
+              and not _ends_sentence(last)
+              and (shot.get("linePlace") or "") == (prev.get("linePlace") or "")
+              and not region_turn(segments[i].text) and run < cap)
+        if ok:
+            shot["chain"] = True
+            run += 1
+            changed += 1
+        else:
+            run = 1
+    return changed
+
+
+def _ends_sentence(word: str) -> bool:
+    from .transcribe import _ends_sentence as ends
+    return ends(word)
+
+
+def weather_edit(segments: List[Segment], shots: List[dict], brief: dict) -> dict:
+    """The Nature & Weather passes, in order (each off unless its switch is on). Returns the counts."""
+    out = {"stills": limit_stills(segments, shots), "regions": region_blocks(segments, shots, brief)}
+    out["chains"] = chain_shots(segments, shots)
+    out["coming"] = coming_shots(segments, shots, brief)
+    out["hook"] = hook_intensity(segments, shots, brief)
+    if any(out.values()):
+        print(f"[director] weather edit: {out}", flush=True)
+    return out
+
+
+def attach_roles(shots: List[dict], segments: List[Segment], brief: dict) -> None:
+    """
+    Carry each shot's role into its scene intent, which travels with the line
+    into sourcing (the handler's jobs, fan-out parts): "role" ("chain" or
+    "coming"), "eyewitness" (the line's eyewitness searches) and "dramatic"
+    (the hook's visual subjects). SceneIntent.from_dict ignores these keys.
+    """
+    for shot, seg in zip(shots, segments):
+        si = shot.get("sceneIntent")
+        if not isinstance(si, dict):
+            continue
+        if shot.get("chain"):
+            si["role"] = "chain"
+        elif shot.get("coming"):
+            si["role"] = "coming"
+            si["specificity"], si["generic_ok"] = "generic", True
+            si["visual_subjects"] = ["storm clouds approaching", "shelf cloud", "satellite view of the storm"]
+        eye = eyewitness_queries(shot, seg.text, brief)
+        if eye:
+            si["eyewitness"] = eye
+            shot["fallbacks"] = [q for q in dict.fromkeys(eye + list(shot.get("fallbacks") or []))
+                                 if q.lower() != (shot.get("query") or "").lower()]
+        if shot.get("dramatic"):
+            subs = [s.strip() for s in str(shot["dramatic"]).split(",") if s.strip()]
+            si["visual_subjects"] = list(dict.fromkeys(subs + list(si.get("visual_subjects") or [])))[:6]
+
+
 LAST_STORY: dict = {}
 
 
@@ -2760,6 +3107,9 @@ def plan(segments: List[Segment], title: str = "", report=None,
     # before the story anchoring below, which then keeps the line's place.
     hook_footage(segments, shots)
     pin_line_places(segments, shots, brief)
+    # The Nature & Weather edit (each pass off unless the style turns it on):
+    # photo cap, region blocks, clip chains, "what's coming" shots, the hook.
+    weather_edit(segments, shots, brief)
     anchor_to_story(shots, segments, brief)
     prefer_interviews(shots, segments, brief)
     # Every beat carries a typed intent (the model's, or the one its shot and
@@ -2792,6 +3142,9 @@ def plan(segments: List[Segment], title: str = "", report=None,
                              if q.lower() != query]
         if news:
             shot["newsQueries"] = news
+    # Chains, "what's coming" shots and eyewitness searches travel into
+    # sourcing inside the scene intent (media, pools, fan-out parts).
+    attach_roles(shots, segments, brief)
     for i in brief.get("hookBeats") or []:
         shots[i]["hook"] = True
 

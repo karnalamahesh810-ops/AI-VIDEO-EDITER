@@ -403,20 +403,29 @@ class RealFolder(unittest.TestCase):
         missing = sorted(n for n in names if not sfxplan.exists(n))
         self.assertEqual(missing, [])
 
+    # The real looks carry their sounds built in (registry defaults.sounds, played
+    # by the renderer's LookSounds): no timeline row; the schedule is sfxplan's twin.
     def test_the_real_memo_and_bar_title_keys_end_with_their_typing(self):
         for tid in ("TEXT_MEMO_V1", "TEXT_BAR_TITLE_V1"):
             ovs = [{"template": tid, "startFrame": 0, "durationInFrames": 180,
                     "text": "THE DAM WAS NEVER BUILT FOR THIS FLOOD"}]
-            [s] = sfxplan.plan(ovs, 30, 1.0)
-            self.assertLessEqual(s["startFrame"] + s["durationFrames"], 42, tid)
+            self.assertEqual(sfxplan.plan(ovs, 30, 1.0), [], tid)
+            [s] = [s for s in sfxplan.doc_look_sounds({"fps": 30, "overlays": ovs, "lookSounds": {}})
+                   if s["name"] in sfxplan.TYPING_TAKES]
+            self.assertGreaterEqual(s["startFrame"], 6)
+            self.assertLessEqual(s["startFrame"] + s["frames"], 42, tid)      # the rebuilt looks type to 42
 
     def test_the_real_corner_stat_ticks_with_its_count(self):
         ovs = [{"template": "LIB_CT_CORNER_STAT", "startFrame": 300, "durationInFrames": 135, "value": 42}]
-        [s] = sfxplan.plan(ovs, 30, 1.0)
-        # CornerStat counts on frames 8-44 (LibCountPro ramp(frame, 8, 36)).
-        self.assertEqual(s["name"], "count-tick")
-        self.assertLessEqual(s["startFrame"], 308)
-        self.assertGreaterEqual(s["startFrame"] + s["durationFrames"], 343)
+        self.assertEqual(sfxplan.plan(ovs, 30, 1.0), [])
+        sounds = {s["name"]: s for s in sfxplan.doc_look_sounds({"fps": 30, "overlays": ovs, "lookSounds": {}})}
+        roll, final = sounds["count-roll"], sounds["count-final"]
+        # CornerStat counts on frames 8-40 and lands on 40 (LibCountPro: ramp(frame, 8, 32), LAND = 40).
+        self.assertEqual((roll["name"], final["name"]), ("count-roll", "count-final"))
+        self.assertEqual(roll["startFrame"], 308)
+        self.assertEqual(roll["startFrame"] + roll["frames"], 340)
+        peak = sfxplan._peak("count-final", 30)
+        self.assertEqual(final["startFrame"] + peak, 340)
 
 
 if __name__ == "__main__":
@@ -428,11 +437,13 @@ class OwnerSounds(unittest.TestCase):
 
     def test_typing_looks_take_the_owner_keyboards_in_turn(self):
         from src import templates
-        typing = [t["id"] for t in templates.all_templates() if (t.get("defaults") or {}).get("types")][:1]
+        typing = [t["id"] for t in templates.all_templates()
+                  if any(c.get("kind") == "typing" for c in (t.get("defaults") or {}).get("sounds") or [])][:1]
         self.assertTrue(typing)
         ovs = [{"template": typing[0], "startFrame": 300 * i, "durationInFrames": 240, "text": "The water kept falling"}
                for i in range(3)]
-        names = [s["name"] for s in sfxplan.plan(ovs, 30, 1.0)]
+        self.assertEqual(sfxplan.plan(ovs, 30, 1.0), [])
+        names = [s["name"] for s in sfxplan.doc_look_sounds({"fps": 30, "overlays": ovs, "lookSounds": {}})]
         self.assertEqual(names[:3], ["keys-type", "keys-laptop", "keys-mech"])
 
     def test_the_files_are_there_and_measured(self):
@@ -448,9 +459,14 @@ class OwnerSounds(unittest.TestCase):
 class DeepHit(unittest.TestCase):
     def test_impacts_lead_with_the_owners_deep_hit(self):
         from src import templates
-        boom = next(t["id"] for t in templates.all_templates()
-                    if ((t.get("defaults") or {}).get("sfx") or {}).get("name") in ("boom-soft", "impact")
-                    and not (t.get("defaults") or {}).get("types") and not sfxplan.plays_own_sound(t))
-        [s] = sfxplan.plan([{"template": boom, "startFrame": 300, "durationInFrames": 150, "text": "x"}], 30, 1.0)
+        # A look the designer's map leaves alone keeps the planner's rule: an impact is the deep hit.
+        design = templates.get("CMP_VERSUS_V1")["defaults"]["sounds"]
+        self.assertEqual(design, [{"name": "hit-deep", "at": 8, "alt": ["impact"]}])
+        ovs = [{"template": "CMP_VERSUS_V1", "startFrame": 300, "durationInFrames": 150, "text": "x"}]
+        self.assertEqual(sfxplan.plan(ovs, 30, 1.0), [])
+        [s] = sfxplan.doc_look_sounds({"fps": 30, "overlays": ovs, "lookSounds": {}})
         self.assertEqual(s["name"], "hit-deep")
+        # A date lands on the designer's date slam, the owner's deep hit its stand-in.
+        self.assertEqual(sfxplan.DATE_SOUND, "date-slam")
+        self.assertEqual(sfxplan.resolve_sound("date-slam", ["hit-deep"]), "date-slam")
         self.assertIn("hit-deep", open("remotion/public/sfx/sfx_meta.json", encoding="utf-8").read())

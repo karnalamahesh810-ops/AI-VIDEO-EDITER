@@ -95,9 +95,22 @@ _SYSTEM = (
     "them the frames show, and class the frames: specificity \"event\" when they are "
     "recognisably the named event at the named place, \"location\" when they show the "
     "named place but not that event, \"generic\" otherwise.\n"
+    "Answer two more questions, each a hard reject when true:\n"
+    "- ai_generated: do the frames look AI-generated or artificial - an AI image or AI "
+    "video, CGI or a 3D render, a digital painting, an oil-painting, watercolour or "
+    "illustration style, a video game, uncanny waxy faces, warped hands or text, "
+    "impossible detail, glossy painterly lighting, or a slideshow of such pictures? "
+    "Real photographs and real camera footage are false.\n"
+    "- studio: is it NOT real field footage of the subject - a TV studio, a weather "
+    "presenter or meteorologist in front of a map or radar wall, a news anchor at a "
+    "desk, a YouTuber, streamer or vlogger talking to camera (a face cam, a split screen "
+    "with a talking person, a subscribe button or bell icon, a QR code, a chat overlay), "
+    "another creator's big word-by-word captions, or a TV weather map or forecast "
+    "graphic? A reporter or official interviewed on location, a press conference, and "
+    "field video carrying a small news banner are false.\n"
     "Reply with one valid JSON object only. Do not wrap it in JSON.stringify(), "
     "JavaScript, markdown, or commentary: {\"description\": str, \"score\": number, \"quality\": number, "
-    "\"has_text_or_watermark\": bool, \"is_talking_head\": bool, "
+    "\"has_text_or_watermark\": bool, \"is_talking_head\": bool, \"ai_generated\": bool, \"studio\": bool, "
     "\"specificity\": \"event\"|\"location\"|\"generic\"}"
 )
 
@@ -117,7 +130,10 @@ _NEWS_TEXT_RULE = (
     "TV NEWS FOOTAGE IS WELCOME: field video, aerials, interviews and press "
     "conferences from a news report are exactly what this documentary uses, WITH "
     "their station logo, headline banner, lower-third name, ticker or subtitles - do "
-    "not flag those and do not lower the score for them. Score 0 and set "
+    "not flag those and do not lower the score for them. The studio itself is NOT "
+    "welcome: a weather presenter at a map or radar wall, an anchor desk, a TV "
+    "forecast graphic, and a YouTuber's or streamer's screen with their big captions "
+    "(answer studio true). Score 0 and set "
     "has_text_or_watermark true only for a stock-library watermark (ZapataStock, "
     "FootageForPro, Pond5, Storyblocks, Getty, Shutterstock), a lyric video, glitch "
     "art or corrupted/blocky frames, a screen recording, software UI, a video game, a "
@@ -148,7 +164,12 @@ _EVENT_RULE = (
     "event with nothing contradicting it; below 0.7 generic or stock-looking footage, "
     "or anything from another country, climate, season or era than the one named. "
     "A news outlet's aerial or on-the-ground footage of the event is ideal; the news "
-    "desk or a reporter talking to camera is still a talking head."
+    "desk or a reporter talking to camera is still a talking head.\n"
+    "READ EVERY BANNER, CHYRON, CAPTION, TITLE CARD, DATE AND SIGN in the frames. One "
+    "that names a DIFFERENT city, county, state or country than the INTENT's and the "
+    "STORY's places (\"RUIDOSO, NM\" for a Texas story), another storm's or event's "
+    "name, another year, or another kind of weather (snow and ice for a flood) means "
+    "the wrong shot: score at most 0.3 and say so in the description."
 )
 
 
@@ -613,9 +634,19 @@ def _parse(text: str) -> Optional[dict]:
         "quality": quality,
         "has_text_or_watermark": bool(data.get("has_text_or_watermark")),
         "is_talking_head": bool(data.get("is_talking_head")),
+        # The AI-slop and not-footage questions (src/slop.py layer 4): a hard
+        # reject each (acceptable). A string "false" is false.
+        "ai_generated": _truthy(data.get("ai_generated")),
+        "studio": _truthy(data.get("studio")),
         "specificity": (data.get("specificity")
                         if data.get("specificity") in scene_intent.SPECIFICITY else ""),
     }
+
+
+def _truthy(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "yes", "1")
+    return bool(value)
 
 
 # One line describing the whole video (who, what, when, where), set once per
@@ -710,6 +741,13 @@ def acceptable(verdict: Optional[dict], allow_people: bool = False) -> bool:
         return bool(config.ACCEPT_UNJUDGED)
     if verdict["has_text_or_watermark"]:
         return False
+    # AI slop never passes, whatever the line (the owner, 2026-09-30: "this is
+    # AI slop clip"); a studio, presenter, streamer or TV map only for a line
+    # about a named person (their own interview or appearance).
+    if verdict.get("ai_generated"):
+        return False
+    if verdict.get("studio") and not allow_people:
+        return False
     if verdict["is_talking_head"] and not allow_people:
         return False
     quality = verdict.get("quality")
@@ -733,7 +771,9 @@ _PICK_SYSTEM = (
     "numbered grid of thumbnails taken across one YouTube video (numbers in the "
     "top-left of each tile). Choose the single tile that best SHOWS the intent. "
     "Never choose a tile showing a presenter talking to camera, a title card, "
-    "on-screen text, a graphic, a map or a logo unless the intent asks for it.\n"
+    "on-screen text, a graphic, a map or a logo unless the intent asks for it, and "
+    "never one that looks AI-generated, painted, illustrated or rendered, or a TV "
+    "studio, weather presenter, YouTuber or live-stream screen.\n"
     "Scoring: 0.9-1.0 the tile clearly shows the intended subject; 0.7-0.89 is "
     "consistent with every person, place and era the intent names; below 0.7 nothing "
     "in the grid really fits. A tile from a different named place, person or era "
@@ -754,7 +794,10 @@ _RATE_SYSTEM = (
     "Usable = the subject itself (or its immediate setting) filmed as real footage: "
     "aerials, landscapes, the place, the thing, the event. NOT usable: a presenter or "
     "interviewee talking to camera, title cards, on-screen text or captions, graphics, "
-    "maps, logos, black or blurry frames, a different named place or era.\n"
+    "maps, logos, black or blurry frames, a different named place or era, anything "
+    "that looks AI-generated, painted, illustrated or rendered, a TV studio or weather "
+    "presenter, a TV weather map, a YouTuber's or live stream's screen, and a banner or "
+    "sign naming another city, state, storm or year.\n"
     "Scoring: 0.9-1.0 clearly the subject, striking footage; 0.7-0.89 clearly the "
     "subject; below 0.7 leave the tile out. Tiles are small thumbnails - never score "
     "above 0.7 what you cannot actually make out.\n"

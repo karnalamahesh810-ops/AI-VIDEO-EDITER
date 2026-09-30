@@ -546,6 +546,14 @@ def check(path: str, kind: str = "video", subject: str = "", event: str = "",
                 v.bad("slideshow of stills")
             elif static >= 0.85:
                 v.bad("still image, no motion")
+        # A photo with a slow pan or zoom, or a slideshow of them, passed off
+        # as footage (src/slop.py: nothing moves inside the picture).
+        if v.ok and getattr(config, "AI_SLOP_FILTER", True):
+            from . import slop
+            still = slop.still_measure(grays)
+            if still and still["still"]:
+                v.bad("a still with a pan or zoom, not footage")
+                v.measures["stillResidual"] = still["residual"]
         tb, lr = bars(grays)
         v.measures["bars"] = [round(tb, 3), round(lr, 3)]
         if tb >= config.LIBRARY_MAX_BARS:
@@ -573,6 +581,20 @@ def check(path: str, kind: str = "video", subject: str = "", event: str = "",
             v.bad("a cartoon, game or 3D render")
         if v.relevance is not None and v.relevance < config.LIBRARY_MIN_CLIP_RELEVANCE:
             v.bad(f"does not show its subject (CLIP {v.relevance:.3f})")
+    # AI-made or painted pictures, TV studios, presenters and weather maps
+    # never go into the library (src/slop.py, the owner's review 2026-09-30).
+    if clip and getattr(config, "AI_SLOP_FILTER", True):
+        try:
+            from PIL import Image
+            from . import slop
+            picks = rgbs if len(rgbs) <= 3 else [rgbs[len(rgbs) // 5], rgbs[len(rgbs) // 2], rgbs[(4 * len(rgbs)) // 5]]
+            sv = slop.clip_verdict([Image.fromarray(f) for f in picks])
+        except Exception:  # noqa: BLE001 - a model error never removes a clip
+            sv = None
+        if sv:
+            v.measures["slop"] = {k: sv[k] for k in ("art", "studio", "creator", "tvmap", "footage")}
+            if sv["reject"]:
+                v.bad(sv["reject"])
     if known:
         dup = duplicate_of(v.hashes, known)
         if dup:
