@@ -175,13 +175,14 @@ class FanoutRender(unittest.TestCase):
         statuses = {"c1": {"status": "COMPLETED", "output": {"url": "https://s/c1"}},
                     "c2": {"status": "FAILED", "output": {"error": "gpu gone"}}}
         doc = {"fps": 30, "durationInFrames": 30 * 270}
-        with mock.patch.object(config, "FANOUT_PARTS", 2),                 mock.patch.object(config, "FANOUT_RENDER_CHUNK_SECONDS", 90),                 mock.patch.object(fanout, "_submit", lambda p: next(ids)),                 mock.patch.object(fanout, "_status", lambda jid: statuses[jid]),                 mock.patch.object(fanout, "_cancel", lambda jid: None),                 mock.patch.object(fanout.storage, "download", download),                 mock.patch.object(fanout.subprocess, "run", lambda *a, **k: None),                 mock.patch.object(fanout.time, "sleep", lambda s: None):
+        with mock.patch.object(config, "FANOUT_PARTS", 2),                 mock.patch.object(config, "FANOUT_RENDER_CHUNK_SECONDS", 90),                 mock.patch.object(fanout, "_submit", lambda p: next(ids)),                 mock.patch.object(fanout, "_status", lambda jid: statuses[jid]),                 mock.patch.object(fanout, "_cancel", lambda jid: None),                 mock.patch.object(fanout.storage, "download", download),                 mock.patch.object(fanout.subprocess, "run", lambda *a, **k: None),                 mock.patch.object(fanout.renderer, "finalize", lambda *a, **k: {}),                 mock.patch.object(fanout.time, "sleep", lambda s: None):
             fanout.render(doc, os.path.join(work, "final.mp4"), parent_job_id="p",
                           project_id="x", bucket="b", work=work,
                           report=lambda *a, **k: None, render_local=render_local)
         self.assertIn(((0, 4049), True, None), calls)          # its own chunk, silent
         self.assertIn(((4050, 8099), True, None), calls)       # the failed chunk, here
-        self.assertEqual([c for c in calls if c[2] == "aac"], [(None, False, "aac")])
+        # The sound once, whole, as lossless WAV (encoded once by render.finalize).
+        self.assertEqual([c for c in calls if c[2] in ("aac", "wav")], [(None, False, "wav")])
         self.assertEqual(media.LAST_STATS["render_fanout"]["rendered_here_after"], 1)
 
 

@@ -40,6 +40,7 @@ import requests
 
 from . import ytdlp
 from . import config, media, storage, costs, events
+from . import render as renderer
 
 
 def readiness(n_scenes: int, project_id: Optional[str] = None) -> dict:
@@ -661,9 +662,12 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
                                            "parts": len(all_units), "chunks": manifest_chunks,
                                            "reused": len(reused)}
     units = all_units
-    audio = os.path.join(work, "track.aac")
+    # The whole sound as lossless WAV, encoded once when it is joined to the
+    # picture (render.finalize: loudness set, starts on frame 0 - an ADTS AAC
+    # track copied into the MP4 played 42.7 ms late).
+    audio = os.path.join(work, "track.wav")
     try:
-        render_local(None, audio, False, "aac")
+        render_local(None, audio, False, "wav")
     except Exception as e:  # noqa: BLE001 - a silent video is still caught below
         print(f"[fanout] audio track failed: {e}", flush=True)
     listing = os.path.join(work, "chunks.txt")
@@ -674,8 +678,7 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
                     "-c", "copy", video], cwd=work, check=True)
     if not (os.path.isfile(audio) and os.path.getsize(audio) > 0):
         raise RuntimeError("the narration track did not render")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", video, "-i", audio, "-map", "0:v",
-                    "-map", "1:a", "-c", "copy", "-shortest", out_path], check=True)
+    renderer.finalize(video, audio, out_path)
     media.LAST_STATS["render_fanout"] = {"chunks": len(units), "on_workers": runner.live,
                                          "stolen_back": runner.stolen, "rendered_here_after": len(failed),
                                          "reused": len(reused)}

@@ -649,6 +649,22 @@ RENDER_VIDEO_THREADS = int(os.getenv("RENDER_VIDEO_THREADS", "1"))
 # a retried fetch, short enough that a dead tile server still fails the job.
 RENDER_DELAY_TIMEOUT_MS = int(os.getenv("RENDER_DELAY_TIMEOUT_MS", "120000"))
 
+# --- render speed (src/render.py; measured 2026-10-01) ---------------------------
+# x264 preset of every h264 render. Remotion's default, medium, encodes beside
+# the browser tabs and took ~16% of the machine: veryfast is 2.3x faster at the
+# same CRF with the same picture (SSIM 0.9805 vs 0.9814) and a 7% smaller file.
+# "" = Remotion's default.
+RENDER_X264_PRESET = os.getenv("RENDER_X264_PRESET", "veryfast").strip().lower()
+# The sound is rendered as lossless WAV beside a picture-only MP4 and encoded
+# to AAC once, loudness included, when the two are joined (render.finalize).
+# Remotion's own AAC played 42.7 ms behind the picture. 0 = the old way.
+RENDER_SEPARATE_AUDIO = _flag("RENDER_SEPARATE_AUDIO", True)
+# Build the Remotion bundle once per machine and code version and render from
+# it (render.ensure_bundle) instead of bundling + copying public/ per render.
+RENDER_PREBUNDLE = _flag("RENDER_PREBUNDLE", True)
+RENDER_BUNDLE_DIR = os.getenv("RENDER_BUNDLE_DIR", "").strip()
+RENDER_BUNDLE_TIMEOUT = int(os.getenv("RENDER_BUNDLE_TIMEOUT", "600"))
+
 # --- whisper -----------------------------------------------------------------
 # "base" is the sweet spot for narration alignment on CPU; bump to "small" on GPU.
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")

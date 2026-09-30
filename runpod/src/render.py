@@ -1,10 +1,14 @@
 """Invoke the Remotion renderer as a subprocess and return the output path."""
 import copy
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
+import threading
+import time
 
 from . import config
 from . import templates
@@ -13,6 +17,124 @@ from .assetserver import AssetServer, localise
 
 class RenderError(RuntimeError):
     pass
+
+
+# x264's speed/size trade-offs. Measured on our own 1080p renders (2026-10-01,
+# 600 frames at CRF 21): medium 73 fps / SSIM 0.9814, faster 105 fps / 0.9812,
+# veryfast 166 fps / 0.9805 (and 7% smaller), superfast 197 fps but 46% bigger.
+_X264_PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium",
+                 "slow", "slower", "veryslow")
+# Audio-only codecs Remotion can render (no picture: no CRF, no x264 preset).
+_AUDIO_CODECS = ("aac", "wav", "mp3")
+
+
+def x264_preset() -> str:
+    """config.RENDER_X264_PRESET when it is a real x264 preset, else "" (Remotion's default, medium)."""
+    p = str(getattr(config, "RENDER_X264_PRESET", "") or "").strip().lower()
+    return p if p in _X264_PRESETS else ""
+
+
+_FINGERPRINTS: dict = {}
+_BUNDLE_LOCK = threading.Lock()
+_BUNDLE_FAILED: set = set()
+
+
+def renderer_fingerprint(remotion_dir: str = None) -> str:
+    """
+    What draws the frames, as one short hash: every file under remotion/src
+    (by content), the public/ file list (names and sizes: the bgm and sfx) and
+    the Remotion package versions. Two machines with the same fingerprint
+    render identical frames from the same document; it names the pre-built
+    bundle and lets a render chunk refuse to join a render made by other code.
+    """
+    root = os.path.abspath(remotion_dir or config.REMOTION_DIR)
+    if root in _FINGERPRINTS:
+        return _FINGERPRINTS[root]
+    h = hashlib.sha1()
+    for sub, by_content in (("src", True), ("public", False)):
+        base = os.path.join(root, sub)
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames.sort()
+            for name in sorted(filenames):
+                path = os.path.join(dirpath, name)
+                rel = os.path.relpath(path, root).replace("\\", "/")
+                h.update(rel.encode("utf-8") + b"\0")
+                if by_content:
+                    with open(path, "rb") as fh:
+                        h.update(hashlib.sha1(fh.read()).digest())
+                else:
+                    h.update(str(os.path.getsize(path)).encode("ascii"))
+    for pkg in ("remotion", "@remotion/cli", "@remotion/renderer", "@remotion/bundler"):
+        try:
+            with open(os.path.join(root, "node_modules", *pkg.split("/"), "package.json"),
+                      encoding="utf-8") as fh:
+                h.update(f"{pkg}@{json.load(fh).get('version')}".encode("utf-8"))
+        except (OSError, ValueError):
+            pass
+    fp = h.hexdigest()[:16]
+    _FINGERPRINTS[root] = fp
+    return fp
+
+
+def ensure_bundle() -> str:
+    """
+    The Remotion project pre-built once per machine and code version
+    (RENDER_BUNDLE_DIR/<fingerprint>), or "" to let the CLI bundle it.
+
+    `remotion render src/index.ts` bundles with webpack and copies public/
+    (140 MB of music and sound effects) before every render: 3.5 s warm and
+    12 s cold on the laptop, longer on a fresh worker. A render chunk, the
+    audio track and every retry paid it again. A failed build is not retried
+    in this process; the render then bundles from source as before.
+    """
+    if not getattr(config, "RENDER_PREBUNDLE", False):
+        return ""
+    if not os.path.isfile(os.path.join(config.REMOTION_DIR, "src", "index.ts")):
+        return ""
+    try:
+        fp = renderer_fingerprint()
+    except OSError:
+        return ""
+    base = config.RENDER_BUNDLE_DIR or os.path.join(tempfile.gettempdir(), "remotion-bundles")
+    final = os.path.join(base, fp)
+    if os.path.isfile(os.path.join(final, "index.html")):
+        return final
+    with _BUNDLE_LOCK:
+        if os.path.isfile(os.path.join(final, "index.html")):
+            return final
+        if fp in _BUNDLE_FAILED:
+            return ""
+        started = time.time()
+        tmp = ""
+        try:
+            os.makedirs(base, exist_ok=True)
+            tmp = tempfile.mkdtemp(prefix=f"{fp}-build-", dir=base)
+            p = subprocess.run(_renderer_argv() + ["bundle", "src/index.ts", "--out-dir", tmp, "--log=error"],
+                               cwd=config.REMOTION_DIR, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=config.RENDER_BUNDLE_TIMEOUT)
+            ok = p.returncode == 0 and os.path.isfile(os.path.join(tmp, "index.html"))
+            why = (p.stderr or p.stdout or "")[-300:]
+        except Exception as e:  # noqa: BLE001 - any failure: bundle per render as before
+            ok, why = False, type(e).__name__
+        if not ok:
+            _BUNDLE_FAILED.add(fp)
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
+            print(f"[render] renderer bundle could not be pre-built; bundling per render: {why}", flush=True)
+            return ""
+        try:
+            os.replace(tmp, final)
+        except OSError:
+            # Another process on this machine finished first: use its copy.
+            shutil.rmtree(tmp, ignore_errors=True)
+            if not os.path.isfile(os.path.join(final, "index.html")):
+                return ""
+        # Bundles of older code on a long-lived machine (the name is a fingerprint).
+        for name in os.listdir(base):
+            if name != fp and re.fullmatch(r"[0-9a-f]{16}", name):
+                shutil.rmtree(os.path.join(base, name), ignore_errors=True)
+        print(f"[render] renderer bundle ready in {time.time() - started:.1f} s ({fp})", flush=True)
+        return final
 
 
 def _renderer_argv() -> list:
@@ -71,9 +193,13 @@ def _render_progress(line: str):
 def render(props: dict, out_path: str, composition: str = "Main",
            concurrency: int = None, timeout: int = 5400,
            serve_dir: str = None, on_progress=None, frames: tuple = None,
-           muted: bool = False, codec: str = None) -> str:
+           muted: bool = False, codec: str = None, audio_to: str = None) -> str:
     """
     Render `props` to `out_path` with Remotion.
+
+    `audio_to` (a .wav path): the sound is written there as lossless PCM and
+    `out_path` holds the picture only; finalize() then encodes the sound once
+    into the finished MP4. Remotion's own AAC left the sound 42.7 ms late.
 
     Sourced media lives on local disk, and headless Chrome cannot read a
     filesystem path from an http origin, so the job directory is served over
@@ -111,24 +237,39 @@ def render(props: dict, out_path: str, composition: str = "Main",
         with open(props_path, "w", encoding="utf-8") as f:
             json.dump(served, f)
 
+        # The pre-built bundle (ensure_bundle) skips webpack and the 140 MB
+        # public/ copy; without one the CLI bundles from source as before.
+        entry = ensure_bundle() or "src/index.ts"
         cmd = _renderer_argv() + [
-            "render", "src/index.ts", composition, out_path,
+            "render", entry, composition, out_path,
             f"--props={props_path}",
             # --log=error hides the progress lines, so ask for more only when
             # somebody is listening.
             "--log=info" if on_progress else "--log=error",
         ]
         # A frame chunk of a split render, silent (the audio is rendered once,
-        # whole), or the audio track alone (codec "aac").
+        # whole), or the audio track alone (codec "wav" or "aac").
         if frames:
             cmd.append(f"--frames={int(frames[0])}-{int(frames[1])}")
         if muted:
             cmd.append("--muted")
         if codec:
             cmd.append(f"--codec={codec}")
+        picture = (codec or "h264") == "h264"
         # Picture quality (the audio-only render has no picture).
-        if config.RENDER_CRF and (codec or "h264") == "h264":
+        if config.RENDER_CRF and picture:
             cmd.append(f"--crf={config.RENDER_CRF}")
+        # x264 runs beside the browser tabs (parallel encoding): its default,
+        # medium, took ~16% of the machine for no visible gain (see _X264_PRESETS).
+        if picture and x264_preset():
+            cmd.append(f"--x264-preset={x264_preset()}")
+        if audio_to and picture and not muted:
+            audio_to = os.path.abspath(audio_to)
+            if os.path.exists(audio_to):
+                os.remove(audio_to)             # never mistake an old track for this render's
+            # --enforce-audio-track: a document with no sound still yields a
+            # (silent) track instead of failing the separate-audio render.
+            cmd += [f"--separate-audio-to={audio_to}", "--enforce-audio-track"]
         # A container sees the HOST's memory and cores. Remotion sizes its
         # frame cache at half of "system memory" and the compositor's decoders
         # scale with cores, so on a RunPod worker both overshoot the cgroup
@@ -173,6 +314,8 @@ def render(props: dict, out_path: str, composition: str = "Main",
                  and "time remaining" not in l]
         tail = "\n".join(lines)[-2000:]
         raise RenderError(f"remotion render failed (exit {p.returncode}): {tail}")
+    if audio_to and picture and not muted and not os.path.isfile(audio_to):
+        raise RenderError("remotion rendered the picture but wrote no sound track")
     return out_path
 
 
@@ -214,34 +357,103 @@ def _run_streaming(cmd, timeout, on_progress) -> "_Completed":
     return _Completed(proc.returncode, "".join(lines), "")
 
 
+def _measure_loudness(path: str, target: float) -> dict:
+    """loudnorm's first pass over a file's sound: its measurement dict, or {} when unreadable."""
+    tp = config.LOUDNESS_TRUE_PEAK
+    probe = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-vn",
+         "-af", f"loudnorm=I={target}:TP={tp}:LRA=11:print_format=json", "-f", "null", "-"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+    m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", probe.stderr or "", re.S)
+    if not m:
+        return {}
+    meas = json.loads(m.group(0))
+    float(meas["input_i"])                  # a KeyError/ValueError here means no usable measurement
+    return meas
+
+
+def _loudnorm_filter(meas: dict, target: float) -> str:
+    """The second (applying) loudnorm pass: one steady gain wherever the peaks allow it."""
+    tp = config.LOUDNESS_TRUE_PEAK
+    return (f"loudnorm=I={target}:TP={tp}:LRA=11:measured_I={meas['input_i']}:"
+            f"measured_TP={meas['input_tp']}:measured_LRA={meas['input_lra']}:"
+            f"measured_thresh={meas['input_thresh']}:offset={meas['target_offset']}:linear=true")
+
+
+def finalize(video_path: str, audio_path: str, out_path: str, target: float = None) -> dict:
+    """
+    The finished MP4 from a picture-only render and its lossless sound track
+    (render(audio_to=...)): the picture is copied as it is, the sound is set
+    to `target` LUFS (config.LOUDNESS_TARGET_LUFS, 0 = as rendered) and
+    encoded to AAC once, in one ffmpeg pass.
+
+    Remotion writes its own AAC as ADTS and copies it into the MP4. ADTS has
+    no field for the encoder's priming samples, so the 2048 samples libfdk
+    puts before the sound played as silence: every render's sound ran
+    42.7 ms behind the picture (a 4 s render: audio 4.053 s, video 4.000 s),
+    and the old loudness pass kept that offset. ffmpeg's MP4 muxer records
+    the priming of its own encoder in an edit list, so here the sound starts
+    exactly on frame 0. Returns {"lufsIn", "lufsTarget", "gainApplied"}.
+    """
+    target = config.LOUDNESS_TARGET_LUFS if target is None else target
+    info = {"lufsIn": None, "lufsTarget": target or None, "gainApplied": False}
+    af = ""
+    if target:
+        try:
+            meas = _measure_loudness(audio_path, target)
+        except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as e:
+            print(f"[render] loudness not measured: {type(e).__name__}", flush=True)
+            meas = {}
+        if meas:
+            measured = float(meas["input_i"])
+            info["lufsIn"] = round(measured, 1)
+            if measured >= -60 and abs(measured - target) >= 0.7:   # not silent, not already there
+                af = _loudnorm_filter(meas, target)
+    tmp = out_path + ".part.mp4"
+
+    def mux(filt: str):
+        return subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", video_path, "-i", audio_path,
+             "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy"] + (["-af", filt] if filt else [])
+            + ["-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", tmp],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3600)
+    p = mux(af)
+    if af and (p.returncode != 0 or not os.path.isfile(tmp)):
+        print(f"[render] loudness step skipped: {(p.stderr or '')[-200:]}", flush=True)
+        af = ""
+        p = mux("")
+    if p.returncode != 0 or not os.path.isfile(tmp) or os.path.getsize(tmp) < 1024:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise RenderError(f"joining the picture and the sound failed: {(p.stderr or '')[-400:]}")
+    os.replace(tmp, out_path)
+    info["gainApplied"] = bool(af)
+    if af:
+        print(f"[render] loudness {info['lufsIn']:.1f} -> {target:.1f} LUFS", flush=True)
+    return info
+
+
 def normalize_loudness(path: str, target: float = None) -> bool:
     """
     Set a finished video's sound to `target` LUFS (config.LOUDNESS_TARGET_LUFS),
     true peak config.LOUDNESS_TRUE_PEAK, copying the picture. Two passes: the
     first measures, the second applies loudnorm with the measurement (a steady
     gain wherever the peaks allow it). True when the file was changed; any
-    failure leaves the file as it was.
+    failure leaves the file as it was. (Renders with a separate sound track
+    use finalize() instead: one pass, and the sound starts on frame 0.)
     """
     target = config.LOUDNESS_TARGET_LUFS if target is None else target
     if not target or not os.path.isfile(path):
         return False
-    tp = config.LOUDNESS_TRUE_PEAK
     try:
-        probe = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-vn",
-             "-af", f"loudnorm=I={target}:TP={tp}:LRA=11:print_format=json", "-f", "null", "-"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
-        m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", probe.stderr or "", re.S)
-        if not m:
+        meas = _measure_loudness(path, target)
+        if not meas:
             return False
-        meas = json.loads(m.group(0))
         measured = float(meas["input_i"])
         if measured < -60 or abs(measured - target) < 0.7:
             return False                   # silent, or already there
         tmp = path + ".loud.mp4"
-        af = (f"loudnorm=I={target}:TP={tp}:LRA=11:measured_I={meas['input_i']}:"
-              f"measured_TP={meas['input_tp']}:measured_LRA={meas['input_lra']}:"
-              f"measured_thresh={meas['input_thresh']}:offset={meas['target_offset']}:linear=true")
+        af = _loudnorm_filter(meas, target)
         p = subprocess.run(
             ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", path, "-map", "0:v:0?", "-map", "0:a:0",
              "-c:v", "copy", "-af", af, "-ar", "48000", "-c:a", "aac", "-b:a", "192k",

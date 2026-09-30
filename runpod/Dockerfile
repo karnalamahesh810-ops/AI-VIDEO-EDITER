@@ -67,6 +67,13 @@ COPY scripts/ scripts/
 # run needs no upload and no credentials (audio_url "bench://<case>").
 COPY bench/ bench/
 
+# The Remotion project bundled once, here (src/render.py ensure_bundle), so no
+# render pays webpack and the 140 MB public/ copy at run time. Named by a hash
+# of remotion/src, so a stale bundle is never used; if this step fails, the
+# first render builds it instead.
+ENV RENDER_BUNDLE_DIR=/opt/remotion-bundles
+RUN python -c "from src import render; print('bundle:', render.ensure_bundle() or 'built at the first render instead')" || true
+
 RUN mkdir -p ${WORK_DIR}
 
 CMD ["sh", "scripts/start.sh"]

@@ -1849,6 +1849,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
             last_pct[0] = pct
             report(f"Rendering video {int(frac * 100)}%", pct)
 
+    # True once the sound has been balanced and joined to the picture in one
+    # pass (render.finalize): the chunked render and the separate-audio render.
+    finished = False
     if split and remote_doc is not None and _all_remote(remote_doc):
         fanout.render(remote_doc, out_path, parent_job_id=(report.job or {}).get("id", ""),
                       project_id=inp.get("project_id") or "",
@@ -1856,6 +1859,28 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
                       report=report, render_local=_local_renderer(doc, inp, work),
                       # The previous render's manifest: unchanged chunks are reused.
                       previous=inp.get("render_manifest") if isinstance(inp.get("render_manifest"), dict) else None)
+        finished = True
+    elif config.RENDER_SEPARATE_AUDIO:
+        # The picture alone, the sound as lossless WAV beside it, joined with
+        # the loudness set and AAC encoded once: the sound starts on frame 0
+        # (Remotion's own AAC ran 42.7 ms late) and the file is written once.
+        picture = os.path.join(work, "final.picture.mp4")
+        mix = os.path.join(work, "final.mix.wav")
+        rendered = renderer.render(doc, picture, composition=inp.get("composition", "Main"),
+                                   concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY,
+                                   on_progress=on_render, serve_dir=work, audio_to=mix) or picture
+        report("Balancing the sound", 90)
+        if os.path.isfile(rendered) and os.path.isfile(mix):
+            renderer.finalize(rendered, mix, out_path)
+            finished = True
+            for leftover in (rendered, mix):
+                try:
+                    os.remove(leftover)
+                except OSError:
+                    pass
+        elif rendered != out_path and os.path.isfile(rendered):
+            # A renderer that kept the sound in its own file: the old path below.
+            os.replace(rendered, out_path)
     else:
         renderer.render(
             doc, out_path,
@@ -1877,8 +1902,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
 
     # YouTube loudness (-14 LUFS): the raw narration sat ~10 dB under
     # every competitor's render. Never fails the job.
-    report("Balancing the sound", 90)
-    renderer.normalize_loudness(out_path)
+    if not finished:
+        report("Balancing the sound", 90)
+        renderer.normalize_loudness(out_path)
     # Over the app's per-file storage limit: re-encode to fit, not fail the
     # upload. R2 has no such cap, so the full-quality file goes there as is.
     if not r2.enabled():

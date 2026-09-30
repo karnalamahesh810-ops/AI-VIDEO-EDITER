@@ -130,6 +130,7 @@ class PartialRerender(unittest.TestCase):
                                   side_effect=lambda local, b, obj, pr, j, read_ttl=60: uploads.append(obj) or "u"), \
                 mock.patch.object(fanout.storage, "download", download), \
                 mock.patch.object(fanout.subprocess, "run", lambda *a, **k: None), \
+                mock.patch.object(fanout.renderer, "finalize", lambda *a, **k: {}), \
                 mock.patch.object(fanout.time, "sleep", lambda s: None):
             fanout.render(doc, os.path.join(work, "final.mp4"), parent_job_id="p1", project_id="x",
                           bucket="b", work=work, report=lambda *a, **k: None,
