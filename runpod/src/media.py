@@ -335,6 +335,10 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
             if rows:
                 break
         if not rows:
+            # The free searches came back empty: SerpApi's Google Images
+            # (quota-limited, so only here).
+            rows = _serpapi_images("google_images", query)
+        if not rows:
             return []
 
     out = []
@@ -363,6 +367,41 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
 
 _YANDEX_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+
+# SerpApi searches spent by this job (the plan's monthly quota is small).
+_SERPAPI_USED = {"n": 0}
+# Social-network crawler links SerpApi's Google Images returns: short-lived,
+# login-walled, usually a post with text on it - never worth a download.
+_SERPAPI_SKIP_HOSTS = ("lookaside.fbsbx.com", "lookaside.instagram.com")
+
+
+def _serpapi_images(engine: str, query: str) -> List[tuple]:
+    """(url, width, height, title, page) rows from SerpApi's google_images or
+    yandex_images engine, or [] when unconfigured, over this job's quota, or
+    failing. Each call is one search against the monthly plan."""
+    if not config.SERPAPI_API_KEY or not query.strip():
+        return []
+    with _CACHE_LOCK:
+        if _SERPAPI_USED["n"] >= config.SERPAPI_MAX_PER_JOB:
+            return []
+        _SERPAPI_USED["n"] += 1
+    params = {"engine": engine, "api_key": config.SERPAPI_API_KEY}
+    params["text" if engine == "yandex_images" else "q"] = query
+    try:
+        r = requests.get("https://serpapi.com/search.json", params=params, timeout=45)
+        r.raise_for_status()
+        rows = []
+        for it in (r.json().get("images_results") or []):
+            url = it.get("original") or ""
+            if not url.startswith("http") or any(h in url for h in _SERPAPI_SKIP_HOSTS):
+                continue
+            rows.append((url, it.get("original_width") or 0, it.get("original_height") or 0,
+                         it.get("title") or "", it.get("link") or it.get("source") or ""))
+        costs.record("serpapi.search")
+        return rows
+    except (requests.RequestException, ValueError) as e:
+        _source_error(f"serpapi_{engine}", e)
+        return []
 
 
 def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
@@ -394,6 +433,9 @@ def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
         found += re.findall(r'"origUrl":"(https?:[^"]+)"', text)
         if found:
             break
+    if not found:
+        # Yandex answered with a captcha on every route: SerpApi's Yandex engine.
+        found = [row[0] for row in _serpapi_images("yandex_images", query)]
     import html as _html
     out, seen = [], set()
     for url in found:
@@ -2352,6 +2394,7 @@ def reset_cache():
     from . import official
     official.reset()                    # each satellite sector once per video
     LOCAL_REJECTED["n"] = 0
+    _SERPAPI_USED["n"] = 0              # SerpApi's per-job budget starts again
     _BRIGHTDATA_FAILS["n"] = 0
     _IMAGE_NO_CREDIT["hit"] = False
     UNJUDGED_KEPT.update(n=0, rejected=0)

@@ -569,6 +569,11 @@ R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
 R2_BUCKET = os.getenv("R2_BUCKET", "").strip()
 R2_PUBLIC_BASE = os.getenv("R2_PUBLIC_BASE", "").strip()
+# SerpApi (Google Images and Yandex Images) as the backup picture search when
+# the free searches come back empty. The plan has a monthly quota (250 on the
+# free plan), so each video may spend at most SERPAPI_MAX_PER_JOB searches.
+SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
+SERPAPI_MAX_PER_JOB = int(os.getenv("SERPAPI_MAX_PER_JOB", "30"))
 # Yandex Images as a picture source after Google/Bing (media.search_yandex_images).
 ALLOW_YANDEX_IMAGES = _flag("ALLOW_YANDEX_IMAGES", True)
 # Set per job by the video style (src/styles.py): how busy the overlay planner
