@@ -231,7 +231,8 @@ class VideoStyles(unittest.TestCase):
         self.assertTrue(inp["config"]["ALLOW_VERTICAL"])
         self.assertEqual(inp["config"]["MAX_SCENE_SECONDS"], 10)          # the job's own override wins
         self.assertEqual(inp["style"], "crossfade")
-        self.assertIs(inp["bgm"], False)
+        # Music plays in every style since 2026-09-30 (the owner: "use the music").
+        self.assertNotIn("bgm", inp)
 
     def test_auto_and_unknown_styles_change_nothing(self):
         from src import styles

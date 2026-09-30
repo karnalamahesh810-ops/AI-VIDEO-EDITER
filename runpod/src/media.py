@@ -19,6 +19,7 @@ shots are illustrations rather than records.
 Every asset carries its `source`, `license` and `attribution` so the UI can
 show where each clip came from and you can see your exposure per video.
 """
+from collections import Counter
 from concurrent.futures import (FIRST_COMPLETED, ThreadPoolExecutor, as_completed,
                                 wait)
 from concurrent.futures import TimeoutError as FuturesTimeout
@@ -938,7 +939,11 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
         return None
 
     safe = "".join(ch for ch in prompt if ch.isalnum())[:24] or "gen"
-    dest = os.path.join(out_dir, f"gen_{safe}_{abs(hash(prompt)) % 99999}.png")
+    # A new file per generation. Named after the prompt alone, two scenes
+    # with one prompt wrote the same file and so showed the same image (its
+    # identity is the path) - part of the owner's "7 generated scenes, 4
+    # images" (2026-09-30).
+    dest = os.path.join(out_dir, f"gen_{safe}_{uuid.uuid4().hex[:12]}.png")
     try:
         # gpt-image-1 returns base64; some gateways return a URL instead.
         if item.get("b64_json"):
@@ -1037,6 +1042,17 @@ _INFLIGHT: set = set()
 _SCENE_LOCK = threading.Lock()
 # Replace Clip keeps the runner-up files so they can be published as choices.
 _KEEP_ALT_FILES: contextvars.ContextVar = contextvars.ContextVar("keep_alt_files", default=False)
+# Set while sourcing a scene of the opening (the job's "hook" flag: a hook
+# beat of the brief, or a line that starts within config.HOOK_SECONDS). The
+# owner's Texas flood video (2026-09-30) opened on 4 AI illustrations in its
+# first 5 scenes: a hook scene is never generated (_generation_budget_left)
+# unless GENERATED_IMAGES_IN_HOOK, and it judges more candidates and keeps
+# the best of more passes (_judge_limits).
+_IN_HOOK: contextvars.ContextVar = contextvars.ContextVar("in_hook", default=False)
+# "month" (or "week") for a line of a story about now: YouTube's and
+# Dailymotion's uploads of the last month are searched first, and older
+# uploads only when nothing recent passes (config.RECENT_FOOTAGE_FIRST).
+_RECENCY: contextvars.ContextVar = contextvars.ContextVar("recency", default="")
 
 
 
@@ -1430,11 +1446,31 @@ def _scene_tried() -> set:
     return tried if tried is not None else set()
 
 
+def _judge_limits() -> dict:
+    """
+    How hard this scene may look: {"best_of", "candidates", "per_scene", "scouts"}.
+
+    A hook scene (the owner, 2026-09-30: the opening must be the strongest
+    footage) scouts more of the candidate pool, judges more downloads and
+    keeps the best of more passing clips. max() so a job's own larger values
+    (Replace Clip raises all of them) are never lowered.
+    """
+    out = {"best_of": config.JUDGE_BEST_OF, "candidates": config.VISION_MAX_CANDIDATES,
+           "per_scene": config.JUDGE_MAX_PER_SCENE, "scouts": config.POOL_SCOUT}
+    if _IN_HOOK.get():
+        out["best_of"] = max(out["best_of"], config.HOOK_JUDGE_BEST_OF)
+        out["candidates"] = max(out["candidates"], config.HOOK_JUDGE_BEST_OF + 1)
+        out["per_scene"] = max(out["per_scene"], config.HOOK_JUDGE_MAX_PER_SCENE)
+        out["scouts"] = max(out["scouts"], config.HOOK_POOL_SCOUT)
+    return out
+
+
 def _vision_budget_left() -> int:
+    cap = _judge_limits()["per_scene"]
     counter = _SCENE_JUDGED.get()
     if counter is None:
-        return config.JUDGE_MAX_PER_SCENE
-    return max(0, config.JUDGE_MAX_PER_SCENE - counter[0])
+        return cap
+    return max(0, cap - counter[0])
 
 
 def _claim_inflight(video_id: str, used: Optional[set]) -> bool:
@@ -1548,7 +1584,7 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
 
 def _scene_cap_reached() -> bool:
     counter = _SCENE_JUDGED.get()
-    return counter is not None and counter[0] >= config.JUDGE_MAX_PER_SCENE
+    return counter is not None and counter[0] >= _judge_limits()["per_scene"]
 
 
 def _count_judged() -> None:
@@ -1558,8 +1594,8 @@ def _count_judged() -> None:
 
 
 def _good_enough(passed: List[MediaAsset]) -> bool:
-    """Stop judging: enough clips passed, or one is plainly excellent."""
-    if len(passed) >= config.JUDGE_BEST_OF:
+    """Stop judging: enough clips passed (more for a hook scene), or one is plainly excellent."""
+    if len(passed) >= _judge_limits()["best_of"]:
         return True
     return any((a.relevance_score or 0) >= config.EXCELLENT_SCORE for a in passed)
 
@@ -1635,15 +1671,21 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         return _asset_for(path, query_or_url, seconds, require_cc)
 
     # Bias the search itself toward footage; fall back to the plain query.
-    # (search, variant, this-year-only)
+    # (search, variant, recency: "" / True = this year / "month" / "week")
     searches = []
+    recency = _RECENCY.get() if config.RECENT_FOOTAGE_FIRST else ""
     if _EVENT_WINDOW.get() == "year" and not require_cc:
         # A recent event: this year's uploads first, so the flood on screen is
         # the one being narrated. News titles rarely say "drone aerial", so
         # the bias word is just "footage". The unfiltered plain query stays
-        # last for an event YouTube has little of yet.
+        # last for an event YouTube has little of yet. A story about now
+        # (the owner's news compilations, 2026-09-30) asks for the last
+        # month's uploads before this year's.
+        if recency in _RECENT_SP:
+            searches += [(f"{query_or_url} footage", f"{recency}-footage", recency),
+                         (query_or_url, recency, recency)]
         searches += [(f"{query_or_url} footage", "recent-footage", True),
-                     (query_or_url, "recent", True)]
+                      (query_or_url, "recent", True)]
     elif b_roll_intent:
         searches.append((f"{query_or_url} {B_ROLL_INTENT}", "broll", False))
     searches.append((query_or_url, "plain", False))
@@ -1653,8 +1695,19 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         searches.insert(0, (query_or_url, "channels", False))
 
     if config.CANDIDATE_POOL:
-        return _youtube_pool(query_or_url, out_dir, seconds, start_at, require_cc, skip,
-                             used, intent, context, subject, searches)
+        recent = [s for s in searches if s[2] in _RECENT_SP]
+        if not recent:
+            return _youtube_pool(query_or_url, out_dir, seconds, start_at, require_cc, skip,
+                                 used, intent, context, subject, searches)
+        # Recent uploads first, on their own: the older ones are only pooled,
+        # scouted and judged when nothing from the last month passed.
+        first = _youtube_pool(query_or_url, out_dir, seconds, start_at, require_cc, skip,
+                              used, intent, context, subject, recent, expand=False)
+        if first is not None and not _near_miss(first):
+            return first
+        later = _youtube_pool(query_or_url, out_dir, seconds, start_at, require_cc, skip,
+                              used, intent, context, subject, [s for s in searches if s not in recent])
+        return _better_pick(first, later)
 
     judged = 0
     passed: List[MediaAsset] = []
@@ -1663,19 +1716,9 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
     # repeat could not cost a second download and a second model call.
     tried: set = set()
     for search, variant, this_year in searches:
-        if judged >= config.VISION_MAX_CANDIDATES or _scene_cap_reached() or _good_enough(passed):
+        if judged >= _judge_limits()["candidates"] or _scene_cap_reached() or _good_enough(passed):
             break
-        if require_cc:
-            # yt-dlp's flat search extractor reports license=NA for every hit,
-            # so a CC match-filter over ytsearch rejects everything. YouTube's
-            # own results page with its CC filter populates the field.
-            target = ("https://www.youtube.com/results?search_query="
-                      + urllib.parse.quote_plus(search) + "&sp=EgIwAQ%3D%3D")
-        elif this_year:
-            target = ("https://www.youtube.com/results?search_query="
-                      + urllib.parse.quote_plus(search) + "&sp=" + _YT_THIS_YEAR)
-        else:
-            target = f"ytsearch{config.YT_SEARCH_RESULTS}:{search}"
+        target = _search_target(search, require_cc, this_year)
 
         if variant == "channels":
             candidates = _channel_candidates(search, _story_channels(), subject)
@@ -1711,7 +1754,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         plan = _plan_grabs(eligible, grab, start_at, intent, context)
 
         for candidate, point, moment in plan:
-            if judged >= config.VISION_MAX_CANDIDATES or _scene_cap_reached() or _good_enough(passed):
+            if judged >= _judge_limits()["candidates"] or _scene_cap_reached() or _good_enough(passed):
                 break
             tried.add(candidate["id"])
             path = _yt_fetch_retry(candidate["id"], out_dir, point, grab,
@@ -1787,6 +1830,12 @@ def search_dailymotion_this_year(query: str) -> List[dict]:
     return search_dailymotion(query, created_after=int(start.timestamp()))
 
 
+def search_dailymotion_this_month(query: str) -> List[dict]:
+    """Uploads of the last 30 days, for a story about now (named for the same cache reason)."""
+    start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+    return search_dailymotion(query, created_after=int(start.timestamp()))
+
+
 def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
               timeout: int = 240) -> str:
     """
@@ -1854,6 +1903,11 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
         # This year's uploads first, whatever their title score; the rest after.
         recent = rank(_cached_search(search_dailymotion_this_year, query,
                                      cache_key=subject))
+        if config.RECENT_FOOTAGE_FIRST and _RECENCY.get() in _RECENT_SP:
+            # A story about now: the last month's uploads before the year's.
+            month = rank(_cached_search(search_dailymotion_this_month, query, cache_key=subject))
+            have = {c["id"] for c in month}
+            recent = month + [c for c in recent if c["id"] not in have]
         ids = {c["id"] for c in recent}
         ranked = recent + [c for c in ranked if c["id"] not in ids]
     if not ranked:
@@ -1993,22 +2047,63 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
     return None
 
 
-def _search_target(search: str, require_cc: bool, this_year: bool) -> str:
+# YouTube's own upload-date filters for the results page ("sp"): this week,
+# this month. This year is _YT_THIS_YEAR (ytdlp).
+_YT_THIS_WEEK = "EgIIAw%3D%3D"
+_YT_THIS_MONTH = "EgIIBA%3D%3D"
+_RECENT_SP = {"week": _YT_THIS_WEEK, "month": _YT_THIS_MONTH}
+
+
+def _search_target(search: str, require_cc: bool, this_year) -> str:
+    """
+    The yt-dlp target of one search. `this_year` is the search's recency:
+    falsy (any upload), True or "year" (this year's), "month" or "week"
+    (the last month's / week's uploads, for a story about now).
+    """
     if require_cc:
         # yt-dlp's flat search extractor reports license=NA for every hit,
         # so a CC match-filter over ytsearch rejects everything. YouTube's
         # own results page with its CC filter populates the field.
         return ("https://www.youtube.com/results?search_query="
                 + urllib.parse.quote_plus(search) + "&sp=EgIwAQ%3D%3D")
+    if this_year in _RECENT_SP:
+        return ("https://www.youtube.com/results?search_query="
+                + urllib.parse.quote_plus(search) + "&sp=" + _RECENT_SP[this_year])
     if this_year:
         return ("https://www.youtube.com/results?search_query="
                 + urllib.parse.quote_plus(search) + "&sp=" + _YT_THIS_YEAR)
     return f"ytsearch{config.YT_SEARCH_RESULTS}:{search}"
 
 
+def _near_miss(asset: Optional[MediaAsset]) -> bool:
+    """The best-available pick kept under the vision floor (_youtube_pool's `soft`)."""
+    return bool(asset is not None and (asset.review_reason or "").startswith("Best available"))
+
+
+def _better_pick(first: Optional[MediaAsset], later: Optional[MediaAsset]) -> Optional[MediaAsset]:
+    """
+    Of a recent-uploads pick and an any-upload pick for one scene, the one to
+    keep: a clip that passed the judge over a near-miss, the recent one when
+    both are near-misses of equal score. The loser's file is removed.
+    """
+    if first is None or later is None:
+        return first if later is None else later
+    keep, drop = first, later
+    if _near_miss(first) and (not _near_miss(later)
+                              or (later.relevance_score or 0) > (first.relevance_score or 0)):
+        keep, drop = later, first
+    try:
+        if drop.local_path and drop.local_path != keep.local_path and os.path.exists(drop.local_path):
+            os.remove(drop.local_path)
+    except OSError:
+        pass
+    return keep
+
+
 def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
                   require_cc: bool, skip: int, used: Optional[set], intent_text: str,
-                  context: str, subject: str, searches: List[tuple]) -> Optional[MediaAsset]:
+                  context: str, subject: str, searches: List[tuple],
+                  expand: bool = True) -> Optional[MediaAsset]:
     """
     The candidate-pool way to find a clip (src/candidates.py).
 
@@ -2017,6 +2112,10 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     against the typed intent; the best few are scouted and judged; and the
     combined score - not the order the searches happened to return - picks
     the winner. The runners-up stay with the scene as alternatives.
+
+    expand=False leaves the intent's searches out: youtube_clip's first,
+    recent-uploads-only pass (they are not date filtered, so they belong to
+    the pass that may take older uploads).
     """
     si = intent.SceneIntent.from_dict(_SCENE_INTENT.get()) if _SCENE_INTENT.get() else None
     pool = candidates.CandidatePool(si, query, seconds, used=used)
@@ -2024,7 +2123,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     tried = _scene_tried()
     # The intent's own expanded searches join the first attempt's pool only;
     # a fallback attempt already has their results and adds its own query.
-    if si and config.POOL_EXTRA_QUERIES > 0 and not require_cc and "__intent_searched__" not in tried:
+    if expand and si and config.POOL_EXTRA_QUERIES > 0 and not require_cc and "__intent_searched__" not in tried:
         tried.add("__intent_searched__")
         for q in si.queries(query)[1:1 + config.POOL_EXTRA_QUERIES]:
             targets.append((q, "intent", False))
@@ -2047,11 +2146,13 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     if not ranked:
         return None
     # Scouting spends one model call per candidate; leave room for judging.
+    # A hook scene scouts more of the pool (_judge_limits).
+    limits = _judge_limits()
     left = _vision_budget_left()
     if left < 2:
-        print(f"[pool] scene out of vision budget ({config.JUDGE_MAX_PER_SCENE}); no more searches", flush=True)
+        print(f"[pool] scene out of vision budget ({limits['per_scene']}); no more searches", flush=True)
         return None
-    n_scouts = max(1, min(config.POOL_SCOUT, left - 2))
+    n_scouts = max(1, min(limits["scouts"], left - 2))
     print(f"[pool] {len(pool)} candidates from {pool.searches} searches ({len(ranked)} new); "
           f"best meta {ranked[0].metadata:.2f} {ranked[0].title[:50]!r}; scouting {n_scouts}", flush=True)
 
@@ -2074,7 +2175,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     fine_done = False
     claimed: List[str] = []
     for row, point, moment in plan:
-        if judged >= config.VISION_MAX_CANDIDATES or _vision_budget_left() < 1 or _good_enough(passed):
+        if judged >= limits["candidates"] or _vision_budget_left() < 1 or _good_enough(passed):
             break
         c = by_id[row["id"]]
         if not _claim_inflight(c.id, used):
@@ -2404,6 +2505,12 @@ def reset_cache():
 
 
 def _generation_budget_left() -> bool:
+    # Never in the opening (the owner, 2026-09-30: 4 of the first 5 scenes of
+    # a news video were AI illustrations). The providers registry asks this
+    # before every generation, on the scene's own thread, so the hook flag
+    # set by source_for_segment is visible here; nothing is counted.
+    if _IN_HOOK.get() and not config.GENERATED_IMAGES_IN_HOOK:
+        return False
     with _CACHE_LOCK:
         if _GENERATED[0] >= config.IMAGE_MAX_PER_VIDEO:
             return False
@@ -2411,6 +2518,18 @@ def _generation_budget_left() -> bool:
     costs.record("image.generate")
     with _CACHE_LOCK:
         return True
+
+
+def _may_generate_for(job: Dict[str, Any]) -> bool:
+    """A job's scene may get a generated image: never a real person, never the hook."""
+    if job.get("subject_type") == "person":
+        return False
+    return not (job.get("hook") and not config.GENERATED_IMAGES_IN_HOOK)
+
+
+def _scene_flags(job: Dict[str, Any]) -> Dict[str, Any]:
+    """The per-scene switches a job carries into source_for_segment (hook, recency)."""
+    return {"hook": bool(job.get("hook")), "recency": str(job.get("recency") or "")}
 
 
 def limit_generation(n: int) -> None:
@@ -2508,7 +2627,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        require_cc: bool = None, intent: str = "",
                        context: str = "", subject_type: str = "",
                        subject: str = "", event_window: str = "",
-                       scene_intent: Optional[dict] = None) -> Optional[MediaAsset]:
+                       scene_intent: Optional[dict] = None, hook: bool = False,
+                       recency: str = "") -> Optional[MediaAsset]:
     """
     Source one scene, relaxing the query until something is found.
 
@@ -2520,17 +2640,27 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     subject_type "person": the line is about a named person, so a portrait or
     that person speaking passes the vision gate, and no image is ever
     GENERATED - an invented photo of a real person is a fabrication.
+
+    hook: the scene opens the video (the job's "hook" flag). It is a footage
+    beat unless it shows a document, it looks harder for its clip
+    (_judge_limits) and it is never given a generated image (the owner,
+    2026-09-30). recency "month": a line of a story about now, whose searches
+    ask for the last month's uploads first.
     """
     if _ytdlp.past_deadline():
         # The job's sourcing time is spent: the beat becomes an animation scene.
         return None
     if config.REQUIRE_AI and vision.ai_exhausted():
         return None   # the job is stopping; do not spend on searches it will discard
+    if hook and visual_type == "image" and subject_type != "document":
+        visual_type = "footage"
     token = _SUBJECT_TYPE.set(subject_type or "")
     window_token = _EVENT_WINDOW.set(event_window or "")
     intent_token = _SCENE_INTENT.set(scene_intent or None)
     judged_token = _SCENE_JUDGED.set([0])
     tried_token = _SCENE_TRIED.set(set())
+    hook_token = _IN_HOOK.set(bool(hook))
+    recency_token = _RECENCY.set(recency or "")
     try:
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
@@ -2545,6 +2675,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                 return got
         return None
     finally:
+        _RECENCY.reset(recency_token)
+        _IN_HOOK.reset(hook_token)
         _SCENE_TRIED.reset(tried_token)
         _SCENE_JUDGED.reset(judged_token)
         _SCENE_INTENT.reset(intent_token)
@@ -2809,7 +2941,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
             event_window=job.get("event_window", ""),
                     scene_intent=job.get("scene_intent"),
-            **kwargs)
+            **_scene_flags(job), **kwargs)
 
     def stronger_hook(job, nth, got):
         # The opening beats decide whether a viewer stays, so they do not take
@@ -2953,7 +3085,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     subject_type=job.get("subject_type", ""), subject=job.get("subject", ""),
                     event_window=job.get("event_window", ""),
                     scene_intent=job.get("scene_intent"),
-                    **kwargs)
+                    **_scene_flags(job), **kwargs)
             except Exception:  # noqa: BLE001
                 candidate = None
             if not candidate:
@@ -3059,7 +3191,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     intent=job.get("intent", ""), context=job.get("context", ""),
                     subject_type=job.get("subject_type", ""),
                     event_window=job.get("event_window", ""),
-                    scene_intent=job.get("scene_intent"), **kwargs)
+                    scene_intent=job.get("scene_intent"), **_scene_flags(job), **kwargs)
             except Exception:  # noqa: BLE001
                 return None
             if not got:
@@ -3093,8 +3225,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # five black scenes and none of its six allowed images used.
     # Never for a person: an invented photograph of a real person is a
     # fabrication, and the editor can Find footage for that scene instead.
-    empties = [job for job, _ in plan if results[job["index"]] is None
-               and job.get("subject_type") != "person"]
+    # Never in the hook either (the owner, 2026-09-30): the opening scenes
+    # stay empty for the job's rescue pass to find footage for.
+    empties = [job for job, _ in plan if results[job["index"]] is None and _may_generate_for(job)]
     if empties:
         def gen(job):
             if not _generation_budget_left():
@@ -3190,6 +3323,191 @@ def _yt_origin(asset: MediaAsset) -> tuple:
     return vid, float(start or 0.0)
 
 
+# --------------------------------------------------------------------------- #
+# Variety: a few scenes per source video, far apart (the owner, 2026-09-30)
+# --------------------------------------------------------------------------- #
+#
+# The Texas flood video drew 97 YouTube scenes from 55 videos and showed
+# "Drone's eye view of Texas flood damage" 4 times in its first minute. They
+# were four DIFFERENT moments of one video, so no duplicate check fired (the
+# moment keys "yt:<id>@<bucket>" differ), yet on screen it was one shot again
+# and again. These rules are about the SOURCE (video_key) and about where the
+# scenes sit on the timeline: the jobs' "start", which handler.do_plan sets;
+# a job without one can only be counted, not spaced.
+
+
+def video_key(asset: Optional[MediaAsset]) -> str:
+    """The source a shot was cut from: "yt:<id>" for every moment of one YouTube video, else its identity."""
+    if asset is None:
+        return ""
+    if asset.source == "youtube" or (asset.identity or "").startswith("yt:"):
+        vid, _start = _yt_origin(asset)
+        if vid:
+            return f"yt:{vid}"
+    return asset.identity
+
+
+def scene_starts(jobs: List[Dict[str, Any]]) -> Dict[int, float]:
+    """{job index: second its line starts on the timeline}, for the jobs that carry a start."""
+    out: Dict[int, float] = {}
+    for j in jobs or []:
+        at = j.get("start")
+        if isinstance(at, (int, float)) and not isinstance(at, bool):
+            out[j["index"]] = float(at)
+    return out
+
+
+def may_place(prev: List[Optional[float]], at: Optional[float]) -> bool:
+    """
+    May one more scene starting at `at` be cut from a video whose scenes
+    already start at `prev`? At most MAX_MOMENTS_PER_VIDEO scenes per video,
+    each SAME_VIDEO_GAP_SECONDS from the others (0 turns a rule off). An
+    unknown start is only counted.
+    """
+    cap = config.MAX_MOMENTS_PER_VIDEO
+    if cap > 0 and len(prev) >= cap:
+        return False
+    gap = config.SAME_VIDEO_GAP_SECONDS
+    if at is None or gap <= 0:
+        return True
+    return all(p is None or abs(at - p) >= gap for p in prev)
+
+
+def _near_twin(prev: List[Optional[float]], at: Optional[float]) -> bool:
+    """A scene at `at` would play within REUSE_MIN_GAP_SECONDS of a scene cut from the same video."""
+    gap = config.REUSE_MIN_GAP_SECONDS
+    if at is None or gap <= 0:
+        return False
+    return any(p is not None and abs(at - p) < gap for p in prev)
+
+
+def _asset_at(results, i: int) -> Optional[MediaAsset]:
+    if isinstance(results, dict):
+        return results.get(i)
+    return results[i] if 0 <= i < len(results) else None
+
+
+def placements(results, starts: Dict[int, float], skip=()) -> Dict[str, List[Optional[float]]]:
+    """{video key: starts of the scenes cut from it} over `results` (a list by index, or a dict)."""
+    items = results.items() if isinstance(results, dict) else enumerate(results or [])
+    out: Dict[str, List[Optional[float]]] = {}
+    for i, a in items:
+        if a is None or i in skip or a.kind != "video":
+            continue
+        out.setdefault(video_key(a), []).append(starts.get(i))
+    return out
+
+
+def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
+    """
+    {scene index: (reason, kind)} for every scene that breaks a variety rule,
+    walking the video in story order: the first scene to use a source keeps
+    it. `kind`:
+
+      hard     never kept - a generated image in the hook or shown a second
+               time, a photo shown more than IMAGE_MAX_USES times;
+      soft     kept only when nothing else is found, and never within
+               REUSE_MIN_GAP_SECONDS of its twin - the same shot twice, a
+               video past MAX_MOMENTS_PER_VIDEO scenes, or one playing again
+               within SAME_VIDEO_GAP_SECONDS;
+      upgrade  a hook scene on a still: footage is looked for, and the still
+               stays when none is found.
+    """
+    starts = scene_starts(jobs)
+    by_index = {j["index"]: j for j in jobs or []}
+    kept: Dict[str, List[Optional[float]]] = {}
+    shots: set = set()
+    shown: Dict[str, int] = {}
+    out: Dict[int, tuple] = {}
+    for i in sorted(by_index):
+        a = _asset_at(results, i)
+        if a is None:
+            continue
+        job = by_index[i]
+        hook = bool(job.get("hook"))
+        if a.source == "generated":
+            if hook and not config.GENERATED_IMAGES_IN_HOOK:
+                out[i] = ("a generated image in the opening", "hard")
+            elif shown.get(a.identity):
+                out[i] = ("a generated image already shown", "hard")
+            else:
+                shown[a.identity] = 1
+            continue
+        if a.kind == "image":
+            if shown.get(a.identity, 0) >= max(1, config.IMAGE_MAX_USES):
+                out[i] = ("a photo already shown", "hard")
+                continue
+            shown[a.identity] = shown.get(a.identity, 0) + 1
+            if hook and job.get("subject_type") != "document":
+                out[i] = ("a still in the opening", "upgrade")
+            continue
+        key = video_key(a)
+        prev = kept.setdefault(key, [])
+        if a.identity in shots:
+            out[i] = ("the same shot again", "soft")
+            continue
+        if not may_place(prev, starts.get(i)):
+            cap = config.MAX_MOMENTS_PER_VIDEO
+            out[i] = ((f"its video already supplies {len(prev)} scenes" if 0 < cap <= len(prev)
+                       else f"its video plays within {config.SAME_VIDEO_GAP_SECONDS:.0f} s"), "soft")
+            continue
+        shots.add(a.identity)
+        prev.append(starts.get(i))
+    return out
+
+
+def hold_violations(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]) -> Dict[int, tuple]:
+    """
+    Clear every scene variety_violations names, so the reserve and rescue
+    passes treat it like an empty one; returns {index: (asset, reason, kind)}
+    for restore_held.
+    """
+    held: Dict[int, tuple] = {}
+    for i, (reason, kind) in variety_violations(jobs, results).items():
+        held[i] = (results[i], reason, kind)
+        results[i] = None
+    if held:
+        by_kind = Counter(kind for _a, _r, kind in held.values())
+        print(f"[variety] {len(held)} scene(s) to find again: {by_kind.get('soft', 0)} repeated video(s), "
+              f"{by_kind.get('hard', 0)} repeated or opening image(s), {by_kind.get('upgrade', 0)} "
+              f"opening still(s)", flush=True)
+    return held
+
+
+def restore_held(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
+                 held: Dict[int, tuple]) -> Dict[str, int]:
+    """
+    After the reserve and rescue passes: put back what nothing replaced,
+    where the rules allow - a repeated video only when it does not play within
+    REUSE_MIN_GAP_SECONDS of its twin (flagged for review), an opening still
+    as it was, a repeated or opening generated image or a repeated photo
+    never. Returns {"replaced", "restored", "dropped"}.
+    """
+    starts = scene_starts(jobs)
+    out = {"replaced": 0, "restored": 0, "dropped": 0}
+    for i in sorted(held):
+        asset, reason, kind = held[i]
+        if results[i] is not None:
+            out["replaced"] += 1
+            continue
+        if kind == "hard":
+            out["dropped"] += 1
+            continue
+        if kind == "soft":
+            prev = placements(results, starts, skip={i}).get(video_key(asset), [])
+            if _near_twin(prev, starts.get(i)):
+                print(f"[variety] scene {i + 1}: {reason}, within {config.REUSE_MIN_GAP_SECONDS:.0f} s "
+                      "of its twin - left empty", flush=True)
+                out["dropped"] += 1
+                continue
+            note = "Same source video as another scene - nothing else was found for this line"
+            asset = _dc_replace(asset, review_required=True,
+                                review_reason=note + (f"; {asset.review_reason}" if asset.review_reason else ""))
+        results[i] = asset
+        out["restored"] += 1
+    return out
+
+
 def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]], work_dir: str) -> int:
     """
     Fill scenes still empty with ANOTHER moment of a same-subject YouTube video
@@ -3198,6 +3516,11 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
     from the donor's moment, passes clip_quality and (when vision is on) the
     judge against the scene's intent. Parallel, time boxed by
     FRESH_MOMENT_SECONDS. Returns how many scenes were filled.
+
+    A donor video only gives another scene when the variety rules allow it
+    (may_place: at most MAX_MOMENTS_PER_VIDEO scenes per video, the same
+    video SAME_VIDEO_GAP_SECONDS apart) - the owner's Texas flood video
+    (2026-09-30) played four moments of one drone video in its first minute.
     """
     if not work_dir:
         return 0
@@ -3213,7 +3536,23 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
             vid, start = _yt_origin(r)
             if vid:
                 used.add(f"yt:{vid}@{int(start // 10)}")
+    starts = scene_starts(jobs)
+    placed = placements(results, starts)
     deadline = time.time() + config.FRESH_MOMENT_SECONDS
+
+    def reserve(vid: str, at: Optional[float]) -> bool:
+        with lock:
+            prev = placed.setdefault(f"yt:{vid}", [])
+            if not may_place(prev, at):
+                return False
+            prev.append(at)
+            return True
+
+    def unreserve(vid: str, at: Optional[float]) -> None:
+        with lock:
+            prev = placed.get(f"yt:{vid}") or []
+            if at in prev:
+                prev.remove(at)
 
     def donors_for(i: int) -> List[MediaAsset]:
         subject = by_index[i].get("subject") or ""
@@ -3231,10 +3570,14 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
     def one(i: int) -> Optional[MediaAsset]:
         job = by_index[i]
         need = max(2.5, min(12.0, float(job.get("seconds") or 5.0)))
+        scene_at = starts.get(i)
         for donor in donors_for(i):
             vid, start = _yt_origin(donor)
+            if not reserve(vid, scene_at):
+                continue                    # that video has its scenes, or plays too close
             for off in _FRESH_OFFSETS:
                 if time.time() > deadline:
+                    unreserve(vid, scene_at)
                     return None
                 at = start + off
                 if at < 3:
@@ -3268,6 +3611,7 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                         asset.relevance_score = float(verdict.get("score") or 0)
                         asset.content_description = str(verdict.get("description") or "")[:300]
                 return asset
+            unreserve(vid, scene_at)
         return None
 
     filled = 0
@@ -3280,7 +3624,7 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
 
 
 def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]], work_dir: str,
-                youtube_only: bool = False) -> Dict[str, int]:
+                youtube_only: bool = False, footage_only=()) -> Dict[str, int]:
     """
     The last pass over scenes still empty after sourcing, before any shot is
     repeated (handler._fill_missing_media borrows one). In order: another
@@ -3290,7 +3634,13 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
     the line is about (_title_fits), and everything found here is flagged for
     review. Parallel, time boxed by RESCUE_SECONDS past any sourcing
     deadline. Fills `results` in place; returns how many per step.
+
+    `footage_only`: scene indices that get no picture - the opening, whose
+    stills and generated images the job's variety pass cleared for a footage
+    retry (the owner, 2026-09-30). A line of a story about now (job recency
+    "month") searches the last month's uploads before any upload.
     """
+    footage_only = set(footage_only or ())
     out = {"fresh": 0, "search": 0, "image": 0, "asked": 0}
     by_index = {j["index"]: j for j in jobs if j["index"] < len(results)}
 
@@ -3325,15 +3675,26 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 return True
 
         def footage(job: dict, q: str, intent_text: str, need: float) -> Optional[MediaAsset]:
-            try:
-                cands = _yt_candidates(f"ytsearch8:{q}", False, limit=8, timeout=40)
-            except Exception:  # noqa: BLE001
-                return None
-            cands = [c for c in cands if float(c.get("duration") or 0) >= need + 8
-                     and not _talking_head(c.get("title") or "")
-                     and _title_fits(c.get("title") or "", intent_text)]
-            cands.sort(key=lambda c: -_score_candidate(c.get("title") or "", float(c.get("duration") or 0),
-                                                       float(c.get("aspect") or 0), need))
+            targets = [f"ytsearch8:{q}"]
+            recency = str(job.get("recency") or "")
+            if config.RECENT_FOOTAGE_FIRST and recency in _RECENT_SP:
+                targets.insert(0, _search_target(q, False, recency))
+            # One ranked list per search, the last month's first: an older
+            # upload is only tried after every recent one that fits.
+            cands, seen_ids = [], set()
+            for target in targets:
+                try:
+                    found = _yt_candidates(target, False, limit=8, timeout=40)
+                except Exception:  # noqa: BLE001
+                    found = []
+                found = [c for c in found if c.get("id") not in seen_ids
+                         and float(c.get("duration") or 0) >= need + 8
+                         and not _talking_head(c.get("title") or "")
+                         and _title_fits(c.get("title") or "", intent_text)]
+                seen_ids.update(c.get("id") for c in found)
+                found.sort(key=lambda c: -_score_candidate(c.get("title") or "", float(c.get("duration") or 0),
+                                                           float(c.get("aspect") or 0), need))
+                cands += found
             for c in cands[:4]:
                 if time.time() > until - 15:
                     return None
@@ -3389,9 +3750,9 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
             token = _SCENE_INTENT.set(job.get("scene_intent") or None)
             try:
                 got = None
-                if job.get("visual_type", "footage") != "image":
+                if job.get("visual_type", "footage") != "image" or i in footage_only:
                     got = footage(job, q, intent_text, need)
-                if got is None and not youtube_only and config.ALLOW_WEB_IMAGES:
+                if got is None and not youtube_only and i not in footage_only and config.ALLOW_WEB_IMAGES:
                     got = picture(job, q, intent_text)
                 return got
             finally:
@@ -3425,16 +3786,43 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
     is flagged for review. With `max_uses`, a shot appears at most that many
     times in the video (the owner: no clip shown again and again). Returns how
     many scenes were filled.
+
+    Reuse is for FOOTAGE (the owner's Texas flood video, 2026-09-30: 28
+    photo scenes showed 15 photos, 7 generated scenes 4 images): a photo is
+    never shown more than IMAGE_MAX_USES times (once by default) and a
+    generated image never twice, so neither is a donor. Where the lines'
+    starts are known a reused clip never plays within REUSE_MIN_GAP_SECONDS
+    of a scene cut from the same video, and a donor whose video could take
+    the scene under the variety rules (may_place) is preferred. A line that
+    names its own place never borrows another place's shot.
     """
     by_index = {j["index"]: j for j in jobs}
     order = sorted(by_index)
+    starts = scene_starts(jobs)
     uses: Dict[str, int] = {}
     for r in results:
         if r is not None:
             uses[r.identity] = uses.get(r.identity, 0) + 1
+    placed = placements(results, starts)
 
     def spent(k: int) -> bool:
-        return max_uses is not None and uses.get(results[k].identity, 0) >= max_uses
+        a = results[k]
+        if a.source == "generated":
+            return True
+        limit = config.IMAGE_MAX_USES if a.kind == "image" else max_uses
+        return limit is not None and uses.get(a.identity, 0) >= limit
+
+    def too_close(k: int, i: int) -> bool:
+        a = results[k]
+        return a.kind == "video" and _near_twin(placed.get(video_key(a), []), starts.get(i))
+
+    def fits(k: int, i: int) -> bool:
+        a = results[k]
+        return a.kind != "video" or may_place(placed.get(video_key(a), []), starts.get(i))
+
+    def elsewhere(k: int, i: int) -> bool:
+        mine, theirs = by_index[i].get("place") or "", by_index[k].get("place") or ""
+        return bool(mine and theirs and not same_subject(mine, theirs))
 
     def placed_near(identity: str, i: int) -> bool:
         return any(results[k] is not None and results[k].identity == identity
@@ -3448,9 +3836,11 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
         job = by_index[i]
         subject = job.get("subject") or ""
         person = job.get("subject_type") == "person"
-        # Nearest donors first; a donor is any scene that has media.
-        donors = sorted((k for k in order if k != i and results[k] is not None and not spent(k)),
-                        key=lambda k: abs(k - i))
+        # Nearest donors first, those the variety rules allow here before the
+        # rest; a donor is any scene that has media it may still lend.
+        donors = sorted((k for k in order if k != i and results[k] is not None and not spent(k)
+                         and not too_close(k, i) and not elsewhere(k, i)),
+                        key=lambda k: (not fits(k, i), abs(k - i)))
         pick = None
         for k in donors:                       # 1. the same subject
             if same_subject(subject, by_index[k].get("subject") or "") \
@@ -3471,11 +3861,13 @@ def fill_from_story(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsse
         if pick is None:                       # 3. the same subject, closer in, never adjacent
             same = [k for k in donors if abs(k - i) >= 2
                     and same_subject(subject, by_index[k].get("subject") or "")]
-            pick = same[-1] if same else None   # farthest of them
+            pick = max(same, key=lambda k: abs(k - i)) if same else None   # farthest of them
         if pick is None:
             continue
         donor = results[pick]
         uses[donor.identity] = uses.get(donor.identity, 0) + 1
+        if donor.kind == "video":
+            placed.setdefault(video_key(donor), []).append(starts.get(i))
         results[i] = _dc_replace(
             donor, review_required=True,
             review_reason=(f"Reused shot of {by_index[pick].get('subject') or 'another scene'}"

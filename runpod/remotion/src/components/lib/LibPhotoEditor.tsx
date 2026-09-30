@@ -1,8 +1,10 @@
 import React from "react";
 import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { HAND, INTER, LABEL, SERIF, SERIF_ITALIC } from "../fonts";
+import { HAND, INTER, LABEL, SERIF, SERIF_ITALIC, TYPEWRITER } from "../fonts";
 import type { Overlay, SceneMedia } from "../../types";
 import { lines, ramp, useK } from "../pro/ProGraphics";
+import { HandArrow, LabelBox, MARK_RED, MarkerLoop, PEN, arrowPts, fitCaps, labelSize, loopPts, markShadow, placeLabel,
+  shortOf } from "./LibVideoMarks";
 
 /**
  * Photo editor moves (family "pe-"): what a documentary editor does with one
@@ -29,11 +31,22 @@ import { lines, ramp, useK } from "../pro/ProGraphics";
  *                    a small location label
  *   pe-polaroid-pan  a shutter flash, an instant print the camera pans across,
  *                    the caption handwritten on it
+ *   pe-case-file     the photo clipped into a manila case folder, a typed label
+ *                    strip, a red marker circle drawn round the point; the
+ *                    camera pushes into the circle
+ *   pe-circle-spotlight  the photo dims except a circle of light that opens on
+ *                    the point, a red ring draws round it, a label on a leader
+ *   pe-magnify       a magnifying glass glides in and settles over the point,
+ *                    enlarging it; a label beside the lens
+ *   pe-red-arrow     a bold label, and a hand-drawn red marker arrow sweeping
+ *                    from it to the point while the camera pushes in
  *
  * Props: text (caption / label / headline), subtitle, label (kicker), and
- * overlay.anchor {x, y} in 0..1 of the frame for the point the circle and
- * box mark (a sensible off-centre point when absent). Red is used only for
- * the marker circle and box. Everything leaves in the last ~12 frames.
+ * overlay.anchor {x, y} in 0..1 of the frame for the point the circle, box,
+ * lens and arrow mark (a sensible off-centre point when absent), optionally
+ * r (0..0.5: the thing's radius as a share of the frame's shorter side, from
+ * src/anchors.find_anchor) to size the circle and the arrow's stand-off.
+ * Red is used only for the marks. Everything leaves in the last ~12 frames.
  */
 
 type Look = React.FC<{ overlay: Overlay; accent: string }>;
@@ -830,6 +843,459 @@ const PolaroidPan: Look = ({ overlay }) => {
   );
 };
 
+// ------------------------------------------------------------------ marks on the photo
+/** overlay.anchor.r (the thing's radius, 0..0.5 of the frame's shorter side) when given, else `def`. */
+const anchorR = (ov: Overlay, def: number): number => {
+  const a = ov.anchor as { r?: unknown } | undefined;
+  const r = a && typeof a === "object" ? Number(a.r) : NaN;
+  return Number.isFinite(r) && r > 0 ? Math.min(0.5, r) : def;
+};
+const rot = (p: Pt, deg: number): Pt => {
+  const a = (deg * Math.PI) / 180;
+  return [p[0] * Math.cos(a) - p[1] * Math.sin(a), p[0] * Math.sin(a) + p[1] * Math.cos(a)];
+};
+
+// ================================================================== pe-case-file
+/** A gem paper clip, 46 x 132 px at scale 1 (wire drawn as one path). */
+const PaperClip: React.FC<{ x: number; y: number; s: number; angle: number; id: string }> = ({ x, y, s, angle, id }) => {
+  const d = "M 16 40 V 104 A 7 7 0 0 0 30 104 V 20 A 12 12 0 0 0 6 20 V 112 A 17 17 0 0 0 40 112 V 34";
+  return (
+    <svg width={52 * s} height={140 * s} viewBox="-3 -3 52 140" style={{ position: "absolute", left: x, top: y, overflow: "visible",
+      transform: `rotate(${angle}deg)`, transformOrigin: "50% 30%", filter: `drop-shadow(${2 * s}px ${3 * s}px ${2.5 * s}px rgba(0,0,0,.45))` }}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#7e858d" />
+          <stop offset="35%" stopColor="#eef1f4" />
+          <stop offset="60%" stopColor="#a7aeb6" />
+          <stop offset="100%" stopColor="#dfe3e7" />
+        </linearGradient>
+      </defs>
+      <path d={d} fill="none" stroke="rgba(40,44,50,.55)" strokeWidth={5.4} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={`url(#${id})`} strokeWidth={3.8} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
+
+/** Rows of "typed" words at a glance: grey word bars, a heading, one redaction bar. Deterministic from `seed`. */
+const TypedLines: React.FC<{ w: number; rows: number; u: number; seed: number }> = ({ w, rows, u, seed }) => {
+  const rnd = (i: number) => {
+    const x = Math.sin((i + 1) * 12.9898 + seed * 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  const out: React.ReactNode[] = [];
+  for (let r = 0; r < rows; r++) {
+    const words: React.ReactNode[] = [];
+    let x = 0;
+    const end = r % 5 === 4 ? w * (0.35 + 0.3 * rnd(r * 7)) : w;
+    for (let j = 0; x < end - 30 * u && j < 16; j++) {
+      const ww = Math.min(end - x, (22 + 70 * rnd(r * 31 + j)) * u);
+      const redact = r === 6 && j >= 1 && j <= 3;
+      words.push(<div key={j} style={{ position: "absolute", left: x, top: 0, width: ww, height: redact ? 15 * u : 8 * u,
+        marginTop: redact ? -3.5 * u : 0, borderRadius: 1.5 * u, background: redact ? "#15130f" : "rgba(38,34,28,.5)" }} />);
+      x += ww + (redact ? 0 : 11 * u);
+    }
+    out.push(<div key={r} style={{ position: "relative", height: 8 * u, marginBottom: 20 * u }}>{words}</div>);
+  }
+  return <div style={{ width: w }}>{out}</div>;
+};
+
+// The print drops onto the folder and lands at 13 (sfx_at 12, paper-slide); the label strip slaps on 16 -> 24;
+// the red marker circle draws 24 -> 42; the camera settles, then pushes into the circle from 20 to the end.
+const CaseFile: Look = ({ overlay }) => {
+  const frame = useCurrentFrame();
+  const { width: W, height: H, durationInFrames: dur } = useVideoConfig();
+  const k = useK();
+  const u = W / 1920;
+  const q = useOut();
+  const uid = React.useId().replace(/[^A-Za-z0-9]/g, "");
+  const src = photoOf(overlay);
+  if (!src) return null;
+  const [ax, ay] = anchorOf(overlay, 0.62, 0.44, 0.08, 0.92);
+  const seed = hashStr(src) % 97;
+  // The folder: a closed manila folder on the desk, turned a little; everything below is in its frame.
+  const FX = 176 * u, FY = 168 * u, FW = 1568 * u, FH = 846 * u, FROT = -1.2;
+  // The print: the 16:9 photo in a white border, clipped on the folder's left, turned the other way.
+  const B = 16 * u, PW = 1024 * u, PH = (PW * 9) / 16;
+  const PRW = PW + 2 * B, PRH = PH + 2 * B;
+  const PX = 64 * u, PY = 58 * u, PROT = -1.6;
+  // Where the circle's centre lands on screen (the camera pushes about it).
+  const local: Pt = [B + ax * PW, B + ay * PH];
+  const inFolder: Pt = (() => {
+    const v = rot([local[0] - PRW / 2, local[1] - PRH / 2], PROT);
+    return [PX + PRW / 2 + v[0], PY + PRH / 2 + v[1]];
+  })();
+  const screen: Pt = (() => {
+    const v = rot([inFolder[0] - FW / 2, inFolder[1] - FH / 2], FROT);
+    return [FX + FW / 2 + v[0], FY + FH / 2 + v[1]];
+  })();
+  const settle = ramp(frame, 0, 22);
+  const push = interpolate(frame, [20, Math.max(21, dur)], [0, 1], { ...clamp, easing: inOut });
+  const cam = (1.035 - 0.035 * settle) * (1 + 0.17 * push);
+  // The print falls and lands at 13 with a small bump.
+  const LAND = 13;
+  const fall = interpolate(frame, [1, LAND], [1, 0], { ...clamp, easing: Easing.in(Easing.quad) });
+  const bt = clamp01((frame - LAND) / 8);
+  const bump = frame >= LAND ? Math.sin(bt * Math.PI) * (1 - bt) : 0;
+  const printS = 1 + 0.09 * fall - 0.008 * bump;
+  const printShadow = `${(6 + 30 * fall) * u}px ${(10 + 46 * fall) * u}px ${(16 + 50 * fall) * u}px rgba(0,0,0,${(0.42 - 0.18 * fall).toFixed(3)})`;
+  // The typed label strip.
+  const text = cap(overlay.text);
+  const strip = fitLines(text, 760, [46, 42, 38, 34], 0.66, 1);
+  const slap = ramp(frame, 16, 9, backOut);
+  const tab = cap(overlay.label) || "CASE FILE";
+  const sub = cap(overlay.subtitle);
+  // The marker circle round the point, in the photo's own pixels.
+  const rPx = anchorR(overlay, 0.13) * PH;
+  const rx = Math.max(64 * u, Math.min(PW * 0.42, rPx * 1.18 + 16 * u));
+  const ry = Math.max(54 * u, Math.min(PH * 0.44, rPx * 0.96 + 14 * u));
+  const loop = loopPts(B + ax * PW, B + ay * PH, rx, ry, seed, 1.12, -0.09);
+  const draw = ramp(frame, 24, 18, PEN);
+  const manila = "linear-gradient(162deg, #e9d19d 0%, #dfc189 38%, #d5b477 72%, #cfab6c 100%)";
+  return (
+    <AbsoluteFill style={{ background: "radial-gradient(ellipse at 44% 38%, #3b2d21 0%, #21180f 55%, #0c0806 100%)", overflow: "hidden" }}>
+      <AbsoluteFill style={{ backgroundImage: `repeating-linear-gradient(87deg, rgba(255,235,210,.022) 0px, rgba(255,235,210,.022) ${2 * u}px, rgba(0,0,0,0) ${2 * u}px, rgba(0,0,0,0) ${13 * u}px)` }} />
+      <AbsoluteFill style={{ transform: `scale(${cam.toFixed(4)})`, transformOrigin: `${screen[0].toFixed(1)}px ${screen[1].toFixed(1)}px` }}>
+        <div style={{ position: "absolute", left: FX, top: FY, width: FW, height: FH, transform: `rotate(${FROT}deg)` }}>
+          {/* The back cover's edge, the tab, the front cover. */}
+          <div style={{ position: "absolute", left: 12 * u, top: 10 * u, width: FW, height: FH, borderRadius: 10 * u,
+            background: "linear-gradient(162deg, #cfb07a 0%, #bf9d63 100%)", boxShadow: `0 ${30 * u}px ${70 * u}px rgba(0,0,0,.6)` }} />
+          <div style={{ position: "absolute", left: 70 * u, top: -54 * u, width: 430 * u, height: 70 * u, borderRadius: `${14 * u}px ${14 * u}px 0 0`,
+            background: manila, boxShadow: `inset 0 ${2 * u}px 0 rgba(255,255,255,.25)`, display: "flex", alignItems: "flex-start",
+            padding: `${12 * u}px ${26 * u}px 0`, overflow: "hidden" }}>
+            <div style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: 28 * u, letterSpacing: "0.14em", color: "#3a2a15",
+              whiteSpace: "nowrap", opacity: 0.88 }}>{tab.slice(0, 22)}</div>
+          </div>
+          <div style={{ position: "absolute", inset: 0, borderRadius: `0 ${10 * u}px ${10 * u}px ${10 * u}px`, background: manila,
+            boxShadow: `inset 0 0 0 ${1.5 * u}px rgba(120,86,40,.35), inset 0 ${-30 * u}px ${60 * u}px rgba(120,80,30,.12)`, overflow: "hidden" }}>
+            <svg width={FW} height={FH} style={{ position: "absolute", inset: 0, opacity: 0.2, mixBlendMode: "multiply" }}>
+              <filter id={`cfp${uid}`} x="0" y="0" width="100%" height="100%">
+                <feTurbulence type="fractalNoise" baseFrequency={0.75} numOctaves={3} seed={seed} stitchTiles="stitch" />
+                <feColorMatrix type="matrix" values="0 0 0 0 .45  0 0 0 0 .32  0 0 0 0 .16  0 0 0 1.1 -.35" />
+              </filter>
+              <rect width={FW} height={FH} filter={`url(#cfp${uid})`} />
+            </svg>
+            <div style={{ position: "absolute", left: 0, right: 0, top: FH * 0.9, height: Math.max(1, 1.5 * u), background: "rgba(110,78,36,.28)",
+              boxShadow: `0 ${1.5 * u}px 0 rgba(255,245,220,.25)` }} />
+          </div>
+          {/* A typed report under the print. */}
+          <div style={{ position: "absolute", left: 1060 * u, top: 64 * u, width: 450 * u, height: 700 * u, background: "#f6f2e8",
+            transform: "rotate(2.4deg)", boxShadow: `0 ${6 * u}px ${18 * u}px rgba(0,0,0,.3)`,
+            padding: `${52 * u}px ${40 * u}px ${52 * u}px ${104 * u}px`, overflow: "hidden" }}>
+            {sub ? (
+              <div style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: 24 * u, letterSpacing: "0.1em", color: "#2a2620",
+                marginBottom: 28 * u, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 306 * u }}>{sub}</div>
+            ) : (
+              <div style={{ width: 230 * u, height: 14 * u, borderRadius: 2 * u, background: "rgba(30,27,22,.78)", marginBottom: 34 * u }} />
+            )}
+            <TypedLines w={306 * u} rows={17} u={u} seed={seed} />
+          </div>
+          {/* The print, with the marker circle drawn on it. */}
+          <div style={{ position: "absolute", left: PX, top: PY, width: PRW, height: PRH, background: "#fbfaf6",
+            transform: `translateY(${(-60 * u * fall).toFixed(2)}px) rotate(${PROT}deg) scale(${printS.toFixed(4)})`, boxShadow: printShadow,
+            opacity: ramp(frame, 0, 3, Easing.linear) }}>
+            <div style={{ position: "absolute", left: B, top: B, width: PW, height: PH, overflow: "hidden", background: "#222" }}>
+              <Photo src={src} style={{ filter: "contrast(1.05) saturate(.9) sepia(.06)" }} />
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(128deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,0) 36%)" }} />
+              <div style={{ position: "absolute", inset: 0, boxShadow: `inset 0 0 ${30 * u}px rgba(0,0,0,.28)` }} />
+            </div>
+            <svg width={PRW} height={PRH} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+              <MarkerLoop pts={loop} to={draw} width={10 * u} k={u} seed={seed} />
+            </svg>
+          </div>
+          <PaperClip x={PX + 90 * u} y={PY - 50 * u} s={u * 1.05} angle={-8} id={`cfc${uid}`} />
+          {/* The typed label strip, taped on under the print. */}
+          {strip.ls.length ? (
+            <div style={{ position: "absolute", left: PX + 44 * u, top: PY + PRH - 30 * u, opacity: clamp01(slap * 3),
+              transform: `rotate(${(1.1 + 3 * (1 - slap)).toFixed(3)}deg) scale(${(1.14 - 0.14 * slap).toFixed(4)})`, transformOrigin: "30% 50%" }}>
+              <div style={{ position: "relative", background: "linear-gradient(180deg, #fbf6e8 0%, #f1e9d3 100%)", padding: `${12 * u}px ${30 * u}px ${10 * u}px`,
+                boxShadow: `0 ${4 * u}px ${12 * u}px rgba(0,0,0,.35)`, fontFamily: TYPEWRITER, fontWeight: 700, fontSize: strip.size * u,
+                letterSpacing: "0.06em", color: "#1d1a15", whiteSpace: "nowrap", lineHeight: 1.1 }}>
+                {strip.ls[0]}
+                {[-1, 1].map((sd) => (
+                  <div key={sd} style={{ position: "absolute", top: -12 * u, bottom: -12 * u, [sd < 0 ? "left" : "right"]: -16 * u, width: 50 * u,
+                    background: "linear-gradient(180deg, rgba(250,246,232,.78) 0%, rgba(236,230,212,.7) 100%)",
+                    boxShadow: `0 ${1 * u}px ${3 * u}px rgba(0,0,0,.14)`, transform: `rotate(${sd * 4.5}deg)`,
+                    clipPath: "polygon(0% 3%, 22% 0%, 48% 3%, 76% 0%, 100% 3%, 100% 97%, 74% 100%, 50% 97%, 24% 100%, 0% 97%)" } as React.CSSProperties} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </AbsoluteFill>
+      <AbsoluteFill style={{ background: "radial-gradient(ellipse at 38% 30%, rgba(255,226,180,.07) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,.5) 100%)" }} />
+      <Grain opacity={0.06} />
+    </AbsoluteFill>
+  );
+};
+
+// ================================================================== pe-circle-spotlight
+// The spotlight opens 3 -> 21 while the rest dims and softens; the red ring draws 10 -> 26 (sfx_at 13);
+// the leader draws from 22 and the label rises from 26. At the exit the ring erases and the iris opens.
+const CircleSpotlight: Look = ({ overlay }) => {
+  const frame = useCurrentFrame();
+  const { width: W, height: H, durationInFrames: dur } = useVideoConfig();
+  const k = useK();
+  const q = useOut();
+  const src = photoOf(overlay);
+  if (!src) return null;
+  const [ax, ay] = anchorOf(overlay, 0.6, 0.44, 0.06, 0.94);
+  // The circle stays whole on screen: smaller near an edge (never under 120 px), then nudged in.
+  const edgeRoom = Math.min(ax * W, (1 - ax) * W, ay * H, (1 - ay) * H) - 18 * k;
+  const Rb = Math.max(120 * k, Math.min(320 * k, edgeRoom, anchorR(overlay, 0.15) * Math.min(W, H) * 1.18 + 22 * k));
+  const cx = Math.max(Rb + 18 * k, Math.min(W - Rb - 18 * k, ax * W));
+  const cy = Math.max(Rb + 18 * k, Math.min(H - Rb - 18 * k, ay * H));
+  const grow = ramp(frame, 3, 18);
+  const dim = ramp(frame, 2, 16, inOut) * (1 - q);
+  const R = Rb * (0.3 + 0.7 * grow) * (1 + 6 * q * q);
+  const push = interpolate(frame, [0, Math.max(1, dur)], [0, 1], { ...clamp, easing: drift });
+  const s = 1.015 + 0.075 * push;
+  const origin = `${cx.toFixed(1)}px ${cy.toFixed(1)}px`;
+  const ring = ramp(frame, 10, 16, PEN);
+  const ringOut = ramp(frame, dur - 15, 10, expoIn);
+  // The label on a leader line, on the side with room.
+  const title = fitCaps(cap(overlay.text), 560 * k, [56 * k, 50 * k, 44 * k], 2);
+  const sub = str(overlay.subtitle).slice(0, 60);
+  const titleW = Math.max(0, ...title.ls.map((l) => l.length * title.size * 0.55));
+  const subW = sub.length * 28 * k * 0.5;
+  const labelW = Math.max(titleW, subW);
+  const M = 110 * k;
+  const roomR = W - M - (cx + Rb + 90 * k), roomL = cx - Rb - 90 * k - M;
+  const onRight = roomR >= labelW || roomR >= roomL;
+  const sd = onRight ? 1 : -1;
+  const up = cy > H * 0.38;
+  const ang = ((up ? -36 : 36) * Math.PI) / 180;
+  const P0 = { x: cx + sd * Math.cos(ang) * Rb, y: cy + Math.sin(ang) * Rb };
+  const P1 = { x: P0.x + sd * 58 * k, y: P0.y + (up ? -46 : 46) * k };
+  const run = Math.max(160 * k, Math.min(labelW + 24 * k, onRight ? W - M - P1.x : P1.x - M));
+  const P2 = { x: P1.x + sd * run, y: P1.y };
+  const lead = ramp(frame, 22, 12, inOut) * (1 - ringOut);
+  const dot = ramp(frame, 22, 8, backOut) * (1 - ringOut);
+  const hasLabel = title.ls.length > 0 || Boolean(sub);
+  const textSide: React.CSSProperties = onRight ? { left: P1.x + 4 * k } : { right: W - (P1.x - 4 * k) };
+  return (
+    <AbsoluteFill style={{ background: "#000", overflow: "hidden" }}>
+      <AbsoluteFill style={{ transform: `scale(${s.toFixed(4)})`, transformOrigin: origin }}>
+        <Photo src={src} style={{ filter: `brightness(${(1 - 0.56 * dim).toFixed(3)}) saturate(${(1 - 0.65 * dim).toFixed(3)}) blur(${(2.5 * k * dim).toFixed(2)}px)` }} />
+      </AbsoluteFill>
+      <AbsoluteFill style={{ clipPath: `circle(${R.toFixed(1)}px at ${cx.toFixed(1)}px ${cy.toFixed(1)}px)` }}>
+        <AbsoluteFill style={{ transform: `scale(${s.toFixed(4)})`, transformOrigin: origin }}>
+          <Photo src={src} style={{ filter: "contrast(1.06) saturate(1.04) brightness(1.03)" }} />
+        </AbsoluteFill>
+      </AbsoluteFill>
+      <AbsoluteFill style={{ opacity: dim, background: `radial-gradient(circle at ${cx.toFixed(1)}px ${cy.toFixed(1)}px, rgba(0,0,0,0) ${R.toFixed(1)}px, ` +
+        `rgba(0,0,0,.34) ${(R + 1.5 * k).toFixed(1)}px, rgba(0,0,0,0) ${(R + 110 * k).toFixed(1)}px)` }} />
+      <svg width={W} height={H} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+        <circle cx={cx} cy={cy} r={R + 9 * k} fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1.6 * k}
+          strokeOpacity={ramp(frame, 18, 12) * (1 - ringOut)} />
+        <circle cx={cx} cy={cy} r={R} fill="none" stroke={MARK_RED} strokeWidth={6.5 * k} strokeLinecap="round" pathLength={1}
+          transform={`rotate(-100 ${cx} ${cy})`} strokeDasharray={`${Math.max(0.0001, ring - ringOut).toFixed(4)} 2`}
+          strokeDashoffset={(-ringOut).toFixed(4)} strokeOpacity={ring - ringOut > 0.002 ? 1 : 0} style={{ filter: markShadow(k) }} />
+        {hasLabel && lead > 0.01 ? (
+          <g style={{ filter: `drop-shadow(0 ${1.5 * k}px ${3 * k}px rgba(0,0,0,.6))` }}>
+            <path d={`M${P0.x} ${P0.y} L${P1.x} ${P1.y} L${P2.x} ${P2.y}`} fill="none" stroke="#fff" strokeWidth={2.6 * k}
+              strokeLinecap="round" strokeLinejoin="round" pathLength={1} strokeDasharray={`${lead.toFixed(4)} 2`} />
+            <circle cx={P0.x} cy={P0.y} r={Math.max(0, 6.5 * k * dot)} fill={MARK_RED} stroke="#fff" strokeWidth={2 * k} />
+          </g>
+        ) : null}
+      </svg>
+      {hasLabel ? (
+        <>
+          <div style={{ position: "absolute", ...textSide, bottom: H - (P1.y - 10 * k), display: "flex", flexDirection: "column",
+            alignItems: onRight ? "flex-start" : "flex-end" }}>
+            {title.ls.map((ln, i) => (
+              <Rise key={i} at={26 + i * 4} q={q}>
+                <div style={{ fontFamily: LABEL, fontWeight: 800, fontSize: title.size, letterSpacing: "0.04em", color: "#fff", lineHeight: 1.02,
+                  whiteSpace: "nowrap", textShadow: SHADOW }}>{ln}</div>
+              </Rise>
+            ))}
+          </div>
+          {sub ? (
+            <div style={{ position: "absolute", ...textSide, top: P1.y + 12 * k }}>
+              <Rise at={32} q={q}>
+                <div style={{ fontFamily: INTER, fontWeight: 400, fontSize: 28 * k, color: "rgba(255,255,255,.9)", whiteSpace: "nowrap",
+                  textShadow: SHADOW }}>{sub}</div>
+              </Rise>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </AbsoluteFill>
+  );
+};
+
+// ================================================================== pe-magnify
+// The lens glides in from the lower right on a curve and settles over the point at ~22 (sfx_at 14, the
+// whoosh); it floats while it holds, the label pops beside it at 22, and at the exit the lens lifts away.
+const Magnify: Look = ({ overlay }) => {
+  const frame = useCurrentFrame();
+  const { width: W, height: H, durationInFrames: dur, fps } = useVideoConfig();
+  const k = useK();
+  const u = W / 1920;
+  const q = useOut();
+  const uid = React.useId().replace(/[^A-Za-z0-9]/g, "");
+  const src = photoOf(overlay);
+  if (!src) return null;
+  const [ax, ay] = anchorOf(overlay, 0.56, 0.46, 0.06, 0.94);
+  const A = { x: ax * W, y: ay * H };
+  const RL = 214 * u, RIM = 17 * u;
+  // Enough magnification to matter, less for a big thing (it must still fit the lens).
+  const MAG = Math.max(1.7, Math.min(2.3, (RL * 0.78) / Math.max(1, anchorR(overlay, 0.07) * Math.min(W, H))));
+  const push = interpolate(frame, [0, Math.max(1, dur)], [0, 1], { ...clamp, easing: drift });
+  const s = 1 + 0.05 * push;
+  const edge = RL + RIM + 70 * u;
+  const Lf = { x: Math.max(edge, Math.min(W - edge, A.x)), y: Math.max(edge, Math.min(H - edge, A.y)) };
+  const g = ramp(frame, 0, 22, Easing.bezier(0.2, 0.62, 0.3, 1));
+  const P0 = { x: Lf.x + 760 * u, y: H + RL + 180 * u };
+  const C = { x: Lf.x + 600 * u, y: Lf.y + 60 * u };
+  const bz = (t: number) => ({
+    x: (1 - t) * (1 - t) * P0.x + 2 * (1 - t) * t * C.x + t * t * Lf.x,
+    y: (1 - t) * (1 - t) * P0.y + 2 * (1 - t) * t * C.y + t * t * Lf.y,
+  });
+  const hoverT = Math.max(0, frame - 22) / fps;
+  const hov = { x: Math.sin(hoverT * 1.25) * 5 * u * g, y: Math.sin(hoverT * 0.95 + 1.2) * 4 * u * g };
+  const lift = q;
+  const B0 = bz(g);
+  const L = { x: B0.x + hov.x + lift * 40 * u, y: B0.y + hov.y - lift * 60 * u };
+  const lensS = 1 + 0.08 * lift;
+  const lensO = 1 - lift;
+  // What the lens shows: the photo about F (the point under it, drifting to the anchor as it settles), MAG times larger.
+  const F = { x: L.x + (A.x - Lf.x) * g, y: L.y + (A.y - Lf.y) * g };
+  const sc = s * MAG;
+  const imgL = RL + MAG * (A.x * (1 - s) - F.x), imgT = RL + MAG * (A.y * (1 - s) - F.y);
+  // The label beside the lens, away from the handle (lower right).
+  const title = fitCaps(cap(overlay.text), 520 * k, [52 * k, 46 * k, 42 * k], 2);
+  const sub = str(overlay.subtitle).slice(0, 48);
+  const box = labelSize(title.ls, title.size, k, sub, 26 * k);
+  const M = 110 * u;
+  const leftRoom = Lf.x - RL - RIM - 40 * u - M;
+  let css: React.CSSProperties;
+  let origin: string;
+  if (box.w <= leftRoom) {
+    css = { right: W - (Lf.x - RL - RIM - 40 * u), top: Math.max(M, Math.min(H - M - box.h, Lf.y - RL * 0.62)) };
+    origin = "100% 50%";
+  } else if (Lf.x + RL + RIM + 40 * u + box.w <= W - M) {
+    css = { left: Lf.x + RL + RIM + 40 * u, top: Math.max(M, Math.min(H - M - box.h, Lf.y - RL - 10 * u)) };
+    origin = "0% 50%";
+  } else {
+    css = { left: Math.max(M, Math.min(W - M - box.w, Lf.x - box.w / 2)), bottom: H - (Lf.y - RL - RIM - 28 * u) };
+    origin = "50% 100%";
+  }
+  const pop = ramp(frame, 22, 12, backOut);
+  const hasLabel = title.ls.length > 0 || Boolean(sub);
+  const D = 2 * (RL + RIM);
+  const rim = RL + RIM / 2;
+  return (
+    <AbsoluteFill style={{ background: "#000", overflow: "hidden" }}>
+      <AbsoluteFill style={{ transform: `scale(${s.toFixed(4)})`, transformOrigin: `${A.x.toFixed(1)}px ${A.y.toFixed(1)}px` }}>
+        <Photo src={src} style={{ filter: `contrast(1.03) brightness(${(1 - 0.14 * g * (1 - lift)).toFixed(3)})` }} />
+      </AbsoluteFill>
+      <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.4) 100%)" }} />
+      <div style={{ position: "absolute", left: L.x - RL - RIM, top: L.y - RL - RIM, width: D, height: D, opacity: lensO,
+        transform: `scale(${lensS.toFixed(4)})`, transformOrigin: "50% 50%" }}>
+        {/* The shadow the glass and its handle cast on the photo. */}
+        <div style={{ position: "absolute", left: 30 * u, top: 40 * u, width: D, height: D, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(0,0,0,.55) 58%, rgba(0,0,0,0) 72%)", filter: `blur(${10 * u}px)` }} />
+        <div style={{ position: "absolute", left: D / 2 + 30 * u, top: D / 2 + 40 * u, width: 300 * u, height: 50 * u, borderRadius: 25 * u,
+          background: "rgba(0,0,0,.45)", filter: `blur(${12 * u}px)`, transform: "rotate(45deg)", transformOrigin: "0 50%" }} />
+        {/* The handle, down and to the right. */}
+        <svg width={D} height={D} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+          <defs>
+            <linearGradient id={`mgf${uid}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#4a4f57" />
+              <stop offset="40%" stopColor="#d9dde2" />
+              <stop offset="100%" stopColor="#3a3e44" />
+            </linearGradient>
+            <linearGradient id={`mgh${uid}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3a2418" />
+              <stop offset="35%" stopColor="#6d4630" />
+              <stop offset="100%" stopColor="#1f130c" />
+            </linearGradient>
+          </defs>
+          <g transform={`translate(${D / 2} ${D / 2}) rotate(45)`}>
+            <rect x={RL + RIM - 6 * u} y={-19 * u} width={52 * u} height={38 * u} rx={5 * u} fill={`url(#mgf${uid})`} />
+            <rect x={RL + RIM + 42 * u} y={-23 * u} width={210 * u} height={46 * u} rx={23 * u} fill={`url(#mgh${uid})`} />
+            <rect x={RL + RIM + 56 * u} y={-17 * u} width={180 * u} height={6 * u} rx={3 * u} fill="rgba(255,255,255,.14)" />
+          </g>
+        </svg>
+        {/* The glass: the photo enlarged about the point, an inner shade and a glare. */}
+        <div style={{ position: "absolute", left: RIM, top: RIM, width: 2 * RL, height: 2 * RL, borderRadius: "50%", overflow: "hidden",
+          background: "#111" }}>
+          <div style={{ position: "absolute", left: imgL, top: imgT, width: W * sc, height: H * sc }}>
+            <Photo src={src} style={{ filter: "contrast(1.08) saturate(1.06)" }} />
+          </div>
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,0,0,0) 72%, rgba(0,0,0,.34) 100%)" }} />
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%",
+            background: "linear-gradient(138deg, rgba(255,255,255,.26) 0%, rgba(255,255,255,.08) 26%, rgba(255,255,255,0) 44%)" }} />
+        </div>
+        {/* The rim. */}
+        <svg width={D} height={D} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+          <defs>
+            <linearGradient id={`mgr${uid}`} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#9aa1a9" />
+              <stop offset="22%" stopColor="#2b2f35" />
+              <stop offset="50%" stopColor="#15181c" />
+              <stop offset="78%" stopColor="#3b4047" />
+              <stop offset="100%" stopColor="#8d949c" />
+            </linearGradient>
+          </defs>
+          <circle cx={D / 2} cy={D / 2} r={rim} fill="none" stroke={`url(#mgr${uid})`} strokeWidth={RIM} />
+          <circle cx={D / 2} cy={D / 2} r={RL + 0.8 * u} fill="none" stroke="rgba(255,255,255,.4)" strokeWidth={1.4 * u} />
+          <circle cx={D / 2} cy={D / 2} r={RL + RIM - 0.8 * u} fill="none" stroke="rgba(0,0,0,.55)" strokeWidth={1.4 * u} />
+          <path d={`M ${D / 2 - Math.cos(0.5) * rim} ${D / 2 - Math.sin(0.5) * rim} A ${rim} ${rim} 0 0 1 ${D / 2 - Math.cos(1.25) * rim} ${D / 2 - Math.sin(1.25) * rim}`}
+            fill="none" stroke="rgba(255,255,255,.55)" strokeWidth={3 * u} strokeLinecap="round" />
+        </svg>
+      </div>
+      {hasLabel ? (
+        <LabelBox spot={{ x0: 0, y0: 0, w: box.w, h: box.h, css, origin, S: { x: 0, y: 0 }, dir: { x: 0, y: 0 } }}
+          ls={title.ls} size={title.size} k={k} p={pop} out={q} sub={sub} subSize={26 * k} />
+      ) : null}
+    </AbsoluteFill>
+  );
+};
+
+// ================================================================== pe-red-arrow
+// The bold label pops at 4; the red marker arrow sweeps out of it 9 -> 21 and its head flicks open on the
+// point at 21 (sfx_at 16, the swipe); the camera pushes in about the point the whole time (it stays put).
+const RedArrow: Look = ({ overlay }) => {
+  const frame = useCurrentFrame();
+  const { width: W, height: H, durationInFrames: dur } = useVideoConfig();
+  const k = useK();
+  const q = useOut();
+  const src = photoOf(overlay);
+  if (!src) return null;
+  const [ax, ay] = anchorOf(overlay, 0.6, 0.42, 0.1, 0.9);
+  const T = { x: ax * W, y: ay * H };
+  const R = Math.max(24 * k, Math.min(240 * k, anchorR(overlay, 0.06) * Math.min(W, H)));
+  const push = interpolate(frame, [0, Math.max(1, dur)], [0, 1], { ...clamp, easing: drift });
+  const title = fitCaps(cap(overlay.text), 640 * k, [68 * k, 62 * k, 56 * k, 50 * k], 2);
+  const sub = str(overlay.subtitle).slice(0, 60);
+  const subSize = 30 * k;
+  const box = labelSize(title.ls, title.size, k, sub, subSize);
+  const spot = placeLabel(T, R, box.w || 1, box.h || 1, W, H, k, box.w ? 240 : 300);
+  // No label: the arrow still comes from a point clear of the thing, inside the safe area.
+  const S = box.w ? spot.S : { x: spot.x0, y: spot.y0 };
+  const E = shortOf(T, S, R + 14 * k);
+  const seed = hashStr(src) % 97;
+  const pts = arrowPts(S, E, W, 0.22, seed);
+  const draw = ramp(frame, 9, 12, PEN);
+  const head = ramp(frame, 21, 5);
+  const erase = ramp(frame, dur - 15, 10, expoIn);
+  const pop = ramp(frame, 4, 13, backOut);
+  return (
+    <AbsoluteFill style={{ background: "#000", overflow: "hidden" }}>
+      <AbsoluteFill style={{ transform: `scale(${(1 + 0.12 * push).toFixed(4)})`, transformOrigin: `${T.x.toFixed(1)}px ${T.y.toFixed(1)}px` }}>
+        <Photo src={src} style={{ filter: "contrast(1.05) saturate(.96)" }} />
+      </AbsoluteFill>
+      <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 52%, rgba(0,0,0,.42) 100%)" }} />
+      <svg width={W} height={H} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+        <HandArrow pts={pts} draw={draw} head={head} erase={erase} width={19 * k} k={k} seed={seed} />
+      </svg>
+      {box.w ? <LabelBox spot={spot} ls={title.ls} size={title.size} k={k} p={pop} out={q} sub={sub} subSize={subSize} /> : null}
+    </AbsoluteFill>
+  );
+};
+
 // ================================================================== registry
 export const LOOKS: Record<string, Look> = {
   "pe-zoom-circle": ZoomCircle,
@@ -843,4 +1309,8 @@ export const LOOKS: Record<string, Look> = {
   "pe-duotone": Duotone,
   "pe-light-sweep": LightSweep,
   "pe-polaroid-pan": PolaroidPan,
+  "pe-case-file": CaseFile,
+  "pe-circle-spotlight": CircleSpotlight,
+  "pe-magnify": Magnify,
+  "pe-red-arrow": RedArrow,
 };

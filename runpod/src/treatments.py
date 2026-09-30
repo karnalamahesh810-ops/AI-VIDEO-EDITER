@@ -59,17 +59,23 @@ SFX_GAP = 12.0          # seconds between two sounds
 HIGH_GAP = 5.0          # a chapter, a number or a map may follow anything after this
 HOOK_SECONDS = 120.0    # the opening, where the cadence is tightest
 REPEAT_GAP = 90.0       # the same figure is not drawn again as a graphic within this
-PRE_ROLL = 0.12         # a graphic lands this far ahead of the word it shows
-TAIL = 0.45             # ... and stays this long after its sentence ends
-MIN_HOLD = 2.2          # never shorter than this (readable)
-HOLD_SLACK = 1.0        # never longer than the template's own hold plus this
+# Timing (the owner, 2026-09-30): a graphic starts on the spoken word that
+# triggers it - never before it, at most PRE_ROLL_FRAMES early for
+# anticipation - and ends when the phrase that says it ends plus TAIL. Its
+# time on screen is capped by kind (LAYOUT_WINDOWS: tags and labels 2-4 s,
+# cards and full-screen graphics 2.5-5 s, maps and charts up to TALKING_MAX
+# only while the narration keeps talking about them), and it is never
+# shorter than its own animation in and out (animation_seconds).
+PRE_ROLL_FRAMES = 2
+TAIL = 0.4
+TALKING_MAX = 6.0
 HOOK_GAP = 6.0          # ... and any treatment may follow another after this
 LOOK_GAP = 240.0        # the same look is not shown again within four minutes (while another fits)
 TEXT_GAP = 10.0         # two text looks (headline, phrase, quote, question...) never closer than this
 SOFT_TEXT_GAP = 20.0    # a line's own typed / term / headline look waits this long after the last text look
 PERSON_FULL_GAP = 45.0  # at most one full-screen person introduction per this
 BREATH = 0.3            # a must-show graphic lands this long after the previous one leaves
-SLIDE_SLACK = 1.5       # ... and may slide this far past its sentence to wait for it
+SLIDE_SLACK = 0.4       # ... and may wait at most this long after its word for it (else it cuts the other short)
 PHOTO_WINDOW = 300.0    # a photo look is used at most PHOTO_MAX times per this
 PHOTO_MAX = 2
 TYPE_START = 6          # typing contract: the first letter lands at frame 6 ...
@@ -91,13 +97,24 @@ FULL_DATA_CUES = {"series", "shares", "compare-values", "ranking", "then-now", "
                   "span", "steps"}
 TEXT_CUES = {"headline", "key-phrase", "statement", "fact", "term", "typewriter", "caption", "question", "quote",
              "warning", "date", "datetime", "list", "summary", "age", "time-of-day", "chapter"}
-LAYOUT_WINDOWS = {"figure": (2.5, 4.0), "full": (3.2, 5.0), "map": (4.0, 5.5), "cutaway": (3.0, 4.5),
-                  "text": (1.8, 4.0),
+# (min, max) seconds on screen by layout class (the owner's caps, 2026-09-30):
+# a figure or a text tag is a label (2-4 s), a card or a full-screen graphic
+# 2.5-5 s (a text look drawn as a card takes the card window), a map needs
+# its fly-in (3.5 s) and may run to TALKING_MAX while the narration stays on it.
+LAYOUT_WINDOWS = {"figure": (2.0, 4.0), "full": (2.5, 5.0), "map": (3.5, 5.0), "cutaway": (2.5, 5.0),
+                  "text": (2.0, 4.0),
                   # A named person's full-screen introduction: long enough to read a name and a role.
-                  "person": (3.5, 5.0),
+                  "person": (3.0, 5.0),
                   # The LibPersist family ("ps-"): built to ride on footage across cuts, so it
-                  # keeps its own registry hold (6-12 s) instead of the figure window's 4 s.
-                  "persist": (6.0, 12.0)}
+                  # keeps a longer hold than the figure window's 4 s - at most 8 s since the
+                  # owner's "don't keep it longer" (2026-09-30; it was 12 s).
+                  "persist": (5.0, 8.0)}
+# A look's own animation, when the registry gives no "sfxAt": its entrance
+# lands about here (frames at 30 fps); every look leaves over its last
+# EXIT_FRAMES; the landed look is seen at least SETTLE seconds in between.
+ENTRANCE_FRAMES = 15
+EXIT_FRAMES = 12
+SETTLE = 0.5
 # Cues whose looks are words on screen: two of them in a row never share a family.
 TEXT_BEAT_CUES = {"headline", "key-phrase", "statement", "fact", "term", "question", "warning", "quote",
                   "typewriter", "caption", "chapter"}
@@ -233,6 +250,37 @@ def time_in(text: str) -> Optional[tuple]:
     return label, start
 
 
+# A span of time, the countdown look's only job (the owner, 2026-09-30: a
+# plain "WEDNESDAY" drew a countdown): "3 days later", "two weeks earlier",
+# "within 48 hours", "over the next 72 hours", "for three days".
+_SPAN_WORDS = ("a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
+               "sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety")
+_SPAN_NUM = rf"(\d{{1,3}}|(?:{_SPAN_WORDS})(?:[\s-](?:one|two|three|four|five|six|seven|eight|nine))?)"
+_SPAN_UNIT = r"(hours?|days?|nights?|weeks?)"
+_TIME_SPAN = re.compile(
+    rf"\b{_SPAN_NUM}[\s-]+{_SPAN_UNIT}\s+(later|earlier|after|before|ago|on)\b"
+    rf"|\b(?:within|in|for|after|over|during)\s+(?:the\s+(?:next|past|last|first|following)\s+)?"
+    rf"{_SPAN_NUM}[\s-]+{_SPAN_UNIT}\b", re.I)
+
+
+def time_span_in(text: str) -> Optional[tuple]:
+    """(label, value, offset, spoken number) of the first span of time a line names -
+    ('3 DAYS LATER', 3.0, ...), ('48 HOURS', 48.0, ...) - or None."""
+    m = _TIME_SPAN.search(text or "")
+    if not m:
+        return None
+    num, unit, tail = (m.group(1), m.group(2), m.group(3)) if m.group(1) else (m.group(4), m.group(5), "")
+    raw = num.lower()
+    value = float(raw) if raw.isdigit() else (1.0 if raw in ("a", "an") else _spelled_value(raw.replace("-", " ")))
+    if not value or value <= 0:
+        return None
+    unit = unit.lower().rstrip("s")
+    unit = unit if value == 1 else unit + "s"
+    shown = str(int(value)) if float(value).is_integer() else str(value)
+    label = " ".join(x for x in (shown, unit.upper(), (tail or "").upper()) if x)
+    return label, float(value), m.start(1) if m.group(1) else m.start(4), num.split()[0].split("-")[0]
+
+
 def _weekday_before(text: str, offset: int) -> str:
     """'MONDAY' when the date is introduced by its weekday ("On Monday, September 15...")."""
     m = None
@@ -290,20 +338,40 @@ beneath below above across along behind beyond inside outside through toward tow
 per each every away ago later before after""".split())
 
 
+# Never a label (the owner, 2026-09-30: a number looked "GREG ABBOTT", "LOOK
+# LIKE", "PEOPLE"): verbs and filler that follow or precede a figure.
+_NOT_A_LABEL = _LABEL_SKIP | set("""look looks looked like likes get gets got getting make makes making see sees saw
+seeing go goes went going gone come comes came coming take takes took taking know knows knew think thinks thought
+want wants wanted need needs needed feel feels felt seem seems seemed become becomes became keep keeps kept put puts
+let lets say tell tells told show call calls give gives gave find finds found leave leaves turn turns turned hit hits
+reach reaches remain remains stay stays rise rises rose fall falls fell drop drops use uses used cost costs paid pay
+hold holds held run runs ran live lives lived work works worked last next just also even really very already yet
+again there here if because though although whether not no never ever another other such same own much many few
+several lot lots kind sort way thing things something anything everything nothing someone anyone everyone ones
+time times today tonight tomorrow yesterday now then later earlier ago than rather quite enough alone""".split())
+# Words that tie a noun phrase to a figure after it ("a death toll of 27", "rainfall totals reached 15").
+_LINKS = {"of", "at", "to", "reached", "hit", "topped", "passed", "exceeded", "was", "is", "were", "are", "now",
+          "stood", "rose", "fell", "climbed", "jumped", "dropped", "least", "more", "nearly", "about", "around",
+          "over", "almost", "roughly", "just", "than", "up", "down", "totaled", "totalled", "hits", "reaches"}
+
+
 def _noun_after(text: str, match_end: int) -> str:
-    """The noun a figure belongs to ("26% capacity", "26 percent of its
-    capacity" -> CAPACITY); nothing when the next words are a verb or a
-    function word ("26% means..." used to label the gauge MEANS)."""
+    """The counted noun a figure belongs to ("26% capacity", "26 percent of its
+    capacity" -> CAPACITY, "12 inches of rain" -> RAIN); nothing when the next
+    words are a verb, filler or a proper name ("26% means...", "40 percent look
+    like...", "4,000 Greg Abbott...")."""
     tail = text[match_end:match_end + 60]
-    words = re.findall(r"[A-Za-z][\w-]*", tail)
+    tail = re.split(r"[.;:!?,]", tail, maxsplit=1)[0]
+    words = re.findall(r"[A-Za-z][\w'-]*", tail)
     i = 0
     # "to" is not skipped: "cost $1.4 billion to build" names no noun.
-    while i < len(words) and words[i].lower() in ("of", "in", "for", "at", "the", "its", "their", "his", "her", "our"):
+    while i < len(words) and words[i].lower() in ("of", "in", "for", "at", "the", "its", "their", "his", "her", "our",
+                                                  "a", "an", "all"):
         i += 1
     out = []
     for w in words[i:i + 3]:
-        if w.lower() in _LABEL_SKIP or w.lower() in ("last", "next") \
-                or (out and w[0].isupper() and not out[-1][0].isupper()):
+        lw = w.lower()
+        if lw in _NOT_A_LABEL or w[0].isupper() or lw.endswith("ly") or "'" in w:
             break
         out.append(w)
         if len(out) == 2:
@@ -311,7 +379,61 @@ def _noun_after(text: str, match_end: int) -> str:
     if out and re.fullmatch(_COUNTABLE_WORDS, out[0].lower()):
         # "40 million people depend..." counts PEOPLE, not "PEOPLE DEPEND".
         out = out[:1]
+    elif len(out) == 2 and (out[1].lower().endswith(("ing", "ed")) and out[1].lower() not in ("red", "bed", "shed")):
+        out = out[:1]                     # "acres burning", "homes flooded": the noun, not the verb after it
     return " ".join(out).upper()[:32]
+
+
+def _noun_before(text: str, match_start: int) -> str:
+    """The noun phrase a figure completes ("a death toll of 27", "rainfall totals
+    reached 15 inches" -> DEATH TOLL, RAINFALL TOTALS), or ''. Only when a
+    linking word joins them; never a verb, filler or proper name."""
+    head = re.split(r"[.;:!?,]", text[:match_start])[-1]
+    words = re.findall(r"[A-Za-z][\w'-]*", head)
+    if not words or words[-1].lower() not in _LINKS:
+        return ""
+    while words and words[-1].lower() in _LINKS:
+        words.pop()
+    # The line's own first word is capitalised as a sentence, not as a name.
+    opener = (re.findall(r"[A-Za-z][\w'-]*", text) or [""])[0]
+    out: List[str] = []
+    for k in range(len(words) - 1, -1, -1):
+        w = words[k]
+        lw = w.lower()
+        if lw in _NOT_A_LABEL or lw.endswith(("ly", "ed", "ing")) or "'" in w:
+            break
+        if w[0].isupper() and not (k == 0 and w == opener and head.lstrip().startswith(w)):
+            break                          # a name, never a label
+        out.insert(0, w)
+        if len(out) == 2:
+            break
+    if out and out[0][0].isupper() and _is_name(" ".join(out)):
+        return ""
+    return " ".join(out).upper()[:32]
+
+
+def _figure_label(text: str, start: int, end: int, shot: dict, seg, brief: Optional[dict] = None) -> str:
+    """
+    The label under a number: the counted noun after it, else the noun phrase
+    it completes, else the story's subject when the line names it and it is
+    not a person, else nothing (the look shows the figure alone).
+    """
+    return _noun_after(text, end) or _noun_before(text, start) or _label_subject(shot, seg, brief)
+
+
+def _label_subject(shot: dict, seg, brief: Optional[dict] = None, words: int = 3) -> str:
+    """The shot's subject as a label or a chart title - never a person ('' when it is one or the line does not name it)."""
+    subject = re.sub(r"\s+", " ", str((shot or {}).get("subject") or "")).strip()
+    text = (getattr(seg, "text", "") or "").lower()
+    if subject and not _person_like(subject, shot, brief) and len(subject.split()) <= words \
+            and len(subject) <= 30 and subject.lower().split()[0] in text:
+        return subject.upper()
+    for place in (brief or {}).get("places") or []:
+        name = str(place or "").split(",")[0].strip()
+        if 3 < len(name) <= 30 and len(name.split()) <= words and re.search(
+                r"(?<![\w])" + re.escape(name.lower()) + r"(?![\w])", text):
+            return name.upper()
+    return ""
 
 
 _MONEY = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)\s*(million|billion|trillion|thousand|[mbk]n?)?\b"
@@ -540,18 +662,28 @@ def _spelled_value(words: str) -> Optional[float]:
     return float(total + current) if seen else None
 
 
+# What can have happened to what was counted, besides a past participle ("displaced").
+_COUNT_STATES = {"died", "fled", "dead", "missing", "homeless", "stranded", "trapped", "unaccounted", "hurt"}
+_NOT_PARTICIPLES = {"need", "needed", "feed", "seed", "speed", "breed", "bleed", "exceed", "proceed", "succeed", "shed",
+                    "used", "based", "related", "called", "named", "expected", "estimated", "reported"}
+
+
 def _participle(text: str, end: int) -> str:
-    """'people were displaced' -> 'DISPLACED' (the word that says what happened to what was counted)."""
-    words = re.findall(r"[A-Za-z][\w-]*", text[end:end + 40])
+    """'people were displaced' -> 'DISPLACED', 'people died' -> 'DIED', 'remain missing' -> 'MISSING'
+    (the word that says what happened to what was counted); '' for any other verb."""
+    words = re.findall(r"[A-Za-z][\w-]*", re.split(r"[.;:!?,]", text[end:end + 40], maxsplit=1)[0])
     for w in words[:3]:
         lw = w.lower()
-        if lw in ("were", "was", "have", "has", "had", "been", "are", "is", "now", "already"):
+        if lw in ("were", "was", "have", "has", "had", "been", "are", "is", "now", "already", "remain", "remained",
+                  "still", "left", "reportedly"):
             continue
-        return w.upper() if lw.endswith("ed") and len(lw) > 4 else ""
+        if lw in _COUNT_STATES or (lw.endswith("ed") and len(lw) > 4 and lw not in _NOT_PARTICIPLES):
+            return w.upper()
+        return ""
     return ""
 
 
-def _spelled_figure(text: str, shot: dict, seg) -> Optional[dict]:
+def _spelled_figure(text: str, shot: dict, seg, brief: Optional[dict] = None) -> Optional[dict]:
     """A figure written out in words: a percent, a big number with its scale, or a count of things."""
     for m in _SPELLED.finditer(text):
         v = _spelled_value(m.group(0))
@@ -563,8 +695,8 @@ def _spelled_figure(text: str, shot: dict, seg) -> Optional[dict]:
             if v <= 100:
                 return {"cue": "percent", "emphasis": "high",
                         "props": {"value": v, "suffix": "%", "_key": key,
-                                  "text": _noun_after(text, m.end() + _PERCENT_AFTER.match(rest).end())
-                                  or _subject_words(shot, seg).upper()}}
+                                  "text": _figure_label(text, m.start(), m.end() + _PERCENT_AFTER.match(rest).end(),
+                                                        shot, seg, brief)}}
             continue
         last = re.findall(r"[a-z]+", m.group(0).lower())[-1]
         countable = _COUNTABLE.match(rest)
@@ -581,7 +713,7 @@ def _spelled_figure(text: str, shot: dict, seg) -> Optional[dict]:
             scale = _NUM_SCALES[last]
             return {"cue": "big-number", "emphasis": "high",
                     "props": {"value": round(v / scale, 2), "suffix": last.upper(), "_key": key,
-                              "text": _noun_after(text, m.end()) or _subject_words(shot, seg).upper()}}
+                              "text": _figure_label(text, m.start(), m.end(), shot, seg, brief)}}
         if countable and v >= 100:
             noun = countable.group(1).upper()
             done = _participle(text, m.end() + countable.end())
@@ -734,6 +866,54 @@ def _is_name(s: str) -> bool:
     return first.lower() not in _NOT_A_PERSON_START and first.upper() not in _NOT_A_PHRASE
 
 
+# Words that make a name an organisation, an agency or a place, never a person
+# (the owner's Texas flood video introduced "Weather Prediction Center" full
+# screen as WHO IS). Words that are also common surnames (Park, Hill, Stone,
+# Wood, Field, Brooks, Street) are left out on purpose.
+_ORG_WORDS = set("""center centre centers service services agency agencies department dept office offices administration
+bureau council committee commission university college institute institution academy school schools association
+authority corporation corp company co inc llc ltd foundation ministry hospital organization organisation patrol
+survey laboratory lab observatory museum society network court senate congress parliament police sheriff sheriffs
+army navy corps guard force fund group party union board team club coalition weather prediction forecast emergency
+management national federal state county city township district region government republic kingdom news times
+tribune gazette journal herald press channel radio station airport highway interstate bridge river creek canyon
+valley lake lakes mount mountain mountains dam bay island islands harbor harbour gulf basin reservoir springs falls
+desert forest camp fort coast ocean sea country hills plains prairie delta peninsula border area metro downtown
+village town borough parish province territory avenue road boulevard canal port heights gardens""".split())
+
+
+def _is_org_or_place(name: str) -> bool:
+    """An organisation, agency or place (by its words, or an acronym like FEMA), not a person."""
+    words = re.findall(r"[A-Za-z][A-Za-z'’.-]*", name or "")
+    if not words:
+        return False
+    if any(w.lower().strip(".'’") in _ORG_WORDS for w in words):
+        return True
+    return len(words) == 1 and words[0].isupper() and len(words[0]) >= 3
+
+
+def _real_person(name: str) -> bool:
+    """A name worth a WHO IS card: a person's name, not an organisation or a place."""
+    return bool(name) and _is_name(name) and not _is_org_or_place(name)
+
+
+def _person_like(name: str, shot: Optional[dict] = None, brief: Optional[dict] = None) -> bool:
+    """True when `name` is (or could be) a person: never use it as a number's label or a chart title."""
+    name = (name or "").strip()
+    if not name:
+        return False
+    if str((shot or {}).get("subjectType") or "").lower() == "person" \
+            and name == str((shot or {}).get("subject") or "").strip():
+        return True
+    for c in (brief or {}).get("cast") or []:
+        if isinstance(c, dict) and any(_same_person(name, str(n)) for n in [c.get("name") or ""] + list(c.get("aliases") or [])
+                                       if n):
+            return True
+    if any(isinstance(p, str) and _same_person(name, p) for p in (brief or {}).get("people") or []):
+        return True
+    return _real_person(name)
+
+
 def _mentions(text: str, name: str) -> bool:
     name = (name or "").strip()
     return len(name) >= 4 and re.search(r"(?<![\w])" + re.escape(name) + r"(?![\w])", text or "") is not None
@@ -755,19 +935,27 @@ def _same_person(a: str, b: str) -> bool:
 
 
 def _named_person(text: str, shot: dict, brief: Optional[dict]) -> Optional[tuple]:
-    """(name, role, spoken name) of a real person the line names or the shot is about, else None."""
+    """
+    (name, role, spoken name) of a real person the line names or the shot is
+    about, else None. Only a person's own name counts: never an organisation,
+    an agency or a place (whatever the brief's cast or people say), never an
+    unnamed cast member known only by an alias ("the boy").
+    """
     brief = brief or {}
     cast = [c for c in (brief.get("cast") or []) if isinstance(c, dict)]
     for c in cast:
         name = str(c.get("name") or "").strip()
+        # The cast is the story's people ("Cher" too), but never an organisation or a place.
+        if not name or _is_org_or_place(name):
+            continue
         for n in [name] + [str(a) for a in (c.get("aliases") or [])]:
             if _mentions(text, n):
-                return (name or n), str(c.get("role") or "").strip(), n
+                return name, str(c.get("role") or "").strip(), n
     for p in brief.get("people") or []:
-        if isinstance(p, str) and _is_name(p) and _mentions(text, p):
+        if isinstance(p, str) and _real_person(p) and _mentions(text, p):
             return p, _role_of(p, cast), p
     subject = (shot.get("subject") or "").strip()
-    if (shot.get("subjectType") or "").lower() == "person" and _is_name(subject):
+    if (shot.get("subjectType") or "").lower() == "person" and _real_person(subject):
         return subject, _role_of(subject, cast), subject
     return None
 
@@ -787,39 +975,45 @@ def cues_for(seg: Segment, shot: dict, brief: Optional[dict]) -> List[dict]:
     """
     text = seg.text or ""
     out: List[dict] = []
+    # A chart's title or a figure's label is what the line counts, never a
+    # person (the owner, 2026-09-30: "GREG ABBOTT" under a rolling number).
+    title = _label_subject(shot, seg, brief)
     m = _TWO_YEARS.search(text)
     if m and m.group(1) != m.group(4):
         a, b = _num(m.group(2)), _num(m.group(5))
         if a is not None and b is not None:
             unit = _UNIT_SHORT.get((m.group(3) or m.group(6) or "").lower(), "")
             out.append({"cue": "then-now", "emphasis": "high",
-                        "props": {"text": _subject_words(shot, seg), "items": [
+                        "props": {"text": title, "items": [
                             {"label": m.group(1), "value": a, "suffix": unit},
                             {"label": m.group(4), "value": b, "suffix": unit}]}})
     money = _money(text)
     if len(money) >= 2 and not out and re.search(r"\bfrom\b.*\bto\b", text, re.I):
         (a, ua, _e1), (b, ub, _e2) = money[0], money[1]
         out.append({"cue": "money-compare", "emphasis": "high",
-                    "props": {"text": _subject_words(shot, seg), "items": [
+                    "props": {"text": title, "items": [
                         {"label": "BEFORE", "value": a, "prefix": "$", "suffix": ua},
                         {"label": "AFTER", "value": b, "prefix": "$", "suffix": ub}]}})
     elif money and not out:
         v, unit, end = money[0]
+        start = next((mm.start() for mm in _MONEY.finditer(text) if mm.end() == end), end)
         out.append({"cue": "money", "emphasis": "high",
                     "props": {"value": v, "prefix": "$", "suffix": unit,
-                              "text": _noun_after(text, end) or _subject_words(shot, seg).upper()}})
+                              "text": _figure_label(text, start, end, shot, seg, brief)}})
     m = _CHANGE.search(text)
     if m and _num(m.group(2)) is not None and not any(c["cue"] in ("money", "money-compare") for c in out):
         down = m.group(1).lower() in ("fell", "fallen", "dropped", "declined", "decreased", "lost", "shrank")
+        # What changed: "the death toll rose to 104" -> DEATH TOLL, else the story's subject.
         out.append({"cue": "change", "emphasis": "high",
                     "props": {"value": _num(m.group(2)), "suffix": _UNIT_SHORT.get((m.group(3) or "").lower(), ""),
-                              "label": "down" if down else "up", "text": _subject_words(shot, seg)}})
+                              "label": "down" if down else "up",
+                              "text": _noun_before(text, m.start(2)) or title}})
     m = _PERCENT.search(text)
     if m and _num(m.group(1)) is not None and not any(c["cue"] in ("then-now", "change", "money", "money-compare")
                                                         for c in out):
         out.append({"cue": "percent", "emphasis": "high",
                     "props": {"value": _num(m.group(1)), "suffix": "%",
-                              "text": _noun_after(text, m.end()) or _subject_words(shot, seg).upper()}})
+                              "text": _figure_label(text, m.start(), m.end(), shot, seg, brief)}})
     m = _NUMBER_UNIT.search(text)
     if m and _num(m.group(1)) is not None and not out:
         unit = re.sub(r"\s+", "-", m.group(2).lower())
@@ -834,11 +1028,18 @@ def cues_for(seg: Segment, shot: dict, brief: Optional[dict]) -> List[dict]:
             # story's subject under every number read "75 MILLION / GLEN CANYON DAM".
             out.append({"cue": "big-number", "emphasis": "high",
                         "props": {"value": _num(m.group(1)), "suffix": _UNIT_SHORT.get(unit, unit.upper()[:8]),
-                                  "text": _noun_after(text, m.end()) or _subject_words(shot, seg).upper()}})
+                                  "text": _figure_label(text, m.start(), m.end(), shot, seg, brief)}})
     if not out and not _RATIO.search(text):
-        spelled = _spelled_figure(text, shot, seg)
+        spelled = _spelled_figure(text, shot, seg, brief)
         if spelled:
             out.append(spelled)
+    span = time_span_in(text)
+    if span:
+        # "Three days later", "within 48 hours": a span of time counts on the
+        # countdown look, not as a plain big number.
+        label, value, _at, spoken = span
+        out = [c for c in out if not (c["cue"] in ("big-number", "count") and c["props"].get("value") == value)]
+        out.append({"cue": "time-span", "emphasis": "high", "props": {"text": label, "value": value, "_key": spoken}})
     m = _QUOTE.search(text)
     if m:
         out.append({"cue": "quote", "emphasis": "high",
@@ -894,7 +1095,7 @@ def cues_for(seg: Segment, shot: dict, brief: Optional[dict]) -> List[dict]:
             out.insert(0, dict(cue, emphasis="high"))
         else:
             out.append(dict(cue, emphasis="medium"))
-    out = _more_cues(text, seg, shot, out)
+    out = _more_cues(text, seg, shot, out, brief)
     person = _named_person(text, shot, brief)
     if person:
         name, role, spoken = person
@@ -904,9 +1105,10 @@ def cues_for(seg: Segment, shot: dict, brief: Optional[dict]) -> List[dict]:
     return out + _text_cues(text, seg, shot, {c["cue"] for c in out})
 
 
-def _more_cues(text: str, seg: Segment, shot: dict, out: List[dict]) -> List[dict]:
+def _more_cues(text: str, seg: Segment, shot: dict, out: List[dict], brief: Optional[dict] = None) -> List[dict]:
     """The charts, ratios, rulers, recordings and documents a line can also ask for."""
-    subject = _subject_words(shot, seg)
+    # A chart title or a figure's label, never a person's name.
+    subject = _label_subject(shot, seg, brief)
     series = _series(text)
     if series:
         # Three or more years: a line chart instead of a single then-vs-now.
@@ -937,7 +1139,8 @@ def _more_cues(text: str, seg: Segment, shot: dict, out: List[dict]) -> List[dic
         if m and unit and _num(m.group(1)) is not None:
             idx = next((i for i, c in enumerate(out) if c["cue"] == "big-number"), len(out))
             noun = _noun_after(text, m.end())
-            props = {"value": _num(m.group(1)), "suffix": unit, "text": noun or subject.upper()}
+            props = {"value": _num(m.group(1)), "suffix": unit,
+                     "text": noun or _noun_before(text, m.start()) or subject.upper()}
             if noun in _SIZE_WORDS:
                 props.update(text=subject.upper(), subtitle=noun)
             out.insert(idx, {"cue": "measurement", "emphasis": "high", "props": props})
@@ -946,8 +1149,9 @@ def _more_cues(text: str, seg: Segment, shot: dict, out: List[dict]) -> List[dic
         words = (q["props"]["text"] if q else text.strip().rstrip(".")).strip()
         if 12 <= len(words) <= 200:
             idx = next((i for i, c in enumerate(out) if c["cue"] == "quote"), len(out))
+            # (Who is heard may be a person: the recording's own label keeps the speaker.)
             out.insert(idx, {"cue": "recording", "emphasis": "high",
-                             "props": {"text": words, "label": subject, "subtitle": "Audio recording"}})
+                             "props": {"text": words, "label": _subject_words(shot, seg), "subtitle": "Audio recording"}})
     doc = _document(text)
     if doc:
         loose = next((i for i, c in enumerate(out) if c["cue"] == "quote" and c["emphasis"] != "high"), None)
@@ -1133,17 +1337,23 @@ _LOOK_NEEDS = {
     "LIB_CO_MEASURE_LINE": r"\b(feet|foot|ft|inches|meters?|metres?|miles?|km|long|wide|tall|deep)\b",
 }
 _LOOK_NEEDS_RX = {k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
-# A date gets a date: every look that carries the date / datetime /
-# time-of-day cue takes its turn (the new date cards among them), the full
-# "SEPTEMBER 15 / 2026" title and the corner stamp first when nothing has been
-# used. Never an effect (light streak, film burn, paper tear), a year-only
-# look (scroller, decade grid, year tape) or a photo plate. Checked on stills
-# 2026-09-29: the calendar flip and the round stamp drew nothing from a date
-# alone and the date-and-place lower third printed the date twice.
-DATE_LOOKS = ["TL_DATE_TITLE_V1", "TL_DATE_STAMP_V1"]
+# A date gets a date in BOLD TYPE (the owner, 2026-09-30: "when a day/date is
+# mentioned you show a simple calendar - I need BOLD TEXT date"): a date or a
+# date-and-time takes its turn over the bold typography looks only - the date
+# slam, the bold headline, the big stack, the clean card, the spaced title -
+# whichever of them the registry has. Never a calendar page, a stamp bar, a
+# REC stamp, a timeline tick or the countdown, and never an effect, a
+# year-only look or a photo plate. A time of day on its own keeps the clock
+# looks; the countdown is only for a span of time ("3 days later", "48 hours").
+BOLD_DATE_LOOKS = ["TL_DATE_TITLE_V1", "LIB_DT_DATE_SLAM", "LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK",
+                   "LIB_DT_CLEAN_CARD"]
+# The one bold look that cannot print a time: a date-and-time line tries it last, with the date alone.
+DATE_ONLY_LOOKS = {"TL_DATE_TITLE_V1"}
+COUNTDOWN_LOOK = "LIB_DT_COUNTDOWN_DAYS"
+DATE_LOOKS = BOLD_DATE_LOOKS
 NOT_FOR_A_DATE = {"LIB_TL_CALENDAR_FLIP", "LIB_TL_DATE_STAMP_CIRCLE", "LIB_LT_DATE_PLACE", "LIB_FX_LIGHT_STREAK",
                   "LIB_FX_FILM_BURN", "LIB_FX_PAPER_TEAR", "LIB_TL_YEAR_SCROLLER", "LIB_TL_DECADE_GRID",
-                  "LIB_CH_YEAR_TAPE", "LIB_PB_DATE_PLATE"}
+                  "LIB_CH_YEAR_TAPE", "LIB_PB_DATE_PLATE", COUNTDOWN_LOOK}
 
 
 def look_fits(template_id: str, text: str) -> bool:
@@ -1170,12 +1380,31 @@ def _weather_figure(req: dict, text: str) -> bool:
     return unit in _WX_UNITS
 
 
+def bold_date_looks(cue: str = "date") -> List[dict]:
+    """The bold typography looks in the registry that carry a date (or a date and a time)."""
+    out = []
+    for tid in BOLD_DATE_LOOKS:
+        t = templates.get(tid)
+        if t and not templates.banned(tid) and cue in templates.cues_of(t):
+            out.append(t)
+    return out
+
+
 def date_looks(cue: str = "date", style: str = "") -> List[dict]:
-    """The looks that draw a date, a time or both, the two proven date looks first."""
-    ranked = {tid: n for n, tid in enumerate(DATE_LOOKS)}
+    """
+    The looks that draw a date, a time or both: bold typography for a date or
+    a date and a time (BOLD_DATE_LOOKS), the clock looks for a time of day.
+    """
+    if cue in ("date", "datetime"):
+        bold = bold_date_looks(cue)
+        if bold:
+            return bold
     options = [t for t in templates.for_cue(cue, style) if t["id"] not in NOT_FOR_A_DATE
                and "stills" not in (t.get("tags") or []) and t.get("category") != "IMAGES"]
-    return sorted(options, key=lambda t: ranked.get(t["id"], len(ranked)))
+    if cue == "time-of-day":
+        # A clock, never a bold date card that happens to take a time.
+        options = [t for t in options if t["id"] not in BOLD_DATE_LOOKS] or options
+    return options
 
 
 def _template_for_cue(cue: str, pack: dict, used_recently: set,
@@ -1206,6 +1435,24 @@ def _template_for_cue(cue: str, pack: dict, used_recently: set,
         # the same gauge every time.
         options = sorted(options, key=lambda t: counts.get(t["id"], 0))
     return options[0]["id"] if options else None
+
+
+def _hint_date_cue(hint: Optional[dict]) -> str:
+    """
+    The date cue a director's library look asks for by name ("dt-calendar-page"
+    -> "date", "dt-clock-time" -> "time-of-day"), or ''. Such a hint is shown
+    like any date on the line: in bold type, or a clock for a time alone.
+    """
+    if not isinstance(hint, dict) or hint.get("type") != "motion" or not hint.get("variant"):
+        return ""
+    t = next((x for x in templates.for_component("motion")
+              if (x.get("defaults") or {}).get("variant") == hint["variant"]), None)
+    if not t or t.get("category") != "TIMELINES":
+        return ""
+    cues = set(templates.cues_of(t))
+    if "time-of-day" in cues and "date" not in cues:
+        return "time-of-day"
+    return "date" if cues & {"date", "datetime"} else ""
 
 
 def _hint_props(overlay: dict) -> dict:
@@ -1303,9 +1550,9 @@ def _offset(text: str, key) -> int:
 
 def _clear_figure(cue: dict) -> bool:
     """A figure worth a counting graphic every time: a percent, money, a ratio, a count, several values,
-    or a number of ten or more (with its scale)."""
+    a span of time, or a number of ten or more (with its scale)."""
     name = cue.get("cue")
-    if name in ("percent", "money", "money-compare", "ratio", "count") or name in FULL_DATA_CUES:
+    if name in ("percent", "money", "money-compare", "ratio", "count", "time-span") or name in FULL_DATA_CUES:
         return True
     p = cue.get("props") or {}
     try:
@@ -1385,7 +1632,8 @@ _TEXT_CATEGORIES = {"TEXT", "HEADLINES", "QUOTES", "LOWER_THIRDS"}
 # owner wants text a proper size, so the planner sets it: 1.1 for a text look,
 # as designed for a tag riding on the footage.
 TEXT_FONT_SCALE = 1.1
-FIGURE_CUES = SINGLE_FIGURE_CUES | FULL_DATA_CUES | {"count"}
+# A span of time ("3 days later") is a figure too: it counts up on the countdown look.
+FIGURE_CUES = SINGLE_FIGURE_CUES | FULL_DATA_CUES | {"count", "time-span"}
 # What a line asks for in words, strongest first; each still needs the rhythm.
 STRONG_LINE_CUES = ("recording", "document", "quote", "question", "warning", "route")
 SOFT_LINE_CUES = ("typewriter", "term")
@@ -1394,26 +1642,32 @@ _SFX_PROPS = ("text", "value", "suffix", "prefix", "label", "subtitle", "highlig
 
 
 def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: int, total: int,
-         brief: Optional[dict], pack: dict, seconds_for: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+         brief: Optional[dict], pack: dict, seconds_for: Optional[Dict[str, float]] = None,
+         voice_lufs: Optional[float] = None, reserved: Optional[List[tuple]] = None) -> Dict[str, Any]:
     """
     Overlays, transitions, sounds, music sections and per-scene treatments.
 
     `scenes` are the built scene dicts (start/duration frames, media type);
-    `seconds_for` is the renderer's minimum hold per component.
+    `seconds_for` (the renderer's hold per component) is kept for callers -
+    the owner's per-kind windows (LAYOUT_WINDOWS) now decide how long a look
+    stays. `voice_lufs` is the narration's loudness the sounds are set
+    against; `reserved` are (start, end) seconds already taken on screen
+    (the job's title card): nothing is laid over them.
     """
-    return _Planner(segments, shots, scenes, fps, total, brief, pack, seconds_for).run()
+    return _Planner(segments, shots, scenes, fps, total, brief, pack, seconds_for, voice_lufs, reserved).run()
 
 
 class _Planner:
     """One video's treatment plan (see plan())."""
 
-    def __init__(self, segments, shots, scenes, fps, total, brief, pack, seconds_for):
+    def __init__(self, segments, shots, scenes, fps, total, brief, pack, seconds_for, voice_lufs=None, reserved=None):
         _reset_rotation()
         self.segments, self.shots, self.scenes = segments, shots, scenes
         self.fps, self.total = fps, total
         self.brief = brief if isinstance(brief, dict) else {}
         self.pack = pack
         self.seconds_for = seconds_for or {}
+        self.voice_lufs = voice_lufs
         self.style = pack.get("id", "documentary")
         self.intensity = float(pack.get("animationIntensity", 1.0))
         self.hooks = set(self.brief.get("hookBeats") or [])
@@ -1458,6 +1712,23 @@ class _Planner:
         # Frame spans the clip is covered by (full-screen graphics): a persisting
         # figure never runs under one.
         self.covered: List[tuple] = []
+        # Seconds where no overlay may be (the owner's Texas video: tags laid
+        # over full-screen graphics were hidden by them): every animation scene,
+        # which IS a full-screen graphic or chart.
+        self.blocks: List[tuple] = []
+        for sc in self.scenes:
+            if (sc.get("media") or {}).get("type") == "animation":
+                a = int(sc.get("startFrame", 0))
+                self.blocks.append((a / fps, (a + int(sc.get("durationInFrames", 0))) / fps))
+        # Seconds already taken by the caller (the job's title card): held like a must-show graphic.
+        for a, b in reserved or []:
+            try:
+                a, b = float(a), float(b)
+            except (TypeError, ValueError):
+                continue
+            if b > a:
+                self.spans.append({"start": a, "end": b, "idx": None, "klass": "full", "must": True, "tr": None})
+                self.covered.append((int(round(a * fps)), int(round(b * fps))))
 
     # ------------------------------------------------------------------ run
     def run(self) -> Dict[str, Any]:
@@ -1473,7 +1744,10 @@ class _Planner:
             self.i = i
             self._beat(i, seg)
         _persist_figures(self.overlays, self.treatments, self.persisting, self.covered, self.scenes, self.fps,
-                         self.total)
+                         self.total, self.segments)
+        # One graphic at a time, never over a full-screen scene (a safety net
+        # behind the placement rules; the sounds are planned after it).
+        self._one_at_a_time()
         sfx = self._sfx()
         music = _plan_music(self.segments, self.brief, self.fps, self.total, self.hooks)
         for i, entry in enumerate(self.treatments):
@@ -1496,10 +1770,57 @@ class _Planner:
             items = [{**ov, "durationFrames": int(ov.get("durationInFrames") or 0),
                       "props": {k: ov[k] for k in _SFX_PROPS if k in ov}} for ov in live]
             try:
-                return list(sfxplan.plan(items, self.fps, intensity, self.style) or [])
+                return list(sfxplan.plan(items, self.fps, intensity, self.style, voice_lufs=self.voice_lufs) or [])
             except Exception as e:      # a sound bug must never cost the video
                 print(f"[treatments] sound planner failed ({type(e).__name__}: {e}); one sound per graphic instead")
-        return _plan_sfx(live, self.treatments, self.fps, intensity)
+        return _plan_sfx(live, self.treatments, self.fps, intensity, self.voice_lufs)
+
+    def _one_at_a_time(self) -> None:
+        """
+        Never two overlays on screen at once and never one over a full-screen
+        scene: an overlay still up when the next one lands ends there, one
+        running into an animation scene ends where it starts, and one that
+        would start on such a scene - or be left too short to read - is dropped.
+        """
+        fps = self.fps
+        blocks = [(int(round(a * fps)), int(round(b * fps))) for a, b in self.blocks]
+        order = sorted(range(len(self.overlays)), key=lambda j: (int(self.overlays[j]["startFrame"]), j))
+        drop = set()
+        for n, j in enumerate(order):
+            ov = self.overlays[j]
+            s = int(ov["startFrame"])
+            e = s + int(ov["durationInFrames"])
+            if any(a <= s < b for a, b in blocks):
+                drop.add(j)
+                continue
+            limit = min([a for a, _b in blocks if a > s] + [e])
+            nxt = next((int(self.overlays[k]["startFrame"]) for k in order[n + 1:] if k not in drop), None)
+            if nxt is not None:
+                limit = min(limit, max(s, nxt))
+            if limit < e:
+                # Never shorter than its own animation: rather not at all.
+                least = int(round(max(1.0, animation_seconds(templates.get(ov.get("template") or "") or {})) * fps))
+                if limit - s < least:
+                    drop.add(j)
+                    continue
+                ov["durationInFrames"] = limit - s
+                self._sync_duration(j, limit - s)
+        if drop:
+            keep = [j for j in range(len(self.overlays)) if j not in drop]
+            index = {old: new for new, old in enumerate(keep)}
+            self.overlays = [self.overlays[j] for j in keep]
+            self.silent = {index[j] for j in self.silent if j in index}
+
+    def _sync_duration(self, j: int, frames: int) -> None:
+        """A treatment entry that shows overlay j follows its new length."""
+        tid = self.overlays[j].get("template")
+        start = int(self.overlays[j]["startFrame"])
+        for span in self.spans:
+            if span.get("idx") == j and span.get("tr") is not None and span["tr"] < len(self.treatments):
+                entry = self.treatments[span["tr"]]
+                if entry.get("overlays") and entry["overlays"][0] == tid:
+                    entry["duration"] = round(frames / self.fps, 2)
+                span["end"] = (start + frames) / self.fps
 
     # ----------------------------------------------------------------- beat
     def _beat(self, i: int, seg) -> None:
@@ -1666,6 +1987,15 @@ class _Planner:
         if archival and not self.prev_archival and not placed:
             tag = _archive_tag(scene, self.style, self.pack, fps, start, scene_frames, self.total)
             if tag:
+                # One graphic at a time: the tag waits for a free screen (or is left out).
+                a = tag["startFrame"] / fps
+                free = self._clear_until(a)
+                if any(s["start"] <= a < s["end"] + BREATH for s in self.spans) or free - a < 1.5 \
+                        or any(b0 <= a < b1 for b0, b1 in self.blocks):
+                    tag = None
+                elif (tag["startFrame"] + tag["durationInFrames"]) / fps > free:
+                    tag["durationInFrames"] = max(1, int(free * fps) - tag["startFrame"])
+            if tag:
                 self.silent.add(len(self.overlays))
                 self.spans.append({"start": tag["startFrame"] / fps,
                                    "end": (tag["startFrame"] + tag["durationInFrames"]) / fps,
@@ -1711,8 +2041,12 @@ class _Planner:
         out: List[dict] = []
         repeated = None
         date = next((c for c in cues if c["cue"] in DATE_CUES), None)
-        if date is None and hint and hint.get("type") in ("date-stamp", "clock-badge") and hint.get("text"):
-            date = {"cue": "date" if hint["type"] == "date-stamp" else "time-of-day", "emphasis": "high",
+        if date is None and hint and hint.get("text") and (hint.get("type") in ("date-stamp", "clock-badge")
+                                                           or _hint_date_cue(hint)):
+            # The director's date ("WEDNESDAY" on a date stamp, a calendar look
+            # by name): shown like any date, in bold type.
+            clock = hint.get("type") == "clock-badge" or _hint_date_cue(hint) == "time-of-day"
+            date = {"cue": "time-of-day" if clock else "date", "emphasis": "high",
                     "props": {"text": str(hint["text"])[:40]}}
         if date:
             out.append(self._date_request(date, text))
@@ -1754,18 +2088,25 @@ class _Planner:
         props = dict(c.get("props") or {})
         label = {"label": props["label"]} if props.get("label") else {}
         key = {"_key": props["_key"]} if props.get("_key") else {}
+        by_id: Dict[str, dict] = {}
+        demote: List[str] = []
         if c["cue"] == "datetime":
             cues = ["datetime", "date", "time-of-day"]
-            by_cue = {"datetime": props, "date": {"text": props.get("date") or props.get("text"), **label, **key},
+            # The bold date looks read "SEPTEMBER 25, 2026 · 3:45 PM" whole; the
+            # spaced title cannot, so it takes the date alone and comes last.
+            by_cue = {"datetime": props, "date": dict(props),
                       "time-of-day": {"text": props.get("time") or props.get("text"), **key}}
+            date_only = {"text": props.get("date") or props.get("text"), **label, **key}
+            by_id = {tid: date_only for tid in DATE_ONLY_LOOKS}
+            demote = sorted(DATE_ONLY_LOOKS)
         else:
-            cues = [c["cue"], "datetime"]
+            cues = [c["cue"], "datetime"] if c["cue"] == "date" else [c["cue"]]
             by_cue = {}
-        req = {"cues": cues, "props": props, "props_by_cue": by_cue, "mode": "must", "group": "date",
+        req = {"cues": cues, "props": props, "props_by_cue": by_cue, "props_by_id": by_id, "demote": demote,
+               "mode": "must", "group": "date",
                "emphasis": c.get("emphasis") or "high", "offset": _offset(text, props.get("_key", ""))}
         if not self.first_date_done and c["cue"] in ("date", "datetime"):
-            # The story's first date is a statement: a bold full card (the
-            # clean card, the calendar page, the date slam), not a thin strip.
+            # The story's first date is a statement: a bold full card, not a thin strip.
             req["prefer"] = _date_cards()
             self.first_date_done = True
         return req
@@ -1778,6 +2119,11 @@ class _Planner:
         if c["cue"] == "route":
             req.update(ids=[self.pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"], cues=[], cue="route",
                        group="map", mode="seq")
+        elif c["cue"] == "time-span":
+            # "3 DAYS LATER", "48 HOURS": the countdown look, and only for a real
+            # span of time. It is the one look for a span, so no group keeps it
+            # from following itself.
+            req.update(ids=[COUNTDOWN_LOOK], cues=[], cue="time-span", group="")
         return req
 
     def _fact_request(self, seg, repeated: dict) -> Optional[dict]:
@@ -1838,6 +2184,8 @@ class _Planner:
                 return {"ids": ids, "prefer": [own] if own else [], "cue": "chapter", "mode": "director",
                         "group": "text", "emphasis": "high", "props": {**props, "text": title}}
         if kind == "motion" and variant:
+            if _hint_date_cue(hint):
+                return None         # a date look by name: the must-show pass showed it in bold type
             t = next((x for x in templates.for_component("motion") if (x.get("defaults") or {}).get("variant") == variant),
                      None)
             if t:
@@ -1908,6 +2256,8 @@ class _Planner:
         """A photo animation for a still, by what it shows, rotating over every photo look."""
         subject = (shot.get("subject") or "").strip()
         kind = (shot.get("subjectType") or "").lower()
+        if kind == "person" and subject and _is_org_or_place(subject):
+            kind = "place"                  # an agency or a place filed as a person: never a person card
         if kind == "person" and subject:
             own = ["photo-person", "person"]
         elif kind in ("place", "location", "landmark") and subject:
@@ -1994,7 +2344,8 @@ class _Planner:
                         merged.append(t)
             stages = [(merged, None, owner)]
         last = self.looks.last_in.get(group) if req.get("never_again") else None
-        demote = set()
+        asked_demote = set(req.get("demote") or ())
+        demote = set(asked_demote)
         stale_all = []
         first = req.get("first")
         if first and first != last and self.looks.fresh(first, at):
@@ -2006,7 +2357,7 @@ class _Planner:
             stage_prefer = prefer
             if cue in FIGURE_CUES:
                 # The persisting looks hold 6-12 s: only when nothing else is left.
-                demote = {t["id"] for t in pool if is_persist_look(t)}
+                demote = asked_demote | {t["id"] for t in pool if is_persist_look(t)}
             if cue in SINGLE_FIGURE_CUES and over_footage:
                 # One figure over footage: the compact corner looks first (tags ride on the clip).
                 stage_prefer = set(prefer) | {t["id"] for t in pool if t.get("kind") == "tag"}
@@ -2056,12 +2407,13 @@ class _Planner:
         resolved = templates.resolve(t["id"], style=self.style, entrance=motion, props=props, pack=self.pack)
         if not resolved:
             return None
-        hold = max(resolved.get("seconds", 3.0), self.seconds_for.get(resolved["type"], 0.0))
         klass = req.get("layout") or layout_class(t, cue or "")
         if klass == "persist" and at < self.persist_until:
             return None
-        lo, hi = LAYOUT_WINDOWS[klass]
-        keep = MIN_VISIBLE.get(klass, 1.6)
+        lo, hi = layout_window(t, klass)
+        least = max(1.0, animation_seconds(t))
+        # A must-show graphic may cut this one short only after it has played its own animation.
+        keep = max(MIN_VISIBLE.get(klass, 1.6), least)
         if templates.types(t):
             # The typing contract: from frame TYPE_START, one letter every 2
             # frames (1 past 48 letters), then a beat to read it. A typed line
@@ -2071,9 +2423,18 @@ class _Planner:
             lo = max(lo, typed + TYPE_HOLD)
             hi = max(hi, lo)
             keep = max(keep, typed + 0.3)
+            least = max(least, typed + 0.3)
+        until = None
+        if klass == "map" or (klass == "full" and t.get("category") in ("CHARTS", "COMPARISONS", "TIMELINES")):
+            # A map or a chart may stay to TALKING_MAX, but only while the
+            # narration is still on it: the next line names the same place or subject.
+            until = self._still_about(seg, props)
+            if until is not None:
+                hi = max(hi, TALKING_MAX)
         wprops = dict(props, _key=key) if key else props
-        t_in, t_out = _voice_window(seg, wprops, hold, lo, hi)
-        dur = t_out - t_in
+        t_in, t_out = _voice_window(seg, wprops, lo, hi, fps, until)
+        if any(a <= t_in < b for a, b in self.blocks):
+            return None                    # a full-screen graphic is on screen: nothing lands on it
         prev = max(self.spans, key=lambda s: s["end"]) if self.spans else None
         busy = prev is not None and prev["end"] + BREATH > t_in
         if mode == "normal":
@@ -2084,17 +2445,23 @@ class _Planner:
             trim_ok = (mode == "must" and prev["idx"] is not None
                        and cut - prev["start"] >= prev.get("keep", MIN_VISIBLE.get(prev["klass"], 1.6)))
             slide_to = prev["end"] + BREATH
-            room = float(seg.end) + TAIL + SLIDE_SLACK - slide_to
-            if trim_ok and not prev["must"]:
+            if trim_ok:
+                # On its word: the graphic still up has been read, it gives way
+                # (only when this one really lands - nothing is cut for nothing).
+                if min(t_out, self._clear_until(t_in)) - t_in < least:
+                    return None
                 self._trim(prev, cut)
-            elif room >= min(lo, dur) and slide_to * fps < self.total - 1:
+            elif slide_to - t_in <= SLIDE_SLACK and slide_to * fps < self.total - 1:
+                # A moment late at most - never seconds after its word.
+                t_out = slide_to + max(lo, min(t_out - slide_to, hi))
                 t_in = slide_to
-                t_out = t_in + max(min(lo, dur), min(dur, room))
-            elif trim_ok:
-                self._trim(prev, cut)
             else:
                 return None
         elif mode == "director" and t.get("kind") in CARD_KINDS and self.rhythm.overlaps(t_in):
+            return None
+        # Never into a full-screen scene or a span already taken ahead (the job's title card).
+        t_out = min(t_out, self._clear_until(t_in))
+        if t_out - t_in < least:
             return None
         o_start = max(0, min(int(round(t_in * fps)), self.total - 1))
         frames = max(1, min(int(round((t_out - t_in) * fps)), self.total - o_start))
@@ -2140,6 +2507,26 @@ class _Planner:
                 self.last_min_figure = at
         return {"idx": idx, "t": t, "cue": cue or "", "sfx": sfx, "klass": klass,
                 "emphasis": req.get("emphasis") or t["emphasis"]}
+
+    def _still_about(self, seg, props: dict) -> Optional[float]:
+        """
+        When the next line, said straight after this one, still names a map's
+        place or a chart's subject: the time that line ends plus TAIL; else None.
+        """
+        nxt = self.segments[self.i + 1] if 0 <= self.i + 1 < len(self.segments) else None
+        if nxt is None or float(nxt.start) - float(seg.end) > 0.6:
+            return None
+        names = [str(loc.get("label") or "").split(",")[0] for loc in (props.get("locations") or [])
+                 if isinstance(loc, dict)] + [str(props.get("text") or "")]
+        about = {w.lower() for n in names for w in re.findall(r"[A-Za-z][\w'-]{3,}", n)} - _NOT_A_LABEL
+        said = {w.lower() for w in re.findall(r"[A-Za-z][\w'-]{3,}", getattr(nxt, "text", "") or "")}
+        return float(nxt.end) + TAIL if about & said else None
+
+    def _clear_until(self, t_in: float) -> float:
+        """Where the screen stops being free after t_in: the next full-screen scene or span already taken."""
+        ahead = [a for a, _b in self.blocks if a > t_in + 1e-6] + \
+            [s["start"] for s in self.spans if s["start"] > t_in + 1e-6]
+        return min(ahead) if ahead else float("inf")
 
     def _trim(self, span: dict, cut: float) -> None:
         """Cut an overlay short so a must-show graphic can land on its word."""
@@ -2188,8 +2575,14 @@ class _Planner:
         return entry
 
 
+# A figure rides across a cut only while the voice runs straight on: a pause
+# longer than this between two lines is the voice moving on (the owner,
+# 2026-09-30: "no look lingers after the voice has moved on").
+PERSIST_PAUSE = 0.25
+
+
 def _persist_figures(overlays: List[dict], treatments: List[dict], persisting: List[tuple], covered: List[tuple],
-                     scenes: List[dict], fps: int, total: int) -> None:
+                     scenes: List[dict], fps: int, total: int, segments: Optional[List[Segment]] = None) -> None:
     """
     GoMotion's persistent figure: a compact ring or number on the clip stays
     up across the short cuts that follow it ("22% OF CAPACITY REMAINING" rode
@@ -2200,7 +2593,9 @@ def _persist_figures(overlays: List[dict], treatments: List[dict], persisting: L
     PERSIST_SCENE_MAX, (b) the whole run stays within PERSIST_MAX_SECONDS of
     the overlay's start, (c) no other overlay starts inside the extended span,
     (d) the scene is not an animation scene and no full-screen graphic covers
-    it. Off with PERSIST_FIGURES=0 (the overlays are left as planned).
+    it, and (e) the narration runs on into that scene's line without a pause
+    longer than PERSIST_PAUSE (`segments`, one per scene). Off with
+    PERSIST_FIGURES=0 (the overlays are left as planned).
     """
     if not config.PERSIST_FIGURES or not persisting or not scenes:
         return
@@ -2216,11 +2611,17 @@ def _persist_figures(overlays: List[dict], treatments: List[dict], persisting: L
         if home is None:
             continue
         new_end = o_end
-        for sc in scenes[home + 1:]:
+        for k in range(home + 1, len(scenes)):
+            sc = scenes[k]
             sc_start = int(sc.get("startFrame", 0))
             sc_end = sc_start + int(sc.get("durationInFrames", 0))
             if sc_end <= new_end:
                 continue
+            if segments is not None and 0 < k < len(segments) \
+                    and float(segments[k].start) - float(segments[k - 1].end) > PERSIST_PAUSE:
+                break                                                # (e) the voice paused: it moved on
+            if segments is not None and k >= len(segments):
+                break
             if sc_end - sc_start >= scene_max:                       # (a) a long shot: the figure leaves
                 break
             if sc_end - o_start > run_max + 1e-6:                    # (b) the run is long enough
@@ -2239,8 +2640,11 @@ def _persist_figures(overlays: List[dict], treatments: List[dict], persisting: L
                 treatments[tr_idx]["duration"] = round((new_end - o_start) / fps, 2)
 
 
-def _plan_sfx(overlays: List[dict], treatments: List[dict], fps: int, intensity: float) -> List[dict]:
-    """One sound per graphic moment at most every SFX_GAP seconds, the strongest moment winning."""
+def _plan_sfx(overlays: List[dict], treatments: List[dict], fps: int, intensity: float,
+              voice_lufs: Optional[float] = None) -> List[dict]:
+    """One sound per graphic moment at most every SFX_GAP seconds, the strongest moment winning,
+    at the same voice-relative level and under the same cap as the sound pass (src/sfxplan.py)."""
+    from . import sfxplan
     rank = {"high": 0, "medium": 1, "low": 2}
     picks: List[dict] = []
     by_start = sorted((ov for ov in overlays), key=lambda o: o["startFrame"])
@@ -2263,8 +2667,9 @@ def _plan_sfx(overlays: List[dict], treatments: List[dict], fps: int, intensity:
                 picks.pop()
             else:
                 continue
+        level = sfxplan.level(s["name"], voice_lufs) * max(0.0, float(intensity))
         picks.append({"name": s["name"], "startFrame": int(ov["startFrame"]),
-                      "volume": round(min(1.0, float(s["volume"]) * intensity), 3), "_e": e})
+                      "volume": round(min(sfxplan.cap(voice_lufs), level), 3), "_e": e})
         last = at
     for p in picks:
         p.pop("_e", None)
@@ -2382,10 +2787,8 @@ _kind_turn = {"person": [0], "place": [0], "object": [0], "photo": [0]}
 
 
 def _date_cards() -> List[str]:
-    """Full-card date looks (kind card) that can carry a date on their own."""
-    return [t["id"] for t in templates.all_templates()
-            if t.get("kind") == "card" and "date" in templates.cues_of(t)
-            and t["id"] not in templates.BANNED and t["id"] not in NOT_FOR_A_DATE and "COUNTDOWN" not in t["id"]]
+    """The bold full-card date looks (kind card): the story's first date is a statement."""
+    return [t["id"] for t in bold_date_looks("date") if t.get("kind") == "card"]
 
 
 def _lib_looks(cue: str, still: bool = True) -> List[str]:
@@ -2410,7 +2813,7 @@ def photo_template(shot: dict) -> tuple:
     subject = (shot.get("subject") or "").strip()
     kind = (shot.get("subjectType") or "").lower()
     hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else {}
-    if kind == "person" and subject:
+    if kind == "person" and subject and not _is_org_or_place(subject):
         return _turn("person", _PERSON_CYCLE), {"text": subject}
     if kind in ("place", "location", "landmark") and subject:
         tid = _turn("place", _PLACE_CYCLE)
@@ -2429,52 +2832,96 @@ _WEAK_REASONS = ("Best available", "Reused shot", "Repeat of an earlier shot", "
 DATA_CATEGORIES = {"CHARTS", "COMPARISONS", "TIMELINES", "MAPS", "DOCUMENTS"}
 
 
-def _voice_window(seg, props: dict, hold: float, min_hold: float = MIN_HOLD, max_hold: float = 0.0) -> tuple:
-    """
-    (in, out) seconds for a graphic on this line: in when the word carrying
-    what it shows is spoken (the figure's digits, the date, the quoted words;
-    the line's start otherwise), out just after the line ends, clamped to
-    MIN_HOLD .. hold + HOLD_SLACK.
-    """
-    words = list(getattr(seg, "words", None) or [])
-    start = float(seg.start)
-    t_in = start
-    key = ""
-    v = props.get("value") if isinstance(props, dict) else None
-    if isinstance(props, dict) and props.get("_key"):
-        # The word the cue was read from ("Sept.", "twenty-two", "Udall").
-        key = str(props["_key"])
-    elif v is not None:
+def _trigger_key(props: dict) -> str:
+    """The word a graphic is triggered by: the cue's own word ("Sept.", "twenty-two", "Udall"), the
+    figure's digits, else the first word of its text."""
+    if not isinstance(props, dict):
+        return ""
+    if props.get("_key"):
+        return str(props["_key"])
+    v = props.get("value")
+    if v is not None:
         try:
-            key = str(int(float(v))) if float(v).is_integer() else str(v)
+            return str(int(float(v))) if float(v).is_integer() else str(v)
         except (TypeError, ValueError):
-            key = ""
-    elif isinstance(props, dict) and props.get("text"):
-        first = str(props["text"]).split()[0] if str(props["text"]).split() else ""
-        key = first if len(first) >= 3 else ""
-    if key and words:
-        norm = lambda w: re.sub(r"[^0-9a-z.]", "", str(w).lower())
-        target = norm(key)
-        for w in words:
-            wt = norm(getattr(w, "text", "") if not isinstance(w, dict) else w.get("text", ""))
-            if target and (wt == target or wt.startswith(target) or (len(target) > 2 and target in wt)):
-                ws = getattr(w, "start", None) if not isinstance(w, dict) else w.get("start")
-                if ws is not None:
-                    t_in = max(start, float(ws) - PRE_ROLL)
-                break
-    t_out = float(seg.end) + TAIL
-    top = min(hold + HOLD_SLACK, max_hold) if max_hold else hold + HOLD_SLACK
-    dur = max(min(min_hold, top), min(t_out - t_in, top))
+            return ""
+    first = str(props.get("text") or "").split()[:1]
+    return first[0] if first and len(first[0]) >= 3 else ""
+
+
+def _word_time(seg, props: dict) -> Optional[float]:
+    """When the word that triggers a graphic is said (seconds), or None when the line has no word timings."""
+    words = list(getattr(seg, "words", None) or [])
+    key = _trigger_key(props)
+    if not key or not words:
+        return None
+
+    def attr(w, name):
+        return w.get(name) if isinstance(w, dict) else getattr(w, name, None)
+
+    norm = lambda w: re.sub(r"[^0-9a-z.]", "", str(w).lower())
+    target = norm(key)
+    for w in words:
+        wt = norm(attr(w, "text") or "")
+        if target and (wt == target or wt.startswith(target) or (len(target) > 2 and target in wt)):
+            ws = attr(w, "start")
+            if ws is not None:
+                return float(ws)
+    # Not spelled the same in the transcript ("22" vs "twenty-two"): the word
+    # standing where the key stands in the line.
+    at = _offset(getattr(seg, "text", "") or "", key)
+    n = len(re.findall(r"\S+", (getattr(seg, "text", "") or "")[:at])) if at > 0 else 0
+    if 0 < n < len(words) and attr(words[n], "start") is not None:
+        return float(attr(words[n], "start"))
+    return None
+
+
+def _voice_window(seg, props: dict, lo: float, hi: float, fps: int = 30, until: Optional[float] = None) -> tuple:
+    """
+    (in, out) seconds for a graphic on this line: in on the word that
+    triggers it (at most PRE_ROLL_FRAMES early, never before the line; the
+    line's start when there are no word timings), out when the phrase ends
+    plus TAIL (or `until`, while the narration keeps talking about it), and
+    on screen at least `lo` and at most `hi` seconds.
+    """
+    start = float(seg.start)
+    said = _word_time(seg, props)
+    t_in = start if said is None else max(start, said - PRE_ROLL_FRAMES / float(fps or 30))
+    t_out = float(until) if until is not None else float(seg.end) + TAIL
+    dur = max(lo, min(t_out - t_in, max(hi, lo)))
     return t_in, t_in + dur
 
 
+def animation_seconds(template: dict) -> float:
+    """
+    The least time a look needs on screen: its entrance up to its visual hit
+    (the registry's sfxAt, else ENTRANCE_FRAMES), SETTLE seconds landed, and
+    its exit (EXIT_FRAMES), all at 30 fps.
+    """
+    d = (template or {}).get("defaults") or {}
+    try:
+        hit = float(d.get("sfxAt")) if d.get("sfxAt") is not None else float(ENTRANCE_FRAMES)
+    except (TypeError, ValueError):
+        hit = float(ENTRANCE_FRAMES)
+    return (max(0.0, hit) + EXIT_FRAMES) / 30.0 + SETTLE
+
+
+def layout_window(template: dict, klass: str) -> tuple:
+    """(min, max) seconds on screen for a look in a layout class (LAYOUT_WINDOWS), never under its own animation."""
+    lo, hi = LAYOUT_WINDOWS[klass]
+    if klass == "text" and template.get("kind") == "card":
+        lo, hi = LAYOUT_WINDOWS["full"]          # a card of words is a card: 2.5-5 s
+    lo = max(lo, animation_seconds(template))
+    return lo, max(hi, lo)
+
+
 def _figure_key(cue: dict) -> Optional[tuple]:
-    """The figure a cue draws, for repeat checks: ("figure", 26.0)."""
+    """The figure a cue draws, for repeat checks: ("figure", 26.0), a span of time ("span", 48.0)."""
     v = (cue.get("props") or {}).get("value")
     if cue.get("cue") in ("percent", "change", "change-length", "big-number", "money", "measurement", "ratio",
-                          "count") and v is not None:
+                          "count", "time-span") and v is not None:
         try:
-            return ("figure", float(v))
+            return ("span" if cue.get("cue") == "time-span" else "figure", float(v))
         except (TypeError, ValueError):
             return None
     return None

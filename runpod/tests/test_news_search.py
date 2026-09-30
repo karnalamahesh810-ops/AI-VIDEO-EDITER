@@ -251,32 +251,39 @@ class PoolPlanning(unittest.TestCase):
                 media.set_story_kind("")
         return plan, spare, calls
 
+    # Updated for the owner's review (2026-09-30): these two tests encoded the
+    # old reuse - NEWS_MAX_MOMENTS_PER_VIDEO (4) lines per news report, and a
+    # nature story drawing all 8 lines from one documentary. Every story now
+    # takes at most config.MAX_MOMENTS_PER_VIDEO (2) lines from one video; the
+    # lines no rated video may take go to per-scene sourcing.
     def test_an_event_subject_draws_a_few_moments_from_several_reports(self):
         cands = [{"id": "AAAAAAAAAAA", "title": "A"}, {"id": "BBBBBBBBBBB", "title": "B"},
                  {"id": "CCCCCCCCCCC", "title": "C"}]
         ten = lambda c: [{"start": 10.0 * k, "score": 0.9, "description": f"{c['id'][0]}{k}"} for k in range(10)]
         jobs = [job(i, "Lake Powell", event_window="year") for i in range(8)]
-        plan, spare, calls = self._plan(jobs, BRIEF, "news", cands, ten)
-        self.assertEqual(len(plan), 8)
-        used = [c["id"] for _, c, _ in plan]
-        self.assertEqual(used.count("AAAAAAAAAAA"), pools.NEWS_MAX_MOMENTS_PER_VIDEO)
-        self.assertEqual(used.count("BBBBBBBBBBB"), pools.NEWS_MAX_MOMENTS_PER_VIDEO)
-        self.assertEqual(calls, ["AAAAAAAAAAA", "BBBBBBBBBBB"])
-        self.assertEqual(spare, [])
-        # A nature story keeps drawing every line from one long documentary.
-        jobs = [job(i, "Lake Powell") for i in range(8)]
-        plan, spare, calls = self._plan(jobs, {}, "nature", cands, ten)
-        self.assertEqual({c["id"] for _, c, _ in plan}, {"AAAAAAAAAAA"})
-        self.assertEqual(calls, ["AAAAAAAAAAA"])
-        self.assertEqual(len(spare), 2)
+        with mock.patch.object(config, "MAX_MOMENTS_PER_VIDEO", 2):
+            plan, spare, calls = self._plan(jobs, BRIEF, "news", cands, ten)
+            self.assertEqual(len(plan), 6)
+            used = [c["id"] for _, c, _ in plan]
+            for vid in ("AAAAAAAAAAA", "BBBBBBBBBBB", "CCCCCCCCCCC"):
+                self.assertEqual(used.count(vid), config.MAX_MOMENTS_PER_VIDEO)
+            self.assertEqual(calls, ["AAAAAAAAAAA", "BBBBBBBBBBB", "CCCCCCCCCCC"])
+            self.assertEqual(spare, [])
+            # A nature story is held to the same cap now.
+            jobs = [job(i, "Lake Powell") for i in range(8)]
+            plan, spare, calls = self._plan(jobs, {}, "nature", cands, ten)
+            used = [c["id"] for _, c, _ in plan]
+            self.assertEqual(max(used.count(v) for v in set(used)), 2)
+            self.assertEqual(calls, ["AAAAAAAAAAA", "BBBBBBBBBBB", "CCCCCCCCCCC"])
 
     def test_cap_keeps_the_best_scored_moments_in_time_order(self):
         scores = [0.7, 0.95, 0.72, 0.9, 0.88, 0.71]
         six = lambda c: [{"start": 10.0 * k, "score": s, "description": ""} for k, s in enumerate(scores)]
         jobs = [job(i, "Lake Powell", event_window="year") for i in range(4)]
-        plan, _, _ = self._plan(jobs, BRIEF, "news", [{"id": "AAAAAAAAAAA", "title": "A"}], six)
+        with mock.patch.object(config, "MAX_MOMENTS_PER_VIDEO", 2):
+            plan, _, _ = self._plan(jobs, BRIEF, "news", [{"id": "AAAAAAAAAAA", "title": "A"}], six)
         self.assertEqual([(m["start"], m["score"]) for _, _, m in plan],
-                         [(10.0, 0.95), (20.0, 0.72), (30.0, 0.9), (40.0, 0.88)])
+                         [(10.0, 0.95), (30.0, 0.9)])
 
     def test_people_still_go_to_per_scene_sourcing(self):
         g = pools.groups([job(0, "Brad Udall", subject_type="person"),

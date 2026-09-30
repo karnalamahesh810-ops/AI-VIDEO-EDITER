@@ -8,14 +8,22 @@ city field says "Santa Marta" while its own caption reads "EPICENTER: SAN JOSE
 DEL PALMAR", 700km apart.
 
 So coordinates never come from the language model. The director may only name a
-place; this module resolves that name against OpenStreetMap's Nominatim and the
-label we draw is the one the gazetteer returned, not the one that was asked
-for. If the lookup fails the map is dropped and the scene keeps its footage.
+place; this module resolves that name against OpenStreetMap's Nominatim, and a
+name only counts as a place when the gazetteer files it as one (a boundary, a
+settlement, a natural feature, a waterway or a road - PLACE_CLASSES). A paint
+store, an office or a restaurant that happens to match the name is not a place
+to map (the owner's Texas flood video got "Sherwin-Williams, United States" on
+a satellite map). If the lookup fails the map is dropped and the scene keeps
+its footage.
+
+The label drawn is the place as the story says it ("North Texas", "El Paso"),
+never the gazetteer's first display part, which for a business is its brand.
 
 Nominatim's usage policy requires an identifying User-Agent and at most one
 request per second, both honoured here.
 """
 from dataclasses import dataclass
+import re
 from typing import Dict, List, Optional
 import threading
 import time
@@ -24,6 +32,12 @@ import requests
 from . import config
 
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
+# Nominatim result classes ("category" in jsonv2, "class" in json) that are places.
+PLACE_CLASSES = {"boundary", "place", "natural", "waterway", "highway"}
+# Hits looked at per name: the first one that is a place wins.
+_CANDIDATES = 5
+# A country the label need not repeat ("El Paso, Texas, USA" -> "El Paso, Texas").
+_COUNTRY_TAIL = re.compile(r",\s*(?:united states(?: of america)?|u\.?s\.?a?\.?)\s*$", re.I)
 
 _cache: Dict[str, Optional["Place"]] = {}
 _lock = threading.Lock()
@@ -57,8 +71,19 @@ def _short_label(display_name: str, fallback: str) -> str:
     return f"{parts[0]}, {parts[-1]}"
 
 
+def is_place(hit: dict) -> bool:
+    """A Nominatim hit filed as a place (PLACE_CLASSES), not a shop, office, amenity or company."""
+    return str(hit.get("category") or hit.get("class") or "").lower() in PLACE_CLASSES
+
+
+def spoken_label(name: str) -> str:
+    """The place as the story names it, tidied: 'El Paso, Texas, USA' -> 'El Paso, Texas'."""
+    label = re.sub(r"\s+", " ", (name or "").strip()).strip(" ,.")
+    return _COUNTRY_TAIL.sub("", label).strip(" ,.") or label
+
+
 def lookup(name: str, timeout: int = 20) -> Optional[Place]:
-    """Resolve one place name. Returns None when nothing matches — never a guess."""
+    """Resolve one place name. Returns None when nothing matches a real place — never a guess."""
     key = (name or "").strip().lower()
     if not key:
         return None
@@ -76,19 +101,22 @@ def lookup(name: str, timeout: int = 20) -> Optional[Place]:
         r = requests.get(
             NOMINATIM,
             headers={"User-Agent": config.USER_AGENT, "Accept-Language": "en"},
-            params={"q": name, "format": "jsonv2", "limit": 1},
+            params={"q": name, "format": "jsonv2", "limit": _CANDIDATES},
             timeout=timeout,
         )
         r.raise_for_status()
         hits = r.json()
-        if hits:
-            hit = hits[0]
+        hit = next((h for h in (hits or []) if isinstance(h, dict) and is_place(h)), None)
+        if hits and hit is None:
+            print(f"[geocode] '{name}' is not a place ({(hits[0] or {}).get('category') or (hits[0] or {}).get('class')}"
+                  f"/{(hits[0] or {}).get('type')}); no map", flush=True)
+        if hit:
             lat, lon = float(hit["lat"]), float(hit["lon"])
             # A gazetteer should never return these, but a bad proxy might, and
             # an out-of-range coordinate would fail validation far downstream.
             if -90 <= lat <= 90 and -180 <= lon <= 180:
                 place = Place(
-                    label=_short_label(hit.get("display_name", ""), name),
+                    label=spoken_label(name) or _short_label(hit.get("display_name", ""), name),
                     lat=round(lat, 5),
                     lon=round(lon, 5),
                     kind=hit.get("addresstype") or hit.get("type") or "",

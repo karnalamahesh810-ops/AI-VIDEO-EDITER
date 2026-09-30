@@ -9925,6 +9925,64 @@
   "file": "LibDateTime"
  },
  {
+  "id": "dt-bold-headline",
+  "name": "Bold Date Headline",
+  "category": "TIMELINES",
+  "description": "The date as a huge bold headline: SEPTEMBER 30 slams onto a solid yellow block (the theme's colour when one is set), punching down from larger with a motion blur and landing on frame 11 with a small camera shake; the weekday rises above it in white and the year, time or place sits letter-spaced under it. Ranges read TUESDAY → THURSDAY, SEPT 28 → OCT 2 or SEPTEMBER 28-30; a time alone headlines with its weekday over it; words like TOMORROW NIGHT go on the block as they are.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "value",
+   "subtitle"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 3.5,
+  "sfx": "hit-deep",
+  "sfx_at": 11,
+  "types": false,
+  "sample": {
+   "text": "Wednesday, September 30, 2026",
+   "label": "Lake Mead, Nevada"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
+  "id": "dt-big-stack",
+  "name": "Big Date Stack",
+  "category": "TIMELINES",
+  "description": "Stacked bold typography left of centre: the day number huge in white (330-440 px), the month in a solid yellow bar locked to the number's width, the weekday, year and place small and letter-spaced under them. The stack punches in from larger with a motion blur and lands on frame 8 with a small bump while the bar wipes open; a weekday, a month or a year alone takes the big line, a day range reads 28-30.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "value",
+   "subtitle"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 3.5,
+  "sfx": "hit-deep",
+  "sfx_at": 8,
+  "types": false,
+  "sample": {
+   "text": "SEPTEMBER 30, 2026",
+   "label": "Phoenix, Arizona"
+  },
+  "family": "dt",
+  "file": "LibDateTime"
+ },
+ {
   "id": "ct-clean-count",
   "name": "Clean Count",
   "category": "NUMBERS",
@@ -10547,6 +10605,141 @@
   "types": false
  },
  {
+  "id": "pe-case-file",
+  "name": "Case File Photo",
+  "category": "IMAGES",
+  "description": "The photo as a print clipped into a manila case folder on a dark desk (a paper clip, the folder tab with the label, a typed report underneath): the print drops onto the folder and lands on frame 13, a typed label strip with the text is taped on under it, a red marker circle is drawn round the point (overlay.anchor {x, y[, r]} in 0..1 of the picture, else an off-centre point) and the camera pushes slowly into the circle.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "photo",
+   "photo-object",
+   "photo-place",
+   "photo-person"
+  ],
+  "duration": 5.0,
+  "sfx": "paper-slide",
+  "sfx_at": 13,
+  "types": false,
+  "sample": {
+   "text": "The intake tower",
+   "label": "Case file",
+   "anchor": {
+    "x": 0.15,
+    "y": 0.42,
+    "r": 0.14
+   }
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor"
+ },
+ {
+  "id": "pe-circle-spotlight",
+  "name": "Circle Spotlight",
+  "category": "IMAGES",
+  "description": "The photo dims, desaturates and softens everywhere except a circle of light that opens on the point (overlay.anchor {x, y[, r]}, else an off-centre point); a red ring draws round it from frame 10 with a thin white halo, and a short label rises beside it on a thin white leader line with a red dot. The camera drifts in about the point; at the exit the ring erases and the iris opens back to the whole picture.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo",
+   "photo-object",
+   "photo-place",
+   "photo-person"
+  ],
+  "duration": 4.5,
+  "sfx": "marker",
+  "sfx_at": 13,
+  "types": false,
+  "sample": {
+   "text": "The intake tower",
+   "subtitle": "Still above water",
+   "anchor": {
+    "x": 0.15,
+    "y": 0.42,
+    "r": 0.14
+   }
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor"
+ },
+ {
+  "id": "pe-magnify",
+  "name": "Magnifying Glass",
+  "category": "IMAGES",
+  "description": "A magnifying glass (dark metal rim, glass glare, wooden handle, a soft shadow on the photo) glides in from the lower right on a curve and settles over the point at frame 22 (overlay.anchor {x, y[, r]}, else an off-centre point), showing the detail about twice as large; it floats while it holds, a white label card pops beside it, and it lifts away at the exit.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "photo",
+   "photo-object",
+   "photo-place"
+  ],
+  "duration": 5.0,
+  "sfx": "whoosh-soft",
+  "sfx_at": 14,
+  "types": false,
+  "sample": {
+   "text": "The intake tower",
+   "anchor": {
+    "x": 0.15,
+    "y": 0.42,
+    "r": 0.1
+   }
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor"
+ },
+ {
+  "id": "pe-red-arrow",
+  "name": "Red Arrow on Photo",
+  "category": "IMAGES",
+  "description": "A bold label card pops up clear of the point, then a hand-drawn red felt-marker arrow sweeps out of it on a bowed curve and its head flicks open on the point at frame 21 (overlay.anchor {x, y[, r]}, else an off-centre point), while the camera pushes slowly in about the point; the arrow is erased from its tail at the exit.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "photo",
+   "photo-object",
+   "photo-place",
+   "photo-person"
+  ],
+  "duration": 4.5,
+  "sfx": "swipe",
+  "sfx_at": 16,
+  "types": false,
+  "sample": {
+   "text": "The intake tower",
+   "anchor": {
+    "x": 0.15,
+    "y": 0.42,
+    "r": 0.1
+   }
+  },
+  "family": "pe",
+  "file": "LibPhotoEditor"
+ },
+ {
   "id": "pf-profile",
   "name": "Profile Intro",
   "category": "IMAGES",
@@ -10760,5 +10953,98 @@
   },
   "family": "wx",
   "file": "LibWeatherMaps"
+ },
+ {
+  "id": "vm-arrow",
+  "name": "Red Arrow on Video",
+  "category": "CALLOUTS",
+  "description": "Rides on the playing clip: a bold white label card pops up clear of the thing and a hand-drawn red felt-marker arrow sweeps out of it, its head flicking open on the thing at frame 18 (the swipe peaks mid-sweep, frame 14). Needs overlay.anchor {x, y[, r]} in 0..1 of the frame (src/anchors.find_anchor on the clip's frame); draws nothing without one.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "point-at",
+   "this-one"
+  ],
+  "duration": 3.0,
+  "sfx": "swipe",
+  "sfx_at": 14,
+  "types": false,
+  "sample": {
+   "text": "The intake tower",
+   "anchor": {
+    "x": 0.15,
+    "y": 0.42,
+    "r": 0.12
+   }
+  },
+  "family": "vm",
+  "file": "LibVideoMarks"
+ },
+ {
+  "id": "vm-circle",
+  "name": "Red Circle on Video",
+  "category": "CALLOUTS",
+  "description": "Rides on the playing clip: a red felt-marker loop draws a little more than once round the thing (frame 3 on) and pulses once with a soft ring going out; a white label card on a red tick beside it when text is given. Needs overlay.anchor {x, y[, r, w, h]} in 0..1 of the frame; draws nothing without one.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "this-one",
+   "point-at"
+  ],
+  "duration": 3.0,
+  "sfx": "marker",
+  "sfx_at": 7,
+  "types": false,
+  "sample": {
+   "text": "The intake tower",
+   "anchor": {
+    "x": 0.15,
+    "y": 0.42,
+    "r": 0.14
+   }
+  },
+  "family": "vm",
+  "file": "LibVideoMarks"
+ },
+ {
+  "id": "vm-box",
+  "name": "Red Box on Video",
+  "category": "CALLOUTS",
+  "description": "Rides on the playing clip: a red box draws round the thing from its top-left corner while the rest of the frame dims a touch, and a red tag with the name slides out of the box's edge. Needs overlay.anchor {x, y[, r, w, h]} in 0..1 of the frame (w, h size the box); draws nothing without one.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "this-one",
+   "point-at"
+  ],
+  "duration": 3.0,
+  "sfx": "marker",
+  "sfx_at": 5,
+  "types": false,
+  "sample": {
+   "text": "The intake tower",
+   "anchor": {
+    "x": 0.15,
+    "y": 0.45,
+    "r": 0.14,
+    "w": 0.1,
+    "h": 0.5
+   }
+  },
+  "family": "vm",
+  "file": "LibVideoMarks"
  }
 ]

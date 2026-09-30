@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { DISPLAY, INTER, LABEL, MONO } from "../fonts";
 import type { Overlay } from "../../types";
-import { ramp, useK } from "../pro/ProGraphics";
+import { lines, ramp, useK } from "../pro/ProGraphics";
 
 /**
  * Dates and times (family "dt-"): bold, clean cards in one strong palette
@@ -17,13 +17,20 @@ import { ramp, useK } from "../pro/ProGraphics";
  *   dt-date-slam       a full-width band: yellow then navy wipe, the date's numerals slam in with a shake
  *   dt-timeline-tick   a thin month (or year) ruler slides in and a marker drops on the date with its label
  *   dt-countdown-days  "3 DAYS LATER" / "48 HOURS": the number counts up, a time bar fills
+ *   dt-bold-headline   the date as a huge bold headline slammed onto a colour block with a small
+ *                      shake, the weekday above it, the year / place under it; ranges as
+ *                      "TUESDAY → THURSDAY" or "SEPT 28 → OCT 2"
+ *   dt-big-stack       stacked bold type left of centre: the day number huge, the month in a
+ *                      solid bar, the weekday / year small; punches in
  *
  * overlay.text is read robustly: "SEPTEMBER 25, 2026", "SEPT. 25", "MARCH 2026",
  * "3:45 PM", "SEPTEMBER 25, 2026 · 3:45 PM", "9/25/2026", "2026-09-25",
  * "noon", "15:45"; overlay.label is a weekday or a place; overlay.value may
  * carry a year. Anything unparseable still draws as a clean text card, never a
  * crash. Sizes are final pixels at 1080p (these looks draw at scale 1.0);
- * nothing is larger than 140 px. Every look leaves in its last 12 frames. No
+ * nothing is larger than 140 px except the two bold looks, whose date is the
+ * headline itself (up to 214 px, the stack's day 330 px). Every look leaves
+ * in its last 12 frames. No
  * sound is played here (the timeline sound lands on the look's sfx_at).
  */
 
@@ -853,6 +860,362 @@ const DtCountdownDays: Look = (props) => {
   );
 };
 
+// ================================================================== bold dates (shared)
+const WD3 = WEEKDAYS.map((w) => w.slice(0, 3));
+type Range = { a: DT; b: DT };
+
+const dayTok = (t: string): number => {
+  const m = /^(\d{1,2})(ST|ND|RD|TH)?$/.exec(t || "");
+  const d = m ? Number(m[1]) : NaN;
+  return d >= 1 && d <= 31 ? d : NaN;
+};
+/** "time" for a clock time alone, "cal" for anything on the calendar, "" for nothing. */
+const kindOf = (d: DT): "time" | "cal" | "" =>
+  d.month !== undefined || d.year !== undefined || d.weekday !== undefined ? "cal" : hasTime(d) ? "time" : "";
+const finishRange = (a: DT, b: DT): Range => {
+  for (const x of [a, b]) {
+    if (x.year !== undefined && x.month !== undefined && x.day !== undefined) {
+      x.day = Math.min(x.day, monthDays(x.year, x.month));
+      if (x.weekday === undefined) x.weekday = weekdayOf(x.year, x.month, x.day);
+    }
+  }
+  return { a, b };
+};
+
+/**
+ * The two ends of a range in the text, else null: "TUESDAY → THURSDAY",
+ * "Monday through Friday", "TUE-THU", "Sept 28 - Oct 2", "SEPTEMBER 28-30,
+ * 2026", "28-30 September", "1983 to 2026", "3 PM - 5 PM". A date and a time
+ * ("SEPT 25 – 3:45 PM") is not a range. Never throws.
+ */
+export const parseRange = (textIn: unknown): Range | null => {
+  const raw = ` ${str(textIn).toUpperCase().replace(/[’']/g, "")} `;
+  if (!raw.trim()) return null;
+  const yearIn = (s: string): number | undefined => {
+    const m = /\b(1\d{3}|2\d{3})\b/.exec(s);
+    return m ? Number(m[1]) : undefined;
+  };
+  const SEP = "(?:-|–|—|→|->|\\bTO\\b|\\bTHROUGH\\b|\\bTHRU\\b|\\bUNTIL\\b|\\bTILL?\\b|\\bAND\\b)";
+  // Days of one month: "SEPT 28-30", "SEPTEMBER 28 TO 30, 2026".
+  let m = new RegExp(`\\b([A-Z]{3,9})\\.?\\s+(\\d{1,2})(?:ST|ND|RD|TH)?\\s*${SEP}\\s*(\\d{1,2})(?:ST|ND|RD|TH)?\\b(?!\\s*[:/.]\\d|\\s*[AP]\\.?M\\b)`).exec(raw);
+  if (m && monthOf(m[1]) >= 0) {
+    const mo = monthOf(m[1]);
+    const d1 = Number(m[2]), d2 = Number(m[3]);
+    if (d1 >= 1 && d1 <= 31 && d2 >= 1 && d2 <= 31 && d1 !== d2) {
+      const y = yearIn(raw);
+      return finishRange({ month: mo, day: d1, year: y }, { month: mo, day: d2, year: y });
+    }
+  }
+  // "28-30 SEPTEMBER".
+  m = /\b(\d{1,2})(?:ST|ND|RD|TH)?\s*(?:-|–|—)\s*(\d{1,2})(?:ST|ND|RD|TH)?\s+([A-Z]{3,9})\b/.exec(raw);
+  if (m && monthOf(m[3]) >= 0 && Number(m[1]) !== Number(m[2]) && Number(m[1]) <= 31 && Number(m[2]) <= 31) {
+    const mo = monthOf(m[3]);
+    const y = yearIn(raw);
+    return finishRange({ month: mo, day: Number(m[1]), year: y }, { month: mo, day: Number(m[2]), year: y });
+  }
+  // Two years: "1983-2026", "1983 TO 2026".
+  m = new RegExp(`\\b(1\\d{3}|2\\d{3})\\s*${SEP}\\s*(1\\d{3}|2\\d{3})\\b`).exec(raw);
+  if (m && m[1] !== m[2]) return { a: { year: Number(m[1]) }, b: { year: Number(m[2]) } };
+  // Anything else around an arrow, a spaced dash, a dash between weekdays or a word.
+  const s = raw
+    .replace(/\b([A-Z]{3,9})\.?-([A-Z]{3,9})\b/g, (all, x: string, y: string) => (weekdayTok(x) >= 0 && weekdayTok(y) >= 0 ? `${x} → ${y}` : all))
+    .replace(/\s*(?:→|->|=>|–|—)\s*/g, " → ")
+    .replace(/\s+-\s+/g, " → ")
+    .replace(/\b(?:TO|THROUGH|THRU|UNTIL|TILL|TIL)\b/g, " → ")
+    .replace(/^\s*FROM\s+/, " ");
+  const parts = s.split("→").map((p) => p.trim()).filter(Boolean);
+  if (parts.length !== 2) return null;
+  const a = parseDT(parts[0]);
+  const b = parseDT(parts[1]);
+  if (b.month === undefined && b.day === undefined && a.month !== undefined) {
+    const dd = dayTok(parts[1].split(/[^A-Z0-9]+/).filter(Boolean)[0] || "");
+    if (Number.isFinite(dd)) b.day = dd;
+  }
+  if (b.month === undefined && b.day !== undefined && a.month !== undefined) b.month = a.month;
+  if (b.year === undefined && a.year !== undefined && b.month !== undefined) b.year = a.year;
+  if (a.year === undefined && b.year !== undefined && a.month !== undefined) a.year = b.year;
+  const ka = kindOf(a), kb = kindOf(b);
+  if (!ka || ka !== kb) return null;
+  if (JSON.stringify(a) === JSON.stringify(b)) return null;
+  return finishRange(a, b);
+};
+
+const joinSub = (...xs: (string | undefined)[]) => xs.filter((x) => !!x).join("  ·  ");
+const clockOf = (d: DT) => (hasTime(d) ? `${timeStr(d)} ${d.ampm}` : "");
+/** The shortest clear name of one end of a range. */
+const endName = (d: DT): string => {
+  if (d.month !== undefined && d.day !== undefined) return `${MON_AP[d.month]} ${d.day}`;
+  if (d.month !== undefined) return d.year !== undefined ? `${MON_AP[d.month]} ${d.year}` : MONTHS[d.month];
+  if (d.year !== undefined) return String(d.year);
+  if (d.weekday !== undefined) return WEEKDAYS[d.weekday];
+  return clockOf(d);
+};
+const placeOf = (ov: Overlay, d: DT): string => d.place || str(ov.subtitle).toUpperCase().slice(0, 40);
+const yearOf = (...ds: DT[]): string => {
+  const y = ds.find((x) => x.year !== undefined)?.year;
+  return y !== undefined ? String(y) : "";
+};
+
+/** Bebas Neue at `px`: advance widths in em by glyph class (a little generous, so nothing clips). */
+const displayW = (t: string, px: number, track = 0.01): number => {
+  let w = 0;
+  for (const c of t) {
+    w += (c === " " ? 0.19 : /[I]/.test(c) ? 0.2 : /[J1]/.test(c) ? 0.3 : /[MW]/.test(c) ? 0.58 : /[-]/.test(c) ? 0.28
+      : /[:.,]/.test(c) ? 0.18 : 0.415) + track;
+  }
+  return w * px;
+};
+const ARROW_EM = 0.62;
+const GAP_EM = 0.2;
+/** Width of a headline line of pieces joined by arrows, at `px`. */
+const piecesW = (parts: string[], px: number): number =>
+  parts.reduce((a, p) => a + displayW(p, px), 0) + Math.max(0, parts.length - 1) * (ARROW_EM + 2 * GAP_EM) * px;
+
+/** A bold geometric arrow between the two ends of a range, in the text's colour. */
+const RangeArrow: React.FC<{ size: number; color: string }> = ({ size, color }) => (
+  <svg width={size * ARROW_EM} height={size * 0.46} viewBox="0 0 62 46" style={{ display: "block", overflow: "visible", flex: "none",
+    marginTop: size * 0.02 }}>
+    <path d="M1 23 H42" stroke={color} strokeWidth={8.5} />
+    <path d="M33 5.5 L61 23 L33 40.5 Z" fill={color} />
+  </svg>
+);
+
+/** One headline line in Bebas Neue: the pieces with an arrow between (a range) or just the one. */
+const Pieces: React.FC<{ parts: string[]; size: number; color: string; shadow?: string }> = ({ parts, size, color, shadow }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: size * GAP_EM }}>
+    {parts.map((p, i) => (
+      <React.Fragment key={i}>
+        {i ? <RangeArrow size={size} color={color} /> : null}
+        <div style={{ fontFamily: DISPLAY, fontSize: size, lineHeight: 0.84, paddingTop: "0.08em", letterSpacing: "0.01em", color,
+          whiteSpace: "nowrap", textShadow: shadow }}>{p}</div>
+      </React.Fragment>
+    ))}
+  </div>
+);
+
+/** A line sliding up out of its mask as p goes 0 -> 1, and down out of it as out goes 0 -> 1. */
+const MaskRise: React.FC<{ p: number; out: number; children: React.ReactNode; style?: React.CSSProperties }> = ({ p, out, children, style }) => (
+  <div style={{ overflow: "hidden", padding: "0.1em 0.2em 0.12em", margin: "-0.1em -0.2em -0.12em", ...style }}>
+    <div style={{ transform: `translateY(${((1 - p) * 110 + out * 110).toFixed(2)}%)`, opacity: p > 0.002 ? 1 : 0 }}>{children}</div>
+  </div>
+);
+
+/** Ink or white, whichever reads on `bg` (the block colour). */
+const onColor = (bg: string): string => {
+  const h = (bg || "").replace("#", "");
+  const n = /^[0-9a-f]{6}$/i.test(h) ? parseInt(h, 16) : 0xffc83d;
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 150 ? INK : "#fff";
+};
+/** The yellow of the date looks, or the theme's colour when one is set on the overlay. */
+const blockColour = (ov: Overlay, accent: string) => (ov.theme ? accent : YELLOW);
+
+/** A decaying camera shake after a hit at frame `at`: [x px, y px, degrees]. */
+const shakeAt = (frame: number, at: number, amp: number): [number, number, number] => {
+  const t = frame - at;
+  if (t < 0 || t > 18) return [0, 0, 0];
+  const e = Math.exp(-t / 3.4);
+  return [Math.sin(t * 2.6 + 0.4) * amp * e, Math.cos(t * 3.3) * amp * 0.7 * e, Math.sin(t * 2.1) * 0.35 * e];
+};
+
+// ================================================================== dt-bold-headline
+type Headline = { top: string[]; main: string[][]; sub: string };
+/** What the headline says: a small top line (the weekday), the date on the block, a line under it (year, time, place). */
+const headlineOf = (ov: Overlay): Headline => {
+  const d = parseDT(ov.text, ov.label, ov.value);
+  const place = placeOf(ov, d);
+  const rg = parseRange(ov.text);
+  if (rg) {
+    const { a, b } = rg;
+    const wds = a.weekday !== undefined && b.weekday !== undefined ? [WEEKDAYS[a.weekday], WEEKDAYS[b.weekday]] : [];
+    if (a.month !== undefined && b.month !== undefined && a.day !== undefined && b.day !== undefined) {
+      const same = a.month === b.month && a.year === b.year;
+      return {
+        top: wds,
+        main: [same ? [`${MONTHS[a.month]} ${a.day}-${b.day}`] : [`${MON_AP[a.month]} ${a.day}`, `${MON_AP[b.month]} ${b.day}`]],
+        sub: joinSub(yearOf(b, a), place),
+      };
+    }
+    if (kindOf(a) === "time") return { top: d.weekday !== undefined ? [WEEKDAYS[d.weekday]] : [], main: [[clockOf(a), clockOf(b)]], sub: place };
+    if (a.month === undefined && b.month === undefined && a.year === undefined && b.year === undefined && wds.length) {
+      return { top: [], main: [wds], sub: joinSub(clockOf(a), place) };
+    }
+    return { top: [], main: [[endName(a), endName(b)]], sub: place };
+  }
+  const wd = d.weekday !== undefined ? WEEKDAYS[d.weekday] : "";
+  const year = d.year !== undefined ? String(d.year) : "";
+  if (d.month !== undefined && d.day !== undefined) return { top: wd ? [wd] : [], main: [[`${MONTHS[d.month]} ${d.day}`]], sub: joinSub(year, clockOf(d), place) };
+  if (d.month !== undefined) return { top: wd ? [wd] : [], main: [[year ? `${MONTHS[d.month]} ${year}` : MONTHS[d.month]]], sub: joinSub(clockOf(d), place) };
+  if (d.year !== undefined) return { top: wd ? [wd] : [], main: [[year]], sub: joinSub(clockOf(d), place) };
+  // A time is the news when there is no calendar date: "3:45 PM" on the block, the weekday over it.
+  if (hasTime(d)) return { top: wd ? [wd] : [], main: [[clockOf(d)]], sub: place };
+  if (wd) return { top: [], main: [[wd]], sub: place };
+  // Words ("TOMORROW NIGHT", "THIS WEEKEND"): the words themselves, up to two stacked lines.
+  const words = str(ov.text).toUpperCase().slice(0, 48);
+  const ls = words.length > 16 ? lines(words, Math.max(10, Math.ceil(words.length / 2) + 2)).slice(0, 2) : [words || "—"];
+  return { top: [], main: ls.map((l) => [l]), sub: place };
+};
+
+/**
+ * The date as a huge bold headline: the date slams onto a strong colour
+ * block (yellow; the theme's colour when set), falling from above the frame
+ * with a motion blur and landing on frame 11 (sfx_at) with a small camera
+ * shake; the weekday rises above it and the year / time / place line under
+ * it. Ranges read "TUESDAY → THURSDAY", "SEPT 28 → OCT 2" or "SEPTEMBER
+ * 28-30". At the exit the block wipes away and the lines drop out.
+ */
+const DtBoldHeadline: Look = ({ overlay, accent }) => {
+  const frame = useCurrentFrame();
+  const { width, durationInFrames: dur } = useVideoConfig();
+  const px = usePx();
+  const u = width / 1920;
+  const out = useOut();
+  const plan = headlineOf(overlay);
+  const block = blockColour(overlay, accent);
+  const ink = onColor(block);
+  const maxW = 1480 * u;
+  const pad = 0.3;
+  const mainSize = Math.min(px(214), ...plan.main.map((l) => maxW / Math.max(1, piecesW(l, 1) + 2 * pad)));
+  const topSize = plan.top.length ? Math.min(mainSize * 0.64, px(140), maxW / Math.max(1, piecesW(plan.top, 1))) : 0;
+  const SLAM = 11;
+  const fall = interpolate(frame, [3, SLAM], [0, 1], { ...clamp, easing: Easing.in(Easing.cubic) });
+  const sc = frame < SLAM ? 1.6 - 0.6 * fall : interpolate(frame, [SLAM, SLAM + 3, SLAM + 10], [1, 0.972, 1], { ...clamp, easing: inOut });
+  const blur = frame < SLAM ? 9 * u * fall * fall : 0;
+  const rotB = frame < SLAM ? -6 + 4.4 * fall : -1.6;
+  const [sx, sy, sr] = shakeAt(frame, SLAM, 12 * u);
+  const hold = interpolate(frame, [SLAM, Math.max(SLAM + 1, dur)], [1, 1.035], clamp);
+  const topIn = ramp(frame, SLAM + 1, 14);
+  const subIn = ramp(frame, SLAM + 7, 14);
+  const lineOut = ramp(frame, dur - EXIT - 2, EXIT - 2, expoIn);
+  const wipe = ramp(frame, dur - EXIT, EXIT - 1, expoIn);
+  const shadow = "0 6px 30px rgba(0,0,0,.55)";
+  return (
+    <AbsoluteFill>
+      <Shade ov={overlay} out={out}
+        background="radial-gradient(ellipse 72% 64% at 50% 50%, rgba(0,0,0,.62) 0%, rgba(0,0,0,.46) 60%, rgba(0,0,0,.34) 100%)" />
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center",
+        transform: `translate(${sx.toFixed(2)}px, ${sy.toFixed(2)}px) rotate(${sr.toFixed(3)}deg) scale(${hold.toFixed(4)})` }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          {plan.top.length ? (
+            <MaskRise p={topIn} out={lineOut} style={{ marginBottom: mainSize * 0.1 }}>
+              <Pieces parts={plan.top} size={topSize} color="#fff" shadow={shadow} />
+            </MaskRise>
+          ) : null}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: mainSize * 0.08,
+            transform: `rotate(${rotB.toFixed(3)}deg) scale(${sc.toFixed(4)})`, opacity: ramp(frame, 3, 2, Easing.linear),
+            filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
+            clipPath: `inset(-30% -30% -30% ${(wipe * 100).toFixed(2)}%)` }}>
+            {plan.main.map((l, i) => (
+              <div key={i} style={{ background: block, padding: `${mainSize * 0.07}px ${mainSize * pad}px ${mainSize * 0.03}px`,
+                boxShadow: `0 ${22 * u}px ${56 * u}px rgba(0,0,0,.45), 0 ${4 * u}px ${10 * u}px rgba(0,0,0,.3)` }}>
+                <Pieces parts={l} size={mainSize} color={ink} />
+              </div>
+            ))}
+          </div>
+          {plan.sub ? (
+            <MaskRise p={subIn} out={lineOut} style={{ marginTop: 30 * u }}>
+              <div style={{ fontFamily: LABEL, fontWeight: 800, fontSize: px(42), letterSpacing: "0.26em", paddingLeft: "0.26em",
+                color: "rgba(255,255,255,.95)", textShadow: "0 3px 16px rgba(0,0,0,.7)", whiteSpace: "nowrap" }}>{plan.sub}</div>
+            </MaskRise>
+          ) : null}
+        </div>
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
+// ================================================================== dt-big-stack
+type StackPlan = { big: string; bar: string; small: string };
+/** The stack: the most specific part huge (the day), the next in the bar (the month), the rest small. */
+const stackOf = (ov: Overlay): StackPlan => {
+  const d = parseDT(ov.text, ov.label, ov.value);
+  const place = placeOf(ov, d);
+  const rg = parseRange(ov.text);
+  if (rg) {
+    const { a, b } = rg;
+    const wdr = a.weekday !== undefined && b.weekday !== undefined ? `${WD3[a.weekday]} - ${WD3[b.weekday]}` : "";
+    if (a.month !== undefined && b.month !== undefined && a.day !== undefined && b.day !== undefined) {
+      const bar = a.month === b.month ? MONTHS[a.month] : `${MON3[a.month]} - ${MON3[b.month]}`;
+      return { big: `${a.day}-${b.day}`, bar, small: joinSub(wdr, yearOf(b, a), place) };
+    }
+    if (kindOf(a) === "time") return { big: timeStr(a), bar: `TO ${clockOf(b)}`, small: joinSub(a.ampm, place) };
+    if (a.year !== undefined && b.year !== undefined && a.month === undefined && b.month === undefined) {
+      return { big: String(a.year), bar: `TO ${b.year}`, small: place };
+    }
+    if (a.weekday !== undefined && b.weekday !== undefined && a.month === undefined && b.month === undefined) {
+      return { big: `${WD3[a.weekday]}-${WD3[b.weekday]}`, bar: place || "", small: joinSub(clockOf(a)) };
+    }
+    return { big: endName(a), bar: `TO ${endName(b)}`, small: place };
+  }
+  const wd = d.weekday !== undefined ? WEEKDAYS[d.weekday] : "";
+  const year = d.year !== undefined ? String(d.year) : "";
+  if (d.month !== undefined && d.day !== undefined) return { big: String(d.day), bar: MONTHS[d.month], small: joinSub(wd, year, clockOf(d), place) };
+  if (d.month !== undefined) return { big: MONTHS[d.month], bar: year, small: joinSub(wd, clockOf(d), place) };
+  if (d.year !== undefined) return { big: year, bar: place, small: joinSub(wd, clockOf(d)) };
+  if (wd) return { big: wd, bar: clockOf(d), small: place };
+  if (hasTime(d)) return { big: timeStr(d), bar: d.ampm || "", small: place };
+  return { big: str(ov.text).toUpperCase().slice(0, 18) || "—", bar: "", small: place };
+};
+
+/**
+ * Stacked bold typography, left of centre: the day number huge, the month
+ * in a solid colour bar the width of the stack, the weekday / year / place
+ * small and letter-spaced under it. The stack punches in from larger with a
+ * motion blur and lands on frame 8 (sfx_at) with a small bump; the bar wipes
+ * open behind it; at the exit the bar wipes shut and the stack slides off.
+ */
+const DtBigStack: Look = ({ overlay, accent }) => {
+  const frame = useCurrentFrame();
+  const { width, durationInFrames: dur } = useVideoConfig();
+  const px = usePx();
+  const u = width / 1920;
+  const out = useOut();
+  const plan = stackOf(overlay);
+  const block = blockColour(overlay, accent);
+  const ink = onColor(block);
+  const barSize = px(plan.bar.length > 14 ? 62 : 78);
+  // The number as wide as the month bar where it can be (a lockup), 330-440 px, never wider than 860 px.
+  const barW = plan.bar ? plan.bar.length * barSize * 0.6 + barSize * 0.6 : 0;
+  const bigW1 = Math.max(0.5, displayW(plan.big, 1));
+  const bigSize = Math.min((860 * u) / bigW1, Math.max(px(330), Math.min(px(440), barW / bigW1)));
+  const HIT = 8;
+  const pin = ramp(frame, 0, HIT, Easing.bezier(0.3, 0.6, 0.35, 1));
+  const sc = frame < HIT ? 1.34 - 0.34 * pin : interpolate(frame, [HIT, HIT + 3, HIT + 9], [1, 0.978, 1], { ...clamp, easing: inOut });
+  const blur = frame < HIT ? 10 * u * (1 - pin) : 0;
+  const bar = ramp(frame, 5, 10, expoOut) * (1 - ramp(frame, dur - EXIT - 2, 8, expoIn));
+  const smallIn = ramp(frame, HIT + 4, 14);
+  const hold = interpolate(frame, [HIT, Math.max(HIT + 1, dur)], [1, 1.03], clamp);
+  const leave = ramp(frame, dur - EXIT + 2, EXIT - 2, expoIn);
+  return (
+    <AbsoluteFill>
+      <Shade ov={overlay} out={out}
+        background="linear-gradient(90deg, rgba(0,0,0,.7) 0%, rgba(0,0,0,.52) 34%, rgba(0,0,0,.18) 64%, rgba(0,0,0,.04) 86%)" />
+      <div style={{ position: "absolute", left: 150 * u, top: "50%", opacity: ramp(frame, 0, 3, Easing.linear) * (1 - leave),
+        transform: `translateY(-50%) translateX(${(-leave * 60 * u).toFixed(2)}px) scale(${(sc * hold).toFixed(4)})`, transformOrigin: "0% 50%",
+        filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined }}>
+        <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "stretch" }}>
+          <div style={{ fontFamily: DISPLAY, fontSize: bigSize, lineHeight: 0.8, paddingTop: "0.075em", marginBottom: bigSize * 0.035,
+            marginLeft: "-0.03em", letterSpacing: "0.005em", color: "#fff", whiteSpace: "nowrap",
+            textShadow: "0 10px 40px rgba(0,0,0,.45)" }}>{plan.big}</div>
+          {plan.bar ? (
+            <div style={{ background: block, color: ink, fontFamily: LABEL, fontWeight: 800, fontSize: barSize, lineHeight: 1,
+              letterSpacing: "0.07em", padding: `${barSize * 0.16}px ${barSize * 0.3}px ${barSize * 0.1}px`, whiteSpace: "nowrap",
+              clipPath: `inset(0 ${((1 - bar) * 100).toFixed(2)}% 0 0)`, boxShadow: `0 ${14 * u}px ${34 * u}px rgba(0,0,0,.4)` }}>{plan.bar}</div>
+          ) : (
+            <div style={{ height: 18 * u, background: block, clipPath: `inset(0 ${((1 - bar) * 100).toFixed(2)}% 0 0)` }} />
+          )}
+        </div>
+        {plan.small ? (
+            <MaskRise p={smallIn} out={0} style={{ marginTop: 22 * u }}>
+              <div style={{ fontFamily: LABEL, fontWeight: 800, fontSize: px(38), letterSpacing: "0.24em", color: "rgba(255,255,255,.94)",
+                whiteSpace: "nowrap", textShadow: "0 3px 14px rgba(0,0,0,.7)" }}>{plan.small}</div>
+            </MaskRise>
+          ) : null}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 export const LOOKS: Record<string, Look> = {
   "dt-clean-card": DtCleanCard,
   "dt-calendar-page": DtCalendarPage,
@@ -862,4 +1225,6 @@ export const LOOKS: Record<string, Look> = {
   "dt-date-slam": DtDateSlam,
   "dt-timeline-tick": DtTimelineTick,
   "dt-countdown-days": DtCountdownDays,
+  "dt-bold-headline": DtBoldHeadline,
+  "dt-big-stack": DtBigStack,
 };

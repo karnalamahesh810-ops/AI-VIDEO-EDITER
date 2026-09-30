@@ -1,4 +1,4 @@
-"""The overlay sound planner (src/sfxplan.py): on the hit, quiet, sparse, varied."""
+"""The overlay sound planner (src/sfxplan.py): on the hit, under the voice, sparse, varied."""
 import json
 import os
 import shutil
@@ -13,6 +13,8 @@ FILES = {  # name: (duration s, peak s)
     "impact": (2.4, 0.6), "boom-soft": (1.7, 0.3), "click": (0.11, 0.0), "tick": (0.09, 0.0),
     "keys": (5.0, 0.4), "count-tick": (1.32, 0.96), "pop": (0.48, 0.03), "marker": (0.7, 0.16),
 }
+# At the assumed voice (-16 LUFS) against the -20 LUFS sound set: 10 ** ((-16 - dB under + 20) / 20).
+AT = {5: 0.891, 6: 0.794, 7: 0.708, 9: 0.562, 10: 0.501}
 
 
 def T(tid, sfx="whoosh", emphasis="medium", cues=(), component="motion", **defaults):
@@ -31,6 +33,8 @@ REG = {t["id"]: t for t in [
     T("TEXT_BAR_TITLE_V1", "typewriter", component="bar-title"),
     T("KICKER", "typewriter", types=False),
     T("DATE_LOOK", "impact", cues=["date"], emphasis="high", sfxAt=20),
+    dict(T("LIB_DT_DATE_SLAM", "boom-soft", cues=["date"], emphasis="high", sfxAt=18), category="TIMELINES"),
+    dict(T("TL_CLOCK_LOOK", "marker", cues=["time-of-day"], sfxAt=10), category="TIMELINES"),
     T("COUNT_LOOK", "pop", cues=["percent"]),
     T("COUNT_HIT", "pop", cues=["big-number"], sfxAt=45),
     T("COUNT_CLICK_IN", "click", cues=["big-number"], sfxAt=6, types=False),
@@ -53,6 +57,8 @@ class SfxPlanTest(unittest.TestCase):
         with open(os.path.join(self.dir, "sfx_meta.json"), "w", encoding="utf-8") as fh:
             json.dump({n: {"duration": d, "peak": p} for n, (d, p) in FILES.items()}, fh)
         self.patches = [mock.patch.object(sfxplan, "SFX_DIR", self.dir),
+                        # The renderer's copy of the meta stays out of these hermetic tests.
+                        mock.patch.object(sfxplan, "DATA_META", os.path.join(self.dir, "no-such-meta.json")),
                         mock.patch.object(sfxplan.templates, "get", lambda tid: REG.get(tid or ""))]
         for p in self.patches:
             p.start()
@@ -78,9 +84,11 @@ class Alignment(SfxPlanTest):
         self.assertEqual((s["name"], s["startFrame"], s["trimFrames"]), ("whoosh", 300, 9))
         self.assertEqual(s["startFrame"] - s["trimFrames"] + 21, 312)
         self.assertEqual(s["durationFrames"], 69)          # the whole file: it ends inside the look
-        # A look shorter than its sound: the sound stops (short release) with it.
+        # A look shorter than its sound: the sound is over when the look leaves
+        # (the renderer fades a cut sound over its last frames), never ringing past it.
         [s] = sfxplan.plan([ov("LOOK_A", 300, frames=30)], 30, 1.0)
-        self.assertEqual(s["durationFrames"], 9 + 30 + 6)
+        self.assertEqual(s["durationFrames"], 9 + 30)
+        self.assertEqual(s["startFrame"] - s["trimFrames"] + s["durationFrames"], 300 + 30)
         self.assertEqual(s["kind"], "overlay")
         self.assertEqual(set(s), {"name", "startFrame", "volume", "durationFrames", "kind", "trimFrames"})
 
@@ -114,7 +122,7 @@ class Typing(SfxPlanTest):
         text = "Where did the water go?"                  # 23 chars <= 48: 2 frames a character
         [s] = sfxplan.plan([ov("TYPE_LOOK", 100, 200, text=text)], 30, 1.0)
         self.assertEqual((s["name"], s["startFrame"], s["durationFrames"]), ("keys", 106, 46))
-        self.assertEqual(s["volume"], 0.1)
+        self.assertEqual(s["volume"], AT[10])                # a typing loop sits ~10 dB under the voice
 
     def test_long_text_types_one_frame_a_character_and_is_capped(self):
         text = "x" * 60
@@ -192,21 +200,133 @@ class Counting(SfxPlanTest):
 
 
 class Volume(SfxPlanTest):
-    def test_quiet_by_kind_and_scaled_by_the_pack(self):
+    """The owner (2026-09-30): the sounds were far too low; set them against the voice, never above it."""
+
+    def test_levels_sit_under_the_voice_by_kind_and_scale_with_the_pack(self):
         got = {s["name"]: s["volume"] for s in sfxplan.plan(
             [ov("LOOK_HIGH", 0), ov("LOOK_B", 300), ov("KICKER", 600, text="A"),
              ov("TYPE_LOOK", 900, text="abc")], 30, 1.0)}
-        self.assertEqual(got, {"impact": 0.13, "whoosh": 0.15, "click": 0.15, "keys": 0.1})
+        # Hits 5 dB under the voice, clicks 7, whooshes 9, typing 10.
+        self.assertEqual(got, {"impact": AT[5], "whoosh": AT[9], "click": AT[7], "keys": AT[10]})
         half = sfxplan.plan([ov("LOOK_B", 300)], 30, 0.5)
-        self.assertEqual(half[0]["volume"], 0.075)
+        self.assertEqual(half[0]["volume"], round(AT[9] * 0.5, 3))
+        # Nothing like the old 0.09-0.135: every planned sound is within reach of the voice.
+        self.assertTrue(all(v >= 0.45 for v in got.values()), got)
+
+    def test_the_levels_follow_the_measured_voice(self):
+        quiet = sfxplan.plan([ov("LOOK_B", 300)], 30, 1.0, voice_lufs=-24.0)[0]["volume"]
+        normal = sfxplan.plan([ov("LOOK_B", 300)], 30, 1.0, voice_lufs=-16.0)[0]["volume"]
+        self.assertAlmostEqual(normal / quiet, 10 ** (8 / 20), places=2)      # 8 dB quieter voice, 8 dB quieter sound
+        # A loud voice never pushes a sound past the renderer's 1.0.
+        loud = sfxplan.plan([ov("LOOK_HIGH", 0)], 30, 1.0, voice_lufs=-8.0)[0]["volume"]
+        self.assertLessEqual(loud, 1.0)
+        # Unknown or absurd levels fall back to the assumed voice.
+        self.assertEqual(sfxplan.voice_level(None), sfxplan.VOICE_LUFS_DEFAULT)
+        self.assertEqual(sfxplan.voice_level("x"), sfxplan.VOICE_LUFS_DEFAULT)
+        self.assertEqual(sfxplan.voice_level(3.0), sfxplan.VOICE_LUFS_DEFAULT)
 
     def test_never_louder_than_the_cap(self):
-        loud = sfxplan.plan([ov("LOOK_B", 0), ov("LOOK_B", 400, sfxVolume=0.9)], 30, 3.0)
-        self.assertTrue(all(s["volume"] <= sfxplan.MAX_VOLUME for s in loud))
-        self.assertEqual(loud[1]["volume"], sfxplan.MAX_VOLUME)
+        loud = sfxplan.plan([ov("LOOK_B", 0), ov("LOOK_B", 400, sfxVolume=1.0)], 30, 3.0)
+        top = round(sfxplan.cap(), 3)
+        self.assertTrue(all(s["volume"] <= top for s in loud), loud)
+        self.assertEqual(loud[1]["volume"], top)           # the editor's 100% comes back to the cap
+        self.assertEqual(top, AT[sfxplan.CAP_UNDER_DB])    # the cap is the hits' level: 5 dB under the voice
+        # An editor's quieter choice stands as set.
+        [s] = sfxplan.plan([ov("LOOK_B", 400, sfxVolume=0.2)], 30, 1.0)
+        self.assertEqual(s["volume"], 0.2)
+        # clamp() also lowers the ceiling for a master sfxVolume above 1.
+        self.assertAlmostEqual(sfxplan.clamp(1.0, None, 2.0), sfxplan.cap() / 2)
+        self.assertEqual(sfxplan.clamp(-1), 0.0)
+
+    def test_a_category_in_the_meta_sets_the_level(self):
+        open(os.path.join(self.dir, "shimmer-new.mp3"), "wb").close()
+        with open(os.path.join(self.dir, "sfx_meta.json"), "w", encoding="utf-8") as fh:
+            json.dump({**{n: {"duration": d, "peak": p} for n, (d, p) in FILES.items()},
+                       "shimmer-new": {"duration": 1.0, "peak": 0.2, "category": "shimmer"},
+                       "whoosh": {"duration": 2.3, "peak": 0.7, "category": "impact"}}, fh)
+        sfxplan.reload()
+        self.assertEqual(sfxplan.category("shimmer-new"), "shimmer")
+        self.assertEqual(round(sfxplan.level("shimmer-new"), 3), AT[9])
+        self.assertEqual(round(sfxplan.level("whoosh"), 3), AT[5])           # the meta beats the name
+        self.assertEqual(sfxplan.category("keys"), "typing")                 # no category: the name decides
+        self.assertEqual(round(sfxplan.level("no-such-sound"), 3), AT[6])    # unknown: 6 dB under
+
+    def test_the_renderer_copy_of_the_meta_fills_in_a_category(self):
+        data = os.path.join(self.dir, "data_meta.json")
+        with open(data, "w", encoding="utf-8") as fh:
+            json.dump({"pop": {"duration": 9.0, "peak": 9.0, "category": "impact"}}, fh)
+        with mock.patch.object(sfxplan, "DATA_META", data):
+            sfxplan.reload()
+            self.assertEqual(sfxplan.category("pop"), "impact")
+            self.assertEqual(sfxplan.duration_frames("pop", 30), 15)        # the sound folder's own numbers win
+        sfxplan.reload()
 
     def test_zero_intensity_is_silence(self):
         self.assertEqual(sfxplan.plan([ov("LOOK_B", 0)], 30, 0.0), [])
+
+
+class FollowsTheLook(SfxPlanTest):
+    """The owner (2026-09-30): a sound starts with its look, peaks on its hit, is over when it leaves."""
+
+    def test_a_look_cut_short_before_its_hit_is_silent(self):
+        self.assertEqual(sfxplan.plan([ov("LOOK_A", 300, frames=12)], 30, 1.0), [])      # hit at 12: never shown
+        self.assertEqual(sfxplan.plan([ov("LOOK_A", 300, frames=15)], 30, 1.0), [])      # 3 frames of it: no
+        [s] = sfxplan.plan([ov("LOOK_A", 300, frames=20)], 30, 1.0)
+        self.assertLessEqual(s["startFrame"] + s["durationFrames"] - s.get("trimFrames", 0), 320)
+
+    def test_no_sound_rings_past_its_look(self):
+        looks = [ov("LOOK_HIGH", 0, 25), ov("TYPE_LOOK", 300, 20, text="z" * 40),
+                 ov("COUNT_LOOK", 600, 30, value=22), ov("LOOK_B", 900, 40)]
+        for s, o in zip(sfxplan.plan(looks, 30, 1.0), looks):
+            end = s["startFrame"] + s["durationFrames"] - s.get("trimFrames", 0)
+            self.assertGreaterEqual(s["startFrame"], o["startFrame"], s)
+            self.assertLessEqual(end, o["startFrame"] + o["durationInFrames"], s)
+
+    def test_two_looks_landing_together_get_one_sound_the_stronger(self):
+        out = sfxplan.plan([ov("LOOK_LOW", 0, 200), ov("LOOK_HIGH", 12, 200)], 30, 1.0)
+        self.assertEqual([s["name"] for s in out], ["impact"])
+        # Even two protected looks: a typed line and a date 0.3 s apart sound once.
+        out = sfxplan.plan([ov("TYPE_LOOK", 0, 60, text="Gone."), ov("LIB_DT_DATE_SLAM", 9, 60, text="MAY 5")],
+                           30, 1.0)
+        self.assertEqual(len(out), 1)
+        # 0.6 s apart they are two moments.
+        out = sfxplan.plan([ov("TYPE_LOOK", 0, 16, text="Gone."), ov("LIB_DT_DATE_SLAM", 18, 60, text="MAY 5")],
+                           30, 1.0)
+        self.assertEqual(len(out), 2)
+
+
+class Dates(SfxPlanTest):
+    """The owner (2026-09-30): every date is bold type on the deep hit."""
+
+    def setUp(self):
+        super().setUp()
+        open(os.path.join(self.dir, "hit-deep.mp3"), "wb").close()
+        with open(os.path.join(self.dir, "sfx_meta.json"), "w", encoding="utf-8") as fh:
+            json.dump({**{n: {"duration": d, "peak": p} for n, (d, p) in FILES.items()},
+                       "hit-deep": {"duration": 2.3, "peak": 0.02}}, fh)
+        sfxplan.reload()
+
+    def test_every_date_lands_on_the_deep_hit_at_the_hits_level(self):
+        looks = [ov("LIB_DT_DATE_SLAM", 300 * k, 90, text="SEPTEMBER 15") for k in range(4)]
+        out = sfxplan.plan(looks, 30, 1.0)
+        # Never varied away from the deep hit, however often dates come.
+        self.assertEqual([s["name"] for s in out], ["hit-deep"] * 4)
+        self.assertTrue(all(s["volume"] == AT[5] for s in out), out)
+        # Its peak (frame 1 of the file) on the look's hit (sfxAt 18).
+        self.assertEqual(out[0]["startFrame"] - out[0].get("trimFrames", 0) + 1, 18)
+
+    def test_a_clock_keeps_its_own_sound_and_an_editor_pick_wins(self):
+        [s] = sfxplan.plan([ov("TL_CLOCK_LOOK", 0, 90, text="3:45 PM")], 30, 1.0)
+        self.assertEqual(s["name"], "marker")
+        [s] = sfxplan.plan([ov("LIB_DT_DATE_SLAM", 0, 90, text="MAY 5", sfx="pop")], 30, 1.0)
+        self.assertEqual(s["name"], "pop")
+
+    def test_what_is_a_calendar_date(self):
+        self.assertTrue(sfxplan.is_calendar_date(REG["LIB_DT_DATE_SLAM"]))
+        self.assertFalse(sfxplan.is_calendar_date(REG["TL_CLOCK_LOOK"]))
+        self.assertFalse(sfxplan.is_calendar_date(REG["DATE_LOOK"]))        # not a date family look
+        self.assertFalse(sfxplan.is_calendar_date({"id": "LIB_FX_FILM_BURN", "category": "TRANSITIONS",
+                                                   "cues": ["archive", "date"]}))
 
 
 class Spacing(SfxPlanTest):

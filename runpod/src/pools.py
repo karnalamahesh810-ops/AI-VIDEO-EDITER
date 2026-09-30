@@ -32,9 +32,19 @@ Here, per subject:
   4. each moment is downloaded as its own short section.
 
 A moment is identified as video + 10 s bucket (MediaAsset.moment_key): the
-same video can supply many shots, the same moment never appears twice. Lines
-with no subject, people (their footage and photos need the per-scene rules),
-stills, and subjects whose pool runs dry are left to the per-scene path.
+same moment never appears twice. Lines with no subject, people (their footage
+and photos need the per-scene rules), stills, the opening (hook) lines, which
+get the per-scene path's wider best-of search, and subjects whose pool runs
+dry are left to the per-scene path.
+
+The owner's review of a news video (2026-09-30) changed step 3: consecutive
+lines taking consecutive moments of one video read as one shot repeated
+("Drone's eye view of Texas flood damage" 4 times in the first minute). A
+video now supplies at most config.MAX_MOMENTS_PER_VIDEO lines of the whole
+video, SAME_VIDEO_GAP_SECONDS apart on the timeline (a ledger shared by every
+subject, _Slots), and a line that names its own place (job "place", from the
+director) is pooled under that place, searched with the event word and, for a
+story about now, among the last month's uploads first.
 """
 from __future__ import annotations
 
@@ -72,6 +82,12 @@ NEWS_TITLE_BONUS = 3.5
 # Flat searches plus the in-channel lookup, per subject pool.
 POOL_SEARCHES_MAX = 4
 _YT_THIS_YEAR = "EgIIBQ%3D%3D"          # same value as ytdlp._YT_THIS_YEAR
+# YouTube's "this month" / "this week" upload filters (media._RECENT_SP).
+_YT_RECENT = {"month": "EgIIBA%3D%3D", "week": "EgIIAw%3D%3D"}
+# Rank bonus for an upload a last-month search returned, in a story about now:
+# recent reports of the event are rated first, older ones only when they run
+# out (the owner, 2026-09-30: footage of THIS flood, not last year's).
+RECENT_BONUS = 2.5
 _YEAR = re.compile(r"\b(19[89]\d|20[0-2]\d)\b")
 
 _NEWS_TITLE = re.compile(
@@ -91,13 +107,15 @@ def _news_title(title: str, channel: str = "") -> bool:
 
 def subject_story(sjobs: List[dict]) -> dict:
     """
-    {kind, event, year, window, is_event} for one subject's lines.
+    {kind, event, year, window, is_event, recency, word} for one subject's lines.
 
     Read from what already travels with the jobs (event_window and
     scene_intent are copied into every fan-out part) and the story kind
     media.set_story_kind records on every worker, so a part behaves like the
     parent. is_event only ever with config.NEWS_FOOTAGE: off, the pools search
-    exactly as before.
+    exactly as before. `recency` is "month" when the lines belong to a story
+    about now (the director's job "recency"), `word` the event's own word
+    ("flooding", "wildfire") for place + event searches.
     """
     from . import director            # lazy: director never imports pools
     kind = media._STORY_KIND["kind"]
@@ -117,7 +135,11 @@ def subject_story(sjobs: List[dict]) -> dict:
     current = director.current_story({"kind": kind, "year": year})
     is_event = bool(config.NEWS_FOOTAGE) and (
         kind in _EVENT_KINDS or bool(windows) or (kind == "explainer" and bool(event)) or current)
-    return {"kind": kind, "event": event, "year": year, "window": window, "is_event": is_event}
+    recencies = {j.get("recency") for j in sjobs if j.get("recency")}
+    recency = next((r for r in ("week", "month") if r in recencies), "") if config.RECENT_FOOTAGE_FIRST else ""
+    word = director.event_word(brief) or director.event_word({"event": si.get("event_type") or ""})
+    return {"kind": kind, "event": event, "year": year, "window": window, "is_event": is_event,
+            "recency": recency, "word": word}
 
 
 def _event_words(event: str, subject: str) -> str:
@@ -133,6 +155,13 @@ def subject_key(subject: str) -> str:
     return " ".join(text.split())
 
 
+def _pool_name(job: dict) -> str:
+    """What a line's pool is about: the place the line names (director
+    linePlace, job "place") before its subject, so a "Dallas and Fort Worth"
+    line is pooled - and searched - as Dallas, not with every Texas line."""
+    return (job.get("place") or job.get("subject") or "").strip()
+
+
 def groups(jobs: List[dict]) -> Dict[str, List[dict]]:
     """
     Footage lines grouped by subject, in story order (key -> jobs).
@@ -141,7 +170,10 @@ def groups(jobs: List[dict]) -> Dict[str, List[dict]]:
     for a person subject (media._vision_gate -> vision.acceptable), whereas
     rate_tiles has no such switch; their interview searches come from
     director.news_queries. Places and things (two thirds of GoMotion's clips)
-    are pooled here, from news reports and drone videos.
+    are pooled here, from news reports and drone videos. So do the opening
+    lines (job "hook"): a pool rates storyboard tiles once per video, while
+    the per-scene path judges the downloaded frames best-of-N with a wider
+    search for them (the owner, 2026-09-30: the hook gets the strongest clips).
     """
     out: Dict[str, List[dict]] = {}
     for job in sorted(jobs, key=lambda j: j["index"]):
@@ -149,14 +181,16 @@ def groups(jobs: List[dict]) -> Dict[str, List[dict]]:
             continue
         if job.get("subject_type") == "person":
             continue
-        key = subject_key(job.get("subject") or "")
+        if job.get("hook"):
+            continue
+        key = subject_key(_pool_name(job))
         if key:
             out.setdefault(key, []).append(job)
     return out
 
 
 def display_name(jobs: List[dict]) -> str:
-    return Counter((j.get("subject") or "").strip() for j in jobs).most_common(1)[0][0]
+    return Counter(_pool_name(j) for j in jobs).most_common(1)[0][0]
 
 
 def _uses_channels(story: Optional[dict], require_cc: bool) -> bool:
@@ -177,6 +211,26 @@ def _searches(subject: str, story: Optional[dict] = None,
     if not story or not story.get("is_event"):
         return generic
     year = str(story.get("year") or "")
+    word = str(story.get("word") or "").strip()
+    now = story.get("recency") or ""
+    if now in _YT_RECENT and word:
+        # A story about now (the owner's news compilations, 2026-09-30): the
+        # place the lines name with the event's own word, among the last
+        # month's uploads first, then the same search over any upload for an
+        # event YouTube has little recent footage of yet. The generic drone
+        # and documentary searches find the skyline, not the flood, and drop
+        # out; _rank puts the recent uploads first.
+        what = subject if _names_word(subject, word) else f"{subject} {word}"
+        first = [(f"{what} {year}".strip(), "event-now", now),
+                 (f"{what} news", "news-now", now),
+                 (f"{what} {year}".strip(), "event", ""),
+                 (f"{what} drone", "drone-now", now)]
+        seen, out = set(), []
+        for q, v, r in first:
+            if (q.lower(), r) not in seen:
+                seen.add((q.lower(), r))
+                out.append((q, v, r))
+        return out[:POOL_SEARCHES_MAX if limit is None else max(1, limit)]
     recent = "year" if story.get("window") == "year" else ""
     topic = _event_words(story.get("event") or "", subject)
     news = [(f"{subject} news {year}".strip(), "news", recent)]
@@ -192,11 +246,20 @@ def _searches(subject: str, story: Optional[dict] = None,
     return out[:max(len(generic), POOL_SEARCHES_MAX if limit is None else limit)]
 
 
+def _names_word(text: str, word: str) -> bool:
+    """Does `text` already carry the event word ("Texas floods" has "flooding")?"""
+    stem = (word or "").lower().split()[0][:5] if word else ""
+    return bool(stem) and stem in (text or "").lower()
+
+
 def _target(query: str, require_cc: bool, recency: str) -> str:
-    """The yt-dlp target: the CC results page, this year's uploads, or a flat search."""
+    """The yt-dlp target: the CC results page, this year's (month's, week's) uploads, or a flat search."""
     if require_cc:
         return ("https://www.youtube.com/results?search_query="
                 + urllib.parse.quote_plus(query) + "&sp=EgIwAQ%3D%3D")
+    if recency in _YT_RECENT:
+        return ("https://www.youtube.com/results?search_query="
+                + urllib.parse.quote_plus(query) + "&sp=" + _YT_RECENT[recency])
     if recency == "year":
         # The only recency signal there is: flat rows carry no upload date.
         return ("https://www.youtube.com/results?search_query="
@@ -237,6 +300,12 @@ def _rank(c: dict, words: List[str], story: Optional[dict], via: str) -> Optiona
             score -= 2.0                  # another year's shoreline / another flood
     if on_topic == 0 and hits == 0:
         return None                       # neither the subject nor the event
+    # A story about now: the last month's uploads first, the event's own
+    # word ("flooding") ahead of a title that names only the place.
+    if c.get("_recent"):
+        score += RECENT_BONUS
+    if story.get("word") and _names_word(title, story["word"]):
+        score += 1.0
     return score
 
 
@@ -249,18 +318,22 @@ def candidates(subject: str, require_cc: bool, skip_ids: Set[str],
     the shorter NEWS_MIN_SECONDS floor for news titles and the news ranking
     on; without it the pool is the two generic searches ranked as before.
     Every row records "_news" (title reads as a report) and "_via"
-    ("search" or "channel") for the stats and the per-video cap.
+    ("search" or "channel") for the stats and the per-video cap, and "_recent"
+    when a last-month search returned it (a story about now ranks those first).
     """
     event = bool(story and story.get("is_event"))
     channels = _uses_channels(story, require_cc)
     limit = POOL_SEARCHES_MAX - (1 if channels else 0)
     words = [w for w in subject_key(subject).split() if len(w) > 2]
     rows: List[tuple] = []
+    recent_ids: Set[str] = set()
     for q, variant, recency in _searches(subject, story, limit):
         target = _target(q, require_cc, recency)
         for c in media._yt_candidates_cached(target, require_cc, subject_key(subject),
                                              variant=f"pool:{variant}:{recency}"):
             rows.append((c, "search"))
+            if recency in _YT_RECENT and not require_cc:
+                recent_ids.add(c.get("id") or "")
     if channels:
         for c in media._channel_candidates(subject, config.NEWS_CHANNELS, subject):
             rows.append((c, "channel"))
@@ -281,6 +354,7 @@ def candidates(subject: str, require_cc: bool, skip_ids: Set[str],
             continue
         c["_news"] = news
         c["_via"] = "channel" if vid in from_channel else via
+        c["_recent"] = vid in recent_ids
         rank = _rank(c, words, story, c["_via"])
         if rank is None:
             continue
@@ -356,15 +430,67 @@ def spaced(found: List[dict], gap: float) -> List[dict]:
     return kept
 
 
+def _video_of(cand: dict) -> str:
+    """A pool candidate's source video as media.video_key names it ("yt:<id>"), library clips included."""
+    vid = str(cand.get("id") or "")
+    m = re.search(r"yt:([\w-]{11})", vid)
+    if m:
+        return f"yt:{m.group(1)}"
+    return f"yt:{vid}" if re.fullmatch(r"[\w-]{11}", vid) else vid
+
+
+def _start_of(job: dict) -> Optional[float]:
+    at = job.get("start")
+    return float(at) if isinstance(at, (int, float)) and not isinstance(at, bool) else None
+
+
+class _Slots:
+    """
+    Where each source video already plays on the timeline, shared by every
+    subject's pool of one job (they run in parallel): take() admits one more
+    line only under the variety rules (media.may_place - MAX_MOMENTS_PER_VIDEO
+    lines per video, SAME_VIDEO_GAP_SECONDS apart). The owner's Texas flood
+    video (2026-09-30) played four moments of one drone video in a minute.
+    """
+
+    def __init__(self, placed: Optional[Dict[str, List[Optional[float]]]] = None):
+        self.at: Dict[str, List[Optional[float]]] = {k: list(v) for k, v in (placed or {}).items()}
+        self.lock = threading.Lock()
+
+    def take(self, video: str, at: Optional[float]) -> bool:
+        with self.lock:
+            prev = self.at.setdefault(video, [])
+            if not media.may_place(prev, at):
+                return False
+            prev.append(at)
+            return True
+
+
+def _per_video(story: dict) -> Optional[int]:
+    """How many of one video's approved moments a pool keeps (its best, in time order)."""
+    cap = config.MAX_MOMENTS_PER_VIDEO
+    if cap > 0:
+        return min(cap, NEWS_MAX_MOMENTS_PER_VIDEO) if story["is_event"] else cap
+    return NEWS_MAX_MOMENTS_PER_VIDEO if story["is_event"] else None
+
+
 def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Set[str],
-                 claim: Callable[[str], bool], library=None, work: str = "") -> tuple:
+                 claim: Callable[[str], bool], library=None, work: str = "",
+                 slots: Optional[_Slots] = None) -> tuple:
     """
     ([(job, candidate, moment)] for the subject's lines, spare (candidate, moment)s).
 
     Clips the library already holds for the subject come first (no search,
     no download from YouTube, no vision call); YouTube supplies the rest.
-    Spares are approved moments beyond what the lines need; fill_from_reserve
-    hands them to lines that ended up empty or repeated.
+    Spares are approved moments no line took; fill_from_reserve hands them to
+    lines that ended up empty or repeated.
+
+    Each video keeps its best few moments (_per_video) and each line, in
+    story order, takes a moment from the first video in rank order that may
+    still supply a line there (`slots`, shared by the job's subjects). Until
+    the owner's review (2026-09-30) consecutive lines took consecutive moments
+    of one video - on screen, one shot four times in a minute. A line no rated
+    video may take is left to per-scene sourcing.
     """
     need = len(sjobs)
     seconds = max(j.get("seconds") or 6.0 for j in sjobs) + media.SEQ_SHOT_PAD
@@ -373,37 +499,52 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
     context = " ".join((j.get("context") or "") for j in sjobs[:6])
     # Several reports, a few moments each (GoMotion), rather than every line
     # from the first long video that clears the floor.
-    per_video = NEWS_MAX_MOMENTS_PER_VIDEO if story["is_event"] else None
-    pool: List[tuple] = []
+    per_video = _per_video(story)
+    slots = slots if slots is not None else _Slots()
+    open_lines = list(sjobs)
+    assigned: Dict[int, tuple] = {}
+    available: List[tuple] = []          # claimed moments no line has taken yet
+
+    def assign() -> None:
+        for job in list(open_lines):
+            for cm in available:
+                if slots.take(_video_of(cm[0]), _start_of(job)):
+                    assigned[job["index"]] = cm
+                    available.remove(cm)
+                    open_lines.remove(job)
+                    break
+
     if library is not None and need:
+        reused = 0
         for entry in library.find(subject, n=need):
             if not claim(entry["id"]):
                 continue
-            pool.append(({"id": entry["id"], "title": entry.get("attribution", ""), "_library": entry},
-                         {"start": 0.0, "score": entry.get("relevance"),
-                          "description": entry.get("description", "")}))
-        if pool:
-            print(f"[library] {subject}: {len(pool)} clip(s) reused", flush=True)
+            available.append(({"id": entry["id"], "title": entry.get("attribution", ""), "_library": entry},
+                              {"start": 0.0, "score": entry.get("relevance"),
+                               "description": entry.get("description", "")}))
+            reused += 1
+        if reused:
+            print(f"[library] {subject}: {reused} clip(s) reused", flush=True)
+        assign()
     for cand in candidates(subject, require_cc, skip_ids, story=story)[:config.POOL_MAX_VIDEOS]:
-        if len(pool) >= need or ytdlp.past_deadline():
+        if not open_lines or ytdlp.past_deadline():
             break
         found = spaced(rate_video(cand, subject, context, seconds, intent=intent),
                        config.POOL_MIN_GAP_SECONDS)
         if per_video and len(found) > per_video:
-            # The best-scored few of this report, back in time order.
+            # The best-scored few of this video, back in time order.
             found = sorted(sorted(found, key=lambda m: -m["score"])[:per_video],
                            key=lambda m: m["start"])
         took = 0
         for m in found:
             if claim(moment_key(cand["id"], m["start"])):
-                pool.append((cand, m))
+                available.append((cand, m))
                 took += 1
         if took:
             cand["_used"] = took
-        if len(pool) >= need:
-            break
-    # Story order: consecutive lines take consecutive moments of one video.
-    return [(job, cand, m) for job, (cand, m) in zip(sjobs, pool)], pool[need:]
+        assign()
+    plan = [(job, *assigned[job["index"]]) for job in sjobs if job["index"] in assigned]
+    return plan, available
 
 
 # Spare approved moments of this job's pools: (subject key, candidate, moment).
@@ -411,13 +552,29 @@ _RESERVE: List[tuple] = []
 _RESERVE_LOCK = threading.Lock()
 
 
+def _same_pool(pool_key: str, key: str) -> bool:
+    """A spare of pool `pool_key` is about the line's own subject or place (one names the other)."""
+    if not key or not pool_key:
+        return False
+    a, b = set(pool_key.split()), set(key.split())
+    return pool_key == key or a <= b or b <= a
+
+
 def fill_from_reserve(jobs: List[dict], indices: List[int], work: str,
-                      require_cc: bool = False) -> Dict[int, media.MediaAsset]:
+                      require_cc: bool = False, assets=None) -> Dict[int, media.MediaAsset]:
     """
     Real, distinct footage for lines left empty or repeated, from the pools'
     spare moments - the line's own subject first, then any story subject.
+
+    The owner's review (2026-09-30): a spare is only placed where its video
+    may still supply a line (media.may_place over `assets`, the lines' current
+    assets as a list by index or a dict, the lines being refilled not
+    counted), and a line that names its own place (job "place") only takes a
+    spare of that place - a Dallas line never gets the Houston pool's shot.
     """
     by_index = {j["index"]: j for j in jobs}
+    starts = media.scene_starts(jobs)
+    slots = _Slots(media.placements(assets, starts, skip=set(indices)) if assets is not None else None)
     with _RESERVE_LOCK:
         spare = list(_RESERVE)
         _RESERVE.clear()
@@ -426,10 +583,14 @@ def fill_from_reserve(jobs: List[dict], indices: List[int], work: str,
         job = by_index.get(i)
         if job is None or not spare:
             continue
-        key = subject_key(job.get("subject") or "")
-        pick = next((s for s in spare if s[0] == key), None) or spare[0]
+        key = subject_key(_pool_name(job))
+        own = [s for s in spare if _same_pool(s[0], key)]
+        others = [] if job.get("place") else [s for s in spare if not _same_pool(s[0], key)]
+        pick = next((s for s in own + others if slots.take(_video_of(s[1]), starts.get(i))), None)
+        if pick is None:
+            continue
         spare.remove(pick)
-        asset = _fetch(job, pick[1], pick[2], work, require_cc, job.get("subject") or pick[0])
+        asset = _fetch(job, pick[1], pick[2], work, require_cc, _pool_name(job) or pick[0])
         if asset is not None:
             out[i] = asset
     with _RESERVE_LOCK:
@@ -476,6 +637,9 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
         return results
     lock = threading.Lock()
     claimed: Set[str] = set()
+    # One ledger of where each video plays, for every subject: two subjects'
+    # searches often return the same report (the owner, 2026-09-30).
+    slots = _Slots()
     done = [0]
     stats = {"subjects": len(todo), "lines": sum(len(v) for v in todo.values()), "covered": 0,
              "news_videos": 0}
@@ -496,7 +660,8 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
             return
         videos = news = 0
         try:
-            plan, spare = plan_subject(name, sjobs, require_cc, set(), claim, library=library, work=work)
+            plan, spare = plan_subject(name, sjobs, require_cc, set(), claim, library=library, work=work,
+                                       slots=slots)
             used = {c["id"]: c for _, c, _ in plan if c.get("id")}
             videos = len(used)
             news = sum(1 for c in used.values() if c.get("_news"))

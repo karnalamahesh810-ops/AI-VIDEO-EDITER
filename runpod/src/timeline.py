@@ -14,11 +14,12 @@ headless Chrome with a stack trace.
 """
 import math
 import os
+import re
 import subprocess
 import zlib
 from typing import Any, Dict, List, Optional
 
-from . import config, templates
+from . import config, sfxplan, templates
 from .director import TEMPLATES
 from .transcribe import Segment
 from .media import MediaAsset
@@ -97,18 +98,21 @@ _KIND_STYLE = {"news": "news", "weather": "weather", "disaster": "weather", "his
 _MIN_IN_FRAMES = 9
 _MIN_OUT_FRAMES = 6
 
-# The sound a transition makes, and how loud (0-1 before the master slider).
-# Its loudest point (sfx_meta.json "peak") lands on the cut. Soft transitions
-# get a whisper of air; a dip through black is silent, as an editor leaves it.
+# The sound a transition makes, and how far under the voice its loudest point
+# sits (dB; src/sfxplan.py turns that into a gain against the measured
+# narration). Its loudest point (sfx_meta.json "peak") lands on the cut. A
+# transition is punctuation, not a moment: each sits a little under its
+# sound's own category level (hits and glitches 5 dB, air 9 dB), the soft
+# dissolves quietest - a whisper of air; a dip through black is silent.
 _TRANSITION_SFX = {
-    "glitch": ("glitch-pro", 0.13), "vhs-glitch": ("glitch-short", 0.12),
-    "flash": ("flash-hit", 0.13), "chromatic-flash": ("flash-hit", 0.13),
-    "whip-pan": ("swipe", 0.13), "zoom-punch": ("swipe", 0.12),
-    "film-burn": ("whoosh-soft", 0.09), "light-leak": ("whoosh-soft", 0.07),
-    "blur-dissolve": ("whoosh-soft", 0.07), "shake-cut": ("hit-deep", 0.13),
+    "glitch": ("glitch-pro", 7.0), "vhs-glitch": ("glitch-short", 7.5),
+    "flash": ("flash-hit", 7.0), "chromatic-flash": ("flash-hit", 7.0),
+    "whip-pan": ("swipe", 9.0), "zoom-punch": ("swipe", 9.5),
+    "film-burn": ("whoosh-soft", 10.0), "light-leak": ("whoosh-soft", 11.0),
+    "blur-dissolve": ("whoosh-soft", 11.0), "shake-cut": ("hit-deep", 7.0),
     # The older entrances an editor can still pick.
-    "whip": ("swipe", 0.12), "punch": ("swipe", 0.1), "zoom": ("whoosh-soft", 0.07),
-    "slide": ("whoosh-soft", 0.07), "mosaic": ("glitch-short", 0.09),
+    "whip": ("swipe", 9.5), "punch": ("swipe", 10.0), "zoom": ("whoosh-soft", 11.0),
+    "slide": ("whoosh-soft", 11.0), "mosaic": ("glitch-short", 9.0),
 }
 # Another sound this close (seconds) to a transition's sound silences the transition's.
 _TRANSITION_SFX_CLEARANCE = 1.0
@@ -139,6 +143,107 @@ def sfx_meta() -> Dict[str, Dict[str, float]]:
         except (OSError, ValueError):
             return dict(_SFX_META_FALLBACK)
     return _SFX_META_CACHE["data"]
+
+
+# --------------------------------------------------------------------------- #
+# The voice's level: every sound and the music are set against it
+# --------------------------------------------------------------------------- #
+
+VOICE_MEASURE_TIMEOUT = 240          # seconds; a 30-minute mp3 measures in well under a minute
+_VOICE_CACHE: Dict[tuple, Optional[float]] = {}
+_LUFS_LINE = re.compile(r"^\s*I:\s*(-?\d+(?:\.\d+)?)\s*LUFS", re.M)
+
+
+def measure_lufs(path: str) -> Optional[float]:
+    """
+    The integrated loudness (EBU R128, ffmpeg's ebur128) of a local audio
+    file, measured once per file; None when it cannot be read or is silence.
+    """
+    try:
+        st = os.stat(path)
+    except (OSError, TypeError, ValueError):
+        return None
+    key = (os.path.abspath(path), st.st_size, int(st.st_mtime))
+    if key in _VOICE_CACHE:
+        return _VOICE_CACHE[key]
+    value = None
+    # framelog=quiet keeps a long file's per-frame log out of the pipe; an
+    # ffmpeg without the option measures the plain way.
+    for af in ("ebur128=framelog=quiet", "ebur128"):
+        try:
+            p = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-vn", "-af", af, "-f", "null", "-"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=VOICE_MEASURE_TIMEOUT)
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            break
+        found = _LUFS_LINE.findall(p.stderr or "")
+        if found:
+            v = float(found[-1])             # the summary's integrated loudness is the last I:
+            value = v if -70.0 < v < 0.0 else None
+            break
+    _VOICE_CACHE[key] = value
+    return value
+
+
+def narration_file(audio_url: str, inp: Dict[str, Any], narration_path: str = "") -> str:
+    """
+    The narration as a file on this worker's disk, or "": the caller's path,
+    the document's audio when it is a local file, the job's audio_path, or
+    the copy the handler downloaded (<WORK_DIR>/<job id>/narration.mp3). A
+    signed URL is never downloaded again just to be measured.
+    """
+    candidates = [narration_path, audio_url, (inp or {}).get("audio_path")]
+    job = str((inp or {}).get("_job_id") or "")
+    if job and "/" not in job and "\\" not in job and ".." not in job:
+        candidates.append(os.path.join(config.WORK_DIR, job, "narration.mp3"))
+    for c in candidates:
+        c = str(c or "")
+        if c.startswith("file://"):
+            c = c[len("file://"):]
+        if c and "://" not in c and os.path.isfile(c):
+            return c
+    return ""
+
+
+def voice_loudness(audio_url: str, inp: Dict[str, Any], narration_path: str = "") -> tuple:
+    """
+    (LUFS, how it was found: "measured" | "given" | "assumed"). A job may
+    pin it (inp["voice_lufs"]); else the local narration is measured once;
+    else sfxplan.VOICE_LUFS_DEFAULT is assumed.
+    """
+    given = (inp or {}).get("voice_lufs")
+    if isinstance(given, (int, float)) and not isinstance(given, bool) and -60.0 < float(given) < 0.0:
+        return float(given), "given"
+    path = narration_file(audio_url, inp, narration_path)
+    value = measure_lufs(path) if path else None
+    if value is not None:
+        return value, "measured"
+    return sfxplan.VOICE_LUFS_DEFAULT, "assumed"
+
+
+def cap_sfx_levels(doc: Dict[str, Any]) -> int:
+    """
+    Hold every sound of a document under the voice-relative cap (sfxplan.cap
+    against doc.meta.voiceLufs, lowered by a master sfxVolume above 1). The
+    editor's sliders write absolute volumes up to 1.0 straight into
+    doc["sfx"]; this is where they come back into line. Returns how many were lowered.
+    """
+    sfx = doc.get("sfx") if isinstance(doc, dict) else None
+    if not isinstance(sfx, list):
+        return 0
+    voice = (doc.get("meta") or {}).get("voiceLufs") if isinstance(doc.get("meta"), dict) else None
+    lowered = 0
+    for fx in sfx:
+        if not isinstance(fx, dict):
+            continue
+        v = fx.get("volume")
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            continue
+        held = sfxplan.clamp(v, voice, doc.get("sfxVolume", 1.0))
+        if held < v - 1e-9:
+            fx["volume"] = round(held, 3)
+            lowered += 1
+    return lowered
 
 
 def transition_style(inp: Optional[Dict[str, Any]] = None, pack: Optional[dict] = None,
@@ -176,9 +281,31 @@ BGM_TRACKS = {
     "crime": (("crime-v1", 1800), ("crime", 720)),
 }
 BGM_GENRES = tuple(BGM_TRACKS)
+# The mood of the music follows the story (the owner, 2026-09-30: music in
+# every style, picked by mood): tense for news, weather and disasters, a true-
+# crime bed when the story is about a crime, the calm investigative bed for a
+# documentary (history, biography, science, explainers).
 _BGM_BY_KIND = {"news": "suspense", "weather": "suspense", "disaster": "suspense",
                 "history": "investigative", "biography": "investigative", "science": "investigative",
                 "explainer": "investigative", "nature": "investigative", "other": "investigative"}
+# Moods an editor or a job may name, as the bundled genre that plays them.
+_BGM_MOODS = {"documentary": "investigative", "calm": "investigative", "tension": "suspense", "tense": "suspense",
+              "news": "suspense", "dramatic": "suspense", "true-crime": "crime", "true_crime": "crime",
+              "mystery": "crime", "dark": "crime"}
+# A story told around a crime (at least CRIME_HITS of these words) gets the crime bed.
+_CRIME_WORDS = re.compile(r"\b(murder(?:s|ed|er|ers)?|homicides?|killers?|serial killer|detectives?|"
+                          r"police (?:said|say|found|arrested)|arrest(?:ed|s)?|suspects?|convicted|prison|"
+                          r"kidnapp(?:ed|ing)|heist|robbery|cartel|gang|trial|jury|verdict|crime scene|"
+                          r"true crime|investigators)\b", re.I)
+CRIME_HITS = 3
+# Integrated loudness of the bundled tracks (EBU R128 over the whole file,
+# measured 2026-09-30). They came mastered very quietly (-34 to -39 LUFS), so
+# under a loud narration even full gain left them ~22 dB down; each file was
+# raised by a fixed gain to about -26 LUFS (peaks -11 to -16 dBFS, no
+# limiting). A job's own track is assumed to be a normal release.
+BGM_LUFS = {"investigative-v5": -26.5, "investigative-20m": -26.4, "investigative": -26.5,
+            "suspense-v2": -26.4, "suspense": -26.5, "crime-v1": -26.5, "crime": -26.4}
+BGM_LUFS_UNKNOWN = -14.0
 
 
 def _bgm_track(genre: str, seconds: float, seed: str) -> str:
@@ -193,13 +320,29 @@ def _bgm_track(genre: str, seconds: float, seed: str) -> str:
     return long_enough[zlib.crc32(seed.encode("utf-8")) % len(long_enough)]
 
 
+def bgm_mood(brief: Optional[dict], story_text: str = "") -> str:
+    """The bundled genre for a story: crime when it is told around a crime, else by its kind."""
+    blob = " ".join([str((brief or {}).get("summary") or ""), str((brief or {}).get("event") or ""), story_text or ""])
+    if len(_CRIME_WORDS.findall(blob)) >= CRIME_HITS:
+        return "crime"
+    return _BGM_BY_KIND.get(str((brief or {}).get("kind") or ""), "investigative")
+
+
 def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict],
-             seconds: float = 0.0) -> Optional[dict]:
+             seconds: float = 0.0, story_text: str = "") -> Optional[dict]:
+    """
+    The music under the video: the job's own track, else a bundled one picked
+    by the story's mood and long enough to run under the whole narration
+    (the renderer loops it when the video is longer). Every style has music;
+    only the job's own "bgm": false turns it off. `pack` is unused (music
+    no longer depends on the graphics planner).
+    """
     if inp.get("bgm_url"):
-        return {"url": str(inp["bgm_url"]), "volume": float(inp.get("bgm_volume", 0.12))}
-    if not inp.get("bgm", config.BGM_AUTO) or not pack:
+        return {"url": str(inp["bgm_url"]), "volume": float(inp.get("bgm_volume", 0.12)), "loop": True}
+    if not inp.get("bgm", config.BGM_AUTO):
         return None
-    genre = str(inp.get("bgm_genre") or _BGM_BY_KIND.get((brief or {}).get("kind") or "", "investigative"))
+    asked = str(inp.get("bgm_genre") or "").strip().lower()
+    genre = _BGM_MOODS.get(asked, asked) or bgm_mood(brief, story_text)
     names = {name for tracks in BGM_TRACKS.values() for name, _ in tracks}
     track = str(inp.get("bgm_track") or "")
     # The editor's music list names tracks ("investigative-v5") in bgm_genre; a
@@ -212,8 +355,131 @@ def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict],
         genre = "investigative"
     if track not in names:
         track = _bgm_track(genre, seconds, str(inp.get("project_id") or inp.get("title") or ""))
+    length = next((n for tracks in BGM_TRACKS.values() for name, n in tracks if name == track), 0)
     return {"url": f"bgm://{track}", "volume": float(inp.get("bgm_volume", 0.12)), "genre": genre,
-            "track": track}
+            "track": track, "trackSeconds": length,
+            # Main.tsx loops the track, so a video longer than it still has music to the end.
+            "loop": True}
+
+
+# ------------------------------------------------------------------ music levels
+# The owner (2026-09-30): music under every video, the whole way through,
+# ducked under the voice like a sidechain: ~18 dB under it while it speaks,
+# up a little in a pause longer than 1.2 s, in over the first 1.5 s and out
+# over the last 3 s. The renderer (Main.tsx makeMusicVolume) reaches each
+# music section's level 1.5 s after the section starts and multiplies a
+# per-word duck on top; the plan below switches that duck off (1.0) and
+# writes the whole automation as sections.
+MUSIC_UNDER_VOICE_DB = 18.0
+MUSIC_PAUSE_SECONDS = 1.2
+MUSIC_PAUSE_RISE_DB = 3.0
+MUSIC_FADE_IN = 1.5
+MUSIC_FADE_OUT = 3.0
+MUSIC_RAMP = 1.5            # Main.tsx: a section's level is reached this long after it starts
+MUSIC_RELEASE = 0.1         # the rise starts this long after the last word before a pause
+MUSIC_BACK_EARLY = 1.2      # ... and the level heads back down this long before the next word
+MUSIC_MAX_RISES = 160       # the longest pauses first: a long video stays cheap to render
+MUSIC_MOOD_REF = 0.12       # the registry's mood levels (musicMoods) are relative to this
+_MOOD_DB_LIMIT = 4.0
+
+
+def _speech_spans(segments: List[Segment]) -> List[tuple]:
+    """(start, end) seconds of every spoken word, in order (the lines themselves when there are no word timings)."""
+    spans = [(float(w.start), float(w.end)) for s in segments for w in (getattr(s, "words", None) or [])
+             if getattr(w, "end", None) is not None and getattr(w, "start", None) is not None]
+    if not spans:
+        spans = [(float(s.start), float(s.end)) for s in segments]
+    return sorted(spans)
+
+
+def music_automation(music: Optional[dict], bgm: Optional[dict], segments: List[Segment], fps: int, total: int,
+                     voice_lufs: float, level: Optional[float] = None) -> dict:
+    """
+    The music's level over the whole video as renderer sections (see the
+    constants above). Under speech the bed plays at the gain that puts the
+    track MUSIC_UNDER_VOICE_DB under the voice (BGM_LUFS; a job's own track
+    is assumed a normal release), the section's mood a few dB either way.
+    `level` (a job's bgm_volume) trims that: MUSIC_MOOD_REF (0.12, the old
+    default) is the automatic level, twice it is 6 dB louder. The renderer
+    never goes above 1.0, so a very quiet track sits as close under the voice
+    as it can.
+    """
+    music = dict(music or {})
+    fps = int(fps or 30)
+    total = max(1, int(total))
+    moods = [s for s in (music.get("sections") or []) if isinstance(s, dict)]
+    if not moods:
+        moods = [{"startFrame": 0, "endFrame": total, "mood": "EXPLANATION", "volume": MUSIC_MOOD_REF}]
+    moods = sorted(moods, key=lambda s: int(s.get("startFrame", 0)))
+    track_lufs = BGM_LUFS.get(str((bgm or {}).get("track") or ""), BGM_LUFS_UNKNOWN)
+    base_db = float(voice_lufs) - MUSIC_UNDER_VOICE_DB - track_lufs
+    rise = 10 ** (MUSIC_PAUSE_RISE_DB / 20.0)
+
+    def speech_gain(section: dict) -> float:
+        try:
+            ratio = float(section.get("volume") or MUSIC_MOOD_REF) / MUSIC_MOOD_REF
+        except (TypeError, ValueError):
+            ratio = 1.0
+        mood_db = max(-_MOOD_DB_LIMIT, min(_MOOD_DB_LIMIT, 20 * math.log10(max(ratio, 1e-3))))
+        g = 10 ** ((base_db + mood_db) / 20.0)
+        if level is not None:
+            g *= max(0.0, float(level)) / MUSIC_MOOD_REF
+        return max(0.0, min(1.0, g))
+
+    def mood_at(frame: int) -> dict:
+        at = moods[0]
+        for s in moods:
+            if int(s.get("startFrame", 0)) <= frame:
+                at = s
+        return at
+
+    fade_out = max(2, total - int(round(MUSIC_FADE_OUT * fps)))
+    fade_half = max(fade_out + 1, total - int(round(MUSIC_RAMP * fps)))
+    out: List[dict] = [{"startFrame": 0, "volume": 0.0, "mood": str(moods[0].get("mood") or ""), "kind": "fade-in"}]
+    for k, s in enumerate(moods):
+        # The music starts with the picture (from silence at frame 0), not with the first word.
+        start = 1 if k == 0 else max(1, int(s.get("startFrame", 0)))
+        if start < fade_out:
+            out.append({"startFrame": start, "volume": round(speech_gain(s), 4), "mood": str(s.get("mood") or ""),
+                        "kind": "voice"})
+    # A pause longer than MUSIC_PAUSE_SECONDS: up a little, back down by the next word.
+    spoken = _speech_spans(segments)
+    pauses = []
+    for (a0, a1), (b0, _b1) in zip(spoken, spoken[1:]):
+        if b0 - a1 > MUSIC_PAUSE_SECONDS:
+            pauses.append((a1, b0))
+    if spoken and total / fps - spoken[-1][1] > MUSIC_PAUSE_SECONDS:
+        pauses.append((spoken[-1][1], None))           # the voice has finished: the music may come up
+    longest = sorted(pauses, key=lambda p: -((p[1] if p[1] is not None else total / fps) - p[0]))
+    pauses = sorted(longest[:MUSIC_MAX_RISES], key=lambda p: p[0])
+    for end, nxt in pauses:
+        up = int(round((end + MUSIC_RELEASE) * fps))
+        down = int(round((nxt - MUSIC_BACK_EARLY) * fps)) if nxt is not None else fade_out
+        down = min(down, fade_out)
+        if up < 1 or down - up < 1:
+            continue
+        section = mood_at(up)
+        g = speech_gain(section)
+        lifted = min(1.0, g * rise)
+        if lifted - g < 0.005:
+            continue                                    # already as loud as the renderer allows
+        out.append({"startFrame": up, "volume": round(lifted, 4), "mood": str(section.get("mood") or ""),
+                    "kind": "pause"})
+        if nxt is not None and down < fade_out:
+            back = mood_at(int(round(nxt * fps)))
+            out.append({"startFrame": down, "volume": round(speech_gain(back), 4), "mood": str(back.get("mood") or ""),
+                        "kind": "voice"})
+    last = mood_at(fade_out)
+    tail = speech_gain(last)
+    out.append({"startFrame": fade_out, "volume": round(tail / 2, 4), "mood": str(last.get("mood") or ""),
+                "kind": "fade-out"})
+    out.append({"startFrame": fade_half, "volume": 0.0, "mood": str(last.get("mood") or ""), "kind": "fade-out"})
+    out.sort(key=lambda s: s["startFrame"])            # stable: a pause's rise stays after the voice level it lifts
+    for k, s in enumerate(out):
+        s["endFrame"] = max(s["startFrame"] + 1, out[k + 1]["startFrame"] if k + 1 < len(out) else total)
+    return {**music, "sections": out, "duck": 1.0,
+            "levels": {"voiceLufs": round(float(voice_lufs), 1), "trackLufs": track_lufs,
+                       "underVoiceDb": MUSIC_UNDER_VOICE_DB, "speech": round(speech_gain(moods[0]), 4)}}
 
 
 def _pack_transitions(entrances: List[str], pack: dict) -> List[str]:
@@ -305,17 +571,19 @@ def _plan_crossfades(shots: List[dict], durations: Optional[List[int]] = None) -
 
 
 def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
-                        intensity: float = 1.0) -> List[dict]:
+                        intensity: float = 1.0, voice_lufs: Optional[float] = None) -> List[dict]:
     """
-    A quiet sound for each transition, placed so its loudest point lands on
-    the cut, at the style pack's sfxIntensity like the graphics' sounds.
-    Skipped when another sound starts within a second of it or is still
-    playing across it (a typing run, a count, a riser): a graphic's own
-    sound on that beat wins, and two sounds never stack.
+    A sound for each transition, placed so its loudest point lands on the
+    cut, set against the voice (`voice_lufs`, see _TRANSITION_SFX) at the
+    style pack's sfxIntensity like the graphics' sounds, never above the one
+    cap (sfxplan.cap). Skipped when another sound starts within a second of
+    it or is still playing across it (a typing run, a count, a riser): a
+    graphic's own sound on that beat wins, and two sounds never stack.
     """
     meta = sfx_meta()
     have = templates.sfx_files()
     near = int(round(_TRANSITION_SFX_CLEARANCE * fps))
+    top = sfxplan.cap(voice_lufs)
     try:
         level = max(0.0, float(intensity))
     except (TypeError, ValueError):
@@ -335,7 +603,7 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
         t = sc.get("transition") or "none"
         if t not in _TRANSITION_SFX:
             continue
-        name, volume = _TRANSITION_SFX[t]
+        name, under = _TRANSITION_SFX[t]
         if have and name not in have:
             continue
         m = meta.get(name) or _SFX_META_FALLBACK.get(name) or {"duration": 1.0, "peak": 0.0}
@@ -348,7 +616,7 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
         if any(abs(s - start) <= near or abs(s - cut) <= near or (s < end and start < e)
                for s, e in busy):
             continue
-        vol = round(min(0.2, volume * level), 3)
+        vol = round(min(top, sfxplan.gain(under, voice_lufs) * level), 3)
         if vol <= 0.005:
             continue
         picks.append({"name": name, "startFrame": start, "volume": vol,
@@ -535,8 +803,13 @@ def _clip_seconds(asset) -> float:
 def build(segments: List[Segment], shots: List[dict],
           assets: List[Optional[MediaAsset]], *,
           audio_url: str, audio_duration: float, inp: Dict[str, Any],
-          planner: str = "rules", warnings: List[str] = None) -> Dict[str, Any]:
-    """Assemble the render document from beats, shot plan and sourced media."""
+          planner: str = "rules", warnings: List[str] = None, narration_path: str = "") -> Dict[str, Any]:
+    """
+    Assemble the render document from beats, shot plan and sourced media.
+    `narration_path` is the narration on this worker's disk when the caller
+    has it (audio_url is usually a signed URL): the sounds and the music are
+    levelled against its measured loudness (voice_loudness).
+    """
     warnings = list(warnings or [])
     fps = int(inp.get("fps") or config.DEFAULT_FPS)
     width = int(inp.get("width") or config.DEFAULT_WIDTH)
@@ -544,6 +817,8 @@ def build(segments: List[Segment], shots: List[dict],
     brand = inp.get("brand") or {}
     total = max(1, int(round(audio_duration * fps)))
     bounds = _scene_bounds(segments, fps, total)
+    # Measured once: every sound effect and the music are set against the voice.
+    voice_lufs, voice_how = voice_loudness(audio_url, inp, narration_path)
 
     scenes: List[Dict[str, Any]] = []
     overlays: List[Dict[str, Any]] = []
@@ -691,9 +966,12 @@ def build(segments: List[Segment], shots: List[dict],
     treatment_counts: Dict[str, Any] = {}
     sfx_list = plan_sfx(overlays, fps, config.SFX_MIN_GAP_SECONDS)
     if pack:
-        planned = vt.plan(segments, shots, scenes, fps, total, brief, pack, _OVERLAY_SECONDS)
         title_card = [o for o in overlays if o.get("type") == "title" and inp.get("title_overlay")
                       and o.get("text") == str(inp["title_overlay"])[:240]]
+        # The job's title card holds its seconds: the planner lays nothing over it.
+        reserved = [(o["startFrame"] / fps, (o["startFrame"] + o["durationInFrames"]) / fps) for o in title_card]
+        planned = vt.plan(segments, shots, scenes, fps, total, brief, pack, _OVERLAY_SECONDS,
+                          voice_lufs=voice_lufs, reserved=reserved)
         overlays = title_card + planned["overlays"]
         for i, scene in enumerate(scenes):
             if i < len(planned["treatments"]):
@@ -701,11 +979,25 @@ def build(segments: List[Segment], shots: List[dict],
         sfx_list = planned["sfx"]
         music = planned["music"]
         treatment_counts = planned["counts"]
-    # Each transition's own quiet sound, peaking on its cut, unless a
-    # graphic's sound is already there.
+    # Each transition's own sound, peaking on its cut, unless a graphic's
+    # sound is already there; then every sound under the one cap.
     sfx_list = sorted(list(sfx_list) + plan_transition_sfx(
-                          scenes, fps, sfx_list, (pack or {}).get("sfxIntensity", 1.0)),
+                          scenes, fps, sfx_list, (pack or {}).get("sfxIntensity", 1.0), voice_lufs=voice_lufs),
                       key=lambda s: int(s.get("startFrame", 0)))
+    top = sfxplan.cap(voice_lufs)
+    for fx in sfx_list:
+        if isinstance(fx.get("volume"), (int, float)) and fx["volume"] > top:
+            fx["volume"] = round(top, 3)
+
+    # Music under every video, set against the voice (music_automation).
+    story_text = " ".join(s.text for s in segments[:60])
+    bgm = _bgm_for(inp, pack, brief, audio_duration, story_text=story_text)
+    if bgm:
+        own_level = inp.get("bgm_volume") if "bgm_volume" in inp else None
+        music = music_automation(music, bgm, segments, fps, total, voice_lufs,
+                                 level=float(own_level) if isinstance(own_level, (int, float))
+                                 and not isinstance(own_level, bool) else None)
+        bgm["volume"] = music["levels"]["speech"]
 
     missing = sum(1 for a in assets if a is None)
     if missing:
@@ -718,7 +1010,7 @@ def build(segments: List[Segment], shots: List[dict],
         "height": height,
         "durationInFrames": total,
         "audio": {"url": audio_url, "volume": float(inp.get("audio_volume", 1.0))},
-        "bgm": _bgm_for(inp, pack, brief, audio_duration),
+        "bgm": bgm,
         "captions": {
             "enabled": keep_captions,
             "position": brand.get("captionPosition", "bottom"),
@@ -745,6 +1037,9 @@ def build(segments: List[Segment], shots: List[dict],
             "scenesWithoutMedia": missing,
             "scenesNeedingReview": sum(1 for s in scenes if s["reviewRequired"]),
             "generatedScenes": sum(1 for a in assets if a and a.source == "generated"),
+            # The narration's loudness every sound and the music were set against.
+            "voiceLufs": round(float(voice_lufs), 1),
+            "voiceLufsSource": voice_how,
             "warnings": warnings,
         },
     }
@@ -863,6 +1158,9 @@ def validate(doc: Any, require_media: bool = True,
 
     Raises ValueError with a message meant to be shown to the user. Set
     require_media=False to validate a plan that the editor is still filling in.
+    One thing is corrected rather than refused: a sound effect set louder than
+    the voice-relative cap (the editor's volume sliders reach 100%) is brought
+    down to it (cap_sfx_levels).
     """
     allow_stock = config.ALLOW_STOCK if allow_stock is None else allow_stock
     if not isinstance(doc, dict):
@@ -920,4 +1218,5 @@ def validate(doc: Any, require_media: bool = True,
         for i, ov in enumerate(overlays):
             _validate_overlay(ov, i, total)
 
+    cap_sfx_levels(doc)
     return doc

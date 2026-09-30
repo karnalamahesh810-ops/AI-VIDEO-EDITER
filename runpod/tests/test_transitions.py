@@ -13,7 +13,7 @@ from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from src import config, templates, timeline  # noqa: E402
+from src import config, sfxplan, templates, timeline  # noqa: E402
 from src.media import MediaAsset  # noqa: E402
 from src.transcribe import Segment, Word  # noqa: E402
 
@@ -163,9 +163,20 @@ class Sounds(unittest.TestCase):
             self.assertLessEqual(abs(p["startFrame"] + meta[p["name"]]["peak"] * 30 - cut), 1.0, p)
             self.assertEqual(p["kind"], "transition")
             self.assertGreater(p["durationFrames"], 0)
-            self.assertLessEqual(p["volume"], 0.2)
+            # Under the voice (never above the one cap), and audible - not the old 0.07-0.13.
+            self.assertLessEqual(p["volume"], round(sfxplan.cap(), 3))
+            self.assertGreaterEqual(p["volume"], 0.25)
         # the soft whoosh is quieter than the hits
         self.assertLess(picks[-1]["volume"], picks[0]["volume"])
+
+    def test_transition_sounds_follow_the_voice(self):
+        scenes = self._scenes(["none", "glitch", "none", "none", "film-burn"])
+        normal = timeline.plan_transition_sfx(scenes, 30, [], voice_lufs=-16.0)
+        quiet = timeline.plan_transition_sfx(scenes, 30, [], voice_lufs=-22.0)
+        for a, b in zip(normal, quiet):
+            self.assertAlmostEqual(a["volume"] / b["volume"], 10 ** (6 / 20), places=1)
+        # glitch 7 dB under the voice at -16 LUFS: 10 ** ((-16 - 7 + 20) / 20)
+        self.assertEqual(normal[0]["volume"], 0.708)
 
     def test_a_nearby_sound_silences_the_transition(self):
         scenes = self._scenes(["none", "glitch", "none", "none", "flash"])
@@ -204,9 +215,9 @@ class Sounds(unittest.TestCase):
         seen = []
         real = timeline.plan_transition_sfx
 
-        def spy(scenes, fps, others, intensity=1.0):
+        def spy(scenes, fps, others, intensity=1.0, **kw):
             seen.append(intensity)
-            return real(scenes, fps, others, intensity)
+            return real(scenes, fps, others, intensity, **kw)
 
         n = 6
         segments = [_seg(i) for i in range(n)]
@@ -268,9 +279,10 @@ class RendererContract(unittest.TestCase):
 
     def test_every_transition_sound_ships(self):
         files = templates.sfx_files()
-        for name, vol in timeline._TRANSITION_SFX.values():
+        for name, under in timeline._TRANSITION_SFX.values():
             self.assertIn(name, files)
-            self.assertTrue(0 < vol <= 0.2, name)
+            # dB under the voice: never closer than the cap, never a whisper nobody hears.
+            self.assertTrue(sfxplan.CAP_UNDER_DB <= under <= 12.0, name)
 
     def test_contract_sounds_and_meta(self):
         files = templates.sfx_files()

@@ -1,130 +1,194 @@
 {
   "boom-soft": {
+    "category": "impact",
     "duration": 1.71,
+    "loop": false,
     "peak": 0.309
   },
   "click": {
+    "category": "ui",
     "duration": 0.11,
+    "loop": false,
     "peak": 0.005
   },
   "count-tick": {
+    "category": "tick",
     "duration": 1.32,
+    "loop": false,
     "peak": 0.963
   },
   "ding": {
+    "category": "ui",
     "duration": 1.5,
+    "loop": false,
     "peak": 0.02
   },
   "flash-hit": {
+    "category": "impact",
     "duration": 0.62,
+    "loop": false,
     "peak": 0.075
   },
   "glitch": {
+    "category": "glitch",
     "duration": 1.023,
+    "loop": false,
     "peak": 0.429
   },
   "glitch fx transistion": {
+    "category": "glitch",
     "duration": 1.656,
+    "loop": false,
     "peak": 0.763
   },
   "glitch-pro": {
+    "category": "glitch",
     "duration": 0.48,
+    "loop": false,
     "peak": 0.01
   },
   "glitch-short": {
+    "category": "glitch",
     "duration": 0.5,
+    "loop": false,
     "peak": 0.175
   },
   "glitch-transition": {
+    "category": "glitch",
     "duration": 1.656,
+    "loop": false,
     "peak": 0.763
   },
   "hit-deep": {
+    "category": "impact",
     "duration": 2.319,
+    "loop": false,
     "peak": 0.02
   },
   "impact": {
+    "category": "impact",
     "duration": 2.463,
+    "loop": false,
     "peak": 0.634
   },
   "keys": {
+    "category": "typing",
     "duration": 5.0,
+    "loop": true,
     "peak": 0.399
   },
   "keys-laptop": {
+    "category": "typing",
     "duration": 4.0,
+    "loop": true,
     "peak": 2.824
   },
   "keys-mech": {
+    "category": "typing",
     "duration": 3.52,
+    "loop": true,
     "peak": 1.093
   },
   "keys-type": {
+    "category": "typing",
     "duration": 3.873,
+    "loop": true,
     "peak": 1.941
   },
   "map-whoosh": {
+    "category": "whoosh",
     "duration": 3.084,
+    "loop": false,
     "peak": 0.703
   },
   "marker": {
+    "category": "marker",
     "duration": 0.7,
+    "loop": false,
     "peak": 0.16
   },
   "page": {
+    "category": "paper",
     "duration": 2.5,
+    "loop": false,
     "peak": 0.429
   },
   "paper": {
+    "category": "paper",
     "duration": 1.094,
+    "loop": false,
     "peak": 0.344
   },
   "paper-slide": {
+    "category": "paper",
     "duration": 0.58,
+    "loop": false,
     "peak": 0.389
   },
   "pop": {
+    "category": "ui",
     "duration": 0.479,
+    "loop": false,
     "peak": 0.035
   },
   "riser": {
+    "category": "riser",
     "duration": 5.068,
+    "loop": false,
     "peak": 2.005
   },
   "riser-short": {
+    "category": "riser",
     "duration": 1.55,
+    "loop": false,
     "peak": 1.497
   },
   "shutter": {
+    "category": "camera",
     "duration": 0.26,
+    "loop": false,
     "peak": 0.01
   },
   "swipe": {
+    "category": "whoosh",
     "duration": 0.44,
+    "loop": false,
     "peak": 0.195
   },
   "tick": {
+    "category": "tick",
     "duration": 0.085,
+    "loop": false,
     "peak": 0.005
   },
   "typewriter": {
+    "category": "typing",
     "duration": 3.474,
+    "loop": true,
     "peak": 0.539
   },
   "typing text": {
+    "category": "typing",
     "duration": 6.374,
+    "loop": true,
     "peak": 0.539
   },
   "whoosh": {
+    "category": "whoosh",
     "duration": 2.321,
+    "loop": false,
     "peak": 0.713
   },
   "whoosh-cinematic-for-maps": {
+    "category": "whoosh",
     "duration": 3.082,
+    "loop": false,
     "peak": 0.703
   },
   "whoosh-soft": {
+    "category": "whoosh",
     "duration": 1.12,
+    "loop": false,
     "peak": 0.419
   }
 }

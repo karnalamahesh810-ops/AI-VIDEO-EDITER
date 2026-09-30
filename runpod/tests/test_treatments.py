@@ -81,7 +81,7 @@ class Planner(unittest.TestCase):
         self.assertIn(first["motion"], templates.load()["entrances"])
         self.assertEqual(first["startFrame"], 0)
         # On the voice, not the whole scene: readable, never past the figure window.
-        self.assertGreaterEqual(first["durationInFrames"], int(treatments.MIN_HOLD * 30))
+        self.assertGreaterEqual(first["durationInFrames"], int(treatments.LAYOUT_WINDOWS["figure"][0] * 30))
         self.assertLessEqual(first["durationInFrames"], int(treatments.LAYOUT_WINDOWS["figure"][1] * 30) + 1)
         vt = out["treatments"][0]
         self.assertEqual((vt["primaryType"], vt["template"]), ("footage", first["template"]))

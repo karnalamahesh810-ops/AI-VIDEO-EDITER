@@ -44,22 +44,23 @@ def figure_overlay(out):
 
 class Persist(unittest.TestCase):
     def test_a_figure_holds_across_two_short_scenes(self):
-        out = plan([6.0, 3.0, 3.0], [FIGURE] + PLAIN[:2])
+        out = plan([4.0, 2.0, 2.0], [FIGURE] + PLAIN[:2])
         ov = figure_overlay(out)
         self.assertEqual(ov["startFrame"], 0)
-        # Extended to the end of the second short scene (12 s in all, the ceiling).
-        self.assertEqual(ov["startFrame"] + ov["durationInFrames"], 12 * FPS)
+        # Extended to the end of the second short scene (8 s in all, the ceiling
+        # since 2026-09-30: "don't keep it longer").
+        self.assertEqual(ov["startFrame"] + ov["durationInFrames"], 8 * FPS)
         # The treatment's duration follows the overlay.
         tr = next(t for t in out["treatments"] if t["template"] == ov["template"])
-        self.assertAlmostEqual(tr["duration"], 12.0)
+        self.assertAlmostEqual(tr["duration"], 8.0)
         # Still one figure on the clip: not a full-screen graphic.
         self.assertNotEqual(ov.get("backdrop"), "blur")
 
     def test_the_run_stops_at_the_ceiling(self):
-        out = plan([6.0, 3.0, 3.0, 3.0], [FIGURE] + PLAIN)
+        out = plan([4.0, 2.0, 2.0, 2.0], [FIGURE] + PLAIN)
         ov = figure_overlay(out)
         self.assertLessEqual(ov["durationInFrames"] / FPS, config.PERSIST_MAX_SECONDS + 1e-6)
-        self.assertEqual(ov["startFrame"] + ov["durationInFrames"], 12 * FPS)
+        self.assertEqual(ov["startFrame"] + ov["durationInFrames"], 8 * FPS)
 
     def test_no_extension_over_a_long_scene(self):
         out = plan([6.0, 6.0, 3.0], [FIGURE] + PLAIN[:2])
@@ -68,14 +69,14 @@ class Persist(unittest.TestCase):
         self.assertLessEqual(ov["durationInFrames"] / FPS, treatments.LAYOUT_WINDOWS["figure"][1] + 1e-6)
 
     def test_a_figure_never_runs_into_the_next_overlay(self):
-        # Without rule (c) the figure would run to 12 s, over the 45% graphic that lands at 10 s.
-        out = plan([6.0, 4.0, 2.0], [FIGURE, PLAIN[0], "Its neighbour Lake Mead holds 45 percent of its water."])
+        # Without rule (c) the figure would run to 8 s, over the 45% graphic that lands at 6 s.
+        out = plan([4.0, 2.0, 2.0], [FIGURE, PLAIN[0], "Its neighbour Lake Mead holds 45 percent of its water."])
         ovs = sorted(out["overlays"], key=lambda o: o["startFrame"])
         self.assertGreaterEqual(len(ovs), 2, ovs)
         first, second = ovs[0], ovs[1]
         self.assertEqual((first.get("value"), second.get("value")), (22.0, 45.0))
         # Held over the plain shot, released as the next graphic lands.
-        self.assertEqual(first["startFrame"] + first["durationInFrames"], 10 * FPS)
+        self.assertEqual(first["startFrame"] + first["durationInFrames"], 6 * FPS)
         self.assertLessEqual(first["startFrame"] + first["durationInFrames"], second["startFrame"])
 
     def test_no_extension_under_an_animation_scene(self):
@@ -88,8 +89,8 @@ class Persist(unittest.TestCase):
 
     def test_flag_off_leaves_the_plan_unchanged(self):
         with mock.patch.object(config, "PERSIST_FIGURES", False):
-            off = plan([6.0, 3.0, 3.0], [FIGURE] + PLAIN[:2])
-        on = plan([6.0, 3.0, 3.0], [FIGURE] + PLAIN[:2])
+            off = plan([4.0, 2.0, 2.0], [FIGURE] + PLAIN[:2])
+        on = plan([4.0, 2.0, 2.0], [FIGURE] + PLAIN[:2])
         a, b = figure_overlay(off), figure_overlay(on)
         self.assertLessEqual(a["durationInFrames"] / FPS, treatments.LAYOUT_WINDOWS["figure"][1] + 1e-6)
         self.assertGreater(b["durationInFrames"], a["durationInFrames"])
@@ -105,7 +106,7 @@ class PersistLooks(unittest.TestCase):
         t = {"id": "LIB_PS_PERCENT_RING", "kind": "tag", "category": "NUMBERS", "tags": [],
              "defaults": {"variant": "ps-percent-ring", "duration": 10.0}}
         self.assertEqual(treatments.layout_class(t, "percent"), "persist")
-        self.assertEqual(treatments.LAYOUT_WINDOWS["persist"], (6.0, 12.0))
+        self.assertEqual(treatments.LAYOUT_WINDOWS["persist"], (5.0, 8.0))
         ov = {"template": t["id"]}
         treatments.apply_layout(ov, t, "persist")
         self.assertNotIn("compact", ov)

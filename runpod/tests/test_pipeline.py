@@ -1748,7 +1748,7 @@ class NoDuplicateShots(unittest.TestCase):
     same clip came back a dozen times.
     """
 
-    def _pool(self, per_query=8):
+    def _pool(self, per_query=8, kind="image"):
         """Fake sourcing: each (query, nth) yields a distinct asset."""
         calls = []
 
@@ -1759,7 +1759,7 @@ class NoDuplicateShots(unittest.TestCase):
             # WRAPS, so asking past the end returns an earlier hit rather than
             # nothing. That wrap is exactly what produces duplicates, so the
             # fake has to reproduce it or the test proves nothing.
-            a = asset(kind="image", source="wikimedia", query=query,
+            a = asset(kind=kind, source="wikimedia", query=query,
                       url=f"https://x/{query}-{nth % per_query}.jpg")
             if used and a.identity in used:
                 return None
@@ -1767,8 +1767,8 @@ class NoDuplicateShots(unittest.TestCase):
 
         return fake, calls
 
-    def _run(self, queries, per_query=8):
-        fake, calls = self._pool(per_query)
+    def _run(self, queries, per_query=8, kind="image"):
+        fake, calls = self._pool(per_query, kind)
         original = media.source_for_segment
         media.source_for_segment = fake
         try:
@@ -1815,8 +1815,11 @@ class NoDuplicateShots(unittest.TestCase):
         # is always flagged - the original complaint was silent, close repeats.
         # (Reuse inside per-scene sourcing: the legacy order. By default the job's
         # rescue pass runs first and reuse is capped - see test_glen_fixes.)
+        # Updated for the owner's review (2026-09-30): the assets were photos,
+        # and a photo is now shown once (config.IMAGE_MAX_USES); reuse and its
+        # spacing are shown on footage.
         with mock.patch.object(config, "RESCUE_BEFORE_REUSE", False):
-            out, _ = self._run(["the lake"] * 8, per_query=2)
+            out, _ = self._run(["the lake"] * 8, per_query=2, kind="video")
         placed = [(i, a) for i, a in enumerate(out) if a]
         self.assertGreater(len(placed), 2)
         for i, a in placed:
@@ -2938,7 +2941,11 @@ class LongVideoCoverage(unittest.TestCase):
         self.assertTrue(media.same_subject("University of Hawaii", "university of hawaii"))
 
     def test_an_empty_scene_reuses_its_own_subject_never_another_persons_photo(self):
-        def a(url, kind="image"):
+        # Updated for the owner's review (2026-09-30): this test reused
+        # PHOTOS, and a photo is now shown once (config.IMAGE_MAX_USES). The
+        # same-person rule is checked on each person's footage; the same
+        # scenes holding only photos stay empty.
+        def a(url, kind="video"):
             return MediaAsset(kind=kind, source="wikipedia", url=url)
         jobs = [{"index": 0, "subject": "Ann Dunham", "subject_type": "person"},
                 {"index": 1, "subject": "Madelyn Dunham", "subject_type": "person"},
@@ -2946,13 +2953,16 @@ class LongVideoCoverage(unittest.TestCase):
                 {"index": 3, "subject": "Madelyn Dunham", "subject_type": "person"},
                 {"index": 4, "subject": "Madelyn Dunham", "subject_type": "person"},
                 {"index": 5, "subject": "Anne Dunham", "subject_type": "person"}]
-        results = [a("https://x/ann.jpg"), a("https://x/mad1.jpg"), a("https://x/mad2.jpg"),
-                   a("https://x/mad3.jpg"), None, None]
+        results = [a("https://x/ann.mp4"), a("https://x/mad1.mp4"), a("https://x/mad2.mp4"),
+                   a("https://x/mad3.mp4"), None, None]
         media.fill_from_story(jobs, results)
-        self.assertEqual(results[5].url, "https://x/ann.jpg")      # her own photo, 5 apart
+        self.assertEqual(results[5].url, "https://x/ann.mp4")      # her own footage, 5 apart
         self.assertTrue(results[5].review_required)
         self.assertIn("Ann Dunham", results[5].review_reason)
-        self.assertEqual(results[4].url, "https://x/mad1.jpg")     # Madelyn's own, 3+ apart
+        self.assertEqual(results[4].url, "https://x/mad1.mp4")     # Madelyn's own, 3+ apart
+        photos = [a(u, kind="image") for u in ("https://x/ann.jpg", "https://x/mad1.jpg",
+                                                "https://x/mad2.jpg", "https://x/mad3.jpg")] + [None, None]
+        self.assertEqual(media.fill_from_story(jobs, photos), 0)   # a photo is never shown twice
 
     def test_a_person_scene_is_never_given_a_stranger(self):
         jobs = [{"index": 0, "subject": "Lolo Soetoro", "subject_type": "person"},

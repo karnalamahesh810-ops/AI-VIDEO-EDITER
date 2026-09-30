@@ -32,6 +32,7 @@ import { LOOKS as L_LibDateTime } from "./LibDateTime";
 import { LOOKS as L_LibCountPro } from "./LibCountPro";
 import { LOOKS as L_LibPhotoEditor } from "./LibPhotoEditor";
 import { LOOKS as L_LibPersonFull } from "./LibPersonFull";
+import { LOOKS as L_LibVideoMarks } from "./LibVideoMarks";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -68,8 +69,9 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibSpeakers, ["sp-quote-portrait", "sp-name-tag", "sp-two-voices", "sp-statement-card", "sp-checklist", "sp-circle-list", "sp-network", "sp-concept-wave", "sp-portrait-quote"]),
   ...pick(L_LibWeatherMaps, ["wx-wind-flow", "wx-rain-bands"]),
   ...pick(L_LibEditorText, ["ed-type-clean", "ed-type-terminal", "ed-word-by-word", "ed-marker-highlight", "ed-blur-in", "ed-split-reveal", "ed-box-stack", "ed-news-clipping", "ed-glass-caption", "ed-outline-fill", "ed-side-note", "ed-quote-type", "ed-question", "ed-alert-bar"]),
-  ...pick(L_LibDateTime, ["dt-clean-card", "dt-calendar-page", "dt-stamp-bar", "dt-clock-time", "dt-rec-stamp", "dt-date-slam", "dt-timeline-tick", "dt-countdown-days"]),
+  ...pick(L_LibDateTime, ["dt-clean-card", "dt-calendar-page", "dt-stamp-bar", "dt-clock-time", "dt-rec-stamp", "dt-date-slam", "dt-timeline-tick", "dt-countdown-days", "dt-bold-headline", "dt-big-stack"]),
   ...pick(L_LibCountPro, ["ct-clean-count", "ct-rolling-digits", "ct-bar-percent", "ct-ring-pro", "ct-dot-grid", "ct-split-compare", "ct-corner-stat", "ct-pie-slice", "ct-money-stack"]),
-  ...pick(L_LibPhotoEditor, ["pe-zoom-circle", "pe-highlight-box", "pe-focus-pull", "pe-split-panels", "pe-frame-drop", "pe-parallax", "pe-newsprint", "pe-punch-in", "pe-duotone", "pe-light-sweep", "pe-polaroid-pan"]),
+  ...pick(L_LibPhotoEditor, ["pe-zoom-circle", "pe-highlight-box", "pe-focus-pull", "pe-split-panels", "pe-frame-drop", "pe-parallax", "pe-newsprint", "pe-punch-in", "pe-duotone", "pe-light-sweep", "pe-polaroid-pan", "pe-case-file", "pe-circle-spotlight", "pe-magnify", "pe-red-arrow"]),
   ...pick(L_LibPersonFull, ["pf-profile", "pf-dossier", "pf-split-name", "pf-spotlight", "pf-magazine"]),
+  ...pick(L_LibVideoMarks, ["vm-arrow", "vm-circle", "vm-box"]),
 };

@@ -788,9 +788,19 @@ def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
     # was already removed by clean_title, so what is left is worth searching.
     script = " ".join(seg.text for seg in segments)
     known = _known_names(script)
+    current = current_story(brief)
+
+    def people_in(text: str) -> List[str]:
+        found = [n for n in _proper_phrases(text, known) if n in _named_people(n)]
+        if found and current:
+            # "Dallas and Fort Worth" reads as one Name-Name run: a news line's
+            # places are not an interviewee (the owner's review, 2026-09-30).
+            place_words = {w for p, _t in line_places(text, brief) for w in _words_of(p)}
+            found = [n for n in found if not set(_words_of(n)) <= place_words]
+        return found
+
     # The person the story is about: the most-named person in the script.
-    named = Counter(n for seg in segments for n in _proper_phrases(seg.text, known)
-                    if n in _named_people(n))
+    named = Counter(n for seg in segments for n in people_in(seg.text))
     lead = [n for n, _ in named.most_common(1)]
     main = (([title] if title else []) + (brief.get("people") or []) + lead
             + (brief.get("places") or []) + [""])[0]
@@ -799,7 +809,7 @@ def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
     for shot, seg in zip(shots, segments):
         text = seg.text
         names = _proper_phrases(text, known)
-        people = [n for n in names if n in _named_people(n)]
+        people = people_in(text)
         if people:
             carry = people[0]
         if not shot.get("rule"):
@@ -1233,6 +1243,14 @@ def anchor_to_story(shots: List[dict], segments: List[Segment], brief: dict) -> 
     that year. A metaphor or explainer shot the director marked anchor=false
     ("Picture rail cars on a track") shows what it names, unpinned. Returns
     how many shots were changed.
+
+    A line that names its own place (pin_line_places: shot "linePlace") keeps
+    it: the story's first place is not put in front of its search, its intent
+    names its own place for the vision judge, and its event fallback is that
+    place's event ("Dallas flooding 2026", not "2026 Hill Country floods") -
+    the owner's Dallas line got a Houston photo (2026-09-30). A beat of this
+    year's story also gets recency "month": the last month's uploads are
+    searched first (config.RECENT_FOOTAGE_FIRST).
     """
     if brief.get("kind") not in EVENT_KINDS:
         return 0
@@ -1252,16 +1270,24 @@ def anchor_to_story(shots: List[dict], segments: List[Segment], brief: dict) -> 
             continue
         own_year = _mentions_other_year(f"{seg.text} {shot.get('query', '')}", year)
         before = shot["query"]
+        line_place = shot.get("linePlace") or ""
         shot["query"] = anchor_query(before, brief, seg.text,
-                                     keep_place=shot.get("subjectType") == "place")
+                                     keep_place=shot.get("subjectType") == "place" or bool(line_place))
 
         intent = shot.get("intent") or ""
-        if place and place.split(",")[0].lower() not in intent.lower() and not own_year:
-            where = f"{place}, {year}" if year else place
+        where_place = line_place or place
+        if where_place and where_place.split(",")[0].lower() not in intent.lower() and not own_year:
+            where = f"{where_place}, {year}" if year else where_place
             shot["intent"] = f"{intent} ({where})".strip()[:300]
-        if event and event not in (shot.get("fallbacks") or []):
-            shot["fallbacks"] = [event] + list(shot.get("fallbacks") or [])
+        head = event
+        word = event_word(brief, seg.text) if line_place else ""
+        if line_place and word and not _names_place(event, line_place):
+            head = " ".join(f"{line_place} {word} {year if year and not own_year else ''}".split())
+        if head and head not in (shot.get("fallbacks") or []):
+            shot["fallbacks"] = [head] + list(shot.get("fallbacks") or [])
         shot["eventWindow"] = "event" if own_year else window
+        if shot["eventWindow"] == "year" and config.RECENT_FOOTAGE_FIRST:
+            shot["recency"] = "month"
         if shot["query"] != before:
             changed += 1
     return changed
@@ -1308,6 +1334,297 @@ def current_story(brief: dict, today: Optional[datetime.date] = None) -> bool:
     return isinstance(year, int) and not isinstance(year, bool) and year >= today.year - 1
 
 
+# --------------------------------------------------------------------------- #
+# The line's own place and the event's own word (the owner, 2026-09-30)
+# --------------------------------------------------------------------------- #
+#
+# In the Texas flood video the line "Dallas and Fort Worth. And folks in North
+# Texas..." got a Houston photo. An event story's searches were pinned to the
+# story's FIRST place whenever a query named none of the brief's five places
+# (anchor_query), a rule shot's intent listed the story's places for the
+# vision judge, and a subject like "Texas" shared one cached search - and one
+# subject pool - with every other Texas line. The reference news-compilation
+# channel shows the town the narration names, in the flood itself, this week.
+# A current news-type story's line now searches the place it names (a town,
+# county or river before a region, a region before a whole state) with the
+# event's word ("flooding"), and a story about now asks for the last month's
+# uploads first (anchor_to_story sets recency "month").
+
+_EVENT_WORDS = (
+    (re.compile(r"\bflash[- ]?flood", re.I), "flash flooding"),
+    (re.compile(r"\bflood", re.I), "flooding"),
+    (re.compile(r"\b(?:wild|brush|forest|bush|grass) ?fires?\b", re.I), "wildfire"),
+    (re.compile(r"\bhurricanes?\b", re.I), "hurricane"),
+    (re.compile(r"\btropical (?:storm|depression)s?\b", re.I), "tropical storm"),
+    (re.compile(r"\btornado(?:e?s)?\b|\btwisters?\b", re.I), "tornado"),
+    (re.compile(r"\bice storms?\b", re.I), "ice storm"),
+    (re.compile(r"\bblizzards?\b|\bsnow ?storms?\b|\bwinter storms?\b", re.I), "winter storm"),
+    (re.compile(r"\b(?:earth)?quakes?\b", re.I), "earthquake"),
+    (re.compile(r"\btsunamis?\b", re.I), "tsunami"),
+    (re.compile(r"\bheat ?waves?\b|\bextreme heat\b|\brecord heat\b", re.I), "heat wave"),
+    (re.compile(r"\bdroughts?\b", re.I), "drought"),
+    (re.compile(r"\b(?:land|mud|rock)slides?\b", re.I), "landslide"),
+    (re.compile(r"\bhail(?:storms?)?\b", re.I), "hail"),
+    (re.compile(r"\bderechos?\b", re.I), "derecho"),
+    (re.compile(r"\b(?:thunder)?storms?\b", re.I), "storm"),
+    (re.compile(r"\bfires?\b|\bblazes?\b", re.I), "fire"),
+)
+
+
+def event_word(brief: Optional[dict], text: str = "") -> str:
+    """
+    The word a search needs for WHAT happened - "flooding", "wildfire",
+    "tornado" - from the line itself first, then the story's event, then its
+    summary. "" when none of them names one (water cuts, a court fight).
+    """
+    brief = brief if isinstance(brief, dict) else {}
+    for source in (text, brief.get("event"), brief.get("summary")):
+        if not source:
+            continue
+        for pattern, word in _EVENT_WORDS:
+            if pattern.search(str(source)):
+                return word
+    return ""
+
+
+def _names_event(text: str) -> bool:
+    return any(pattern.search(text or "") for pattern, _w in _EVENT_WORDS)
+
+
+_DIRECTIONS = {"north", "south", "east", "west", "central", "northern", "southern", "eastern", "western",
+               "northeast", "northwest", "southeast", "southwest", "upper", "lower", "greater"}
+# First and last words that make a capitalised name a place.
+_GEO_FIRST = _DIRECTIONS | {"downtown", "fort", "port", "lake", "mount", "mt", "san", "santa", "los", "las",
+                            "el", "saint", "st", "new", "del"}
+# Inside a name: "Dallas-Fort Worth", "Corpus Christi Bay"'s kin.
+_GEO_INNER = {"fort", "port", "san", "santa", "saint", "lake", "mount", "mt"}
+_GEO_LAST = {"county", "parish", "borough", "township", "city", "town", "village", "river", "creek", "lake",
+             "lakes", "bay", "harbor", "harbour", "beach", "island", "islands", "valley", "canyon", "mountain",
+             "mountains", "hills", "springs", "falls", "coast", "plains", "basin", "delta", "peninsula",
+             "reservoir", "dam", "metro", "metroplex", "area", "region", "country", "panhandle", "keys", "bayou",
+             "heights"}
+_MUNICIPAL = {"city", "county", "parish", "town", "village", "borough", "township"}
+_REGION_LAST = {"area", "region", "country", "coast", "panhandle", "plains", "valley", "basin", "metro",
+                "metroplex", "delta", "peninsula"}
+# Last words of agencies and outlets, first words of storm and project names.
+_ORG_LAST = {"service", "department", "agency", "office", "administration", "company", "corporation", "corp",
+             "inc", "association", "society", "commission", "committee", "council", "board", "center",
+             "centre", "university", "college", "school", "hospital", "church", "guard", "patrol", "police",
+             "sheriff", "force", "corps", "army", "navy", "bureau", "institute", "foundation", "network",
+             "news", "channel", "weather", "cross", "authority", "district", "court", "congress", "senate",
+             "times", "post", "tribune", "journal", "station"}
+_EVENT_FIRST = {"hurricane", "tropical", "storm", "typhoon", "cyclone", "winter", "tornado", "operation",
+                "project"}
+_NOT_PLACES = {"congress", "god", "english", "spanish", "christmas", "easter", "thanksgiving", "internet",
+               "facebook", "twitter", "youtube", "tiktok", "instagram", "reuters", "cnn", "fox", "abc", "nbc",
+               "cbs", "noaa", "fema", "the weather channel"}
+_STATE_NAMES = {s.lower() for s in _US_STATES.split("|")}
+_WHOLE_COUNTRY = {"united states", "america", "usa", "us", "the united states"}
+# "in Kerrville", "at Camp Mystic": a location word before a name makes it a
+# place even when it is shaped like a person's name; "from"/"into" only when
+# it is not ("a statement from John Walker").
+_AT_PLACE = re.compile(r"\b(?:in|at|near|across|around|outside|inside|throughout)\s+$", re.I)
+_PLACE_PREP = re.compile(r"\b(?:from|over|toward|towards|into|through)\s+$", re.I)
+
+
+def _words_of(name: str) -> List[str]:
+    return [w for w in (_key(w) for w in (name or "").replace("-", " ").split()) if w]
+
+
+def _place_match(name: str, place: str) -> bool:
+    """One names the other ("Dallas" / "Dallas-Fort Worth"), on a word that is not a compass point."""
+    a = {w for w in _words_of(name) if w not in ("the", "of", "and")}
+    b = {w for w in _words_of((place or "").split(",")[0]) if w not in ("the", "of", "and")}
+    if not a or not b or not (a <= b or b <= a):
+        return False
+    return bool((a & b) - _DIRECTIONS - _GEO_LAST)
+
+
+def _names_place(text: str, place: str) -> bool:
+    """Does `text` name `place` (every one of its words)?"""
+    want = {w for w in _words_of((place or "").split(",")[0]) if w not in ("the", "of", "and")}
+    return bool(want) and want <= set(_words_of(text))
+
+
+def _place_tier(name: str) -> int:
+    """0 a town, city, county, river...; 1 a region ("North Texas"); 2 a whole state or country."""
+    words = _words_of(name)
+    low = " ".join(words)
+    if low in _STATE_NAMES or low in _WHOLE_COUNTRY:
+        return 2
+    if words and words[-1] in _MUNICIPAL:
+        return 0                          # Kansas City, Kerr County
+    if words and (words[0] in _DIRECTIONS or words[-1] in _REGION_LAST or any(w in _STATE_NAMES for w in words)):
+        return 1
+    return 0
+
+
+def _place_verdict(name: str, text: str, at: int, story: List[str], people: List[str]) -> str:
+    """"place", "maybe" (a name with no place evidence of its own) or "not"."""
+    from .media import same_subject
+    words = _words_of(name)
+    if not words:
+        return "not"
+    low = " ".join(words)
+    if low in _NOT_PLACES or words[0] in _EVENT_FIRST or words[-1] in _ORG_LAST:
+        return "not"
+    if re.fullmatch(r"[A-Z]{2,5}", name) or _HONORIFIC_NAME.match(name):
+        return "not"                      # FEMA, NWS; Governor Greg Abbott
+    if low in _STATE_NAMES or low in _WHOLE_COUNTRY or any(_place_match(name, p) for p in story):
+        return "place"
+    if len(words) >= 2 and (words[0] in _GEO_FIRST or words[-1] in _GEO_LAST
+                            or any(w in _GEO_INNER for w in words[1:])):
+        return "place"                    # Fort Worth, Kerr County, Dallas-Fort Worth
+    if any(w in _STATE_NAMES for w in words):
+        return "place"                    # "Texas Hill Country"
+    if any(same_subject(name, p) for p in people):
+        return "not"
+    if _AT_PLACE.search(text[:at]):
+        return "place"                    # "in Kerrville", "at Camp Mystic"
+    if len(words) >= 2 and _named_people(name):
+        return "not"
+    if _PLACE_PREP.search(text[:at]):
+        return "place"                    # "from Houston"
+    return "maybe"
+
+
+def line_places(text: str, brief: Optional[dict] = None, locations=None) -> List[tuple]:
+    """
+    [(place, tier)] the line itself names, most specific first (tier 0 a
+    town, county or river; 1 a region; 2 a whole state), the story's own
+    places before others of a tier, then in the order spoken. A name counts
+    as a place on evidence: it is one of the story's places or the planner's
+    locations for the line, it has a place word ("Fort Worth", "Kerr County",
+    "North Texas"), a place preposition comes before it ("in Houston"), or a
+    list names it with a place ("Dallas and Fort Worth"). People, agencies
+    and storm names never count.
+    """
+    text = text or ""
+    brief = brief if isinstance(brief, dict) else {}
+    story = [p for p in list(brief.get("places") or []) + list(locations or [])
+             if isinstance(p, str) and p.strip()]
+    people = [p for p in (brief.get("people") or []) if isinstance(p, str) and p]
+    people += [c["name"] for c in (brief.get("cast") or []) if isinstance(c, dict) and c.get("name")]
+    names: List[tuple] = []                     # (start, end, name)
+    for m in _CAP_RUN.finditer(text):
+        for part in re.split(r"\s+(?:and|&)\s+", m.group(0)):
+            words = part.split()
+            while words and _key(words[0]) in _NOT_A_NAME:
+                words.pop(0)
+            while words and _key(words[-1]) in _NOT_A_NAME:
+                words.pop()
+            name = " ".join(words).strip(" .,;:!?'’\"()")
+            at = text.find(name, m.start()) if len(name) >= 3 else -1
+            if at >= 0:
+                names.append((at, at + len(name), name))
+    lists: List[List[tuple]] = []
+    for item in names:
+        if lists and re.fullmatch(r"\s*(?:,|,?\s*(?:and|&))\s*", text[lists[-1][-1][1]:item[0]], re.I):
+            lists[-1].append(item)
+        else:
+            lists.append([item])
+    found: Dict[str, tuple] = {}
+    for group in lists:
+        verdicts = [(item, _place_verdict(item[2], text, item[0], story, people)) for item in group]
+        listed = len(group) > 1 and any(v == "place" for _i, v in verdicts)
+        for (at, _end, name), verdict in verdicts:
+            if verdict == "place" or (verdict == "maybe" and listed):
+                own = 0 if any(_place_match(name, p) for p in story) else 1
+                found.setdefault(name.lower(), (name, _place_tier(name), own, at))
+    ordered = sorted(found.values(), key=lambda t: (t[1], t[2], t[3]))
+    return [(name, tier) for name, tier, _own, _at in ordered]
+
+
+def pin_line_places(segments: List[Segment], shots: List[dict], brief: dict) -> int:
+    """
+    A current news-type story's footage and photo beats (news, weather,
+    disaster, or an explainer, about this year or last) search the place
+    their own line names (line_places) with the event's word (event_word).
+
+    Sets shot["linePlace"] (the most specific place, never a whole state) and
+    shot["linePlaces"]. The query is made to name the place: a query about
+    another of the story's places (not a state) is rebuilt as "<place> <event
+    word> <year>" with the old one kept as a fallback, otherwise the place goes
+    in front; the event word goes on the end when the query has none. The
+    subject becomes the place when it names none of the line's places, so the
+    subject pools, the search cache and the reuse steps keep "Dallas" apart
+    from "Texas"; the intent names it for the vision judge. Never a metaphor
+    beat (anchor false) or a portrait. Returns how many shots changed.
+    """
+    if not isinstance(brief, dict) or not current_story(brief) or brief.get("kind") not in _NEWS_QUERY_KINDS:
+        return 0
+    year = brief.get("year")
+    year = str(year) if isinstance(year, int) and not isinstance(year, bool) else ""
+    story_word = event_word(brief)
+    story_places = [p for p in (brief.get("places") or []) if isinstance(p, str) and p.strip()]
+    changed = 0
+    for shot, seg in zip(shots, segments):
+        if shot.get("anchor") is False or shot.get("visualType") not in ("footage", "image"):
+            continue
+        person = shot.get("subjectType") == "person"
+        if person and shot.get("visualType") == "image":
+            continue
+        si = shot.get("sceneIntent") if isinstance(shot.get("sceneIntent"), dict) else {}
+        found = line_places(seg.text, brief, si.get("locations"))
+        names = [p for p, _tier in found]
+        specific = [p for p, tier in found if tier < 2]
+        if not specific:
+            continue
+        place = specific[0]
+        word = event_word(brief, seg.text) or story_word
+        shot["linePlace"] = place
+        shot["linePlaces"] = names[:4]
+        query = shot.get("query") or ""
+        if not any(_names_place(query, p) for p in names):
+            other = [p for p in story_places
+                     if _place_tier(p.split(",")[0]) < 2 and _names_place(query, p)
+                     and not any(_place_match(n, p) for n in names)]
+            if other:
+                shot["fallbacks"] = [query] + [f for f in (shot.get("fallbacks") or []) if f != query]
+                query = " ".join(f"{place} {word} {year}".split())
+            else:
+                query = with_subject(place, query)
+        if word and not _names_event(query):
+            query = f"{query} {word}"
+        shot["query"] = query[:240]
+        if not person and not any(_names_place(shot.get("subject") or "", p) for p in names):
+            shot["subject"] = place
+        intent = shot.get("intent") or ""
+        if not _names_place(intent, place):
+            shot["intent"] = f"{intent} ({place})".strip()[:300]
+        changed += 1
+    return changed
+
+
+# Words that make a query ask for a still.
+_STILL_QUERY_WORDS = re.compile(r"\b(?:archival |exterior )?(?:photo(?:graph)?s?|portraits?|pictures?|"
+                                r"images?|document scan)\b", re.I)
+
+
+def hook_footage(segments: List[Segment], shots: List[dict]) -> int:
+    """
+    Every beat that starts within config.HOOK_SECONDS is footage: the opening
+    decides whether a viewer stays, and the owner's Texas flood video
+    (2026-09-30) opened on stills and AI illustrations. A document keeps its
+    scan. The still's words leave the query ("Greg Abbott photo" searches
+    "Greg Abbott") and its entity's footage words join it (shape_query).
+    Returns how many beats changed.
+    """
+    changed = 0
+    for shot, seg in zip(shots, segments):
+        if seg.start >= config.HOOK_SECONDS:
+            continue
+        if shot.get("visualType") != "image" or shot.get("subjectType") == "document":
+            continue
+        query = " ".join(_STILL_QUERY_WORDS.sub(" ", shot.get("query") or "").split())
+        shot["query"] = query or shot.get("query") or ""
+        shot["visualType"] = "footage"
+        shot.pop("stillReason", None)
+        shape_query(shot)
+        changed += 1
+    return changed
+
+
 def _person_beat(shot: dict, brief: dict) -> bool:
     """
     A beat whose footage is a named person speaking.
@@ -1335,6 +1652,12 @@ def news_queries(shot: dict, text: str, brief: dict) -> List[str]:
     never for a metaphor beat (anchor false), a still, or a beat with no
     subject. A line that names its own other year (the 2021 shortage a 2026
     story compares itself to) searches that year, as anchor_to_story does.
+
+    A line that names its own place (shot "linePlace") searches that place
+    with the event's word first ("Dallas flooding 2026"), and its news report
+    with the word rather than the story's event, which names another place
+    ("Dallas Texas Hill Country floods news report" found the Hill Country) -
+    the owner's review, 2026-09-30.
     """
     kind = brief.get("kind")
     topic = _event_topic(brief)
@@ -1358,9 +1681,16 @@ def news_queries(shot: dict, text: str, brief: dict) -> List[str]:
         out.append(f"{subject} {topic} news {when}".strip())
         out.append(f"{subject} press conference {when}".strip())
     else:
+        place = shot.get("linePlace") or ""
+        word = event_word(brief, text) if place else ""
+        if word:
+            out.append(f"{place} {word} {when}")
         out.append(f"{subject} news {when}".strip())
         if topic and topic.lower() not in subject.lower():
-            out.append(f"{subject} {topic} news report")
+            if word and not _names_place(topic, place):
+                out.append(f"{subject} {word} news report")
+            else:
+                out.append(f"{subject} {topic} news report")
         if shot.get("subjectType") == "place" or shot.get("entity") in _PLACE_ENTITIES:
             out.append(f"{subject} drone {when}".strip())
     return [q[:240] for q in dict.fromkeys(" ".join(q.split()) for q in out) if q]
@@ -2425,6 +2755,11 @@ def plan(segments: List[Segment], title: str = "", report=None,
 
     vary_person_stills(shots)
     promote_stills(segments, shots, brief)
+    # The owner's review (2026-09-30): the opening is footage, and a current
+    # story's line searches the place it names with the event's word - both
+    # before the story anchoring below, which then keeps the line's place.
+    hook_footage(segments, shots)
+    pin_line_places(segments, shots, brief)
     anchor_to_story(shots, segments, brief)
     prefer_interviews(shots, segments, brief)
     # Every beat carries a typed intent (the model's, or the one its shot and
@@ -2438,11 +2773,19 @@ def plan(segments: List[Segment], title: str = "", report=None,
     for shot, seg in zip(shots, segments):
         si = (scene_intent.SceneIntent.from_dict(shot["sceneIntent"]) if shot.get("sceneIntent")
               else scene_intent.SceneIntent.from_shot(shot, brief))
+        if shot.get("linePlaces"):
+            # The places the line names, not the story's first two: the judge
+            # and the title ranking check the right town (the Dallas line got
+            # a Houston photo, 2026-09-30).
+            si.locations = list(shot["linePlaces"])[:6]
         shot["sceneIntent"] = si.to_dict()
         expanded = si.queries(shot.get("query", ""))[1:]
         existing = list(shot.get("fallbacks") or [])
-        # anchor_to_story put the story's own event first; it stays first.
-        head = [f for f in existing[:1] if f and f == (brief.get("event") or "")]
+        # anchor_to_story put the story's own event first (or, for a line
+        # that names its own place, that place's event); it stays first.
+        line_place = (shot.get("linePlace") or "").lower()
+        head = [f for f in existing[:1] if f and (f == (brief.get("event") or "")
+                                                  or (line_place and f.lower().startswith(line_place)))]
         news = news_queries(shot, seg.text, brief)
         query = (shot.get("query") or "").lower()
         shot["fallbacks"] = [q for q in dict.fromkeys(head + news + expanded + existing)

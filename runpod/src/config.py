@@ -422,8 +422,56 @@ RESCUE_PARALLEL = int(os.getenv("RESCUE_PARALLEL", "12"))
 # Fresh footage before repeats: per-scene sourcing leaves a beat empty rather
 # than reusing a shot, the job's rescue pass looks for new footage, and only
 # then is a shot reused - at most REUSE_MAX_USES times in the whole video.
+# That cap is for FOOTAGE. A photo is shown at most IMAGE_MAX_USES times and
+# a generated image exactly once: the owner's Texas flood video (2026-09-30)
+# showed 15 photos across 28 scenes and 4 generated images across 7.
 RESCUE_BEFORE_REUSE = os.getenv("RESCUE_BEFORE_REUSE", "1").strip().lower() not in ("0", "false", "no")
 REUSE_MAX_USES = int(os.getenv("REUSE_MAX_USES", "2"))
+IMAGE_MAX_USES = int(os.getenv("IMAGE_MAX_USES", "1"))
+
+# --- variety and the hook (the owner's review, 2026-09-30) --------------------
+# The Texas flood video (news_compilation, 138 scenes) drew 97 YouTube scenes
+# from only 55 videos, and "Drone's eye view of Texas flood damage" played 4
+# times in its first minute - different 10 s moments of one video still look
+# like the same shot. No source video (a YouTube id, whatever the moment) may
+# supply more than MAX_MOMENTS_PER_VIDEO scenes, and two scenes cut from one
+# video must start at least SAME_VIDEO_GAP_SECONDS apart on the timeline.
+# The pools assign moments under both rules and a final pass after sourcing
+# re-sources every scene that still breaks one; a scene nothing else can fill
+# may keep its repeat, but never within REUSE_MIN_GAP_SECONDS of its twin.
+# 0 turns a rule off.
+MAX_MOMENTS_PER_VIDEO = int(os.getenv("MAX_MOMENTS_PER_VIDEO", "2"))
+SAME_VIDEO_GAP_SECONDS = float(os.getenv("SAME_VIDEO_GAP_SECONDS", "120"))
+REUSE_MIN_GAP_SECONDS = float(os.getenv("REUSE_MIN_GAP_SECONDS", "60"))
+# The opening decides whether a viewer stays, and 4 of the same video's first
+# 5 scenes were AI-generated illustrations. Every scene that starts within
+# HOOK_SECONDS is a footage beat (a document keeps its scan), sourced one by
+# one with a wider search and a best-of-HOOK_JUDGE_BEST_OF judgement instead
+# of from a subject pool, retried for footage after sourcing if it ended on a
+# still, and never given a generated image unless GENERATED_IMAGES_IN_HOOK.
+HOOK_SECONDS = float(os.getenv("HOOK_SECONDS", "45"))
+GENERATED_IMAGES_IN_HOOK = _flag("GENERATED_IMAGES_IN_HOOK", False)
+HOOK_JUDGE_BEST_OF = int(os.getenv("HOOK_JUDGE_BEST_OF", "3"))
+HOOK_POOL_SCOUT = int(os.getenv("HOOK_POOL_SCOUT", "4"))
+HOOK_JUDGE_MAX_PER_SCENE = int(os.getenv("HOOK_JUDGE_MAX_PER_SCENE", "16"))
+# A story about something happening now (a news, weather or disaster story
+# about this year) searches the last month's uploads first - "this month" on
+# YouTube and Dailymotion - and falls back to this year's and then any upload
+# only when nothing recent passes. The owner's reference channel shows this
+# week's footage of the town the narration names. Off = this year's first.
+RECENT_FOOTAGE_FIRST = _flag("RECENT_FOOTAGE_FIRST", True)
+# "When a person's name is mentioned, show that person WHILE it is said, not
+# before, not after" (the owner, 2026-09-30): a beat is split where it names
+# one of the story's people and that beat shows the person (src/mentions.py).
+MENTION_CUTS = _flag("MENTION_CUTS", True)
+# Red arrow / circle / box on a clip "only when it's worth it" (the owner,
+# 2026-09-30): a line that points at something visible ("you can see the
+# water line") gets a mark where vision finds that thing, at most MARKS_MAX
+# per video, MARKS_GAP_SECONDS apart; photo looks that point get their spot
+# the same way (src/marks.py).
+MARKS_ENABLED = _flag("MARKS_ENABLED", True)
+MARKS_MAX = int(os.getenv("MARKS_MAX", "5"))
+MARKS_GAP_SECONDS = float(os.getenv("MARKS_GAP_SECONDS", "60"))
 # One wall-clock budget for all footage finding, across every worker: a
 # real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
 # and searches stop at once and the beats still without footage become
@@ -643,7 +691,8 @@ STYLE_PACK = os.getenv("STYLE_PACK", "").strip().lower()
 # full-screen graphic (treatments._persist_figures).
 PERSIST_FIGURES = _flag("PERSIST_FIGURES", True)
 PERSIST_SCENE_MAX = float(os.getenv("PERSIST_SCENE_MAX", "4.5"))
-PERSIST_MAX_SECONDS = float(os.getenv("PERSIST_MAX_SECONDS", "12"))
+# 8 s since 2026-09-30 (was 12): the owner, "don't keep it longer".
+PERSIST_MAX_SECONDS = float(os.getenv("PERSIST_MAX_SECONDS", "8"))
 
 # VidRush's pacing, measured on four of their exports (first 8 min each):
 # median shot 3.3-3.7 s, middle half 2.3-5.2 s, 13.6-16.5 cuts/min, only
@@ -657,3 +706,47 @@ MAX_SCENE_SECONDS = float(os.getenv("MAX_SCENE_SECONDS", "9.0"))
 # require identifying your client in their terms of use.
 CONTACT_EMAIL = os.getenv("CONTACT_EMAIL", "karnalamahesh810@gmail.com")
 USER_AGENT = f"ThumbGenius/2.0 (video worker; contact: {CONTACT_EMAIL})"
+
+# --- footage library on Cloudflare R2 (src/libstore.py, src/library.py) -------
+# The library's own bucket ("thumbgenius-library") and its public r2.dev or
+# custom domain. Both set (with the R2_* keys above) = approved clips and
+# photos are kept there instead of the app's storage and read straight from
+# the public URL. R2_LIBRARY_PREFIX puts every key under a folder ("library/"
+# when the library has to share R2_BUCKET).
+R2_LIBRARY_BUCKET = os.getenv("R2_LIBRARY_BUCKET", "").strip()
+R2_LIBRARY_PUBLIC_BASE = os.getenv("R2_LIBRARY_PUBLIC_BASE", "").strip()
+R2_LIBRARY_PREFIX = os.getenv("R2_LIBRARY_PREFIX", "").strip()
+# Each scene's clip, preview and thumbnail go to R2_BUCKET under a public,
+# link-only name (no storage reference, so nothing re-signs them) instead of
+# the app's video-media bucket. On whenever R2 is configured; 0 = app storage.
+R2_SCENE_MEDIA = _flag("R2_SCENE_MEDIA", True)
+R2_MEDIA_UPLOAD_SECONDS = float(os.getenv("R2_MEDIA_UPLOAD_SECONDS", "120"))
+# Approved photos are kept too (never a generated image), when their long
+# side is at least LIBRARY_IMAGE_MIN_SIDE.
+LIBRARY_IMAGES = _flag("LIBRARY_IMAGES", True)
+LIBRARY_IMAGE_MIN_SIDE = int(os.getenv("LIBRARY_IMAGE_MIN_SIDE", "1280"))
+# The library's quality gate (libstore.check_clip). Not kept (an old row is
+# marked removed, reversibly): shorter than LIBRARY_MIN_SECONDS, smaller than
+# LIBRARY_MIN_WIDTH x LIBRARY_MIN_HEIGHT, vertical or framed on a blurred copy,
+# mostly black, frozen, letter/pillarboxed (bars over LIBRARY_MAX_BARS of the
+# frame), a slideshow of stills, burned-in graphics over LIBRARY_MAX_TEXT_SHARE
+# of the frame, softer than LIBRARY_MIN_SHARPNESS, CLIP relevance to its own
+# subject under LIBRARY_MIN_CLIP_RELEVANCE, or within LIBRARY_DUP_BITS of the
+# perceptual hash of a clip the library already keeps.
+LIBRARY_MIN_SECONDS = float(os.getenv("LIBRARY_MIN_SECONDS", "3.0"))
+LIBRARY_MIN_WIDTH = int(os.getenv("LIBRARY_MIN_WIDTH", "1280"))
+LIBRARY_MIN_HEIGHT = int(os.getenv("LIBRARY_MIN_HEIGHT", "720"))
+LIBRARY_MAX_BARS = float(os.getenv("LIBRARY_MAX_BARS", "0.2"))
+LIBRARY_MAX_TEXT_SHARE = float(os.getenv("LIBRARY_MAX_TEXT_SHARE", "0.25"))
+LIBRARY_MIN_SHARPNESS = float(os.getenv("LIBRARY_MIN_SHARPNESS", "12"))
+LIBRARY_MIN_CLIP_RELEVANCE = float(os.getenv("LIBRARY_MIN_CLIP_RELEVANCE", str(LOCAL_VISION_MIN_RELEVANCE)))
+LIBRARY_DUP_BITS = int(os.getenv("LIBRARY_DUP_BITS", "10"))
+# Old rows (clips in the app's storage) are checked and moved to R2 by a
+# background pass started with each plan/build job: at most
+# LIBRARY_MAINTENANCE_MAX rows within LIBRARY_MAINTENANCE_SECONDS.
+LIBRARY_MAINTENANCE = _flag("LIBRARY_MAINTENANCE", True)
+LIBRARY_MAINTENANCE_SECONDS = float(os.getenv("LIBRARY_MAINTENANCE_SECONDS", "60"))
+LIBRARY_MAINTENANCE_MAX = int(os.getenv("LIBRARY_MAINTENANCE_MAX", "25"))
+# A current news story prefers library clips recorded within this many days
+# and never takes one dated to another year.
+LIBRARY_FRESH_DAYS = int(os.getenv("LIBRARY_FRESH_DAYS", "45"))

@@ -11,7 +11,10 @@ news_compilation is measured from a real daily weather-news channel (four
 Nor'easter videos, 2026-09-29): phone/social clips of the named towns, about
 half of them vertical and shown on a blurred copy of themselves, shots of
 3-12 s (median ~5.5 s), official NWS graphics and forecast maps, almost no
-on-screen text, soft 0.5 s crossfades, narration only (no music).
+on-screen text, soft 0.5 s crossfades. The reference ran narration only; the
+owner (2026-09-30) wants music under every style, news included (the timeline
+picks the track by the story's mood and ducks it under the voice). News uses
+real pictures only: no AI-generated images (IMAGE_MAX_PER_VIDEO 0).
 """
 from __future__ import annotations
 
@@ -21,6 +24,8 @@ from typing import Dict
 # documentary/history/story soft and rare, trending/compilation/explainer
 # energetic flashes, glitches and whips, crossfade = soft 0.5 s dissolves).
 # graphics: how busy the overlay planner is ("minimal", "normal", "rich").
+# Every style has music (the owner, 2026-09-30); only the job's own
+# "bgm": false turns it off.
 STYLES: Dict[str, dict] = {
     "documentary": {
         "label": "Documentary",
@@ -29,15 +34,18 @@ STYLES: Dict[str, dict] = {
     },
     "news_compilation": {
         "label": "News compilation",
-        "transitions": "crossfade", "graphics": "minimal", "bgm": False,
+        "transitions": "crossfade", "graphics": "minimal",
         "config": {"MIN_SCENE_SECONDS": 3.0, "TARGET_SCENE_SECONDS": 5.5, "MAX_SCENE_SECONDS": 12.0,
-                   "ALLOW_VERTICAL": True, "NEWS_FOOTAGE": True},
+                   "ALLOW_VERTICAL": True, "NEWS_FOOTAGE": True,
+                   # News shows what happened: never an AI-generated picture.
+                   "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False},
     },
     "trending_news": {
         "label": "Trending news",
         "transitions": "trending", "graphics": "normal",
         "config": {"MIN_SCENE_SECONDS": 3.0, "TARGET_SCENE_SECONDS": 5.0, "MAX_SCENE_SECONDS": 9.0,
-                   "ALLOW_VERTICAL": True, "NEWS_FOOTAGE": True},
+                   "ALLOW_VERTICAL": True, "NEWS_FOOTAGE": True,
+                   "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False},
     },
     "story": {
         "label": "Story narration",
@@ -87,8 +95,9 @@ def apply(inp: dict) -> str:
     Fold the job's video_style into its input, in place, before config
     overrides are applied: the style's config goes under inp["config"]
     (explicit per-job overrides win), and style / transition_style /
-    graphics_density / style_pack / bgm defaults are set where the job left
-    them empty. Returns the resolved style id ("" for auto).
+    graphics_density / style_pack defaults are set where the job left them
+    empty. Music is never switched off by a style. Returns the resolved style
+    id ("" for auto).
     """
     style = resolve(inp.get("video_style"))
     chosen = density(inp.get("graphics_density"))
@@ -113,7 +122,4 @@ def apply(inp: dict) -> str:
     inp["graphics_density"] = merged["GRAPHICS_DENSITY"]
     if spec.get("pack") and not inp.get("style_pack"):
         inp["style_pack"] = spec["pack"]
-    # Music off for styles that have none, unless the job picked a track.
-    if spec.get("bgm") is False and "bgm" not in inp and not inp.get("bgm_url") and not inp.get("bgm_genre"):
-        inp["bgm"] = False
     return style

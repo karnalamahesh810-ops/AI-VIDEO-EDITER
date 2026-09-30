@@ -59724,6 +59724,330 @@
    ]
   },
   {
+   "id": "LIB_DT_BOLD_HEADLINE",
+   "name": "Bold Date Headline",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "The date as a huge bold headline: SEPTEMBER 30 slams onto a solid yellow block (the theme's colour when one is set), punching down from larger with a motion blur and landing on frame 11 with a small camera shake; the weekday rises above it in white and the year, time or place sits letter-spaced under it. Ranges read TUESDAY → THURSDAY, SEPT 28 → OCT 2 or SEPTEMBER 28-30; a time alone headlines with its weekday over it; words like TOMORROW NIGHT go on the block as they are.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-bold-headline",
+    "sfx": {
+     "name": "hit-deep",
+     "volume": 0.25
+    },
+    "sfxAt": 11,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
+   "id": "LIB_DT_BIG_STACK",
+   "name": "Big Date Stack",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "Stacked bold typography left of centre: the day number huge in white (330-440 px), the month in a solid yellow bar locked to the number's width, the weekday, year and place small and letter-spaced under them. The stack punches in from larger with a motion blur and lands on frame 8 with a small bump while the bar wipes open; a weekday, a month or a year alone takes the big line, a day range reads 28-30.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "dt-big-stack",
+    "sfx": {
+     "name": "hit-deep",
+     "volume": 0.25
+    },
+    "sfxAt": 8,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dt"
+   ]
+  },
+  {
    "id": "LIB_CT_CLEAN_COUNT",
    "name": "Clean Count",
    "category": "NUMBERS",
@@ -63031,6 +63355,643 @@
    ]
   },
   {
+   "id": "LIB_PE_CASE_FILE",
+   "name": "Case File Photo",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "The photo as a print clipped into a manila case folder on a dark desk (a paper clip, the folder tab with the label, a typed report underneath): the print drops onto the folder and lands on frame 13, a typed label strip with the text is taped on under it, a red marker circle is drawn round the point (overlay.anchor {x, y[, r]} in 0..1 of the picture, else an off-centre point) and the camera pushes slowly into the circle.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-case-file",
+    "sfx": {
+     "name": "paper-slide",
+     "volume": 0.25
+    },
+    "sfxAt": 13,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-object",
+    "photo-place",
+    "photo-person"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_CIRCLE_SPOTLIGHT",
+   "name": "Circle Spotlight",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "The photo dims, desaturates and softens everywhere except a circle of light that opens on the point (overlay.anchor {x, y[, r]}, else an off-centre point); a red ring draws round it from frame 10 with a thin white halo, and a short label rises beside it on a thin white leader line with a red dot. The camera drifts in about the point; at the exit the ring erases and the iris opens back to the whole picture.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-circle-spotlight",
+    "sfx": {
+     "name": "marker",
+     "volume": 0.25
+    },
+    "sfxAt": 13,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-object",
+    "photo-place",
+    "photo-person"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_MAGNIFY",
+   "name": "Magnifying Glass",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A magnifying glass (dark metal rim, glass glare, wooden handle, a soft shadow on the photo) glides in from the lower right on a curve and settles over the point at frame 22 (overlay.anchor {x, y[, r]}, else an off-centre point), showing the detail about twice as large; it floats while it holds, a white label card pops beside it, and it lifts away at the exit.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-magnify",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.25
+    },
+    "sfxAt": 14,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-object",
+    "photo-place"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PE_RED_ARROW",
+   "name": "Red Arrow on Photo",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A bold label card pops up clear of the point, then a hand-drawn red felt-marker arrow sweeps out of it on a bowed curve and its head flicks open on the point at frame 21 (overlay.anchor {x, y[, r]}, else an off-centre point), while the camera pushes slowly in about the point; the arrow is erased from its tail at the exit.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "pe-red-arrow",
+    "sfx": {
+     "name": "swipe",
+     "volume": 0.25
+    },
+    "sfxAt": 16,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo",
+    "photo-object",
+    "photo-place",
+    "photo-person"
+   ],
+   "tags": [
+    "lib",
+    "pe",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
    "id": "LIB_PF_PROFILE",
    "name": "Profile Intro",
    "category": "IMAGES",
@@ -64139,6 +65100,455 @@
     "lib",
     "wx",
     "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_VM_ARROW",
+   "name": "Red Arrow on Video",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Rides on the playing clip: a bold white label card pops up clear of the thing and a hand-drawn red felt-marker arrow sweeps out of it, its head flicking open on the thing at frame 18 (the swipe peaks mid-sweep, frame 14). Needs overlay.anchor {x, y[, r]} in 0..1 of the frame (src/anchors.find_anchor on the clip's frame); draws nothing without one.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "vm-arrow",
+    "sfx": {
+     "name": "swipe",
+     "volume": 0.25
+    },
+    "sfxAt": 14,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "point-at",
+    "this-one"
+   ],
+   "tags": [
+    "lib",
+    "vm"
+   ]
+  },
+  {
+   "id": "LIB_VM_CIRCLE",
+   "name": "Red Circle on Video",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Rides on the playing clip: a red felt-marker loop draws a little more than once round the thing (frame 3 on) and pulses once with a soft ring going out; a white label card on a red tick beside it when text is given. Needs overlay.anchor {x, y[, r, w, h]} in 0..1 of the frame; draws nothing without one.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "vm-circle",
+    "sfx": {
+     "name": "marker",
+     "volume": 0.25
+    },
+    "sfxAt": 7,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "this-one",
+    "point-at"
+   ],
+   "tags": [
+    "lib",
+    "vm"
+   ]
+  },
+  {
+   "id": "LIB_VM_BOX",
+   "name": "Red Box on Video",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Rides on the playing clip: a red box draws round the thing from its top-left corner while the rest of the frame dims a touch, and a red tag with the name slides out of the box's edge. Needs overlay.anchor {x, y[, r, w, h]} in 0..1 of the frame (w, h size the box); draws nothing without one.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none",
+      "impact",
+      "whoosh",
+      "map-whoosh",
+      "riser",
+      "pop",
+      "typewriter",
+      "paper",
+      "page",
+      "glitch",
+      "glitch-transition"
+     ],
+     "default": "default"
+    },
+    "sfxVolume": {
+     "type": "number",
+     "label": "Sound volume",
+     "min": 0.0,
+     "max": 1.0,
+     "default": 0.3
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "vm-box",
+    "sfx": {
+     "name": "marker",
+     "volume": 0.25
+    },
+    "sfxAt": 5,
+    "types": false
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "this-one",
+    "point-at"
+   ],
+   "tags": [
+    "lib",
+    "vm"
    ]
   }
  ],

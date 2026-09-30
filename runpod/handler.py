@@ -51,7 +51,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
                  render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
 from src import templates
-from src import localvision, r2, styles, upscale
+from src import localvision, marks, r2, styles, upscale
 
 
 def _work_dir(job_id: str) -> str:
@@ -390,10 +390,38 @@ def _require_youtube() -> None:
             "stopped. Add working US proxies (YTDLP_PROXY) and run it again.")
 
 
+_STORAGE_REFS = ("storage", "thumbStorage", "previewStorage")
+
+
+def _put_scene_file(local: str, obj: str, bucket: str, project_id: str, job_id: str) -> tuple:
+    """
+    (url, storage ref or None) for one scene file. Cloudflare R2 first
+    (R2_SCENE_MEDIA, bucket R2_BUCKET under a link-only name): a public link
+    that never expires, so the timeline carries no storage reference and
+    neither the app nor the render re-signs it - and the app's storage stays
+    small. The app's storage (a signed link plus the reference it is
+    re-signed from) when R2 is off or refuses.
+    """
+    if config.R2_SCENE_MEDIA and r2.enabled():
+        try:
+            return r2.upload(local, r2.tokened(obj), content_type=r2.content_type(local),
+                             deadline=time.time() + config.R2_MEDIA_UPLOAD_SECONDS,
+                             cache_control=r2.IMMUTABLE), None
+        except Exception as e:  # noqa: BLE001 - the app's storage below
+            print(f"[worker] R2 upload of {os.path.basename(obj)} failed, using app storage: "
+                  f"{type(e).__name__}: {str(e)[:120]}", flush=True)
+    ref = {"bucket": bucket, "path": obj}
+    if storage.broker_enabled():
+        return storage.broker_upload(local, bucket, obj, project_id, job_id, read_ttl=_MEDIA_LINK_TTL), ref
+    storage.upload_to_supabase(local, obj, bucket=bucket)
+    return storage.signed_url(obj, bucket=bucket, expires_in=_MEDIA_LINK_TTL), ref
+
+
 def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                   job_id: str = "", band: tuple = (66, 68)) -> int:
     """
-    Upload sourced media to Supabase and point the timeline at it.
+    Upload sourced media (Cloudflare R2, or the app's storage) and point the
+    timeline at it (_put_scene_file).
 
     Needed because `plan` and `render` are separate serverless jobs. The work
     directory is wiped when a job ends, and the next job may land on a
@@ -415,12 +443,8 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
                                  if os.path.isfile((s.get("media") or {}).get("url") or "")),
                                 "")) or config.WORK_DIR
 
-    def put(local: str, obj: str) -> str:
-        if storage.broker_enabled():
-            return storage.broker_upload(local, bucket, obj, project_id, job_id,
-                                         read_ttl=_MEDIA_LINK_TTL)
-        storage.upload_to_supabase(local, obj, bucket=bucket)
-        return storage.signed_url(obj, bucket=bucket, expires_in=_MEDIA_LINK_TTL)
+    def put(local: str, obj: str) -> tuple:
+        return _put_scene_file(local, obj, bucket, project_id, job_id)
 
     # One job per distinct file, run 8 at a time: every clip is an upload, a
     # thumbnail and a re-encoded preview copy, and doing 23 of those one after
@@ -435,30 +459,28 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
         ext = os.path.splitext(path)[1] or ".bin"
         obj = f"projects/{project_id}/media/{scene['id']}{ext}"
         try:
-            url = put(path, obj)
+            url, ref = put(path, obj)
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not publish {obj}: {e}", flush=True)
             return None
-        fields = {"url": url,
-                  # The signed URL expires; the app re-signs from this before a render.
-                  "storage": {"bucket": bucket, "path": obj}}
+        # A signed URL expires; the app re-signs from `storage` before a
+        # render. An R2 link does not expire and carries no reference.
+        fields = {"url": url, "storage": ref}
         thumb = _thumbnail(path, work, scene["id"])
         if thumb:
             tobj = f"projects/{project_id}/thumbs/{scene['id']}.jpg"
             try:
-                fields["thumbnail"] = put(thumb, tobj)
-                fields["thumbStorage"] = {"bucket": bucket, "path": tobj}
+                fields["thumbnail"], fields["thumbStorage"] = put(thumb, tobj)
             except Exception as e:  # noqa: BLE001 — a missing thumb is cosmetic
                 print(f"[worker] could not save thumbnail {tobj}: {e}", flush=True)
         preview = _preview_proxy(path, work, scene["id"])
         if preview:
             pobj = f"projects/{project_id}/preview/{scene['id']}.mp4"
             try:
-                fields["previewUrl"] = put(preview, pobj)
-                fields["previewStorage"] = {"bucket": bucket, "path": pobj}
+                fields["previewUrl"], fields["previewStorage"] = put(preview, pobj)
             except Exception as e:  # noqa: BLE001 — the editor falls back to the full clip
                 print(f"[worker] could not save preview {pobj}: {e}", flush=True)
-        return url, fields
+        return url, {k: v for k, v in fields.items() if v is not None}
 
     total = len(first_scene)
     report(f"Saving clips for editing 0/{total}", lo, done=0, total=total)
@@ -480,6 +502,10 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
         if not path or not os.path.isfile(path):
             continue
         if path in published:
+            # A reference left from an earlier save would make the app re-sign
+            # that old file over the new link.
+            for key in _STORAGE_REFS:
+                media.pop(key, None)
             media.update(published[path][1])
         else:
             scene["reviewRequired"] = True
@@ -497,7 +523,10 @@ def _source_with_pools(jobs: list, work: str, *, require_cc: bool, exclude: set,
     """
     Everything one worker does for its lines: subject pools first, per-scene
     sourcing for what the pools did not cover (`source_rest(rest, taken)`),
-    then the pools' spare moments for lines still empty or repeated.
+    then the pools' spare moments for lines still empty or repeated - or
+    breaking a variety rule (media.variety_violations: the owner's review,
+    2026-09-30), while this worker still holds its pools' spares; the parent
+    judges the whole video again after every part is in.
     Returns (assets aligned to the jobs sorted by index, pooled).
     """
     ordered = sorted(jobs, key=lambda j: j["index"])
@@ -525,8 +554,12 @@ def _source_with_pools(jobs: list, work: str, *, require_cc: bool, exclude: set,
                 redo.append(j["index"])
             else:
                 seen.add(a.identity)
+        # A still in the hook keeps its place until the parent's footage retry.
+        redo += [i for i, (_why, kind) in media.variety_violations(ordered, by_index).items()
+                 if kind != "upgrade" and i not in redo]
+        redo.sort()
         if redo:
-            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc)
+            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc, assets=by_index)
             by_index.update(extra)
             print(f"[worker] {len(extra)}/{len(redo)} empty or repeated line(s) filled from "
                   "spare pool moments", flush=True)
@@ -752,11 +785,39 @@ def _fill_missing_media(doc: dict) -> int:
     collapses onto the SAME single neighbour: a visible run of the identical
     clip repeated back to back, which reads far worse than the same clip
     appearing twice somewhere apart in the video.
+
+    Only FOOTAGE is borrowed, never a photo, and a shot whose source video
+    plays nowhere within REUSE_MIN_GAP_SECONDS of the scene comes before one
+    that does: the owner's Texas flood video (2026-09-30) showed 15 photos
+    across 28 scenes and one drone video four times in a minute. (The saved
+    timeline keeps that 60 s rule strictly - media.restore_held and
+    fill_from_story; this render copy still prefers a near repeat to black.)
+    A scene with nothing it may borrow shows its line as text.
     Returns how many scenes were patched.
     """
     scenes = doc.get("scenes", [])
     have = [i for i, s in enumerate(scenes)
            if (s.get("media") or {}).get("type") in ("video", "image")]
+    fps = max(1, int(doc.get("fps") or 30))
+
+    def source_of(idx: int) -> str:
+        """The source video a scene shows ("yt:<id>" for any moment of one), else its media url."""
+        aid = str((scenes[idx].get("semanticMetadata") or {}).get("assetId") or "")
+        if aid.startswith("yt:"):
+            return aid.split("@")[0]
+        return str((scenes[idx].get("media") or {}).get("url") or "")
+
+    def seconds_at(idx: int) -> float:
+        return int(scenes[idx].get("startFrame") or 0) / fps
+
+    footage = [i for i in have if (scenes[i].get("media") or {}).get("type") == "video"]
+    plays: Dict[str, List[float]] = {}          # source video -> where it plays
+    for k in footage:
+        plays.setdefault(source_of(k), []).append(seconds_at(k))
+
+    def near_twin(pick: int, idx: int) -> bool:
+        at, floor = seconds_at(idx), config.REUSE_MIN_GAP_SECONDS
+        return floor > 0 and any(abs(t - at) < floor for t in plays.get(source_of(pick), []))
     if not have:
         # Nothing was sourced anywhere in the whole video - there is no clip
         # to borrow. Never leave this as a black hole: give each empty scene
@@ -810,11 +871,14 @@ def _fill_missing_media(doc: dict) -> int:
             if not have:
                 continue
             want = subject_of(i)
-            same_subject = [h for h in have if want and subject_of(h) == want]
             # A shot is borrowed at most once, never near itself: the owner saw
             # ~19 clips each repeated about eight times across a 22-minute video.
-            same_pool = [h for h in same_subject if borrowed[h] < 1 and abs(h - i) >= gap]
-            pool = same_pool or [h for h in have if borrowed[h] < 1 and abs(h - i) >= gap]
+            # A shot of the same subject whose video plays nowhere near comes
+            # first, then any such shot, and only then one that plays near.
+            free = [h for h in footage if borrowed[h] < 1 and abs(h - i) >= gap]
+            same = [h for h in free if want and subject_of(h) == want]
+            far = [h for h in free if not near_twin(h, i)]
+            pool = [h for h in same if h in far] or far or same or free
             if not pool:
                 text = (s.get("text") or "").strip()
                 if text:
@@ -827,11 +891,12 @@ def _fill_missing_media(doc: dict) -> int:
                 continue
             pick = min(pool, key=lambda h: (borrowed[h], abs(h - i)))
             borrowed[pick] += 1
+            plays.setdefault(source_of(pick), []).append(seconds_at(i))
             s["media"] = dict(scenes[pick]["media"])
             s["motion"] = scenes[pick].get("motion", "none")
             s["reviewRequired"] = True
             reason = ("No usable clip found — reused a shot of the same subject; use Find footage to replace it"
-                     if same_pool else
+                     if want and subject_of(pick) == want else
                      "No usable clip found — reused another scene; use Find footage to replace it")
             s["reviewReason"] = reason
             patched += 1
@@ -887,6 +952,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     vision.set_story(brief)
     # And YouTube searches the archive or news channels for this kind of story.
     media.set_story_kind(brief.get("kind", ""))
+    # Cut on names (src/mentions.py): a beat is split where it names one of the
+    # story's people, so their shot starts WHILE the name is said; the brief's
+    # beat numbers follow the new beats.
+    from src import mentions
+    segments, mention_focus = mentions.prepare(segments, brief)
 
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
@@ -898,6 +968,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         allow_maps=bool(inp.get("maps", True)),
         brief=brief,
     )
+    # ...and a beat that opens with a named person shows that person.
+    mentions.apply_focus(shots, segments, mention_focus, brief)
     # Out of AI credits already: stop before a single footage search is paid for.
     vision.require_credits()
 
@@ -914,16 +986,24 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     report(f"Sourcing media for {total} scenes", 22, done=0, total=total)
     events.phase("source")
     media.reset_cache()
+    # "start" places each line on the timeline for the variety rules (one
+    # video's scenes SAME_VIDEO_GAP_SECONDS apart); every line that starts
+    # within HOOK_SECONDS is a hook line (best-of search, no generated image);
+    # "place" and "recency" carry the line's own place and "last month first"
+    # into the pools and the searches (the owner's review, 2026-09-30).
     jobs = [{"index": i, "query": shot["query"], "seconds": seg.duration,
+             "start": round(float(seg.start), 2),
              "visual_type": shot.get("visualType", "footage"),
              "fallbacks": shot.get("fallbacks") or [],
              "prompt": shot.get("prompt") or "",
              "intent": shot.get("intent") or "",
              "subject_type": shot.get("subjectType") or "",
              "subject": shot.get("subject") or "",
+             "place": shot.get("linePlace") or "",
              "event_window": shot.get("eventWindow") or "",
+             "recency": shot.get("recency") or "",
              "scene_intent": shot.get("sceneIntent") or None,
-             "hook": bool(shot.get("hook")),
+             "hook": bool(shot.get("hook")) or float(seg.start) < config.HOOK_SECONDS,
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
 
@@ -1067,27 +1147,53 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             else:
                 seen_ids.add(a.identity)
         if redo:
-            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc)
+            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc, assets=assets)
             for i, a in extra.items():
                 assets[i] = a
             pool_stats["reserve_filled"] = len(extra)
             print(f"[worker] {len(extra)}/{len(redo)} empty or repeated line(s) filled from "
                   "spare pool moments", flush=True)
+    # The owner's review of the Texas flood video (2026-09-30): 4 of its first
+    # 5 scenes were AI illustrations, one drone video played 4 times in the
+    # first minute and 28 photo scenes showed 15 photos. Every scene that
+    # breaks a variety rule (media.variety_violations: a video past
+    # MAX_MOMENTS_PER_VIDEO scenes or within SAME_VIDEO_GAP_SECONDS of itself,
+    # a photo or generated image shown again, a generated image or a still in
+    # the hook) is cleared here and goes through the pools' spare moments and
+    # the rescue pass like an empty scene - a hook scene for footage only.
+    # What nothing replaced comes back where the rules allow
+    # (media.restore_held) before any shot is reused.
+    results_by_index = [None] * (max(j["index"] for j in jobs) + 1)
+    for j in jobs:
+        results_by_index[j["index"]] = assets[j["index"]]
+    held = media.hold_violations(jobs, results_by_index)
+    if held and pools_wanted:
+        extra = pools.fill_from_reserve(jobs, sorted(held), work, require_cc=require_cc,
+                                        assets=results_by_index)
+        for i, a in extra.items():
+            results_by_index[i] = a
+    rescued: dict = {}
     # Still empty: one last time-boxed pass before the render repeats a shot
     # (the Glen Canyon job repeated ~19 clips across 148 empty scenes).
-    if any(a is None for a in assets):
-        n_empty = sum(1 for a in assets if a is None)
+    if any(results_by_index[j["index"]] is None for j in jobs):
+        n_empty = sum(1 for j in jobs if results_by_index[j["index"]] is None)
         report(f"Finding footage for {n_empty} empty scenes", 62)
-        results_by_index = [None] * (max(j["index"] for j in jobs) + 1)
-        for j in jobs:
-            results_by_index[j["index"]] = assets[j["index"]]
-        rescued = media.rescue_fill(jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")))
-        # Only now, with nothing fresh left to find, may a shot be reused - and
-        # never more than REUSE_MAX_USES times in the video.
-        if config.REUSE_SHOTS_TO_FILL and config.RESCUE_BEFORE_REUSE:
-            rescued["reused"] = media.fill_from_story(jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
-        for j in jobs:
-            assets[j["index"]] = results_by_index[j["index"]]
+        rescued = media.rescue_fill(jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")),
+                                    footage_only={j["index"] for j in jobs
+                                                  if j.get("hook") and j.get("subject_type") != "document"})
+    if held:
+        pool_stats["variety"] = dict(media.restore_held(jobs, results_by_index, held), held=len(held),
+                                     reasons=dict(collections.Counter(r for _a, r, _k in held.values())))
+        print(f"[worker] variety: {pool_stats['variety']}", flush=True)
+    # Only now, with nothing fresh left to find, may a shot be reused - footage
+    # only, never within REUSE_MIN_GAP_SECONDS of its twin, and never more than
+    # REUSE_MAX_USES times in the video.
+    if any(results_by_index[j["index"]] is None for j in jobs) \
+            and config.REUSE_SHOTS_TO_FILL and config.RESCUE_BEFORE_REUSE:
+        rescued["reused"] = media.fill_from_story(jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
+    for j in jobs:
+        assets[j["index"]] = results_by_index[j["index"]]
+    if rescued:
         pool_stats["rescue"] = rescued
     _ytdlp_mod.set_deadline(0.0)               # later steps (resource, render) are not time boxed here
     # Small photos get Real-ESRGAN detail and soft clips a sharpen pass to
@@ -1115,12 +1221,16 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         planner=planner,
         warnings=warnings,
     )
+    # Arrows / circles that point at the thing the line talks about, only
+    # where vision finds it (src/marks.py) - while the clips are still local.
+    doc.setdefault("meta", {})["marks"] = marks.place(doc)
     try:
         def _put_split(local: str, name: str) -> str:
             obj = f"projects/{project_id}/{name}"
-            if storage.broker_enabled() and project_id:
-                return storage.broker_upload(local, inp.get("media_bucket") or config.MEDIA_BUCKET, obj, project_id,
-                                             (report.job or {}).get("id", ""), read_ttl=_MEDIA_LINK_TTL)
+            if project_id and ((config.R2_SCENE_MEDIA and r2.enabled()) or storage.broker_enabled()):
+                # R2 first: a public link that never expires (the signed one lapsed after 30 days).
+                return _put_scene_file(local, obj, inp.get("media_bucket") or config.MEDIA_BUCKET, project_id,
+                                       (report.job or {}).get("id", ""))[0]
             return local
         _bind_split_images(doc, work, _put_split)
         _bind_overlay_photos(doc, work, _put_split)
@@ -1214,13 +1324,9 @@ def _candidate_entry(asset, rank: int, winner: bool) -> dict:
 
 def _publish_alternatives(cands: List[dict], project_id: str, bucket: str, job_id: str,
                           scene_id: str, work: str) -> None:
-    """Upload each alternative's clip, thumbnail and preview; fill its media."""
-    def put(local: str, obj: str) -> str:
-        if storage.broker_enabled():
-            return storage.broker_upload(local, bucket, obj, project_id, job_id,
-                                         read_ttl=_MEDIA_LINK_TTL)
-        storage.upload_to_supabase(local, obj, bucket=bucket)
-        return storage.signed_url(obj, bucket=bucket, expires_in=_MEDIA_LINK_TTL)
+    """Upload each alternative's clip, thumbnail and preview; fill its media (R2 first, see _put_scene_file)."""
+    def put(local: str, obj: str) -> tuple:
+        return _put_scene_file(local, obj, bucket, project_id, job_id)
 
     for n, c in enumerate(cands, 1):
         path = c.pop("localPath", "") or (c.get("media") or {}).get("url") or ""
@@ -1230,30 +1336,28 @@ def _publish_alternatives(cands: List[dict], project_id: str, bucket: str, job_i
         tag = f"{scene_id}_alt{n}"
         obj = f"projects/{project_id}/alts/{tag}{ext}"
         try:
-            url = put(path, obj)
+            url, ref = put(path, obj)
         except Exception as e:  # noqa: BLE001 - the choice is lost, the rest stand
             print(f"[replace] could not publish alternative {n}: {e}", flush=True)
             c["media"] = {}
             continue
-        media_fields = dict(c.get("media") or {})
-        media_fields.update({"type": "video", "url": url, "storage": {"bucket": bucket, "path": obj}})
+        media_fields = {k: v for k, v in (c.get("media") or {}).items() if k not in _STORAGE_REFS}
+        media_fields.update({"type": "video", "url": url, "storage": ref})
         thumb = _thumbnail(path, work, tag)
         if thumb:
             tobj = f"projects/{project_id}/thumbs/{tag}.jpg"
             try:
-                media_fields["thumbnail"] = put(thumb, tobj)
-                media_fields["thumbStorage"] = {"bucket": bucket, "path": tobj}
+                media_fields["thumbnail"], media_fields["thumbStorage"] = put(thumb, tobj)
             except Exception:  # noqa: BLE001 - cosmetic
                 pass
         preview = _preview_proxy(path, work, tag)
         if preview:
             pobj = f"projects/{project_id}/preview/{tag}.mp4"
             try:
-                media_fields["previewUrl"] = put(preview, pobj)
-                media_fields["previewStorage"] = {"bucket": bucket, "path": pobj}
+                media_fields["previewUrl"], media_fields["previewStorage"] = put(preview, pobj)
             except Exception:  # noqa: BLE001 - the editor falls back to the clip
                 pass
-        c["media"] = media_fields
+        c["media"] = {k: v for k, v in media_fields.items() if v is not None}
 
 
 def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
@@ -1323,6 +1427,11 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         "JUDGE_MAX_PER_SCENE": max(count + 3, config.JUDGE_MAX_PER_SCENE),
     })
     keep = media._KEEP_ALT_FILES.set(True)
+    # The same rules as the plan: a scene in the first HOOK_SECONDS gets the
+    # hook search (footage, never an AI image), and a scene of this year's
+    # story searches the last month's uploads first.
+    hook = int(scene.get("startFrame") or 0) / fps < config.HOOK_SECONDS
+    recency = "month" if sem.get("eventWindow") == "year" and config.RECENT_FOOTAGE_FIRST else ""
     try:
         asset = media.source_for_segment(
             query, seconds, work,
@@ -1335,7 +1444,7 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
             subject_type=str(sem.get("subjectType") or ""),
             subject=str(sem.get("subject") or ""),
             event_window=str(sem.get("eventWindow") or ""),
-            scene_intent=scene_intent,
+            scene_intent=scene_intent, hook=hook, recency=recency,
         )
     finally:
         media._KEEP_ALT_FILES.reset(keep)
@@ -1905,7 +2014,13 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # Video styles (src/styles.py) ride on these.
                       "MIN_SCENE_SECONDS", "TARGET_SCENE_SECONDS", "MAX_SCENE_SECONDS",
                       "ALLOW_VERTICAL", "VERTICAL_BAND_ASPECT", "NEWS_FOOTAGE", "GRAPHICS_DENSITY",
-                      "TRANSITION_STYLE", "UPSCALE_ENABLED", "LOCAL_VISION_ENABLED")
+                      "TRANSITION_STYLE", "UPSCALE_ENABLED", "LOCAL_VISION_ENABLED",
+                      # The news styles turn AI images off (the owner's review,
+                      # 2026-09-30), and any style may tune the variety rules.
+                      "IMAGE_MAX_PER_VIDEO", "PREFER_GENERATED_IMAGES", "GENERATED_IMAGES_IN_HOOK",
+                      "HOOK_SECONDS", "MAX_MOMENTS_PER_VIDEO", "SAME_VIDEO_GAP_SECONDS",
+                      "REUSE_MIN_GAP_SECONDS", "IMAGE_MAX_USES", "RECENT_FOOTAGE_FIRST",
+                      "MENTION_CUTS", "MARKS_ENABLED", "MARKS_MAX")
 
 
 def _apply_config(overrides) -> dict:
@@ -2075,6 +2190,9 @@ def handler(job):
                     "localVision": localvision.available(),
                     "upscaler": upscale.available(),
                     "r2": r2.enabled(),
+                    # The footage library's own bucket (src/libstore.py) and scene media on R2.
+                    "r2Library": r2.library_enabled(),
+                    "r2SceneMedia": bool(config.R2_SCENE_MEDIA and r2.enabled()),
                     # Real download check per route: {"probe_youtube": true}.
                     "proxies": media.proxy_snapshot(),
                     **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),
@@ -2092,6 +2210,12 @@ def handler(job):
             if inp.get("allow_youtube") is not False:
                 report("Checking the YouTube connection", 2)
                 _require_youtube()
+
+        if action in ("plan", "build") and project_id:
+            # Old library clips are checked and moved to R2 in the background
+            # while the narration is transcribed; the footage search waits for
+            # it briefly (library.start_maintenance / Library.load).
+            library.start_maintenance(project_id, job_id, inp.get("media_bucket") or config.MEDIA_BUCKET)
 
         if action == "plan":
             doc = do_plan(inp, work, report)
