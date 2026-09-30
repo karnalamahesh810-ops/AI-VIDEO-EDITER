@@ -3264,7 +3264,8 @@ class VisionJudgeEventsAndQuality(unittest.TestCase):
         from src import vision
         sent = []
 
-        def ask(messages, max_tokens):
+        def ask(messages, max_tokens, accept=None):
+            # judge() now passes accept= so a prose answer goes to the next model.
             sent.append(messages[0]["content"])
             return reply, "m"
 

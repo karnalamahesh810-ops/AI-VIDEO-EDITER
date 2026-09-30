@@ -218,6 +218,11 @@ VISION_CALL_BUDGET_SECONDS = float(os.getenv("VISION_CALL_BUDGET_SECONDS", "100"
 # Vision requests in flight per worker. Ten workers each firing 20+ at once
 # drew Kie's "You've hit your attachment limit" (Glen Canyon, 2026-09-29).
 VISION_CONCURRENCY = int(os.getenv("VISION_CONCURRENCY", "8"))
+# Kie's vision channels time out or answer in prose under bursts: with two jobs
+# at VISION_CONCURRENCY 20 each, 123 of 130 calls failed (ReadTimeout) and 278
+# answers on the owner's 12-min job were unparseable (2026-10-01). Requests to
+# Kie are capped at this many in flight per worker whatever the job asks for.
+VISION_KIE_MAX_CONCURRENCY = int(os.getenv("VISION_KIE_MAX_CONCURRENCY", "8"))
 # News footage the GoMotion way: local-TV reports of the exact event, shown
 # with their station logo, headline banner and ticker as they are. Off = the
 # old rule (any other channel's text or logo rejects a clip).

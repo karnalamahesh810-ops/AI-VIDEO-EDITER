@@ -74,6 +74,36 @@ class HedgedVisionCalls(unittest.TestCase):
             self.assertEqual(vision._ask([], 100), ('{"ok": 2}', "backup"))
         self.assertLess(time.time() - t, 1.0)
 
+    def test_an_unusable_answer_hands_over_to_the_next_model(self):
+        # 2026-10-01: Kie answered in prose ("daylight street scene showing...")
+        # 278 times on one job; each left its clip unjudged. Now the next model
+        # is asked, in both the hedged and the one-at-a-time loop.
+        def ask_once(model, messages, max_tokens, url="", key="", main=True):
+            if model == "main":
+                return " daylight street scene showing several cars", False
+            return '{"score": 0.9}', False
+
+        for hedge in (10, 0):
+            with mock.patch.object(config, "VISION_HEDGE_SECONDS", hedge), \
+                    mock.patch.object(vision, "_ask_once", side_effect=ask_once):
+                self.assertEqual(vision._ask([], 100, accept=lambda t: t.startswith("{")),
+                                 ('{"score": 0.9}', "backup"))
+                # Without a check the first answer is still taken as it was.
+                self.assertEqual(vision._ask([], 100)[1], "main")
+
+    def test_the_judge_asks_for_json_only_and_rejects_prose(self):
+        with mock.patch.object(vision, "sample_frames", return_value=["AAAA"]), \
+                mock.patch.object(vision.os.path, "exists", return_value=True), \
+                mock.patch.object(vision, "_fingerprint", return_value="fp"), \
+                mock.patch.object(vision, "_ask", return_value=(None, "")) as ask:
+            self.assertIsNone(vision.judge("clip.mp4", "flooding in Texas"))
+        messages, _tokens = ask.call_args[0][:2]
+        text = messages[1]["content"][0]["text"]
+        self.assertIn("ONLY the JSON object", text)
+        accept = ask.call_args[1]["accept"]
+        self.assertFalse(accept(" frames show large hippopotamuses"))
+        self.assertTrue(accept('{"description": "flooded street", "score": 0.8}'))
+
 
 if __name__ == "__main__":
     unittest.main()

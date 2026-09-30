@@ -256,8 +256,11 @@ def stats() -> dict:
                 "recentErrors": list(_ERRORS)}
 
 
-# At most VISION_CONCURRENCY requests in flight per worker (see config).
-_SLOTS = threading.BoundedSemaphore(max(1, config.VISION_CONCURRENCY))
+# At most VISION_CONCURRENCY requests in flight per worker (see config), and
+# never more than VISION_KIE_MAX_CONCURRENCY against Kie.
+_SLOTS = threading.BoundedSemaphore(max(1, min(config.VISION_CONCURRENCY, config.VISION_KIE_MAX_CONCURRENCY)
+                                             if "kie.ai" in (config.VISION_API_BASE or "")
+                                             else config.VISION_CONCURRENCY))
 
 
 def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
@@ -403,9 +406,13 @@ def _route_call(route: tuple, messages: list, max_tokens: int, deadline: float) 
 _HEDGE_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix="vision")
 
 
-def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
+def _ask(messages: list, max_tokens: int, accept=None) -> Tuple[Optional[str], str]:
     """
     First model that answers: (text, model). (None, "") when none did.
+
+    `accept`: an answer it rejects (a judge verdict that is prose, not JSON)
+    counts as that model failing, and the next model is asked - an unusable
+    answer used to end the call and leave the clip unjudged.
 
     A transient failure (timeout, HTTP/Kie 5xx, 429) is retried once on the
     same model. Kie's gpt-5-2 answers "code 500: Server exception, please try
@@ -431,8 +438,10 @@ def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
             if time.time() >= deadline:
                 break
             text = _route_call(route, messages, max_tokens, deadline)
-            if text:
+            if text and (accept is None or accept(text)):
                 return text, route[0]
+            if text:
+                _fail(route[0], f"unusable answer: {text[:120]!r}")
         return None, ""
     running: Dict = {}
     nxt = 0
@@ -460,8 +469,10 @@ def _ask(messages: list, max_tokens: int) -> Tuple[Optional[str], str]:
                 text = fut.result()
             except Exception:  # noqa: BLE001 - a crashed route is a failed one
                 text = None
-            if text:
+            if text and (accept is None or accept(text)):
                 return text, route[0]
+            if text:
+                _fail(route[0], f"unusable answer: {text[:120]!r}")
         if nxt < len(queue) and (not running or time.time() >= started + hedge * nxt):
             launch(bool(running))
     return None, ""
@@ -699,13 +710,14 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     content = [{"type": "text", "text":
                 (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
                 + f"INTENT: {intent}\n" + _scene_lines(scene) + f"NARRATION: {context}\n"
-                f"These are {len(frames)} frames from the candidate."}]
+                f"These are {len(frames)} frames from the candidate. "
+                "Answer with ONLY the JSON object described in your instructions - no prose."}]
     content += [{"type": "image_url",
                  "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames]
     messages = [{"role": "system", "content": _system() + (_EVENT_RULE if event else "")},
                 {"role": "user", "content": content}]
 
-    text, model = _ask(messages, 400)
+    text, model = _ask(messages, 400, accept=lambda t: _parse(t) is not None)
     verdict = _parse(text) if text else None
     if verdict:
         verdict["model"] = model
