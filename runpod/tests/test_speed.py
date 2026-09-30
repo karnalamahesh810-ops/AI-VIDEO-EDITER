@@ -204,8 +204,8 @@ class Finalize(unittest.TestCase):
         wav = os.path.join(d, "mix.wav")
         # Quiet pink noise under a loud 50 ms beep starting at exactly 1.000 s.
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
-                        f"aevalsrc='if(between(t,1,1.05),0.9*sin(2*PI*1000*t),0)':s=48000:d=4",
-                        "-f", "lavfi", "-i", f"anoisesrc=d=4:c=pink:a=0.004:r=48000",
+                        "aevalsrc='if(between(t,1,1.05),0.9*sin(2*PI*1000*t),0)':s=48000:d=4",
+                        "-f", "lavfi", "-i", "anoisesrc=d=4:c=pink:a=0.004:r=48000",
                         "-filter_complex", f"[0:a][1:a]amix=inputs=2:normalize=0,volume={level}",
                         "-ac", "2", "-c:a", "pcm_s16le", wav], check=True)
         return picture, wav

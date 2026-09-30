@@ -24,22 +24,25 @@ never lose scenes. Clips two parts both picked are resolved by the parent.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
 import os
+import re
 import subprocess
 import threading
 import time
 import urllib.parse
+import uuid
 from dataclasses import asdict, fields
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
 
 from . import ytdlp
-from . import config, media, storage, costs, events
+from . import config, media, storage, costs, events, r2
 from . import render as renderer
 
 
@@ -495,6 +498,11 @@ def _round_deadline(n_jobs: int) -> float:
 
 
 def render_enabled(doc: dict, project_id: str) -> bool:
+    """The render is split across machines: a pod's spread render (render_pod,
+    POD_RENDER_FANOUT) or the serverless chunk render (FANOUT_RENDER). Either
+    way the scene media must be published first, so other machines can read it."""
+    if pod_render_enabled(doc):
+        return True
     seconds = doc.get("durationInFrames", 0) / max(1, doc.get("fps", 30))
     return bool(config.FANOUT_RENDER and seconds >= config.FANOUT_RENDER_MIN_SECONDS
                 and readiness(config.FANOUT_MIN_SCENES, project_id)["enabled"])
@@ -748,3 +756,897 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
                 out[got[0]] = got[1]
     delivered = sum(1 for d in out.values() if not d.get("refetch"))
     return {"assets": out, "delivered": delivered, "refetch": len(out) - delivered, "asked": len(jobs)}
+
+
+# ===========================================================================
+# One pod's render spread over the serverless workers (POD_RENDER_FANOUT)
+# ===========================================================================
+#
+# The pod cuts the finished timeline into frame ranges at clean scene cuts,
+# renders the first itself and queues the rest as "render_chunk" jobs on the
+# serverless endpoint. Each worker renders its range - the picture, and that
+# range's slice of the whole sound mix as lossless WAV - from the scene
+# media's public R2 links, and hands both back through R2. The pod joins the
+# pictures without re-encoding, the sound slices sample-exactly, and encodes
+# the sound once (render.finalize): no seam in the picture (every frame is
+# drawn on its own, whatever machine draws it) and none in the sound.
+#
+# Nothing a worker does can lose the video: a chunk that fails, times out or
+# is still queued once the pod is free is rendered on the pod; the pod races
+# a copy of the slowest worker chunk when it has nothing else to do; and if
+# the spread render cannot start or breaks, the caller renders the whole
+# video on the pod as before.
+
+# Cut transitions drawn half over the outgoing scene's last frames and half
+# over the incoming scene's first ones (remotion/src/transitions/timing.ts
+# CUT_TRANSITIONS; a test keeps the two lists equal). A chunk boundary at such
+# a cut would fall inside the transition.
+CUT_TRANSITIONS = frozenset({"flash", "chromatic-flash", "glitch", "vhs-glitch", "film-burn", "light-leak",
+                             "whip-pan", "zoom-punch", "shake-cut", "blur-dissolve", "luma-fade"})
+# An overlay's entrance (and the sound built into its look) plays over its first frames.
+OVERLAY_ENTRY_FRAMES = 45
+# A sound effect with no planned length is taken as this long, and none plays
+# longer (Main.tsx SFX_MAX_SECONDS).
+SFX_DEFAULT_SECONDS = 3.0
+SFX_MAX_SECONDS = 6.0
+AUDIO_RATE = 48000
+# How often the pod looks at its worker jobs, and how long it idles between
+# looks for something to render itself.
+POD_POLL_SECONDS = 3.0
+POD_IDLE_SECONDS = 1.0
+
+# RunPod job ids of chunks a worker still holds, for cancel_live_jobs().
+_LIVE: Dict[str, str] = {}
+_LIVE_LOCK = threading.Lock()
+
+
+def pod_render_ready(doc: Optional[dict] = None) -> dict:
+    """Whether a spread render can run, and what is missing (never a secret value)."""
+    missing = []
+    if not config.POD_RENDER_FANOUT:
+        missing.append("POD_RENDER_FANOUT is off")
+    if not config.FANOUT_API_KEY:
+        missing.append("RunPod API key missing (FANOUT_API_KEY or RUNPOD_API_KEY)")
+    if not config.POD_RENDER_ENDPOINT_ID:
+        missing.append("endpoint id missing (POD_RENDER_ENDPOINT_ID or FANOUT_ENDPOINT_ID)")
+    if not r2.enabled():
+        missing.append("Cloudflare R2 is not configured (chunks travel through it)")
+    if config.POD_RENDER_CHUNKS < 2:
+        missing.append("POD_RENDER_CHUNKS must be at least 2")
+    if doc is not None:
+        fps = max(1, int(doc.get("fps") or 30))
+        if int(doc.get("durationInFrames") or 0) / fps < config.POD_RENDER_MIN_SECONDS:
+            missing.append("video shorter than POD_RENDER_MIN_SECONDS")
+    return {"enabled": not missing, "chunks": config.POD_RENDER_CHUNKS, "missing": missing}
+
+
+def pod_render_enabled(doc: Optional[dict] = None) -> bool:
+    return pod_render_ready(doc)["enabled"]
+
+
+def _sfx_spans(doc: dict) -> List[tuple]:
+    """(first frame, end frame) of every planned sound effect."""
+    fps = max(1, int(doc.get("fps") or 30))
+    out = []
+    for fx in doc.get("sfx") or []:
+        try:
+            start = int(round(float(fx.get("startFrame") or 0)))
+        except (TypeError, ValueError):
+            continue
+        d = fx.get("durationFrames")
+        frames = int(d) if isinstance(d, (int, float)) and d > 0 else int(SFX_DEFAULT_SECONDS * fps)
+        out.append((start, start + min(frames, int(SFX_MAX_SECONDS * fps))))
+    return out
+
+
+def chunk_cuts(doc: dict) -> Tuple[List[int], List[int], List[int]]:
+    """
+    Scene starts where a chunk may begin, in three tiers, best first:
+      clean  - no crossfade or cut transition across the cut, no sound effect
+               playing across it, no overlay making its entrance;
+      visual - no crossfade or cut transition across the cut;
+      every  - every scene start.
+    """
+    total = int(doc.get("durationInFrames") or 0)
+    scenes = sorted(doc.get("scenes") or [], key=lambda s: int(s.get("startFrame") or 0))
+    sfx = _sfx_spans(doc)
+    entries = []
+    for o in doc.get("overlays") or []:
+        s0 = int(o.get("startFrame") or 0)
+        entries.append((s0, s0 + min(OVERLAY_ENTRY_FRAMES, int(o.get("durationInFrames") or 0))))
+    clean, visual, every = [], [], []
+    for sc in scenes:
+        f = int(sc.get("startFrame") or 0)
+        if f <= 0 or f >= total or (every and every[-1] == f):
+            continue
+        every.append(f)
+        t = str(sc.get("transition") or "none")
+        if t == "crossfade" or t in CUT_TRANSITIONS:
+            continue
+        visual.append(f)
+        if any(a < f < b for a, b in sfx) or any(a < f < b for a, b in entries):
+            continue
+        clean.append(f)
+    return clean, visual, every
+
+
+def plan_chunks(doc: dict, n: int, min_frames: int = 1) -> List[tuple]:
+    """
+    At most `n` inclusive frame ranges covering the whole video with no gap or
+    overlap, each at least `min_frames` long, about equal in length, each new
+    range starting on the cleanest scene cut near its ideal start (chunk_cuts;
+    within half a chunk). With no scene start near, an exact frame is used:
+    every frame is drawn on its own, so the picture is still identical.
+    """
+    total = int(doc.get("durationInFrames") or 0)
+    if total <= 0:
+        return []
+    min_frames = max(1, int(min_frames or 1))
+    n = max(1, min(int(n or 1), total // min_frames))
+    if n == 1:
+        return [(0, total - 1)]
+    tiers = chunk_cuts(doc)
+    size = total / n
+    bounds = [0]
+    for i in range(1, n):
+        target = int(round(i * size))
+        lo = bounds[-1] + min_frames
+        hi = total - min_frames * (n - i)
+        if hi < lo:
+            break
+        pick = None
+        for tier in tiers:
+            near = [f for f in tier if lo <= f <= hi and abs(f - target) <= size / 2]
+            if near:
+                pick = min(near, key=lambda f: (abs(f - target), f))
+                break
+        bounds.append(pick if pick is not None else min(max(target, lo), hi))
+    return [(a, b - 1) for a, b in zip(bounds, bounds[1:] + [total])]
+
+
+# --- R2 transfers -----------------------------------------------------------
+
+def _r2_location(url: str) -> Optional[Tuple[str, str]]:
+    """(bucket, key) of a link under one of our R2 public bases, else None."""
+    for base, bucket in ((config.R2_PUBLIC_BASE, config.R2_BUCKET),
+                         (getattr(config, "R2_LIBRARY_PUBLIC_BASE", ""), getattr(config, "R2_LIBRARY_BUCKET", ""))):
+        base = (base or "").rstrip("/")
+        if base and bucket and url.startswith(base + "/"):
+            return bucket, urllib.parse.unquote(url[len(base) + 1:].split("?", 1)[0])
+    return None
+
+
+def _r2_get(key: str, bucket: str, path: str) -> None:
+    """One object through the S3 API (the public r2.dev link is rate limited)."""
+    headers = r2._auth_headers("GET", key, {}, hashlib.sha256(b"").hexdigest(), bucket=bucket)
+    headers["Accept-Encoding"] = "identity"
+    with requests.get(r2._object_url(key, bucket), headers=headers, stream=True, timeout=(20, 600)) as r:
+        if r.status_code != 200:
+            raise RuntimeError(f"R2 GET {key}: HTTP {r.status_code}")
+        _stream_to(r, path)
+
+
+def _stream_to(r, path: str) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    part = path + ".part"
+    with open(part, "wb") as fh:
+        for block in r.iter_content(1 << 20):
+            if block:
+                fh.write(block)
+    os.replace(part, path)
+
+
+def _fetch(url: str, path: str, key: str = "", bucket: str = "", tries: int = 4) -> str:
+    """
+    Download `url` (or R2 `key`) to `path`, retried with backoff. Our own R2
+    objects go through the S3 API with this worker's keys; anything else (a
+    signed narration link, a picture elsewhere) is a plain GET.
+    """
+    loc = (bucket or config.R2_BUCKET, key) if key else (_r2_location(url) if url else None)
+    last = ""
+    for attempt in range(tries):
+        try:
+            if loc and r2.enabled():
+                try:
+                    _r2_get(loc[1], loc[0], path)
+                    return path
+                except Exception as e:  # noqa: BLE001 - the public link below
+                    last = f"{type(e).__name__}: {str(e)[:120]}"
+                    if not url:
+                        raise
+            if url:
+                with requests.get(url, stream=True, timeout=(20, 600)) as r:
+                    if r.status_code == 200:
+                        _stream_to(r, path)
+                        return path
+                    last = f"HTTP {r.status_code}"
+                    if r.status_code in (400, 401, 403, 404, 410):
+                        break
+        except Exception as e:  # noqa: BLE001 - retried
+            last = f"{type(e).__name__}: {str(e)[:120]}"
+        time.sleep(min(20.0, 2.0 * (attempt + 1)))
+    raise RuntimeError(f"download failed ({last}): {key or url[:120]}")
+
+
+def _delete_keys(keys: List[str]) -> None:
+    for k in keys:
+        try:
+            r2.delete(k)
+        except Exception:  # noqa: BLE001 - a leftover chunk is only storage
+            pass
+
+
+def _delete_prefix(prefix: str, keys: List[str]) -> None:
+    """Every object of one spread render: the keys it knows and whatever else a
+    worker left under its prefix (a chunk it finished after the pod raced it)."""
+    found = set(keys)
+    try:
+        found.update(o["key"] for o in r2.list_keys(prefix) if o.get("key", "").startswith(prefix))
+    except Exception:  # noqa: BLE001 - the known keys still go
+        pass
+    _delete_keys(sorted(found))
+
+
+def _media_dicts(doc: dict) -> List[dict]:
+    """Every dict in the document that points at a file the renderer reads."""
+    out = []
+    for sc in doc.get("scenes") or []:
+        if isinstance(sc.get("media"), dict):
+            out.append(sc["media"])
+        anim = sc.get("animation")
+        if isinstance(anim, dict):
+            out += [m for m in anim.get("media") or [] if isinstance(m, dict)]
+    for o in doc.get("overlays") or []:
+        out += [m for m in o.get("media") or [] if isinstance(m, dict)]
+    for key in ("audio", "bgm"):
+        if isinstance(doc.get(key), dict):
+            out.append(doc[key])
+    return out
+
+
+def _publish_files(doc: dict, prefix: str, deadline: float) -> Tuple[dict, List[str]]:
+    """
+    A copy of the pod's finished document whose every local file (its cleaned
+    stills, anything not yet on the web) is uploaded to R2 under `prefix`: the
+    exact bytes the pod renders, so every machine draws the same frames.
+    Returns (that copy, the keys uploaded). Raises when a file cannot go up.
+    """
+    remote = copy.deepcopy(doc)
+    refs = []
+    for m in _media_dicts(remote):
+        for field in ("url", "thumbnail"):
+            v = str(m.get(field) or "")
+            if v and not v.startswith(("http://", "https://", "bgm://", "data:")) and os.path.isfile(v):
+                refs.append((m, field, v))
+    files = sorted({v for _m, _f, v in refs})
+
+    def up(path: str) -> Tuple[str, str, str]:
+        ext = os.path.splitext(path)[1].lower() or ".bin"
+        key = f"{prefix}assets/{hashlib.sha1(os.path.abspath(path).encode('utf-8')).hexdigest()[:16]}{ext}"
+        url = r2.upload(path, key, content_type=r2.content_type(path), deadline=deadline,
+                        cache_control=r2.IMMUTABLE)
+        return path, key, url
+    uploaded: Dict[str, Tuple[str, str]] = {}
+    if files:
+        with ThreadPoolExecutor(max_workers=min(8, len(files))) as ex:
+            for path, key, url in ex.map(up, files):
+                uploaded[path] = (key, url)
+    for m, field, v in refs:
+        m[field] = uploaded[v][1]
+    return remote, [key for key, _url in uploaded.values()]
+
+
+def _count_frames(path: str) -> int:
+    """Video frames in a file (packets counted, nothing decoded); -1 when unreadable."""
+    try:
+        p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets",
+                            "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", path],
+                           capture_output=True, text=True, timeout=300)
+        return int((p.stdout or "").strip().split(",")[0])
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+        return -1
+
+
+def _chunk_ok(video: str, audio: str, frames: int) -> bool:
+    """A chunk's picture has exactly its frames and its sound slice exists."""
+    return (os.path.isfile(video) and os.path.isfile(audio) and os.path.getsize(audio) > 44
+            and _count_frames(video) == frames)
+
+
+# --- the worker side ----------------------------------------------------------
+
+def _localize(doc: dict, a: int, b: int, work: str) -> dict:
+    """
+    Download, in parallel, the files frames a..b draw (the scenes on screen,
+    the stills their neighbours lend to animation backdrops and case-file
+    looks, the overlays' pictures, the narration) and point the document at
+    the local copies. Anything not fetched keeps its link and Remotion reads
+    it itself. Remotion downloads a clip whole before its first frame anyway;
+    done here it all happens before the first frame instead of stalling tabs,
+    and our own R2 objects come through the S3 API, not the rate-limited
+    public link.
+    """
+    started = time.time()
+    scenes = doc.get("scenes") or []
+    on: List[int] = []
+    for i, sc in enumerate(scenes):
+        s0 = int(sc.get("startFrame") or 0)
+        nxt = scenes[i + 1] if i + 1 < len(scenes) else {}
+        s1 = s0 + int(sc.get("durationInFrames") or 0) - 1 + (
+            CROSSFADE_FRAMES if (nxt or {}).get("transition") == "crossfade" else 0)
+        if s0 <= b and s1 >= a:
+            on.append(i)
+    wanted: List[Tuple[dict, str]] = []
+    for i in on:
+        m = scenes[i].get("media") or {}
+        wanted += [(m, "url"), (m, "thumbnail")]
+        anim = scenes[i].get("animation")
+        if isinstance(anim, dict):
+            wanted += [(x, "url") for x in anim.get("media") or [] if isinstance(x, dict)]
+    near = set()
+    for i in on:
+        near.update(range(max(0, i - 3), min(len(scenes), i + 8)))
+    for j in sorted(near - set(on)):
+        m = scenes[j].get("media") or {}
+        wanted.append((m, "thumbnail"))
+        if m.get("type") == "image":
+            wanted.append((m, "url"))
+    for o in doc.get("overlays") or []:
+        s0 = int(o.get("startFrame") or 0)
+        if s0 <= b and s0 + int(o.get("durationInFrames") or 0) - 1 >= a:
+            wanted += [(m, "url") for m in o.get("media") or [] if isinstance(m, dict)]
+    if isinstance(doc.get("audio"), dict):
+        wanted.append((doc["audio"], "url"))
+    targets: Dict[str, str] = {}
+    for m, field in wanted:
+        url = str(m.get(field) or "")
+        if url.startswith(("http://", "https://")) and url not in targets:
+            ext = os.path.splitext(urllib.parse.urlparse(url).path)[1][:6] or ".bin"
+            targets[url] = os.path.join(work, "media", hashlib.sha1(url.encode("utf-8")).hexdigest()[:16] + ext)
+
+    def get(item):
+        url, path = item
+        if os.path.isfile(path) and os.path.getsize(path) > 0:
+            return url, path                      # an earlier chunk on this machine fetched it
+        try:
+            return url, _fetch(url, path)
+        except Exception as e:  # noqa: BLE001 - Remotion reads the link itself
+            print(f"[chunk] prefetch failed, the renderer reads the link: {str(e)[:120]}", flush=True)
+            return url, ""
+    got: Dict[str, str] = {}
+    if targets:
+        with ThreadPoolExecutor(max_workers=min(8, len(targets))) as ex:
+            for url, path in ex.map(get, list(targets.items())):
+                if path:
+                    got[url] = path
+    for m, field in wanted:
+        url = str(m.get(field) or "")
+        if url in got:
+            m[field] = got[url]
+    size = sum(os.path.getsize(p) for p in got.values() if os.path.isfile(p))
+    return {"files": len(got), "failed": len(targets) - len(got), "mb": round(size / 1e6, 1),
+            "seconds": round(time.time() - started, 1)}
+
+
+def _load_timeline(inp: dict, work: str) -> dict:
+    if isinstance(inp.get("timeline"), dict):
+        return copy.deepcopy(inp["timeline"])
+    path = os.path.join(work, "timeline.json")
+    _fetch(str(inp.get("timeline_url") or ""), path, key=str(inp.get("timeline_key") or ""))
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _prefix_ok(prefix: str) -> bool:
+    """A chunk may only write under the configured chunk prefix, one folder deep."""
+    root = config.POD_RENDER_PREFIX.rstrip("/")
+    return bool(root) and re.fullmatch(re.escape(root) + r"/[A-Za-z0-9_-]{1,120}/", prefix or "") is not None
+
+
+def run_pod_chunk(inp: dict, work: str, progress: Callable = None) -> dict:
+    """
+    The worker side of render_pod(): render frames a..b of the pod's finished
+    document - the picture, and that range's slice of the sound as WAV - and
+    put both in R2 under the pod's prefix. Refuses (the pod then renders the
+    chunk itself) when it starts after its deadline or when this worker's
+    renderer is not the pod's: two code versions could draw different frames.
+    """
+    started = time.time()
+    a, b = (int(x) for x in inp["frames"])
+    i = int(inp.get("chunk", 0))
+    prefix = str(inp.get("prefix") or "")
+    if inp.get("deadline_at") and time.time() > float(inp["deadline_at"]):
+        return {"ok": False, "chunk": i, "error": "the chunk started after its deadline"}
+    mine = renderer.renderer_fingerprint()
+    if inp.get("renderer") and inp["renderer"] != mine:
+        return {"ok": False, "chunk": i, "error": f"this worker's renderer {mine} is not the pod's {inp['renderer']}"}
+    if not r2.enabled():
+        return {"ok": False, "chunk": i, "error": "Cloudflare R2 is not configured on this worker"}
+    if not _prefix_ok(prefix):
+        return {"ok": False, "chunk": i, "error": "bad chunk prefix"}
+    doc = _load_timeline(inp, work)
+    fetched = _localize(doc, a, b, work)
+    video = os.path.join(work, f"chunk_{i:03d}.mp4")
+    audio = os.path.join(work, f"chunk_{i:03d}.wav")
+    # The pod's encoder settings: pictures encoded differently would not join
+    # without re-encoding.
+    saved = {}
+    for name, value in (("RENDER_CRF", inp.get("crf")), ("RENDER_X264_PRESET", inp.get("x264"))):
+        if value is not None:
+            saved[name] = getattr(config, name)
+            setattr(config, name, type(saved[name])(value))
+    try:
+        renderer.render(doc, video, composition=inp.get("composition") or "Main",
+                        concurrency=config.RENDER_CONCURRENCY, serve_dir=work, on_progress=progress,
+                        frames=(a, b), audio_to=audio)
+    finally:
+        for name, value in saved.items():
+            setattr(config, name, value)
+    frames = _count_frames(video)
+    if frames != b - a + 1:
+        return {"ok": False, "chunk": i, "error": f"rendered {frames} frames, expected {b - a + 1}"}
+    token = uuid.uuid4().hex[:12]
+    until = time.time() + 600
+    vkey, akey = f"{prefix}{i:03d}-{token}.mp4", f"{prefix}{i:03d}-{token}.wav"
+    vurl = r2.upload(video, vkey, content_type="video/mp4", deadline=until)
+    aurl = r2.upload(audio, akey, content_type="audio/wav", deadline=until)
+    return {"ok": True, "chunk": i, "frames": [a, b], "video_key": vkey, "video_url": vurl,
+            "audio_key": akey, "audio_url": aurl, "renderer": mine, "fetched": fetched,
+            "seconds": round(time.time() - started, 1)}
+
+
+# --- the pod side -------------------------------------------------------------
+
+def _register(job_id: str) -> None:
+    with _LIVE_LOCK:
+        _LIVE[job_id] = config.POD_RENDER_ENDPOINT_ID
+
+
+def _unregister(job_id: str) -> None:
+    with _LIVE_LOCK:
+        _LIVE.pop(job_id, None)
+
+
+def cancel_live_jobs() -> int:
+    """Cancel every chunk job a worker still holds (the pod job is ending). Returns how many."""
+    with _LIVE_LOCK:
+        live = dict(_LIVE)
+        _LIVE.clear()
+    for jid, endpoint in live.items():
+        try:
+            requests.post(f"https://api.runpod.ai/v2/{endpoint}/cancel/{jid}",
+                          headers={"Authorization": f"Bearer {config.FANOUT_API_KEY}"}, timeout=15)
+        except requests.RequestException:
+            pass
+    return len(live)
+
+
+def _pod_submit(payload: dict) -> Tuple[str, str]:
+    """(job id, "") or ("", why). A policy RunPod refuses is dropped and the job sent again."""
+    url = f"https://api.runpod.ai/v2/{config.POD_RENDER_ENDPOINT_ID}/run"
+    headers = {"Authorization": f"Bearer {config.FANOUT_API_KEY}"}
+    why = ""
+    bodies = [payload] + ([{k: v for k, v in payload.items() if k != "policy"}] if "policy" in payload else [])
+    for body in bodies:
+        try:
+            r = requests.post(url, headers=headers, json=body, timeout=30)
+            jid = (r.json() or {}).get("id") if r.status_code < 400 else ""
+            if jid:
+                return str(jid), ""
+            why = f"HTTP {r.status_code}: {r.text[:160]}"
+        except (requests.RequestException, ValueError) as e:
+            why = type(e).__name__
+    return "", why
+
+
+def _pod_status(job_id: str) -> dict:
+    try:
+        return requests.get(f"https://api.runpod.ai/v2/{config.POD_RENDER_ENDPOINT_ID}/status/{job_id}",
+                            headers={"Authorization": f"Bearer {config.FANOUT_API_KEY}"},
+                            timeout=30).json() or {}
+    except (requests.RequestException, ValueError):
+        return {}
+
+
+def _pod_cancel(job_id: str) -> None:
+    _unregister(job_id)
+    try:
+        requests.post(f"https://api.runpod.ai/v2/{config.POD_RENDER_ENDPOINT_ID}/cancel/{job_id}",
+                      headers={"Authorization": f"Bearer {config.FANOUT_API_KEY}"}, timeout=15)
+    except requests.RequestException:
+        pass
+
+
+class _Chunk:
+    """One frame range of a spread render and who is drawing it."""
+
+    def __init__(self, i: int, a: int, b: int, work: str):
+        self.i, self.a, self.b = i, a, b
+        self.frames = b - a + 1
+        self.job = ""                 # the worker job holding it
+        self.queued_at = 0.0
+        self.started_at = 0.0         # a worker started it (IN_PROGRESS seen)
+        self.frac = 0.0               # the worker's progress
+        self.remote_dead = False      # no worker will deliver it: the pod must
+        self.fetching = False         # a finished worker chunk is downloading
+        self.local = False            # the pod is rendering it
+        self.local_frac = 0.0
+        self.local_cancel: Optional[threading.Event] = None
+        self.speculative = False      # the pod races a worker for it
+        self.local_failed = False
+        self.done = False
+        self.source = ""              # "worker" | "pod"
+        self.video = self.audio = ""
+        self.keys: List[str] = []     # its files in R2
+        self.pod_video = os.path.join(work, f"pchunk_{i:03d}.pod.mp4")
+        self.pod_audio = os.path.join(work, f"pchunk_{i:03d}.pod.wav")
+        self.worker_video = os.path.join(work, f"pchunk_{i:03d}.worker.mp4")
+        self.worker_audio = os.path.join(work, f"pchunk_{i:03d}.worker.wav")
+
+
+class _PodRender:
+    """The pod's side of one spread render: queue, watch, take back, race, collect, join."""
+
+    def __init__(self, doc: dict, ranges: List[tuple], *, fps: int, total: int, prefix: str, tl_key: str,
+                 tl_url: str, job_id: str, work: str, report: Callable, composition: str = "Main",
+                 concurrency: int = None):
+        self.doc = doc
+        self.chunks = [_Chunk(i, a, b, work) for i, (a, b) in enumerate(ranges)]
+        self.fps, self.total, self.prefix = fps, total, prefix
+        self.tl_key, self.tl_url, self.job_id, self.work = tl_key, tl_url, job_id, work
+        self.report, self.composition, self.concurrency = report, composition, concurrency
+        self.lock = threading.Lock()
+        self.wake = threading.Event()
+        self.started = time.time()
+        self.deadline = self.started + config.POD_RENDER_TIMEOUT_SECONDS
+        self.fingerprint = renderer.renderer_fingerprint()
+        self.local_fps = 0.0
+        self.fatal = ""
+        self.counts = {"queued": 0, "submitFailed": 0, "takenBack": 0, "raced": 0, "workerFailed": 0,
+                       "timedOut": 0}
+        self._last_pct = -1
+
+    # ---- worker jobs
+    def _payload(self, c: _Chunk) -> dict:
+        body = {"input": {"action": "render_chunk", "upload": "r2", "parent_job_id": self.job_id,
+                          "chunk": c.i, "frames": [c.a, c.b], "timeline_key": self.tl_key,
+                          "timeline_url": self.tl_url, "prefix": self.prefix, "renderer": self.fingerprint,
+                          "crf": config.RENDER_CRF, "x264": renderer.x264_preset(), "composition": "Main",
+                          "deadline_at": self.deadline}}
+        if config.POD_RENDER_JOB_POLICY:
+            run_ms = int(config.POD_RENDER_CHUNK_TIMEOUT_SECONDS * 1000)
+            body["policy"] = {"executionTimeout": run_ms,
+                              "ttl": int(max(run_ms, (self.deadline - time.time()) * 1000) + 600_000)}
+        return body
+
+    def _submit_all(self) -> None:
+        remote = self.chunks[1:]
+        if not remote:
+            return
+        with ThreadPoolExecutor(max_workers=min(8, len(remote))) as ex:
+            results = list(ex.map(lambda c: _pod_submit(self._payload(c)), remote))
+        now = time.time()
+        for c, (jid, why) in zip(remote, results):
+            if jid:
+                c.job, c.queued_at = jid, now
+                _register(jid)
+                self.counts["queued"] += 1
+            else:
+                c.remote_dead = True
+                self.counts["submitFailed"] += 1
+                print(f"[pod-render] chunk {c.i} could not be queued ({why}); the pod renders it", flush=True)
+
+    def _drop_worker(self, c: _Chunk, why: str, cancel: bool = True) -> None:
+        """No worker will deliver this chunk (caller holds the lock)."""
+        if c.job:
+            if cancel:
+                threading.Thread(target=_pod_cancel, args=(c.job,), daemon=True).start()
+            else:
+                _unregister(c.job)
+        c.job, c.remote_dead = "", True
+        if why:
+            print(f"[pod-render] chunk {c.i}: {why}; the pod renders it", flush=True)
+        self.wake.set()
+
+    def _poll(self, pool: ThreadPoolExecutor, fetch_pool: ThreadPoolExecutor) -> None:
+        with self.lock:
+            watch = [c for c in self.chunks if c.job and not c.done and not c.fetching]
+        if not watch:
+            return
+        states = dict(zip([c.i for c in watch], pool.map(lambda c: _pod_status(c.job), watch)))
+        now = time.time()
+        with self.lock:
+            for c in watch:
+                if c.done or not c.job or c.fetching:
+                    continue
+                st = states.get(c.i) or {}
+                state = st.get("status")
+                out = st.get("output")
+                if state == "IN_PROGRESS":
+                    c.started_at = c.started_at or now
+                    if isinstance(out, dict) and isinstance(out.get("frac"), (int, float)):
+                        c.frac = max(c.frac, min(1.0, float(out["frac"])))
+                    if now - c.started_at > config.POD_RENDER_CHUNK_TIMEOUT_SECONDS:
+                        self.counts["timedOut"] += 1
+                        self._drop_worker(c, "the worker took too long")
+                elif state == "COMPLETED":
+                    if isinstance(out, dict) and out.get("ok") and out.get("video_key") and out.get("audio_key"):
+                        c.fetching = True
+                        c.keys = [str(out["video_key"]), str(out["audio_key"])]
+                        fetch_pool.submit(self._collect, c, out)
+                    else:
+                        self.counts["workerFailed"] += 1
+                        err = out.get("error") if isinstance(out, dict) else out
+                        self._drop_worker(c, f"the worker could not render it ({str(err)[:160]})", cancel=False)
+                elif state in ("FAILED", "CANCELLED", "TIMED_OUT"):
+                    self.counts["workerFailed"] += 1
+                    err = (out.get("error") if isinstance(out, dict) else out) or st.get("error") or state
+                    self._drop_worker(c, f"worker job {state.lower()} ({str(err)[:160]})", cancel=False)
+
+    def _collect(self, c: _Chunk, out: dict) -> None:
+        """Download a worker's finished chunk and check it."""
+        ok = False
+        try:
+            _fetch(str(out.get("video_url") or ""), c.worker_video, key=str(out["video_key"]))
+            _fetch(str(out.get("audio_url") or ""), c.worker_audio, key=str(out["audio_key"]))
+            ok = _chunk_ok(c.worker_video, c.worker_audio, c.frames)
+            if not ok:
+                print(f"[pod-render] chunk {c.i} from the worker is incomplete", flush=True)
+        except Exception as e:  # noqa: BLE001 - rendered on the pod instead
+            print(f"[pod-render] chunk {c.i}: download failed ({str(e)[:160]})", flush=True)
+        with self.lock:
+            c.fetching = False
+            if c.job:
+                _unregister(c.job)
+            c.job = ""
+            if ok and not c.done:
+                c.done, c.source, c.video, c.audio = True, "worker", c.worker_video, c.worker_audio
+                if c.local and c.local_cancel is not None:
+                    c.local_cancel.set()              # the pod's race copy is not needed
+            elif not ok and not c.done:
+                self.counts["workerFailed"] += 1
+                c.remote_dead = True
+        self.wake.set()
+
+    # ---- the pod's own rendering
+    def _next_local(self) -> Optional[_Chunk]:
+        """What the pod renders next (caller holds the lock)."""
+        now = time.time()
+        todo = [c for c in self.chunks if not c.done and not c.local and not c.fetching and not c.local_failed]
+        first = self.chunks[0]
+        if first in todo and not first.job:
+            return first
+        for c in todo:                                   # no worker will deliver these
+            if c.remote_dead and not c.job:
+                return c
+        if now > self.deadline:                          # the spread render is out of time
+            for c in todo:
+                if c.job:
+                    self._drop_worker(c, "the spread render ran out of time")
+                    return c
+        for c in todo:                                   # still queued: take it back
+            if c.job and not c.started_at and now - c.queued_at > config.POD_RENDER_QUEUE_GRACE_SECONDS:
+                self.counts["takenBack"] += 1
+                self._drop_worker(c, f"no worker started it in {int(now - c.queued_at)} s")
+                return c
+        if config.POD_RENDER_SPECULATE and self.local_fps > 0:
+            best, gain = None, 0.0
+            for c in todo:                               # race the slowest worker chunk
+                if not (c.job and c.started_at) or c.speculative:
+                    continue
+                elapsed = now - c.started_at
+                left = (elapsed * (1 - c.frac) / c.frac) if c.frac > 0.03 else \
+                    max(0.0, config.POD_RENDER_CHUNK_TIMEOUT_SECONDS - elapsed)
+                here = c.frames / self.local_fps + 20.0
+                if left > here * 1.25 and left - here > gain:
+                    best, gain = c, left - here
+            if best is not None:
+                best.speculative = True
+                self.counts["raced"] += 1
+                print(f"[pod-render] racing chunk {best.i} on the pod (~{int(gain)} s sooner)", flush=True)
+                return best
+        return None
+
+    def _render_here(self, c: _Chunk) -> None:
+        started = time.time()
+
+        def prog(frac: float) -> None:
+            c.local_frac = max(c.local_frac, float(frac))
+        ok = cancelled = False
+        try:
+            # The same bytes the workers draw: the document's links fetched
+            # through R2 (the pod's own stills are local files already).
+            chunk_doc = copy.deepcopy(self.doc)
+            _localize(chunk_doc, c.a, c.b, self.work)
+            renderer.render(chunk_doc, c.pod_video, composition=self.composition, concurrency=self.concurrency,
+                            serve_dir=self.work, on_progress=prog, frames=(c.a, c.b), audio_to=c.pod_audio,
+                            cancel=c.local_cancel)
+            ok = _chunk_ok(c.pod_video, c.pod_audio, c.frames)
+            if not ok:
+                print(f"[pod-render] chunk {c.i} rendered on the pod is incomplete", flush=True)
+        except renderer.RenderCancelled:
+            cancelled = True
+        except Exception as e:  # noqa: BLE001 - reported below
+            print(f"[pod-render] chunk {c.i} failed on the pod: {str(e)[:300]}", flush=True)
+        with self.lock:
+            c.local = False
+            if ok:
+                self.local_fps = c.frames / max(1.0, time.time() - started)
+                if not c.done:
+                    c.done, c.source, c.video, c.audio = True, "pod", c.pod_video, c.pod_audio
+                    if c.job:
+                        self._drop_worker(c, "", cancel=True)
+            elif not cancelled and not c.done:
+                c.local_failed = True
+                if not c.job:
+                    self.fatal = f"chunk {c.i} (frames {c.a}-{c.b}) could not be rendered"
+        self.wake.set()
+
+    def _local_loop(self) -> None:
+        while True:
+            with self.lock:
+                if self.fatal or all(c.done for c in self.chunks):
+                    return
+                c = self._next_local()
+                if c is not None:
+                    c.local, c.local_frac = True, 0.0
+                    c.local_cancel = threading.Event()
+            if c is None:
+                time.sleep(POD_IDLE_SECONDS)
+                continue
+            self._render_here(c)
+
+    # ---- progress
+    def _progress(self) -> None:
+        with self.lock:
+            done = sum(c.frames * (1.0 if c.done else max(c.frac * 0.95, c.local_frac)) for c in self.chunks)
+            busy = sum(1 for c in self.chunks if not c.done and (c.local or c.started_at))
+        frac = done / max(1, self.total)
+        pct = 70 + int(20 * min(1.0, frac))
+        if pct != self._last_pct:
+            self._last_pct = pct
+            self.report(f"Rendering video {int(min(1.0, frac) * 100)}% on {max(1, busy)} machines", pct)
+
+    # ---- the whole run
+    def run(self) -> None:
+        self._submit_all()
+        print(f"[pod-render] {len(self.chunks)} chunks: {self.counts['queued']} on workers, the first here",
+              flush=True)
+        local = threading.Thread(target=self._local_loop, daemon=True, name="pod-render-local")
+        local.start()
+        with ThreadPoolExecutor(max_workers=8) as pool, ThreadPoolExecutor(max_workers=4) as fetch_pool:
+            while True:
+                with self.lock:
+                    if self.fatal or all(c.done for c in self.chunks):
+                        break
+                    watching = any(c.job or c.fetching for c in self.chunks)
+                    stuck = next((c for c in self.chunks if not c.done and c.local_failed and not c.job
+                                  and not c.fetching and not c.local), None)
+                    if stuck is not None:
+                        self.fatal = f"chunk {stuck.i} (frames {stuck.a}-{stuck.b}) could not be rendered"
+                        break
+                if not watching and not local.is_alive():
+                    self.fatal = self.fatal or "nobody is rendering the remaining chunks"
+                    break
+                self._poll(pool, fetch_pool)
+                self._progress()
+                self.wake.wait(POD_POLL_SECONDS)
+                self.wake.clear()
+        self.cancel_all()
+        local.join(timeout=60)
+        if self.fatal:
+            raise RuntimeError(self.fatal)
+
+    def cancel_all(self) -> None:
+        with self.lock:
+            for c in self.chunks:
+                if c.job and not c.fetching:
+                    self._drop_worker(c, "", cancel=True)
+                if c.local and c.local_cancel is not None:
+                    c.local_cancel.set()
+
+    def keys(self) -> List[str]:
+        return [k for c in self.chunks for k in c.keys]
+
+    def stats(self) -> dict:
+        return {"chunks": len(self.chunks), "onWorkers": sum(1 for c in self.chunks if c.source == "worker"),
+                "onPod": sum(1 for c in self.chunks if c.source == "pod"), **self.counts,
+                "podFps": round(self.local_fps, 1), "seconds": round(time.time() - self.started, 1)}
+
+    # ---- joining
+    def join(self) -> Tuple[str, str]:
+        """The chunks' pictures joined without re-encoding and their sound slices sample-exactly."""
+        order = sorted(self.chunks, key=lambda c: c.a)
+        video = os.path.join(self.work, "pod_video.mp4")
+        join_videos([c.video for c in order], video, self.total)
+        audio = os.path.join(self.work, "pod_audio.wav")
+        join_wavs([(c.audio, c.frames) for c in order], self.fps, audio)
+        return video, audio
+
+
+def join_videos(paths: List[str], out: str, frames: int) -> str:
+    """The chunk pictures, in order, joined without re-encoding; exactly `frames` long or an error."""
+    listing = out + ".txt"
+    with open(listing, "w", encoding="utf-8") as fh:
+        fh.writelines("file '{}'\n".format(os.path.abspath(p).replace("\\", "/").replace("'", "'\\''"))
+                      for p in paths)
+    p = subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-y", "-f", "concat", "-safe", "0",
+                        "-i", listing, "-map", "0:v:0", "-c", "copy", out],
+                       capture_output=True, text=True, timeout=1800)
+    got = _count_frames(out)
+    if p.returncode != 0 or got != frames:
+        raise RuntimeError(f"joining the chunks gave {got} of {frames} frames: {(p.stderr or '')[-300:]}")
+    return out
+
+
+def join_wavs(parts: List[Tuple[str, int]], fps: int, out: str) -> str:
+    """
+    One WAV from sound slices [(path, frames)], each padded or trimmed to
+    exactly its frames' length (48 kHz: 1600 samples a frame at 30 fps), so
+    every slice starts on its own first frame and nothing drifts.
+    """
+    inputs, chains = [], []
+    for k, (path, frames) in enumerate(parts):
+        n = int(round(frames * AUDIO_RATE / max(1, fps)))
+        inputs += ["-i", path]
+        chains.append(f"[{k}:a]aresample={AUDIO_RATE},aformat=sample_fmts=s16:channel_layouts=stereo,"
+                      f"apad=whole_len={n},atrim=end_sample={n},asetpts=N/SR/TB[a{k}]")
+    graph = ";".join(chains) + ";" + "".join(f"[a{k}]" for k in range(len(parts))) + \
+        f"concat=n={len(parts)}:v=0:a=1[out]"
+    p = subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-y", *inputs, "-filter_complex", graph,
+                        "-map", "[out]", "-c:a", "pcm_s16le", out],
+                       capture_output=True, text=True, timeout=1800)
+    if p.returncode != 0 or not os.path.isfile(out):
+        raise RuntimeError(f"joining the sound slices failed: {(p.stderr or '')[-300:]}")
+    return out
+
+
+def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Callable,
+               composition: str = "Main", concurrency: int = None) -> bool:
+    """
+    Render the pod's finished document `doc` to `out_path`, spread over the
+    serverless workers (see the notes above this section). True when
+    `out_path` was written; False when the spread render could not run or
+    broke (the reason is logged, every worker job is cancelled): the caller
+    then renders the whole video on the pod.
+    """
+    if not pod_render_enabled(doc):
+        return False
+    fps = max(1, int(doc.get("fps") or 30))
+    total = int(doc.get("durationInFrames") or 0)
+    ranges = plan_chunks(doc, config.POD_RENDER_CHUNKS, config.POD_RENDER_MIN_CHUNK_FRAMES)
+    if len(ranges) < 2:
+        return False
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", job_id or "job")[:60]
+    prefix = f"{config.POD_RENDER_PREFIX.rstrip('/')}/{safe}-{uuid.uuid4().hex[:10]}/"
+    keys: List[str] = []
+    runner = None
+    ok = False
+    try:
+        report(f"Rendering video 0% on {len(ranges)} machines", 70)
+        remote, asset_keys = _publish_files(doc, prefix, time.time() + 300)
+        keys += asset_keys
+        tl_key = prefix + "timeline.json"
+        tl_url = r2.upload_bytes(json.dumps(remote).encode("utf-8"), tl_key, content_type="application/json",
+                                 deadline=time.time() + 120)
+        keys.append(tl_key)
+        runner = _PodRender(doc, ranges, fps=fps, total=total, prefix=prefix, tl_key=tl_key, tl_url=tl_url,
+                            job_id=job_id, work=work, report=report, composition=composition,
+                            concurrency=concurrency)
+        runner.run()
+        video, audio = runner.join()
+        report("Balancing the sound", 90)
+        renderer.finalize(video, audio, out_path)
+        ok = True
+    except Exception as e:  # noqa: BLE001 - the whole video is rendered on the pod instead
+        print(f"[pod-render] spread render stopped ({type(e).__name__}: {str(e)[:300]}); "
+              "rendering the whole video on the pod", flush=True)
+    finally:
+        if runner is not None:
+            runner.cancel_all()
+            keys += runner.keys()
+            media.LAST_STATS["pod_render"] = {**runner.stats(), "ok": ok}
+            print(f"[pod-render] {media.LAST_STATS['pod_render']}", flush=True)
+        if not config.POD_RENDER_KEEP_CHUNKS and (keys or runner is not None):
+            threading.Thread(target=_delete_prefix, args=(prefix, list(keys)), daemon=True).start()
+    return ok

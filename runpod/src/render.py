@@ -19,6 +19,10 @@ class RenderError(RuntimeError):
     pass
 
 
+class RenderCancelled(RenderError):
+    """render(cancel=...) was told to stop (another machine finished the same frames first)."""
+
+
 # x264's speed/size trade-offs. Measured on our own 1080p renders (2026-10-01,
 # 600 frames at CRF 21): medium 73 fps / SSIM 0.9814, faster 105 fps / 0.9812,
 # veryfast 166 fps / 0.9805 (and 7% smaller), superfast 197 fps but 46% bigger.
@@ -193,13 +197,16 @@ def _render_progress(line: str):
 def render(props: dict, out_path: str, composition: str = "Main",
            concurrency: int = None, timeout: int = 5400,
            serve_dir: str = None, on_progress=None, frames: tuple = None,
-           muted: bool = False, codec: str = None, audio_to: str = None) -> str:
+           muted: bool = False, codec: str = None, audio_to: str = None,
+           cancel: threading.Event = None) -> str:
     """
     Render `props` to `out_path` with Remotion.
 
     `audio_to` (a .wav path): the sound is written there as lossless PCM and
     `out_path` holds the picture only; finalize() then encodes the sound once
     into the finished MP4. Remotion's own AAC left the sound 42.7 ms late.
+    With `frames`, the sound is that frame range's slice of the whole mix.
+    `cancel`: a threading.Event that kills the render (RenderCancelled).
 
     Sourced media lives on local disk, and headless Chrome cannot read a
     filesystem path from an http origin, so the job directory is served over
@@ -291,14 +298,16 @@ def render(props: dict, out_path: str, composition: str = "Main",
             cmd.append(f"--gl={gl_backend or 'angle'}")
 
         def run(argv):
-            if on_progress is None:
+            if on_progress is None and cancel is None:
                 return subprocess.run(
                     argv, cwd=config.REMOTION_DIR, capture_output=True, text=True,
                     encoding="utf-8", errors="replace", timeout=timeout,
                 )
-            return _run_streaming(argv, timeout, on_progress)
+            return _run_streaming(argv, timeout, on_progress, cancel)
 
         p = run(cmd + ([f"--concurrency={concurrency}"] if concurrency else []))
+        if cancel is not None and cancel.is_set():
+            raise RenderCancelled("render cancelled")
         tail = (p.stderr or p.stdout or "")[-3000:]
         if p.returncode != 0 and ("thread_start" in tail or "Resource temporarily" in tail):
             # Still out of threads: one slower, single-tab retry beats losing
@@ -326,9 +335,12 @@ class _Completed:
         self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
 
 
-def _run_streaming(cmd, timeout, on_progress) -> "_Completed":
-    """Run Remotion, forwarding progress while keeping the output for errors."""
-    import time
+def _run_streaming(cmd, timeout, on_progress, cancel=None) -> "_Completed":
+    """
+    Run Remotion, forwarding progress while keeping the output for errors.
+    `cancel` (a threading.Event): once set, the render is killed (a chunk
+    another machine finished first).
+    """
     proc = subprocess.Popen(
         cmd, cwd=config.REMOTION_DIR, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
@@ -336,13 +348,34 @@ def _run_streaming(cmd, timeout, on_progress) -> "_Completed":
     )
     lines, deadline = [], time.time() + timeout
     best = [0.0]   # progress only ever moves forward
+    done = threading.Event()
+
+    def watch():
+        # A quiet render prints nothing for a while: the stop must not wait for a line.
+        while not done.wait(1.0):
+            if cancel.is_set():
+                # SIGTERM first: Remotion then closes its browser ("Received
+                # SIGTERM signal. Killing browser process"); a hard kill would
+                # leave Chrome running on the pod. Killed if it lingers.
+                try:
+                    proc.terminate()
+                except OSError:
+                    pass
+                if not done.wait(10.0):
+                    try:
+                        proc.kill()
+                    except OSError:
+                        pass
+                return
+    if cancel is not None:
+        threading.Thread(target=watch, daemon=True, name="render-cancel").start()
     try:
         for line in proc.stdout:
             lines.append(line)
             if len(lines) > 400:          # keep the tail, not the whole log
                 del lines[:200]
             frac = _render_progress(line)
-            if frac is not None and frac > best[0]:
+            if frac is not None and frac > best[0] and on_progress is not None:
                 best[0] = frac
                 try:
                     on_progress(frac)
@@ -352,6 +385,7 @@ def _run_streaming(cmd, timeout, on_progress) -> "_Completed":
                 proc.kill()
                 raise subprocess.TimeoutExpired(cmd, timeout)
     finally:
+        done.set()
         proc.stdout.close()
         proc.wait()
     return _Completed(proc.returncode, "".join(lines), "")

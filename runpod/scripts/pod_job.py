@@ -49,6 +49,17 @@ def load_job() -> dict:
     return job
 
 
+def _cancel_chunks() -> None:
+    """Cancel the serverless render chunks this pod still has queued or running (src/fanout.py render_pod)."""
+    try:
+        from src import fanout
+        n = fanout.cancel_live_jobs()
+        if n:
+            print(f"[pod] cancelled {n} render chunk job(s) still on the workers", flush=True)
+    except Exception as e:  # noqa: BLE001 - never blocks the pod's own exit
+        print(f"[pod] could not cancel render chunks: {type(e).__name__}", flush=True)
+
+
 def stop_this_pod(terminate: bool = False) -> None:
     """Stop this pod, or terminate it (the app's pods: nothing left to keep)."""
     pod = os.environ.get("RUNPOD_POD_ID", "")
@@ -148,6 +159,7 @@ def main() -> None:
         def _deadline():
             time.sleep(cap)
             print(f"[pod] over the {int(cap // 60)} min limit: stopping this pod", flush=True)
+            _cancel_chunks()
             stop_this_pod()
             os._exit(3)
         threading.Thread(target=_deadline, daemon=True, name="pod-deadline").start()
@@ -181,6 +193,8 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
         out = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    # A spread render's worker chunks never outlive the pod's job.
+    _cancel_chunks()
     if not isinstance(out, dict):
         out = {"ok": False, "error": "the job returned no result"}
     # handler() cleared nothing about the job id; the final write is still this job's.

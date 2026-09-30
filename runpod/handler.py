@@ -1850,9 +1850,20 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
             report(f"Rendering video {int(frac * 100)}%", pct)
 
     # True once the sound has been balanced and joined to the picture in one
-    # pass (render.finalize): the chunked render and the separate-audio render.
+    # pass (render.finalize): the chunked renders and the separate-audio render.
     finished = False
-    if split and remote_doc is not None and _all_remote(remote_doc):
+    # A pod spreads its render over the serverless workers (POD_RENDER_FANOUT):
+    # this finished document - stills cleaned, gaps filled - is what every
+    # machine draws. When it cannot run or breaks, the whole video renders here.
+    spread = fanout.pod_render_enabled(doc)
+    if spread:
+        finished = fanout.render_pod(doc, out_path,
+                                     job_id=inp.get("_job_id") or (getattr(report, "job", None) or {}).get("id", ""),
+                                     work=work, report=report, composition=inp.get("composition", "Main"),
+                                     concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY)
+    if finished:
+        pass
+    elif split and not spread and remote_doc is not None and _all_remote(remote_doc):
         fanout.render(remote_doc, out_path, parent_job_id=(report.job or {}).get("id", ""),
                       project_id=inp.get("project_id") or "",
                       bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
@@ -2180,6 +2191,22 @@ def handler(job):
                     "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
 
+        if action == "render_chunk" and inp.get("upload") == "r2":
+            # One chunk of a pod's spread render (fanout.render_pod): the pod's
+            # finished document by link (stills already cleaned, gaps filled - so
+            # every machine draws the same frames); picture and sound slice go
+            # back through R2. Never touches the project.
+            def pod_chunk_progress(frac):
+                try:
+                    runpod.serverless.progress_update(job, {"frac": round(frac, 3)})
+                except Exception:  # noqa: BLE001 - progress must never kill a chunk
+                    pass
+            out = fanout.run_pod_chunk(inp, work, pod_chunk_progress)
+            return {**out, "action": "render_chunk",
+                    "costs": costs.summary(time.time() - started),
+                    "events": events.summary(),
+                    "elapsed": round(time.time() - started, 1)}
+
         if action == "render_chunk":
             # One frame range of a split render, queued by its parent (src/fanout.py).
             doc = inp.get("timeline") or {}
@@ -2222,6 +2249,11 @@ def handler(job):
                     "storage": store,
                     "readyToRender": store.get("ok", False),
                     "parallelWorkers": fanout.readiness(config.FANOUT_MIN_SCENES),
+                    # A pod's render spread over these workers (POD_RENDER_FANOUT) and the
+                    # renderer version a chunk must match (render.renderer_fingerprint).
+                    "podRender": fanout.pod_render_ready(),
+                    "renderer": renderer.renderer_fingerprint(),
+                    "x264Preset": renderer.x264_preset() or "medium",
                     "machine": _machine(),
                     "potProvider": media.pot_provider_alive(),
                     **({} if media.pot_provider_alive() else {"potLog": media.pot_provider_log()}),

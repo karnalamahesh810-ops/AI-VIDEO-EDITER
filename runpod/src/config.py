@@ -665,6 +665,40 @@ RENDER_PREBUNDLE = _flag("RENDER_PREBUNDLE", True)
 RENDER_BUNDLE_DIR = os.getenv("RENDER_BUNDLE_DIR", "").strip()
 RENDER_BUNDLE_TIMEOUT = int(os.getenv("RENDER_BUNDLE_TIMEOUT", "600"))
 
+# --- one pod's render spread over the serverless workers (src/fanout.py render_pod)
+# The pod cuts the finished timeline into POD_RENDER_CHUNKS frame ranges at clean
+# scene cuts (no crossfade, no cut transition and no sound effect across them),
+# renders one itself and queues the rest as "render_chunk" jobs on
+# POD_RENDER_ENDPOINT_ID (the serverless endpoint; needs FANOUT_API_KEY and R2).
+# Each worker renders its range - picture and that range's slice of the sound
+# as WAV - from the scene media's public R2 links and hands both back through
+# R2 (POD_RENDER_PREFIX). The pod joins the pictures without re-encoding, the
+# sound slices sample-exactly, and encodes the sound once (render.finalize).
+# Any chunk that fails, times out or is still queued when the pod is free is
+# rendered on the pod; a slow one is raced by a copy on the pod. Off until
+# verified on a real run; videos shorter than POD_RENDER_MIN_SECONDS stay whole.
+POD_RENDER_FANOUT = _flag("POD_RENDER_FANOUT", False)
+POD_RENDER_CHUNKS = int(os.getenv("POD_RENDER_CHUNKS", "12"))
+POD_RENDER_MIN_SECONDS = float(os.getenv("POD_RENDER_MIN_SECONDS", "90"))
+# No chunk shorter than this many frames (a chunk's start-up costs ~30-45 s).
+POD_RENDER_MIN_CHUNK_FRAMES = int(os.getenv("POD_RENDER_MIN_CHUNK_FRAMES", "900"))
+POD_RENDER_ENDPOINT_ID = os.getenv("POD_RENDER_ENDPOINT_ID", "").strip() or FANOUT_ENDPOINT_ID
+# A chunk no worker has started this long after it was queued is rendered on
+# the pod as soon as the pod is free (RunPod wakes stopped workers slowly).
+POD_RENDER_QUEUE_GRACE_SECONDS = float(os.getenv("POD_RENDER_QUEUE_GRACE_SECONDS", "45"))
+# A worker's chunk is given up (and rendered on the pod) after this long.
+POD_RENDER_CHUNK_TIMEOUT_SECONDS = float(os.getenv("POD_RENDER_CHUNK_TIMEOUT_SECONDS", "1800"))
+# The whole spread render; past it every unfinished chunk is rendered on the pod.
+POD_RENDER_TIMEOUT_SECONDS = float(os.getenv("POD_RENDER_TIMEOUT_SECONDS", "3600"))
+# Race a copy of the slowest worker chunk on the pod once it has nothing else to do.
+POD_RENDER_SPECULATE = _flag("POD_RENDER_SPECULATE", True)
+POD_RENDER_PREFIX = os.getenv("POD_RENDER_PREFIX", "chunks/").strip()
+# Keep the chunk files in R2 after the join (debugging); normally deleted.
+POD_RENDER_KEEP_CHUNKS = _flag("POD_RENDER_KEEP_CHUNKS", False)
+# RunPod job policy on each chunk (executionTimeout/ttl): a pod that dies never
+# leaves a chunk running or queued for long. 0 = no policy.
+POD_RENDER_JOB_POLICY = _flag("POD_RENDER_JOB_POLICY", True)
+
 # --- whisper -----------------------------------------------------------------
 # "base" is the sweet spot for narration alignment on CPU; bump to "small" on GPU.
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
