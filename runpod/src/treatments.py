@@ -36,6 +36,8 @@ on a line for a jump in years (see VR_LOOKS, vr_moment, _Planner._vr_select).
 Nothing the narration did not say: no worked-out weekday, no year it did not
 name, no place it did not name (or its section's region).
 """
+import contextlib
+import contextvars
 import datetime
 import re
 import zlib
@@ -3246,6 +3248,25 @@ FULLSCREEN_CUES = {"then-now", "compare-values", "ranking", "series", "shares", 
 COMPACT_SCALE = 0.55
 _CORNERS = ["bottom-left", "bottom-right"]
 _corner_turn = [0]
+# The corner the brand kit's watermark sits in (src/brandkit.py scope): a
+# compact figure keeps out of it. Per context, like the kit's picks.
+_KEEP_CLEAR: contextvars.ContextVar = contextvars.ContextVar("tg_keep_clear", default="")
+
+
+@contextlib.contextmanager
+def keep_clear(corner: str):
+    """Compact figures avoid this corner while the block runs ("" = none)."""
+    token = _KEEP_CLEAR.set(str(corner or ""))
+    try:
+        yield
+    finally:
+        _KEEP_CLEAR.reset(token)
+
+
+def _corners() -> List[str]:
+    """The corners a compact figure may take: both bottom ones, less the watermark's."""
+    clear = _KEEP_CLEAR.get()
+    return [c for c in _CORNERS if c != clear] or list(_CORNERS)
 # Built-in tags that draw themselves in the middle of the frame (the ring):
 # over footage they are made compact in a corner like a figure card.
 _CENTRED_TAGS = {"ring-stat"}
@@ -3289,7 +3310,8 @@ def apply_layout(overlay: dict, template: dict, klass: str) -> None:
         return
     if klass == "figure":
         overlay["compact"] = True
-        overlay["position"] = _CORNERS[_corner_turn[0] % len(_CORNERS)]
+        corners = _corners()
+        overlay["position"] = corners[_corner_turn[0] % len(corners)]
         _corner_turn[0] += 1
         overlay["scale"] = COMPACT_SCALE
     elif klass == "full":

@@ -8,6 +8,8 @@ the narration cues the planner matches it on. This module is the Python
 view of it: look-ups, style packs, and `resolve`, which turns a template
 choice plus customisations into the overlay fields the renderer reads.
 """
+import contextlib
+import contextvars
 import json
 import os
 from functools import lru_cache
@@ -61,8 +63,43 @@ BANNED = frozenset({"TEXT_UNDERLINE_TITLE_V1", "TEXT_SWOOSH_TITLE_V1", "TEXT_SEN
                     "TEXT_WORD_TYPE_V1"}) | AUDIT_BANNED
 
 
-def banned(template_id: str) -> bool:
+# The looks a job's brand kit allows (src/brandkit.py scope): None while every
+# look is allowed. Per context, so concurrent jobs never share it.
+_ALLOWED: contextvars.ContextVar = contextvars.ContextVar("tg_allowed_looks", default=None)
+
+
+def banned_always(template_id: str) -> bool:
+    """A look no planner path may ever choose (the owner's bans), whatever the brand kit."""
     return (template_id or "") in BANNED
+
+
+def banned(template_id: str) -> bool:
+    """A look the planner may not choose: banned by the owner, or outside this job's brand kit picks."""
+    tid = template_id or ""
+    if tid in BANNED:
+        return True
+    allowed = _ALLOWED.get()
+    return allowed is not None and tid not in allowed
+
+
+def allowed() -> Optional[frozenset]:
+    """The looks the current brand kit allows (None: every look)."""
+    return _ALLOWED.get()
+
+
+@contextlib.contextmanager
+def only(ids):
+    """Only these looks for the planner while the block runs (None: every look, as without a kit)."""
+    token = _ALLOWED.set(None if ids is None else frozenset(ids))
+    try:
+        yield
+    finally:
+        _ALLOWED.reset(token)
+
+
+def auto_pick(t: Optional[dict]) -> bool:
+    """False for a look the registry marks editor-only ("autoPick": false): the planner never places it."""
+    return bool(t) and t.get("autoPick", (t.get("defaults") or {}).get("autoPick", True)) is not False
 
 
 # The planner's cue vocabulary for the built-in looks. The library looks carry
@@ -136,7 +173,7 @@ def family(t: Optional[dict]) -> str:
 
 def for_component(component: str, style: str = "") -> List[dict]:
     """Templates drawn by one renderer component, the style pack's favourites first (never a banned look)."""
-    found = [t for t in load()["templates"] if t["component"] == component and t["id"] not in BANNED]
+    found = [t for t in load()["templates"] if t["component"] == component and not banned(t["id"])]
     if style:
         found.sort(key=lambda t: 0 if style in t["variants"]["style"] else 1)
     return found
@@ -161,7 +198,7 @@ def _by_cue() -> Dict[str, List[dict]]:
 
 def for_cue(cue: str, style: str = "", exclude: Optional[set] = None) -> List[dict]:
     """Templates the planner may use for a narration cue, in preference order (never a banned look)."""
-    out = [t for t in _by_cue().get(cue, []) if t["id"] not in (exclude or set()) and t["id"] not in BANNED]
+    out = [t for t in _by_cue().get(cue, []) if t["id"] not in (exclude or set()) and not banned(t["id"])]
     if style:
         out.sort(key=lambda t: (0 if style in t["tags"] else 1, 0 if style in t["variants"]["style"] else 1))
     return out
