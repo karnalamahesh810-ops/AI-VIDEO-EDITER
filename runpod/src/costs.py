@@ -113,9 +113,17 @@ class Ledger:
             total_seconds = own + self.child_seconds
             credit = self.prices.get("kie.credit", 0.005)
             by = defaultdict(float)
+            # The vision provider's own price per call (OpenRouter's usage.cost,
+            # src/vision.py) replaces the Kie-credit estimate when it is there:
+            # the estimate priced the Lake Powell job's vision at $2.83.
+            measured_vision = float(self.units.get("vision.usd", 0.0) or 0.0)
             for k, n in self.units.items():
                 cat = _CATEGORY.get(k, "other")
+                if k == "vision.usd" or k.startswith("vision.") and k.endswith("_tokens"):
+                    continue
                 if k in _CREDIT_KEYS:
+                    if cat == "vision" and measured_vision > 0:
+                        continue
                     by[cat] += n * self.prices.get(k, 0.0) * credit
                 elif k == "proxy.bytes":
                     by[cat] += n / 1e9 * self.prices.get("proxy.gb", 0.0)
@@ -124,6 +132,7 @@ class Ledger:
                 else:
                     by[cat] += n * self.prices.get(k, 0.0)
             by["runpod"] += total_seconds * self.prices.get("runpod.worker_second", 0.0)
+            by["vision"] += measured_vision
             measured = None
             if self.balance_before is not None and self.balance_after is not None:
                 measured = round(self.balance_before - self.balance_after, 2)
@@ -135,10 +144,12 @@ class Ledger:
             out["credits_measured"] = measured
             if measured is not None:
                 out["measured_ai_usd"] = round(measured * credit, 4)
+            out["vision_measured"] = measured_vision > 0
             out["worker_seconds"] = round(total_seconds, 1)
             out["own_seconds"] = round(own, 1)
             out["children"] = self.children
-            out["units"] = {k: (int(v) if float(v).is_integer() else round(v, 3)) for k, v in self.units.items()}
+            out["units"] = {k: (int(v) if float(v).is_integer() else round(v, 6 if k.endswith(".usd") else 3))
+                            for k, v in self.units.items()}
             return out
 
 

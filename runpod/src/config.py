@@ -195,6 +195,17 @@ VISION_REASONING_EFFORT = os.getenv("VISION_REASONING_EFFORT", "low").strip()
 # eats max_tokens, so vision calls ask for none (see vision._extra).
 VISION_GEMINI_REASONING = os.getenv("VISION_GEMINI_REASONING", "none").strip()
 VISION_FRAMES = int(os.getenv("VISION_FRAMES", "3"))
+# Frame widths sent to the judge. Measured on OpenRouter gemini-2.5-flash
+# (2026-10-01): a check of 3 clip frames costs 258 image tokens a frame at
+# 512 px or 384 px alike, but a lone photo at 512 px is cut into 5 tiles
+# (1,290 tokens) and at 384 px is one (258): a photo check 2,946 -> 1,914
+# prompt tokens. Clips keep 512 px (free); photos go at 384.
+VISION_FRAME_WIDTH = int(os.getenv("VISION_FRAME_WIDTH", "512"))
+VISION_STILL_WIDTH = int(os.getenv("VISION_STILL_WIDTH", "384"))
+# The judge's long, fixed instructions (~1,500 tokens) as a cached block on
+# OpenRouter for Gemini and Claude models: read back at a quarter of the input
+# price. Measured: a clip check $0.00110 -> $0.00066-0.00071, same verdicts.
+VISION_PROMPT_CACHE = _flag("VISION_PROMPT_CACHE", True)
 # Retries per model on a transient failure (timeout, 5xx, 429), before the
 # fallback model is tried, and the pause before the first (doubling after).
 # Google answered "high demand" (503) in bursts all night on 2026-09-29: one

@@ -108,6 +108,7 @@ _SYSTEM = (
     "another creator's big word-by-word captions, or a TV weather map or forecast "
     "graphic? A reporter or official interviewed on location, a press conference, and "
     "field video carrying a small news banner are false.\n"
+    "Keep the description to one plain sentence of at most 25 words.\n"
     "Reply with one valid JSON object only. Do not wrap it in JSON.stringify(), "
     "JavaScript, markdown, or commentary: {\"description\": str, \"score\": number, \"quality\": number, "
     "\"has_text_or_watermark\": bool, \"is_talking_head\": bool, \"ai_generated\": bool, \"studio\": bool, "
@@ -298,16 +299,60 @@ def _extra(model: str, url: str, max_tokens: int) -> tuple:
     return max_tokens, {}
 
 
+def _cached(model: str, url: str, messages: list) -> list:
+    """
+    The fixed system instructions as a cached block, on OpenRouter for the
+    models that take a cache breakpoint (Gemini, Claude). Measured on
+    gemini-2.5-flash (2026-10-01): 1,502 of a clip check's ~2,400 prompt
+    tokens came back from the cache at a quarter of the price, $0.00110 ->
+    $0.00066-0.00071 a check. Nothing else changes: the same text, the same
+    verdict. Gemini caches only blocks of 1,024+ tokens, so the short tile
+    prompts simply go uncached.
+    """
+    if not config.VISION_PROMPT_CACHE or "openrouter.ai" not in (url or ""):
+        return messages
+    if not model.startswith(("google/", "anthropic/")):
+        return messages
+    if not messages or messages[0].get("role") != "system" or not isinstance(messages[0].get("content"), str):
+        return messages
+    first = dict(messages[0], content=[{"type": "text", "text": messages[0]["content"],
+                                        "cache_control": {"type": "ephemeral"}}])
+    return [first] + list(messages[1:])
+
+
+def _note_usage(body) -> None:
+    """What a call really cost and used, when the provider says (OpenRouter's usage.cost):
+    vision.usd, vision.prompt_tokens, vision.cached_tokens, vision.completion_tokens."""
+    usage = body.get("usage") if isinstance(body, dict) else None
+    if not isinstance(usage, dict):
+        return
+    try:
+        usd = float(usage.get("cost") or 0.0)
+        details = usage.get("prompt_tokens_details") or {}
+        counts = {"vision.prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                  "vision.cached_tokens": int(details.get("cached_tokens") or 0) if isinstance(details, dict) else 0,
+                  "vision.completion_tokens": int(usage.get("completion_tokens") or 0)}
+    except (TypeError, ValueError):
+        return
+    if usd > 0:
+        costs.record("vision.usd", usd)
+    for k, n in counts.items():
+        if n:
+            costs.record(k, n)
+
+
 def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
                    key: str, main: bool) -> Tuple[Optional[str], bool]:
     target = url or _endpoint(model)
     budget, extra = _extra(model, target, max_tokens)
+    if "openrouter.ai" in target:
+        extra = dict(extra, usage={"include": True})     # the call's real price, for the cost ledger
     try:
         r = requests.post(
             target,
             headers={"Authorization": f"Bearer {key or config.VISION_API_KEY}",
                      "Content-Type": "application/json"},
-            json={"model": model, "messages": messages,
+            json={"model": model, "messages": _cached(model, target, messages),
                   "max_tokens": budget, "stream": False, **extra},
             timeout=config.VISION_TIMEOUT)
     except requests.RequestException as e:
@@ -318,6 +363,7 @@ def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
     except ValueError:
         _fail(model, f"HTTP {r.status_code}, not JSON: {r.text[:120]!r}")
         return None, r.status_code >= 500 or r.status_code == 429
+    _note_usage(body)
     # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
     if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
         _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
@@ -514,15 +560,33 @@ def probe() -> dict:
 
 
 def _fingerprint(path: str) -> str:
+    """
+    The file's content: its size, first and last 64 KB. Not its modification
+    time - a candidate downloaded again (another scene, another search) is the
+    same picture and must not pay for a second verdict; the Lake Powell job
+    fetched one Dailymotion section at least four times (2026-10-01).
+    """
     h = hashlib.sha1()
     try:
-        st = os.stat(path)
-        h.update(f"{st.st_size}:{int(st.st_mtime)}".encode())
+        size = os.path.getsize(path)
+        h.update(str(size).encode())
         with open(path, "rb") as fh:
             h.update(fh.read(1 << 16))
+            if size > 2 << 16:
+                fh.seek(size - (1 << 16))
+                h.update(fh.read(1 << 16))
     except OSError:
         h.update(path.encode())
     return h.hexdigest()
+
+
+_STILL_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def judge_width(path: str) -> int:
+    """The width the judge sees a candidate at (config.VISION_STILL_WIDTH for a photo)."""
+    still = os.path.splitext(path or "")[1].lower() in _STILL_EXT
+    return config.VISION_STILL_WIDTH if still else config.VISION_FRAME_WIDTH
 
 
 # Frames of recent candidates: the local CLIP check and the remote judge look
@@ -712,7 +776,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
         if key in _CACHE:
             return _CACHE[key]
 
-    frames = sample_frames(path, config.VISION_FRAMES)
+    frames = sample_frames(path, config.VISION_FRAMES, judge_width(path))
     if not frames:
         _fail("ffmpeg", f"no frames from {os.path.basename(path)}")
         with _LOCK:
@@ -814,7 +878,7 @@ _RATE_SYSTEM = (
     "a subject supplies many shots. You are shown a numbered grid of thumbnails "
     "taken across one YouTube video (numbers top-left). For EVERY tile that is a "
     "usable shot of the SUBJECT - or, when an INTENT is given, of the exact shot the "
-    "INTENT describes - give a score and a few words on what it shows.\n"
+    "INTENT describes - give a score and at most 10 words on what it shows.\n"
     "Usable = the subject itself (or its immediate setting) filmed as real footage: "
     "aerials, landscapes, the place, the thing, the event. NOT usable: a presenter or "
     "interviewee talking to camera, title cards, on-screen text or captions, graphics, "
