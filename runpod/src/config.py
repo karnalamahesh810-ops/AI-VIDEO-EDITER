@@ -688,6 +688,22 @@ UPSCALE_PARALLEL = int(os.getenv("UPSCALE_PARALLEL", "4"))
 # With the upscaler, a photo this small is still usable (it is upscaled 2-4x
 # with real detail instead of blown up blurry).
 MIN_IMAGE_LONG_SIDE_UPSCALED = int(os.getenv("MIN_IMAGE_LONG_SIDE_UPSCALED", "640"))
+# Smart reframing (src/reframe.py): a slow push toward the subject (faces,
+# what stands out, the action) on a locked-off shot, and stills aimed at their
+# subject - the owner, 2026-10-01: "it feels hand-edited". Detection is
+# CPU-only and time-boxed (REFRAME_SECONDS for the whole video, REFRAME_PARALLEL
+# scenes at once); no move above REFRAME_MAX_SCALE, none on a shot shorter than
+# REFRAME_MIN_SECONDS, and about REFRAME_SHARE of the shots that could move do.
+REFRAME_ENABLED = _flag("REFRAME_ENABLED", False)
+REFRAME_STILLS = _flag("REFRAME_STILLS", True)
+REFRAME_SECONDS = float(os.getenv("REFRAME_SECONDS", "75"))
+REFRAME_PARALLEL = int(os.getenv("REFRAME_PARALLEL", "6"))
+REFRAME_MAX_SCALE = float(os.getenv("REFRAME_MAX_SCALE", "1.15"))
+REFRAME_MIN_SECONDS = float(os.getenv("REFRAME_MIN_SECONDS", "3.0"))
+REFRAME_SHARE = float(os.getenv("REFRAME_SHARE", "0.6"))
+REFRAME_MIN_CONFIDENCE = float(os.getenv("REFRAME_MIN_CONFIDENCE", "0.45"))
+# YuNet face detector (OpenCV Zoo, MIT, 230 KB ONNX; scripts/fetch_models.py).
+FACE_MODEL = os.getenv("FACE_MODEL", "/opt/models/face_detection_yunet_2023mar.onnx")
 # Vertical / square phone video (news-compilation styles, src/styles.py):
 # accepted and framed on a blurred copy of itself before render, the way news
 # compilation channels show TikTok/X clips. The sharp band keeps the middle
