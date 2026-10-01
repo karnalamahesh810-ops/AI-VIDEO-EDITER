@@ -187,6 +187,14 @@ def localise(doc: dict, server: AssetServer) -> dict:
 
     Mutates and returns the document. Paths that do not exist on disk are left
     alone so the renderer reports a missing asset rather than a 404 from here.
+
+    Every media field anywhere in the document is covered, not only a scene's
+    and an overlay's url: the looks draw a clip's still from its `thumbnail`
+    (a neighbour's backdrop, an empty slot filled from nearby scenes) and an
+    animation scene has media of its own. A render chunk downloads all of
+    them (fanout._localize); one left as a disk path loaded from the bundle's
+    server as a 404, and on 2026-10-01 that failed every chunk with such a
+    look on the pod and the workers alike.
     """
     def fix(url: str) -> str:
         if not is_local(url):
@@ -200,16 +208,20 @@ def localise(doc: dict, server: AssetServer) -> dict:
             path = url
         return server.url_for(path) if os.path.isfile(path) else url
 
-    for key in ("audio", "bgm"):
-        track = doc.get(key) or {}
-        if isinstance(track, dict) and track.get("url"):
-            track["url"] = fix(track["url"])
-    for scene in doc.get("scenes", []):
-        media = scene.get("media") or {}
-        if media.get("url"):
-            media["url"] = fix(media["url"])
-    for overlay in doc.get("overlays", []):
-        for media in (overlay.get("media") or []):
-            if isinstance(media, dict) and media.get("url"):
-                media["url"] = fix(media["url"])
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in MEDIA_FIELDS and isinstance(value, str) and value:
+                    node[key] = fix(value)
+                elif isinstance(value, (dict, list)):
+                    walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(doc)
     return doc
+
+
+# The document fields that hold a file the renderer loads.
+MEDIA_FIELDS = frozenset({"url", "thumbnail", "previewUrl"})
