@@ -636,6 +636,9 @@ R2_PUBLIC_BASE = os.getenv("R2_PUBLIC_BASE", "").strip()
 # free plan), so each video may spend at most SERPAPI_MAX_PER_JOB searches.
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
 SERPAPI_MAX_PER_JOB = int(os.getenv("SERPAPI_MAX_PER_JOB", "30"))
+# Google Videos through SerpApi when Bright Data is off or answers empty: a few
+# per video so the free plan's 250 searches a month last (2026-10-01).
+SERPAPI_VIDEO_MAX_PER_JOB = int(os.getenv("SERPAPI_VIDEO_MAX_PER_JOB", "8"))
 # Yandex Images as a picture source after Google/Bing (media.search_yandex_images).
 ALLOW_YANDEX_IMAGES = _flag("ALLOW_YANDEX_IMAGES", True)
 # Set per job by the video style (src/styles.py): how busy the overlay planner

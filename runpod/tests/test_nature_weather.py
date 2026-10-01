@@ -225,6 +225,21 @@ class WrongPlaceEventYear(Styled):
         with mock.patch.object(slop, "enabled", return_value=True),                 mock.patch.object(slop, "metadata_reason", return_value=""),                 mock.patch.object(slop, "check_file", return_value="an AI-generated or painted picture"),                 mock.patch.object(media, "_is_still", return_value=False):
             self.assertTrue(media.slop_reason("x.mp4", "Lake Powell | AP News"))   # footage keeps the check
 
+    def test_google_videos_fall_back_to_serpapi_a_few_times_a_video(self):
+        from unittest import mock
+        body = {"video_results": [{"title": "Lake Powell aerial", "link": "https://www.youtube.com/watch?v=abcdefghijk",
+                                   "duration": "3:12"}, {"title": "no link"}]}
+        resp = mock.Mock(status_code=200, json=lambda: body, raise_for_status=lambda: None)
+        media._SERPAPI_VIDEO_USED["n"] = 0
+        media._GOOGLE_VIDEO_CACHE.clear()
+        with mock.patch.object(media, "brightdata_available", return_value=False),                 mock.patch.object(media.config, "SERPAPI_API_KEY", "k"),                 mock.patch.object(media.config, "SERPAPI_VIDEO_MAX_PER_JOB", 2),                 mock.patch.object(media.requests, "get", return_value=resp) as get:
+            rows = media.search_google_videos("lake powell aerial")
+            self.assertEqual(rows, [{"url": "https://www.youtube.com/watch?v=abcdefghijk", "title": "Lake Powell aerial",
+                                     "site": "youtube.com", "seconds": 192.0}])
+            media.search_google_videos("glen canyon dam")
+            media.search_google_videos("cataract canyon")          # over the cap: no call
+            self.assertEqual(get.call_count, 2)
+
     def test_not_an_event_story_no_title_rules(self):
         director.LAST_STORY.clear()
         director.LAST_STORY.update({"kind": "history", "year": 1942, "places": ["Midway"]})

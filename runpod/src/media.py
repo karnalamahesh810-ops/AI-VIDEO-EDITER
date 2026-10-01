@@ -1767,34 +1767,74 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
     footage" it returned 8 YouTube videos the flat search had not, plus
     TikTok/Facebook clips. One paid call per distinct query, cached per job.
     """
-    if not (brightdata_available() and query.strip()):
+    if not query.strip() or not (brightdata_available() or config.SERPAPI_API_KEY):
         return []
     key = query.strip().lower()
     with _CACHE_LOCK:
         if key in _GOOGLE_VIDEO_CACHE:
             return _GOOGLE_VIDEO_CACHE[key]
     rows: List[dict] = []
-    costs.record("serp.call")
-    try:
-        body = _brightdata_serp("https://www.google.com/search?tbm=vid&brd_json=1&q="
-                                + urllib.parse.quote_plus(query))
-        for it in (body.get("organic") or [])[:limit]:
-            url = it.get("link") or ""
-            if not url.startswith("http"):
-                continue
-            secs = it.get("duration_sec")
-            if not secs and it.get("duration"):
-                parts = [int(p) for p in re.findall(r"\d+", str(it["duration"]))]
-                secs = sum(p * 60 ** i for i, p in enumerate(reversed(parts))) if parts else 0
-            rows.append({"url": url, "title": (it.get("title") or "")[:200],
-                         "site": urllib.parse.urlparse(url).netloc.replace("www.", ""),
-                         "seconds": float(secs or 0)})
-    except (requests.RequestException, ValueError) as e:
-        _source_error("search_google_videos", e)
-        rows = []
+    if brightdata_available():
+        costs.record("serp.call")
+        try:
+            body = _brightdata_serp("https://www.google.com/search?tbm=vid&brd_json=1&q="
+                                    + urllib.parse.quote_plus(query))
+            for it in (body.get("organic") or [])[:limit]:
+                url = it.get("link") or ""
+                if not url.startswith("http"):
+                    continue
+                secs = it.get("duration_sec")
+                if not secs and it.get("duration"):
+                    secs = _clock_seconds(it["duration"])
+                rows.append({"url": url, "title": (it.get("title") or "")[:200],
+                             "site": urllib.parse.urlparse(url).netloc.replace("www.", ""),
+                             "seconds": float(secs or 0)})
+        except (requests.RequestException, ValueError) as e:
+            _source_error("search_google_videos", e)
+            rows = []
+    if not rows:
+        # Bright Data off or empty-handed (2026-10-01: "not JSON: ''"): SerpApi's
+        # Google Videos, a few per video (the owner's plan is 250 searches a month).
+        rows = _serpapi_videos(query, limit)
     with _CACHE_LOCK:
         _GOOGLE_VIDEO_CACHE[key] = rows
     return rows
+
+
+def _clock_seconds(text) -> float:
+    """"3:12" / "1:02:03" -> seconds (0 when there is none)."""
+    parts = [int(p) for p in re.findall(r"\d+", str(text or ""))]
+    return float(sum(p * 60 ** i for i, p in enumerate(reversed(parts)))) if parts else 0.0
+
+
+_SERPAPI_VIDEO_USED = {"n": 0}
+
+
+def _serpapi_videos(query: str, limit: int = 10) -> List[dict]:
+    """SerpApi's Google Videos: [{url, title, site, seconds}], at most SERPAPI_VIDEO_MAX_PER_JOB a job."""
+    if not config.SERPAPI_API_KEY or not query.strip():
+        return []
+    with _CACHE_LOCK:
+        if _SERPAPI_VIDEO_USED["n"] >= config.SERPAPI_VIDEO_MAX_PER_JOB:
+            return []
+        _SERPAPI_VIDEO_USED["n"] += 1
+    try:
+        r = requests.get("https://serpapi.com/search.json", timeout=60,
+                         params={"engine": "google_videos", "q": query, "api_key": config.SERPAPI_API_KEY})
+        r.raise_for_status()
+        body = r.json()
+        costs.record("serpapi.search")
+    except (requests.RequestException, ValueError) as e:
+        _source_error("serpapi_google_videos", e)
+        return []
+    out = []
+    for it in (body.get("video_results") or [])[:limit]:
+        url = it.get("link") or ""
+        if url.startswith("http"):
+            out.append({"url": url, "title": (it.get("title") or "")[:200],
+                        "site": urllib.parse.urlparse(url).netloc.replace("www.", ""),
+                        "seconds": _clock_seconds(it.get("duration"))})
+    return out
 
 
 def _google_youtube_candidates(query: str) -> List[dict]:
@@ -2966,6 +3006,7 @@ def reset_cache():
     official.reset()                    # each satellite sector once per video
     LOCAL_REJECTED["n"] = 0
     _SERPAPI_USED["n"] = 0              # SerpApi's per-job budget starts again
+    _SERPAPI_VIDEO_USED["n"] = 0
     _BRIGHTDATA_FAILS["n"] = 0
     _IMAGE_NO_CREDIT["hit"] = False
     UNJUDGED_KEPT.update(n=0, rejected=0)
