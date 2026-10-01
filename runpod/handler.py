@@ -2038,7 +2038,8 @@ def _done_fields(out: dict) -> dict:
     return {
         "status": "done", "progress": 100, "current_step": "Done",
         "video_url": out["video_url"],
-        "duration_seconds": out["duration"],
+        # An INTEGER column: a fractional length is refused by the database.
+        "duration_seconds": int(round(float(out["duration"] or 0))),
         "completed_at": "now()",
     }
 

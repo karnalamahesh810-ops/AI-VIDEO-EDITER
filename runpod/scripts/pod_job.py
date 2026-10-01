@@ -203,9 +203,16 @@ def main() -> None:
         fields = {"status": "failed", "current_step": "Failed",
                   "error_message": str(out.get("error") or "failed")[:800]}
     else:
+        # duration_seconds is an INTEGER column: 720.92 was refused by the
+        # database on every retry, so the app never heard the video was done and
+        # showed 99% forever (2026-10-01, and the Glen Canyon pod run before it).
+        try:
+            seconds = int(round(float(out.get("duration"))))
+        except (TypeError, ValueError):
+            seconds = None
         fields = {"status": "done", "progress": 100, "current_step": "Completed",
                   "video_url": out.get("video_url") or "", "render_path": out.get("object_path") or "",
-                  "duration_seconds": out.get("duration"),
+                  "duration_seconds": seconds,
                   "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         if isinstance(out.get("timeline"), dict):
             fields["scene_data"] = out["timeline"]
