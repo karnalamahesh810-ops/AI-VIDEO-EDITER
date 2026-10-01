@@ -2000,8 +2000,17 @@ class GeneratedImages(unittest.TestCase):
         self._prefer = config.PREFER_GENERATED_IMAGES
         self._cap = config.IMAGE_MAX_PER_VIDEO
         media.reset_cache()
+        # The stills path asks every web source in turn: none of them may go to the
+        # network in the offline suite (these tests reached Bing and DuckDuckGo).
+        self._offline = [mock.patch.object(media, name, return_value=[]) for name in (
+            "search_web_images", "search_yandex_images", "search_wikipedia_article_images", "search_nasa",
+            "search_pexels", "search_pixabay") if hasattr(media, name)]
+        for p in self._offline:
+            p.start()
 
     def tearDown(self):
+        for p in reversed(self._offline):
+            p.stop()
         config.PREFER_GENERATED_IMAGES = self._prefer
         config.IMAGE_MAX_PER_VIDEO = self._cap
         media.reset_cache()
