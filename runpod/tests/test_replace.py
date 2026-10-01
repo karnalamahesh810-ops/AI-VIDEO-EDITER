@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -106,6 +108,25 @@ class ReplaceClip(unittest.TestCase):
         self.assertEqual(seen["scene_intent"]["visual_subjects"], ["low water"])
         self.assertEqual(doc["scenes"][0]["query"], seen["query"])
         self.assertEqual(len(cands), 2)
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "needs ffmpeg")
+    def test_the_new_clip_keeps_its_measured_length(self):
+        # A build records each clip's length (clipSeconds); a replacement had
+        # none, so the renderer played a clip shorter than its scene at 1x and
+        # it froze on its last frame (measured, src/quality.py).
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "yt_SHORTCLIP01_10_4.mp4")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=160x90:r=30:d=4",
+                        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", p], check=True)
+        a = media.MediaAsset(kind="video", source="youtube", url="https://www.youtube.com/watch?v=SHORTCLIP01&t=10",
+                             local_path=p, duration=7.0)
+        with mock.patch.object(media, "source_for_segment", return_value=a), \
+                mock.patch.object(media, "reset_cache"), mock.patch.object(handler.vision, "set_story"), \
+                mock.patch.object(config, "UPSCALE_ENABLED", False), mock.patch.object(config, "ALLOW_VERTICAL", False):
+            doc, _cands = handler.do_resource({"timeline": _doc(), "scene_index": 1, "publish_media": False},
+                                              d, lambda *a, **k: None)
+        # The file's own 4 s, not the 7 s it was cut for.
+        self.assertAlmostEqual(doc["scenes"][1]["media"]["clipSeconds"], 4.0, delta=0.05)
 
 
 class PartialRerender(unittest.TestCase):

@@ -1375,6 +1375,13 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
                 upscale.frame_vertical(p)
 
     scene["media"] = asset.to_scene_media()
+    if asset.kind == "video":
+        # Its measured length, as a build records it: without one the renderer
+        # plays a clip shorter than its scene at 1x and holds its last frame
+        # (measured on Remotion 4.0.511).
+        clip_s = timeline._clip_seconds(asset)
+        if clip_s:
+            scene["media"]["clipSeconds"] = round(clip_s, 2)
     scene["query"] = query
     scene["motion"] = (timeline._IMAGE_MOTIONS[idx % len(timeline._IMAGE_MOTIONS)]
                        if asset.kind == "image" else "none")
