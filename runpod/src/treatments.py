@@ -1664,6 +1664,8 @@ _LOOK_NEEDS = {
                            r"water levels?)\b",
     "LIB_NUM_TEMPERATURE": r"\b(degrees?|temperatures?|heat|hott?er|hottest|warm\w*|cold\w*|fahrenheit|celsius|"
                            r"freez\w*|chill)\b|°",
+    # The waterline drawn on a photo: only for a line about where the water stood.
+    "LIB_PX_LEVEL_LINE": r"\b(water|lake|reservoir|river|level|line|feet|foot|ft|high[- ]water|bathtub|pool)\b",
 }
 _LOOK_NEEDS_RX ={k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
 # The letter drop (LibBoldText): every date, date-and-time and time of day
@@ -1744,9 +1746,72 @@ BAR_TEXT_LOOKS = {
 
 
 def auto_ok(template_id: str) -> bool:
-    """False for a look the planner never picks on its own (BAR_TEXT_LOOKS, the old date rotation)."""
+    """
+    False for a look the planner never picks on its own: BAR_TEXT_LOOKS, the
+    old date rotation, and any look the registry marks "autoPick": false (new
+    looks wait in the editor until the owner approves them from their
+    contact sheets; scripts/library_looks_*.json "auto_pick").
+    """
     tid = template_id or ""
-    return tid not in BAR_TEXT_LOOKS and tid not in OLD_DATE_LOOKS and not tid.startswith("LIB_DTX_")
+    if tid in BAR_TEXT_LOOKS or tid in OLD_DATE_LOOKS or tid.startswith("LIB_DTX_"):
+        return False
+    t = templates.get(tid)
+    return not (t and t.get("autoPick") is False)
+
+
+# The photo looks' hooks (LibPhotosPro, "px-"): what a still's line says about
+# its picture, as the cues those looks carry. Only the line's own words reach
+# the look (photo_line_props): its years, a height in feet, "today" when said.
+_PHOTO_YEAR = re.compile(r"\b(1[6-9]\d0s|20[0-2]0s|1[6-9]\d\d|20[0-2]\d)\b")
+_PHOTO_LEVEL = re.compile(r"\b(water ?lines?|high[- ]water|bathtub rings?|full pool|"
+                          r"(?:lake|water|reservoir) (?:once |used to )?(?:reach(?:ed)?|stood|sat|rose|came) (?:to|up|at|all the way|here|there)|"
+                          r"used to (?:reach|sit|stand|come) (?:all the way |up )?(?:up|here|there|to))\b", re.I)
+_PHOTO_RETURN = re.compile(r"\b(c[oa]me back|coming back|reappear\w*|resurfac\w*|re-?emerg\w*|reveal(?:s|ed|ing)?|"
+                           r"exposed|uncover\w*|g[ia]ves? (?:it |them )?back|returned)\b", re.I)
+_PHOTO_DETAIL = re.compile(r"\b(look closely|look at (?:this|that|the)|you can (?:still )?see|notice|right (?:here|there)|"
+                           r"in the (?:corner|middle|background|foreground)|zoom(?:ed)? in)\b", re.I)
+_PHOTO_THEN = re.compile(r"\b(used to|once|back then|before the dam|years ago|decades ago|no longer|anymore|at the time)\b", re.I)
+_PHOTO_NOW = re.compile(r"\b(today|now|these days|this year|nowadays)\b", re.I)
+_PHOTO_ARCHIVE = re.compile(r"\b(photograph(?:s|ed|er|ers)?|archiv\w*|historic(?:al)?|old (?:photos?|pictures?|prints?)|"
+                            r"black[- ]and[- ]white|(?:a|one) century ago|in the (?:1[6-9]\d0)s)\b", re.I)
+PHOTO_LINE_CUES = ("photo-level", "photo-then-now", "photo-return", "photo-detail", "photo-archival")
+
+
+def photo_line_cues(text: str) -> List[str]:
+    """The photo-look cues a still's line asks for, most specific first: a waterline, then and now, something
+    coming back, a detail pointed at, an old (dated) photograph."""
+    text = text or ""
+    years = set(_PHOTO_YEAR.findall(text))
+    out = []
+    if _PHOTO_LEVEL.search(text):
+        out.append("photo-level")
+    if len(years) >= 2 or ((_PHOTO_THEN.search(text) or years) and _PHOTO_NOW.search(text)):
+        out.append("photo-then-now")
+    if _PHOTO_RETURN.search(text):
+        out.append("photo-return")
+    if _PHOTO_DETAIL.search(text):
+        out.append("photo-detail")
+    if _PHOTO_ARCHIVE.search(text) or any(int(y[:4]) < 2000 for y in years):
+        out.append("photo-archival")
+    return out
+
+
+def photo_line_props(text: str) -> dict:
+    """What a photo look may show from its line, all of it said: the first year (label), the years in order
+    for a run of dated prints or a then / now (items, "TODAY" only when said), a height in feet (subtitle)."""
+    text = text or ""
+    years = list(dict.fromkeys(_PHOTO_YEAR.findall(text)))
+    props: Dict[str, Any] = {}
+    if years:
+        props["label"] = years[0]
+    if len(years) >= 2:
+        props["items"] = [{"label": y} for y in years[:3]]
+    elif years and re.search(r"\btoday\b", text, re.I):
+        props["items"] = [{"label": years[0]}, {"label": "TODAY"}]
+    m = re.search(r"(\d[\d,]*(?:\.\d+)?)\s*(?:feet|foot|ft)\b", text, re.I)
+    if m:
+        props["subtitle"] = f"{m.group(1)} FT"
+    return props
 
 
 NOT_FOR_A_DATE = {"LIB_TL_CALENDAR_FLIP", "LIB_TL_DATE_STAMP_CIRCLE", "LIB_LT_DATE_PLACE", "LIB_FX_LIGHT_STREAK",
@@ -2735,6 +2800,11 @@ class _Planner:
             own = ["photo-object", "object-photo"]
         else:
             own = []
+        # What the line itself says about the picture (a waterline, then and now, an old photograph...):
+        # the photo looks drawn for that come first. A person's picture keeps the person looks.
+        line = [] if kind == "person" and subject else photo_line_cues(seg.text or "")
+        by_kind = bool(own)
+        own = line + own
         many = self._stills_after(i) >= 3
         pool, specific = [], []
         for c in own + ["photo"]:
@@ -2753,11 +2823,16 @@ class _Planner:
                     specific.append(t["id"])
         if not pool:
             return None
-        props = {"text": subject.upper()} if subject and not own else ({"text": subject} if subject else {})
+        props = {"text": subject.upper()} if subject and not by_kind else ({"text": subject} if subject else {})
         by_id = {}
         hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else {}
         if hint.get("type") == "map" and hint.get("locations"):
             by_id["PLACE_CARD_V1"] = {**props, "locations": hint["locations"][:1]}
+        # The photo looks show the line's own years and heights (photo_line_props); the older looks keep theirs.
+        said = photo_line_props(seg.text or "")
+        for t in pool:
+            if said and str((t.get("defaults") or {}).get("variant") or "").startswith("px-"):
+                by_id[t["id"]] = {**props, **said}
         req = {"ids": [t["id"] for t in pool], "prefer": specific, "props": props, "props_by_id": by_id,
                "mode": "director", "group": "photo", "emphasis": "medium", "never_again": True}
         return self._request(req, seg, scene, "director")
@@ -3305,9 +3380,10 @@ _kind_turn = {"person": [0], "place": [0], "object": [0], "photo": [0]}
 
 
 def _lib_looks(cue: str, still: bool = True) -> List[str]:
-    """Library looks (component "motion") registered for a cue; `still`: only those that show one picture."""
+    """Library looks (component "motion") registered for a cue that the planner may pick; `still`: only those
+    that show one picture."""
     return [t["id"] for t in templates.for_cue(cue)
-            if t.get("component") == "motion" and (not still or "still" in (t.get("tags") or []))]
+            if t.get("component") == "motion" and (not still or "still" in (t.get("tags") or [])) and auto_ok(t["id"])]
 
 
 def _turn(kind: str, cycle: List[str]) -> str:
@@ -3619,7 +3695,7 @@ def animation_for(seg, shot: dict, pack: dict, brief: Optional[dict],
             for name in [cue["cue"]] + (CUE_FALLBACK.get(cue["cue"], []) if cue["cue"] == "count" else []):
                 options = [t for t in templates.for_cue(name, pack.get("id", ""))
                            if t["kind"] in CARD_KINDS and look_fits(t["id"], seg.text or "")
-                           and not _needs_places(t, cue["props"])]
+                           and not _needs_places(t, cue["props"]) and auto_ok(t["id"])]
                 if options:
                     break
             if not options:
@@ -3693,11 +3769,13 @@ def note_figure(seen: dict, seg, animation: Optional[dict]) -> None:
 # component's stills(overlay, N)): fewer repeats a picture in two slots.
 LOOK_SLOTS = {"pa-polaroid-drop": 2, "pa-film-strip": 3, "pb-wipe-compare": 2, "pb-triptych": 3, "pb-carousel": 3,
               "pb-corkboard": 3, "pb-double-exposure": 2, "pb-zoom-through": 2, "pb-grid-pop": 4,
-              "pb-parallax-stack": 3, "cp-photo-versus": 2, "collage": 3}
+              "pb-parallax-stack": 3, "cp-photo-versus": 2, "collage": 3,
+              "px-dated-cascade": 2, "px-then-now": 2}
 # ... and the most it shows.
 LOOK_MOST = {"pa-polaroid-drop": 2, "pa-film-strip": 4, "pb-wipe-compare": 2, "pb-triptych": 3, "pb-carousel": 6,
              "pb-corkboard": 4, "pb-double-exposure": 2, "pb-zoom-through": 2, "pb-grid-pop": 6,
-             "pb-parallax-stack": 3, "cp-photo-versus": 2, "collage": 6}
+             "pb-parallax-stack": 3, "cp-photo-versus": 2, "collage": 6,
+             "px-dated-cascade": 3, "px-then-now": 2}
 PICTURE_NEAR = 8          # scenes either side searched for pictures of the same subject
 # The one-picture looks a multi-picture look becomes when the story has too
 # few pictures of its subject: each draws one still full frame, any subject.

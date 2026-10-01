@@ -783,14 +783,34 @@ MUSIC_MOODS = {
 }
 
 
+def library_files() -> list:
+    """The look lists: library_looks.json, then each family file beside it (library_looks_<family>.json) in name order."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    main = os.path.join(here, "library_looks.json")
+    extra = sorted(os.path.join(here, f) for f in os.listdir(here)
+                   if f.startswith("library_looks_") and f.endswith(".json"))
+    return ([main] if os.path.exists(main) else []) + extra
+
+
+def library_looks() -> list:
+    """Every library look entry, in registry order."""
+    out = []
+    for path in library_files():
+        with open(path, encoding="utf-8") as fh:
+            out.extend(json.load(fh))
+    return out
+
+
 def _library() -> list:
-    """The animation library (remotion/src/components/lib): one "motion" template per QA-kept look."""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library_looks.json")
-    if not os.path.exists(path):
-        return []
+    """
+    The animation library (remotion/src/components/lib): one "motion" template
+    per QA-kept look. A look with "auto_pick": false is written with
+    "autoPick": false: it stays in the editor, and the planner never picks it
+    on its own (src/treatments.auto_ok) until the owner switches it on.
+    """
     out = []
     design = designer()
-    for look in json.load(open(path, encoding="utf-8")):
+    for look in library_looks():
         tags = ["lib", look["family"]]
         if look.get("own_backdrop"):
             tags.append("own-backdrop")
@@ -813,6 +833,8 @@ def _library() -> list:
         if isinstance(look.get("sfx_at"), (int, float)) and not isinstance(look.get("sfx_at"), bool):
             t["defaults"]["sfxAt"] = int(round(look["sfx_at"]))
         t["defaults"]["types"] = bool(look.get("types"))
+        if look.get("auto_pick") is False:
+            t["autoPick"] = False
         out.append(with_sound(t, look, design["looks"].get(t["id"]), design["replace"]))
     return out
 
