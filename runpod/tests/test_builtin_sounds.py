@@ -347,34 +347,29 @@ class Planner(unittest.TestCase):
                                  or (s["startFrame"] < tr["startFrame"] + tr["durationFrames"]
                                      and tr["startFrame"] < s["startFrame"] + s["frames"]), (tr, s))
 
-    def test_every_date_and_time_is_the_letter_drop_in_every_style(self):
-        lines = ["On July 2, the rain began.", PLAIN, "By September 15, 2026, the lake had dropped.", PLAIN,
-                 "At 3:45 pm the gates opened.", PLAIN, "Sept. 25 was the deadline.", PLAIN]
+    def test_every_date_and_time_takes_a_vidrush_look_in_every_style(self):
+        # A date, a time and a year jump, each 13 lines (78 s) apart: three graphics, every style.
+        lines = (["On July 2, 2026, the rain began."] + [PLAIN] * 12 + ["At 3:45 pm the gates opened."] + [PLAIN] * 12
+                 + ["Years later, in 2008, the lake was full."] + [PLAIN] * 2)
         for pack in templates.style_packs():
             out = _plan(lines, pack)
-            dated = [o for o in out["overlays"]
-                     if set(templates.cues_of(templates.get(o["template"]))) & set(treatments.DATE_CUES)]
-            self.assertEqual(len(dated), 4, (pack, [o["template"] for o in out["overlays"]]))
-            # Bold text only: the letter drop in turn with the placed date looks of
-            # pack A (2026-10-01: "time on the top left, dates in the middle top...").
-            self.assertTrue({o["template"] for o in dated} <= treatments.DATE_TEXT_LOOKS, pack)
-            self.assertGreaterEqual(len({o["template"] for o in dated}), 2, pack)
-            drops = [o for o in dated if o["template"] == treatments.TEXT_DATE_LOOK]
-            # The letter drop sits in the lower third at the safe margin - never mid-frame.
-            self.assertTrue(drops and all(o["align"] in ("left", "right") for o in drops), pack)
-            # Lettered in turn: no two dates in a row look the same.
-            styles = [o["textStyle"] for o in drops]
-            self.assertTrue(set(styles) <= set(treatments.TEXT_LOOK_STYLES), styles)
-            self.assertTrue(all(a != b for a, b in zip(styles, styles[1:])), styles)
+            dated = [o for o in out["overlays"] if o["template"] in treatments.VR_LOOKS
+                     or o["template"] in treatments.OLD_DATE_LOOKS or o["template"].startswith("LIB_DTX_")]
+            self.assertEqual([o["template"] for o in dated],
+                             [treatments.VR_HERO, treatments.VR_TIME, treatments.VR_YEAR], pack)
+            # Each look places itself (centred, top-left, centred): the planner never moves it around.
+            self.assertFalse([o for o in dated if o.get("align") not in (None, "auto")], pack)
+            # One theme for the whole video (an explainer: gold serif).
+            self.assertEqual({o["theme"] for o in dated}, {"serif"}, pack)
 
-    def test_never_the_centre_on_a_persons_shot(self):
+    def test_the_old_date_looks_are_never_picked(self):
         lines = ["On July 2, the rain began.", PLAIN, "On July 9, the river rose.", PLAIN, "On July 16, it fell."]
         shots = [{"subject": "Lake Mead"}, {"subject": "x"}, {"subject": "x"}, {"subject": "x"},
                  {"subject": "residents", "subjectType": "person"}]
         out = _plan(lines, shots=shots)
-        aligns = [o.get("align") for o in out["overlays"] if o["template"] in treatments.DATE_TEXT_LOOKS]
-        self.assertEqual(len(aligns), 3)
-        self.assertNotIn("center", aligns)
+        used = [o["template"] for o in out["overlays"]]
+        self.assertFalse([t for t in used if t in treatments.OLD_DATE_LOOKS or t.startswith("LIB_DTX_")], used)
+        self.assertEqual([t for t in used if t in treatments.VR_LOOKS], [treatments.VR_HERO])    # 24 s of dates: one
 
     def test_a_number_leads_with_the_bold_count(self):
         lines = ["Lake Mead is now at 26 percent.", PLAIN, "Some 12,000 people lost power.", PLAIN,

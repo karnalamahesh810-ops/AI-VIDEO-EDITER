@@ -23,10 +23,20 @@ the looks that carry the cue, built-in and library alike. A look is not
 shown twice within LOOK_GAP (four minutes) while another fits, two text beats
 in a row never share a family, and the order is shuffled per video so two
 videos do not open on the same looks. The banned headline looks
-(templates.BANNED) are never chosen. Some things always show: a date or a
-time the line names, a clear figure (it counts up), and the first mention
-of a named person (a full-screen introduction, at most one per 45 s).
+(templates.BANNED) are never chosen, nor are the long-text looks with a bar,
+rule or underline beside or under the words (NOT_AUTO_LOOKS). Some things
+always show: a clear figure (it counts up) and the first mention of a named
+person (a full-screen introduction, at most one per 45 s).
+
+Dates and times (the owner, 2026-10-01, after four VidRush exports): about one
+date or time graphic every two to three minutes, never on every mention, in
+four looks with fixed places and one colour theme per video - a big centred
+date, a time card top-left, a typed "Place, Year" caption bottom-left, a year
+on a line for a jump in years (see VR_LOOKS, vr_moment, _Planner._vr_select).
+Nothing the narration did not say: no worked-out weekday, no year it did not
+name, no place it did not name (or its section's region).
 """
+import datetime
 import re
 import zlib
 from typing import Any, Dict, List, Optional
@@ -171,6 +181,15 @@ _WEEKDAY = re.compile(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sun
 def date_in(text: str) -> Optional[tuple]:
     """(label, offset) of the first calendar date a line names - 'SEPTEMBER 15',
     'AUGUST 21, 2026', 'MARCH 2026' - or None."""
+    d = date_parts(text)
+    return (d["label"], d["start"]) if d else None
+
+
+def date_parts(text: str) -> Optional[dict]:
+    """
+    The first calendar date a line names, in parts: {label, start, end,
+    month ('SEPTEMBER'), day (int or None), year (int or None)} - or None.
+    """
     found = []
     for rx, kind in ((_DATE_DM, "dm"), (_DATE_MD, "md"), (_DATE_MY, "my"), (_DATE_ABBR, "abbr"), (_DATE_NUM, "num")):
         for m in rx.finditer(text or ""):
@@ -193,12 +212,13 @@ def date_in(text: str) -> Optional[tuple]:
             label = month.upper() + (f" {day}" if day else "")
             if year:
                 label += f", {year}" if day else f" {year}"
-            found.append((m.start(), -len(label), label))
+            found.append((m.start(), -len(label), {"label": label, "start": m.start(), "end": m.end(),
+                                                   "month": month.upper(), "day": day or None,
+                                                   "year": int(year) if year else None}))
             break
     if not found:
         return None
-    start, _neg, label = min(found)
-    return label, start
+    return min(found, key=lambda f: (f[0], f[1]))[2]
 
 
 # Times of day as narrators say them: "3:45 pm", "3 p.m.", "at noon",
@@ -1159,6 +1179,308 @@ def _more_cues(text: str, seg: Segment, shot: dict, out: List[dict], brief: Opti
     return out
 
 
+# ------------------------------------------------------------ dates and times, VidRush's way
+# The owner, 2026-10-01, comparing four VidRush exports with ours: we showed
+# dates far too often, jumped between corners (top-left, top-centre,
+# bottom-left, right), and showed weekdays and days the narration never said.
+# VidRush shows about ONE date or time graphic every two to three minutes,
+# never on every mention, in four looks with fixed places and one colour theme
+# per video:
+#   VR_HERO     centred: the date as said ("SEPTEMBER 23"; "JULY" for a month
+#               and a year), the year small under it when the year was said;
+#   VR_TIME     top-left: the time as said ("9:08 AM") over a strip with the
+#               date said in the same sentence, else the place the line or its
+#               section is about, else nothing;
+#   VR_CAPTION  bottom-left: a typed "Place, Year" ("Parker Dam, 1938");
+#   VR_YEAR     centred: the year said on a line, its dot moving from the year
+#               the story was in (else NOW_YEAR) - a jump in years.
+# A weekday alone, "last night", "48 hours", "this week", a range or any other
+# relative time gets no date graphic. The old rotation (the letter drop and
+# the placed looks of LibPackDates) stays in the registry for the editor only.
+VR_HERO = "LIB_VR_DATE_HERO"
+VR_TIME = "LIB_VR_TIME_CARD"
+VR_CAPTION = "LIB_VR_CAPTION_TYPED"
+VR_YEAR = "LIB_VR_YEAR_LINE"
+VR_LOOKS = (VR_HERO, VR_TIME, VR_CAPTION, VR_YEAR)
+VR_GAP = 75.0            # at most one of them per this many seconds of video
+VR_HERO_GAP = 150.0      # the big centred date at most once per this
+VR_FIRST_HERO = 90.0     # the video's first full date is always shown when it is said this early
+YEAR_JUMP = 5            # a year said this far from the one the story was in is a jump
+NOW_YEAR = datetime.date.today().year      # the year a story is in until it names one (2026 now)
+CAPTION_MAX = 42         # "University of Hawaii, 1959"
+STRIP_MAX = 32           # the time card's label strip
+# One colour theme per video: gold serif for news, weather and explainers, red
+# typewriter for documentaries, history, stories and crime.
+VR_SERIF_STYLES = {"nature_weather", "trending_news", "news_compilation", "compilation", "explainer"}
+VR_TYPEWRITER_STYLES = {"documentary", "history", "story", "crime", "investigative", "true_crime"}
+_VR_THEME_BY_KIND = {"news": "serif", "weather": "serif", "disaster": "serif", "nature": "serif",
+                     "science": "serif", "explainer": "serif", "history": "typewriter",
+                     "biography": "typewriter", "crime": "typewriter", "investigative": "typewriter"}
+
+
+def vr_theme(video_style: str = "", brief: Optional[dict] = None, pack: Optional[dict] = None) -> str:
+    """The video's one theme for its date and time looks: "serif" (gold) or "typewriter" (red).
+    The job's video style decides; without one the story's kind, then the style pack."""
+    from . import styles
+    raw = str(video_style or "").strip().lower().replace(" ", "_").replace("-", "_")
+    key = styles.resolve(raw) or raw
+    if key in VR_SERIF_STYLES:
+        return "serif"
+    if key in VR_TYPEWRITER_STYLES or key.startswith(("crime", "true_crime", "investigat")):
+        return "typewriter"
+    kind = str((brief or {}).get("kind") or "").strip().lower()
+    if kind in _VR_THEME_BY_KIND:
+        return _VR_THEME_BY_KIND[kind]
+    return "serif" if str((pack or {}).get("id") or "") in ("news", "weather", "tech", "youtube_modern") \
+        else "typewriter"
+
+
+# A clock time, the time card's only job: "9:08 a.m.", "at 21:40", "seven
+# o'clock that evening", "at noon", "at midnight". Never dawn or dusk, "past
+# midnight", "overnight" or "this morning": relative times get no graphic.
+_CLOCK_WORD = re.compile(r"\b(?:at|around|about|just\s+after|just\s+before|shortly\s+after|shortly\s+before|"
+                         r"right\s+at|exactly\s+at)\s+(noon|midday|midnight)\b", re.I)
+
+
+def clock_in(text: str) -> Optional[tuple]:
+    """(label, offset) of the first clock time a line says - '9:08 AM', '21:40', '7:00 PM', '12:00 AM' - or None."""
+    text = text or ""
+    found = []
+    # (offset, how specific - an "am/pm" reading beats a bare "3:45" at the same place, label)
+    for m in _TIME_AMPM.finditer(text):
+        h = int(m.group(1))
+        if 1 <= h <= 12:
+            found.append((m.start(1), 0, f"{h}{':' + m.group(2) if m.group(2) else ''} {m.group(3).upper()}M"))
+            break
+    for m in _TIME_AT.finditer(text):
+        h = int(m.group(1))
+        if 0 <= h <= 23:
+            found.append((m.start(1), 1, f"{h}:{m.group(2)}"))
+            break
+    m = _CLOCK_WORD.search(text)
+    if m:
+        found.append((m.start(1), 0, "12:00 AM" if m.group(1).lower() == "midnight" else "12:00 PM"))
+    m = _TIME_OCLOCK.search(text)
+    if m:
+        raw = m.group(1).lower()
+        h = int(raw) if raw.isdigit() else _CLOCK_WORDS.get(raw, 0)
+        if 1 <= h <= 12:
+            part = (m.group(2) or "").lower()
+            ampm = " AM" if "morning" in part else " PM" if part else ""
+            found.append((m.start(), 0, f"{h}:00{ampm}"))
+    if not found:
+        return None
+    start, _prio, label = min(found)
+    return label, start
+
+
+# A year as a year: never a figure ("2,000 people", "1900 feet"), a decade ("the
+# 1960s"), money or a code. The years of a chart ("in 2020 it was 40 percent; by
+# 2026, 26") are its labels, not the story's time (vr_moment skips those lines).
+_YEAR_SAID = re.compile(
+    r"(?<![\d$£€#.,/:-])\b(1[5-9]\d\d|20\d\d)\b(?![,.]?\d)(?!\s*(?:%|percent|per\s*cent|feet|foot|ft|acres?|"
+    r"acre-feet|miles?|meters?|metres?|km|kilomet\w+|people|persons|homes?|houses?|residents|families|deaths?|"
+    r"dollars|tons?|gallons?|inches|degrees|cfs|mph|hours?|minutes?|seconds?|days?|weeks?|months?|years?|"
+    r"times|cases|votes|jobs|students|cars|vehicles|structures?|buildings?|square|cubic)\b)", re.I)
+_YEAR_RANGE = re.compile(r"\b(?:from|between)\s+(?:the\s+years?\s+)?(1[5-9]\d\d|20\d\d)\s*,?\s*"
+                         r"(?:to|and|until|till|through|thru|[-–—])\s*(1[5-9]\d\d|20\d\d)\b"
+                         r"|\b(1[5-9]\d\d|20\d\d)\s*[-–—]\s*(1[5-9]\d\d|20\d\d)\b", re.I)
+_JUMP_COUNT = (r"(?:a|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|"
+               r"fifty|sixty|seventy|eighty|ninety|a\s+few|a\s+couple\s+of|several|many|some|\d{1,3})")
+_YEAR_JUMP = re.compile(rf"\b(?:{_JUMP_COUNT}\s+)?(?:years?|decades?|centur(?:y|ies)|half\s+a\s+century)\s+"
+                        r"(?:later|earlier|on|passed|went\s+by)\b|\bfast[\s-]+forward(?:ing)?\b", re.I)
+# A date that opens a range ("July 2 to July 5", "September 3-5", "between June 1 and June 4"): no graphic.
+_DATE_RANGE_AFTER = re.compile(
+    rf"^\s*(?:[-–—]|to|through|thru|until|till|and|or)\s+(?:the\s+)?(?:(?:{_MONTHS})\b|\d{{1,2}}(?:st|nd|rd|th)?\b|"
+    + "|".join(sorted((re.escape(w).replace(r"\-", "[- ]") for w in _ORDINAL_DAYS), key=len, reverse=True)) + ")",
+    re.I)
+# Words that make a capitalised name a place ("Parker Dam", "Kerr County",
+# "University of Hawaii"), and words that make one an organisation instead
+# ("National Weather Service").
+_VR_PLACE_WORDS = set("""dam dams river creek canyon valley lake lakes mount mountain mountains bay island islands
+harbor harbour gulf basin reservoir springs falls desert forest camp fort coast ocean sea county city township
+district region state park beach village town borough parish province territory avenue road boulevard canal port
+heights gardens plains prairie delta peninsula border hills university college school hospital airport highway
+interstate bridge station museum observatory square street hall base mine plant refinery prison cemetery church
+cathedral stadium arena tower capitol courthouse ranch farm keys bayou""".split())
+_VR_NOT_PLACE_WORDS = set("""service services agency agencies department dept office offices administration bureau
+council committee commission authority corporation corp company inc llc ltd foundation ministry association
+organization organisation network news times tribune gazette journal herald press channel radio party union board
+team club coalition group fund senate congress parliament government police sheriff sheriffs patrol guard army navy
+corps force court institute prediction weather""".split())
+_VR_AT_PLACE = re.compile(r"\b(?:in|at|near|outside|inside|across|throughout)\s+(?:the\s+)?$", re.I)
+
+
+def years_said(text: str) -> List[tuple]:
+    """[(year, offset)] of the years a line says as years, up to this year, in the order said."""
+    return [(int(m.group(1)), m.start(1)) for m in _YEAR_SAID.finditer(text or "")
+            if 1500 <= int(m.group(1)) <= NOW_YEAR]
+
+
+def _ranged(text: str, end: int) -> bool:
+    """The date that ends at `end` opens a range of dates."""
+    return bool(_DATE_RANGE_AFTER.match((text or "")[end:end + 40]))
+
+
+def _part_at(text: str, at: int, splits: str) -> tuple:
+    """(start, end) of the stretch of `text` around offset `at` between any of the `splits` characters."""
+    text = text or ""
+    a = max((text.rfind(ch, 0, at) for ch in splits), default=-1) + 1
+    ends = [k for k in (text.find(ch, at) for ch in splits) if k >= 0]
+    return a, (min(ends) if ends else len(text))
+
+
+def _sentence_at(text: str, at: int) -> str:
+    # (A clock's "a.m." or a "Sept." is not a full stop: a full stop ends a sentence before a space and a capital.)
+    marks = [m.end() for m in re.finditer(r"[.!?](?=\s+[A-Z])", text or "")]
+    a = max([k for k in marks if k <= at], default=0)
+    b = min([k for k in marks if k > at], default=len(text or ""))
+    return (text or "")[a:b]
+
+
+def _word_at(text: str, at: int) -> str:
+    m = re.match(r"[\w:'’]+", (text or "")[at:])
+    return m.group(0) if m else ""
+
+
+def places_said(text: str, shot: Optional[dict] = None, brief: Optional[dict] = None) -> List[tuple]:
+    """
+    [(place as said, offset)] the line itself names, in the order said: one of
+    the story's places, a map location the director gave the line, a place the
+    line was pinned to, a name with a place word ("Parker Dam", "Kerr County",
+    "University of Hawaii") or a name after "in", "at", "near"... Never a
+    person, an agency, a month or a weekday.
+    """
+    text = text or ""
+    brief = brief if isinstance(brief, dict) else {}
+    shot = shot if isinstance(shot, dict) else {}
+    hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else {}
+    known = [str(p).split(",")[0].strip() for p in (brief.get("places") or []) if isinstance(p, str)]
+    known += [str(loc.get("label") or "").split(",")[0].strip() for loc in (hint.get("locations") or [])
+              if isinstance(loc, dict)]
+    known += [str(p).split(",")[0].strip() for p in (shot.get("linePlaces") or []) if isinstance(p, str)]
+    people = [str(p) for p in (brief.get("people") or []) if isinstance(p, str)]
+    people += [str(c.get("name") or "") for c in (brief.get("cast") or []) if isinstance(c, dict)]
+    if str(shot.get("subjectType") or "").lower() == "person" and shot.get("subject"):
+        people.append(str(shot["subject"]))
+    found: List[tuple] = []                 # (name, start, end)
+    for name in sorted({k for k in known if len(k) >= 3}, key=len, reverse=True):
+        m = re.search(r"(?<![\w])" + re.escape(name) + r"(?![\w])", text)
+        if m and not any(a <= m.start() < b for _n, a, b in found):
+            found.append((m.group(0), m.start(), m.end()))
+    for m in _PROPER.finditer(text):
+        words = m.group(0).split()
+        lead = m.start()
+        while words and (words[0].strip(".,'’") in _CAP_STOP or words[0].upper().strip(".,") in _NOT_A_PHRASE):
+            lead += len(words[0]) + 1
+            words = words[1:]
+        while words and words[-1].lower() in _PHRASE_TAIL:
+            words = words[:-1]
+        name = " ".join(words).strip(".,;:'’")
+        if len(name) < 3 or name.endswith(("'s", "’s")) or any(a <= lead < b for _n, a, b in found):
+            continue
+        low = [w.lower().strip(".,'’") for w in name.split()]
+        if any(w in _VR_NOT_PLACE_WORDS for w in low) or any(_same_person(name, p) for p in people if p):
+            continue
+        if not any(w in _VR_PLACE_WORDS for w in low) and (_real_person(name) or not _VR_AT_PLACE.search(text[:lead])):
+            continue
+        found.append((name, lead, lead + len(name)))
+    return [(n, a) for n, a, _b in sorted(found, key=lambda f: f[1])]
+
+
+def _strip(text: str) -> str:
+    """A place for the time card's strip, upper case, cut at a comma to fit."""
+    parts = [p.strip() for p in str(text or "").split(",") if p.strip()]
+    out = ""
+    for p in parts[:2]:
+        nxt = f"{out}, {p}" if out else p
+        if len(nxt) > STRIP_MAX:
+            break
+        out = nxt
+    return out.upper()
+
+
+def vr_moment(text: str, shot: Optional[dict] = None, brief: Optional[dict] = None,
+              story_year: Optional[int] = None, region: str = "") -> tuple:
+    """
+    (the date or time graphic a line asks for, or None; the year the story is
+    in after the line). The graphic: {"look", "cue", "props", "key" (the word
+    it lands on), "strength", "full_date"}. In order: a clock time is the time
+    card; a full date (month and day) the hero; a jump in years ("years later"
+    with a year, "from 1961 to 2008", a year YEAR_JUMP or more from the one the
+    story was in) the year line; a month and a year the hero; a place and a
+    year in one clause the typed caption. Only what the line says reaches the
+    screen; `region` (the line's section) may only fill the time card's strip.
+    """
+    text = text or ""
+    was = story_year or NOW_YEAR
+    # Years that are a chart's labels ("in 2020 ... 40 percent; by 2026 ... 26") are not the story's time.
+    data = bool(_TWO_YEARS.search(text)) or bool(_series(text))
+    years = [] if data else years_said(text)
+    span = None if data else _YEAR_RANGE.search(text)
+    now = years[-1][0] if years else story_year
+    if span:
+        a, b = int(span.group(1) or span.group(3)), int(span.group(2) or span.group(4))
+        now = b if b <= NOW_YEAR else now
+    date = date_parts(text)
+    if date and _ranged(text, date["end"]):
+        date = None                       # "July 2 to July 5": a range gets no date graphic
+    clock = clock_in(text)
+    if clock:
+        sentence = _sentence_at(text, clock[1])
+        said = date_parts(sentence)
+        if said and _ranged(sentence, said["end"]):
+            said = None
+        strip = said["label"] if said else ""
+        if not strip:
+            places = places_said(text, shot, brief)
+            strip = _strip(places[0][0] if places else region)
+        return ({"look": VR_TIME, "cue": "time-of-day", "props": {"text": clock[0], "subtitle": strip},
+                 "key": _word_at(text, clock[1]), "strength": 3 if strip else 2,
+                 "full_date": bool(said and said["day"])}, now)
+    if date and date["day"]:
+        return ({"look": VR_HERO, "cue": "date",
+                 "props": {"text": f"{date['month']} {date['day']}",
+                           "subtitle": str(date["year"]) if date["year"] else ""},
+                 "key": _word_at(text, date["start"]), "strength": 2 if date["year"] else 1, "full_date": True}, now)
+    jump = None if data else _YEAR_JUMP.search(text)
+    target = None
+    if span and a != b and b <= NOW_YEAR:
+        target = (b, a, span.start(1) if span.group(1) else span.start(3), "")
+    elif years and jump:
+        y, at = next(((y, at) for y, at in years if at >= jump.start()), years[0])
+        said = re.sub(r"\s+", " ", jump.group(0)).upper()
+        target = (y, was, at, said if not said.startswith("FAST") and len(said) <= 18 else "")
+    elif years and abs(years[0][0] - was) >= YEAR_JUMP:
+        target = (years[0][0], was, years[0][1], "")
+    if target and target[0] != target[1]:
+        y, frm, at, label = target
+        return ({"look": VR_YEAR, "cue": "years", "props": {"value": y, "total": frm, "label": label},
+                 "key": _word_at(text, at), "strength": 3, "full_date": False}, now)
+    if date and date["year"]:
+        return ({"look": VR_HERO, "cue": "date", "props": {"text": date["month"], "subtitle": str(date["year"])},
+                 "key": _word_at(text, date["start"]), "strength": 1, "full_date": False}, now)
+    for y, at in years:
+        a0, b0 = _part_at(text, at, ".;:!?—–()")
+        places = places_said(text[a0:b0], shot, brief)
+        if places:
+            caption = f"{places[0][0]}, {y}"
+            if len(caption) <= CAPTION_MAX:
+                first = min(at, a0 + places[0][1])
+                return ({"look": VR_CAPTION, "cue": "date", "props": {"text": caption},
+                         "key": _word_at(text, first), "strength": 2, "full_date": False}, now)
+    return None, now
+
+
+def _vr_fits(m: dict, others: List[dict], margin: float = 0.0) -> bool:
+    """`m` keeps VR_GAP from every other date or time graphic (VR_HERO_GAP between two heroes)."""
+    for o in others:
+        d = abs(float(m["at"]) - float(o["at"]))
+        if d < VR_GAP + margin or (m["look"] == VR_HERO and o["look"] == VR_HERO and d < VR_HERO_GAP + margin):
+            return False
+    return True
+
+
 # ------------------------------------------------------------ choosing
 class _Rhythm:
     def __init__(self):
@@ -1344,20 +1666,12 @@ _LOOK_NEEDS = {
                            r"freez\w*|chill)\b|°",
 }
 _LOOK_NEEDS_RX ={k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
-# A date is BOLD TEXT and nothing else (the owner, 2026-09-30: "when a
-# day/date is mentioned ... I need BOLD TEXT date", then: "NO background layout,
-# ONLY TEXT: the date in white BOLD, on the sides, with a black stroke"): every
-# date, date-and-time and time of day is the letter-drop look (LibBoldText),
-# redesigned 2026-10-01 (the owner: "cleaner ... not big, not small", "only a
-# digit sound", "use the font Anton"): clean Anton letters sliding up one by one
-# with a soft tick each and no hit, low on the left or the right at the safe
-# margin in turn (_align_for), lettered in turn (TEXT_LOOK_STYLES: clean,
-# shine, accent, shade), every spoken number in digits (numwords, _place).
-# The older bold cards on a band or a block (the date slam, the bold headline,
-# the big stack, the clean card, the spaced title) stand in only when the
-# registry has no letter drop. Never a calendar page, a stamp bar, a REC
-# stamp, a timeline tick, an effect, a year-only look or a photo plate; the
-# countdown is only for a span of time ("3 days later", "48 hours").
+# The letter drop (LibBoldText): every date, date-and-time and time of day
+# until 2026-10-01, clean Anton letters low on the left or the right in turn.
+# Since then the planner shows dates and times in the VidRush looks only
+# (VR_LOOKS); the letter drop, the bold cards and the placed looks of
+# LibPackDates stay in the registry for the editor (OLD_DATE_LOOKS, auto_ok).
+# date_looks() still answers what the registry offers for a date cue.
 TEXT_DATE_LOOK = "LIB_DT_LETTER_DROP"
 BOLD_DATE_LOOKS = [TEXT_DATE_LOOK]
 # Only if the registry lacks the letter drop: the two bold type looks left
@@ -1377,20 +1691,10 @@ TEXT_LOOK_ALIGNS = {TEXT_DATE_LOOK: ["left", "right"], BOLD_COUNT_LOOK: ["right"
 # How they are lettered, in turn across both looks so no two in a row look the same
 # (LibBoldText: clean white with a rule, silver shine, the key part in amber, white on a soft shade).
 TEXT_LOOK_STYLES = ["clean", "shine", "accent", "shade"]
-# A bold look that cannot print a time would take a date-and-time line's date alone (none is left in use).
-DATE_ONLY_LOOKS: set = set()
-# A span of time ("3 DAYS LATER") counted up: the countdown card is banned (boxed), so the bold count does it.
+# The countdown card (banned, boxed). A span of time ("3 days later", "48 hours")
+# is a relative time since 2026-10-01: no graphic at all (_musts).
 COUNTDOWN_LOOK = "LIB_DT_COUNTDOWN_DAYS"
 DATE_LOOKS = BOLD_DATE_LOOKS
-# What a date or time line says, for the placed looks of pack A (_date_lead).
-_RELATIVE_TIME = re.compile(r"\b(last night|this morning|this afternoon|this evening|yesterday|earlier today|overnight)\b")
-_CLOCK_TIME = re.compile(r"\b\d{1,2}(:\d{2})?\s*(a\.?m\.?|p\.?m\.?)|\b\d{1,2}:\d{2}\b")
-_LIVE_WORDS = re.compile(r"\b(live|right now|at this hour|as we speak)\b")
-_DATE_RANGE = re.compile(r"\s(through|thru|to|until|into)\s|→|\s[-–]\s")
-_DAY_N = re.compile(r"\bday (\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)\b")
-_YEAR_ONLY = re.compile(r"(1[5-9]\d\d|20\d\d)")
-_WEEKDAY_ONLY = re.compile(r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday)( (morning|afternoon|evening|night))?",
-                           re.I)
 # "Now let's head to New Jersey", "Down in North Carolina", "Moving north into
 # Virginia": the narration walks to a new region (the reference channel's
 # sections) - the section marker names it (pack C, LibPackPlaces).
@@ -1401,13 +1705,48 @@ _REGION_CHANGE = re.compile(
     r"|(?:moving|heading|turning)\s+(?:north|south|east|west|inland|up|down|over)\s+(?:to|into|towards?)\s+)"
     r"(?i:the\s+)?(?P<place>[A-Z][\w.'-]+(?:\s+[A-Z][\w.'-]+){0,3})")
 SECTION_LOOK = "LIB_PLC_SECTION_MARKER"
-# Every bold text look a date or a time may land on: the letter drop and the
-# placed looks of pack A (LibPackDates).
+# The bold text looks a date or a time used to land on: the letter drop and the
+# placed looks of pack A (LibPackDates). Since 2026-10-01 (VR_LOOKS) the planner
+# never picks them; they stay in the registry for the editor.
 DATE_TEXT_LOOKS = {TEXT_DATE_LOOK, "LIB_DTX_TIME_STAMP", "LIB_DTX_DATE_TOP", "LIB_DTX_DATE_PLACE",
                    "LIB_DTX_DATE_RANGE", "LIB_DTX_DAY_MARKER", "LIB_DTX_TIME_OF_DAY", "LIB_DTX_LEAD_TIME",
                    "LIB_DTX_UPDATED_STAMP", "LIB_DTX_WEEK_STRIP", "LIB_DTX_WEEKDAY_STACK", "LIB_DTX_YEAR_MARKER",
                    "LIB_DTX_RELATIVE_TAG", "LIB_DTX_CLOCK_LIVE"}
-_AHEAD_SPAN = re.compile(r"\b(next|in|within|over the next|coming)\s+(\d+|\w+)\s+(hours|days)\b", re.I)
+OLD_DATE_LOOKS = DATE_TEXT_LOOKS | set(BOLD_DATE_LOOKS) | set(LEGACY_DATE_LOOKS)
+# Words with a red or amber bar, rule or underline beside or under them (the
+# owner, 2026-10-01: "not great"; VidRush's own text has none). Never picked by
+# the planner, the director's hints included; the editor may still choose them.
+# Kept: the mini timeline (txt-mini-timeline, "the line one") and the year line.
+BAR_TEXT_LOOKS = {
+    # LibPackText: an amber rule beside, before or under the words
+    "LIB_TXT_KEY_PHRASE", "LIB_TXT_UNDERLINE_SWEEP", "LIB_TXT_KICKER_HEADLINE", "LIB_TXT_HEADLINE_WORDS",
+    "LIB_TXT_BREAKING_TAG", "LIB_TXT_QUESTION",
+    # the built-ins: a dark pill with an accent bar down its left side, a thick
+    # accent bar under a typed headline, a BREAKING bar with an accent underline
+    "TEXT_KEY_PHRASE_V1", "TEXT_BAR_TITLE_V1", "HEADLINE_BANNER_V1",
+    # LibEditorText / LibCallouts: an accent bar between two lines, an amber cell
+    # and dark bar beside the words, a marker scribble under the key word
+    "LIB_ED_SPLIT_REVEAL", "LIB_ED_ALERT_BAR", "LIB_CO_SCRIBBLE_UNDERLINE",
+    # LibHeadlines: an accent spine beside the stack, wiping bars, an accent
+    # underline, an accent bar or band under the line, rules above and below
+    "LIB_HL_WORD_STACK", "LIB_HL_WIPE_BAR", "LIB_HL_KEYWORD_POP", "LIB_HL_LETTER_FLIP", "LIB_HL_TICKER_SLIDE",
+    "LIB_HL_SPLIT_LINE",
+    # LibQuotes / LibSpeakers: an accent edge or rail beside the quote, underlines
+    # under its words, a paper card with an accent spine and a highlighter under it
+    "LIB_QS_SIDE_PANEL", "LIB_QS_TESTIMONY_RAIL", "LIB_QS_KARAOKE", "LIB_QS_ZOOM_WORD", "LIB_SP_STATEMENT_CARD",
+    # an accent rule or a gold dash under a title, a hairline drawn beneath a line
+    "LIB_CH_GLITCH_RESOLVE", "LIB_FX_SHAPE_WIPE", "LIB_CN_FOCUS_VIGNETTE",
+    # LibPackPlaces: a thin amber rule under the warning
+    "LIB_PLC_WARNING_LABEL",
+}
+
+
+def auto_ok(template_id: str) -> bool:
+    """False for a look the planner never picks on its own (BAR_TEXT_LOOKS, the old date rotation)."""
+    tid = template_id or ""
+    return tid not in BAR_TEXT_LOOKS and tid not in OLD_DATE_LOOKS and not tid.startswith("LIB_DTX_")
+
+
 NOT_FOR_A_DATE = {"LIB_TL_CALENDAR_FLIP", "LIB_TL_DATE_STAMP_CIRCLE", "LIB_LT_DATE_PLACE", "LIB_FX_LIGHT_STREAK",
                   "LIB_FX_FILM_BURN", "LIB_FX_PAPER_TEAR", "LIB_TL_YEAR_SCROLLER", "LIB_TL_DECADE_GRID",
                   "LIB_CH_YEAR_TAPE", "LIB_PB_DATE_PLATE", COUNTDOWN_LOOK}
@@ -1493,7 +1832,8 @@ def _template_for_cue(cue: str, pack: dict, used_recently: set,
         options = templates.for_cue(cue, pack.get("id", ""), exclude=used_recently)
     if cue == "typewriter":
         options = [t for t in options if templates.types(t)]
-    options = [t for t in options if look_fits(t["id"], text) and not _needs_places(t, props)]
+    options = [t for t in options if look_fits(t["id"], text) and not _needs_places(t, props) and auto_ok(t["id"])
+               and t["id"] not in VR_LOOKS]
     if cue in SINGLE_FIGURE_CUES or (cue in TEXT_CUES and cue != "chapter"):
         # One figure, or words: on the clip, never a card that covers it.
         options = [t for t in options if "own-backdrop" not in (t.get("tags") or [])] or options
@@ -1717,7 +2057,8 @@ _SFX_PROPS = ("text", "value", "suffix", "prefix", "label", "subtitle", "highlig
 
 def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: int, total: int,
          brief: Optional[dict], pack: dict, seconds_for: Optional[Dict[str, float]] = None,
-         voice_lufs: Optional[float] = None, reserved: Optional[List[tuple]] = None) -> Dict[str, Any]:
+         voice_lufs: Optional[float] = None, reserved: Optional[List[tuple]] = None,
+         video_style: str = "") -> Dict[str, Any]:
     """
     Overlays, transitions, sounds, music sections and per-scene treatments.
 
@@ -1726,15 +2067,18 @@ def plan(segments: List[Segment], shots: List[dict], scenes: List[dict], fps: in
     the owner's per-kind windows (LAYOUT_WINDOWS) now decide how long a look
     stays. `voice_lufs` is the narration's loudness the sounds are set
     against; `reserved` are (start, end) seconds already taken on screen
-    (the job's title card): nothing is laid over them.
+    (the job's title card): nothing is laid over them. `video_style` (the
+    job's, src/styles.py) picks the date and time looks' theme (vr_theme).
     """
-    return _Planner(segments, shots, scenes, fps, total, brief, pack, seconds_for, voice_lufs, reserved).run()
+    return _Planner(segments, shots, scenes, fps, total, brief, pack, seconds_for, voice_lufs, reserved,
+                    video_style).run()
 
 
 class _Planner:
     """One video's treatment plan (see plan())."""
 
-    def __init__(self, segments, shots, scenes, fps, total, brief, pack, seconds_for, voice_lufs=None, reserved=None):
+    def __init__(self, segments, shots, scenes, fps, total, brief, pack, seconds_for, voice_lufs=None, reserved=None,
+                 video_style=""):
         _reset_rotation()
         self.segments, self.shots, self.scenes = segments, shots, scenes
         self.fps, self.total = fps, total
@@ -1771,10 +2115,12 @@ class _Planner:
         # The last geocoded places a map hint carried, for the forecast map.
         self.last_locations: List[dict] = []
         self.last_forecast = -1e9
-        self.first_date_done = False
-        # Dates and times take turns between the letter drop and the placed
-        # looks of pack A (LibPackDates), matched to what was said.
-        self.date_turn = _seed(segments) % 2
+        # Dates and times (VR_LOOKS): one theme for the whole video, every line's
+        # moment (vr_moment), the ones chosen to show (_vr_select) and the ones shown.
+        self.vr_theme = vr_theme(video_style, self.brief, pack)
+        self.vr_moments: Dict[int, dict] = {}
+        self.vr_chosen: set = set()
+        self.vr_placed: List[dict] = []
         # The text-only looks' placements in turn, their letterings in turn (one turn shared by the
         # date and the count, from a per-video start), and the figure looks shown (the bold count's run).
         self.align_turn: Dict[str, int] = {}
@@ -1822,6 +2168,7 @@ class _Planner:
                     self.seen_figures[("figure", float(anim["value"]))] = self.segments[sc_i].start
                 except (TypeError, ValueError):
                     pass
+        self._vr_select()
         for i, seg in enumerate(self.segments):
             self.i = i
             self._beat(i, seg)
@@ -1895,6 +2242,61 @@ class _Planner:
             index = {old: new for new, old in enumerate(keep)}
             self.overlays = [self.overlays[j] for j in keep]
             self.silent = {index[j] for j in self.silent if j in index}
+
+    # ------------------------------------------------------- dates and times
+    def _section_place(self, i: int) -> str:
+        """The region tag of line i's section: the shot's region, else the brief section's "where"."""
+        shot = self.shots[i] if 0 <= i < len(self.shots) else {}
+        region = str((shot or {}).get("region") or "").strip()
+        if region:
+            return region
+        for s in self.brief.get("sections") or []:
+            if isinstance(s, dict) and isinstance(s.get("from"), int) and isinstance(s.get("to"), int) \
+                    and s["from"] <= i <= s["to"]:
+                return str(s.get("where") or "").strip()
+        return ""
+
+    def _vr_select(self) -> None:
+        """
+        Every line's date or time moment (vr_moment), and the ones to show: at
+        most one per VR_GAP seconds, the hero at most once per VR_HERO_GAP, the
+        strongest first - the story's start date (its first full date, always
+        shown when said in the first VR_FIRST_HERO seconds), a clock time with
+        a place or a date, a jump in years - then the rest where room is left.
+        """
+        year = None
+        first = True
+        for i, seg in enumerate(self.segments):
+            shot = self.shots[i] if i < len(self.shots) else {}
+            scene = self.scenes[i] if i < len(self.scenes) else {}
+            m, year = vr_moment(seg.text or "", shot, self.brief, year, self._section_place(i))
+            if m is None or (scene.get("media") or {}).get("type") == "animation":
+                continue                    # (an animation scene IS a full-screen graphic: nothing lands on it)
+            m = dict(m, i=i, at=_voice_window(seg, {"_key": m["key"]}, 1.0, 1.0, self.fps)[0], forced=False)
+            if m["full_date"] and first:
+                first = False
+                m["strength"] = 4
+                m["forced"] = m["at"] < VR_FIRST_HERO
+            self.vr_moments[i] = m
+        chosen: List[dict] = []
+        for m in sorted(self.vr_moments.values(), key=lambda m: (not m["forced"], -m["strength"], m["at"])):
+            # (A graphic may land up to SLIDE_SLACK late: the plan keeps that much more room.)
+            if _vr_fits(m, chosen, SLIDE_SLACK):
+                chosen.append(m)
+        self.vr_chosen = {m["i"] for m in chosen}
+
+    def _vr_request(self, seg) -> Optional[dict]:
+        """The date or time graphic for this line, when it was chosen - or when the one that took its room never showed."""
+        m = self.vr_moments.get(self.i)
+        if not m:
+            return None
+        if self.i not in self.vr_chosen:
+            ahead = [self.vr_moments[j] for j in self.vr_chosen if j > self.i]
+            if not (_vr_fits(m, self.vr_placed) and _vr_fits(m, ahead, SLIDE_SLACK)):
+                return None
+        props = dict(m["props"], theme=self.vr_theme, _key=m["key"])
+        return {"ids": [m["look"]], "cues": [], "cue": m["cue"], "props": props, "mode": "must", "group": "",
+                "emphasis": "high", "layout": "text", "offset": _offset(seg.text or "", m["key"]), "vr": True}
 
     def _sync_duration(self, j: int, frames: int) -> None:
         """A treatment entry that shows overlay j follows its new length."""
@@ -2125,20 +2527,16 @@ class _Planner:
         at = float(seg.start)
         out: List[dict] = []
         repeated = None
-        date = next((c for c in cues if c["cue"] in DATE_CUES), None)
-        if date is None and hint and hint.get("text") and (hint.get("type") in ("date-stamp", "clock-badge")
-                                                           or _hint_date_cue(hint)):
-            # The director's date ("WEDNESDAY" on a date stamp, a calendar look
-            # by name): shown like any date, in bold type.
-            clock = hint.get("type") == "clock-badge" or _hint_date_cue(hint) == "time-of-day"
-            date = {"cue": "time-of-day" if clock else "date", "emphasis": "high",
-                    "props": {"text": str(hint["text"])[:40]}}
-        if date:
-            out.append(self._date_request(date, text))
+        # A date or a time: only the moments _vr_select chose, in the VidRush
+        # looks. The director's own date stamps are not shown: their words
+        # ("WEDNESDAY", a worked-out date) are not always the narration's.
+        vr = self._vr_request(seg)
+        if vr:
+            out.append(vr)
         fig = None
         for c in cues:
-            if c["cue"] not in FIGURE_CUES:
-                continue
+            if c["cue"] not in FIGURE_CUES or c["cue"] == "time-span":
+                continue            # ("3 days later", "48 hours": a relative time gets no graphic)
             key = _figure_key(c)
             if key and at - self.seen_figures.get(key, -1e9) < REPEAT_GAP:
                 # "26%" again twenty seconds later: not the same gauge twice.
@@ -2176,78 +2574,6 @@ class _Planner:
         out.sort(key=lambda r: r.get("offset", 0))
         return out, repeated
 
-    def _date_request(self, c: dict, text: str) -> dict:
-        props = dict(c.get("props") or {})
-        label = {"label": props["label"]} if props.get("label") else {}
-        key = {"_key": props["_key"]} if props.get("_key") else {}
-        by_id: Dict[str, dict] = {}
-        demote: List[str] = []
-        if c["cue"] == "datetime":
-            cues = ["datetime", "date", "time-of-day"]
-            # The bold date looks read "SEPTEMBER 25, 2026 · 3:45 PM" whole; the
-            # spaced title cannot, so it takes the date alone and comes last.
-            by_cue = {"datetime": props, "date": dict(props),
-                      "time-of-day": {"text": props.get("time") or props.get("text"), **key}}
-            date_only = {"text": props.get("date") or props.get("text"), **label, **key}
-            by_id = {tid: date_only for tid in DATE_ONLY_LOOKS}
-            demote = sorted(DATE_ONLY_LOOKS)
-        else:
-            cues = [c["cue"], "datetime"] if c["cue"] == "date" else [c["cue"]]
-            by_cue = {}
-        req = {"cues": cues, "props": props, "props_by_cue": by_cue, "props_by_id": by_id, "demote": demote,
-               "mode": "must", "group": "date",
-               "emphasis": c.get("emphasis") or "high", "offset": _offset(text, props.get("_key", ""))}
-        lead = self._date_lead(c, props, text) or lead_look(TEXT_DATE_LOOK)
-        if lead:
-            # A date, a time or both always lands on a bold text look: the
-            # letter drop in turn with the placed looks that fit what was said
-            # (a clock time top-left, a date top-centre, a weekday, a range, a
-            # "day 3", "last night", a year); no group keeps it from following itself.
-            req.update(lead=lead, group="")
-        elif not self.first_date_done and c["cue"] in ("date", "datetime"):
-            # The story's first date is a statement: a bold full card, not a thin strip.
-            req["prefer"] = _date_cards()
-        if c["cue"] in ("date", "datetime"):
-            self.first_date_done = True
-        return req
-
-    def _date_lead(self, c: dict, props: dict, text: str) -> Optional[str]:
-        """
-        The placed date or time look (LibPackDates) that fits this line, taking
-        turns with the letter drop so no two dates in a row look the same (the
-        owner, 2026-10-01: "time on the top left, dates in the middle top and
-        the left corner bottom ... not the same style every time").
-        """
-        shown = str(props.get("text") or "")
-        low = f"{shown} {text}".lower()
-        options: List[str] = []
-        if c["cue"] == "time-of-day":
-            if _RELATIVE_TIME.search(low):
-                options = ["LIB_DTX_RELATIVE_TAG"]
-            elif _CLOCK_TIME.search(shown.lower()):
-                options = (["LIB_DTX_CLOCK_LIVE"] if _LIVE_WORDS.search(low) else []) + ["LIB_DTX_TIME_STAMP"]
-            else:
-                options = ["LIB_DTX_TIME_OF_DAY"]
-        else:
-            if _DATE_RANGE.search(shown.lower()):
-                options = ["LIB_DTX_DATE_RANGE"]
-            elif _DAY_N.search(low):
-                options = ["LIB_DTX_DAY_MARKER"]
-            elif _YEAR_ONLY.fullmatch(shown.strip()):
-                options = ["LIB_DTX_YEAR_MARKER"]
-            elif _WEEKDAY_ONLY.fullmatch(shown.strip()):
-                options = ["LIB_DTX_WEEKDAY_STACK", "LIB_DTX_WEEK_STRIP"]
-            elif c["cue"] == "date":
-                options = ["LIB_DTX_DATE_TOP"] + (["LIB_DTX_DATE_PLACE"] if props.get("subtitle") else [])
-        usable = [o for o in options if lead_look(o) and look_fits(o, text)]
-        if not usable:
-            return None
-        turn = self.date_turn
-        self.date_turn += 1
-        if turn % 2 == 0 and lead_look(TEXT_DATE_LOOK):
-            return None       # the letter drop this time
-        return usable[(turn // 2) % len(usable)]
-
     def _cue_request(self, c: dict, seg) -> dict:
         props = dict(c.get("props") or {})
         req = {"cues": [c["cue"]] + CUE_FALLBACK.get(c["cue"], []), "props": props, "mode": "normal",
@@ -2261,12 +2587,7 @@ class _Planner:
         if c["cue"] == "route":
             req.update(ids=[self.pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"], cues=[], cue="route",
                        group="map", mode="seq")
-        elif c["cue"] == "time-span":
-            # "3 DAYS LATER", "48 HOURS": the countdown look, and only for a real
-            # span of time. It is the one look for a span, so no group keeps it
-            # from following itself.
-            ahead = "LIB_DTX_LEAD_TIME" if _AHEAD_SPAN.search(seg.text or "") and lead_look("LIB_DTX_LEAD_TIME") else None
-            req.update(ids=[x for x in (ahead, span_look()) if x], cues=[], cue="time-span", group="")
+        # (A span of time - "3 days later", "48 hours" - is a relative time: _musts gives it no graphic.)
         return req
 
     def _fact_request(self, seg, repeated: dict) -> Optional[dict]:
@@ -2536,7 +2857,9 @@ class _Planner:
             return None
         tried = set()
         for t, cue, props in self._candidates(req, seg, scene, mode):
-            if t["id"] in tried:
+            # (The VidRush date looks carry generic cues - "caption", "date" - but only
+            # the date pass, _vr_request, may place them.)
+            if t["id"] in tried or not auto_ok(t["id"]) or (t["id"] in VR_LOOKS and not req.get("vr")):
                 continue
             tried.add(t["id"])
             got = self._place(t, cue, props, req, seg, scene, mode)
@@ -2594,6 +2917,8 @@ class _Planner:
         t_in, t_out = _voice_window(seg, wprops, lo, hi, fps, until)
         if any(a <= t_in < b for a, b in self.blocks):
             return None                    # a full-screen graphic is on screen: nothing lands on it
+        if t["id"] in VR_LOOKS and not _vr_fits({"at": t_in, "look": t["id"]}, self.vr_placed):
+            return None                    # one date or time graphic per VR_GAP, on screen (it may only slide later)
         prev = max(self.spans, key=lambda s: s["end"]) if self.spans else None
         busy = prev is not None and prev["end"] + BREATH > t_in
         if mode == "normal":
@@ -2627,6 +2952,10 @@ class _Planner:
         sfx = resolved.pop("sfx", {"name": "none", "volume": 0.0})
         overlay = {**resolved, "startFrame": o_start, "durationInFrames": frames}
         overlay.pop("seconds", None)
+        if t["id"] in VR_LOOKS:
+            # One theme for every date and time look of the video, whatever the pack's colour.
+            overlay["theme"] = self.vr_theme
+            self.vr_placed.append({"at": o_start / fps, "look": t["id"]})
         apply_layout(overlay, t, klass)
         if t["id"] in TEXT_LOOK_ALIGNS and overlay.get("align") in (None, "auto"):
             overlay["align"] = self._align_for(t["id"], scene)
@@ -2964,11 +3293,6 @@ _PLACE_CYCLE = ["PLACE_CARD_V1", "PHOTO_WINDOW_V1"]
 _OBJECT_CYCLE = ["OBJECT_CARD_V1", "PHOTO_BOARD_V1", "PHOTO_EVIDENCE_V1"]
 _photo_turn = [0]
 _kind_turn = {"person": [0], "place": [0], "object": [0], "photo": [0]}
-
-
-def _date_cards() -> List[str]:
-    """The bold full-card date looks (kind card): the story's first date is a statement."""
-    return [t["id"] for t in bold_date_looks("date") if t.get("kind") == "card"]
 
 
 def _lib_looks(cue: str, still: bool = True) -> List[str]:

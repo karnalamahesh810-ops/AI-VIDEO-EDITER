@@ -144,7 +144,7 @@ class Planner(unittest.TestCase):
                  "Some three thousand homes lost power.", PLAIN]
         out = _plan(lines)
         shown = [(o["template"], str(o.get("text") or ""), o.get("value")) for o in out["overlays"]]
-        dates = [s for s in shown if s[0] in treatments.DATE_TEXT_LOOKS]
+        dates = [s for s in shown if s[0] in treatments.VR_LOOKS]
         self.assertEqual([s[1] for s in dates], ["SEPTEMBER 29"], shown)
         counts = [s for s in shown if s[2] is not None]
         self.assertTrue(counts, shown)
@@ -152,12 +152,16 @@ class Planner(unittest.TestCase):
             for word in ("FIVE", "THREE", "THOUSAND", "TWENTY", "NINTH"):
                 self.assertNotIn(word, text.upper(), (tid, text))
 
-    def test_a_directors_spoken_date_is_shown_in_digits(self):
+    def test_a_spoken_date_is_shown_in_digits_and_a_directors_unsaid_date_not_at_all(self):
+        out = _plan(["On the twenty-ninth of September the water came.", PLAIN])
+        [o] = [o for o in out["overlays"] if o["template"] in treatments.VR_LOOKS]
+        self.assertEqual((o["template"], o["text"]), (treatments.VR_HERO, "SEPTEMBER 29"))
+        # The director's date stamp on a line that never says the date (the owner, 2026-10-01).
         hint = {"type": "date-stamp", "text": "SEPTEMBER TWENTY-NINTH"}
         out = _plan(["The water came that week.", PLAIN], shots=[{"subject": "Lake Mead", "overlay": hint},
                                                                  {"subject": "Lake Mead"}])
-        [o] = [o for o in out["overlays"] if o["template"] in treatments.DATE_TEXT_LOOKS]
-        self.assertEqual(o["text"], "SEPTEMBER 29")
+        self.assertFalse([o for o in out["overlays"] if o["template"] in treatments.VR_LOOKS
+                          or o["template"] in treatments.OLD_DATE_LOOKS], out["overlays"])
 
     def test_the_registry_keeps_the_text_style_choice(self):
         for tid in (treatments.TEXT_DATE_LOOK, treatments.BOLD_COUNT_LOOK):

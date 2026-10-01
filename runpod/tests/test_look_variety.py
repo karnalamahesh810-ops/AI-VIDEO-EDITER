@@ -145,20 +145,29 @@ class TwentyMinutes(unittest.TestCase):
                                             f"{pack}: {o['template']} at {at:.1f}s and {last[o['template']]:.1f}s")
                 last[o["template"]] = at
 
-    def test_every_date_line_gets_a_date_or_time_look(self):
-        for i in DATE_LINES:
-            got = [o for o in on_line(self.ovs, self.segs[i]) if cues(o) & set(treatments.DATE_CUES)]
-            self.assertTrue(got, f"line {i}: {self.segs[i].text}")
-        # The opening line (0.4 s, a chapter hint on it) opens on its date card.
-        first = self.ovs[0]
-        self.assertTrue(cues(first) & set(treatments.DATE_CUES), first["template"])
-        self.assertLessEqual(first["startFrame"], int(round(START * FPS)) + 1)
-        self.assertIn("SEPTEMBER 15", first["text"])
-        # A time on its own line gets a time look, a date and a time one card.
-        mid = [o for o in on_line(self.ovs, self.segs[110]) if cues(o) & set(treatments.DATE_CUES)][0]
-        self.assertEqual(mid["text"], "12:00 AM")
-        both = [o for o in on_line(self.ovs, self.segs[80]) if cues(o) & set(treatments.DATE_CUES)][0]
-        self.assertIn("3:45 PM", both["text"])
+    def test_dates_are_rare_and_each_look_keeps_its_place(self):
+        # The owner, 2026-10-01 (VidRush): one date or time graphic per 75 s at most, the
+        # centred date once per 150 s, nothing for "past midnight" or "at dawn".
+        vr = [o for o in self.ovs if o["template"] in treatments.VR_LOOKS]
+        got = {i: [(o["template"], o.get("text"), o.get("subtitle")) for o in on_line(vr, self.segs[i])]
+               for i in DATE_LINES}
+        self.assertEqual(got[0], [(treatments.VR_HERO, "SEPTEMBER 15", "2026")])        # the story's start date
+        self.assertEqual(got[20], [])            # "March 2026" 100 s after the first centred date
+        self.assertEqual(got[50], [(treatments.VR_HERO, "AUGUST 21", "")])               # no worked-out weekday
+        self.assertEqual(got[80], [(treatments.VR_TIME, "3:45 PM", "JULY 4")])           # the date said with it
+        self.assertEqual(got[110], [])           # "ran past midnight": not a clock time
+        self.assertEqual(got[140], [(treatments.VR_HERO, "JUNE 15", "")])
+        self.assertEqual(got[230], [])           # "at dawn": not a clock time
+        self.assertEqual(len(vr), sum(1 for v in got.values() if v))
+        at = [o["startFrame"] / FPS for o in vr]
+        self.assertTrue(all(b - a >= treatments.VR_GAP for a, b in zip(at, at[1:])), at)
+        heroes = [o["startFrame"] / FPS for o in vr if o["template"] == treatments.VR_HERO]
+        self.assertTrue(all(b - a >= treatments.VR_HERO_GAP for a, b in zip(heroes, heroes[1:])), heroes)
+        # The opening line (0.4 s, a chapter hint on it) opens on its date.
+        self.assertIs(self.ovs[0], vr[0])
+        self.assertLessEqual(vr[0]["startFrame"], int(round(START * FPS)) + 1)
+        self.assertFalse([o for o in self.ovs if o["template"] in treatments.OLD_DATE_LOOKS
+                          or o["template"].startswith("LIB_DTX_")])
 
     def test_percentages_count_up_in_varied_looks(self):
         looks = []
@@ -320,10 +329,13 @@ class Density(unittest.TestCase):
                    "shares", "ratio", "compare-values", "years", "span"}
         for o in minimal:
             t = templates.get(o["template"]) or {}
-            self.assertTrue(cues(o) & allowed or t.get("category") == "MAPS", (o["template"], cues(o)))
-        # Every date line still gets its date card.
-        dated = [o for o in minimal if cues(o) & {"date", "datetime", "time-of-day"}]
-        self.assertGreaterEqual(len(dated), len(DATE_LINES) - 2)
+            self.assertTrue(cues(o) & allowed or t.get("category") == "MAPS" or o["template"] in treatments.VR_LOOKS,
+                            (o["template"], cues(o)))
+        # The dates are the rich plan's: as rare (one per VR_GAP at most), the same moments.
+        dated = [(o["template"], o.get("text")) for o in minimal if o["template"] in treatments.VR_LOOKS]
+        self.assertEqual(dated, [(o["template"], o.get("text")) for o in sorted(rich, key=lambda o: o["startFrame"])
+                                 if o["template"] in treatments.VR_LOOKS])
+        self.assertGreaterEqual(len(dated), 4)
         figures = [o["startFrame"] / FPS for o in minimal
                    if cues(o) & {"percent", "big-number", "count", "money"}]
         self.assertTrue(all(b - a >= treatments.MINIMAL_FIGURE_GAP - 0.01 for a, b in zip(figures, figures[1:])),

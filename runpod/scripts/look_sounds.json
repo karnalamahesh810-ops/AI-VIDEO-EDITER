@@ -7803,6 +7803,100 @@
    ],
    "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
    "event": "digits roll from frame 8 and land at 28"
+  },
+  "LIB_VR_DATE_HERO": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft",
+      "swoosh-text"
+     ],
+     "at": 6,
+     "gain_db": -4
+    },
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker-draw",
+      "marker"
+     ],
+     "at": 26,
+     "align": "start",
+     "gain_db": -6
+    }
+   ],
+   "why": "Pack VR (VidRush text, 2026-10-01): a soft whoosh peaks as the letters fade in (2-22); the marker draws 26-36 (typewriter theme only); LibPackVR schedules them on its real frames (useLookSound)",
+   "event": "letters 2-~22 (1.2 frames apart), year ~19-29, marker wipe 26-36, exit last 10"
+  },
+  "LIB_VR_TIME_CARD": {
+   "sfx": "keys-type",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "keys-type",
+     "alt": [
+      "keys-laptop",
+      "keys"
+     ],
+     "at": 0,
+     "align": "start",
+     "until": 23,
+     "gain_db": -4
+    }
+   ],
+   "why": "Pack VR (VidRush text, 2026-10-01): the keys run while the figures type: the recording's first stroke falls ~6 frames in, then about one every 3 frames, one per figure; LibPackVR schedules them on its real frames (useLookSound)",
+   "event": "card 0-6, figures type 6, 9, 12 ... (one every 3), label strip last figure +4 for 6, exit last 8"
+  },
+  "LIB_VR_CAPTION_TYPED": {
+   "sfx": "typewriter-clean",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "typewriter-clean",
+     "alt": [
+      "typewriter",
+      "keys"
+     ],
+     "at": 5,
+     "align": "start",
+     "until": 38,
+     "gain_db": -5
+    }
+   ],
+   "types": true,
+   "why": "Pack VR (VidRush text, 2026-10-01): a subtle clean typewriter for exactly the typing span (2 frames a letter from 6); LibPackVR schedules them on its real frames (useLookSound)",
+   "event": "types 6 -> 6 + 2 x letters, cursor blinks 20 frames after, exit last 10"
+  },
+  "LIB_VR_YEAR_LINE": {
+   "sfx": "count-tick",
+   "sfx_at": 48,
+   "sounds": [
+    {
+     "name": "count-tick",
+     "alt": [
+      "count-roll",
+      "ui-tick"
+     ],
+     "at": 8,
+     "align": "start",
+     "until": 47,
+     "gain_db": -8
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 48,
+     "gain_db": -6
+    }
+   ],
+   "why": "Pack VR (VidRush text, 2026-10-01): a quiet count while the dot slides and the year counts (8-47), one soft tick as it lands at 48; LibPackVR schedules them on its real frames (useLookSound)",
+   "event": "line and dot 0-8, slide + count 8-48, label 50-60, exit last 10"
   }
  }
 }

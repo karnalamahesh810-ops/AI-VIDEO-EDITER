@@ -164,9 +164,8 @@ export const parseDT = (textIn: unknown, labelIn?: unknown, valueIn?: unknown): 
     if (lw >= 0) out.weekday = out.weekday ?? lw;
     else if (label !== str(textIn).toUpperCase()) out.place = label.slice(0, 40);
   }
-  if (out.weekday === undefined && out.year !== undefined && out.month !== undefined && out.day !== undefined) {
-    out.weekday = weekdayOf(out.year, out.month, out.day);
-  }
+  // A weekday is shown only when the narration says it (the owner, 2026-10-01:
+  // "showing days the voiceover didn't say"): never worked out from a full date.
   return out;
 };
 
@@ -878,7 +877,6 @@ const finishRange = (a: DT, b: DT): Range => {
   for (const x of [a, b]) {
     if (x.year !== undefined && x.month !== undefined && x.day !== undefined) {
       x.day = Math.min(x.day, monthDays(x.year, x.month));
-      if (x.weekday === undefined) x.weekday = weekdayOf(x.year, x.month, x.day);
     }
   }
   return { a, b };

@@ -13428,5 +13428,192 @@
   "family": "num",
   "file": "LibPackNumbers",
   "exit": "none"
+ },
+ {
+  "id": "vr-date-hero",
+  "name": "Big Date (Centred)",
+  "category": "TIMELINES",
+  "description": "VidRush's big date, always centred: the date exactly as said on line 1 ('23 September' / 'SEPTEMBER 23') and the year (subtitle, or a year ending the words) at about half its size under it. The letters fade in left to right (blur 4 -> 0 px, 6 px rise, 1.2 frames apart), the year 6 frames later. theme typewriter (red, the default): white Courier Prime Bold in title case (cap ~92 px at 1080p, never wider than 66% of the frame), a soft shadow, a crimson marker box wiping in behind line 1 from frame 26. theme serif (gold): warm-white Cinzel caps (cap ~64 px, tracked) on a full-width dark band, thin dashes either side, the year under the band. No weekday, nothing the narration did not say. Fades out over the last 10 frames.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 6,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft",
+     "swoosh-text"
+    ],
+    "at": 6,
+    "gain_db": -4
+   },
+   {
+    "name": "marker-underline",
+    "alt": [
+     "marker-draw",
+     "marker"
+    ],
+    "at": 26,
+    "align": "start",
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "23 September",
+   "subtitle": "2026",
+   "theme": "red"
+  },
+  "family": "vr",
+  "file": "LibPackVR",
+  "exit": "none"
+ },
+ {
+  "id": "vr-time-card",
+  "name": "Time Card (Top Left)",
+  "category": "TIMELINES",
+  "description": "VidRush's time tag, always top-left (card's left edge 64 px, top 56 px at 1080p): a rounded card holding the time as said ('9:08 AM', '21:40'), black figures (cap ~50 px) with AM/PM at half size on the same line. theme typewriter (red, the default): a crimson card with darker diagonal stripes and Courier Prime Bold figures; theme serif (gold): a flat gold card and Playfair Display 900 figures. The card scales 0.92 -> 1 and fades in over 6 frames, the figures type in one every 3 frames, and a black label strip (subtitle: a place or a date, white bold caps) drops 8 px into place under it, overlapping the card. Fades out over the last 8 frames.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "time-of-day",
+   "datetime"
+  ],
+  "duration": 3.5,
+  "sfx": "none",
+  "sfx_at": 6,
+  "types": false,
+  "sounds": [
+   {
+    "name": "keys-type",
+    "alt": [
+     "keys-laptop",
+     "keys"
+    ],
+    "at": 0,
+    "align": "start",
+    "until": 23,
+    "gain_db": -4
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "9:08 AM",
+   "subtitle": "September 23, 2026",
+   "theme": "red"
+  },
+  "family": "vr",
+  "file": "LibPackVR",
+  "exit": "none"
+ },
+ {
+  "id": "vr-caption-typed",
+  "name": "Typed Caption (Bottom Left)",
+  "category": "TIMELINES",
+  "description": "VidRush's typed caption, always bottom-left (x 96 px, baseline ~960 px at 1080p): a short caption as said ('Parker Dam, 1938', 'University of Hawaii, 1959', up to ~42 characters) in cream Courier Prime Bold (cap ~34 px) with a soft shadow over a soft bottom-left darkening. It types one character every 2 frames from frame 6 (the typing contract), a thin cursor follows and blinks for 20 frames after the last letter, holds, and fades out over the last 10 frames.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "location",
+   "caption"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 6,
+  "types": true,
+  "sounds": [
+   {
+    "name": "typewriter-clean",
+    "alt": [
+     "typewriter",
+     "keys"
+    ],
+    "at": 5,
+    "align": "start",
+    "until": 38,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Parker Dam, 1938"
+  },
+  "family": "vr",
+  "file": "LibPackVR",
+  "exit": "none"
+ },
+ {
+  "id": "vr-year-line",
+  "name": "Year on a Line (Centred)",
+  "category": "TIMELINES",
+  "description": "VidRush's year on a line, always centred: a thin white line (1100 px, ends fading out) fades in, a small glowing white dot slides from its right end to the centre over 40 frames (ease in-out) and the year under it counts in whole years from total (the start, default 2026) to value (the year said; else a year in the words), landing exactly on it. The label, if any, comes in small and tracked under the year once it lands. Fades out over the last 10 frames.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "label",
+   "text"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 3.5,
+  "sfx": "none",
+  "sfx_at": 48,
+  "types": false,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "count-roll",
+     "ui-tick"
+    ],
+    "at": 8,
+    "align": "start",
+    "until": 47,
+    "gain_db": -8
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 48,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 1974,
+   "total": 2026,
+   "label": "Lake Havasu"
+  },
+  "family": "vr",
+  "file": "LibPackVR",
+  "exit": "none"
  }
 ]

@@ -38,6 +38,7 @@ import { LOOKS as L_LibPackText } from "./LibPackText";
 import { LOOKS as L_LibPackPlaces } from "./LibPackPlaces";
 import { LOOKS as L_LibPackDates } from "./LibPackDates";
 import { LOOKS as L_LibPackNumbers } from "./LibPackNumbers";
+import { LOOKS as L_LibPackVR } from "./LibPackVR";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -97,4 +98,6 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibPackNumbers, ["num-lower-third", "num-percent-line", "num-rainfall", "num-wind-gauge", "num-big-figure",
     "num-versus", "num-trend-arrow", "num-rank", "num-split-stat", "num-water-level", "num-temperature", "num-money",
     "num-step-of"]),
+  // Pack VR, VidRush's date / time / caption text (LibPackVR): one place per look, the sound scheduled on its frames.
+  ...pick(L_LibPackVR, ["vr-date-hero", "vr-time-card", "vr-caption-typed", "vr-year-line"]),
 };

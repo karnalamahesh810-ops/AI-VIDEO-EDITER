@@ -27,8 +27,10 @@ from src.media import MediaAsset
 from src.transcribe import Segment, Word
 
 FPS = 30
-# The letter drop and the placed date looks of pack A (2026-10-01) are all bold text.
-BOLD = set(treatments.BOLD_DATE_LOOKS) | treatments.DATE_TEXT_LOOKS
+# Dates and times since 2026-10-01: the four VidRush looks only (the letter drop and
+# the placed looks of pack A stay in the registry for the editor).
+VR = set(treatments.VR_LOOKS)
+OLD_DATES = treatments.OLD_DATE_LOOKS
 NOT_A_DATE_LOOK = {"LIB_DT_CALENDAR_PAGE", "LIB_DT_REC_STAMP", "LIB_DT_COUNTDOWN_DAYS", "TL_DATE_STAMP_V1",
                    "LIB_DT_TIMELINE_TICK", "LIB_DT_STAMP_BAR"}
 AT_16 = {5: 0.891, 7: 0.708, 9: 0.562, 10: 0.501}      # 10 ** ((-16 - dB + 20) / 20)
@@ -245,34 +247,36 @@ class SoundFollowsTheLook(unittest.TestCase):
 
 # --------------------------------------------------------------------------- B. dates
 class Dates(unittest.TestCase):
-    def test_every_date_is_bold_type(self):
+    """The owner, 2026-10-01, after four VidRush exports: one date or time graphic every two to three minutes,
+    each look in its one place, one theme per video, nothing the narration did not say."""
+
+    def test_a_date_takes_a_vidrush_look_and_never_the_old_rotation(self):
         lines = ["On Wednesday, July 2, the rain began.", "Plain words about the river.",
                  "By September 15, 2026, the lake had dropped.", "Plain words about the town.",
                  "At 3:45 pm on July 4, the gates opened.", "Plain words about the dam.",
                  "Sept. 25 was the deadline.", "Plain words about the crews.",
                  "In October 2025 the lake hit a new low."]
         _s, _sc, out = plan(lines, pack="documentary", brief={"kind": "explainer", "hookBeats": [], "sections": []})
-        dated = [o for o in out["overlays"] if cues_of(o) & {"date", "datetime"}]
-        self.assertGreaterEqual(len(dated), 5, [o["template"] for o in out["overlays"]])
-        for o in dated:
-            self.assertIn(o["template"], BOLD, o)
-            self.assertNotIn(o["template"], NOT_A_DATE_LOOK)
-        both = [o for o in dated if "3:45 PM" in str(o.get("text"))]
-        self.assertTrue(both, [o.get("text") for o in dated])                 # a date with a time: one card
+        used = [o["template"] for o in out["overlays"]]
+        self.assertFalse(set(used) & OLD_DATES, used)
+        self.assertFalse([t for t in used if t.startswith("LIB_DTX_") or t in NOT_A_DATE_LOOK], used)
+        # Five dates said within half a minute: one graphic, the first date (the story's start), centred.
+        dated = [o for o in out["overlays"] if o["template"] in VR]
+        self.assertEqual([(o["template"], o["text"], o.get("subtitle")) for o in dated],
+                         [(treatments.VR_HERO, "JULY 2", "")], used)
+        self.assertNotIn("WEDNESDAY", str(dated))                 # the weekday is not part of the date look
 
-    def test_a_plain_weekday_is_bold_type_not_a_countdown(self):
+    def test_a_directors_date_stamp_shows_nothing_the_line_did_not_say(self):
         shots = [{"subject": "Texas", "overlay": {"type": "date-stamp", "text": "Wednesday"}},
                  {"subject": "Texas"}]
         _s, _sc, out = plan(["That was when the water started to rise.", "Plain words follow here."], shots)
-        [o] = [o for o in out["overlays"] if cues_of(o) & {"date", "datetime"}]
-        self.assertIn(o["template"], BOLD)
-        self.assertEqual(o["text"], "Wednesday")
-        # The director asking for a calendar look by name gets bold type too.
+        self.assertFalse([o for o in out["overlays"] if o["template"] in VR or o["template"] in OLD_DATES], out)
+        # A calendar look asked for by name, a date the line never says: nothing either.
         shots[0]["overlay"] = {"type": "motion", "variant": "dt-calendar-page", "text": "July 2"}
         _s, _sc, out = plan(["That was when the water started to rise.", "Plain words follow here."], shots)
-        self.assertEqual([o["template"] in BOLD for o in out["overlays"]], [True])
+        self.assertEqual(out["overlays"], [])
 
-    def test_the_countdown_is_only_for_a_span_of_time(self):
+    def test_a_span_of_time_or_a_relative_time_gets_no_graphic(self):
         self.assertEqual(treatments.time_span_in("Three days later, crews returned.")[0], "3 DAYS LATER")
         self.assertEqual(treatments.time_span_in("Over the next 48 hours, more rain.")[0], "48 HOURS")
         self.assertEqual(treatments.time_span_in("It rained for forty-eight hours.")[0], "48 HOURS")
@@ -280,44 +284,37 @@ class Dates(unittest.TestCase):
         for plain in ("On Wednesday it rained.", "On July 2 it rained.", "It rained for days.", "At 3 pm it rained."):
             self.assertIsNone(treatments.time_span_in(plain), plain)
         _s, _sc, out = plan(["Three days later, crews were still searching the riverbanks.",
-                             "Plain words about the recovery.", "Plain words about the town.",
-                             "Over the next 48 hours, more storms are expected."])
-        # The countdown card is banned (boxed, 2026-09-30 audit): the bold count counts the span.
-        self.assertEqual(treatments.span_look(), treatments.BOLD_COUNT_LOOK)
-        # A span ahead ("over the next 48 hours") takes the lead-time look of pack A.
-        downs = [o for o in out["overlays"] if o["template"] in (treatments.span_look(), "LIB_DTX_LEAD_TIME")]
-        self.assertEqual([(o["text"], o["value"]) for o in downs], [("3 DAYS LATER", 3.0), ("48 HOURS", 48.0)])
-        # Never a big number for the span as well.
-        self.assertEqual([o for o in out["overlays"] if o.get("value") in (3.0, 48.0)], downs)
+                             "Plain words about the recovery.", "Last night the river crested.",
+                             "Over the next 48 hours, more storms are expected.", "This week the town waits.",
+                             "From July 2 to July 5 the rain never stopped.", "On Friday the water rose.",
+                             "They left the marina at dawn.", "The meeting ran past midnight."])
+        shown = [(o["template"], o.get("text"), o.get("value")) for o in out["overlays"]]
+        self.assertFalse([s for s in shown if s[0] in VR or s[0] in OLD_DATES or s[0] == treatments.BOLD_COUNT_LOOK
+                          or s[2] in (3.0, 48.0)], shown)
         self.assertNotIn(treatments.COUNTDOWN_LOOK, [t["id"] for t in treatments.date_looks("date")])
         self.assertNotIn(treatments.COUNTDOWN_LOOK, [t["id"] for t in treatments.date_looks("datetime")])
 
-    def test_a_time_of_day_is_bold_text_too(self):
-        # The owner (2026-09-30): the date or time as bold text only - the letter drop.
+    def test_a_clock_time_is_the_time_card(self):
         _s, _sc, out = plan(["The call came in at 3:45 pm.", "Plain words follow here."])
-        [o] = [o for o in out["overlays"] if cues_of(o) & {"time-of-day", "datetime", "date"}]
-        self.assertIn(o["template"], BOLD)
-        self.assertIn("time-of-day", cues_of(o))
-        self.assertEqual(o["text"], "3:45 PM")
+        [o] = [o for o in out["overlays"] if o["template"] in VR]
+        self.assertEqual((o["template"], o["text"], o["subtitle"]), (treatments.VR_TIME, "3:45 PM", ""))
+        self.assertEqual(o["theme"], "serif")                     # a news story: the gold serif theme
 
-    def test_every_date_ticks_and_never_hits(self):
+    def test_dates_never_punch(self):
         lines = ["On July 2, the rain began.", "Plain words about the river.", "Plain words about the town.",
                  "By September 15, 2026, the lake had dropped.", "Plain words about the dam.",
                  "Plain words about the crews.", "Sept. 25 was the deadline."]
         _s, _sc, out = plan(lines, pack="documentary", brief={"kind": "explainer", "hookBeats": [], "sections": []})
-        dated = [o for o in out["overlays"] if o["template"] in BOLD]
-        self.assertGreaterEqual(len(dated), 3)
-        # The sound is the look's own: a soft digital tick per letter, and nothing
-        # lands at the end (the owner, 2026-10-01: "only a digit sound ... no punch").
+        dated = [o for o in out["overlays"] if o["template"] in VR]
+        self.assertEqual(len(dated), 1)
+        # The sound is the look's own, under the voice; never a punch (the owner, 2026-10-01).
         self.assertEqual(out["sfx"], [])
         sounds = sfxplan.doc_look_sounds({"fps": FPS, "overlays": out["overlays"], "lookSounds": out["lookSounds"]})
         for o in dated:
             mine = [s for s in sounds if out["overlays"][s["look"]] is o]
-            self.assertGreaterEqual(len(mine), 5, o["template"])
-            self.assertEqual({sfxplan.category(s["name"]) for s in mine}, {"tick"}, o["template"])
-            self.assertFalse([s for s in mine if s["name"] in ("hit-deep", "date-slam", "impact-punch", "count-final")])
+            self.assertFalse([s for s in mine if s["name"] in ("hit-deep", "date-slam", "impact-punch")], mine)
 
-    def test_the_bold_looks_work_with_or_without_the_newest_ones(self):
+    def test_the_registry_still_offers_the_old_date_looks_for_the_editor(self):
         # Bold text only: the letter drop for a date, a date and a time, a time of day.
         for cue in ("date", "datetime", "time-of-day"):
             self.assertEqual([t["id"] for t in treatments.date_looks(cue)], [treatments.TEXT_DATE_LOOK], cue)

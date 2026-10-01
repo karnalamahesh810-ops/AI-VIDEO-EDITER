@@ -1300,7 +1300,8 @@ def build(segments: List[Segment], shots: List[dict],
         # The job's title card holds its seconds: the planner lays nothing over it.
         reserved = [(o["startFrame"] / fps, (o["startFrame"] + o["durationInFrames"]) / fps) for o in title_card]
         planned = vt.plan(segments, shots, scenes, fps, total, brief, pack, _OVERLAY_SECONDS,
-                          voice_lufs=voice_lufs, reserved=reserved)
+                          voice_lufs=voice_lufs, reserved=reserved,
+                          video_style=str(inp.get("video_style") or ""))
         overlays = title_card + planned["overlays"]
         for i, scene in enumerate(scenes):
             if i < len(planned["treatments"]):

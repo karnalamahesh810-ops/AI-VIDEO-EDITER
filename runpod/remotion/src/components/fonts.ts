@@ -9,6 +9,7 @@ import { loadFont as loadMarker } from "@remotion/google-fonts/PermanentMarker";
 import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
 import { loadFont as loadAnton } from "@remotion/google-fonts/Anton";
 import { loadFont as loadInterTight } from "@remotion/google-fonts/InterTight";
+import { loadFont as loadCinzel } from "@remotion/google-fonts/Cinzel";
 
 /**
  * The composition's typefaces, loaded the same way in the RunPod render and in
@@ -45,6 +46,13 @@ export const SUBLINE = `${loadInterTight("normal", { ...latin, weights: ["600", 
 export const ANTON_CAP = 0.859;
 /** Inter Tight's cap height (em). */
 export const SUBLINE_CAP = 0.728;
+
+// The VidRush date looks (components/lib/LibPackVR): Cinzel caps for the serif
+// date on its band, Playfair Display 700/900 for the gold time card and its
+// label, Inter 600 for the year that counts along the line.
+export const CINZEL = `${loadCinzel("normal", { ...latin, weights: ["400"] }).fontFamily}, ${SERIF}`;
+export const SERIF_HEAVY = `${loadPlayfair("normal", { ...latin, weights: ["700", "900"] }).fontFamily}, Georgia, serif`;
+export const INTER_SEMI = `${loadInter("normal", { ...latin, weights: ["600"] }).fontFamily}, system-ui, sans-serif`;
 
 // The case-file graphics (components/pro/ProCase): handwriting for notes on a
 // board, a felt marker for the big words, a mono face for window chrome.

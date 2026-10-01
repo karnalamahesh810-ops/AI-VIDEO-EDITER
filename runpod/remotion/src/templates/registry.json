@@ -75777,6 +75777,653 @@
     "lib",
     "num"
    ]
+  },
+  {
+   "id": "LIB_VR_DATE_HERO",
+   "name": "Big Date (Centred)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "VidRush's big date, always centred: the date exactly as said on line 1 ('23 September' / 'SEPTEMBER 23') and the year (subtitle, or a year ending the words) at about half its size under it. The letters fade in left to right (blur 4 -> 0 px, 6 px rise, 1.2 frames apart), the year 6 frames later. theme typewriter (red, the default): white Courier Prime Bold in title case (cap ~92 px at 1080p, never wider than 66% of the frame), a soft shadow, a crimson marker box wiping in behind line 1 from frame 26. theme serif (gold): warm-white Cinzel caps (cap ~64 px, tracked) on a full-width dark band, thin dashes either side, the year under the band. No weekday, nothing the narration did not say. Fades out over the last 10 frames.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "vr-date-hero",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 6,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft",
+       "swoosh-text"
+      ],
+      "at": 6,
+      "gain_db": -4
+     },
+     {
+      "name": "marker-underline",
+      "alt": [
+       "marker-draw",
+       "marker"
+      ],
+      "at": 26,
+      "align": "start",
+      "gain_db": -6
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "vr"
+   ]
+  },
+  {
+   "id": "LIB_VR_TIME_CARD",
+   "name": "Time Card (Top Left)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "VidRush's time tag, always top-left (card's left edge 64 px, top 56 px at 1080p): a rounded card holding the time as said ('9:08 AM', '21:40'), black figures (cap ~50 px) with AM/PM at half size on the same line. theme typewriter (red, the default): a crimson card with darker diagonal stripes and Courier Prime Bold figures; theme serif (gold): a flat gold card and Playfair Display 900 figures. The card scales 0.92 -> 1 and fades in over 6 frames, the figures type in one every 3 frames, and a black label strip (subtitle: a place or a date, white bold caps) drops 8 px into place under it, overlapping the card. Fades out over the last 8 frames.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "vr-time-card",
+    "sfx": {
+     "name": "keys-type",
+     "volume": 0.3
+    },
+    "sfxAt": 6,
+    "types": false,
+    "sounds": [
+     {
+      "name": "keys-type",
+      "alt": [
+       "keys-laptop",
+       "keys"
+      ],
+      "at": 0,
+      "align": "start",
+      "until": 23,
+      "gain_db": -4
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "vr"
+   ]
+  },
+  {
+   "id": "LIB_VR_CAPTION_TYPED",
+   "name": "Typed Caption (Bottom Left)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "VidRush's typed caption, always bottom-left (x 96 px, baseline ~960 px at 1080p): a short caption as said ('Parker Dam, 1938', 'University of Hawaii, 1959', up to ~42 characters) in cream Courier Prime Bold (cap ~34 px) with a soft shadow over a soft bottom-left darkening. It types one character every 2 frames from frame 6 (the typing contract), a thin cursor follows and blinks for 20 frames after the last letter, holds, and fades out over the last 10 frames.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "vr-caption-typed",
+    "sfx": {
+     "name": "typewriter-clean",
+     "volume": 0.3
+    },
+    "sfxAt": 6,
+    "types": true,
+    "sounds": [
+     {
+      "name": "typewriter-clean",
+      "alt": [
+       "typewriter",
+       "keys"
+      ],
+      "at": 5,
+      "align": "start",
+      "until": 38,
+      "gain_db": -5
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "location",
+    "caption"
+   ],
+   "tags": [
+    "lib",
+    "vr"
+   ]
+  },
+  {
+   "id": "LIB_VR_YEAR_LINE",
+   "name": "Year on a Line (Centred)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "VidRush's year on a line, always centred: a thin white line (1100 px, ends fading out) fades in, a small glowing white dot slides from its right end to the centre over 40 frames (ease in-out) and the year under it counts in whole years from total (the start, default 2026) to value (the year said; else a year in the words), landing exactly on it. The label, if any, comes in small and tracked under the year once it lands. Fades out over the last 10 frames.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "vr-year-line",
+    "sfx": {
+     "name": "count-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 48,
+    "types": false,
+    "sounds": [
+     {
+      "name": "count-tick",
+      "alt": [
+       "count-roll",
+       "ui-tick"
+      ],
+      "at": 8,
+      "align": "start",
+      "until": 47,
+      "gain_db": -8
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 48,
+      "gain_db": -6
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "vr"
+   ]
   }
  ],
  "imageTreatments": [
