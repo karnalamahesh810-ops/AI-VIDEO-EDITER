@@ -53,6 +53,7 @@ from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, styles, upscale
 from src import gapfill, quality
+from src import brandkit
 
 
 def _work_dir(job_id: str) -> str:
@@ -1191,6 +1192,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     doc["meta"]["videoStyle"] = styles.resolve(inp.get("video_style"))
     # The music sections, ducking and sound effects were laid out by the build.
     report("Mixing music and sound effects")
+    # Only the brand kit's looks: the planner drew none other; a look a side
+    # path placed (an archive tag, a mark, a one-picture swap) becomes the
+    # closest allowed one or goes, and a full-screen graphic no allowed look
+    # can draw becomes the neighbouring shot held over its line.
+    kit = brandkit.from_input(inp)
+    if kit is not None:
+        doc["meta"]["brandKitApplied"] = brandkit.enforce(doc, kit)
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).
@@ -1740,6 +1748,17 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         timeline.relevel_to_voice(doc)
     except Exception as e:  # noqa: BLE001
         print(f"[worker] narration level not re-measured: {type(e).__name__}: {str(e)[:100]}", flush=True)
+    # The brand kit's identity as it is now (the job's kit, else the plan's):
+    # the logo checked, the intro and outro measured and given their frames.
+    # A brand file that cannot be read is left out - never a failed render.
+    try:
+        brand_report = brandkit.prepare_render(doc, inp, work)
+        if brand_report:
+            doc.setdefault("meta", {})["brand"] = brand_report
+    except Exception as e:  # noqa: BLE001 - the video renders without the brand extras
+        print(f"[worker] brand kit left out of the render: {type(e).__name__}: {str(e)[:160]}", flush=True)
+        for key in ("intro", "outro"):
+            (doc.get("brand") or {}).pop(key, None)
     # The quality check (src/quality.py): every scene, picture and sound the
     # renderer will load is checked, and whatever fails is repaired through
     # the fallback ladder before any frame is drawn - one unreadable clip
@@ -1782,7 +1801,8 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
 
     report("Uploading video", 91)
     events.phase("upload")
-    duration = doc["durationInFrames"] / doc["fps"]
+    # The whole video: the brand intro and outro around the narration.
+    duration = brandkit.total_frames(doc) / doc["fps"]
 
     # Preferred: the caller pre-signed a destination for us, so this worker
     # needs no Supabase credentials at all. The app's video-render edge
@@ -2078,6 +2098,17 @@ def handler(job):
         tl = inp.get("timeline") if isinstance(inp.get("timeline"), dict) else {}
         meta = tl.get("meta") if isinstance(tl.get("meta"), dict) else {}
         inp["video_style"] = meta.get("videoStyle") or ""
+    # The customer's brand kit (src/brandkit.py): its defaults (density, sound,
+    # captions, colours) go into the input before the video style is applied,
+    # and its picks are in force for everything this job plans. A render or a
+    # Replace Clip without one keeps the picks its timeline was planned with.
+    kit = None
+    if act in ("plan", "build", "resource", "render"):
+        kit = brandkit.prepare_input(inp)
+        if kit is None and isinstance(inp.get("timeline"), dict):
+            kit = brandkit.from_doc(inp["timeline"])
+        if kit is not None:
+            print(f"[worker] brand kit: {kit['name']} ({brandkit.describe(kit)})", flush=True)
     if act in ("plan", "build", "resource"):
         vstyle = styles.apply(inp)
         if vstyle:
@@ -2098,6 +2129,8 @@ def handler(job):
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
     quality.reset()                     # and so is the quality check's
+    kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
+    kit_scope.__enter__()
 
     try:
         if action in ("plan", "build", "resource", "source_part"):
@@ -2414,6 +2447,7 @@ def handler(job):
         # before the work directory goes and the next job starts.
         media.drain_pools(config.DRAIN_SECONDS)
         _restore_config(config_before)
+        kit_scope.__exit__(None, None, None)
         quality.reset()
         events.phase("")
         try:

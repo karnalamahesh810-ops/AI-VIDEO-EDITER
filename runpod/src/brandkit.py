@@ -312,6 +312,18 @@ def parse(raw: Any) -> Optional[dict]:
     return kit
 
 
+def describe(kit: Optional[dict]) -> str:
+    """One line for the job's log: what the picks allow."""
+    if not kit:
+        return "no kit"
+    p = kit["picks"]
+
+    def n(v):
+        return "all" if v == ALL else ("none" if v in (NONE, []) else str(len(v)))
+    return (f"looks {n(p['looks'])}, transitions {n(p['transitions'])}, music {n(p['music'])}, "
+            f"sfx {'on' if p['sfx'] else 'off'}, density {p['density']}")
+
+
 def from_input(inp: Optional[dict]) -> Optional[dict]:
     """The job's kit, parsed once and kept on the input (inp["_brand_kit"])."""
     if not isinstance(inp, dict):
@@ -841,10 +853,10 @@ def prepare_render(doc: dict, inp: Optional[dict], work: str, fetch=None, probe=
         block = doc_brand(parse({**block, "font": block.get("fontFamily")})) if block else None
         if block is not None and isinstance(doc.get("brand"), dict):
             block["kit"] = dict(doc["brand"].get("kit") or {})
-    report: Dict[str, Any] = {"kit": (block or {}).get("kit", {}).get("name", ""), "dropped": []}
     if block is None:
         doc.pop("brand", None)
-        return report
+        return {}
+    report: Dict[str, Any] = {"kit": (block.get("kit") or {}).get("name", ""), "dropped": []}
     fps = max(1, int(doc.get("fps") or 30))
     voice = (doc.get("meta") or {}).get("voiceLufs") if isinstance(doc.get("meta"), dict) else None
     folder = os.path.join(work or config.WORK_DIR, "brand")

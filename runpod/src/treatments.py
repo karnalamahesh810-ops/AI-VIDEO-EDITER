@@ -1599,6 +1599,21 @@ def _map_ids(overlay: dict, pack: dict, still: bool = False, n_maps: int = 0) ->
     return ids, by_variant
 
 
+def _pack_look(pack: dict, key: str, cue: str, counts: Optional[Dict[str, int]] = None) -> Optional[str]:
+    """
+    The style pack's own look for `key` (its chapter card, its lower third);
+    when the brand kit leaves it out, the least used allowed look of the same
+    kind for `cue`, else None.
+    """
+    own = pack.get(key) or ""
+    if own and templates.get(own) and not templates.banned(own):
+        return own
+    kind = (templates.get(own) or {}).get("category")
+    ids = [t["id"] for t in templates.for_cue(cue, pack.get("id", ""))
+           if (not kind or t.get("category") == kind) and auto_ok(t["id"])]
+    return _least_used(ids, counts)
+
+
 def _from_hint(overlay: dict, pack: dict, n_locs: int, text: str,
                counts: Optional[Dict[str, int]] = None) -> Optional[str]:
     """The template for an overlay the AI director or the rules proposed."""
@@ -1613,9 +1628,9 @@ def _from_hint(overlay: dict, pack: dict, n_locs: int, text: str,
     if kind == "bullets" and not variant and counts is not None:
         return _least_used(["CALL_BULLETS_V1", "FACTS_CARD_V1"], counts)
     if kind == "chapter":
-        return pack["chapter"]
+        return _pack_look(pack, "chapter", "chapter", counts)
     if kind == "lower-third":
-        return pack["lowerThird"]
+        return _pack_look(pack, "lowerThird", "person", counts)
     options = [t for t in templates.for_component(kind, pack.get("id", "")) if look_fits(t["id"], text)]
     if not options:
         return None
@@ -1829,7 +1844,7 @@ def _template_for_cue(cue: str, pack: dict, used_recently: set,
     if cue == "place":
         return _least_used(_place_maps(pack), counts)
     if cue == "chapter":
-        return pack["chapter"]
+        return _pack_look(pack, "chapter", "chapter", counts)
     if cue in DATE_CUES:
         options = [t for t in date_looks(cue, pack.get("id", "")) if t["id"] not in used_recently]
     else:
@@ -1913,7 +1928,10 @@ def _archive_tag(scene: dict, style: str, pack: dict, fps: int, start: int, fram
     year = re.search(r"\b(1[89]\d\d)\b", title)
     props = {"text": "Archive footage", **({"subtitle": year.group(1)} if year else {})}
     tid = _least_used(["TAG_SOURCE_V1"] + [t for t in _lib_looks("archive", still=False)
-                                           if (templates.get(t) or {}).get("kind") == "tag"], _ARCHIVE_COUNTS) or "TAG_SOURCE_V1"
+                                           if (templates.get(t) or {}).get("kind") == "tag"], _ARCHIVE_COUNTS) or (
+        "" if templates.banned("TAG_SOURCE_V1") else "TAG_SOURCE_V1")
+    if not tid:
+        return None                 # no archive tag the brand kit allows
     _ARCHIVE_COUNTS[tid] = _ARCHIVE_COUNTS.get(tid, 0) + 1
     resolved = templates.resolve(tid, style=style, props=props, pack=pack)
     if not resolved:
@@ -3851,7 +3869,8 @@ def bind_look_pictures(overlays: List[dict], scenes: List[dict], library=None,
             counts["bound"] += 1
             keep.append(ov)
         elif have >= 1 and need > 1:
-            choices = [x for x in ONE_PICTURE_LOOKS if templates.get(x)]
+            # (Only the one-picture looks the brand kit allows; none: the look goes.)
+            choices = [x for x in ONE_PICTURE_LOOKS if templates.get(x) and not templates.banned(x)]
             if not choices:
                 counts["dropped"] += 1
                 continue
