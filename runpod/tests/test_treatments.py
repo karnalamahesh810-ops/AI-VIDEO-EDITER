@@ -310,9 +310,10 @@ class TimelineIntegration(unittest.TestCase):
         picks = {timeline._bgm_for({**on, "project_id": str(i)}, {"id": "x"}, {"kind": "history"}, 180.0)["track"]
                  for i in range(40)}
         self.assertEqual(picks, {"investigative-v5", "investigative-20m"})
-        # A named track wins, including the old 12-minute beds existing projects use.
+        # A named track wins. The old 12-minute beds were removed (2026-10-01,
+        # the owner's new tracks); a document naming one gets its genre's track.
         got = timeline._bgm_for({**on, "bgm_track": "crime"}, {"id": "x"}, {"kind": "history"}, 60.0)
-        self.assertEqual(got["url"], "bgm://crime")
+        self.assertEqual(got["url"], "bgm://crime-v1")
         got = timeline._bgm_for({**on, "bgm_genre": "crime"}, {"id": "x"}, {}, 60.0)
         self.assertEqual(got["url"], "bgm://crime-v1")
         # The editor's music list sends a track name as the genre.

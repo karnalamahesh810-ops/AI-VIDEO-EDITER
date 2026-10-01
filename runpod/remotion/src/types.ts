@@ -277,7 +277,9 @@ export interface TimelineProps {
    * Music automation over the bgm: sections with a mood and a level, ramped
    * between; `duck` is the share of the section level kept under speech.
    */
-  music?: { sections: MusicSection[]; duck?: number } | null;
+  /** gain: the editor's music level, a multiplier on the automatic sections (1 = default);
+   *  from / to: the editor's trim in frames (music silent outside, 1.5 s fades). */
+  music?: { sections: MusicSection[]; duck?: number; gain?: number; from?: number; to?: number } | null;
   captions: {
     enabled: boolean;
     position: "bottom" | "center";

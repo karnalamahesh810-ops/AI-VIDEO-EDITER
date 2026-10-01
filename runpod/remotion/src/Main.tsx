@@ -128,6 +128,10 @@ const makeMusicVolume = (props: TimelineProps) => {
   const base = props.bgm?.volume ?? 0.12;
   const sections = props.music?.sections || [];
   const duck = props.music?.duck ?? 0.55;
+  // The editor's "Music level" (1 = the automatic mix under the voice). The
+  // planner's sections used to ignore every editor setting, so the owner could
+  // not turn the music up at all (2026-10-01).
+  const gain = Math.max(0, Number(props.music?.gain ?? 1) || 0);
   const fps = props.fps;
   // Whether a word is being spoken, per frame (0.15 s before a word to 0.35 s
   // after it), built once. The Player evaluates this callback for EVERY frame of
@@ -155,8 +159,16 @@ const makeMusicVolume = (props: TimelineProps) => {
     }
     return level;
   };
+  // The editor's trim: music only between `from` and `to` (frames), faded over
+  // 1.5 s at each end. Unset = the whole video.
+  const from = Math.max(0, Number(props.music?.from ?? 0) || 0);
+  const to = Math.min(total, Number(props.music?.to ?? total) || total);
+  const trimmed = (f: number) => {
+    if (f < from || f > to) return 0;
+    return Math.min(1, (f - from) / ramp + (from > 0 ? 0 : 1), (to - f) / ramp + (to < total ? 0 : 1));
+  };
   return (f: number) => {
-    const level = levelAt(f);
+    const level = levelAt(f) * (sections.length ? gain : 1) * trimmed(f);
     const on = speaking[Math.min(total, Math.max(0, Math.round(f)))] === 1;
     return Math.max(0, Math.min(1, on ? level * duck : level));
   };

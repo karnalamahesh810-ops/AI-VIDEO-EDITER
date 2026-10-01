@@ -286,10 +286,12 @@ _MIN_TRANSITION_GAP = 3
 # resolved by the renderer to its bundled file and loops under the narration.
 # The owner's full-length tracks (added 2026-09-28) come first; the original
 # 12-minute beds (<genre>.mp3) stay for projects that already name them.
+# The owner's own tracks (re-exported from CapCut, 2026-10-01; the old 12-min
+# beds were removed): investigative 30 / 20 min, suspense 30 min, crime 30 min.
 BGM_TRACKS = {
-    "investigative": (("investigative-v5", 1800), ("investigative-20m", 1199), ("investigative", 720)),
-    "suspense": (("suspense-v2", 1800), ("suspense", 720)),
-    "crime": (("crime-v1", 1800), ("crime", 720)),
+    "investigative": (("investigative-v5", 1800), ("investigative-20m", 1199)),
+    "suspense": (("suspense-v2", 1800),),
+    "crime": (("crime-v1", 1800),),
 }
 BGM_GENRES = tuple(BGM_TRACKS)
 # The mood of the music follows the story (the owner, 2026-09-30: music in
@@ -310,12 +312,11 @@ _CRIME_WORDS = re.compile(r"\b(murder(?:s|ed|er|ers)?|homicides?|killers?|serial
                           r"true crime|investigators)\b", re.I)
 CRIME_HITS = 3
 # Integrated loudness of the bundled tracks (EBU R128 over the whole file,
-# measured 2026-09-30). They came mastered very quietly (-34 to -39 LUFS), so
-# under a loud narration even full gain left them ~22 dB down; each file was
-# raised by a fixed gain to about -26 LUFS (peaks -11 to -16 dBFS, no
-# limiting). A job's own track is assumed to be a normal release.
-BGM_LUFS = {"investigative-v5": -26.5, "investigative-20m": -26.4, "investigative": -26.5,
-            "suspense-v2": -26.4, "suspense": -26.5, "crime-v1": -26.5, "crime": -26.4}
+# measured 2026-10-01 on the owner's CapCut re-exports). They come quiet
+# (-30.6 to -35.5 LUFS), so under a loud narration even full gain left them
+# far down; each file is raised by a fixed gain to about -27 LUFS (peaks -12
+# to -17 dBFS, no limiting). A job's own track is assumed to be a normal release.
+BGM_LUFS = {"investigative-v5": -26.9, "investigative-20m": -26.9, "suspense-v2": -27.0, "crime-v1": -26.9}
 BGM_LUFS_UNKNOWN = -14.0
 
 
@@ -323,11 +324,12 @@ def _bgm_track(genre: str, seconds: float, seed: str) -> str:
     """
     A track of the genre long enough to play under the whole narration without
     looping (else the longest ones, which loop), varied between projects by a
-    stable seed. The old 12-minute beds are only used when a job names them.
+    stable seed. (The list used to end with a 12-minute bed that was skipped
+    here; those were removed with the owner's new tracks, 2026-10-01.)
     """
     tracks = BGM_TRACKS[genre]
-    fresh = [name for name, length in tracks[:-1]] or [tracks[0][0]]
-    long_enough = [name for name, length in tracks[:-1] if length >= seconds] or fresh
+    fresh = [name for name, length in tracks] or [tracks[0][0]]
+    long_enough = [name for name, length in tracks if length >= seconds] or fresh
     return long_enough[zlib.crc32(seed.encode("utf-8")) % len(long_enough)]
 
 
@@ -362,6 +364,10 @@ def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict],
         track = genre
     if track in names:
         genre = next(g for g, tracks in BGM_TRACKS.items() if any(n == track for n, _ in tracks))
+    elif track in BGM_GENRES:
+        # The removed 12-minute beds were named like their genre ("crime"):
+        # a document naming one plays that genre's current track.
+        genre = track
     if genre not in BGM_GENRES:
         genre = "investigative"
     if track not in names:
