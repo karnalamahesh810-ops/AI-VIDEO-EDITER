@@ -39,7 +39,7 @@ name, no place it did not name (or its section's region).
 import datetime
 import re
 import zlib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, numwords, templates
 from .transcribe import Segment
@@ -2274,7 +2274,10 @@ class _Planner:
             m, year = vr_moment(seg.text or "", shot, self.brief, year, self._section_place(i))
             if m is None or (scene.get("media") or {}).get("type") == "animation":
                 continue                    # (an animation scene IS a full-screen graphic: nothing lands on it)
-            m = dict(m, i=i, at=_voice_window(seg, {"_key": m["key"]}, 1.0, 1.0, self.fps)[0], forced=False)
+            window = _voice_window(seg, {"_key": m["key"]}, 1.0, 1.0, self.fps)
+            if window is None:
+                continue                    # the date is not said in this line's words: no date graphic early
+            m = dict(m, i=i, at=window[0], forced=False)
             if m["full_date"] and first:
                 first = False
                 m["strength"] = 4
@@ -2916,7 +2919,11 @@ class _Planner:
             if until is not None:
                 hi = max(hi, TALKING_MAX)
         wprops = dict(props, _key=key) if key else props
-        t_in, t_out = _voice_window(seg, wprops, lo, hi, fps, until)
+        ahead = tuple(self.segments[self.i + 1:self.i + 1 + KEY_LOOKAHEAD]) if self.i >= 0 else ()
+        window = _voice_window(seg, wprops, lo, hi, fps, until, ahead=ahead)
+        if window is None:
+            return None                    # its word is never said here: none rather than one before its word
+        t_in, t_out = window
         if any(a <= t_in < b for a, b in self.blocks):
             return None                    # a full-screen graphic is on screen: nothing lands on it
         if t["id"] in VR_LOOKS and not _vr_fits({"at": t_in, "look": t["id"]}, self.vr_placed):
@@ -3338,9 +3345,30 @@ _WEAK_REASONS = ("Best available", "Reused shot", "Repeat of an earlier shot", "
 DATA_CATEGORIES = {"CHARTS", "COMPARISONS", "TIMELINES", "MAPS", "DOCUMENTS"}
 
 
+# A label's word as the narration may say it ("HEIGHT" on screen, "high" or "tall" said).
+_KEY_FORMS = {"height": ("high", "tall"), "high": ("height", "tall"), "tall": ("height", "high"),
+              "depth": ("deep",), "deep": ("depth",), "width": ("wide",), "wide": ("width",),
+              "length": ("long",), "long": ("length",), "percent": ("%",)}
+# Words that never time a graphic: "The worst was over?" lands on "worst", not on the line's first "the".
+_KEY_SKIP = frozenset("the a an and or but of to in on at for with from by as is are was were be been this that "
+                      "these those it its his her their our your my we they he she you not no so".split())
+# The planner can hang a graphic on the line before the one that says it: its
+# word is looked for in the next KEY_LOOKAHEAD lines too, within this many seconds.
+KEY_LOOKAHEAD = 2
+KEY_LOOKAHEAD_SECONDS = 12.0
+# Timing (the owner, 2026-10-01: "need to come when the person mentioning, in a
+# perfect time ... not keep for a long time"): a graphic leaves AFTER_WORD
+# seconds after its word is said (longer text: the time to read it), not when
+# its whole line ends - and a graphic whose word is never said near it is left
+# out instead of landing early on its line's start (Lake Powell: 23 of 59 came
+# in early, up to 9 s, when the word was not found).
+AFTER_WORD = 2.0
+READ_CHARS_PER_SECOND = 15.0
+
+
 def _trigger_key(props: dict) -> str:
     """The word a graphic is triggered by: the cue's own word ("Sept.", "twenty-two", "Udall"), the
-    figure's digits, else the first word of its text."""
+    figure's digits, else the first word of its text that carries meaning."""
     if not isinstance(props, dict):
         return ""
     if props.get("_key"):
@@ -3351,49 +3379,122 @@ def _trigger_key(props: dict) -> str:
             return str(int(float(v))) if float(v).is_integer() else str(v)
         except (TypeError, ValueError):
             return ""
-    first = str(props.get("text") or "").split()[:1]
-    return first[0] if first and len(first[0]) >= 3 else ""
+    for word in str(props.get("text") or "").split():
+        bare = re.sub(r"[^0-9A-Za-z']", "", word)
+        if len(bare) >= 3 and bare.lower() not in _KEY_SKIP:
+            return bare
+    return ""
 
 
-def _word_time(seg, props: dict) -> Optional[float]:
-    """When the word that triggers a graphic is said (seconds), or None when the line has no word timings."""
-    words = list(getattr(seg, "words", None) or [])
-    key = _trigger_key(props)
-    if not key or not words:
+def _attr(w, name):
+    return w.get(name) if isinstance(w, dict) else getattr(w, name, None)
+
+
+def _norm_word(w) -> str:
+    return re.sub(r"[^0-9a-z.%]", "", str(w).lower()).rstrip(".")
+
+
+def _key_span(words: list, key: str) -> Optional[Tuple[float, float]]:
+    """
+    (start, end) seconds of `key` in these timed words: the same word, a close
+    spoken form ("HEIGHT" said as "high"), or a figure said in words ("3,517"
+    as "three thousand five hundred seventeen", "2022" as "twenty twenty-two").
+    """
+    target = _norm_word(key)
+    if not target:
         return None
-
-    def attr(w, name):
-        return w.get(name) if isinstance(w, dict) else getattr(w, name, None)
-
-    norm = lambda w: re.sub(r"[^0-9a-z.]", "", str(w).lower())
-    target = norm(key)
+    forms = {target, *_KEY_FORMS.get(target, ())}
     for w in words:
-        wt = norm(attr(w, "text") or "")
-        if target and (wt == target or wt.startswith(target) or (len(target) > 2 and target in wt)):
-            ws = attr(w, "start")
+        wt = _norm_word(_attr(w, "text") or "")
+        if wt and any(wt == f or wt.startswith(f) or (len(f) > 3 and f in wt) for f in forms):
+            ws, we = _attr(w, "start"), _attr(w, "end")
             if ws is not None:
-                return float(ws)
-    # Not spelled the same in the transcript ("22" vs "twenty-two"): the word
-    # standing where the key stands in the line.
-    at = _offset(getattr(seg, "text", "") or "", key)
-    n = len(re.findall(r"\S+", (getattr(seg, "text", "") or "")[:at])) if at > 0 else 0
-    if 0 < n < len(words) and attr(words[n], "start") is not None:
-        return float(attr(words[n], "start"))
+                return float(ws), float(we if we is not None else ws)
+    try:
+        value = float(target.replace("%", ""))
+    except ValueError:
+        return None
+    texts = [str(_attr(w, "text") or "") for w in words]
+    for i in range(len(words)):
+        if numwords.parse(texts[i]) is None:
+            continue                                   # a figure starts on a number word
+        for n in range(min(8, len(words) - i), 0, -1):  # the whole figure: "twenty twenty-two", not "twenty"
+            got = numwords.parse(" ".join(texts[i:i + n]))
+            if got is not None and abs(got - value) < 1e-6:
+                ws, we = _attr(words[i], "start"), _attr(words[i + n - 1], "end")
+                if ws is not None:
+                    return float(ws), float(we if we is not None else ws)
     return None
 
 
-def _voice_window(seg, props: dict, lo: float, hi: float, fps: int = 30, until: Optional[float] = None) -> tuple:
+def _said(segs: list, props: dict) -> Optional[Tuple[float, float]]:
     """
-    (in, out) seconds for a graphic on this line: in on the word that
-    triggers it (at most PRE_ROLL_FRAMES early, never before the line; the
-    line's start when there are no word timings), out when the phrase ends
-    plus TAIL (or `until`, while the narration keeps talking about it), and
-    on screen at least `lo` and at most `hi` seconds.
+    When a graphic's word is said, (start, end) seconds: in its own line, else
+    in the next KEY_LOOKAHEAD lines within KEY_LOOKAHEAD_SECONDS. None when it
+    has no word, or the word is not said there.
+    """
+    key = _trigger_key(props)
+    if not key or not segs:
+        return None
+    first = segs[0]
+    words = list(getattr(first, "words", None) or [])
+    got = _key_span(words, key) if words else None
+    if got is None and words:
+        # Not spelled the same in the transcript ("22" vs "twenty-two"): the word
+        # standing where the key stands in the line.
+        text = getattr(first, "text", "") or ""
+        at = _offset(text, key)
+        n = len(re.findall(r"\S+", text[:at])) if at > 0 else 0
+        if 0 < n < len(words) and _attr(words[n], "start") is not None:
+            ws, we = _attr(words[n], "start"), _attr(words[n], "end")
+            got = (float(ws), float(we if we is not None else ws))
+    if got is not None:
+        return got
+    limit = float(first.start) + KEY_LOOKAHEAD_SECONDS
+    for seg in segs[1:1 + KEY_LOOKAHEAD]:
+        if float(seg.start) > limit:
+            break
+        got = _key_span(list(getattr(seg, "words", None) or []), key)
+        if got is not None:
+            return got
+    return None
+
+
+def _word_time(seg, props: dict) -> Optional[float]:
+    """When the word that triggers a graphic is said in its line (seconds), or None."""
+    got = _said([seg], props)
+    return got[0] if got else None
+
+
+def _reading_seconds(props: dict) -> float:
+    """How long its words take to read once they are on screen."""
+    chars = sum(len(str(props.get(k) or "")) for k in ("text", "subtitle", "label")) if isinstance(props, dict) else 0
+    return chars / READ_CHARS_PER_SECOND
+
+
+def _voice_window(seg, props: dict, lo: float, hi: float, fps: int = 30, until: Optional[float] = None,
+                  ahead: tuple = ()) -> Optional[tuple]:
+    """
+    (in, out) seconds for a graphic on this line: in on the word that triggers
+    it (at most PRE_ROLL_FRAMES early, never before the line), out AFTER_WORD
+    after that word is said (or the time to read its text, or `until` while the
+    narration keeps talking about it), on screen at least `lo` and at most `hi`
+    seconds. A graphic with no word to wait for (or a line with no word
+    timings) takes its line: in at its start, out when it ends plus TAIL. None
+    when its word is never said in this line or the next ones: it is left out.
     """
     start = float(seg.start)
-    said = _word_time(seg, props)
-    t_in = start if said is None else max(start, said - PRE_ROLL_FRAMES / float(fps or 30))
-    t_out = float(until) if until is not None else float(seg.end) + TAIL
+    span = _said([seg, *ahead], props)
+    if span is None:
+        if _trigger_key(props) and getattr(seg, "words", None):
+            return None
+        t_in = start
+        t_out = float(until) if until is not None else float(seg.end) + TAIL
+    else:
+        said, said_end = span
+        t_in = max(start, said - PRE_ROLL_FRAMES / float(fps or 30))
+        t_out = (float(until) if until is not None
+                 else max(said_end, said) + max(AFTER_WORD, _reading_seconds(props)))
     dur = max(lo, min(t_out - t_in, max(hi, lo)))
     return t_in, t_in + dur
 

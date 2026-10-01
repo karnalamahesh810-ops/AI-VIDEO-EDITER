@@ -138,7 +138,7 @@ class SoundLevels(unittest.TestCase):
         self.assertEqual(sfxplan.cap(-6.0), 1.0)
 
     def test_a_whole_plan_is_under_the_cap_and_no_longer_a_whisper(self):
-        # The planned levels at a master of 1.0 (the default master, 0.5, halves them all).
+        # The planned levels at a master of 1.0 (the default master, 0.2, scales them all).
         doc = build_doc(FLOOD, inp={"voice_lufs": -20.0, "sfx_volume": 1.0})
         self.assertEqual((doc["meta"]["voiceLufs"], doc["meta"]["voiceLufsSource"]), (-20.0, "given"))
         top = round(sfxplan.cap(-20.0), 3)
@@ -503,7 +503,7 @@ class Music(unittest.TestCase):
         self.assertEqual(m["levels"]["voiceLufs"], -18.0)
         self.assertEqual(doc["bgm"]["volume"], m["levels"]["speech"])
 
-    def test_a_new_video_gets_the_owners_mix_music_20_sounds_50(self):
+    def test_a_new_video_gets_the_owners_mix_music_20_sounds_20(self):
         # 2026-10-01: "set to 20% music"; the sounds as in the approved Lake Powell video.
         doc = build_doc(FLOOD[:5], inp={"voice_lufs": -14.0})
         m = doc["music"]
@@ -512,7 +512,7 @@ class Music(unittest.TestCase):
         self.assertEqual(m["duck"], 0.8)
         self.assertEqual([s["volume"] for s in m["sections"]], [0.0, 0.2, 0.1, 0.0])  # fade in, bed, fade out
         self.assertEqual(m["sections"][-1]["endFrame"], doc["durationInFrames"])
-        self.assertEqual(doc["sfxVolume"], 0.5)
+        self.assertEqual(doc["sfxVolume"], 0.2)
         # A job's own level still takes the voice-relative automation.
         doc = build_doc(FLOOD[:5], inp={"voice_lufs": -14.0, "bgm_volume": 0.12})
         self.assertNotEqual(doc["music"]["levels"].get("mode"), "flat")
@@ -550,9 +550,56 @@ class Timing(unittest.TestCase):
             t = templates.get(o["template"])
             lo, hi = treatments.layout_window(t, "figure")
             end = (o["startFrame"] + o["durationInFrames"]) / FPS
-            # Leaves with its phrase (+0.4 s), unless its own animation needs longer.
-            self.assertLessEqual(end, max(seg.end + treatments.TAIL, o["startFrame"] / FPS + lo) + 1 / FPS)
+            # Leaves AFTER_WORD after its word (the owner: "not keep for a long time"),
+            # unless its own animation needs longer.
+            stay = max(treatments.AFTER_WORD, treatments._reading_seconds(o))
+            self.assertLessEqual(end, max(word.end + stay, o["startFrame"] / FPS + lo) + 1 / FPS)
             self.assertLessEqual(o["durationInFrames"] / FPS, hi + 1e-6)
+
+    # The owner's Lake Powell video (2026-10-01): 23 of 59 graphics came in before
+    # their word - up to 9 s - whenever the word was not found in their own line.
+    def _segs(self, lines):
+        segs, t = [], 0.0
+        for line in lines:
+            words = []
+            for w in line.split():
+                words.append(Word(w, t, t + 0.4))
+                t += 0.45
+            segs.append(Segment(line, words[0].start, words[-1].end, words))
+            t += 0.6
+        return segs
+
+    def test_a_graphic_waits_for_its_word_in_the_next_line(self):
+        segs = self._segs(["The melt starts high in the mountains every spring.",
+                           "Then comes the snowmelt to runoff season for the river."])
+        t_in, _t_out = treatments._voice_window(segs[0], {"text": "Snowmelt to runoff"}, 2.0, 4.0, FPS,
+                                                ahead=tuple(segs[1:]))
+        said = next(w for w in segs[1].words if w.text.startswith("snowmelt"))
+        self.assertAlmostEqual(t_in, said.start - treatments.PRE_ROLL_FRAMES / FPS, places=3)
+
+    def test_a_graphic_whose_word_is_never_said_is_left_out(self):
+        segs = self._segs(["Plain words about the town follow here.", "More plain words about the river here."])
+        self.assertIsNone(treatments._voice_window(segs[0], {"text": "Cathedral"}, 2.0, 4.0, FPS, ahead=tuple(segs[1:])))
+        # A graphic with nothing to wait for still takes its line.
+        self.assertEqual(treatments._voice_window(segs[0], {"text": "of it"}, 2.0, 4.0, FPS)[0], segs[0].start)
+
+    def test_a_label_said_in_other_words_or_a_figure_said_in_words_is_found(self):
+        seg = self._segs(["The arch stands two hundred ninety feet high above the water."])[0]
+        high = next(w for w in seg.words if w.text.startswith("high"))
+        self.assertEqual(treatments._said([seg], {"text": "HEIGHT"})[0], high.start)
+        two = next(w for w in seg.words if w.text == "two")
+        span = treatments._said([seg], {"value": 290})
+        self.assertEqual(span[0], two.start)
+        self.assertEqual(span[1], next(w for w in seg.words if w.text == "ninety").end)
+        year = self._segs(["By twenty twenty-two the lake had dropped again."])[0]
+        self.assertEqual(treatments._said([year], {"value": 2022})[0], year.words[1].start)
+
+    def test_it_leaves_soon_after_its_word_not_at_the_end_of_a_long_line(self):
+        seg = self._segs(["Lake Powell sits at the center of this story and the long dry years that came after it all."])[0]
+        t_in, t_out = treatments._voice_window(seg, {"text": "Lake Powell"}, 2.0, 4.0, FPS)
+        self.assertAlmostEqual(t_in, max(seg.start, seg.words[0].start - treatments.PRE_ROLL_FRAMES / FPS), places=3)
+        self.assertLessEqual(t_out, seg.words[0].end + treatments.AFTER_WORD + 1e-6)
+        self.assertLess(t_out, seg.end)
 
     def test_windows_by_kind_and_never_shorter_than_the_looks_own_animation(self):
         self.assertEqual(treatments.LAYOUT_WINDOWS["figure"], (2.0, 4.0))
