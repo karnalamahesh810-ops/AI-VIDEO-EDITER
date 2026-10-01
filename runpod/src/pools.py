@@ -509,6 +509,13 @@ class _Slots:
             prev.append(at)
             return True
 
+    def release(self, video: str, at: Optional[float]) -> None:
+        """A line's moment of `video` did not arrive: the video may supply that place again."""
+        with self.lock:
+            prev = self.at.get(video) or []
+            if at in prev:
+                prev.remove(at)
+
 
 def _per_video(story: dict) -> Optional[int]:
     """How many of one video's approved moments a pool keeps (its best, in time order)."""
@@ -573,26 +580,39 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
         if reused:
             print(f"[library] {subject}: {reused} clip(s) reused", flush=True)
         assign()
-    for cand in candidates(subject, require_cc, skip_ids, story=story)[:config.POOL_MAX_VIDEOS]:
+    ranked = candidates(subject, require_cc, skip_ids, story=story)[:config.POOL_MAX_VIDEOS]
+    step = max(1, int(config.POOL_RATE_PARALLEL))
+    for b in range(0, len(ranked), step):
         if not open_lines or ytdlp.past_deadline():
             break
-        found = spaced(rate_video(cand, subject, context, seconds, intent=intent, place=place),
-                       config.POOL_MIN_GAP_SECONDS)
-        # Never a moment an earlier video showed (src/ledger.py); the
-        # video's other moments stay.
-        found = [m for m in found if not ledger.moment_used(cand["id"], m["start"], m["start"] + seconds)]
-        if per_video and len(found) > per_video:
-            # The best-scored few of this video, back in time order.
-            found = sorted(sorted(found, key=lambda m: -m["score"])[:per_video],
-                           key=lambda m: m["start"])
-        took = 0
-        for m in found:
-            if claim(moment_key(cand["id"], m["start"])):
-                available.append((cand, m))
-                took += 1
-        if took:
-            cand["_used"] = took
-        assign()
+        # A few videos rated at once (a metadata read, a storyboard and one
+        # vision call each): one at a time, a subject that needed its eighth
+        # video waited for seven in a row. Moments are still handed out in
+        # rank order, video by video, as before.
+        batch = ranked[b:b + step]
+        if len(batch) == 1:
+            rated = [rate_video(batch[0], subject, context, seconds, intent=intent, place=place)]
+        else:
+            with ThreadPoolExecutor(max_workers=len(batch)) as ex:
+                rated = list(ex.map(lambda c: rate_video(c, subject, context, seconds, intent=intent,
+                                                         place=place), batch))
+        for cand, got in zip(batch, rated):
+            found = spaced(got, config.POOL_MIN_GAP_SECONDS)
+            # Never a moment an earlier video showed (src/ledger.py); the
+            # video's other moments stay.
+            found = [m for m in found if not ledger.moment_used(cand["id"], m["start"], m["start"] + seconds)]
+            if per_video and len(found) > per_video:
+                # The best-scored few of this video, back in time order.
+                found = sorted(sorted(found, key=lambda m: -m["score"])[:per_video],
+                               key=lambda m: m["start"])
+            took = 0
+            for m in found:
+                if claim(moment_key(cand["id"], m["start"])):
+                    available.append((cand, m))
+                    took += 1
+            if took:
+                cand["_used"] = took
+            assign()
     plan = [(job, *assigned[job["index"]]) for job in sjobs if job["index"] in assigned]
     return plan, available
 
@@ -760,6 +780,53 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
                 "clean": clean, "cuts": cuts})
 
 
+def retry_failed(got: List[tuple], plan: List[tuple], spare: List[tuple], slots: "_Slots", work: str,
+                 require_cc: bool, subject: str, library=None, stats: Optional[dict] = None,
+                 lock: Optional[threading.Lock] = None) -> List[tuple]:
+    """
+    [(job, asset)] with each line whose pooled moment failed - no download,
+    burned-in text, a still, AI-made - given another of its subject's approved
+    moments (`spare`, under the same variety rules) at once, up to
+    POOL_RETRY_MOMENTS each. Before, such a line fell to the per-scene search
+    (a search, scouts, downloads and several vision calls), with this pool's
+    other approved moments sitting unused until the reserve pass.
+    `spare` loses the moments used; `plan` is [(job, cand, moment)] in `got`'s order.
+    """
+    tries = max(0, int(config.POOL_RETRY_MOMENTS))
+    failed = [(job, cand) for (job, asset), (_j, cand, _m) in zip(got, plan) if asset is None]
+    if not failed or not spare or not tries:
+        return got
+    pick_lock = threading.Lock()
+    for job, cand in failed:
+        slots.release(_video_of(cand), _start_of(job))       # that moment never arrived
+
+    def one(job: dict) -> Optional[media.MediaAsset]:
+        for _ in range(tries):
+            if ytdlp.past_deadline():
+                return None
+            with pick_lock:
+                pick = next((cm for cm in spare if slots.take(_video_of(cm[0]), _start_of(job))), None)
+                if pick is None:
+                    return None
+                spare.remove(pick)
+            asset = _fetch(job, pick[0], pick[1], work, require_cc, subject, library=library)
+            if asset is not None:
+                return asset
+            slots.release(_video_of(pick[0]), _start_of(job))
+        return None
+    with ThreadPoolExecutor(max_workers=max(1, min(6, len(failed)))) as ex:
+        again = dict(zip((j["index"] for j, _c in failed), ex.map(one, [j for j, _c in failed])))
+    filled = sum(1 for a in again.values() if a is not None)
+    if stats is not None:
+        with (lock or threading.Lock()):
+            stats["retried"] = stats.get("retried", 0) + len(failed)
+            stats["retry_filled"] = stats.get("retry_filled", 0) + filled
+    if filled:
+        print(f"[pools] {subject}: {filled}/{len(failed)} failed line(s) took another approved moment",
+              flush=True)
+    return [(job, asset if asset is not None else again.get(job["index"])) for job, asset in got]
+
+
 def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
                       report: Optional[Callable] = None,
                       min_scenes: Optional[int] = None, library=None) -> Dict[int, media.MediaAsset]:
@@ -808,6 +875,8 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
                 got = list(ex.map(lambda p: (p[0], _fetch(p[0], p[1], p[2], work, require_cc, name,
                                                           library=library)),
                                   plan))
+            got = retry_failed(got, plan, spare, slots, work, require_cc, name, library=library, stats=stats,
+                               lock=lock)
             with _RESERVE_LOCK:
                 _RESERVE.extend((key, c, m) for c, m in spare)
                 first = sjobs[0] if sjobs else {}

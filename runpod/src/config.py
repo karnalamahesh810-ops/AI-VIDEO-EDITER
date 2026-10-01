@@ -377,6 +377,12 @@ POOL_MIN_SCENES = int(os.getenv("POOL_MIN_SCENES", "2"))
 POOL_MAX_VIDEOS = int(os.getenv("POOL_MAX_VIDEOS", "8"))
 POOL_PARALLEL_SUBJECTS = int(os.getenv("POOL_PARALLEL_SUBJECTS", "4"))
 POOL_MIN_GAP_SECONDS = float(os.getenv("POOL_MIN_GAP_SECONDS", "8"))
+# A subject's candidate videos rated at once (pools.plan_subject); 1 = one at a time.
+POOL_RATE_PARALLEL = int(os.getenv("POOL_RATE_PARALLEL", "3"))
+# A pooled line whose moment failed (no download, burned-in text, a still, AI)
+# tries this many more of its subject's approved moments before it goes to
+# the per-scene search (pools.retry_failed).
+POOL_RETRY_MOMENTS = int(os.getenv("POOL_RETRY_MOMENTS", "2"))
 
 # --- supabase storage --------------------------------------------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")

@@ -54,7 +54,8 @@ class SourceBySubject(unittest.TestCase):
                 mock.patch.object(pools, "_fetch", fake_fetch), \
                 mock.patch.object(config, "POOL_MIN_SCENES", 2):
             got = pools.source_by_subject(jobs, "/w")
-        self.assertEqual(calls, ["AAAAAAAAAAA", "BBBBBBBBBBB"])      # one judgement per video
+        # One judgement per video (rated a few at once since 2026-10-01, so in any order).
+        self.assertEqual(sorted(calls), ["AAAAAAAAAAA", "BBBBBBBBBBB"])
         self.assertEqual(sorted(got), [0, 1, 2, 3])                     # Hoover Dam: a one-off
         self.assertEqual([got[i].url.split("=", 1)[1] for i in range(4)],
                          ["AAAAAAAAAAA&t=20", "AAAAAAAAAAA&t=60",
