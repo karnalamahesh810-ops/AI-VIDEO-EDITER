@@ -135,6 +135,13 @@ export interface SceneMedia {
   clipSeconds?: number;
   /** A still frame of the clip (the editor's thumbnail); an animation scene's blurred backdrop. */
   thumbnail?: string;
+  /**
+   * The picture's measured tone (src/grade.py): mean luma l, its 2nd/98th
+   * percentiles lo/hi, mean chroma s, red and blue against green in the
+   * midtones rg/bg. The video's grade pulls each scene toward the median of
+   * these (components/gradeMath.ts).
+   */
+  tone?: { l: number; lo: number; hi: number; s: number; rg: number; bg: number; v?: number };
 }
 
 export interface Scene {
@@ -348,6 +355,14 @@ export interface TimelineProps {
    * documents): the sfx rows carry every sound, exactly as before.
    */
   lookSounds?: { intensity?: number } | null;
+  /**
+   * One grade over every scene's picture, never the graphics
+   * (components/gradeMath.ts, src/grade.py): preset none | neutral |
+   * documentary | warm-doc | cool-news | archival, strength 0-1 (1 = as
+   * designed), normalize (default true) pulls each scene toward the video's
+   * median tone first. Absent or null = the pictures as sourced.
+   */
+  grade?: { preset?: string; strength?: number; normalize?: boolean } | null;
   meta?: Record<string, unknown>;
   /**
    * Remotion requires composition props to be assignable to

@@ -6,6 +6,7 @@ import {
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
 import { EffectLayer, TransitionLayer, effectFilter, entranceStyle } from "./SceneEffects";
 import { AnimationScene } from "./AnimationScene";
+import { useSceneGrade } from "./Grade";
 import { PlayerWindow } from "./pro/ProCase";
 import { StillPicture, TransitionFrame } from "../transitions";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
@@ -29,6 +30,9 @@ export const SceneClip: React.FC<{
   const frame = useCurrentFrame();
   const { durationInFrames, fps, width } = useVideoConfig();
   const { media, motion, treatment, transition, effect } = scene;
+  // The video's grade (Grade.tsx): this picture's filter, first in its list,
+  // and the SVG that defines it. Null for an ungraded document or scene.
+  const grade = useSceneGrade(scene);
 
   const progress = durationInFrames > 1 ? frame / durationInFrames : 0;
 
@@ -76,7 +80,7 @@ export const SceneClip: React.FC<{
   const sceneSeconds = durationInFrames / fps;
   const clip = media.type === "video" ? media.clipSeconds ?? 0 : 0;
   const rate = clip > 0 && clip < sceneSeconds ? Math.max(0.6, clip / sceneSeconds) : 1;
-  const filters = [cssFilterFor(treatment), effectFilter(effect, frame), entrance.filter]
+  const filters = [grade?.filter, cssFilterFor(treatment), effectFilter(effect, frame), entrance.filter]
     .filter((f) => f && f !== "none")
     .join(" ");
 
@@ -96,6 +100,7 @@ export const SceneClip: React.FC<{
     return (
       <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
         <AbsoluteFill style={{ backgroundColor: "#000" }}>
+          {grade?.defs}
           <PlayerWindow tone={tone} seed={scene.startFrame % 7}
             title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
             {media.type === "video" ? (
@@ -135,6 +140,7 @@ export const SceneClip: React.FC<{
             overflow: "hidden",
           }}
         >
+          {grade?.defs}
           <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.22 }}>
             <filter id={`grain-${scene.id}`}>
               <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed={frame % 7} />
@@ -165,6 +171,7 @@ export const SceneClip: React.FC<{
   return (
     <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
       <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#000" }}>
+        {grade?.defs}
         <AbsoluteFill
           style={{
             opacity: entrance.opacity ?? 1,

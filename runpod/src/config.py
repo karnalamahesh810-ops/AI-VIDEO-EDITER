@@ -600,6 +600,20 @@ LOUDNESS_TRUE_PEAK = float(os.getenv("LOUDNESS_TRUE_PEAK", "-1.5"))
 VOICE_POLISH = _flag("VOICE_POLISH", True)
 # The whole polish (download, analysis, filters, checks) gives up after this.
 VOICE_POLISH_SECONDS = float(os.getenv("VOICE_POLISH_SECONDS", "240"))
+# One grade for the whole video (src/grade.py, drawn by the renderer's
+# gradeMath.ts on every scene picture, never on graphics): each clip pulled
+# toward the video's common exposure, saturation and colour cast
+# (GRADE_NORMALIZE, from each scene's measured tone), then one gentle look
+# (GRADE_PRESET: none, neutral, documentary, warm-doc, cool-news, archival) at
+# GRADE_STRENGTH (0-1). GRADE=1 gives a plan or render without one the
+# default; a document's own grade (the editor's) always wins.
+GRADE = _flag("GRADE", True)
+GRADE_PRESET = os.getenv("GRADE_PRESET", "documentary")
+GRADE_STRENGTH = float(os.getenv("GRADE_STRENGTH", "1.0"))
+GRADE_NORMALIZE = _flag("GRADE_NORMALIZE", True)
+# Measuring the scenes' tone: the time box and the parallel reads.
+GRADE_MEASURE_SECONDS = float(os.getenv("GRADE_MEASURE_SECONDS", "60"))
+GRADE_MEASURE_WORKERS = int(os.getenv("GRADE_MEASURE_WORKERS", "8"))
 # Picture quality of h264 renders (x264 CRF). Remotion's own default, 18, made
 # ~13 Mbit/s at 1080p: a 22-minute render passed 2 GB and the app's storage
 # (Lovable Cloud: 2 GB a file by default) refused it after the whole render.

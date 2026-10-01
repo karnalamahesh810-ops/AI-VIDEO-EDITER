@@ -12,6 +12,7 @@ import sfxMeta from "./data/sfx_meta.json";   // a copy of public/sfx/sfx_meta.j
 import { LookSoundContext, LookSounds, type LookSoundScope } from "./components/lib/LookSounds";
 import { lookSoundsOn, planDocSounds, type SoundCue, type SoundTemplate } from "./components/lib/lookSoundPlan";
 import { PackTransitions } from "./transitions/PackTransition";
+import { GradeContext, gradeStateFor } from "./components/Grade";
 
 // The music beds were replaced by the owner's own tracks (2026-10-01); a
 // document planned before names the old bed, which no longer ships (its 404
@@ -353,6 +354,9 @@ export const Main: React.FC<TimelineProps> = (props) => {
   // When the looks carry their own sounds, a row planned for an overlay
   // would double its look's sound: only transitions and the editor's own play.
   const builtIn = lookSoundsOn(props);
+  // The video's grade (gradeMath.ts): settings and the scenes' median tone,
+  // read by every SceneClip. Absent from the document = no grade, as before.
+  const grade = React.useMemo(() => gradeStateFor(props.grade, scenes), [props.grade, scenes]);
   const sfxNodes = React.useMemo(() => {
     if (props.sfxEnabled === false) return [];
     const doubles = builtIn ? doublesLook(overlays || [], lookSounds) : () => false;
@@ -363,7 +367,8 @@ export const Main: React.FC<TimelineProps> = (props) => {
     <AbsoluteFill className="tg-composition" style={{ backgroundColor: "#000" }}>
       {/* The page's own CSS must not resize the pictures (the editor's Player). */}
       <style>{PAGE_CSS_GUARD}</style>
-      {/* Visual track — one clip per spoken clause */}
+      {/* Visual track — one clip per spoken clause, under the video's one grade */}
+      <GradeContext.Provider value={grade}>
       {scenes.map((scene, i) => (
         <Sequence
           key={scene.id}
@@ -382,6 +387,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           </CrossfadeIn>
         </Sequence>
       ))}
+      </GradeContext.Provider>
 
       {/* The owner's overlay transitions ("pack:<name>"): a clip screen-blended
           over a hard cut, its own sound levelled under the narration
