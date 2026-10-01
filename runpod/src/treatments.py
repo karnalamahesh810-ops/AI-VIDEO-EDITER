@@ -3571,3 +3571,182 @@ def note_figure(seen: dict, seg, animation: Optional[dict]) -> None:
             seen[("figure", float(animation["value"]))] = seg.start
         except (TypeError, ValueError):
             pass
+
+
+# =========================================================================== #
+# Real pictures for every slot of every image look
+# =========================================================================== #
+#
+# The owner's Lake Powell video (2026-10-01): a split look showed one picture
+# and two dark, empty slots. An image look used to take whatever the renderer
+# borrowed at render time (the scene's still, or the stills of the scenes that
+# followed, whatever they showed). The planner now decides, for each look:
+# how many pictures it is drawn around (look_slots), and which - the scene's
+# own still or a frame of its footage first, then the stills (then frames) of
+# nearby scenes about the same subject, then the clip library's pictures of
+# it. A look that still lacks pictures becomes a one-picture look, or goes.
+# Scenes are named by id (overlay["mediaFrom"]): the renderer takes each
+# scene's current picture, so a clip replaced in the editor carries over.
+
+# How many different pictures a multi-picture look is drawn around (its
+# component's stills(overlay, N)): fewer repeats a picture in two slots.
+LOOK_SLOTS = {"pa-polaroid-drop": 2, "pa-film-strip": 3, "pb-wipe-compare": 2, "pb-triptych": 3, "pb-carousel": 3,
+              "pb-corkboard": 3, "pb-double-exposure": 2, "pb-zoom-through": 2, "pb-grid-pop": 4,
+              "pb-parallax-stack": 3, "cp-photo-versus": 2, "collage": 3}
+# ... and the most it shows.
+LOOK_MOST = {"pa-polaroid-drop": 2, "pa-film-strip": 4, "pb-wipe-compare": 2, "pb-triptych": 3, "pb-carousel": 6,
+             "pb-corkboard": 4, "pb-double-exposure": 2, "pb-zoom-through": 2, "pb-grid-pop": 6,
+             "pb-parallax-stack": 3, "cp-photo-versus": 2, "collage": 6}
+PICTURE_NEAR = 8          # scenes either side searched for pictures of the same subject
+# The one-picture looks a multi-picture look becomes when the story has too
+# few pictures of its subject: each draws one still full frame, any subject.
+ONE_PICTURE_LOOKS = ("LIB_PA_KEN_BURNS", "LIB_PE_PUNCH_IN", "LIB_PE_LIGHT_SWEEP", "LIB_PE_FOCUS_PULL")
+# A look about a person shows that scene's own picture only: a neighbour's
+# or the library's could be someone else.
+_PERSON_LOOK_CUES = {"person", "person-full", "profile"}
+_SUBJECT_WORD = re.compile(r"[a-z0-9]{3,}")
+_SUBJECT_STOP = {"the", "and", "for", "with", "from", "this", "that", "its", "their", "over", "into", "near", "about"}
+
+
+def look_slots(t: Optional[dict]) -> tuple:
+    """(pictures a look needs, the most it shows): (0, 0) for a look that shows none, (1, 1) for a still look."""
+    if not t:
+        return 0, 0
+    variant = str((t.get("defaults") or {}).get("variant") or "")
+    tags = set(t.get("tags") or [])
+    if variant in LOOK_SLOTS:
+        return LOOK_SLOTS[variant], LOOK_MOST.get(variant, LOOK_SLOTS[variant])
+    if "stills" in tags:
+        return 3, 6
+    if "still" in tags or t.get("component") in ("photo-card", "name-card"):
+        return 1, 1
+    return 0, 0
+
+
+def _web_photo_look(ov: dict, t: dict) -> bool:
+    """A photo window the build fills with a searched photo of the thing named (handler._bind_overlay_photos)."""
+    return t.get("id") == "PHOTO_PIP_V1" or ov.get("variant") == "pip" \
+        or ("subject-photo" in (t.get("cues") or []) and "still" in (t.get("tags") or []))
+
+
+def _subject_terms(text: str) -> set:
+    return {w for w in _SUBJECT_WORD.findall(str(text or "").lower()) if w not in _SUBJECT_STOP}
+
+
+def same_subject(a: str, b: str) -> bool:
+    """Two subjects name the same thing: most of the shorter one's words are in the other ("Lake Powell" ~ "Lake Powell ramps")."""
+    wa, wb = _subject_terms(a), _subject_terms(b)
+    if not wa or not wb:
+        return False
+    return len(wa & wb) >= max(1, -(-3 * min(len(wa), len(wb)) // 5))
+
+
+def _scene_picture(scene: dict) -> str:
+    """The scene's picture (its image, or its clip for a frame) as a key, "" when it has none."""
+    m = scene.get("media") if isinstance(scene, dict) else None
+    if not isinstance(m, dict) or m.get("type") not in ("image", "video"):
+        return ""
+    return str(m.get("url") or "")
+
+
+def _library_pictures(library, subject: str, n: int, story: Optional[dict] = None) -> List[dict]:
+    """Up to n pictures of the subject from the clip library (its kept images), as overlay media."""
+    if library is None or n <= 0 or not subject:
+        return []
+    try:
+        found = library.find(subject, n=n, kind="image", story=story) or []
+    except Exception:  # noqa: BLE001 - the library is a bonus, never a failure
+        return []
+    out = []
+    for e in found:
+        url = str((e or {}).get("read_url") or "")
+        if url.startswith("http"):
+            out.append({"type": "image", "url": url, "source": "library",
+                        "attribution": str(e.get("attribution") or ""), "license": str(e.get("license") or "")})
+    return out[:n]
+
+
+def bind_look_pictures(overlays: List[dict], scenes: List[dict], library=None,
+                       story: Optional[dict] = None) -> Dict[str, int]:
+    """
+    Every image look gets a real picture for every slot (look_slots), in
+    this order: the scene's own still or footage frame, then nearby scenes'
+    pictures of the same subject (stills before clips, nearest first), then
+    the clip library's pictures of it. The scenes go in overlay["mediaFrom"]
+    (scene ids: the renderer draws each one's still, or a frame of its clip),
+    library pictures in overlay["media"]. A multi-picture look short of
+    pictures becomes a one-picture look (ONE_PICTURE_LOOKS) and a look with
+    none is left out. Looks given their pictures already, and the photo
+    windows the build searches the web for, are left as they are.
+    Changes `overlays` in place; returns {"bound", "swapped", "dropped"}.
+    """
+    counts = {"bound": 0, "swapped": 0, "dropped": 0}
+    starts = [int(sc.get("startFrame", 0)) for sc in scenes]
+    keep: List[dict] = []
+    for ov in overlays:
+        t = templates.get(ov.get("template") or "") if isinstance(ov, dict) else None
+        need, most = look_slots(t)
+        own = [m for m in (ov.get("media") or []) if isinstance(m, dict) and m.get("url")] if need else []
+        if not need or _web_photo_look(ov, t) or ov.get("mediaFrom") or len(own) >= need:
+            keep.append(ov)
+            continue
+        at = int(ov.get("startFrame", 0))
+        i = next((k for k in range(len(scenes) - 1, -1, -1) if starts[k] <= at), -1)
+        here = scenes[i] if 0 <= i < len(scenes) else {}
+        meta = here.get("semanticMetadata") or {}
+        subject = str(meta.get("subject") or "").strip()
+        person = bool(set(t.get("cues") or []) & _PERSON_LOOK_CUES) or t.get("component") == "name-card" \
+            or str(meta.get("subjectType") or "").lower() == "person"
+        picks: List[int] = []
+        seen = {str(m.get("url")) for m in own}
+        # A person is shown by their own scene's still only: a frame of a clip
+        # can be anyone in it (build binds person cards the same way).
+        mine = _scene_picture(here) if not person or (here.get("media") or {}).get("type") == "image" else ""
+        if mine and mine not in seen:
+            picks.append(i)
+            seen.add(mine)
+        if not person and subject and len(own) + len(picks) < most:
+            near = []
+            for d in range(1, PICTURE_NEAR + 1):
+                for j in (i - d, i + d):
+                    if 0 <= j < len(scenes) and _scene_picture(scenes[j]) and same_subject(
+                            subject, str(((scenes[j].get("semanticMetadata") or {}).get("subject")) or "")):
+                        still = (scenes[j].get("media") or {}).get("type") == "image"
+                        near.append((0 if still else 1, d, j))
+            for _still, _d, j in sorted(near):
+                key = _scene_picture(scenes[j])
+                if key not in seen and len(own) + len(picks) < most:
+                    picks.append(j)
+                    seen.add(key)
+        extra = [] if person else _library_pictures(library, subject, need - len(own) - len(picks), story)
+        have = len(own) + len(picks) + len(extra)
+        if have >= need:
+            if picks:
+                ov["mediaFrom"] = [scenes[j]["id"] for j in picks]
+            if extra:
+                ov["media"] = own + extra
+            counts["bound"] += 1
+            keep.append(ov)
+        elif have >= 1 and need > 1:
+            choices = [x for x in ONE_PICTURE_LOOKS if templates.get(x)]
+            if not choices:
+                counts["dropped"] += 1
+                continue
+            one = templates.get(choices[zlib.crc32(f"{at}:{ov.get('template')}".encode("utf-8")) % len(choices)])
+            ov["type"] = one.get("component") or "motion"
+            ov["template"] = one["id"]
+            ov["variant"] = (one.get("defaults") or {}).get("variant") or ov.get("variant")
+            if own:
+                ov["media"] = own[:1]
+                ov.pop("mediaFrom", None)
+            elif picks:
+                ov["mediaFrom"] = [scenes[picks[0]]["id"]]
+                ov.pop("media", None)
+            else:
+                ov["media"] = extra[:1]
+            counts["swapped"] += 1
+            keep.append(ov)
+        else:
+            counts["dropped"] += 1
+    overlays[:] = keep
+    return counts

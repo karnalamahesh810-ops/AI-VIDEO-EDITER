@@ -220,6 +220,14 @@ export interface Overlay {
   locations?: MapLocation[];
   /** Only used by "split": the two visuals to show, top then bottom. */
   media?: SceneMedia[];
+  /**
+   * An image look's pictures taken from the story's own scenes, by scene id,
+   * in slot order (src/treatments.py bind_look_pictures: the scene under it,
+   * then nearby scenes about the same subject). The renderer draws each
+   * scene's current picture - its still, or a frame of its clip - before any
+   * library picture in `media` (source "library").
+   */
+  mediaFrom?: string[];
   variant?: string;
   /** Words to emphasise (sentence-highlight) or the phrase to mark (article-zoom). */
   highlight?: string;

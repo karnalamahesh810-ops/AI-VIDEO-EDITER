@@ -1226,6 +1226,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # measured loudness (the owner's Lake Powell video was planned
         # against an assumed voice, voiceLufsSource "assumed").
         narration_path=audio_path,
+        # Its pictures of a subject fill an image look's slots the story cannot.
+        library=LAST_LIBRARY.get("lib"),
     )
     # Arrows / circles that point at the thing the line talks about, only
     # where vision finds it (src/marks.py) - while the clips are still local.

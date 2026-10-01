@@ -29,6 +29,77 @@ const STILL_LOOKS = new Set(["board", "clipping", "doc", "facts", "dossier", "wi
 const stillOf = (m?: SceneMedia | null) =>
   m && m.url ? (m.type === "image" ? m : m.thumbnail ? { ...m, type: "image" as const, url: m.thumbnail } : null) : null;
 
+/**
+ * The editor's Player draws this composition inside the app's page, whose
+ * global CSS (Tailwind's preflight: img, video { max-width: 100%; height:
+ * auto }) clamped every picture to its box. A look that shows a strip of a
+ * full-frame photo (an image wider than its strip, shifted left: the split
+ * panels, the triptych slices) shrank the photo into the first strip and
+ * left the others dark - the owner's "empty slots" in the Lake Powell video
+ * (2026-10-01). The render has no such sheet; this puts the preview back to
+ * the browser defaults every look is drawn for.
+ */
+const PAGE_CSS_GUARD = ".tg-composition img, .tg-composition video { max-width: none; max-height: none; }";
+
+// Looks about a person show the picture of their own scene only: a
+// neighbour's could be someone else.
+const PERSON_CUES = new Set(["person", "person-full", "profile"]);
+const SUBJECT_STOP = new Set(["the", "and", "for", "with", "from", "this", "that", "its", "their", "over", "into",
+  "near", "about"]);
+const subjectWords = (s?: string): Set<string> =>
+  new Set(((s || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter((w) => !SUBJECT_STOP.has(w)));
+/** Two subjects name the same thing: most of the shorter one's words are in the other (src/treatments.py same_subject). */
+const sameSubject = (a?: string, b?: string): boolean => {
+  const wa = subjectWords(a), wb = subjectWords(b);
+  if (!wa.size || !wb.size) return false;
+  let both = 0;
+  wa.forEach((w) => { if (wb.has(w)) both += 1; });
+  return both >= Math.max(1, Math.ceil((3 * Math.min(wa.size, wb.size)) / 5));
+};
+const PICTURE_NEAR = 8;
+
+/**
+ * The pictures an image look shows, as stills (a clip lends its frame), or
+ * null for a look that shows none. In order: its own pictures, the scenes the
+ * planner chose (mediaFrom), the library's (source "library"). A look the
+ * planner did not fill (an older document, the editor's own) borrows: the
+ * scene under it, then nearby scenes about the same subject, and a
+ * several-picture look the scenes that follow. Never an empty slot: a look
+ * with no picture draws nothing, one with fewer repeats or folds its slots.
+ */
+const lookPictures = (ov: Overlay, scenes: TimelineProps["scenes"]): SceneMedia[] | null => {
+  const v = ov.variant || "";
+  const t = templateFor(ov.template);
+  const tags = t?.tags || [];
+  const many = v === "collage" || tags.includes("stills");
+  if (!many && !(PHOTO_CARDS.has(ov.type) || STILL_LOOKS.has(v) || tags.includes("still"))) return null;
+  const person = ov.type === "name-card" || ((t as { cues?: string[] } | undefined)?.cues || []).some((c) => PERSON_CUES.has(c));
+  const out: SceneMedia[] = [];
+  const add = (m?: SceneMedia | null) => {
+    const s = stillOf(m);
+    if (s && !out.some((p) => p.url === s.url)) out.push(s);
+  };
+  const own = (Array.isArray(ov.media) ? ov.media : []).filter((m): m is SceneMedia => !!m && typeof m === "object");
+  own.filter((m) => m.source !== "library").forEach(add);
+  (Array.isArray(ov.mediaFrom) ? ov.mediaFrom : []).forEach((id) => add(scenes.find((s) => s.id === id)?.media));
+  own.filter((m) => m.source === "library").forEach(add);
+  if (!out.length || (many && out.length < 2)) {
+    const at = scenes.findIndex((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
+    if (at >= 0) {
+      add(scenes[at].media);
+      const subject = scenes[at].semanticMetadata?.subject;
+      for (let d = 1; !person && d <= PICTURE_NEAR && out.length < (many ? 6 : 1); d++) {
+        for (const j of [at - d, at + d]) {
+          if (j >= 0 && j < scenes.length && sameSubject(subject, scenes[j].semanticMetadata?.subject)) add(scenes[j].media);
+        }
+      }
+      // A burst of the story's own pictures: the stills of the scenes that follow.
+      for (let i = at + 1; many && i < scenes.length && out.length < 6; i++) add(scenes[i].media);
+    }
+  }
+  return out.slice(0, many ? 6 : Math.max(1, own.length));
+};
+
 /** A look's built-in sound: its scope (LookSounds.tsx) and, for a registry design, the cues to play. */
 type LookSound = { scope: LookSoundScope; cues: SoundCue[] | null };
 
@@ -62,30 +133,11 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
   // An overlay that names a template gets its unset fields from the
   // registry, so the editor's pick and the planner's draw the same way.
   let ov = resolveOverlay(raw);
-  if (PHOTO_CARDS.has(ov.type) && !(ov.media && ov.media.length)) {
-    // A photo or person card dropped on a scene borrows that scene's image.
-    const under = scenes.find((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
-    // On a clip, a frame of it (a person introduced over footage of them).
-    const m = under ? stillOf(under.media) : null;
-    if (m) ov = { ...ov, media: [m] };
-  }
-  if (!(ov.media && ov.media.length)) {
-    const v = ov.variant || "";
-    const tags = templateFor(ov.template)?.tags || [];
-    const at = scenes.findIndex((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
-    if (v === "collage" || tags.includes("stills")) {
-      // A burst of the story's own pictures: the stills of the scenes that follow.
-      const pics: SceneMedia[] = [];
-      for (let i = Math.max(0, at + 1); i < scenes.length && pics.length < 6; i++) {
-        const m = stillOf(scenes[i].media);
-        if (m && !pics.some((p) => p.url === m.url)) pics.push(m);
-      }
-      if (pics.length) ov = { ...ov, media: pics };
-    } else if ((STILL_LOOKS.has(v) || tags.includes("still")) && at >= 0) {
-      const m = stillOf(scenes[at].media);
-      if (m) ov = { ...ov, media: [m] };
-    }
-  }
+  // An image look's pictures, every slot a real picture (lookPictures): the
+  // planner's, else the scene's own (on a clip, a frame of it), else its
+  // neighbours' about the same subject.
+  const pics = lookPictures(ov, scenes);
+  if (pics) ov = { ...ov, media: pics };
   const Component = OVERLAYS[ov.type];
   // A document can arrive from the editor or an older schema, so an unknown
   // type is possible at runtime even though it is not at compile time.
@@ -308,7 +360,9 @@ export const Main: React.FC<TimelineProps> = (props) => {
   }, [props.sfx, props.sfxEnabled, props.sfxVolume, fps, builtIn, overlays, lookSounds]);
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#000" }}>
+    <AbsoluteFill className="tg-composition" style={{ backgroundColor: "#000" }}>
+      {/* The page's own CSS must not resize the pictures (the editor's Player). */}
+      <style>{PAGE_CSS_GUARD}</style>
       {/* Visual track — one clip per spoken clause */}
       {scenes.map((scene, i) => (
         <Sequence

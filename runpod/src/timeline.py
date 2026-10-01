@@ -1234,12 +1234,15 @@ def _clip_seconds(asset) -> float:
 def build(segments: List[Segment], shots: List[dict],
           assets: List[Optional[MediaAsset]], *,
           audio_url: str, audio_duration: float, inp: Dict[str, Any],
-          planner: str = "rules", warnings: List[str] = None, narration_path: str = "") -> Dict[str, Any]:
+          planner: str = "rules", warnings: List[str] = None, narration_path: str = "",
+          library=None) -> Dict[str, Any]:
     """
     Assemble the render document from beats, shot plan and sourced media.
     `narration_path` is the narration on this worker's disk when the caller
     has it (audio_url is usually a signed URL): the sounds and the music are
-    levelled against its measured loudness (voice_loudness).
+    levelled against its measured loudness (voice_loudness). `library` is
+    the clip library the job loaded (src/library.py): its pictures of a
+    subject fill an image look's slots the story's own pictures cannot.
     """
     warnings = list(warnings or [])
     fps = int(inp.get("fps") or config.DEFAULT_FPS)
@@ -1421,6 +1424,13 @@ def build(segments: List[Segment], shots: List[dict],
         music = planned["music"]
         treatment_counts = planned["counts"]
         look_sounds = planned.get("lookSounds")
+    # Every image look gets a real picture for every slot (the scene's own,
+    # then nearby ones of the same subject, then the clip library), or a look
+    # that needs fewer, or none (the owner's Lake Powell video: empty slots).
+    pictures = vt.bind_look_pictures(overlays, scenes, library=library, story=brief)
+    if pictures["swapped"] or pictures["dropped"]:
+        print(f"[timeline] image looks: {pictures['bound']} bound, {pictures['swapped']} became one-picture looks, "
+              f"{pictures['dropped']} left out (no picture)", flush=True)
     busy = list(sfx_list) + (sfxplan.builtin_busy(overlays, scenes, fps) if look_sounds is not None else [])
     # The owner's overlay transition pack: a few chosen cuts take a clip that
     # brings its own sound, so only where no other sound is on that beat
@@ -1495,6 +1505,8 @@ def build(segments: List[Segment], shots: List[dict],
             "sources": sorted({a.source for a in assets if a}),
             "scenesWithoutMedia": missing,
             "scenesNeedingReview": sum(1 for s in scenes if s["reviewRequired"]),
+            # Image looks: given their pictures, made one-picture looks, left out (bind_look_pictures).
+            "lookPictures": pictures,
             "generatedScenes": sum(1 for a in assets if a and a.source == "generated"),
             # The narration's loudness every sound and the music were set against.
             "voiceLufs": round(float(voice_lufs), 1),
@@ -1531,6 +1543,8 @@ _BORROWING_VARIANTS = {"collage", "board", "clipping", "doc", "facts", "dossier"
 def _borrows_pictures(ov: dict) -> bool:
     if (ov.get("variant") or "") in _BORROWING_VARIANTS:
         return True
+    if isinstance(ov.get("mediaFrom"), list) and ov["mediaFrom"]:
+        return True             # the scenes the planner chose (treatments.bind_look_pictures)
     t = templates.get(ov.get("template") or "") or {}
     tags = t.get("tags") or []
     return "still" in tags or "stills" in tags
