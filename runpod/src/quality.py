@@ -38,6 +38,16 @@ What it answers for (each has a test in tests/test_quality.py):
                       that still has no picture becomes a full-screen text
                       graphic (a colour scene would fail the render's own
                       validation, and shows an empty frame).
+  Gate.after_render   one ffmpeg pass over the finished file (blackdetect,
+                      freezedetect, silencedetect); every flagged stretch is
+                      mapped to its scenes and told apart from what is meant
+                      to look that way (the opening fade, a dip or a cut
+                      transition, a still with no motion, a graphic holding
+                      still, a title card). A real defect: those scenes are
+                      repaired the same way and the video is drawn ONCE more;
+                      the better file is kept and what is left is reported.
+  Gate.recover        a render that failed on a file its error names: those
+                      scenes are repaired and the video drawn once more.
   Gate.finish         the report: doc.meta.quality, the job's "quality", an
                       events row per finding and repair, and a one-liner for
                       the app ("Quality check: 159/159 scenes OK, 2 clips
@@ -76,6 +86,13 @@ CROSSFADE_FRAMES = 15
 MIN_RATE = 0.6
 # A freeze this short at the end of a clip is not seen.
 TOLERANCE_FRAMES = 2
+# An entrance or cut transition darkens at most this many of a scene's first
+# frames (SceneEffects.tsx: 12 + 4; transitions/timing.ts: light-leak 16), and
+# a cut transition this many of the outgoing scene's last ones.
+ENTRANCE_FRAMES = 16
+EXIT_FRAMES = 8
+CUT_TRANSITIONS = {"flash", "chromatic-flash", "glitch", "vhs-glitch", "film-burn", "light-leak", "whip-pan",
+                   "zoom-punch", "shake-cut", "blur-dissolve", "luma-fade"}
 # The image looks and how they find their pictures (Main.tsx lookPictures).
 PHOTO_CARDS = {"photo-card", "name-card"}
 STILL_LOOKS = {"board", "clipping", "doc", "facts", "dossier", "window", "audio", "evidence"}
@@ -89,6 +106,13 @@ TEXT_LOOKS = ("TEXT_SENTENCE_HIGHLIGHT_V1", "TEXT_UNDERLINE_TITLE_V1", "HEADLINE
 MIN_VIDEO_BYTES = 8_000
 MIN_IMAGE_BYTES = 100
 MAX_IMAGE_BYTES = 40_000_000
+# The scan's freeze floor: -70 dB catches the renderer's own freeze (frames
+# repeated exactly) and leaves a nearly-still live shot alone (measured: a
+# still frame with a small moving patch read as frozen at the default -60 dB).
+FREEZE_NOISE = 0.0003
+# A clip that never moves in a scene this long reads as a frozen video.
+STILL_CLIP_SECONDS = 3.0
+STILL_CLIP_SHARE = 0.9
 # Events rows of findings and repairs per job (the summary row always goes).
 EVENT_ROWS = 60
 
@@ -563,11 +587,242 @@ def _kind_of(how: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# The scan of the finished file
+# --------------------------------------------------------------------------- #
+
+_BLACK = re.compile(r"black_start:\s*(-?[\d.]+)\s+black_end:\s*(-?[\d.]+)")
+_FREEZE_START = re.compile(r"freeze_start:\s*(-?[\d.]+)")
+_FREEZE_END = re.compile(r"freeze_end:\s*(-?[\d.]+)")
+_SILENCE_START = re.compile(r"silence_start:\s*(-?[\d.]+)")
+_SILENCE_END = re.compile(r"silence_end:\s*(-?[\d.]+)")
+
+
+def _streams(path: str) -> dict:
+    try:
+        p = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type:format=duration",
+                            "-of", "json", path], capture_output=True, text=True, timeout=60)
+        info = json.loads(p.stdout or "{}") or {}
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return {}
+    kinds = {s.get("codec_type") for s in info.get("streams") or []}
+    return {"video": "video" in kinds, "audio": "audio" in kinds,
+            "duration": _num((info.get("format") or {}).get("duration"))}
+
+
+def _pairs(text: str, start_re, end_re, until: float) -> List[Tuple[float, float]]:
+    out, pending = [], None
+    for line in text.splitlines():
+        m = start_re.search(line)
+        if m:
+            pending = max(0.0, float(m.group(1)))
+            continue
+        m = end_re.search(line)
+        if m and pending is not None:
+            out.append((pending, float(m.group(1))))
+            pending = None
+    if pending is not None and until > pending:
+        out.append((pending, until))            # still running when the file ended
+    return out
+
+
+def scan(path: str, timeout: Optional[float] = None) -> dict:
+    """
+    One ffmpeg pass over a finished video: black stretches (blackdetect), a
+    frozen picture (freezedetect, on a 320 px copy) and silence (silencedetect).
+    {"ok", "why", "duration", "black", "frozen", "silent", "audio", "seconds"};
+    ok False when the file cannot be scanned (nothing is then judged).
+    """
+    t0 = time.time()
+    out = {"ok": False, "why": "", "duration": 0.0, "black": [], "frozen": [], "silent": [], "audio": True,
+           "seconds": 0.0}
+    if not path or not os.path.isfile(path) or os.path.getsize(path) < 1024:
+        out["why"] = "no finished file to scan"
+        return out
+    info = _streams(path)
+    if not info.get("video") or info.get("duration", 0) <= 0:
+        out["why"] = "the finished file could not be read"
+        return out
+    dur = info["duration"]
+    vf = (f"scale=320:-2:flags=neighbor,blackdetect=d={config.QUALITY_BLACK_SECONDS}:pix_th=0.10,"
+          f"freezedetect=n={FREEZE_NOISE}:d={config.QUALITY_FREEZE_SECONDS}")
+    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-map", "0:v:0", "-vf", vf, "-f", "null", "-"]
+    if info.get("audio"):
+        cmd += ["-map", "0:a:0", "-af", f"silencedetect=n=-50dB:d={config.QUALITY_SILENCE_SECONDS}",
+                "-f", "null", "-"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout or config.QUALITY_SCAN_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        out["why"] = f"the scan did not finish ({type(e).__name__})"
+        return out
+    if p.returncode != 0:
+        out["why"] = f"the scan failed ({(p.stderr or '')[-160:].strip()})"
+        return out
+    text = p.stderr or ""
+    out.update(ok=True, duration=round(dur, 3), audio=bool(info.get("audio")),
+               black=[(float(a), float(b)) for a, b in _BLACK.findall(text)],
+               frozen=_pairs(text, _FREEZE_START, _FREEZE_END, dur),
+               silent=_pairs(text, _SILENCE_START, _SILENCE_END, dur),
+               seconds=round(time.time() - t0, 1))
+    return out
+
+
+def _covering_cards(doc: dict, f0: int, f1: int) -> bool:
+    """A title card, chapter or full-screen graphic is on screen for most of frames f0..f1."""
+    span = max(1, f1 - f0)
+    for ov in doc.get("overlays") or []:
+        if not isinstance(ov, dict):
+            continue
+        t = templates.get(ov.get("template") or "") or {}
+        card = ov.get("backdrop") == "blur" or ov.get("fullFrame") or ov.get("type") in ("title", "chapter") \
+            or t.get("category") == "HEADLINES"
+        if not card:
+            continue
+        a = int(ov.get("startFrame") or 0)
+        b = a + int(ov.get("durationInFrames") or 0)
+        if min(b, f1) - max(a, f0) >= 0.8 * span:
+            return True
+    return False
+
+
+def classify(doc: dict, res: dict) -> Tuple[List[dict], List[dict]]:
+    """
+    (defects, intended) from a scan: every flagged stretch is mapped to the
+    scenes it falls on and judged. Meant to look that way: the opening fade and
+    the last moments, a dip or cut transition's dark frames, a still with no
+    motion, a graphic holding still, a dark graphic or title card. Defects:
+    black over a clip or a picture, a clip that ran out and froze on its last
+    frame (a frozen stretch reaching its scene's end), a clip that never moves,
+    an empty scene, a video with no sound at all.
+    """
+    fps = max(1, int(doc.get("fps") or 30))
+    scenes = doc.get("scenes") or []
+    dur = float(res.get("duration") or 0.0) or int(doc.get("durationInFrames") or 0) / fps
+    defects: List[dict] = []
+    intended: List[dict] = []
+
+    def on(a: float, b: float):
+        for k, s in enumerate(scenes):
+            s0 = int(s.get("startFrame") or 0) / fps
+            s1 = s0 + int(s.get("durationInFrames") or 0) / fps
+            if min(b, s1) - max(a, s0) > 0:
+                yield k, s, s0, s1
+
+    for a, b in res.get("black") or []:
+        what = {"kind": "black", "start": round(a, 2), "end": round(b, 2), "at": _clock(a)}
+        if a <= 0.25 and b - a <= 1.5:
+            intended.append({**what, "why": "the opening fade"})
+            continue
+        if b >= dur - 0.25 and b - a <= 2.0:
+            intended.append({**what, "why": "the last moments"})
+            continue
+        if _covering_cards(doc, int(a * fps), int(b * fps)):
+            intended.append({**what, "why": "a title card"})
+            continue
+        parts, graphic = [], False
+        for k, s, s0, s1 in on(a, b):
+            lo, hi = s0, s1
+            if (s.get("transition") or "none") != "none":
+                lo = s0 + ENTRANCE_FRAMES / fps              # an entrance darkens its first frames
+            nxt = scenes[k + 1] if k + 1 < len(scenes) else {}
+            if (nxt or {}).get("transition") in CUT_TRANSITIONS:
+                hi = s1 - EXIT_FRAMES / fps                  # and a cut transition the last ones
+            part = min(b, hi) - max(a, lo)
+            if part <= 0:
+                continue
+            if (s.get("media") or {}).get("type") == "animation":
+                graphic = True                               # a dark graphic is drawn that way
+            else:
+                parts.append((part, k))
+        # Black over clips or pictures, outside every transition's frames, for long
+        # enough to see - in one scene or across a cut.
+        if sum(p for p, _k in parts) >= config.QUALITY_BLACK_SECONDS:
+            bad = [k for p, k in parts if p >= TOLERANCE_FRAMES / fps]
+            pictures = all((scenes[k].get("media") or {}).get("type") == "image" for k in bad)
+            defects.append({**what, "scenes": bad,
+                            "why": f"{b - a:.1f} s of black over {'a picture' if pictures else 'a clip'}"})
+        else:
+            intended.append({**what, "why": "a dark graphic" if graphic else "a transition"})
+
+    for a, b in res.get("frozen") or []:
+        what = {"kind": "frozen", "start": round(a, 2), "end": round(b, 2), "at": _clock(a)}
+        bad, whys = [], []
+        for k, s, s0, s1 in on(a, b):
+            lo, hi = max(a, s0), min(b, s1)
+            part = hi - lo
+            if part < config.QUALITY_FREEZE_SECONDS:
+                continue
+            m = s.get("media") or {}
+            kind = m.get("type")
+            if kind == "image":
+                intended.append({**what, "scene": k, "why": "a still picture"})
+                continue
+            if kind == "animation":
+                intended.append({**what, "scene": k, "why": "a graphic holding still"})
+                continue
+            if kind != "video" or not m.get("url"):
+                bad.append(k)
+                whys.append("an empty scene")
+                continue
+            tol = TOLERANCE_FRAMES / fps
+            to_end, late = hi >= s1 - tol, lo > s0 + 0.2
+            if to_end and late:
+                bad.append(k)
+                whys.append(f"the clip ran out and froze on its last frame for {part:.1f} s")
+            elif a < s0 - tol:
+                bad.append(k)                                # two shots cannot be the same frame
+                whys.append("the picture did not change at the cut into this clip")
+            elif to_end and b > s1 + tol:
+                bad.append(k)
+                whys.append("the clip never moved and its frame stayed on into the next scene")
+            elif part >= STILL_CLIP_SECONDS and part >= STILL_CLIP_SHARE * (s1 - s0):
+                bad.append(k)
+                whys.append("the clip never moves")
+            else:
+                intended.append({**what, "scene": k, "why": "a still moment of the clip"})
+        if bad:
+            defects.append({**what, "scenes": bad, "why": "; ".join(dict.fromkeys(whys))})
+
+    silent = sum(b - a for a, b in res.get("silent") or [])
+    if not res.get("audio", True) or (dur > 0 and silent >= 0.9 * dur):
+        defects.append({"kind": "silent", "start": 0.0, "end": round(dur, 2), "at": "0:00", "scenes": [],
+                        "why": "the video has no sound"})
+    else:
+        for a, b in res.get("silent") or []:
+            intended.append({"kind": "silent", "start": round(a, 2), "end": round(b, 2), "at": _clock(a),
+                             "why": "a pause in the narration"})
+    return defects, intended
+
+
+def _score(defects: List[dict]) -> float:
+    """How bad a render is: seconds of defect, a silent video worst of all."""
+    return sum((1000.0 if d["kind"] == "silent" else 0.0) + max(0.0, d["end"] - d["start"]) for d in defects)
+
+
+# --------------------------------------------------------------------------- #
 # The gate
 # --------------------------------------------------------------------------- #
 
 class NarrationMissing(RuntimeError):
     """The narration cannot be read: nothing can be drawn over it."""
+
+
+class _Floor:
+    """A report that never moves the bar backwards (a second render runs 70-90 % again)."""
+
+    def __init__(self, inner: Callable, floor: int, prefix: str = ""):
+        self._inner, self._floor, self._prefix = inner, floor, prefix
+
+    def __call__(self, step: str, progress: int = None, **kw):
+        pct = None if progress is None else max(int(progress), self._floor)
+        return self._inner(f"{self._prefix}{step}", pct, **kw)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def floor(report: Callable, pct: int, prefix: str = "") -> Callable:
+    return _Floor(report, pct, prefix) if callable(report) else report
 
 
 class Gate:
@@ -584,11 +839,14 @@ class Gate:
         self.repairs: List[dict] = []
         self.notes: List[str] = []
         self.unresolved: List[dict] = []
+        self.render: Dict[str, Any] = {}
         self.seconds: Dict[str, float] = {}
         self.fetched: Dict[str, str] = {}       # a remote still -> the copy fetched to decode it
         self.checked = 0
         self.unverified = 0
         self.audited = False
+        self.rerendered = False
+        self._first: Optional[Tuple[List[dict], List[dict]]] = None
         self._report: Optional[dict] = None
         self._rows = 0
         self._lock = threading.Lock()
@@ -1161,6 +1419,164 @@ class Gate:
                 self._fixed(None, "overlay", f"graphic {n + 1} ({name}) had no picture it could show", "left out")
         overlays[:] = keep
 
+    # ---- after the render ---------------------------------------------------
+    def after_render(self, path: str) -> bool:
+        """Scan the finished file. True when scenes were repaired and the video should be drawn once more."""
+        if not config.QUALITY_SCAN:
+            return False
+        self._say("Checking the finished video", 90)
+        res = scan(path)
+        self.seconds["scan"] = res.get("seconds", 0.0)
+        if not res["ok"]:
+            self.render.update(scanned=False, why=res["why"])
+            self.notes.append(f"the finished video was not scanned: {res['why']}")
+            self._event("scanned", f"not scanned: {res['why']}", level="warning", always=True)
+            return False
+        defects, intended = classify(self.doc, res)
+        self._first = (defects, intended)
+        self.render.update(scanned=True, seconds=res["seconds"], black=len(res["black"]),
+                           frozen=len(res["frozen"]), silent=len(res["silent"]), intended=len(intended),
+                           defects=[_brief(d) for d in defects][:20])
+        self.render.setdefault("rerendered", False)
+        self._event("scanned", f"{len(defects)} defect(s), {len(intended)} intended (fades, stills, graphics) "
+                               f"in {res['seconds']:.0f} s", level="warning" if defects else "info", always=True,
+                    data={"black": len(res["black"]), "frozen": len(res["frozen"]), "silent": len(res["silent"]),
+                          "defects": len(defects), "intended": len(intended)})
+        for d in defects:
+            self.found[d["kind"]] += 1
+            self._event("defect", f"{d['kind']} at {d['at']}: {d['why']}", level="warning",
+                        scene=(d.get("scenes") or [None])[0], data=_brief(d))
+        if not defects:
+            return False
+        scenes = self.doc.get("scenes") or []
+        problems = {}
+        for d in defects:
+            for k in d.get("scenes") or []:
+                if 0 <= k < len(scenes):
+                    problems.setdefault(k, (d["kind"], d["why"]))
+        # Silence has no scene to repair, and drawing the same narration again
+        # gives the same sound: it is reported, never re-rendered for.
+        if self.rerendered or not config.QUALITY_RERENDER or not problems:
+            self._leave(defects)
+            return False
+        self.rerendered = True
+        self._say(f"Repairing {_n(len(problems), 'scene')} the finished video showed wrong", 90)
+        self._replace(problems, "after the render")
+        self._look_sources()
+        self.no_empty_scenes()
+        from . import timeline
+        timeline.drop_invalid_overlays(self.doc)
+        self.render["rerendered"] = True
+        self._event("rerender", f"drawing the video once more after repairing {_n(len(problems), 'scene')}",
+                    always=True, data={"scenes": sorted(problems)[:40]})
+        return True
+
+    def after_rerender(self, path: str, first: str) -> str:
+        """Scan the second render and keep the better file at `path`. Returns "repaired" or "first"."""
+        res = scan(path)
+        before = self._first[0] if self._first else []
+        if not res["ok"]:
+            # Nothing to judge it by: the repaired render stands (its scenes were the ones at fault).
+            self.notes.append(f"the second render was not scanned: {res['why']}")
+            self.render["kept"] = "repaired"
+            self.render["fixed"] = len(before)
+            _remove(first)
+            return "repaired"
+        after, intended = classify(self.doc, res)
+        self.seconds["scan"] = round(self.seconds.get("scan", 0.0) + res.get("seconds", 0.0), 1)
+        if _score(after) <= _score(before):
+            kept, left = "repaired", after
+            _remove(first)
+        else:
+            kept, left = "first", before
+            os.replace(first, path)
+        self.render.update(kept=kept, fixed=max(0, len(before) - len(left)),
+                           defectsAfter=[_brief(d) for d in after][:20])
+        if left:
+            self._leave(left)
+        self._event("rerendered", f"kept the {kept} render: {len(before)} defect(s) before, {len(after)} after",
+                    level="warning" if left else "info", always=True)
+        return kept
+
+    def rerender_failed(self, err: BaseException) -> None:
+        """The second render broke: the first file stands, with its problems reported."""
+        self.render["kept"] = "first"
+        self.notes.append(f"the second render failed ({type(err).__name__}: {str(err)[:120]}); the first one is kept")
+        self._event("rerender_failed", f"{type(err).__name__}: {str(err)[:200]}", level="error", always=True)
+        if self._first:
+            self._leave(self._first[0])
+
+    def _leave(self, defects: List[dict]) -> None:
+        scenes = self.doc.get("scenes") or []
+        for d in defects:
+            ids = [str(scenes[k].get("id")) for k in d.get("scenes") or [] if 0 <= k < len(scenes)]
+            self.unresolved.append({"kind": d["kind"], "scene": ids[0] if ids else "", "at": d["at"],
+                                    "what": f"{d['kind']} at {d['at']}: {d['why']}"})
+            self._event("unresolved", f"{d['kind']} at {d['at']}: {d['why']}", level="error", always=True,
+                        data=_brief(d))
+
+    # ---- a render that failed -----------------------------------------------
+    def recover(self, err: BaseException) -> bool:
+        """
+        A render that failed on files its error names: the scenes showing them
+        are repaired, dead stills and pictures taken out, and True says draw it
+        once more. False when the error names nothing that can be fixed, or the
+        one second render is already spent.
+        """
+        if self.rerendered or not config.QUALITY_GATE:
+            return False
+        named = set(_URLS.findall(str(err)))
+        if not named:
+            return False
+        hit = _NamedFiles(named, self.work)
+        scenes = self.doc.get("scenes") or []
+        problems: Dict[int, Tuple[str, str]] = {}
+        changed = 0
+        for i, s in enumerate(scenes):
+            m = s.get("media") or {}
+            if m.get("type") in ("video", "image") and hit(m.get("url")):
+                problems[i] = ("render", "the renderer could not load it")
+            if isinstance(m.get("thumbnail"), str) and hit(m["thumbnail"]):
+                m.pop("thumbnail", None)
+                changed += 1
+            anim = s.get("animation")
+            if isinstance(anim, dict) and isinstance(anim.get("media"), list):
+                kept = [x for x in anim["media"] if not (isinstance(x, dict) and hit(x.get("url")))]
+                changed += len(anim["media"]) - len(kept)
+                anim["media"] = kept
+        for ov in self.doc.get("overlays") or []:
+            if isinstance(ov, dict) and isinstance(ov.get("media"), list):
+                kept = [x for x in ov["media"] if not (isinstance(x, dict) and hit(x.get("url")))]
+                if len(kept) != len(ov["media"]):
+                    changed += len(ov["media"]) - len(kept)
+                    ov["media"] = kept
+                    self._after_loss(ov)
+        bgm = self.doc.get("bgm")
+        if isinstance(bgm, dict) and hit(bgm.get("url")):
+            new = _bundled_bgm(self.doc, avoid=str(bgm.get("url")))
+            if new and new != bgm.get("url"):
+                bgm["url"] = new
+            else:
+                self.doc["bgm"] = None
+            changed += 1
+        if not problems and not changed:
+            return False
+        self.rerendered = True
+        self.found["render"] += len(problems) + changed
+        self._event("render_failed", f"the render failed on {_n(len(problems), 'scene')} and "
+                                     f"{_n(changed, 'other picture')}: {str(err)[:160]}", level="warning", always=True)
+        if problems:
+            self._replace(problems, "after the render failed")
+        if changed:
+            self.fixed["overlay"] += changed
+        self._look_sources()
+        self.no_empty_scenes()
+        from . import timeline
+        timeline.drop_invalid_overlays(self.doc)
+        self.render["rerendered"] = True
+        self.render["afterFailure"] = True
+        return True
+
     # ---- the report ---------------------------------------------------------
     def summary(self) -> str:
         """The app's one-liner: "Quality check: 159/159 scenes OK, 2 clips replaced"."""
@@ -1186,6 +1602,9 @@ class Gate:
             parts.append("music replaced")
         if f["sound"]:
             parts.append(_n(f["sound"], "missing sound") + " left out")
+        if self.render.get("fixed"):
+            parts.append(_n(int(self.render["fixed"]), "black or frozen stretch", "black or frozen stretches")
+                         + " fixed by a second render")
         if self.unresolved:
             parts.append(_n(len(self.unresolved), "problem") + f" left ({self.unresolved[0]['what']})")
         return f"Quality check: {ok}/{total} scenes OK, " + (", ".join(parts) if parts else "nothing to fix")
@@ -1197,12 +1616,12 @@ class Gate:
         line = self.summary()
         out = {"summary": line, "scenes": len(self.doc.get("scenes") or []), "scenesBefore": self.scenes_in,
                "found": dict(self.found), "fixed": dict(self.fixed), "repairs": self.repairs[:200],
-               "unresolved": self.unresolved[:50], "notes": self.notes[:20],
+               "render": dict(self.render), "unresolved": self.unresolved[:50], "notes": self.notes[:20],
                "checked": self.checked, "unverified": self.unverified, "seconds": dict(self.seconds),
                "audited": self.audited}
         self._event("summary", line, level="warning" if self.unresolved else "info", always=True,
                     data={"found": dict(self.found), "fixed": dict(self.fixed),
-                          "unresolved": len(self.unresolved)})
+                          "unresolved": len(self.unresolved), "rerendered": bool(self.render.get("rerendered"))})
         extra = getattr(self.report_fn, "extra", None)
         if isinstance(extra, dict):
             extra["quality"] = line                         # rides on every later progress update
@@ -1230,6 +1649,17 @@ def mark_for_review(doc: dict, checked: Optional[dict]) -> int:
                              f"{r.get('how')} - replace it here to choose its shot")
         n += 1
     return n
+
+
+def _brief(d: dict) -> dict:
+    return {k: d[k] for k in ("kind", "start", "end", "at", "why", "scenes") if k in d}
+
+
+def _remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def _bgm_dir() -> str:
@@ -1261,3 +1691,39 @@ def _bundled_bgm(doc: dict, avoid: str = "") -> str:
         if f"bgm://{name}" != avoid and _bgm_file(name):
             return f"bgm://{name}"
     return ""
+
+
+_URLS = re.compile(r"https?://[^\s'\"<>()\[\]{},]+")
+
+
+class _NamedFiles:
+    """Whether a document link is one a render error names (directly, or as the copy the renderer served)."""
+
+    def __init__(self, named: set, work: str):
+        self.links = set()
+        self.paths = set()
+        self.names = set()
+        root = os.path.abspath(work or ".")
+        for u in named:
+            u = u.rstrip(".;:")
+            p = urllib.parse.urlparse(u)
+            if p.hostname in ("127.0.0.1", "localhost"):
+                rel = urllib.parse.unquote(p.path).lstrip("/")
+                self.paths.add(os.path.normcase(os.path.abspath(os.path.join(root, rel))))
+                self.names.add(os.path.basename(rel))
+            else:
+                self.links.add(u.split("?", 1)[0])
+
+    def __call__(self, url) -> bool:
+        url = str(url or "")
+        if not url:
+            return False
+        if url.split("?", 1)[0] in self.links:
+            return True
+        path = local_path(url)
+        if path:
+            return os.path.normcase(os.path.abspath(path)) in self.paths or \
+                (os.path.basename(path) in self.names and bool(self.names))
+        # A link a render chunk downloaded first (fanout._localize: media/<sha1 of the link>.<ext>).
+        tag = hashlib.sha1(url.encode("utf-8")).hexdigest()[:16]
+        return any(n.startswith(tag) for n in self.names)

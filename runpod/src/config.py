@@ -968,6 +968,11 @@ POOL_JUDGE_CLIPS = _flag("POOL_JUDGE_CLIPS", False)
 # that decodes and is not tiny, no repeats, every overlay picture loadable -
 # and whatever fails is repaired through the fallback ladder (src/gapfill.py).
 QUALITY_GATE = _flag("QUALITY_GATE", True)
+# QUALITY_SCAN: the finished file is scanned (ffmpeg blackdetect, freezedetect,
+# silencedetect); a real defect is repaired and the video drawn once more
+# (QUALITY_RERENDER), the better file kept. Never more than one re-render.
+QUALITY_SCAN = _flag("QUALITY_SCAN", True)
+QUALITY_RERENDER = _flag("QUALITY_RERENDER", True)
 # Checks run QUALITY_PARALLEL at a time, each request QUALITY_HTTP_TIMEOUT s,
 # all of them inside QUALITY_AUDIT_SECONDS (what is still out then is trusted).
 QUALITY_PARALLEL = int(os.getenv("QUALITY_PARALLEL", "16"))
@@ -980,3 +985,9 @@ QUALITY_REPAIR_SCENE_SECONDS = float(os.getenv("QUALITY_REPAIR_SCENE_SECONDS", "
 QUALITY_REPAIR_GENERATED = _flag("QUALITY_REPAIR_GENERATED", False)
 # A still whose long side is under this many pixels is too small to show.
 QUALITY_MIN_IMAGE_SIDE = int(os.getenv("QUALITY_MIN_IMAGE_SIDE", "320"))
+# The scan: black for QUALITY_BLACK_SECONDS or more, a picture frozen for
+# QUALITY_FREEZE_SECONDS or more, silence of QUALITY_SILENCE_SECONDS or more.
+QUALITY_BLACK_SECONDS = float(os.getenv("QUALITY_BLACK_SECONDS", "0.5"))
+QUALITY_FREEZE_SECONDS = float(os.getenv("QUALITY_FREEZE_SECONDS", "0.8"))
+QUALITY_SILENCE_SECONDS = float(os.getenv("QUALITY_SILENCE_SECONDS", "4"))
+QUALITY_SCAN_TIMEOUT = float(os.getenv("QUALITY_SCAN_TIMEOUT", "900"))

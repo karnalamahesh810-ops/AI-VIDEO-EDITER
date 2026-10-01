@@ -1,13 +1,15 @@
 """
 The quality gate (src/quality.py): every render is checked before a frame is
-drawn, and what is wrong is repaired before anyone sees the video - then said,
-in doc.meta.quality, the job result and the job's events.
+drawn and scanned after, and what is wrong is repaired before anyone sees the
+video - then said, in doc.meta.quality, the job result and the job's events.
 
-Offline: the media is synthetic (ffmpeg lavfi clips, broken and tiny stills),
-R2 and every web link answer through fakes, and the fallback ladder is mocked
-where a test needs it to find something. Regression tests for each thing that
-went wrong on 2026-10-01 are marked "Regression".
+Offline: the media is synthetic (ffmpeg lavfi: clips, black, frozen and silent
+stretches, broken and tiny stills), R2 and every web link answer through fakes,
+the fallback ladder is mocked where a test needs it to find something, and the
+renderer is a fake that writes prepared files. Regression tests for each thing
+that went wrong on 2026-10-01 are marked "Regression".
 """
+import base64
 import copy
 import datetime
 import os
@@ -22,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import handler  # noqa: E402
-from src import config, events, gapfill, quality, r2, templates, timeline  # noqa: E402
+from src import config, events, gapfill, quality, r2, render, templates, timeline  # noqa: E402
 from src.media import MediaAsset  # noqa: E402
 
 FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
@@ -45,6 +47,30 @@ def _still(name: str, w: int, h: int) -> str:
     path = os.path.join(MEDIA, name)
     if not os.path.isfile(path):
         _ff("-f", "lavfi", "-i", f"testsrc2=s={w}x{h}:d=1", "-frames:v", "1", path)
+    return path
+
+
+def _video(name: str, parts, audio: str = "sine", size: str = "320x180") -> str:
+    """A finished-video stand-in: segments ("moving" | "black" | "frozen", seconds) with sound or silence."""
+    path = os.path.join(MEDIA, name)
+    if os.path.isfile(path):
+        return path
+    args, labels = [], []
+    for k, (kind, sec) in enumerate(parts):
+        if kind == "black":
+            src = f"color=c=black:s={size}:r=30:d={sec}"
+        elif kind == "frozen":
+            src = f"testsrc2=s={size}:r=30:d=1,trim=end_frame=1,loop=loop={int(sec * 30) - 1}:size=1:start=0,setpts=N/30/TB"
+        else:
+            src = f"testsrc2=s={size}:r=30:d={sec}"
+        args += ["-f", "lavfi", "-i", src]
+        labels.append(f"[{k}:v]")
+    total = sum(sec for _k, sec in parts)
+    sound = f"sine=f=300:d={total}" if audio == "sine" else f"anullsrc=r=48000:cl=stereo:d={total}"
+    args += ["-f", "lavfi", "-i", sound]
+    graph = "".join(labels) + f"concat=n={len(parts)}:v=1:a=0[v]"
+    _ff(*args, "-filter_complex", graph, "-map", "[v]", "-map", f"{len(parts)}:a", "-c:v", "libx264", "-preset",
+        "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", path)
     return path
 
 
@@ -550,6 +576,196 @@ class Regressions(unittest.TestCase):
             with self.assertRaises(quality.NarrationMissing) as ctx:
                 quality.Gate(doc, tempfile.mkdtemp()).before_render()
         self.assertIn("upload the voiceover again", str(ctx.exception))
+
+
+# --------------------------------------------------------------------------- #
+# The scan of the finished file
+# --------------------------------------------------------------------------- #
+
+def _scan_doc(kinds, seconds=2.0, transitions=None):
+    scenes = []
+    for i, kind in enumerate(kinds):
+        media = {"video": video("/x/c%d.mp4" % i, 4.0), "image": image("/x/p%d.jpg" % i),
+                 "animation": {"type": "animation", "url": "", "source": "template"}, "empty": dict(EMPTY)}[kind]
+        scenes.append(scene(i, media, seconds=seconds, transition=(transitions or {}).get(i, "none")))
+    return doc_of(scenes, narration="/x/vo.wav")
+
+
+class Classify(unittest.TestCase):
+    def test_what_is_meant_to_look_that_way_is_not_a_defect(self):
+        doc = _scan_doc(["video", "image", "animation", "video"], transitions={3: "dip"})
+        res = {"duration": 8.0, "audio": True,
+               "black": [(0.0, 0.3),                    # the opening fade
+                         (4.2, 5.4),                    # a dark graphic (scene 2)
+                         (6.0, 6.5)],                   # the dip into scene 3 (its first 16 frames)
+               "frozen": [(2.0, 4.0),                   # a still with no motion
+                          (4.0, 6.0),                   # a graphic holding still
+                          (6.6, 7.4)],                  # a still moment in the middle of a clip
+               "silent": [(3.0, 4.0)]}
+        defects, intended = quality.classify(doc, res)
+        self.assertEqual(defects, [])
+        whys = {i["why"] for i in intended}
+        self.assertTrue({"the opening fade", "a dark graphic", "a transition", "a still picture",
+                         "a graphic holding still", "a still moment of the clip"} <= whys, whys)
+
+    def test_black_over_a_clip_a_frozen_tail_and_an_empty_scene_are_defects(self):
+        doc = _scan_doc(["video", "video", "empty", "video", "video"])
+        res = {"duration": 10.0, "audio": True,
+               "black": [(0.6, 1.6)],                   # a second of black inside scene 0
+               "frozen": [(2.9, 4.0),                   # scene 1's clip ran out at 2.9 s and froze
+                          (4.0, 6.0),                   # the empty scene's quiet background
+                          (6.0, 9.0)],                  # scene 3 frozen whole, on into scene 4
+               "silent": []}
+        defects, _intended = quality.classify(doc, res)
+        by = {(d["kind"], tuple(d["scenes"])): d["why"] for d in defects}
+        self.assertIn(("black", (0,)), by)
+        self.assertIn("ran out", by[("frozen", (1,))])
+        self.assertIn("empty scene", by[("frozen", (2,))])
+        self.assertIn(("frozen", (3, 4)), by)
+        self.assertIn("did not change at the cut", by[("frozen", (3, 4))])
+
+    def test_black_across_a_cut_counts_even_when_no_scene_has_half_a_second(self):
+        doc = _scan_doc(["video", "video"])
+        defects, _ = quality.classify(doc, {"duration": 4.0, "audio": True, "black": [(1.7, 2.3)],
+                                            "frozen": [], "silent": []})
+        self.assertEqual(defects[0]["scenes"], [0, 1])
+
+    def test_a_video_with_no_sound_is_a_defect(self):
+        doc = _scan_doc(["video", "video"])
+        defects, _ = quality.classify(doc, {"duration": 4.0, "audio": True, "black": [], "frozen": [],
+                                            "silent": [(0.0, 4.0)]})
+        self.assertEqual([d["kind"] for d in defects], ["silent"])
+
+
+@unittest.skipUnless(FFMPEG, "needs ffmpeg")
+class Scan(unittest.TestCase):
+    def test_black_frozen_and_silent_stretches_are_found_in_a_real_file(self):
+        path = _video("scan_mix.mp4", [("moving", 2.0), ("black", 1.5), ("moving", 1.5), ("frozen", 2.0)],
+                      audio="silence")
+        res = quality.scan(path)
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(len(res["black"]), 1)
+        a, b = res["black"][0]
+        self.assertAlmostEqual(a, 2.0, delta=0.1)
+        self.assertAlmostEqual(b, 3.5, delta=0.1)
+        # The encoder sharpens a still picture for a few frames after a cut, so the
+        # freeze is found a little after the segment starts - and runs to the end.
+        self.assertTrue(any(5.0 <= fa <= 5.5 and fb >= 6.9 for fa, fb in res["frozen"]), res["frozen"])
+        self.assertTrue(res["silent"] and res["silent"][0][1] - res["silent"][0][0] >= 6.5, res["silent"])
+
+    def test_a_file_that_is_not_a_video_is_not_judged(self):
+        bad = os.path.join(MEDIA, "not_video.mp4")
+        with open(bad, "wb") as fh:
+            fh.write(b"final" * 400)
+        res = quality.scan(bad)
+        self.assertFalse(res["ok"])
+        self.assertFalse(quality.scan(os.path.join(MEDIA, "missing.mp4"))["ok"])
+
+
+# --------------------------------------------------------------------------- #
+# do_render end to end: scan, repair, one more render, keep the better file
+# --------------------------------------------------------------------------- #
+
+@unittest.skipUnless(FFMPEG, "needs ffmpeg")
+class DoRender(unittest.TestCase):
+    def setUp(self):
+        events.start_job("qa-render", "")
+        clip = _clip("four.mp4", 4.0)
+        self.doc = doc_of([scene(i, video(clip if i == 0 else _fresh(200 + i).local_path, 4.0), seconds=2.0)
+                           for i in range(3)])
+        self.clean = _video("render_clean.mp4", [("moving", 6.0)])
+        self.black = _video("render_black.mp4", [("moving", 2.2), ("black", 1.6), ("moving", 2.2)])
+        self.worse = _video("render_worse.mp4", [("moving", 1.0), ("black", 4.0), ("moving", 1.0)])
+
+    def _run(self, outputs, inp=None):
+        calls = []
+
+        def fake_render(doc, path, **kw):
+            calls.append(copy.deepcopy(doc))
+            out = outputs[min(len(calls), len(outputs)) - 1]
+            if isinstance(out, Exception):
+                raise out if not callable(getattr(out, "for_doc", None)) else out.for_doc(doc)
+            shutil.copy(out, path)
+            return path
+        work = tempfile.mkdtemp()
+        with _offline_quality(), _Ctx(), mock.patch.object(config, "RENDER_SEPARATE_AUDIO", False), \
+                mock.patch.object(handler.renderer, "render", side_effect=fake_render), \
+                mock.patch.object(handler.renderer, "normalize_loudness", return_value=False), \
+                mock.patch.object(handler.timeline, "relevel_to_voice"), \
+                mock.patch.object(handler, "_keep_render"), \
+                mock.patch.object(handler.r2, "enabled", return_value=False):
+            out = handler.do_render(self.doc, {"return_video": True, **(inp or {})}, work, lambda *a, **k: None)
+        return out, calls, work
+
+    def _final(self, out) -> bytes:
+        return base64.b64decode(out["video_b64"])
+
+    def test_a_clean_render_is_scanned_once_and_kept(self):
+        out, calls, _work = self._run([self.clean])
+        self.assertEqual(len(calls), 1)
+        q = out["quality"]
+        self.assertTrue(q["render"]["scanned"])
+        self.assertEqual(q["render"]["defects"], [])
+        self.assertEqual(q["summary"], "Quality check: 3/3 scenes OK, nothing to fix")
+        self.assertEqual(self.doc["meta"]["quality"]["summary"], q["summary"])
+
+    def test_a_black_stretch_is_repaired_and_drawn_once_more(self):
+        out, calls, _work = self._run([self.black, self.clean])
+        self.assertEqual(len(calls), 2)                                  # one second render, never more
+        q = out["quality"]
+        self.assertTrue(q["render"]["rerendered"])
+        self.assertEqual(q["render"]["kept"], "repaired")
+        self.assertEqual(q["render"]["fixed"], 1)
+        self.assertEqual(q["unresolved"], [])
+        self.assertIn("1 black or frozen stretch fixed by a second render", q["summary"])
+        self.assertNotIn(_fresh(201).local_path, [s["media"].get("url") for s in calls[1]["scenes"]])
+        with open(self.clean, "rb") as fh:
+            self.assertEqual(self._final(out), fh.read())
+        rows = [e["event"] for e in events._EVENTS if e["stage"] == "quality"]
+        self.assertIn("defect", rows)
+        self.assertIn("rerender", rows)
+
+    def test_a_second_render_that_is_worse_is_not_kept_and_the_problem_is_reported(self):
+        out, calls, _work = self._run([self.black, self.worse, self.clean])
+        self.assertEqual(len(calls), 2)                                  # never a third
+        q = out["quality"]
+        self.assertEqual(q["render"]["kept"], "first")
+        with open(self.black, "rb") as fh:
+            self.assertEqual(self._final(out), fh.read())
+        self.assertTrue(q["unresolved"])
+        self.assertIn("problem left", q["summary"])
+        self.assertEqual(sum(1 for e in events._EVENTS if e["stage"] == "quality" and e["event"] == "unresolved"), 1)
+
+    def test_a_second_render_that_breaks_leaves_the_first_one(self):
+        out, calls, _work = self._run([self.black, render.RenderError("chrome crashed")])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(out["quality"]["render"]["kept"], "first")
+        with open(self.black, "rb") as fh:
+            self.assertEqual(self._final(out), fh.read())
+
+    def test_a_render_that_fails_on_a_file_it_names_is_repaired_and_drawn_once_more(self):
+        class Named(Exception):
+            def for_doc(self, doc):
+                # A file outside the job folder is served as _extra/<name> (assetserver.url_for).
+                served = os.path.basename(doc["scenes"][1]["media"]["url"])
+                return render.RenderError(f"remotion render failed (exit 1): Error: Could not extract frame from "
+                                          f"http://127.0.0.1:61234/_extra/{served} at time 1.2")
+        clip_url = self.doc["scenes"][1]["media"]["url"]
+        out, calls, _work = self._run([Named(), self.clean])
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn(clip_url, [s["media"].get("url") for s in calls[1]["scenes"]])
+        self.assertTrue(out["quality"]["render"]["afterFailure"])
+        self.assertEqual(out["quality"]["found"]["render"], 1)
+
+    def test_a_render_that_fails_on_nothing_it_names_still_fails(self):
+        with self.assertRaises(render.RenderError):
+            self._run([render.RenderError("remotion render failed (exit 1): out of memory")])
+
+    def test_the_scan_can_be_switched_off(self):
+        with mock.patch.object(config, "QUALITY_SCAN", False):
+            out, calls, _work = self._run([self.black, self.clean])
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("scanned", out["quality"]["render"])
 
 
 # --------------------------------------------------------------------------- #

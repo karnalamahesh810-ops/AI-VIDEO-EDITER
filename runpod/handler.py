@@ -1750,7 +1750,27 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         report(f"Repaired {broken} scene(s) before the render", 69)
     timeline.validate(doc, require_media=True, allow_stock=inp.get("allow_stock"))
     out_path = os.path.join(work, "final.mp4")
-    _draw(doc, inp, work, report, split, out_path, gate)
+    try:
+        _draw(doc, inp, work, report, split, out_path, gate)
+    except Exception as e:  # noqa: BLE001 - drawn once more when the error names files that can be replaced
+        if not gate.recover(e):
+            raise
+        print(f"[worker] the render failed on files it named; repaired them, rendering once more: "
+              f"{type(e).__name__}: {str(e)[:200]}", flush=True)
+        _draw(doc, inp, work, quality.floor(report, 70, "Second render: "), split, out_path, gate)
+    # The finished file is scanned (black, frozen, silent): a real defect is
+    # repaired and the video drawn once more - never twice - and the better
+    # of the two files is kept.
+    if gate.after_render(out_path):
+        first = os.path.join(work, "final.first.mp4")
+        os.replace(out_path, first)
+        try:
+            _draw(doc, inp, work, quality.floor(report, 90, "Second render: "), split, out_path, gate)
+        except Exception as e:  # noqa: BLE001 - the first render stands, its problems reported
+            gate.rerender_failed(e)
+            os.replace(first, out_path)
+        else:
+            gate.after_rerender(out_path, first)
     checked = gate.finish()
     doc.setdefault("meta", {})["quality"] = checked
     report(checked["summary"], 90)
@@ -1880,7 +1900,8 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
     """
     Draw `doc` to `out_path`, picture and balanced sound, whichever way this
     render runs: a pod's render spread over the workers, the serverless chunk
-    render, or one machine.
+    render, or one machine. do_render calls it a second time (once) when the
+    quality check repaired scenes after the first.
     """
     # Chunk workers get the document with its web links and clean their own
     # stills; the cleaned copies below are files on this worker's disk only.
