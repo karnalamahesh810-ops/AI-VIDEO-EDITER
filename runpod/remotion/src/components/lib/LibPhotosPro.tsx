@@ -295,6 +295,16 @@ export const FullPhoto: React.FC<{ src: string; ar: number; filter?: string; pin
     );
   };
 
+/**
+ * The caption's room (1080p px) beside a portrait photo shown whole (FullPhoto): the blurred side panel
+ * left of the picture, so the words never run onto it; `room` for a picture that fills the frame.
+ */
+export const roomBeside = (ar: number, pinned: boolean | undefined, W: number, H: number, k: number, room = 1120): number => {
+  if (pinned || ar >= 1.25) return room;
+  const w = Math.min(W, H * ar);
+  return Math.max(300, Math.min(room, (W - w) / 2 / k - 112 - 36));
+};
+
 /** overlay.anchor as a point in 0..1 of the frame (clamped to [lo, hi]), else (fx, fy). */
 export const anchorOf = (ov: Overlay, fx: number, fy: number, lo = 0.08, hi = 0.92): Pt => {
   const a = ov.anchor as { x?: unknown; y?: unknown } | undefined;
@@ -388,6 +398,14 @@ export const PxCaption: React.FC<{ ov: Overlay; at: number; q: number; accent: s
   const line = sub === null ? "" : cut(str(sub ?? ov.subtitle), 70);
   if (!kick && !head.lines.length && !line) return null;
   const subPx = 25 * k;
+  // The subtitle in at most two balanced lines inside the room (Inter Tight 600, about 0.52 em a letter).
+  const subW = (s: string) => s.length * subPx * 0.52;
+  let subLines = wrapBy(line, room * k, subW).slice(0, 2);
+  for (let r = room * k * 0.96; subLines.length === 2 && r > room * k * 0.4; r *= 0.96) {
+    const b = wrapBy(line, r, subW);
+    if (b.length !== 2) break;
+    subLines = b;
+  }
   const pos: CSS = align === "center" ? { left: 0, width: W, alignItems: "center" } : { left: left * k, alignItems: "flex-start" };
   return (
     <div style={{ position: "absolute", bottom: bottom * k, display: "flex", flexDirection: "column", ...pos }}>
@@ -403,12 +421,12 @@ export const PxCaption: React.FC<{ ov: Overlay; at: number; q: number; accent: s
             color: "#fff", whiteSpace: "nowrap", textShadow: SHADOW, textAlign: align }}>{ln}</div>
         </Rise>
       ))}
-      {line ? (
-        <Rise at={at + 6 + head.lines.length * 3} q={q} style={{ marginTop: 10 * k }}>
-          <div style={{ fontFamily: SUBLINE, fontWeight: 600, fontSize: subPx, letterSpacing: "0.02em",
-            color: "rgba(255,255,255,.9)", whiteSpace: "nowrap", textShadow: SHADOW }}>{line}</div>
+      {subLines.map((ln, i) => (
+        <Rise key={`s${i}`} at={at + 6 + head.lines.length * 3 + i * 2} q={q} style={{ marginTop: i ? 0 : 10 * k }}>
+          <div style={{ fontFamily: SUBLINE, fontWeight: 600, fontSize: subPx, letterSpacing: "0.02em", lineHeight: 1.3,
+            color: "rgba(255,255,255,.9)", whiteSpace: "nowrap", textShadow: SHADOW }}>{ln}</div>
         </Rise>
-      ) : null}
+      ))}
     </div>
   );
 };
@@ -527,7 +545,7 @@ const ApertureIris: Look = ({ overlay, accent }) => {
         opacity: flash, mixBlendMode: "screen" }} />
       <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 52%, rgba(0,0,0,.42) 100%)" }} />
       <CaptionShade show={cap_} strength={0.62} />
-      <PxCaption ov={overlay} at={16} q={q} accent={accent} />
+      <PxCaption ov={overlay} at={16} q={q} accent={accent} room={roomBeside(ar, false, W, H, k)} />
       {r < R - 1 ? <IrisBlades r={r} turn={turn} W={W} H={H} k={k} id={id} /> : null}
     </AbsoluteFill>
   );
@@ -566,7 +584,7 @@ const SlitReveal: Look = ({ overlay, accent }) => {
           <FullPhoto src={src} ar={ar} filter={`contrast(1.05) brightness(${(0.8 + 0.2 * settle).toFixed(3)})`} />
           <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.38) 100%)" }} />
           <CaptionShade show={cap_} strength={0.62} />
-          <PxCaption ov={overlay} at={20} q={q} accent={accent} />
+          <PxCaption ov={overlay} at={20} q={q} accent={accent} room={roomBeside(ar, false, W, H, k)} />
         </div>
       </div>
       {/* The line, then the band's two lit edges. */}
@@ -636,7 +654,7 @@ const ColorBloom: Look = ({ overlay, accent }) => {
       ) : null}
       <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.4) 100%)" }} />
       <CaptionShade show={cap_} strength={0.6} />
-      <PxCaption ov={overlay} at={22} q={q} accent={accent} />
+      <PxCaption ov={overlay} at={22} q={q} accent={accent} room={roomBeside(ar, pinned, W, H, k)} />
     </AbsoluteFill>
   );
 };
@@ -691,7 +709,7 @@ const DiagonalSlices: Look = ({ overlay, accent }) => {
       <div style={{ position: "absolute", inset: 0, opacity: 1 - fade }}>
         <CaptionShade show={cap_} strength={0.6} />
       </div>
-      <PxCaption ov={overlay} at={26} q={q} accent={accent} />
+      <PxCaption ov={overlay} at={26} q={q} accent={accent} room={roomBeside(ar, false, W, H, k)} />
     </AbsoluteFill>
   );
 };
@@ -946,7 +964,7 @@ const Viewfinder: Look = ({ overlay, accent }) => {
         <AbsoluteFill style={{ background: "#fff", opacity: flash }} />
         <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.38) 100%)" }} />
         <CaptionShade show={cap_} strength={0.6} />
-        <PxCaption ov={overlay} at={24} q={q} accent={accent} />
+        <PxCaption ov={overlay} at={24} q={q} accent={accent} room={roomBeside(ar, false, W, H, k)} />
       </AbsoluteFill>
     );
   }

@@ -5,8 +5,8 @@ import { useK } from "../pro/ProGraphics";
 import { LOOP, markerPath, poly } from "./LibVideoMarks";
 import { ANTON_TRACK, CaptionShade, Cover, EXPO_IN, EXPO_OUT, FillPhoto, FullPhoto, Grain, IN_OUT, PaperGrain, PxCaption,
   Rise, SHADOW, anchorOf, asWritten, caps, clamp, clamp01, cut, fitAnton, hasAnchor, hasCaption, hash01, hashStr, itemsOf,
-  lerp, photoOf, photosOf, printAspect, ramp, str, uidOf, useLife, useOut, usePhotoInfo, yearIn, zoomRoom, type CSS,
-  type Look, type Pt } from "./LibPhotosPro";
+  lerp, photoOf, photosOf, printAspect, ramp, roomBeside, str, uidOf, useLife, useOut, usePhotoInfo, yearIn, zoomRoom,
+  type CSS, type Look, type Pt } from "./LibPhotosPro";
 
 /**
  * Photo looks, pro set II (family "px-", the shared pieces in LibPhotosPro.tsx):
@@ -157,7 +157,7 @@ const ContactSheet: Look = ({ overlay, accent }) => {
         </AbsoluteFill>
       ) : null}
       <CaptionShade show={cap_ && final > 0.5} strength={0.6} />
-      <PxCaption ov={overlay} at={40} q={q} accent={accent} />
+      <PxCaption ov={overlay} at={40} q={q} accent={accent} room={roomBeside(info.ar, false, W, H, k)} />
     </AbsoluteFill>
   );
 };
@@ -450,7 +450,7 @@ const FlatbedScan: Look = ({ overlay, accent }) => {
         </>
       ) : null}
       <CaptionShade show={cap_ && grow > 0.6} strength={0.6} />
-      <PxCaption ov={overlay} at={42} q={q} accent={accent} />
+      <PxCaption ov={overlay} at={42} q={q} accent={accent} room={roomBeside(info.ar, false, W, H, k)} />
     </AbsoluteFill>
   );
 };
@@ -460,6 +460,8 @@ const FlatbedScan: Look = ({ overlay, accent }) => {
 // closer (10 -> 17), blinks on 18-19 (sfx_at 18), closest from 20, still easing in; the caption rises from 22.
 const ShutterBurst: Look = ({ overlay, accent }) => {
   const frame = useCurrentFrame();
+  const { width: W, height: H } = useVideoConfig();
+  const k = useK();
   const q = useOut(12);
   const life = useLife();
   const src = photoOf(overlay);
@@ -486,7 +488,7 @@ const ShutterBurst: Look = ({ overlay, accent }) => {
       <AbsoluteFill style={{ background: "#fff", opacity: flash }} />
       <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 56%, rgba(0,0,0,.36) 100%)" }} />
       <CaptionShade show={cap_} strength={0.6} />
-      <PxCaption ov={overlay} at={22} q={q} accent={accent} />
+      <PxCaption ov={overlay} at={22} q={q} accent={accent} room={roomBeside(info.ar, pinned, W, H, k)} />
     </AbsoluteFill>
   );
 };
@@ -1150,7 +1152,7 @@ const ThenNow: Look = ({ overlay, accent }) => {
       {label(thenL, thenS, false, 10)}
       {label(nowL, nowS, true, 16)}
       <CaptionShade show={cap_} strength={0.66} />
-      <PxCaption ov={overlay} at={20} q={q} accent={accent} kicker={null} />
+      <PxCaption ov={overlay} at={20} q={q} accent={accent} kicker={null} room={roomBeside(a.ar, false, W, H, k)} />
     </AbsoluteFill>
   );
 };
