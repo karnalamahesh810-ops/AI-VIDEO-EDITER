@@ -57,6 +57,13 @@ class ProxyRecord:
                 "domains": {d: dict(v) for d, v in self.domains.items()}}
 
 
+def _clean_record(r: ProxyRecord) -> bool:
+    """One recent failure in a long run of successes (a refusal is also how
+    YouTube answers an age- or region-locked video on the first route that
+    tries it). A second refusal in a row still quarantines the route."""
+    return r.consecutive_failures <= 1 and r.successes >= 10 and r.success_rate >= 0.9
+
+
 class ProxyManager:
     def __init__(self, urls: List[str], direct: bool = False,
                  quarantine_base: float = 300.0, quarantine_max: float = 1800.0):
@@ -87,9 +94,18 @@ class ProxyManager:
             # A recovering route carries one trial at a time; when every
             # route is quarantined, the one due back soonest goes first.
             busy = r.active if r.state != RECOVERING else r.active * 100
+            state = rank[r.state]
+            if r.state == DEGRADED and _clean_record(r):
+                # Degraded by one refusal after a long clean run: stay in the
+                # rotation, one request behind an equally busy healthy route.
+                # Ranked after every healthy route it got no traffic and so
+                # could never earn its way back: on the Lake Powell pod
+                # (2026-10-01) 11 of 17 proxies sat degraded at 97-99% success
+                # (one at 138 of 139) while 4 carried all of YouTube.
+                state, busy = rank[HEALTHY], busy + 1
             fair = (r.index - self._rr) % max(1, n)          # round-robin among equals
             due = r.quarantined_until if r.state == QUARANTINED else 0.0
-            return (rank[r.state], due, busy, r.latency_ms, fair)
+            return (state, due, busy, r.latency_ms, fair)
         return sorted(self.records, key=key)
 
     def peek(self) -> str:

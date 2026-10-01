@@ -80,6 +80,42 @@ class Manager(unittest.TestCase):
         self.assertEqual(snap[1]["domains"]["youtube.com"]["ok"], 1)
 
 
+class OneRefusalDoesNotSideline(unittest.TestCase):
+    """The Lake Powell pod (2026-10-01): 11 of 17 proxies degraded at 97-99% success,
+    never picked again while 4 healthy ones carried all of YouTube."""
+
+    def _pm(self):
+        pm = ProxyManager(["http://a", "http://b", "http://c"], direct=False)
+        for url in ("http://a", "http://b"):
+            for _ in range(20):
+                pm.release(url, True, None, 300)
+        pm.release("http://b", False, FailureClass.ACCESS_DENIED, 300)     # one refusal after 20 successes
+        for _ in range(2):
+            pm.release("http://c", True, None, 300)
+        pm.release("http://c", False, FailureClass.ACCESS_DENIED, 300)     # one refusal, little record
+        return pm
+
+    def test_a_clean_record_keeps_the_route_in_rotation(self):
+        pm = self._pm()
+        self.assertEqual((pm.by_url["http://b"].state, pm.by_url["http://c"].state), (DEGRADED, DEGRADED))
+        picks = [pm.acquire() for _ in range(4)]
+        self.assertEqual(picks[0], "http://a")                 # an idle healthy route first
+        self.assertIn("http://b", picks)                       # then b shares the load
+        self.assertNotIn("http://c", picks[:3])                # c, with no record, only when a and b are busy
+
+    def test_two_refusals_in_a_row_still_quarantine(self):
+        pm = self._pm()
+        pm.release("http://b", False, FailureClass.ACCESS_DENIED, 300)
+        self.assertEqual(pm.by_url["http://b"].state, QUARANTINED)
+        self.assertNotIn("http://b", [pm.acquire() for _ in range(3)])
+
+    def test_three_successes_restore_it(self):
+        pm = self._pm()
+        for _ in range(3):
+            pm.release("http://b", True, None, 300)
+        self.assertEqual(pm.by_url["http://b"].state, HEALTHY)
+
+
 class RetryPolicy(unittest.TestCase):
     def _run(self, outcomes, video="VID00000001"):
         calls = []
