@@ -225,15 +225,21 @@ class Renderer(unittest.TestCase):
 
     def test_the_renderer_lays_the_clip_over_the_cut(self):
         comp = self._read("transitions", "PackTransition.tsx")
+        levels = self._read("transitions", "packLevels.ts")
         self.assertIn('mixBlendMode: "screen"', comp)
         self.assertIn("OffthreadVideo", comp)
-        self.assertIn("peakFrame", comp)
-        self.assertIn('PACK_PREFIX = "pack:"', comp)
+        self.assertIn("peakFrame", levels)
+        self.assertIn('PACK_PREFIX = "pack:"', levels)
         self.assertIn("pack:${string}", self._read("types.ts"))
+        self.assertIn("transitionGain?: number", self._read("types.ts"))
         main = self._read("Main.tsx")
         self.assertIn("<PackTransitions", main)
-        # Its own sound: never above the original level, muted only by the editor's switch.
+        # Its own sound levelled under the voice (packVolume), muted only by the editor's switch, the
+        # master only ever turning it down.
+        self.assertIn("volume={level} muted={level <= 0}", comp)
+        self.assertIn("packVolume(scene, voiceLufs, volume)", comp)
         self.assertIn("props.sfxEnabled === false ? 0 : Math.min(1,", main)
+        self.assertIn("voiceLufs={(props.meta as { voiceLufs?: unknown } | undefined)?.voiceLufs}", main)
 
 
 if __name__ == "__main__":

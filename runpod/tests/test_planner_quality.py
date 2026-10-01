@@ -33,7 +33,7 @@ VR = set(treatments.VR_LOOKS)
 OLD_DATES = treatments.OLD_DATE_LOOKS
 NOT_A_DATE_LOOK = {"LIB_DT_CALENDAR_PAGE", "LIB_DT_REC_STAMP", "LIB_DT_COUNTDOWN_DAYS", "TL_DATE_STAMP_V1",
                    "LIB_DT_TIMELINE_TICK", "LIB_DT_STAMP_BAR"}
-AT_16 = {5: 0.891, 7: 0.708, 9: 0.562, 10: 0.501}      # 10 ** ((-16 - dB + 20) / 20)
+AT_16 = {5: 0.891, 6: 0.794, 7: 0.708, 9: 0.562, 10: 0.501}      # 10 ** ((-16 - dB + 20) / 20)
 
 
 def spoken(text, start, pace=0.36):
@@ -114,19 +114,24 @@ def flood_shots():
 # --------------------------------------------------------------------------- A. sound levels
 class SoundLevels(unittest.TestCase):
     def test_every_kind_of_sound_sits_under_the_voice(self):
-        self.assertEqual(round(sfxplan.level("keys-type"), 3), AT_16[10])     # typing ~10 dB under
-        self.assertEqual(round(sfxplan.level("whoosh-soft"), 3), AT_16[9])    # soft whooshes ~9
-        self.assertEqual(round(sfxplan.level("click"), 3), AT_16[7])          # ui ~7
-        self.assertEqual(round(sfxplan.level("paper"), 3), AT_16[7])          # paper ~7
-        self.assertEqual(round(sfxplan.level("hit-deep"), 3), AT_16[5])       # impacts and dates ~5
-        self.assertEqual(round(sfxplan.level("glitch-pro"), 3), AT_16[5])     # glitches ~5
-        # One cap, the hits' level: nothing is ever louder than 5 dB under the voice.
-        self.assertEqual(round(sfxplan.cap(), 3), AT_16[5])
+        # Against a -16 LUFS voice. The owner, 2026-10-01: no sound is ever louder than the narration -
+        # its loudest moment 6 dB under the voice at most, a glitch 9.
+        self.assertEqual(round(sfxplan.level("keys-type", -16.0), 3), AT_16[10])     # typing ~10 dB under
+        self.assertEqual(round(sfxplan.level("whoosh-soft", -16.0), 3), AT_16[9])    # soft whooshes ~9
+        self.assertEqual(round(sfxplan.level("click", -16.0), 3), AT_16[7])          # ui ~7
+        self.assertEqual(round(sfxplan.level("paper", -16.0), 3), AT_16[7])          # paper ~7
+        self.assertEqual(round(sfxplan.level("hit-deep", -16.0), 3), AT_16[6])       # impacts ~6
+        # A glitch 9 dB under, counted from its own measured loudness (glitch-pro is 0.4 dB hot).
+        self.assertAlmostEqual(sfxplan.peak_under_voice("glitch-pro", sfxplan.level("glitch-pro", -16.0), -16.0), 9.0,
+                               places=6)
+        # The ceiling, the hits' level: nothing is ever louder than 6 dB under the voice.
+        self.assertEqual(round(sfxplan.cap(-16.0), 3), AT_16[6])
         for name in templates.sfx_files():
-            self.assertLessEqual(sfxplan.level(name), sfxplan.cap() + 1e-9, name)
+            self.assertLessEqual(sfxplan.level(name), sfxplan.cap(None, name) + 1e-9, name)
+            self.assertGreaterEqual(sfxplan.peak_under_voice(name, sfxplan.level(name)), 6.0 - 1e-6, name)
 
     def test_a_quiet_narration_takes_the_sounds_down_with_it(self):
-        self.assertAlmostEqual(sfxplan.cap(-20.0), 10 ** (-5 / 20), places=4)
+        self.assertAlmostEqual(sfxplan.cap(-20.0), 10 ** (-6 / 20), places=4)
         self.assertAlmostEqual(sfxplan.level("hit-deep", -20.0) / sfxplan.level("hit-deep", -16.0), 10 ** (-4 / 20),
                                places=4)
         # A very loud one never asks the renderer for more than 1.0.

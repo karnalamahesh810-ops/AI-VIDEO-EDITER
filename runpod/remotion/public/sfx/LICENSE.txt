@@ -25,3 +25,8 @@ Sound-designed from those takes: riser-short-v2 (rising sweep into the impact-pu
 zoom-in-whoosh (reversed whoosh into a soft thump), count-final (lock click with a low body),
 ui-tick and letter-tick (single ticks cut from tick takes), paper-tear (a take of tape-rip).
 New names never overwrite an older file; "-v2" marks the better take of an existing name.
+
+2026-10-01 (sounds never over the narration): every file's "lufs" in sfx_meta.json is now measured the same
+way - its loudest 400 ms (BS.1770 momentary loudness: K-weighted at 48 kHz, a 10 ms hop, the file padded
+with silence) - and "peakDb" is its sample peak (dBFS) at its own rate. src/sfxplan.py levels each sound from
+it: a file hotter than the -20 LUFS reference is turned down by the difference, a quieter one is never raised.

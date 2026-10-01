@@ -101,21 +101,23 @@ _MIN_OUT_FRAMES = 6
 # The sound a transition makes, and how far under the voice its loudest point
 # sits (dB; src/sfxplan.py turns that into a gain against the measured
 # narration). Its loudest point (sfx_meta.json "peak") lands on the cut. A
-# transition is punctuation, not a moment: each sits a little under its
-# sound's own category level (hits and glitches 5 dB, air 9 dB), the soft
-# dissolves quietest - a whisper of air; a dip through black is silent.
+# transition is punctuation, not a moment: each sits at or under its
+# sound's own category level, never closer to the voice than the ceiling
+# (sfxplan.cap: 6 dB, a glitch 9 - the owner, 2026-10-01: the transition
+# sounds stood over the narration, the glitches most), the soft dissolves
+# quietest - a whisper of air; a dip through black is silent.
 # The sound designer's premium set (2026-09-30): a whip is a fast whoosh, a
 # zoom punch lands its thump on the cut, a light leak or film burn shimmers,
 # a flash pops; the owner's glitch and deep hit stay.
 _TRANSITION_SFX = {
-    "glitch": ("glitch-pro", 7.0), "vhs-glitch": ("glitch-short-v2", 7.5),
+    "glitch": ("glitch-pro", 9.0), "vhs-glitch": ("glitch-short-v2", 9.5),
     "flash": ("camera-flash-pop", 7.0), "chromatic-flash": ("camera-flash-pop", 7.0),
     "whip-pan": ("whoosh-fast", 9.0), "zoom-punch": ("zoom-in-whoosh", 9.5),
     "film-burn": ("light-shimmer", 10.0), "light-leak": ("light-shimmer", 11.0),
     "blur-dissolve": ("whoosh-soft-v2", 11.0), "shake-cut": ("hit-deep", 7.0),
     # The older entrances an editor can still pick.
     "whip": ("whoosh-fast", 9.5), "punch": ("zoom-in-whoosh", 10.0), "zoom": ("whoosh-soft-v2", 11.0),
-    "slide": ("ui-swipe", 11.0), "mosaic": ("glitch-short-v2", 9.0),
+    "slide": ("ui-swipe", 11.0), "mosaic": ("glitch-short-v2", 11.0),
 }
 # The older file a transition plays while its premium one does not ship.
 _TRANSITION_ALT = {"glitch-short-v2": "glitch-short", "camera-flash-pop": "flash-hit", "whoosh-fast": "swipe",
@@ -229,7 +231,68 @@ def voice_loudness(audio_url: str, inp: Dict[str, Any], narration_path: str = ""
     value = measure_lufs(path) if path else None
     if value is not None:
         return value, "measured"
+    if (inp or {}).get("_job_id"):
+        # Said out loud in a job's log: an unmeasured voice levels every sound against a guess.
+        print(f"[worker] narration loudness not measured ({'no local file' if not path else 'unreadable'}); "
+              f"assuming {sfxplan.VOICE_LUFS_DEFAULT} LUFS", flush=True)
     return sfxplan.VOICE_LUFS_DEFAULT, "assumed"
+
+
+VOICE_URL_TIMEOUT = 90               # seconds to read a narration over the network at render time
+
+
+def measure_lufs_url(url: str, timeout: float = VOICE_URL_TIMEOUT) -> Optional[float]:
+    """The integrated loudness of a narration at an http(s) link (ffmpeg reads it); None when it cannot."""
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        return None
+    try:
+        # rw_timeout (microseconds): a stalled read gives up instead of holding the render.
+        p = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-rw_timeout", "20000000", "-i", url, "-vn",
+                            "-af", "ebur128", "-f", "null", "-"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+    found = _LUFS_LINE.findall(p.stderr or "")
+    v = float(found[-1]) if found else None
+    return v if v is not None and -70.0 < v < 0.0 else None
+
+
+def relevel_to_voice(doc: Dict[str, Any], measure=None) -> bool:
+    """
+    A document planned against a voice nobody measured (meta.voiceLufsSource
+    "assumed"): measure the narration now (doc.audio.url, `measure` =
+    measure_lufs_url) and level the sounds to it. The looks'
+    own sounds and the pack clips follow meta.voiceLufs in the renderer; the
+    planned rows (sfx kind "transition" / "overlay") and the pack scenes'
+    transitionGain come down by the difference when the voice is quieter
+    than assumed (never raised). The editor's own rows stay as set, held
+    under the ceilings by cap_sfx_levels. Returns whether the voice was measured.
+    """
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else None
+    if meta is None or not isinstance(doc.get("audio"), dict) or meta.get("voiceLufsSource") != "assumed":
+        return False
+    known = meta.get("voiceLufs")
+    got = (measure or measure_lufs_url)(str(doc["audio"].get("url") or ""))
+    if got is None:
+        return False
+    planned = sfxplan.voice_level(known)
+    meta["voiceLufs"] = round(float(got), 1)
+    meta["voiceLufsSource"] = "measured"
+    meta["voiceLufsPlanned"] = round(planned, 1)
+    drop = float(got) - planned
+    if drop < 0:
+        k = 10 ** (drop / 20.0)
+        for fx in doc.get("sfx") or []:
+            v = fx.get("volume") if isinstance(fx, dict) else None
+            if fx.get("kind") in ("transition", "overlay") and isinstance(v, (int, float)) and not isinstance(v, bool):
+                fx["volume"] = round(float(v) * k, 3)
+        for sc in doc.get("scenes") or []:
+            g = sc.get("transitionGain") if isinstance(sc, dict) else None
+            if isinstance(g, (int, float)) and not isinstance(g, bool):
+                sc["transitionGain"] = round(float(g) * k, 3)
+    cap_sfx_levels(doc)
+    print(f"[worker] narration measured at render: {got:.1f} LUFS (planned against {planned:.1f})", flush=True)
+    return True
 
 
 def cap_sfx_levels(doc: Dict[str, Any]) -> int:
@@ -250,7 +313,8 @@ def cap_sfx_levels(doc: Dict[str, Any]) -> int:
         v = fx.get("volume")
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
             continue
-        held = sfxplan.clamp(v, voice, doc.get("sfxVolume", 1.0))
+        # Each sound under its own ceiling: a glitch further under the voice.
+        held = sfxplan.clamp(v, voice, doc.get("sfxVolume", 1.0), name=str(fx.get("name") or ""))
         if held < v - 1e-9:
             fx["volume"] = round(held, 3)
             lowered += 1
@@ -605,9 +669,15 @@ def _plan_crossfades(shots: List[dict], durations: Optional[List[int]] = None) -
 # burns, light leaks, white flashes, film strips, glitches and streaks shot on
 # black, each with its own sound. A scene entering with "pack:<name>" is a hard
 # cut with the clip screen-blended over it, its most covered frame on the cut
-# (remotion/src/transitions/PackTransition.tsx), its sound at its own level -
-# so no timeline transition sound is ever planned on that cut. The owner: not
-# on every cut, never the same one twice running, placed where the story turns.
+# (remotion/src/transitions/PackTransition.tsx), its own sound playing - so no
+# timeline transition sound is ever planned on that cut. The owner: not on
+# every cut, never the same one twice running, placed where the story turns.
+# Its sound is levelled against the narration like every other sound (the
+# owner, 2026-10-01: the pack's sounds stood over the voice): the clip's
+# measured loudness (transitions_meta.json "lufs") sets a gain that puts its
+# loudest moment PACK_UNDER_DB under the voice, a glitch clip's
+# PACK_GLITCH_UNDER_DB, never above 1 (as recorded): pack_gain, stored on the
+# scene as "transitionGain"; the renderer holds it under the same ceiling.
 PACK_PREFIX = "pack:"
 PACK_CHARACTERS = ("flash", "burn", "leak", "film", "glitch", "streak")
 PACK_META_PATH = os.path.join(os.path.dirname(templates.PATH), "..", "data", "transitions_meta.json")
@@ -683,6 +753,31 @@ def pack_name(t: Any) -> str:
     if isinstance(t, str) and t.startswith(PACK_PREFIX) and t[len(PACK_PREFIX):] in pack_meta():
         return t[len(PACK_PREFIX):]
     return ""
+
+
+# How far under the voice a pack clip's loudest moment sits (dB): the sound
+# ceiling (sfxplan.CAP_UNDER_DB), a glitch clip the glitches' further 3 dB.
+PACK_UNDER_DB = sfxplan.CAP_UNDER_DB
+PACK_GLITCH_UNDER_DB = sfxplan.CAP_UNDER_DB + sfxplan.GLITCH_EXTRA_DB
+
+
+def pack_under_db(name: str) -> float:
+    """dB under the voice a pack clip's loudest moment is set: glitch clips further."""
+    return PACK_GLITCH_UNDER_DB if (pack_meta().get(name) or {}).get("character") == "glitch" else PACK_UNDER_DB
+
+
+def pack_gain(name: str, voice_lufs: Optional[float] = None) -> float:
+    """
+    The gain of a pack clip's own sound against this voice: its loudest 400 ms
+    (transitions_meta.json "lufs"; a clip not measured counts as a matched
+    sound file, SFX_REF_LUFS) pack_under_db under the voice, never above 1
+    (the clip as recorded). The renderer's twin is PackTransition.tsx packGain.
+    """
+    m = pack_meta().get(name) or {}
+    loud = m.get("lufs")
+    if isinstance(loud, bool) or not isinstance(loud, (int, float)) or not math.isfinite(loud):
+        loud = sfxplan.SFX_REF_LUFS
+    return min(1.0, 10 ** ((sfxplan.voice_level(voice_lufs) - pack_under_db(name) - float(loud)) / 20.0))
 
 
 def _pack_span(m: dict, fps: int) -> tuple:
@@ -875,12 +970,14 @@ def plan_pack_transitions(segments: List[Segment], shots: List[dict], bounds: Li
     return out
 
 
-def apply_pack_transitions(scenes: List[dict], picks: Dict[int, str], fps: int, clear_seconds: float = 3.0) -> int:
+def apply_pack_transitions(scenes: List[dict], picks: Dict[int, str], fps: int, clear_seconds: float = 3.0,
+                           voice_lufs: Optional[float] = None) -> int:
     """
     Set each picked scene's entrance to its pack clip (any crossfade or style
     transition there becomes the hard cut the clip covers) and clear the
     style's own transitions within `clear_seconds` of it (crossfades stay).
-    Returns how many pack transitions were set.
+    Each pack scene carries its clip's sound level against this voice
+    ("transitionGain", pack_gain). Returns how many pack transitions were set.
     """
     near = int(round(max(0.0, clear_seconds) * fps))
     cuts = [int(scenes[i]["startFrame"]) for i in picks if 0 < i < len(scenes)]
@@ -888,6 +985,7 @@ def apply_pack_transitions(scenes: List[dict], picks: Dict[int, str], fps: int, 
         t = sc.get("transition") or "none"
         if i in picks and 0 < i < len(scenes):
             sc["transition"] = PACK_PREFIX + picks[i]
+            sc["transitionGain"] = round(pack_gain(picks[i], voice_lufs), 3)
         elif t not in ("none", "crossfade") and not pack_name(t) \
                 and any(abs(int(sc.get("startFrame", 0)) - c) <= near for c in cuts):
             sc["transition"] = "none"
@@ -904,15 +1002,15 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
     """
     A sound for each transition, placed so its loudest point lands on the
     cut, set against the voice (`voice_lufs`, see _TRANSITION_SFX) at the
-    style pack's sfxIntensity like the graphics' sounds, never above the one
-    cap (sfxplan.cap). Skipped when another sound starts within a second of
-    it or is still playing across it (a typing run, a count, a riser): a
-    graphic's own sound on that beat wins, and two sounds never stack.
+    style pack's sfxIntensity like the graphics' sounds, never above its
+    ceiling (sfxplan.cap: 6 dB under the voice, a glitch 9). Skipped when
+    another sound starts within a second of it or is still playing across
+    it (a typing run, a count, a riser): a graphic's own sound on that beat
+    wins, and two sounds never stack.
     """
     meta = sfx_meta()
     have = templates.sfx_files()
     near = int(round(_TRANSITION_SFX_CLEARANCE * fps))
-    top = sfxplan.cap(voice_lufs)
     try:
         level = max(0.0, float(intensity))
     except (TypeError, ValueError):
@@ -947,7 +1045,9 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
         if any(abs(s - start) <= near or abs(s - cut) <= near or (s < end and start < e)
                for s, e in busy):
             continue
-        vol = round(min(top, sfxplan.gain(under, voice_lufs) * level), 3)
+        # Under its own ceiling, never above it (sfxplan.cap: the file's measured loudness counts).
+        under = max(float(under), sfxplan.ceiling_db(name))
+        vol = round(min(sfxplan.cap(voice_lufs, name), sfxplan.gain(under, voice_lufs, name) * level), 3)
         if vol <= 0.005:
             continue
         picks.append({"name": name, "startFrame": start, "volume": vol,
@@ -1333,15 +1433,15 @@ def build(segments: List[Segment], shots: List[dict],
         from . import styles as video_styles
         rhythm = video_styles.pack_rhythm(str(inp.get("video_style") or ""), style)
         apply_pack_transitions(scenes, plan_pack_transitions(segments, shots, bounds, fps, rhythm, brief, busy),
-                               fps, float(rhythm.get("clear", 3.0)))
+                               fps, float(rhythm.get("clear", 3.0)), voice_lufs=voice_lufs)
     # Each transition's own sound, peaking on its cut, unless a graphic's
     # sound is already there (a row, or the sound built into a look); then
-    # every sound under the one cap. A pack transition plays its own: none here.
+    # every sound under its ceiling. A pack transition plays its own: none here.
     sfx_list = sorted(list(sfx_list) + plan_transition_sfx(
                           scenes, fps, busy, (pack or {}).get("sfxIntensity", 1.0), voice_lufs=voice_lufs),
                       key=lambda s: int(s.get("startFrame", 0)))
-    top = sfxplan.cap(voice_lufs)
     for fx in sfx_list:
+        top = sfxplan.cap(voice_lufs, str(fx.get("name") or ""))
         if isinstance(fx.get("volume"), (int, float)) and fx["volume"] > top:
             fx["volume"] = round(top, 3)
 

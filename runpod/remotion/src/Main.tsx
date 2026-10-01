@@ -330,9 +330,11 @@ export const Main: React.FC<TimelineProps> = (props) => {
       ))}
 
       {/* The owner's overlay transitions ("pack:<name>"): a clip screen-blended
-          over a hard cut, its own sound at its own level (never raised; the
-          editor's sound switch mutes it, its master level can turn it down). */}
+          over a hard cut, its own sound levelled under the narration
+          (meta.voiceLufs; never above 1; the editor's sound switch mutes it,
+          its master level can only turn it down). */}
       <PackTransitions scenes={scenes} fps={fps} durationInFrames={props.durationInFrames} premountFor={premount}
+        voiceLufs={(props.meta as { voiceLufs?: unknown } | undefined)?.voiceLufs}
         volume={props.sfxEnabled === false ? 0 : Math.min(1, Math.max(0, Number(props.sfxVolume ?? 1)))} />
 
       {/* Caption track, burned in over the visuals but under the graphics */}

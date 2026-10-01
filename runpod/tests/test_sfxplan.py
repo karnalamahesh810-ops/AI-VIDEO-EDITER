@@ -13,8 +13,9 @@ FILES = {  # name: (duration s, peak s)
     "impact": (2.4, 0.6), "boom-soft": (1.7, 0.3), "click": (0.11, 0.0), "tick": (0.09, 0.0),
     "keys": (5.0, 0.4), "count-tick": (1.32, 0.96), "pop": (0.48, 0.03), "marker": (0.7, 0.16),
 }
-# At the assumed voice (-16 LUFS) against the -20 LUFS sound set: 10 ** ((-16 - dB under + 20) / 20).
-AT = {5: 0.891, 6: 0.794, 7: 0.708, 9: 0.562, 10: 0.501}
+# At the assumed voice (sfxplan.VOICE_LUFS_DEFAULT) against the -20 LUFS sound set:
+# 10 ** ((voice - dB under + 20) / 20).
+AT = {d: round(10 ** ((sfxplan.VOICE_LUFS_DEFAULT - d - sfxplan.SFX_REF_LUFS) / 20), 3) for d in (5, 6, 7, 9, 10)}
 
 
 def T(tid, sfx="whoosh", emphasis="medium", cues=(), component="motion", **defaults):
@@ -206,12 +207,12 @@ class Volume(SfxPlanTest):
         got = {s["name"]: s["volume"] for s in sfxplan.plan(
             [ov("LOOK_HIGH", 0), ov("LOOK_B", 300), ov("KICKER", 600, text="A"),
              ov("TYPE_LOOK", 900, text="abc")], 30, 1.0)}
-        # Hits 5 dB under the voice, clicks 7, whooshes 9, typing 10.
-        self.assertEqual(got, {"impact": AT[5], "whoosh": AT[9], "click": AT[7], "keys": AT[10]})
+        # Hits 6 dB under the voice, clicks 7, whooshes 9, typing 10 (the owner, 2026-10-01: never over the voice).
+        self.assertEqual(got, {"impact": AT[6], "whoosh": AT[9], "click": AT[7], "keys": AT[10]})
         half = sfxplan.plan([ov("LOOK_B", 300)], 30, 0.5)
         self.assertEqual(half[0]["volume"], round(AT[9] * 0.5, 3))
         # Nothing like the old 0.09-0.135: every planned sound is within reach of the voice.
-        self.assertTrue(all(v >= 0.45 for v in got.values()), got)
+        self.assertTrue(all(v >= 0.3 for v in got.values()), got)
 
     def test_the_levels_follow_the_measured_voice(self):
         quiet = sfxplan.plan([ov("LOOK_B", 300)], 30, 1.0, voice_lufs=-24.0)[0]["volume"]
@@ -230,7 +231,7 @@ class Volume(SfxPlanTest):
         top = round(sfxplan.cap(), 3)
         self.assertTrue(all(s["volume"] <= top for s in loud), loud)
         self.assertEqual(loud[1]["volume"], top)           # the editor's 100% comes back to the cap
-        self.assertEqual(top, AT[sfxplan.CAP_UNDER_DB])    # the cap is the hits' level: 5 dB under the voice
+        self.assertEqual(top, AT[sfxplan.CAP_UNDER_DB])    # the cap is the hits' level: 6 dB under the voice
         # An editor's quieter choice stands as set.
         [s] = sfxplan.plan([ov("LOOK_B", 400, sfxVolume=0.2)], 30, 1.0)
         self.assertEqual(s["volume"], 0.2)
@@ -247,7 +248,7 @@ class Volume(SfxPlanTest):
         sfxplan.reload()
         self.assertEqual(sfxplan.category("shimmer-new"), "shimmer")
         self.assertEqual(round(sfxplan.level("shimmer-new"), 3), AT[9])
-        self.assertEqual(round(sfxplan.level("whoosh"), 3), AT[5])           # the meta beats the name
+        self.assertEqual(round(sfxplan.level("whoosh"), 3), AT[6])           # the meta beats the name
         self.assertEqual(sfxplan.category("keys"), "typing")                 # no category: the name decides
         self.assertEqual(round(sfxplan.level("no-such-sound"), 3), AT[6])    # unknown: 6 dB under
 

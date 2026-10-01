@@ -30,12 +30,15 @@
  *   pitch    the render's tone change (Audio toneFrequency; 1 = as recorded)
  *
  * Levels are the planner's, against the narration's measured loudness
- * (doc.meta.voiceLufs): every file is loudness-matched to refLufs, so a gain
- * puts its loudest moment a category's dB under the voice (typing 10,
- * whooshes 9, clicks/ticks/paper 7, hits 5), times 10^(gain_db/20), the
+ * (doc.meta.voiceLufs): every file is loudness-matched to refLufs (its
+ * measured loudest 400 ms is sfx_meta.json "lufs": a hotter file is turned
+ * down by the difference, a quieter one never raised), so a gain puts its
+ * loudest moment a category's dB under the voice (typing 10, whooshes and
+ * glitches 9, clicks/ticks/paper 7, hits 6), times 10^(gain_db/20), the
  * pack's intensity (doc.lookSounds.intensity; not for a fixed cue), the
  * overlay's soundGain trim and the document's sfxVolume - never above the
- * one cap (capUnder dB under the voice, and never above 1).
+ * ceiling (capUnder dB under the voice, a glitch capUnderCategory's 9; the
+ * owner, 2026-10-01: no sound is ever louder than the narration), never above 1.
  */
 import registry from "../../templates/registry.json";
 import sfxMetaJson from "../../data/sfx_meta.json";
@@ -75,6 +78,8 @@ export interface SoundLevels {
   voiceDefault: number;
   underDefault: number;
   capUnder: number;
+  /** A category held further under the voice than capUnder (glitch: 9 dB). */
+  capUnderCategory?: Record<string, number>;
   categoryUnder: Record<string, number>;
   nameCategory: Record<string, string>;
   categoryFallback: Record<string, string[]>;
@@ -91,7 +96,9 @@ export interface SoundLevels {
   protectedComponents: string[];
 }
 
-export type SoundMeta = Record<string, { duration?: number; peak?: number; category?: string; loop?: boolean }>;
+export type SoundMeta = Record<string, { duration?: number; peak?: number; category?: string; loop?: boolean;
+  /** The file's loudest 400 ms (LUFS) and its sample peak (dBFS), measured. */
+  lufs?: number; peakDb?: number }>;
 
 export interface SoundData {
   meta: SoundMeta;
@@ -159,24 +166,37 @@ export const voiceLevel = (voiceLufs: unknown, data: SoundData = SOUND_DATA): nu
   return v !== null && v > -60 && v < 0 ? v : data.levels.voiceDefault;
 };
 
-/** The linear gain that puts a loudness-matched file's loudest moment `dbUnder` dB under the voice. */
-export const gainFor = (dbUnder: number, voice: number, data: SoundData = SOUND_DATA): number =>
-  10 ** ((voice - dbUnder - data.levels.refLufs) / 20);
-
-/** The one ceiling every sound is held under (never above the renderer's 1.0). */
-export const capFor = (voice: number, data: SoundData = SOUND_DATA): number =>
-  Math.min(1, gainFor(data.levels.capUnder, voice, data));
-
 export const categoryOf = (name: string, data: SoundData = SOUND_DATA): string => {
   const got = data.meta[name]?.category;
   if (typeof got === "string" && got.trim().toLowerCase() in data.levels.categoryUnder) return got.trim().toLowerCase();
   return data.levels.nameCategory[name] || "";
 };
 
-/** The planned gain of a file against this voice (the category's level, under the cap). */
+/** A file's loudest 400 ms as levelled: its measured lufs when hotter than refLufs, else refLufs (never raised). */
+export const fileLufs = (name: string | null | undefined, data: SoundData = SOUND_DATA): number => {
+  const v = name ? num(data.meta[name]?.lufs) : null;
+  return v === null ? data.levels.refLufs : Math.max(data.levels.refLufs, v);
+};
+
+/** The linear gain that puts a file's loudest moment `dbUnder` dB under the voice (`name`: that file's own loudness). */
+export const gainFor = (dbUnder: number, voice: number, data: SoundData = SOUND_DATA, name?: string | null): number =>
+  10 ** ((voice - dbUnder - fileLufs(name, data)) / 20);
+
+/** How close to the voice a sound may come at its loudest (dB under): capUnder, a glitch's further. */
+export const ceilingFor = (name: string | null | undefined, data: SoundData = SOUND_DATA): number => {
+  const own = name ? data.levels.capUnderCategory?.[categoryOf(name, data)] : undefined;
+  return Math.max(data.levels.capUnder, typeof own === "number" ? own : data.levels.capUnder);
+};
+
+/** The ceiling a sound is held under (never above the renderer's 1.0); without a name, a matched file's. */
+export const capFor = (voice: number, data: SoundData = SOUND_DATA, name?: string | null): number =>
+  Math.min(1, gainFor(ceilingFor(name, data), voice, data, name));
+
+/** The planned gain of a file against this voice (the category's level, under its ceiling). */
 export const levelFor = (name: string, voice: number, data: SoundData = SOUND_DATA): number => {
   const under = data.levels.categoryUnder[categoryOf(name, data)];
-  return Math.min(capFor(voice, data), gainFor(typeof under === "number" ? under : data.levels.underDefault, voice, data));
+  return Math.min(capFor(voice, data, name),
+    gainFor(typeof under === "number" ? under : data.levels.underDefault, voice, data, name));
 };
 
 // ------------------------------------------------------------------ files
@@ -259,7 +279,6 @@ export const scheduleCues = (cues: readonly SoundCue[] | undefined | null, ctx: 
   const L = data.levels;
   const s = fps / BASE_FPS;
   const voice = voiceLevel(ctx.voice, data);
-  const top = capFor(voice, data);
   const defaultFrames = numOr(ctx.defaultFrames, 0);
   const stretch = defaultFrames > 0 ? frames / defaultFrames : 1;
   const least = jr(L.minAudible * s);
@@ -318,7 +337,7 @@ export const scheduleCues = (cues: readonly SoundCue[] | undefined | null, ctx: 
         : n < natural || looped ? Math.max(1, Math.min(jr(4 * s), Math.floor(n / 3))) : 0;
       fade = Math.min(fade, n);
       const db = numOr(cue.gain_db, 0);
-      const vol = r4(Math.min(top, Math.max(0, levelFor(name, voice, data) * 10 ** (db / 20)
+      const vol = r4(Math.min(capFor(voice, data, name), Math.max(0, levelFor(name, voice, data) * 10 ** (db / 20)
         * (cue.fixed ? 1 : pack) * trimGain * master)));
       if (vol <= 0.001) continue;
       const pitch = num(cue.pitch);

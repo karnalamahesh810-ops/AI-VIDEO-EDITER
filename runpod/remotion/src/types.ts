@@ -39,8 +39,8 @@ export type SceneTransition =
   // incoming one while it fades in (Main.tsx extends the outgoing scene).
   | "crossfade"
   // The owner's overlay transition pack ("pack:mlt5"): a hard cut with the
-  // pack clip laid over it, screen-blended, its own sound at its own level
-  // (transitions/PackTransition.tsx). The names are data/transitions_meta.json's,
+  // pack clip laid over it, screen-blended, its own sound levelled under the
+  // narration (Scene.transitionGain; transitions/PackTransition.tsx). The names are data/transitions_meta.json's,
   // checked against timeline.pack_meta() rather than this list.
   | `pack:${string}`;
 
@@ -155,6 +155,13 @@ export interface Scene {
   /** Footage grade — film grain, vintage warmth, archival black and white. */
   treatment?: Treatment;
   transition: SceneTransition;
+  /**
+   * A pack transition's ("pack:<name>") own sound level, planned against the
+   * narration (src/timeline.py pack_gain): its loudest moment 6 dB under the
+   * voice, a glitch clip 9. The renderer never plays it louder than that
+   * ceiling or 1; absent, it plays at the ceiling.
+   */
+  transitionGain?: number;
   /** "inset": media framed on a backdrop at its own shape (archival, low-res, 4:3). */
   /** "window": the footage plays inside a floating player window on a designed backdrop (case-file look). */
   frame?: "full" | "inset" | "window";

@@ -86,7 +86,10 @@ class Registry(unittest.TestCase):
     def test_the_renderer_sets_levels_like_the_planner(self):
         levels = _registry()["soundLevels"]
         self.assertEqual(levels, json.loads(json.dumps(sfxplan.sound_levels())))
-        self.assertEqual((levels["capUnder"], levels["refLufs"], levels["voiceDefault"]), (5.0, -20.0, -16.0))
+        self.assertEqual((levels["capUnder"], levels["refLufs"], levels["voiceDefault"]), (6.0, -20.0, -20.0))
+        # The owner, 2026-10-01: never over the voice; a glitch a further 3 dB under.
+        self.assertEqual(levels["capUnderCategory"], {"glitch": 9.0})
+        self.assertEqual(levels["categoryUnder"]["glitch"], 9.0)
 
     def test_the_sound_designers_map_is_applied(self):
         reg = {t["id"]: t for t in _registry()["templates"]}
@@ -191,7 +194,7 @@ class Schedule(unittest.TestCase):
         cue = {"name": "whoosh-soft-v2", "at": 20}
         [s] = sched([cue])
         self.assertAlmostEqual(s["volume"], sfxplan.level("whoosh-soft-v2"), places=4)
-        [q] = sched([cue], voice_lufs=-22.0)
+        [q] = sched([cue], voice_lufs=sfxplan.VOICE_LUFS_DEFAULT - 6.0)
         self.assertAlmostEqual(s["volume"] / q["volume"], 10 ** (6 / 20), places=2)
         [g] = sched([dict(cue, gain_db=-6.0)], intensity=0.5, gain=0.5, master=0.5)
         self.assertAlmostEqual(g["volume"], sfxplan.level("whoosh-soft-v2") * 10 ** (-6 / 20) * 0.125, places=4)

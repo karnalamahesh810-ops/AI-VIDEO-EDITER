@@ -3180,7 +3180,7 @@ def _plan_sfx(overlays: List[dict], treatments: List[dict], fps: int, intensity:
                 continue
         level = sfxplan.level(s["name"], voice_lufs) * max(0.0, float(intensity))
         picks.append({"name": s["name"], "startFrame": int(ov["startFrame"]),
-                      "volume": round(min(sfxplan.cap(voice_lufs), level), 3), "_e": e})
+                      "volume": round(min(sfxplan.cap(voice_lufs, s["name"]), level), 3), "_e": e})
         last = at
     for p in picks:
         p.pop("_e", None)

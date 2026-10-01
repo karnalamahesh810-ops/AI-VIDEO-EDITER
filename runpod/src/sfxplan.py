@@ -31,14 +31,16 @@ six times a minute. This module does that for the planned overlays:
     character every FRAMES_PER_CHAR frames at 30 fps). Looks that count a
     number up get "count-tick" for the count.
   * Level (the owner, 2026-09-30: "make the sound effects NOT HIGHER than the
-    voiceover - edit like a smart editor"): relative to the narration. Every
-    file is loudness-matched (its loudest 400 ms ~ SFX_REF_LUFS), so a gain
-    puts a sound's loudest moment a known number of dB under the voice's
-    integrated loudness: typing ~10 dB under, whooshes ~9, clicks, ticks and
-    paper ~7, hits, glitches and risers ~5 (sfx_meta.json "category", else
-    the file's own name), times the style pack's intensity (a date's tick
-    excepted: always at its own level), and never above one cap (cap())
-    - an editor's override included.
+    voiceover - edit like a smart editor"; 2026-10-01: they still were, the
+    glitches most): relative to the narration. Every file's loudest 400 ms
+    is measured (sfx_meta.json "lufs"; about SFX_REF_LUFS, the matched
+    level), so a gain puts a sound's loudest moment a known number of dB
+    under the voice's integrated loudness: typing ~10 dB under, whooshes and
+    glitches ~9, clicks, ticks and paper ~7, hits and risers ~6
+    (sfx_meta.json "category", else the file's own name), times the style
+    pack's intensity (a date's tick excepted: always at its own level), and
+    never closer than the ceiling (cap(): 6 dB under the voice, a glitch or
+    static sound 9) - an editor's override included.
   * Sparse: one overlay sound per GAP_SECONDS, the stronger look winning;
     a typing or date look alone on screen always keeps its sound, and of two
     looks that start within CLASH_SECONDS only the stronger one sounds.
@@ -82,15 +84,23 @@ MIN_AUDIBLE = 4
 
 # ------------------------------------------------------------------ levels
 # Every file in public/sfx is loudness-matched: its loudest 400 ms sits at
-# about SFX_REF_LUFS (true peak <= -3.5 dBFS). The narration is measured once
-# per video (timeline.voice_loudness) or assumed at VOICE_LUFS_DEFAULT.
+# about SFX_REF_LUFS (true peak <= -3.5 dBFS). sfx_meta.json "lufs" is that
+# loudest 400 ms as measured per file (BS.1770 momentary loudness, the file
+# padded with silence; "peakDb" its sample peak): a file hotter than the
+# reference is turned down by the difference, a quieter one is never raised.
+# The narration is measured once per video (timeline.voice_loudness) or
+# assumed at VOICE_LUFS_DEFAULT.
 SFX_REF_LUFS = -20.0
-VOICE_LUFS_DEFAULT = -16.0
+# A narration nobody could measure is assumed where measured ones sit (the
+# bench narrations -19.9 to -20.3 LUFS). Assuming a louder voice (-16, until
+# 2026-10-01) set every sound of the owner's Lake Powell video for a voice
+# 4 dB louder than a typical one: the sounds stood over the narration.
+VOICE_LUFS_DEFAULT = -20.0
 # A sound's loudest moment sits this far under the voice ...
 UNDER_VOICE_DB = 6.0
 # ... by its category (sfx_meta.json "category"; CATEGORY for the files that predate it) ...
 CATEGORY_UNDER_DB = {"typing": 10.0, "whoosh": 9.0, "shimmer": 9.0, "ui": 7.0, "tick": 7.0, "marker": 7.0,
-                     "paper": 7.0, "camera": 7.0, "impact": 5.0, "glitch": 5.0, "riser": 5.0}
+                     "paper": 7.0, "camera": 7.0, "impact": 6.0, "glitch": 9.0, "riser": 6.0}
 CATEGORY = {
     "keys": "typing", "typewriter": "typing", "typing text": "typing", "keys-mech": "typing",
     "keys-type": "typing", "keys-laptop": "typing",
@@ -115,10 +125,15 @@ CATEGORY = {
     "ui-tick": "tick", "whoosh-cinematic": "whoosh", "whoosh-fast": "whoosh", "whoosh-soft-v2": "whoosh",
     "zoom-in-whoosh": "whoosh",
 }
-# ... and never closer to it than this: the one cap every sound is held to
-# (planned, transition, or an editor's 100% slider). It is the level of the
-# loudest category, so nothing ever stands out over the hits.
-CAP_UNDER_DB = 5.0
+# ... and never closer to it than this: the ceiling every sound is held to
+# (planned, transition, or an editor's 100% slider). The owner, 2026-10-01:
+# no sound effect or transition sound is ever louder than the narration -
+# its peaks sit about 6 dB under the voice, a glitch or static sound a
+# further 3 dB (CAP_UNDER_CATEGORY_DB). It is the level of the loudest
+# category, so nothing ever stands out over the hits.
+CAP_UNDER_DB = 6.0
+GLITCH_EXTRA_DB = 3.0
+CAP_UNDER_CATEGORY_DB = {"glitch": CAP_UNDER_DB + GLITCH_EXTRA_DB}
 
 # A calendar date sounds like its digits: one soft digital tick, never a hit
 # (the owner, 2026-10-01: "only a digit sound ... you used a punch sound as
@@ -320,31 +335,65 @@ def under_voice_db(name: str) -> float:
     return CATEGORY_UNDER_DB.get(category(name), UNDER_VOICE_DB)
 
 
-def gain(db_under: float, voice_lufs=None) -> float:
-    """The linear gain that puts a loudness-matched file's loudest moment `db_under` dB under the voice."""
-    return 10 ** ((voice_level(voice_lufs) - float(db_under) - SFX_REF_LUFS) / 20.0)
+def ceiling_db(name: Optional[str] = None) -> float:
+    """How close to the voice a sound may ever come at its loudest (dB under): CAP_UNDER_DB, a glitch further."""
+    return max(CAP_UNDER_DB, CAP_UNDER_CATEGORY_DB.get(category(name or ""), CAP_UNDER_DB))
 
 
-def cap(voice_lufs=None) -> float:
-    """The one ceiling for every sound in the video (never above the renderer's 1.0)."""
-    return min(1.0, gain(CAP_UNDER_DB, voice_lufs))
+def file_lufs(name: Optional[str] = None) -> float:
+    """
+    The loudest 400 ms of a sound file as levelled: its measured "lufs" when
+    that is hotter than the matched SFX_REF_LUFS (it is turned down by the
+    difference), else the reference (a quieter file is never raised).
+    """
+    v = _number((_meta().get(name) or {}).get("lufs")) if name else None
+    return SFX_REF_LUFS if v is None else max(SFX_REF_LUFS, v)
+
+
+def gain(db_under: float, voice_lufs=None, name: Optional[str] = None) -> float:
+    """The linear gain that puts a file's loudest moment `db_under` dB under the voice (`name`: that file's own loudness)."""
+    return 10 ** ((voice_level(voice_lufs) - float(db_under) - file_lufs(name)) / 20.0)
+
+
+def cap(voice_lufs=None, name: Optional[str] = None) -> float:
+    """
+    The ceiling a sound is held under (never above the renderer's 1.0): its
+    loudest moment CAP_UNDER_DB under the voice, a glitch's further
+    (ceiling_db). Without a name, the ceiling of a matched file of no category.
+    """
+    return min(1.0, gain(ceiling_db(name), voice_lufs, name))
 
 
 def level(name: str, voice_lufs=None) -> float:
     """The planned gain of a sound against this voice, before the style pack's intensity."""
-    return min(cap(voice_lufs), gain(under_voice_db(name), voice_lufs))
+    return min(cap(voice_lufs, name), gain(under_voice_db(name), voice_lufs, name))
 
 
-def clamp(volume, voice_lufs=None, master=1.0) -> float:
+def clamp(volume, voice_lufs=None, master=1.0, name: Optional[str] = None) -> float:
     """
-    A volume held under the cap. `master` is the document's sfxVolume, which
-    the renderer multiplies in: a master above 1 lowers the ceiling to match.
+    A volume held under the sound's ceiling (cap). `master` is the document's
+    sfxVolume, which the renderer multiplies in: a master above 1 lowers the
+    ceiling to match.
     """
     v = _number(volume)
     if v is None or v <= 0:
         return 0.0
     m = _number(master)
-    return min(v, cap(voice_lufs) / max(1.0, m if m is not None else 1.0))
+    return min(v, cap(voice_lufs, name) / max(1.0, m if m is not None else 1.0))
+
+
+def peak_under_voice(name: str, volume: float, voice_lufs=None) -> Optional[float]:
+    """
+    How far (dB) a sound's loudest moment, played at `volume`, sits under the
+    voice's loudness: its measured "lufs" (else the matched reference) plus
+    the gain, against voice_level. None for a silent volume.
+    """
+    v = _number(volume)
+    if v is None or v <= 0:
+        return None
+    got = _number((_meta().get(name) or {}).get("lufs"))
+    loud = SFX_REF_LUFS if got is None else got
+    return voice_level(voice_lufs) - (loud + 20.0 * math.log10(v))
 
 
 # --------------------------------------------------------------------------- #
@@ -593,7 +642,6 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "",
     if strength <= 0 or not overlays:
         return []
     voice = voice_level(voice_lufs)
-    top = cap(voice)
     ovs = [o for o in overlays if isinstance(o, dict)]
     spans = [_span(o, templates.get(o.get("template") or ""), fps) for o in ovs]
     cands = [c for c in (_candidate(i, o, fps, spans) for i, o in enumerate(ovs)) if c]
@@ -631,6 +679,7 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "",
             length = trim + audible
         else:
             start, length = c["hit"], max(1, c["length"])
+        top = cap(voice, name)
         if c["volume"] is not None:
             # The editor's own level stands as set, never above the cap.
             volume = min(top, c["volume"])
@@ -653,7 +702,7 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "",
             audible = min(duration_frames(COUNT_FINAL, fps), c["end"] - max(0, raw))
             if land < c["end"] - _scale(MIN_AUDIBLE, fps) and audible >= _scale(MIN_AUDIBLE, fps):
                 out.append({"name": COUNT_FINAL, "startFrame": max(0, raw), "kind": "overlay", "durationFrames": audible,
-                            "volume": round(min(top, level(COUNT_FINAL, voice) * strength
+                            "volume": round(min(cap(voice, COUNT_FINAL), level(COUNT_FINAL, voice) * strength
                                                 if c["volume"] is None else c["volume"]), 3)})
     out.sort(key=lambda s: s["startFrame"])
     return out
@@ -786,7 +835,6 @@ def look_sounds(cues, *, fps: int, frames: int, text: str = "", value: Optional[
         return []
     s = fps / BASE_FPS
     voice = voice_level(voice_lufs)
-    top = cap(voice)
     stretch = frames / default_frames if default_frames and default_frames > 0 else 1.0
     least = _jr(MIN_AUDIBLE * s)
     longest = _jr(MAX_SOUND_SECONDS * fps)
@@ -848,7 +896,7 @@ def look_sounds(cues, *, fps: int, frames: int, text: str = "", value: Optional[
             db = _num_or(cue.get("gain_db"), 0.0)
             vol = level(name, voice) * 10 ** (db / 20.0) * (1.0 if cue.get("fixed") else level_pack) \
                 * trim_gain * level_master
-            vol = _r4(min(top, max(0.0, vol)))
+            vol = _r4(min(cap(voice, name), max(0.0, vol)))
             if vol <= 0.001:
                 continue
             pitch = _number(cue.get("pitch"))
@@ -1039,7 +1087,8 @@ def sound_levels() -> dict:
     """The level and timing constants the renderer's twin reads (registry.json "soundLevels")."""
     return {
         "refLufs": SFX_REF_LUFS, "voiceDefault": VOICE_LUFS_DEFAULT, "underDefault": UNDER_VOICE_DB,
-        "capUnder": CAP_UNDER_DB, "categoryUnder": dict(CATEGORY_UNDER_DB), "nameCategory": dict(CATEGORY),
+        "capUnder": CAP_UNDER_DB, "capUnderCategory": dict(CAP_UNDER_CATEGORY_DB),
+        "categoryUnder": dict(CATEGORY_UNDER_DB), "nameCategory": dict(CATEGORY),
         "categoryFallback": {k: list(v) for k, v in CATEGORY_FALLBACK.items()}, "loopNames": sorted(LOOP_NAMES),
         "typingTakes": list(TYPING_TAKES), "typeStart": TYPE_START, "typingMaxSeconds": TYPING_MAX_SECONDS,
         "maxSeconds": MAX_SOUND_SECONDS, "minAudible": MIN_AUDIBLE, "clashSeconds": CLASH_SECONDS,

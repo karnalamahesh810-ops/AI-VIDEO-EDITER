@@ -4,471 +4,575 @@
     "duration": 1.0,
     "loop": false,
     "lufs": -20.2,
-    "peak": 0.01
+    "peak": 0.01,
+    "peakDb": -5.6
   },
   "boom-soft": {
     "category": "impact",
     "duration": 1.71,
     "loop": false,
-    "peak": 0.309
+    "lufs": -21.3,
+    "peak": 0.309,
+    "peakDb": -12.8
   },
   "boom-sub": {
     "category": "impact",
     "duration": 1.76,
     "loop": false,
-    "lufs": -20.2,
-    "peak": 0.005
+    "lufs": -20.1,
+    "peak": 0.005,
+    "peakDb": -16.9
   },
   "camera-flash-pop": {
     "category": "camera",
     "duration": 0.2,
     "loop": false,
     "lufs": -20.2,
-    "peak": 0.01
+    "peak": 0.01,
+    "peakDb": -5.8
   },
   "camera-shutter": {
     "category": "camera",
     "duration": 0.45,
     "loop": false,
     "lufs": -20.3,
-    "peak": 0.04
+    "peak": 0.04,
+    "peakDb": -5.3
   },
   "click": {
     "category": "ui",
     "duration": 0.11,
     "loop": false,
-    "peak": 0.005
+    "lufs": -25.6,
+    "peak": 0.005,
+    "peakDb": -7.0
   },
   "count-final": {
     "category": "ui",
     "duration": 0.221,
     "loop": false,
     "lufs": -21.6,
-    "peak": 0.02
+    "peak": 0.02,
+    "peakDb": -5.2
   },
   "count-roll": {
     "category": "tick",
     "duration": 2.25,
     "loop": true,
-    "lufs": -20.4,
-    "peak": 0.0
+    "lufs": -20.2,
+    "peak": 0.0,
+    "peakDb": -8.6
   },
   "count-tick": {
     "category": "tick",
     "duration": 1.32,
     "loop": false,
-    "peak": 0.963
+    "lufs": -24.8,
+    "peak": 0.963,
+    "peakDb": -7.1
   },
   "ding": {
     "category": "ui",
     "duration": 1.5,
     "loop": false,
-    "peak": 0.02
+    "lufs": -25.1,
+    "peak": 0.02,
+    "peakDb": -21.4
   },
   "flash-hit": {
     "category": "impact",
     "duration": 0.62,
     "loop": false,
-    "peak": 0.075
+    "lufs": -21.2,
+    "peak": 0.075,
+    "peakDb": -8.0
   },
   "folder-open": {
     "category": "paper",
     "duration": 0.668,
     "loop": false,
     "lufs": -27.0,
-    "peak": 0.569
+    "peak": 0.569,
+    "peakDb": -4.1
   },
   "frame-drop": {
     "category": "impact",
     "duration": 0.39,
     "loop": false,
     "lufs": -21.4,
-    "peak": 0.03
+    "peak": 0.03,
+    "peakDb": -4.0
   },
   "glitch": {
     "category": "glitch",
     "duration": 1.023,
     "loop": false,
-    "peak": 0.429
+    "lufs": -21.7,
+    "peak": 0.429,
+    "peakDb": -11.6
   },
   "glitch fx transistion": {
     "category": "glitch",
     "duration": 1.656,
     "loop": false,
-    "peak": 0.763
+    "lufs": -21.1,
+    "peak": 0.763,
+    "peakDb": -8.8
   },
   "glitch-digital": {
     "category": "glitch",
     "duration": 0.68,
     "loop": false,
-    "lufs": -20.3,
-    "peak": 0.14
+    "lufs": -19.9,
+    "peak": 0.14,
+    "peakDb": -11.1
   },
   "glitch-pro": {
     "category": "glitch",
     "duration": 0.48,
     "loop": false,
-    "peak": 0.01
+    "lufs": -19.6,
+    "peak": 0.01,
+    "peakDb": -8.8
   },
   "glitch-short": {
     "category": "glitch",
     "duration": 0.5,
     "loop": false,
-    "peak": 0.175
+    "lufs": -20.5,
+    "peak": 0.175,
+    "peakDb": -8.1
   },
   "glitch-short-v2": {
     "category": "glitch",
     "duration": 0.35,
     "loop": false,
     "lufs": -20.1,
-    "peak": 0.02
+    "peak": 0.02,
+    "peakDb": -10.2
   },
   "glitch-transition": {
     "category": "glitch",
     "duration": 1.656,
     "loop": false,
-    "peak": 0.763
+    "lufs": -21.2,
+    "peak": 0.763,
+    "peakDb": -8.5
   },
   "hit-deep": {
     "category": "impact",
     "duration": 2.319,
     "loop": false,
-    "peak": 0.02
+    "lufs": -20.2,
+    "peak": 0.02,
+    "peakDb": -7.1
   },
   "impact": {
     "category": "impact",
     "duration": 2.463,
     "loop": false,
-    "peak": 0.634
+    "lufs": -21.2,
+    "peak": 0.634,
+    "peakDb": -13.2
   },
   "keys": {
     "category": "typing",
     "duration": 5.0,
     "loop": true,
-    "peak": 0.399
+    "lufs": -21.6,
+    "peak": 0.399,
+    "peakDb": -3.5
   },
   "keys-laptop": {
     "category": "typing",
     "duration": 4.0,
     "loop": true,
-    "peak": 2.824
+    "lufs": -23.4,
+    "peak": 2.824,
+    "peakDb": -5.3
   },
   "keys-mech": {
     "category": "typing",
     "duration": 3.52,
     "loop": true,
-    "peak": 1.093
+    "lufs": -22.5,
+    "peak": 1.093,
+    "peakDb": -4.5
   },
   "keys-type": {
     "category": "typing",
     "duration": 3.873,
     "loop": true,
-    "peak": 1.941
+    "lufs": -22.0,
+    "peak": 1.941,
+    "peakDb": -4.1
   },
   "letter-tick": {
     "category": "tick",
     "duration": 0.058,
     "loop": false,
     "lufs": -29.4,
-    "peak": 0.01
+    "peak": 0.01,
+    "peakDb": -4.5
   },
   "light-shimmer": {
     "category": "shimmer",
     "duration": 1.127,
     "loop": false,
-    "lufs": -20.7,
-    "peak": 0.449
+    "lufs": -20.6,
+    "peak": 0.449,
+    "peakDb": -12.6
   },
   "magnifier-glide": {
     "category": "shimmer",
     "duration": 0.719,
     "loop": false,
-    "lufs": -20.2,
-    "peak": 0.404
+    "lufs": -20.1,
+    "peak": 0.404,
+    "peakDb": -10.0
   },
   "map-swoop": {
     "category": "whoosh",
     "duration": 1.476,
     "loop": false,
-    "lufs": -20.3,
-    "peak": 0.269
+    "lufs": -20.2,
+    "peak": 0.269,
+    "peakDb": -9.3
   },
   "map-whoosh": {
     "category": "whoosh",
     "duration": 3.084,
     "loop": false,
-    "peak": 0.703
+    "lufs": -21.0,
+    "peak": 0.703,
+    "peakDb": -12.0
   },
   "marker": {
     "category": "marker",
     "duration": 0.7,
     "loop": false,
-    "peak": 0.16
+    "lufs": -26.4,
+    "peak": 0.16,
+    "peakDb": -16.0
   },
   "marker-draw": {
     "category": "marker",
     "duration": 0.88,
     "loop": false,
-    "lufs": -20.2,
-    "peak": 0.683
+    "lufs": -20.0,
+    "peak": 0.683,
+    "peakDb": -11.7
   },
   "marker-underline": {
     "category": "marker",
     "duration": 0.423,
     "loop": false,
     "lufs": -20.3,
-    "peak": 0.13
+    "peak": 0.13,
+    "peakDb": -10.9
   },
   "page": {
     "category": "paper",
     "duration": 2.5,
     "loop": false,
-    "peak": 0.429
+    "lufs": -21.9,
+    "peak": 0.429,
+    "peakDb": -4.5
   },
   "page-flip": {
     "category": "paper",
     "duration": 0.59,
     "loop": false,
-    "lufs": -21.4,
-    "peak": 0.304
+    "lufs": -21.3,
+    "peak": 0.304,
+    "peakDb": -4.1
   },
   "paper": {
     "category": "paper",
     "duration": 1.094,
     "loop": false,
-    "peak": 0.344
+    "lufs": -22.3,
+    "peak": 0.344,
+    "peakDb": -4.2
   },
   "paper-pin": {
     "category": "paper",
     "duration": 0.206,
     "loop": false,
     "lufs": -27.0,
-    "peak": 0.03
+    "peak": 0.03,
+    "peakDb": -4.5
   },
   "paper-slide": {
     "category": "paper",
     "duration": 0.58,
     "loop": false,
-    "peak": 0.389
+    "lufs": -21.4,
+    "peak": 0.389,
+    "peakDb": -4.2
   },
   "paper-slide-v2": {
     "category": "paper",
     "duration": 0.68,
     "loop": false,
     "lufs": -20.4,
-    "peak": 0.15
+    "peak": 0.15,
+    "peakDb": -11.0
   },
   "paper-tear": {
     "category": "paper",
     "duration": 0.696,
     "loop": false,
-    "lufs": -20.2,
-    "peak": 0.494
+    "lufs": -19.9,
+    "peak": 0.494,
+    "peakDb": -9.8
   },
   "pen-scribble": {
     "category": "marker",
     "duration": 1.0,
     "loop": false,
-    "lufs": -20.6,
-    "peak": 0.883
+    "lufs": -20.4,
+    "peak": 0.883,
+    "peakDb": -4.2
   },
   "phone-buzz": {
     "category": "ui",
     "duration": 0.6,
     "loop": false,
     "lufs": -20.2,
-    "peak": 0.005
+    "peak": 0.005,
+    "peakDb": -18.8
   },
   "pin-drop": {
     "category": "ui",
     "duration": 0.45,
     "loop": false,
     "lufs": -23.7,
-    "peak": 0.035
+    "peak": 0.035,
+    "peakDb": -4.1
   },
   "pop": {
     "category": "ui",
     "duration": 0.479,
     "loop": false,
-    "peak": 0.035
+    "lufs": -21.8,
+    "peak": 0.035,
+    "peakDb": -4.0
   },
   "radar-ping": {
     "category": "ui",
     "duration": 1.28,
     "loop": false,
-    "lufs": -20.3,
-    "peak": 0.005
+    "lufs": -20.1,
+    "peak": 0.005,
+    "peakDb": -8.1
   },
   "record-beep": {
     "category": "camera",
     "duration": 0.159,
     "loop": false,
     "lufs": -24.0,
-    "peak": 0.04
+    "peak": 0.04,
+    "peakDb": -4.0
   },
   "reverse-swell": {
     "category": "riser",
     "duration": 0.8,
     "loop": false,
-    "lufs": -20.3,
-    "peak": 0.718
+    "lufs": -20.2,
+    "peak": 0.718,
+    "peakDb": -11.2
   },
   "riser": {
     "category": "riser",
     "duration": 5.068,
     "loop": false,
-    "peak": 2.005
+    "lufs": -21.2,
+    "peak": 2.005,
+    "peakDb": -12.9
   },
   "riser-short": {
     "category": "riser",
     "duration": 1.55,
     "loop": false,
-    "peak": 1.497
+    "lufs": -21.3,
+    "peak": 1.497,
+    "peakDb": -12.3
   },
   "riser-short-v2": {
     "category": "riser",
     "duration": 1.406,
     "loop": false,
-    "lufs": -20.2,
-    "peak": 0.993
+    "lufs": -20.1,
+    "peak": 0.993,
+    "peakDb": -11.6
   },
   "shutter": {
     "category": "camera",
     "duration": 0.26,
     "loop": false,
-    "peak": 0.01
+    "lufs": -25.5,
+    "peak": 0.01,
+    "peakDb": -7.2
   },
   "shutter-slide": {
     "category": "paper",
     "duration": 0.88,
     "loop": false,
     "lufs": -20.4,
-    "peak": 0.055
+    "peak": 0.055,
+    "peakDb": -11.0
   },
   "stamp": {
     "category": "impact",
     "duration": 0.222,
     "loop": false,
     "lufs": -23.5,
-    "peak": 0.02
+    "peak": 0.02,
+    "peakDb": -4.5
   },
   "swipe": {
     "category": "whoosh",
     "duration": 0.44,
     "loop": false,
-    "peak": 0.195
+    "lufs": -20.2,
+    "peak": 0.195,
+    "peakDb": -9.6
   },
   "swoosh-text": {
     "category": "whoosh",
     "duration": 0.68,
     "loop": false,
     "lufs": -20.3,
-    "peak": 0.06
+    "peak": 0.06,
+    "peakDb": -6.1
   },
   "tape-rip": {
     "category": "paper",
     "duration": 0.5,
     "loop": false,
     "lufs": -20.4,
-    "peak": 0.07
+    "peak": 0.07,
+    "peakDb": -9.9
   },
   "tick": {
     "category": "tick",
     "duration": 0.085,
     "loop": false,
-    "peak": 0.005
+    "lufs": -26.3,
+    "peak": 0.005,
+    "peakDb": -7.2
   },
   "typewriter": {
     "category": "typing",
     "duration": 3.474,
     "loop": true,
-    "peak": 0.539
+    "lufs": -20.8,
+    "peak": 0.539,
+    "peakDb": -5.1
   },
   "typewriter-clean": {
     "category": "typing",
     "duration": 2.25,
     "loop": true,
-    "lufs": -20.4,
-    "peak": 0.0
+    "lufs": -19.9,
+    "peak": 0.0,
+    "peakDb": -6.4
   },
   "typing text": {
     "category": "typing",
     "duration": 6.374,
     "loop": true,
-    "peak": 0.539
+    "lufs": -21.6,
+    "peak": 0.539,
+    "peakDb": -3.8
   },
   "ui-click": {
     "category": "ui",
     "duration": 0.2,
     "loop": false,
     "lufs": -28.9,
-    "peak": 0.02
+    "peak": 0.02,
+    "peakDb": -4.0
   },
   "ui-pop": {
     "category": "ui",
     "duration": 0.13,
     "loop": false,
     "lufs": -21.7,
-    "peak": 0.005
+    "peak": 0.005,
+    "peakDb": -4.2
   },
   "ui-swipe": {
     "category": "whoosh",
     "duration": 0.445,
     "loop": false,
     "lufs": -20.6,
-    "peak": 0.18
+    "peak": 0.18,
+    "peakDb": -10.3
   },
   "ui-tick": {
     "category": "tick",
     "duration": 0.048,
     "loop": false,
     "lufs": -24.6,
-    "peak": 0.005
+    "peak": 0.005,
+    "peakDb": -5.0
   },
   "whoosh": {
     "category": "whoosh",
     "duration": 2.321,
     "loop": false,
-    "peak": 0.713
+    "lufs": -21.2,
+    "peak": 0.713,
+    "peakDb": -8.2
   },
   "whoosh-cinematic": {
     "category": "whoosh",
     "duration": 0.84,
     "loop": false,
-    "lufs": -20.3,
-    "peak": 0.16
+    "lufs": -20.2,
+    "peak": 0.16,
+    "peakDb": -12.5
   },
   "whoosh-cinematic-for-maps": {
     "category": "whoosh",
     "duration": 3.082,
     "loop": false,
-    "peak": 0.703
+    "lufs": -21.0,
+    "peak": 0.703,
+    "peakDb": -11.4
   },
   "whoosh-fast": {
     "category": "whoosh",
     "duration": 0.223,
     "loop": false,
     "lufs": -20.3,
-    "peak": 0.055
+    "peak": 0.055,
+    "peakDb": -7.1
   },
   "whoosh-soft": {
     "category": "whoosh",
     "duration": 1.12,
     "loop": false,
-    "peak": 0.419
+    "lufs": -22.4,
+    "peak": 0.419,
+    "peakDb": -9.2
   },
   "whoosh-soft-v2": {
     "category": "whoosh",
     "duration": 0.798,
     "loop": false,
     "lufs": -20.2,
-    "peak": 0.125
+    "peak": 0.125,
+    "peakDb": -5.8
   },
   "zoom-in-whoosh": {
     "category": "whoosh",
     "duration": 0.543,
     "loop": false,
     "lufs": -20.2,
-    "peak": 0.381
+    "peak": 0.381,
+    "peakDb": -8.7
   }
 }

@@ -177,8 +177,10 @@ class Sounds(unittest.TestCase):
         quiet = timeline.plan_transition_sfx(scenes, 30, [], voice_lufs=-22.0)
         for a, b in zip(normal, quiet):
             self.assertAlmostEqual(a["volume"] / b["volume"], 10 ** (6 / 20), places=1)
-        # glitch 7 dB under the voice at -16 LUFS: 10 ** ((-16 - 7 + 20) / 20)
-        self.assertEqual(normal[0]["volume"], 0.708)
+        # A glitch 9 dB under the voice at -16 LUFS (the owner, 2026-10-01: glitches a further 3 dB under the
+        # 6 dB ceiling), counted from the file's own measured loudness (glitch-pro: -19.6 LUFS).
+        self.assertEqual(normal[0]["volume"], round(10 ** ((-16 - 9 + 19.6) / 20), 3))
+        self.assertAlmostEqual(sfxplan.peak_under_voice("glitch-pro", normal[0]["volume"], -16.0), 9.0, delta=0.05)
 
     def test_a_nearby_sound_silences_the_transition(self):
         scenes = self._scenes(["none", "glitch", "none", "none", "flash"])
@@ -210,7 +212,7 @@ class Sounds(unittest.TestCase):
         half = timeline.plan_transition_sfx(scenes, 30, [], 0.5)
         self.assertEqual([p["name"] for p in half], [p["name"] for p in full])
         for a, b in zip(full, half):
-            self.assertAlmostEqual(b["volume"], round(a["volume"] * 0.5, 3))
+            self.assertAlmostEqual(b["volume"], a["volume"] * 0.5, delta=0.001)
         self.assertEqual(timeline.plan_transition_sfx(scenes, 30, [], 0.0), [])
 
     def test_build_passes_the_packs_intensity(self):

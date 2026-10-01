@@ -1222,6 +1222,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         inp=inp,
         planner=planner,
         warnings=warnings,
+        # The narration on this disk: every sound is levelled against its
+        # measured loudness (the owner's Lake Powell video was planned
+        # against an assumed voice, voiceLufsSource "assumed").
+        narration_path=audio_path,
     )
     # Arrows / circles that point at the thing the line talks about, only
     # where vision finds it (src/marks.py) - while the clips are still local.
@@ -1826,6 +1830,12 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         except Exception as e:  # noqa: BLE001
             print(f"[worker] could not refresh narration url: {e}", flush=True)
     _sign_supabase_urls(doc)
+    # A plan levelled against an assumed voice: measure the narration now and
+    # bring the sounds under it (timeline.relevel_to_voice) - never a failure.
+    try:
+        timeline.relevel_to_voice(doc)
+    except Exception as e:  # noqa: BLE001
+        print(f"[worker] narration level not re-measured: {type(e).__name__}: {str(e)[:100]}", flush=True)
     # One unreadable clip killed a 15-minute render at frame 22,534 (storage
     # answered 500 for it). Every clip is checked first; a broken one is
     # replaced like an empty scene, before any frame is drawn.

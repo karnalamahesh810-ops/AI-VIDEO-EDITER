@@ -1,5 +1,5 @@
 {
-  "_about": "The owner's overlay transition pack (Mr.YTR _MLT1-18, 2026-10-01): full-frame clips on black, laid over a hard cut with a SCREEN blend, their own sound at its original level. peakFrame = the clip's frame that lands ON the cut (the first frame of the new shot; it and the frame before it are the most covered); peak = peakFrame / fps seconds; audioPeak = seconds into the clip of its loudest 20 ms; coverage = how evenly the two cut frames are covered (0-1); character: flash | burn | leak | film | glitch | streak.",
+  "_about": "The owner's overlay transition pack (Mr.YTR _MLT1-18, 2026-10-01): full-frame clips on black, laid over a hard cut with a SCREEN blend, each with its own sound, levelled against the narration. peakFrame = the clip's frame that lands ON the cut (the first frame of the new shot; it and the frame before it are the most covered); peak = peakFrame / fps seconds; audioPeak = seconds into the clip of its loudest 20 ms; coverage = how evenly the two cut frames are covered (0-1); character: flash | burn | leak | film | glitch | streak. Loudness: lufs = the clip sound's loudest 400 ms (BS.1770 momentary loudness, K-weighted, measured on a 10 ms hop with the clip padded by silence: the same measure as public/sfx/sfx_meta.json \"lufs\"), peakDb = its sample peak (dBFS). The planner (src/timeline.py pack_gain) and the renderer (PackTransition.tsx packGain) set each clip's gain from lufs so its loudest moment sits 6 dB under the narration's measured loudness (doc.meta.voiceLufs), a glitch clip 9 dB under, never above 1 (as recorded).",
   "transitions": {
     "mlt1": {
       "file": "transitions/mlt1.mp4",
@@ -12,6 +12,8 @@
       "peak": 0.5667,
       "brightestFrame": 16,
       "audioPeak": 0.594,
+      "lufs": -26.0,
+      "peakDb": -6.5,
       "coverage": 0.974,
       "cutCover": 0.974
     },
@@ -26,6 +28,8 @@
       "peak": 0.3333,
       "brightestFrame": 17,
       "audioPeak": 0.464,
+      "lufs": -28.2,
+      "peakDb": -14.4,
       "coverage": 0.246,
       "cutCover": 0.353
     },
@@ -40,6 +44,8 @@
       "peak": 0.3,
       "brightestFrame": 10,
       "audioPeak": 0.384,
+      "lufs": -27.9,
+      "peakDb": -12.1,
       "coverage": 0.967,
       "cutCover": 0.967
     },
@@ -54,6 +60,8 @@
       "peak": 0.3333,
       "brightestFrame": 10,
       "audioPeak": 0.22,
+      "lufs": -28.4,
+      "peakDb": -8.4,
       "coverage": 0.708,
       "cutCover": 0.989
     },
@@ -68,6 +76,8 @@
       "peak": 0.4333,
       "brightestFrame": 12,
       "audioPeak": 0.319,
+      "lufs": -30.6,
+      "peakDb": -16.3,
       "coverage": 0.987,
       "cutCover": 0.987
     },
@@ -82,6 +92,8 @@
       "peak": 0.2,
       "brightestFrame": 5,
       "audioPeak": 0.09,
+      "lufs": -26.3,
+      "peakDb": -14.3,
       "coverage": 0.849,
       "cutCover": 0.906
     },
@@ -96,6 +108,8 @@
       "peak": 0.4667,
       "brightestFrame": 20,
       "audioPeak": 0.324,
+      "lufs": -24.3,
+      "peakDb": -6.5,
       "coverage": 0.978,
       "cutCover": 0.99
     },
@@ -110,6 +124,8 @@
       "peak": 0.5333,
       "brightestFrame": 16,
       "audioPeak": 0.19,
+      "lufs": -36.5,
+      "peakDb": -15.1,
       "coverage": 0.268,
       "cutCover": 0.953
     },
@@ -124,6 +140,8 @@
       "peak": 0.3,
       "brightestFrame": 8,
       "audioPeak": 0.309,
+      "lufs": -27.9,
+      "peakDb": -13.8,
       "coverage": 0.956,
       "cutCover": 0.956
     },
@@ -138,6 +156,8 @@
       "peak": 0.3,
       "brightestFrame": 8,
       "audioPeak": 0.17,
+      "lufs": -26.2,
+      "peakDb": -14.3,
       "coverage": 0.969,
       "cutCover": 0.969
     },
@@ -152,6 +172,8 @@
       "peak": 0.2667,
       "brightestFrame": 7,
       "audioPeak": 0.22,
+      "lufs": -23.2,
+      "peakDb": -8.0,
       "coverage": 0.603,
       "cutCover": 0.603
     },
@@ -166,6 +188,8 @@
       "peak": 0.3,
       "brightestFrame": 7,
       "audioPeak": 0.364,
+      "lufs": -27.5,
+      "peakDb": -12.6,
       "coverage": 0.8,
       "cutCover": 0.8
     },
@@ -180,6 +204,8 @@
       "peak": 0.6,
       "brightestFrame": 17,
       "audioPeak": 0.479,
+      "lufs": -33.4,
+      "peakDb": -15.5,
       "coverage": 0.89,
       "cutCover": 0.89
     },
@@ -194,6 +220,8 @@
       "peak": 0.6,
       "brightestFrame": 17,
       "audioPeak": 0.708,
+      "lufs": -28.8,
+      "peakDb": -10.0,
       "coverage": 0.965,
       "cutCover": 0.965
     },
@@ -208,6 +236,8 @@
       "peak": 0.3333,
       "brightestFrame": 11,
       "audioPeak": 0.364,
+      "lufs": -29.7,
+      "peakDb": -14.7,
       "coverage": 0.911,
       "cutCover": 0.985
     },
@@ -222,6 +252,8 @@
       "peak": 0.5667,
       "brightestFrame": 16,
       "audioPeak": 0.354,
+      "lufs": -33.2,
+      "peakDb": -15.9,
       "coverage": 0.924,
       "cutCover": 0.924
     },
@@ -236,6 +268,8 @@
       "peak": 0.4333,
       "brightestFrame": 12,
       "audioPeak": 0.18,
+      "lufs": -36.3,
+      "peakDb": -16.4,
       "coverage": 0.898,
       "cutCover": 0.898
     },
@@ -250,6 +284,8 @@
       "peak": 0.5,
       "brightestFrame": 10,
       "audioPeak": 0.244,
+      "lufs": -26.0,
+      "peakDb": -9.1,
       "coverage": 0.954,
       "cutCover": 0.954
     }

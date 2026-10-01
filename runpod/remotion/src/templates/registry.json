@@ -77190,9 +77190,12 @@
  ],
  "soundLevels": {
   "refLufs": -20.0,
-  "voiceDefault": -16.0,
+  "voiceDefault": -20.0,
   "underDefault": 6.0,
-  "capUnder": 5.0,
+  "capUnder": 6.0,
+  "capUnderCategory": {
+   "glitch": 9.0
+  },
   "categoryUnder": {
    "typing": 10.0,
    "whoosh": 9.0,
@@ -77202,9 +77205,9 @@
    "marker": 7.0,
    "paper": 7.0,
    "camera": 7.0,
-   "impact": 5.0,
-   "glitch": 5.0,
-   "riser": 5.0
+   "impact": 6.0,
+   "glitch": 9.0,
+   "riser": 6.0
   },
   "nameCategory": {
    "keys": "typing",
