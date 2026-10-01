@@ -844,6 +844,9 @@ R2_MEDIA_UPLOAD_SECONDS = float(os.getenv("R2_MEDIA_UPLOAD_SECONDS", "120"))
 # Approved photos are kept too (never a generated image), when their long
 # side is at least LIBRARY_IMAGE_MIN_SIDE.
 LIBRARY_IMAGES = _flag("LIBRARY_IMAGES", True)
+# Every clip and picture a finished video shows also goes into the app's library
+# (library.record_shown), for the owner to see and pick by hand; never auto-reused.
+LIBRARY_SHOWN = _flag("LIBRARY_SHOWN", True)
 LIBRARY_IMAGE_MIN_SIDE = int(os.getenv("LIBRARY_IMAGE_MIN_SIDE", "1280"))
 # The library's quality gate (libstore.check_clip). Not kept (an old row is
 # marked removed, reversibly): shorter than LIBRARY_MIN_SECONDS, smaller than

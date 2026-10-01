@@ -2314,6 +2314,9 @@ def handler(job):
             # 15 minutes of one CPU and then failed on one broken clip.
             split = bool(project_id and fanout.render_enabled(doc, project_id))
             out = do_render(doc, inp, work, report, split=split)
+            if project_id:
+                # Before the done write: the broker takes rows only while the project renders.
+                library.record_shown(doc, project_id, job_id)
             if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
             if project_id:
@@ -2368,6 +2371,10 @@ def handler(job):
             if not split and project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))
+            if project_id:
+                # Every shown clip into the app's library, before the done write (the broker
+                # takes rows only while the project renders).
+                library.record_shown(doc, project_id, job_id)
             if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
             if project_id:

@@ -205,6 +205,84 @@ def saves_unused() -> bool:
     return bool(config.LIBRARY_SAVE_UNUSED and ledger.on())
 
 
+def shown(entry: dict) -> bool:
+    """A clip a finished video shows (record_shown): the owner may pick it by hand, the picker never does."""
+    return bool((entry.get("analysis") or {}).get("shownIn"))
+
+
+def _r2_location(url: str) -> Optional[tuple]:
+    """(bucket, key) of a link under one of our R2 public bases, else None."""
+    for base, bucket in ((config.R2_PUBLIC_BASE, config.R2_BUCKET),
+                         (getattr(config, "R2_LIBRARY_PUBLIC_BASE", ""), getattr(config, "R2_LIBRARY_BUCKET", ""))):
+        base = (base or "").rstrip("/")
+        if base and bucket and str(url or "").startswith(base + "/"):
+            from urllib.parse import unquote
+            return bucket, unquote(str(url)[len(base) + 1:].split("?", 1)[0])
+    return None
+
+
+def shown_rows(doc: dict, project_id: str) -> List[dict]:
+    """
+    One footage_library row per clip or picture file the video shows, stored
+    on our R2 (the scene media publish puts every one there): the file, its
+    still, the line's subject, the vision model's description, the source and
+    its scores. Marked shownIn: the automatic picker never puts it in another
+    video (the cross-video rule, src/ledger.py); the owner can, by hand.
+    """
+    rows, seen = [], set()
+    for s in (doc or {}).get("scenes") or []:
+        m = s.get("media") if isinstance(s, dict) else None
+        if not isinstance(m, dict) or m.get("type") not in ("video", "image"):
+            continue
+        loc = _r2_location(m.get("url") or "")
+        if not loc or loc[1] in seen:
+            continue
+        seen.add(loc[1])
+        sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
+        thumb = _r2_location(m.get("thumbnail") or "")
+        subject = str(sem.get("subject") or sem.get("searchQuery") or s.get("query") or "")[:200]
+        kind = ("generated" if m.get("generated") or m.get("source") == "generated"
+                else "image" if m.get("type") == "image" else "video")
+        rows.append({
+            "asset_id": f"file:{loc[1]}", "kind": kind, "source": str(m.get("source") or ""),
+            "source_url": str(sem.get("sourceUrl") or m.get("sourceUrl") or ""),
+            "storage_bucket": f"r2:{loc[0]}", "storage_path": loc[1],
+            **({"thumbnail_path": thumb[1]} if thumb and thumb[0] == loc[0] else {}),
+            "subject": subject, "subject_key": _key(subject),
+            "description": str(sem.get("contentDescription") or "")[:2000],
+            "seconds": m.get("clipSeconds"), "quality": m.get("qualityScore"),
+            "relevance": m.get("relevanceScore") if m.get("relevanceScore") is not None else sem.get("relevanceScore"),
+            "saved": True, "used": True,
+            "analysis": {"shownIn": project_id, "publicUrl": m.get("url"), "thumbUrl": m.get("thumbnail") or "",
+                         "attribution": str(m.get("attribution") or "")[:200], "license": str(m.get("license") or ""),
+                         "line": str(s.get("text") or "")[:300]},
+        })
+    return rows
+
+
+def record_shown(doc: dict, project_id: str, job_id: str) -> int:
+    """
+    Every clip and picture of the finished video into the app's library (the
+    owner, 2026-10-01: "you're saving clips on Cloudflare and it's not showing
+    on this library" - only the unused runner-ups were kept, and the Lake
+    Powell video added 1 clip for 159 scenes). Before the job's done write: the
+    broker only takes rows while the project is still rendering. Never fails a
+    video; returns how many rows were written.
+    """
+    if not (config.LIBRARY_SHOWN and project_id and job_id and storage.broker_enabled()):
+        return 0
+    rows = shown_rows(doc, project_id)
+    done = 0
+    try:
+        for k in range(0, len(rows), 100):
+            got = storage.broker_library_upsert(project_id, job_id, rows[k:k + 100])
+            done += int(got.get("upserted") or 0)
+        print(f"[library] {done} clip(s) and picture(s) of this video are in the library", flush=True)
+    except Exception as e:  # noqa: BLE001 - the library must never fail a video
+        print(f"[library] the video's clips were not added: {type(e).__name__}: {str(e)[:160]}", flush=True)
+    return done
+
+
 def _strip_local_alternatives(doc: dict) -> None:
     """The runner-ups' local files were only for the library: no work-dir path goes into the saved timeline."""
     for s in (doc or {}).get("scenes") or []:
@@ -409,7 +487,7 @@ class Library:
             return key in names
 
         hits = [e for e in self.entries
-                if e.get("kind", "video") == kind and e.get("saved", True)
+                if e.get("kind", "video") == kind and e.get("saved", True) and not shown(e)
                 and matches(e) and e.get("id") not in used
                 and float(e.get("relevance") or 0) >= floor and not self._stale(e, ctx)
                 # Never a clip an earlier video showed (src/ledger.py).
@@ -432,7 +510,7 @@ class Library:
         except Exception:  # noqa: BLE001
             return []
         cands = [e for e in self.entries if e.get("saved", True) and e.get("kind", "video") == kind
-                 and (e.get("analysis") or {}).get("embeddingKey")]
+                 and not shown(e) and (e.get("analysis") or {}).get("embeddingKey")]
         todo = [e for e in cands if e["id"] not in self._emb]
 
         def get(e: dict):
