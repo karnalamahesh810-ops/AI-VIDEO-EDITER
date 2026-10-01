@@ -36,10 +36,11 @@ class FreshMoments(unittest.TestCase):
         self.assertEqual(n, 1)
         self.assertIsNone(results[2])                       # never a person
         got = results[1]
-        self.assertEqual(got.moment_key, "yt:EWQT3VwOgvA@6")  # 40 s + 25 s -> bucket 6, not the donor's 4
+        # 40 s + 30 s (never under FALLBACK_MOMENT_GAP_SECONDS from the donor) -> bucket 7, not the donor's 4
+        self.assertEqual(got.moment_key, "yt:EWQT3VwOgvA@7")
         self.assertNotEqual(got.identity, results[0].identity)
         self.assertTrue(got.review_required)
-        self.assertEqual(fetched, [("EWQT3VwOgvA", 65.0)])
+        self.assertEqual(fetched, [("EWQT3VwOgvA", 70.0)])
 
     def test_a_failed_or_rejected_moment_tries_the_next_offset(self):
         work = tempfile.mkdtemp()

@@ -15,7 +15,8 @@ class Deadline(unittest.TestCase):
     def test_budget_scales_with_scenes_and_is_capped(self):
         with mock.patch.object(config, "SOURCE_BUDGET_BASE_SECONDS", 180), \
                 mock.patch.object(config, "SOURCE_BUDGET_PER_SCENE", 2), \
-                mock.patch.object(config, "SOURCE_BUDGET_MAX_SECONDS", 900):
+                mock.patch.object(config, "SOURCE_BUDGET_MAX_SECONDS", 900), \
+                mock.patch.object(config, "SOURCE_BUDGET_MAX_PER_SCENE", 0):   # a flat cap (tests/test_gapfill: the scaled one)
             self.assertEqual(fanout.source_budget(54), 288)       # a 3-minute narration: under 5 minutes
             self.assertEqual(fanout.source_budget(1000), 900)
 

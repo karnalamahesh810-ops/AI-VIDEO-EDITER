@@ -483,9 +483,18 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
 
 
 def source_budget(n_scenes: int) -> float:
-    """Seconds all footage finding may take for a video of n scenes."""
-    return min(config.SOURCE_BUDGET_MAX_SECONDS,
-               config.SOURCE_BUDGET_BASE_SECONDS + config.SOURCE_BUDGET_PER_SCENE * max(0, n_scenes))
+    """
+    Seconds all footage finding may take for a video of n scenes: base + per
+    scene, under a cap that grows with the video (SOURCE_BUDGET_MAX_SECONDS,
+    or SOURCE_BUDGET_MAX_PER_SCENE a scene when that is more) and never past
+    SOURCE_BUDGET_CEILING_SECONDS. A flat cap gave the owner's 159-scene
+    Lake Powell video the same 40 minutes as a 100-scene one.
+    """
+    n = max(0, n_scenes)
+    cap = max(config.SOURCE_BUDGET_MAX_SECONDS, config.SOURCE_BUDGET_MAX_PER_SCENE * n)
+    if config.SOURCE_BUDGET_CEILING_SECONDS > 0:
+        cap = min(cap, max(config.SOURCE_BUDGET_MAX_SECONDS, config.SOURCE_BUDGET_CEILING_SECONDS))
+    return min(cap, config.SOURCE_BUDGET_BASE_SECONDS + config.SOURCE_BUDGET_PER_SCENE * n)
 
 
 def _round_deadline(n_jobs: int) -> float:

@@ -497,6 +497,43 @@ STILL_MOTION = os.getenv("STILL_MOTION", "").strip().lower()
 SOURCE_BUDGET_BASE_SECONDS = float(os.getenv("SOURCE_BUDGET_BASE_SECONDS", "180"))
 SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "6"))
 SOURCE_BUDGET_MAX_SECONDS = float(os.getenv("SOURCE_BUDGET_MAX_SECONDS", "1500"))
+# The cap grows with the video (fanout.source_budget): never below
+# SOURCE_BUDGET_MAX_PER_SCENE seconds a scene, never past the ceiling. The
+# owner's 159-scene Lake Powell video (2026-10-01) hit the pod's flat
+# 2400 s cap - the same 40 minutes a 100-scene video gets - and its last 23
+# scenes in story order were left empty. 18 s a scene gives it ~48 minutes.
+SOURCE_BUDGET_MAX_PER_SCENE = float(os.getenv("SOURCE_BUDGET_MAX_PER_SCENE", "18"))
+SOURCE_BUDGET_CEILING_SECONDS = float(os.getenv("SOURCE_BUDGET_CEILING_SECONDS", "5400"))
+# --- every scene filled, nothing shown twice (src/gapfill.py) -----------------
+# The owner's rules (2026-10-01): never reuse a clip within a video, never
+# leave a scene empty, every clip fits its own line. NO_REUSE switches off the
+# old "reuse a shot from elsewhere in the story" fill (media.fill_from_story)
+# and the render copy's borrowed shots. A fallback never takes a file, asset
+# or moment another scene shows; another moment of a source video another
+# scene shows only FALLBACK_MOMENT_GAP_SECONDS from its other moments, and
+# never on the next scene.
+NO_REUSE = _flag("NO_REUSE", True)
+FALLBACK_MOMENT_GAP_SECONDS = float(os.getenv("FALLBACK_MOMENT_GAP_SECONDS", "30"))
+# Scenes still empty when the sourcing budget is spent get the fast ladder:
+# the clip library's unused clips of the line's subject or place, the subject
+# pools' unused approved moments, one web/Wikimedia picture search (an AI
+# image only when the job allows one), each through the usual gates. Its own
+# time box (FALLBACK_SECONDS, plus FALLBACK_SECONDS_PER_SCENE a scene, at
+# most FALLBACK_MAX_SECONDS) after the budget, FALLBACK_SCENE_SECONDS a
+# scene, FALLBACK_PARALLEL at once. FALLBACK_STILLS=0 drops the picture step.
+FALLBACK_FILL = _flag("FALLBACK_FILL", True)
+FALLBACK_SECONDS = float(os.getenv("FALLBACK_SECONDS", "180"))
+FALLBACK_SECONDS_PER_SCENE = float(os.getenv("FALLBACK_SECONDS_PER_SCENE", "6"))
+FALLBACK_MAX_SECONDS = float(os.getenv("FALLBACK_MAX_SECONDS", "600"))
+FALLBACK_SCENE_SECONDS = float(os.getenv("FALLBACK_SCENE_SECONDS", "45"))
+FALLBACK_PARALLEL = int(os.getenv("FALLBACK_PARALLEL", "8"))
+FALLBACK_STILLS = _flag("FALLBACK_STILLS", True)
+# The last resort for a scene nothing filled (never in the hook while
+# anything else is possible): the planner's own number/map graphic for the
+# line, else the neighbouring shot held over it (the scenes merge) while the
+# clip still covers the longer scene at HOLD_MIN_RATE of its speed or more
+# (0.6 = the renderer's own slow-down floor).
+HOLD_MIN_RATE = float(os.getenv("HOLD_MIN_RATE", "0.85"))
 # Saving good clips to the library: parallel uploads under one time box.
 LIBRARY_SAVE_SECONDS = float(os.getenv("LIBRARY_SAVE_SECONDS", "90"))
 # The editor's playback copies of each clip (the render uses the originals).

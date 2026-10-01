@@ -75,7 +75,9 @@ class Reserve(unittest.TestCase):
         cands = {"Lake Mead": [{"id": "AAAAAAAAAAA", "title": "Lake Mead 4k"},
                                {"id": "BBBBBBBBBBB", "title": "Lake Mead drone"}],
                  "Hoover Dam": [{"id": "HHHHHHHHHHH", "title": "Hoover Dam drone"}]}
-        rated = {"AAAAAAAAAAA": [{"start": 10.0 * k, "score": 0.9, "description": f"mead {k}"} for k in (1, 2)],
+        # Video A's two moments 50 s apart: a spare must be a clearly different
+        # moment, >= FALLBACK_MOMENT_GAP_SECONDS from any moment shown (2026-10-01).
+        rated = {"AAAAAAAAAAA": [{"start": 10.0 * k, "score": 0.9, "description": f"mead {k}"} for k in (1, 6)],
                  "BBBBBBBBBBB": [{"start": 100.0 + 10 * k, "score": 0.9, "description": f"mead b{k}"} for k in (0, 1)],
                  "HHHHHHHHHHH": [{"start": 10.0 * k, "score": 0.9, "description": f"dam {k}"} for k in range(1, 4)]}
 
@@ -102,6 +104,32 @@ class Reserve(unittest.TestCase):
         self.assertIn("AAAAAAAAAAA", extra[3].url)          # no Hoover Dam spare: any subject's, 500 s on
         all_ids = {a.identity for a in got.values()} | {a.identity for a in extra.values()}
         self.assertEqual(len(all_ids), 6)                   # never the same moment twice
+
+    def test_a_spare_too_close_to_a_shown_moment_or_on_the_next_line_is_never_used(self):
+        # The owner (2026-10-01): another moment of a video another scene shows
+        # must be >= 30 s from it in the video and never on the next scene.
+        jobs = [dict(job(0, "Lake Mead"), start=0.0), dict(job(1, "Lake Mead"), start=300.0),
+                dict(job(2, "Lake Mead"), start=600.0)]
+        shown = media.MediaAsset(kind="video", source="youtube", url="https://www.youtube.com/watch?v=AAAAAAAAAAA&t=40",
+                                 local_path="/w/a40.mp4", moment_key="yt:AAAAAAAAAAA@5", moment={"start": 40.0})
+        with pools._RESERVE_LOCK:
+            pools._RESERVE[:] = [("lake mead", {"id": "AAAAAAAAAAA", "title": "Lake Mead"},
+                                  {"start": 55.0, "score": 0.9, "description": "15 s on"})]
+        try:
+            with mock.patch.object(pools, "_fetch", side_effect=AssertionError("a near repeat")), \
+                    mock.patch.object(config, "MAX_MOMENTS_PER_VIDEO", 0), \
+                    mock.patch.object(config, "SAME_VIDEO_GAP_SECONDS", 0.0):
+                self.assertEqual(pools.fill_from_reserve(jobs, [2], "/w", assets={0: shown}), {})
+            with pools._RESERVE_LOCK:
+                pools._RESERVE[:] = [("lake mead", {"id": "AAAAAAAAAAA", "title": "Lake Mead"},
+                                      {"start": 120.0, "score": 0.9, "description": "80 s on"})]
+            with mock.patch.object(pools, "_fetch", side_effect=AssertionError("its video on the next line")), \
+                    mock.patch.object(config, "MAX_MOMENTS_PER_VIDEO", 0), \
+                    mock.patch.object(config, "SAME_VIDEO_GAP_SECONDS", 0.0):
+                self.assertEqual(pools.fill_from_reserve(jobs, [1], "/w", assets={0: shown}), {})
+        finally:
+            with pools._RESERVE_LOCK:
+                pools._RESERVE.clear()
 
     def test_a_line_that_names_its_own_place_takes_only_that_places_spares(self):
         jobs = [dict(job(0, "Houston"), start=0.0, place="Houston"),

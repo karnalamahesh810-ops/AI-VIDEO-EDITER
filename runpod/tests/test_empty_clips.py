@@ -73,17 +73,23 @@ class SanitizeVideos(unittest.TestCase):
         d = tempfile.mkdtemp()
         stub = os.path.join(d, "s0.mp4"); _stub_mp4(stub)
         good = os.path.join(d, "s1.mp4"); _stub_mp4(good)
-        doc = {"scenes": [
-            {"id": "s0000", "media": {"type": "video", "url": stub, "source": "youtube"}, "semanticMetadata": {"subject": "Lake Mead"}},
-            {"id": "s0001", "media": {"type": "video", "url": good, "source": "youtube"}, "semanticMetadata": {"subject": "Lake Mead"}},
+        doc = {"fps": 30, "scenes": [
+            {"id": "s0000", "startFrame": 0, "durationInFrames": 90, "text": "first",
+             "media": {"type": "video", "url": stub, "source": "youtube"}, "semanticMetadata": {"subject": "Lake Mead"}},
+            {"id": "s0001", "startFrame": 90, "durationInFrames": 90, "text": "second",
+             "media": {"type": "video", "url": good, "source": "youtube", "clipSeconds": 6.0},
+             "semanticMetadata": {"subject": "Lake Mead"}},
         ], "overlays": []}
         with mock.patch.object(media, "playable_video", side_effect=lambda p: p == good):
-            with mock.patch.object(config, "ANIMATION_FILL", False):      # the borrowing path, not a graphic
+            with mock.patch.object(config, "ANIMATION_FILL", False):      # the hold, not a graphic
                 dropped = handler._sanitize_videos(doc)
         self.assertEqual(dropped, 1)
-        self.assertEqual(doc["scenes"][0]["media"]["url"], good)        # covered by the good clip
+        # Covered without a repeat (the owner, 2026-10-01): the good clip is
+        # held over the stub's line - one scene, never the same clip twice.
+        self.assertEqual([s["media"]["url"] for s in doc["scenes"]], [good])
+        self.assertEqual((doc["scenes"][0]["startFrame"], doc["scenes"][0]["durationInFrames"]), (0, 180))
         self.assertTrue(doc["scenes"][0]["reviewRequired"])
-        self.assertEqual(doc["scenes"][1]["media"]["url"], good)
+        self.assertEqual(doc["scenes"][0]["text"], "first second")
 
 
 if __name__ == "__main__":

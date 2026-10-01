@@ -3542,7 +3542,14 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # running in the background and their scenes fall through to the
     # recheck / fill steps below, which exist for exactly that.
     pool = _new_pool(max(1, workers))
-    futures = {pool.submit(fetch, job, nth): job["index"] for job, nth in pass1}
+    # Started in coverage order (src/gapfill.py): the hook's lines first, then
+    # every other line spread over the whole video. In story order the pool
+    # reached the ending last, and when the owner's 159-scene Lake Powell job
+    # ran out of time its last 23 lines were the ones left empty (2026-10-01).
+    nths = {j["index"]: nth for j, nth in pass1}
+    from . import gapfill
+    futures = {pool.submit(fetch, job, nths[job["index"]]): job["index"]
+               for job in gapfill.coverage_order([j for j, _nth in pass1])}
     started = time.time()
     deadline = started + _budget(config.PASS1_BUDGET_SECONDS, 3.0, len(pass1))
     if _ytdlp.DEADLINE[0]:
@@ -3810,8 +3817,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     LAST_STATS.update(fresh_moments=fresh)
     # Reusing a shot waits until after the job's rescue pass has looked for fresh
     # footage (handler): run here first, it filled 51 of 164 scenes with repeats.
+    # Never with NO_REUSE (the owner, 2026-10-01: never reuse a clip within a video).
     reused = (fill_from_story(ordered, results)
-              if config.REUSE_SHOTS_TO_FILL and not config.RESCUE_BEFORE_REUSE else 0)
+              if config.REUSE_SHOTS_TO_FILL and not config.RESCUE_BEFORE_REUSE and not config.NO_REUSE else 0)
     if reused:
         print(f"[media] reused a shot from elsewhere in the story for {reused} "
               f"scene(s) nothing else could fill", flush=True)
@@ -3871,7 +3879,9 @@ def same_subject(a: str, b: str) -> bool:
     return bool(ga & gb)
 
 
-_FRESH_OFFSETS = (25.0, -25.0, 45.0, -45.0, 70.0, -70.0, 95.0)
+# At least config.FALLBACK_MOMENT_GAP_SECONDS (30 s) from the donor's moment:
+# another moment of a video shown elsewhere must be clearly another moment.
+_FRESH_OFFSETS = (30.0, -30.0, 45.0, -45.0, 70.0, -70.0, 95.0)
 
 
 def _yt_origin(asset: MediaAsset) -> tuple:
@@ -4146,6 +4156,7 @@ def restore_held(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]
     """
     starts = scene_starts(jobs)
     out = {"replaced": 0, "restored": 0, "dropped": 0}
+    from . import gapfill
     for i in sorted(held):
         asset, reason, kind = held[i]
         if results[i] is not None:
@@ -4159,6 +4170,15 @@ def restore_held(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]
             if _near_twin(prev, starts.get(i)):
                 print(f"[variety] scene {i + 1}: {reason}, within {config.REUSE_MIN_GAP_SECONDS:.0f} s "
                       "of its twin - left empty", flush=True)
+                out["dropped"] += 1
+                continue
+            # Never a repeat (the owner, 2026-10-01): not the same shot or
+            # moment, not its video under FALLBACK_MOMENT_GAP_SECONDS from
+            # another of its moments, not its video on the next line.
+            why = gapfill.Used.of_results(results, starts).why_not(i, gapfill.Shot.of_asset(asset, starts.get(i))) \
+                if config.NO_REUSE else ""
+            if why:
+                print(f"[variety] scene {i + 1}: {reason} - {why}; left for the fallback fill", flush=True)
                 out["dropped"] += 1
                 continue
             note = "Same source video as another scene - nothing else was found for this line"

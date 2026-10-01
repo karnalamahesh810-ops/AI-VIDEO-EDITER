@@ -642,29 +642,39 @@ class HandlerWiring(_Rules):
         self.assertEqual(ffr.call_args.args[1], [1])
         self.assertIn("BBBBBBBBBBB", got[1].url)
 
-    def test_the_render_copy_borrows_footage_never_a_photo_and_a_far_twin_first(self):
+    def test_the_render_copy_never_borrows_a_shot_it_holds_the_neighbour(self):
+        # Was: the render copy borrowed footage from elsewhere (a far twin
+        # first). The owner's rules (2026-10-01) - never reuse a clip within a
+        # video, never an empty scene - make it hold the neighbouring shot over
+        # the empty line instead (the scenes merge); no url appears twice.
         import handler
         fps = 30
 
         def scene(sec, media_, subject="Texas", asset=""):
-            return {"startFrame": sec * fps, "durationInFrames": 5 * fps, "text": f"line at {sec}",
-                    "media": media_, "semanticMetadata": {"subject": subject, "assetId": asset}}
+            return {"id": f"s{sec:04d}", "startFrame": sec * fps, "durationInFrames": 5 * fps,
+                    "text": f"line at {sec}", "media": media_,
+                    "semanticMetadata": {"subject": subject, "assetId": asset}}
 
         def empty():
             return {"type": "color", "url": "", "source": "none"}
         only_a_photo = {"fps": fps, "meta": {}, "overlays": [], "scenes": [
             scene(0, {"type": "image", "url": "https://x/houston.jpg", "source": "web_image"}),
-            scene(100, empty())]}
+            scene(5, empty())]}
         clips = {"fps": fps, "meta": {}, "overlays": [], "scenes": [
-            scene(0, empty()),
-            scene(10, {"type": "video", "url": "https://x/a.mp4", "source": "youtube"}, asset="yt:AAAAAAAAAAA@2"),
-            scene(200, {"type": "video", "url": "https://x/b.mp4", "source": "youtube"}, asset="yt:BBBBBBBBBBB@0")]}
+            scene(100, {"type": "video", "url": "https://x/a.mp4", "source": "youtube", "clipSeconds": 9.0},
+                  asset="yt:AAAAAAAAAAA@2"),
+            scene(105, empty()),
+            scene(110, {"type": "video", "url": "https://x/b.mp4", "source": "youtube", "clipSeconds": 9.0},
+                  asset="yt:BBBBBBBBBBB@0")]}
         with mock.patch.object(config, "ANIMATION_FILL", False):
-            handler._fill_missing_media(only_a_photo)
-            handler._fill_missing_media(clips)
-        self.assertEqual(only_a_photo["scenes"][1]["media"]["type"], "color")      # a photo is never borrowed
-        self.assertIn("shown as text", only_a_photo["scenes"][1]["reviewReason"])
-        self.assertEqual(clips["scenes"][0]["media"]["url"], "https://x/b.mp4")    # not A, 10 s away
+            self.assertEqual(handler._fill_missing_media(only_a_photo), 1)
+            self.assertEqual(handler._fill_missing_media(clips), 1)
+        self.assertEqual(len(only_a_photo["scenes"]), 1)                           # the photo holds over the line
+        self.assertEqual(only_a_photo["scenes"][0]["durationInFrames"], 10 * fps)
+        self.assertEqual([s["media"]["url"] for s in clips["scenes"]], ["https://x/a.mp4", "https://x/b.mp4"])
+        self.assertEqual(sum(s["durationInFrames"] for s in clips["scenes"]), 15 * fps)   # nothing lost
+        self.assertEqual(clips["scenes"][1]["startFrame"], clips["scenes"][0]["durationInFrames"] + 100 * fps)
+        self.assertIn("line at 105", " ".join(s["text"] for s in clips["scenes"]))
 
     def test_do_plan_clears_and_re_sources_what_breaks_a_rule(self):
         """do_plan end to end up to the timeline build, with the network mocked."""
@@ -714,6 +724,7 @@ class HandlerWiring(_Rules):
                 mock.patch.object(media, "source_many", side_effect=source_many), \
                 mock.patch.object(media, "rescue_fill", side_effect=rescue), \
                 mock.patch.object(handler.timeline, "build", side_effect=build), \
+                mock.patch.object(handler.gapfill, "fill_empty", return_value={}) as ladder, \
                 mock.patch.object(config, "UPSCALE_ENABLED", False), mock.patch.object(config, "ALLOW_VERTICAL", False), \
                 mock.patch.object(config, "SUBJECT_POOLS", True), mock.patch.object(config, "REUSE_SHOTS_TO_FILL", False):
             try:
@@ -734,7 +745,9 @@ class HandlerWiring(_Rules):
         got = seen["assets"]
         self.assertIn("RESCUE00000", got[0].url)                      # the AI image replaced by footage
         self.assertEqual(got[1].url, "https://x/k.jpg")               # no footage found: the still stays
-        self.assertIsNone(got[4])                                     # 5 s from its twin: never kept
+        self.assertIsNone(got[4])                                     # 5 s from its twin: never kept...
+        ladder.assert_called_once()                                   # ...it goes to the fallback ladder
+        self.assertIsNone(ladder.call_args.args[1][4])                # (src/gapfill.py, mocked here)
         self.assertEqual([a.url for a in (got[2], got[3], got[5])],
                          [sourced[2].url, sourced[3].url, sourced[5].url])
         variety = media.LAST_STATS["pools"]["variety"]

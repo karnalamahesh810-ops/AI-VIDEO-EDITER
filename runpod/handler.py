@@ -52,6 +52,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, styles, upscale
+from src import gapfill
 
 
 def _work_dir(job_id: str) -> str:
@@ -759,7 +760,7 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
 
 def _fill_missing_media(doc: dict) -> int:
     """
-    Give every scene something to render, for the `build` path only.
+    Give every scene something to render, never another scene's clip.
 
     `build` sources and renders in one job with nothing shown to the user in
     between, so a single scene nothing could be found for used to fail
@@ -768,139 +769,16 @@ def _fill_missing_media(doc: dict) -> int:
     is deleted, taking every other scene's already-downloaded clip with it.
     Twenty minutes of sourcing was lost over one hard beat.
 
-    The scene_data already saved to the project (before this is ever called)
-    keeps the honest "no media found" / reviewRequired record, so the editor
-    and its readiness panel still show the real gap. This only patches the
-    throwaway render copy: it borrows a scene that does have media and flags
-    the borrow for review, the same "a repeat is better than black" rule
-    already used for duplicates.
-
-    Borrows prefer a scene about the SAME subject first (matching the story,
-    not just filling the frame - a shot of the actual thing being narrated
-    beats a shot of whatever else happened to be nearby), then spread across
-    every available scene (least-borrowed first, nearest as the tiebreak)
-    rather than always the closest one. Several empty scenes in a row are
-    common — a hard subject is usually hard for several consecutive beats,
-    not one — and always reaching for "nearest" means every one of them
-    collapses onto the SAME single neighbour: a visible run of the identical
-    clip repeated back to back, which reads far worse than the same clip
-    appearing twice somewhere apart in the video.
-
-    Only FOOTAGE is borrowed, never a photo, and a shot whose source video
-    plays nowhere within REUSE_MIN_GAP_SECONDS of the scene comes before one
-    that does: the owner's Texas flood video (2026-09-30) showed 15 photos
-    across 28 scenes and one drone video four times in a minute. (The saved
-    timeline keeps that 60 s rule strictly - media.restore_held and
-    fill_from_story; this render copy still prefers a near repeat to black.)
-    A scene with nothing it may borrow shows its line as text.
-    Returns how many scenes were patched.
+    This used to borrow another scene's shot ("a repeat is better than
+    black"). The owner's rules (2026-10-01) - never reuse a clip within a
+    video, never leave a scene empty - turned that round: an empty scene gets
+    the planner's own graphic for its line (a number, money, a map), else the
+    neighbouring shot held over it while its clip still covers the longer
+    scene (the scenes merge, src/gapfill.hold_or_animate), else its line as a
+    text card on the quiet background. Returns how many scenes were patched.
     """
-    scenes = doc.get("scenes", [])
-    have = [i for i, s in enumerate(scenes)
-           if (s.get("media") or {}).get("type") in ("video", "image")]
-    fps = max(1, int(doc.get("fps") or 30))
-
-    def source_of(idx: int) -> str:
-        """The source video a scene shows ("yt:<id>" for any moment of one), else its media url."""
-        aid = str((scenes[idx].get("semanticMetadata") or {}).get("assetId") or "")
-        if aid.startswith("yt:"):
-            return aid.split("@")[0]
-        return str((scenes[idx].get("media") or {}).get("url") or "")
-
-    def seconds_at(idx: int) -> float:
-        return int(scenes[idx].get("startFrame") or 0) / fps
-
-    footage = [i for i in have if (scenes[i].get("media") or {}).get("type") == "video"]
-    plays: Dict[str, List[float]] = {}          # source video -> where it plays
-    for k in footage:
-        plays.setdefault(source_of(k), []).append(seconds_at(k))
-
-    def near_twin(pick: int, idx: int) -> bool:
-        at, floor = seconds_at(idx), config.REUSE_MIN_GAP_SECONDS
-        return floor > 0 and any(abs(t - at) < floor for t in plays.get(source_of(pick), []))
-    if not have:
-        # Nothing was sourced anywhere in the whole video - there is no clip
-        # to borrow. Never leave this as a black hole: give each empty scene
-        # a text card over its own narration line, the same fallback VidRush
-        # itself reaches for on an unfindable beat. SceneClip already draws a
-        # quiet gradient instead of flat black behind it.
-        overlays = doc.setdefault("overlays", [])
-        cards = 0
-        for s in scenes:
-            text = (s.get("text") or "").strip()
-            if not text:
-                continue
-            overlays.append({
-                "type": "highlight", "text": text[:180],
-                "startFrame": s["startFrame"], "durationInFrames": s["durationInFrames"],
-            })
-            s["reviewRequired"] = True
-            s["reviewReason"] = "No usable clip or image found — text card shown instead"
-            cards += 1
-        return cards
-    def subject_of(idx: int) -> str:
-        return ((scenes[idx].get("semanticMetadata") or {}).get("subject") or "").strip().lower()
-
-    borrowed = {h: 0 for h in have}
-    # How far a borrowed shot must sit from where it already plays: none for a
-    # handful of scenes, six scenes on a long video.
-    gap = 1 if len(scenes) <= 12 else min(6, 2 + len(scenes) // 40)
-    patched = 0
-    for i, s in enumerate(scenes):
-        if (s.get("media") or {}).get("type") == "color":
-            anim = None
-            if config.ANIMATION_FILL and config.TREATMENTS:
-                # A graphic over the line beats a repeated clip (and never
-                # goes stale the way a borrowed shot of something else does).
-                from src import treatments as vt
-                pack = vt.pack_for(doc.get("meta", {}).get("brief") or {}, str(doc.get("meta", {}).get("stylePack") or ""))
-                fps = max(1, int(doc.get("fps") or 30))
-                sf, df = int(s.get("startFrame") or 0), int(s.get("durationInFrames") or 0)
-                seg = type("Seg", (), {"text": s.get("text") or "", "start": sf / fps,
-                                       "end": (sf + df) / fps, "duration": df / fps})()
-                shot = {"subject": (s.get("semanticMetadata") or {}).get("subject") or ""}
-                anim = vt.animation_for(seg, shot, pack, None)
-            if anim:
-                s["media"] = {"type": "animation", "url": "", "source": "template"}
-                s["animation"] = anim
-                s["visualType"] = "animation"
-                s["reviewRequired"] = True
-                s["reviewReason"] = "No footage found — a motion graphic fills this beat (keep it or replace the clip)"
-                patched += 1
-                continue
-            if not have:
-                continue
-            want = subject_of(i)
-            # A shot is borrowed at most once, never near itself: the owner saw
-            # ~19 clips each repeated about eight times across a 22-minute video.
-            # A shot of the same subject whose video plays nowhere near comes
-            # first, then any such shot, and only then one that plays near.
-            free = [h for h in footage if borrowed[h] < 1 and abs(h - i) >= gap]
-            same = [h for h in free if want and subject_of(h) == want]
-            far = [h for h in free if not near_twin(h, i)]
-            pool = [h for h in same if h in far] or far or same or free
-            if not pool:
-                text = (s.get("text") or "").strip()
-                if text:
-                    doc.setdefault("overlays", []).append({
-                        "type": "highlight", "text": text[:180],
-                        "startFrame": s["startFrame"], "durationInFrames": s["durationInFrames"]})
-                s["reviewRequired"] = True
-                s["reviewReason"] = "No usable clip found — the line is shown as text; use Find footage to add one"
-                patched += 1
-                continue
-            pick = min(pool, key=lambda h: (borrowed[h], abs(h - i)))
-            borrowed[pick] += 1
-            plays.setdefault(source_of(pick), []).append(seconds_at(i))
-            s["media"] = dict(scenes[pick]["media"])
-            s["motion"] = scenes[pick].get("motion", "none")
-            s["reviewRequired"] = True
-            reason = ("No usable clip found — reused a shot of the same subject; use Find footage to replace it"
-                     if want and subject_of(pick) == want else
-                     "No usable clip found — reused another scene; use Find footage to replace it")
-            s["reviewReason"] = reason
-            patched += 1
-    return patched
+    got = gapfill.hold_or_animate(doc, label="before the render")
+    return int(got.get("graphic", 0)) + int(got.get("held", 0)) + int(got.get("card", 0))
 
 
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
@@ -1090,6 +968,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     lib = library.Library.load(project_id, (report.job or {}).get("id", ""),
                                inp.get("media_bucket") or config.MEDIA_BUCKET)
     LAST_LIBRARY["lib"] = lib
+    # The lines and switches the fallback ladder and the check before
+    # publishing need (src/gapfill.py).
+    gapfill.remember(jobs, work, library=lib, require_cc=require_cc, youtube_only=flags["youtube_only"])
     # Parts on other workers apply the same per-job config overrides.
     fan_flags = ({**flags, "config": inp["config"]} if isinstance(inp.get("config"), dict) else flags)
     pools_wanted = bool(config.SUBJECT_POOLS and inp.get("allow_youtube") is not False)
@@ -1149,7 +1030,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             else:
                 seen_ids.add(a.identity)
         if redo:
-            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc, assets=assets)
+            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc, assets=assets, library=lib)
             for i, a in extra.items():
                 assets[i] = a
             pool_stats["reserve_filled"] = len(extra)
@@ -1171,7 +1052,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     held = media.hold_violations(jobs, results_by_index)
     if held and pools_wanted:
         extra = pools.fill_from_reserve(jobs, sorted(held), work, require_cc=require_cc,
-                                        assets=results_by_index)
+                                        assets=results_by_index, library=lib)
         for i, a in extra.items():
             results_by_index[i] = a
     rescued: dict = {}
@@ -1187,12 +1068,25 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         pool_stats["variety"] = dict(media.restore_held(jobs, results_by_index, held), held=len(held),
                                      reasons=dict(collections.Counter(r for _a, r, _k in held.values())))
         print(f"[worker] variety: {pool_stats['variety']}", flush=True)
-    # Only now, with nothing fresh left to find, may a shot be reused - footage
-    # only, never within REUSE_MIN_GAP_SECONDS of its twin, and never more than
-    # REUSE_MAX_USES times in the video.
-    if any(results_by_index[j["index"]] is None for j in jobs) \
-            and config.REUSE_SHOTS_TO_FILL and config.RESCUE_BEFORE_REUSE:
-        rescued["reused"] = media.fill_from_story(jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
+    # Still empty: never a reused shot (the owner, 2026-10-01: the Lake Powell
+    # video reused 47 clips here and left its last 23 scenes empty). The fast
+    # fallback ladder instead - the library's unused clips of the line's
+    # subject or place, the pools' unused approved moments, one picture
+    # search - in its own short time box (src/gapfill.py). What it cannot
+    # fill gets the planner's graphic or the neighbouring shot held over it
+    # once the timeline is built.
+    fallback: dict = {}
+    if any(results_by_index[j["index"]] is None for j in jobs):
+        if config.NO_REUSE:
+            n_left = sum(1 for j in jobs if results_by_index[j["index"]] is None)
+            report(f"Filling {n_left} scenes the footage search ran out of time for", 63)
+            fallback = gapfill.fill_empty(jobs, results_by_index, work, library=lib, require_cc=require_cc,
+                                          youtube_only=bool(flags.get("youtube_only")),
+                                          label="after the footage search")
+            pool_stats["fallback"] = fallback
+        elif config.REUSE_SHOTS_TO_FILL and config.RESCUE_BEFORE_REUSE:
+            # The old rule (NO_REUSE=0): a shot reused at most REUSE_MAX_USES times.
+            rescued["reused"] = media.fill_from_story(jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
     for j in jobs:
         assets[j["index"]] = results_by_index[j["index"]]
     if rescued:
@@ -1244,6 +1138,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         _bind_overlay_photos(doc, work, _put_split)
     except Exception as e:  # noqa: BLE001 - a nicety, never a failure
         print(f"[worker] split images skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+    # (d) the last resort for a line the ladder could not fill: the planner's
+    # graphic for it, else the neighbouring shot held over it (src/gapfill.py).
+    # Never an empty scene, never another scene's clip.
+    last = gapfill.hold_or_animate(doc, label="after the fallback fill")
+    doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
+    if fallback or any(last.values()):
+        print(f"[worker] {gapfill.summary(fallback, last)}", flush=True)
     # A signed URL expires; keep the original reference so render can re-sign.
     unsupported = [k for k in ("own_clips", "channels")
                    if inp.get(k) and inp.get("source") in ("clips", "channels")]
@@ -1604,6 +1505,31 @@ def _sanitize_videos(doc: dict) -> int:
         print(f"[worker] {dropped} empty clip(s) dropped before publishing", flush=True)
         _fill_missing_media(doc)
     return dropped
+
+
+def _no_repeats(doc: dict, report: Reporter = None) -> dict:
+    """
+    The check before the timeline is published (saved for the editor,
+    uploaded, rendered): a scene showing the same file, asset or moment as an
+    earlier scene - or its source video on the very next scene - gets a fresh
+    shot through the fallback ladder (library, spare pool moments, a picture),
+    else the last resort (src/gapfill.final_check). The owner's rule
+    (2026-10-01): never reuse a clip within a video. Never fails the job.
+    """
+    try:
+        found = gapfill.find_repeats(doc)
+        if found and report is not None:
+            report(f"Replacing {len(found)} repeated shots", 66)
+        got = gapfill.final_check(doc)
+    except Exception as e:  # noqa: BLE001 - the timeline as it is beats a failed job
+        print(f"[worker] repeat check skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        return {}
+    if got.get("repeats") or got.get("empty"):
+        print(f"[worker] before publishing: {got.get('repeats', 0)} repeated shot(s), "
+              f"{got.get('replaced', 0)} replaced by fresh ones; {got.get('empty', 0)} empty scene(s) filled",
+              flush=True)
+        doc.setdefault("meta", {}).setdefault("fallbackFill", {})["beforePublishing"] = dict(got)
+    return got
 
 
 def _sanitize_stills(doc: dict, work: str) -> int:
@@ -2152,6 +2078,7 @@ def handler(job):
         costs.measure_start()
     report = Reporter(project_id, job=job)
     work = _work_dir(job_id)
+    gapfill.reset()                     # the fallback ladder's plan is this job's own
 
     try:
         if action in ("plan", "build", "resource", "source_part"):
@@ -2304,6 +2231,7 @@ def handler(job):
         if action == "plan":
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
+            _no_repeats(doc, report)            # the last look before the editor gets it
             _keep_in_library(doc, report)
             ledger.note(doc)                    # while the photos are still here to hash
             # Without this the timeline points at files this job is about to
@@ -2373,6 +2301,7 @@ def handler(job):
         if action == "build":
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
+            _no_repeats(doc, report)            # the last look before the render and the editor
             _keep_in_library(doc, report)
             ledger.note(doc)                    # while the photos are still here to hash
             if project_id:

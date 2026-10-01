@@ -369,19 +369,27 @@ class PersonSafetyNet(unittest.TestCase):
             media.source_many(jobs, "/tmp", workers=1)
         self.assertEqual(made, [])
 
-    def test_borrowing_prefers_the_same_subject_over_the_nearest_scene(self):
+    def test_an_empty_scene_never_borrows_another_scenes_shot(self):
+        # Was: an empty scene borrowed a shot of the same subject from elsewhere.
+        # The owner's rule (2026-10-01): never reuse a clip within a video. The
+        # neighbour is held over the line while its clip covers it, else the
+        # line is shown as text; no url ever appears twice.
         import handler
         doc = build_doc(n=5, seconds=3.0)
         for i, subj in ((0, "Lake Mead"), (4, "Hoover Dam")):
             doc["scenes"][i]["media"] = {"type": "video", "source": "youtube",
-                                         "url": f"https://x/{i}.mp4"}
+                                         "url": f"https://x/{i}.mp4", "clipSeconds": 6.0}
             doc["scenes"][i]["semanticMetadata"] = {"subject": subj}
         for i in (1, 2, 3):
             doc["scenes"][i]["media"] = {"type": "color", "url": "", "source": "none"}
         doc["scenes"][2]["semanticMetadata"] = {"subject": "Hoover Dam"}
-        _fill_no_anim(doc)
-        self.assertEqual(doc["scenes"][2]["media"]["url"], "https://x/4.mp4")
-        self.assertIn("same subject", doc["scenes"][2]["reviewReason"])
+        total = sum(s["durationInFrames"] for s in doc["scenes"])
+        self.assertEqual(_fill_no_anim(doc), 3)
+        urls = [s["media"].get("url") for s in doc["scenes"] if s["media"].get("url")]
+        self.assertEqual(sorted(urls), ["https://x/0.mp4", "https://x/4.mp4"])   # each shot once
+        self.assertEqual(sum(s["durationInFrames"] for s in doc["scenes"]), total)
+        self.assertLess(len(doc["scenes"]), 5)                                    # held over, merged
+        timeline.validate(doc, require_media=False)
 
 
 class DirectorFallback(unittest.TestCase):
@@ -818,8 +826,9 @@ class PipelineProgress(unittest.TestCase):
         # pick their single nearest real neighbour, so all of them piled onto
         # THAT one scene's clip - a visible run of the identical shot,
         # repeated back to back. The Glen Canyon video then showed ~19 clips
-        # about eight times each. Now a shot is borrowed at most once and
-        # never right next to itself; the rest show their line as text.
+        # about eight times each. Since the owner's rule (2026-10-01) a shot
+        # is never borrowed at all: a neighbour is only held while its own
+        # clip covers the longer scene, the rest show their line as text.
         import handler
         doc = build_doc(n=101, seconds=3.0)
         for i, s in enumerate(doc["scenes"]):
@@ -828,12 +837,11 @@ class PipelineProgress(unittest.TestCase):
         patched = _fill_no_anim(doc)
         self.assertEqual(patched, 99)
         urls = [s["media"].get("url") for s in doc["scenes"]]
-        self.assertEqual(urls.count("https://x/real0.mp4"), 2)       # itself + one borrow
-        self.assertEqual(urls.count("https://x/real100.mp4"), 2)
-        for i in (1, 2, 3):                                          # never right beside itself
-            self.assertNotEqual(urls[i], "https://x/real0.mp4")
+        self.assertEqual(urls.count("https://x/real0.mp4"), 1)       # never borrowed
+        self.assertEqual(urls.count("https://x/real100.mp4"), 1)
         cards = [o for o in doc["overlays"] if o.get("type") == "highlight"]
         self.assertGreaterEqual(len(cards), 90)
+        self.assertEqual(sum(s["durationInFrames"] for s in doc["scenes"]), 101 * 90)
 
 
 class VisionFailuresAreReported(unittest.TestCase):
@@ -1818,7 +1826,8 @@ class NoDuplicateShots(unittest.TestCase):
         # Updated for the owner's review (2026-09-30): the assets were photos,
         # and a photo is now shown once (config.IMAGE_MAX_USES); reuse and its
         # spacing are shown on footage.
-        with mock.patch.object(config, "RESCUE_BEFORE_REUSE", False):
+        # The legacy reuse path, only with NO_REUSE off (the owner's rule since 2026-10-01).
+        with mock.patch.object(config, "RESCUE_BEFORE_REUSE", False), mock.patch.object(config, "NO_REUSE", False):
             out, _ = self._run(["the lake"] * 8, per_query=2, kind="video")
         placed = [(i, a) for i, a in enumerate(out) if a]
         self.assertGreater(len(placed), 2)
@@ -2267,7 +2276,7 @@ class SameSubjectBeatsSpreadAcrossTheList(unittest.TestCase):
         nths = []
 
         def fake(query, seconds, work_dir, *, nth=0, **kw):
-            nths.append(nth)
+            nths.append((query, nth))
             return MediaAsset(kind="image", source="wikimedia", url=f"https://x/{query}{nth}")
 
         jobs = [{"index": i, "query": q, "seconds": 3.0}
@@ -2276,7 +2285,8 @@ class SameSubjectBeatsSpreadAcrossTheList(unittest.TestCase):
                 mock.patch.object(media, "_asset_ok", return_value=(True, "")):
             media.reset_cache()
             media.source_many(jobs, "/tmp", workers=1)
-        self.assertEqual(nths[:3], [0, 0, 1])
+        # Started in coverage order (src/gapfill.py), counted in story order.
+        self.assertEqual(sorted(nths[:3]), [("a", 0), ("a", 1), ("b", 0)])
 
 
 class SubjectLevelSearchCache(unittest.TestCase):

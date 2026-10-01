@@ -629,8 +629,22 @@ def _same_pool(pool_key: str, key: str) -> bool:
     return pool_key == key or a <= b or b <= a
 
 
+def _spare_shot(cand: dict, m: dict, at: Optional[float]):
+    """A spare moment as gapfill.Shot (the no-repeat rules)."""
+    from . import gapfill
+    vid = _video_of(cand)
+    if cand.get("_library") is not None:
+        e = cand["_library"]
+        video = gapfill._video_of(str(e.get("id") or ""), e.get("url") or "")
+        return gapfill.Shot(video=video, start=gapfill._start_from(None, e.get("url") or "", ""), at=at,
+                            ident="" if video else str(e.get("id") or ""))
+    if vid.startswith("yt:"):
+        return gapfill.Shot(video=vid, start=float(m.get("start") or 0.0), at=at)
+    return gapfill.Shot(ident=vid, at=at)
+
+
 def fill_from_reserve(jobs: List[dict], indices: List[int], work: str,
-                      require_cc: bool = False, assets=None) -> Dict[int, media.MediaAsset]:
+                      require_cc: bool = False, assets=None, library=None) -> Dict[int, media.MediaAsset]:
     """
     Real, distinct footage for lines left empty or repeated, from the pools'
     spare moments - the line's own subject first, then any story subject.
@@ -640,10 +654,17 @@ def fill_from_reserve(jobs: List[dict], indices: List[int], work: str,
     assets as a list by index or a dict, the lines being refilled not
     counted), and a line that names its own place (job "place") only takes a
     spare of that place - a Dallas line never gets the Houston pool's shot.
+    And never a repeat (the owner, 2026-10-01): not a moment another line
+    shows, nor one of its video under FALLBACK_MOMENT_GAP_SECONDS from it, nor
+    its video on the next line (gapfill.Used).
     """
+    from . import gapfill
     by_index = {j["index"]: j for j in jobs}
     starts = media.scene_starts(jobs)
     slots = _Slots(media.placements(assets, starts, skip=set(indices)) if assets is not None else None)
+    keep = {i: a for i, a in (assets.items() if isinstance(assets, dict) else enumerate(assets or []))
+            if a is not None and i not in set(indices)}
+    used = gapfill.Used.of_results(keep, starts)
     with _RESERVE_LOCK:
         spare = list(_RESERVE)
         _RESERVE.clear()
@@ -655,16 +676,44 @@ def fill_from_reserve(jobs: List[dict], indices: List[int], work: str,
         key = subject_key(_pool_name(job))
         own = [s for s in spare if _same_pool(s[0], key)]
         others = [] if job.get("place") else [s for s in spare if not _same_pool(s[0], key)]
-        pick = next((s for s in own + others if slots.take(_video_of(s[1]), starts.get(i))), None)
+        pick = next((s for s in own + others
+                     if not used.why_not(i, _spare_shot(s[1], s[2], starts.get(i)))
+                     and slots.take(_video_of(s[1]), starts.get(i))), None)
         if pick is None:
             continue
         spare.remove(pick)
-        asset = _fetch(job, pick[1], pick[2], work, require_cc, _pool_name(job) or pick[0])
+        asset = _fetch(job, pick[1], pick[2], work, require_cc, _pool_name(job) or pick[0], library=library)
         if asset is not None:
             out[i] = asset
+            used.add(i, gapfill.Shot.of_asset(asset, starts.get(i)))
     with _RESERVE_LOCK:
         _RESERVE.extend(spare)
     return out
+
+
+def take_spare(job: dict, ok: Callable[[dict, dict], bool],
+               prefer: Optional[Callable[[dict, dict], bool]] = None) -> Optional[tuple]:
+    """
+    Take one spare moment for `job` off the reserve: the line's own subject or
+    place first, then (a line that names no place of its own) any subject's;
+    only one `ok(cand, moment)` accepts, and among those one `prefer` likes
+    first. (key, cand, moment), or None. put_back() returns it unused.
+    """
+    key = subject_key(_pool_name(job))
+    with _RESERVE_LOCK:
+        own = [s for s in _RESERVE if _same_pool(s[0], key)]
+        others = [] if job.get("place") else [s for s in _RESERVE if not _same_pool(s[0], key)]
+        fine = [s for s in own + others if ok(s[1], s[2])]
+        best = [s for s in fine if prefer is None or prefer(s[1], s[2])]
+        pick = (best or fine or [None])[0]
+        if pick is not None:
+            _RESERVE.remove(pick)
+        return pick
+
+
+def put_back(spare: tuple) -> None:
+    with _RESERVE_LOCK:
+        _RESERVE.append(spare)
 
 
 def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
