@@ -326,5 +326,25 @@ class TimelineIntegration(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(root, name + ".mp3")), name)
 
 
+
+class RenamedMusic(unittest.TestCase):
+    """A document planned before the owner's new tracks still names the removed beds."""
+
+    def test_old_beds_map_to_the_new_tracks(self):
+        import os
+        from src import timeline
+        self.assertEqual(timeline.current_bgm_url("bgm://investigative"), "bgm://investigative-v5")
+        self.assertEqual(timeline.current_bgm_url("bgm://crime"), "bgm://crime-v1")
+        self.assertEqual(timeline.current_bgm_url("bgm://suspense-v2"), "bgm://suspense-v2")
+        self.assertEqual(timeline.current_bgm_url("https://x/y.mp3"), "https://x/y.mp3")
+        root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "remotion", "public", "bgm")
+        for new in timeline.BGM_RENAMED.values():
+            self.assertTrue(os.path.isfile(os.path.join(root, new + ".mp3")), new)
+        with open(os.path.join(os.path.dirname(root), "..", "src", "Main.tsx"), encoding="utf-8") as fh:
+            main = fh.read()
+        for old, new in timeline.BGM_RENAMED.items():
+            self.assertIn(f'{old}: "{new}"', main)
+
+
 if __name__ == "__main__":
     unittest.main()

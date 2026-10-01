@@ -13,6 +13,14 @@ import { LookSoundContext, LookSounds, type LookSoundScope } from "./components/
 import { lookSoundsOn, planDocSounds, type SoundCue, type SoundTemplate } from "./components/lib/lookSoundPlan";
 import { PackTransitions } from "./transitions/PackTransition";
 
+// The music beds were replaced by the owner's own tracks (2026-10-01); a
+// document planned before names the old bed, which no longer ships (its 404
+// failed the whole render: "Could not play audio ... investigative.mp3").
+const BGM_RENAMED: Record<string, string> = {
+  investigative: "investigative-v5", suspense: "suspense-v2", crime: "crime-v1",
+};
+export const bgmFile = (name: string): string => `bgm/${BGM_RENAMED[name] ?? name}.mp3`;
+
 const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
 // Case-file looks that show a still of the story when they were given no
 // picture: the scene's own image, or a frame of its clip (the newspaper
@@ -355,7 +363,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
       {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
       {bgm?.url && musicVolume ? (
         <Audio
-          src={bgm.url.startsWith("bgm://") ? staticFile(`bgm/${bgm.url.slice(6)}.mp3`) : bgm.url}
+          src={bgm.url.startsWith("bgm://") ? staticFile(bgmFile(bgm.url.slice(6))) : bgm.url}
           volume={musicVolume}
           loop
           // A 12-minute bed under a 22-minute video: the ducking must follow the

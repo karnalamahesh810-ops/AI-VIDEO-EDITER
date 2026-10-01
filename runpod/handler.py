@@ -1553,7 +1553,7 @@ def _sign_supabase_urls(doc: dict):
         audio["url"] = resign(audio["url"])
     bgm = doc.get("bgm") or {}
     if bgm.get("url"):
-        bgm["url"] = resign(bgm["url"])
+        bgm["url"] = timeline.current_bgm_url(resign(bgm["url"]))
     for scene in doc.get("scenes", []):
         m = scene.get("media") or {}
         if m.get("url"):

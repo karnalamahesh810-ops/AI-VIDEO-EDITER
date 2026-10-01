@@ -294,6 +294,17 @@ BGM_TRACKS = {
     "crime": (("crime-v1", 1800),),
 }
 BGM_GENRES = tuple(BGM_TRACKS)
+# The beds those tracks replaced: a document planned before 2026-10-01 still
+# names them, and the missing file failed its whole re-render.
+BGM_RENAMED = {"investigative": "investigative-v5", "suspense": "suspense-v2", "crime": "crime-v1"}
+
+
+def current_bgm_url(url: str) -> str:
+    """ "bgm://investigative" (a removed bed) -> "bgm://investigative-v5"; anything else unchanged."""
+    if isinstance(url, str) and url.startswith("bgm://"):
+        name = url[len("bgm://"):]
+        return "bgm://" + BGM_RENAMED.get(name, name)
+    return url
 # The mood of the music follows the story (the owner, 2026-09-30: music in
 # every style, picked by mood): tense for news, weather and disasters, a true-
 # crime bed when the story is about a crime, the calm investigative bed for a
