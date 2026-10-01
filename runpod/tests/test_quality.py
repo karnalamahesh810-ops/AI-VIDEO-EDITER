@@ -767,6 +767,61 @@ class DoRender(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertNotIn("scanned", out["quality"]["render"])
 
+    # The check must never be what fails a video: a step of it that breaks is
+    # logged (an error row in the events) and the render goes on as before.
+    def test_a_scan_that_breaks_keeps_the_first_render(self):
+        with mock.patch.object(quality, "classify", side_effect=RuntimeError("a bug in the scan")):
+            out, calls, _work = self._run([self.black, self.clean])
+        self.assertEqual(len(calls), 1)
+        with open(self.black, "rb") as fh:
+            self.assertEqual(self._final(out), fh.read())
+        self.assertTrue(any("scan of the finished video broke" in n for n in out["quality"]["notes"]))
+        self.assertTrue(any(e["event"] == "check_failed" and e["level"] == "error"
+                            for e in events._EVENTS if e["stage"] == "quality"))
+
+    def test_a_repair_that_breaks_after_a_failed_render_leaves_the_renders_own_error(self):
+        class Named(Exception):
+            def for_doc(self, doc):
+                name = os.path.basename(doc["scenes"][1]["media"]["url"])
+                return render.RenderError(f"remotion render failed: http://127.0.0.1:1/_extra/{name}")
+        with mock.patch.object(quality, "_NamedFiles", side_effect=RuntimeError("a bug in the repair")), \
+                self.assertRaises(render.RenderError):
+            self._run([Named(), self.clean])
+
+    def test_a_report_that_breaks_still_delivers_the_video(self):
+        with mock.patch.object(quality.Gate, "summary", side_effect=RuntimeError("a bug in the report")):
+            out, calls, _work = self._run([self.clean])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(out["quality"]["summary"], "Quality check: the report could not be written")
+        self.assertTrue(out["video_b64"])
+
+
+@unittest.skipUnless(FFMPEG, "needs ffmpeg")
+class NeverTheCause(unittest.TestCase):
+    def test_a_check_that_breaks_mid_repair_leaves_no_scene_without_a_picture(self):
+        doc = doc_of([scene(0, video(_clip("three.mp4", 3.0), 3.0)),
+                      scene(1, video(os.path.join(tempfile.gettempdir(), "gone-pod", "s0001.mp4"), 3.0)),
+                      scene(2, video(_fresh(400).local_path, 4.0))])
+
+        def broken_replace(problems, stage):
+            doc["scenes"][1]["media"] = dict(EMPTY)                    # cleared, then the bug
+            raise RuntimeError("a bug in the repair")
+        events.start_job("qa-never", "")
+        with _offline_quality(), _Ctx():
+            gate = quality.Gate(doc, tempfile.mkdtemp())
+            with mock.patch.object(gate, "_replace", side_effect=broken_replace):
+                self.assertEqual(gate.before_render(), 0)                 # never raised
+        self.assertEqual(doc["scenes"][1]["media"]["type"], "animation")  # still a picture: its line as text
+        timeline.validate(doc, require_media=True)
+        self.assertTrue(any("check before the render broke" in n for n in gate.notes))
+        self.assertTrue(any(e["event"] == "check_failed" for e in events._EVENTS if e["stage"] == "quality"))
+
+    def test_a_narration_that_cannot_load_still_stops_the_render(self):
+        doc = doc_of([scene(0, video(_clip("four.mp4", 4.0), 4.0))], narration="https://sb.example/vo.mp3")
+        with _offline_quality(), _Ctx(), mock.patch.object(quality.requests, "get", return_value=Resp(410)):
+            with self.assertRaises(quality.NarrationMissing):
+                quality.Gate(doc, tempfile.mkdtemp()).before_render()
+
 
 # --------------------------------------------------------------------------- #
 # The handler: context, report, progress

@@ -63,6 +63,7 @@ import re
 import subprocess
 import threading
 import time
+import traceback
 import urllib.parse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait as _wait
@@ -542,8 +543,12 @@ def _web_photo_look(ov: dict) -> bool:
 def text_scene(doc: dict, s: dict) -> None:
     """The scene's own line as a full-screen text graphic: what shows when nothing could be found for it."""
     text = " ".join(str(s.get("text") or "").split())[:160]
-    tid = next((x for x in TEXT_LOOKS if templates.get(x)), "")
-    anim = templates.resolve(tid, props={"text": text}) if tid else {"type": "typewriter"}
+    try:
+        tid = next((x for x in TEXT_LOOKS if templates.get(x)), "")
+        anim = templates.resolve(tid, props={"text": text}) if tid else {}
+    except Exception:  # noqa: BLE001 - an unreadable registry: the renderer's own default text look
+        anim = {}
+    anim = anim or {"type": "typewriter"}
     for k in ("seconds", "sfx", "_motion"):
         anim.pop(k, None)
     anim.setdefault("text", text)
@@ -870,11 +875,35 @@ class Gate:
                     return
         events.emit("quality", event, level=level, scene=scene, message=message, data=data)
 
+    def _broke(self, what: str, err: BaseException) -> None:
+        """A step of the check that broke is logged and skipped: the check must never be what fails a video."""
+        traceback.print_exc()
+        self.notes.append(f"{what} broke ({type(err).__name__}: {str(err)[:120]}) and was skipped")
+        try:
+            events.emit("quality", "check_failed", level="error",
+                        message=f"{what}: {type(err).__name__}: {str(err)[:200]}")
+        except Exception:  # noqa: BLE001
+            pass
+
     # ---- before the render --------------------------------------------------
     def before_render(self) -> int:
-        """Check the document and repair it. Returns how many scenes were repaired."""
+        """
+        Check the document and repair it. Returns how many scenes were
+        repaired. Raises only NarrationMissing; a step that breaks is logged
+        and the render goes on as before (no scene left without a picture).
+        """
         if not config.QUALITY_GATE:
             return 0
+        try:
+            return self._before_render()
+        except NarrationMissing:
+            raise
+        except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
+            self._broke("the check before the render", e)
+            self.no_empty_scenes()          # a scene cleared before the step broke still gets a picture
+            return 0
+
+    def _before_render(self) -> int:
         t0 = time.time()
         self._say("Checking every scene before the render")
         checks = self._check_all()
@@ -1365,9 +1394,12 @@ class Gate:
         """Every scene still without a picture becomes its line as a full-screen text graphic. Returns their ids."""
         out = []
         for s in self.doc.get("scenes") or []:
-            if gapfill._empty(s):
-                text_scene(self.doc, s)
-                out.append(str(s.get("id")))
+            try:
+                if gapfill._empty(s):
+                    text_scene(self.doc, s)
+                    out.append(str(s.get("id")))
+            except Exception as e:  # noqa: BLE001 - one odd scene never stops the others
+                self._broke(f"scene {s.get('id')} as text", e)
         return out
 
     def _look_sources(self) -> None:
@@ -1421,9 +1453,20 @@ class Gate:
 
     # ---- after the render ---------------------------------------------------
     def after_render(self, path: str) -> bool:
-        """Scan the finished file. True when scenes were repaired and the video should be drawn once more."""
+        """
+        Scan the finished file. True when scenes were repaired and the video
+        should be drawn once more. Never raises: a scan or repair that breaks
+        is logged and the first render stands.
+        """
         if not config.QUALITY_SCAN:
             return False
+        try:
+            return self._after_render(path)
+        except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
+            self._broke("the scan of the finished video", e)
+            return False
+
+    def _after_render(self, path: str) -> bool:
         self._say("Checking the finished video", 90)
         res = scan(path)
         self.seconds["scan"] = res.get("seconds", 0.0)
@@ -1472,7 +1515,23 @@ class Gate:
         return True
 
     def after_rerender(self, path: str, first: str) -> str:
-        """Scan the second render and keep the better file at `path`. Returns "repaired" or "first"."""
+        """
+        Scan the second render and keep the better file at `path`. Returns
+        "repaired" or "first". A scan that breaks keeps the repaired render.
+        """
+        try:
+            return self._after_rerender(path, first)
+        except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
+            self._broke("the scan of the second render", e)
+            if not os.path.isfile(path) and os.path.isfile(first):
+                os.replace(first, path)
+                self.render["kept"] = "first"
+                return "first"
+            _remove(first)
+            self.render["kept"] = "repaired"
+            return "repaired"
+
+    def _after_rerender(self, path: str, first: str) -> str:
         res = scan(path)
         before = self._first[0] if self._first else []
         if not res["ok"]:
@@ -1502,9 +1561,12 @@ class Gate:
         """The second render broke: the first file stands, with its problems reported."""
         self.render["kept"] = "first"
         self.notes.append(f"the second render failed ({type(err).__name__}: {str(err)[:120]}); the first one is kept")
-        self._event("rerender_failed", f"{type(err).__name__}: {str(err)[:200]}", level="error", always=True)
-        if self._first:
-            self._leave(self._first[0])
+        try:
+            self._event("rerender_failed", f"{type(err).__name__}: {str(err)[:200]}", level="error", always=True)
+            if self._first:
+                self._leave(self._first[0])
+        except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
+            self._broke("the report of the second render", e)
 
     def _leave(self, defects: List[dict]) -> None:
         scenes = self.doc.get("scenes") or []
@@ -1520,11 +1582,19 @@ class Gate:
         """
         A render that failed on files its error names: the scenes showing them
         are repaired, dead stills and pictures taken out, and True says draw it
-        once more. False when the error names nothing that can be fixed, or the
-        one second render is already spent.
+        once more. False when the error names nothing that can be fixed, the
+        one second render is already spent, or the repair itself broke (the
+        render's own error then stands).
         """
         if self.rerendered or not config.QUALITY_GATE:
             return False
+        try:
+            return self._recover(err)
+        except Exception as e:  # noqa: BLE001 - the render's own error is the one to report
+            self._broke("the repair after a failed render", e)
+            return False
+
+    def _recover(self, err: BaseException) -> bool:
         named = set(_URLS.findall(str(err)))
         if not named:
             return False
@@ -1613,6 +1683,15 @@ class Gate:
         """The report (doc.meta.quality and the job result's "quality"); one summary row in the events."""
         if self._report is not None:
             return self._report
+        try:
+            return self._finish()
+        except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
+            self._broke("the quality report", e)
+            self._report = {"summary": "Quality check: the report could not be written", "notes": self.notes[:20],
+                            "found": dict(self.found), "fixed": dict(self.fixed)}
+            return self._report
+
+    def _finish(self) -> dict:
         line = self.summary()
         out = {"summary": line, "scenes": len(self.doc.get("scenes") or []), "scenesBefore": self.scenes_in,
                "found": dict(self.found), "fixed": dict(self.fixed), "repairs": self.repairs[:200],
