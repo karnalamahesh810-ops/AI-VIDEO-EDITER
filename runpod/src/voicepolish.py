@@ -347,9 +347,10 @@ def plan(stats: Dict[str, Any]) -> Dict[str, Any]:
     elif floor <= FLOOR_MIN_DB or snr >= CLEAN_SNR_DB:
         skipped["denoise"] = f"clean: noise floor {floor:.0f} dBFS, {snr:.0f} dB under the voice"
     else:
-        # The closer the noise, the more it is taken down: 8 dB at the edge of
-        # clean, up to 18 dB for a floor only 20 dB under the voice.
-        nr = max(6.0, min(18.0, 8.0 + (CLEAN_SNR_DB - snr) * 0.6))
+        # The closer the noise, the more it is taken down: 10 dB at the edge of
+        # clean, up to 20 dB for a floor only 25 dB under the voice. (8 dB at
+        # 34 dB under only lowered the measured floor 4.8 dB.)
+        nr = max(8.0, min(20.0, 10.0 + (CLEAN_SNR_DB - snr) * 0.8))
         nf = max(-80.0, min(-20.0, floor))
         steps.append({"step": "denoise", "why": f"noise floor {floor:.0f} dBFS, only {snr:.0f} dB under the voice",
                       "reduction": round(nr, 1), "floor": round(nf, 1)})

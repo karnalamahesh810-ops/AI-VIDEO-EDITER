@@ -52,7 +52,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, styles, upscale
-from src import gapfill, quality
+from src import gapfill, quality, voicepolish
 
 
 def _work_dir(job_id: str) -> str:
@@ -1749,6 +1749,12 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     if broken:
         report(f"Repaired {broken} scene(s) before the render", 69)
     timeline.validate(doc, require_media=True, allow_stock=inp.get("allow_stock"))
+    # The narration cleaned once (src/voicepolish.py: rumble, hum, room noise,
+    # harsh esses, peaks, level drift - only what it measures as needed), at
+    # its own loudness and timing; every draw below reads the cleaned copy.
+    # Any failure keeps the original.
+    report("Polishing the narration", 69)
+    voicepolish.for_render(doc, work, inp)
     out_path = os.path.join(work, "final.mp4")
     try:
         _draw(doc, inp, work, report, split, out_path, gate)

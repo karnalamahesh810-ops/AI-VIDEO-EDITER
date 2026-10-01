@@ -3,7 +3,7 @@
 Branch base: origin/thumbgenius-video-worker @ 852196b. Baseline suite: 1288 tests OK (8 skipped), 92 s
 (`cd runpod && SKIP_DOTENV=1 python -m unittest discover -s tests -t .`).
 
-## Done (WIP, not yet wired into the render)
+## Done
 - `runpod/src/voicepolish.py`: narration analysis (loudness/LRA/true peak via ebur128, per-frame noise
   floor with a pause-cluster reliability check, rumble, sibilance) in ~5 s for an 18-minute narration;
   `plan()` picks steps (highpass / afftdn denoise / split-band de-ess / gentle compression / dynaudnorm
@@ -15,11 +15,11 @@ Branch base: origin/thumbgenius-video-worker @ 852196b. Baseline suite: 1288 tes
   -63 dBFS (41 dB under the voice: clean, denoise skipped). Degraded copies (noisy, harsh, rumble, uneven,
   cheapmic) trigger the right steps once the thresholds below are tuned.
 
+- Narration polish wired into handler.do_render (after the quality gate, before the first draw);
+  tests/test_voice_polish.py (15 tests); suite 1303 OK. Lake Powell full narration: highpass + gentle
+  compression only (denoise skipped: clean), -22.2 LUFS kept, TP -1.4 -> -3.7, lag 0.04 ms, 16 s.
+
 ## Left
-1. voicepolish: hum detection as tonal 50/60 Hz peaks (`humProminence`, plus notches on harmonics);
-   select speech frames by the 300-3000 Hz band; run `polish()` on the variants + Lake Powell, record
-   before/after (noise floor, SNR, sibilance, LRA, lag); call `voicepolish.for_render` in
-   handler.do_render after `_preflight_media` (before `_draw`); tests (tests/test_voice_polish.py).
 2. Grade: `doc.grade` {preset, strength}; per-scene tone stats measured at plan time (and for scenes
    without them at render, budgeted); SVG feColorMatrix/feComponentTransfer filter per scene in
    SceneClip (sRGB, no crushed blacks); presets neutral / documentary / warm-doc / cool-news / archival;
