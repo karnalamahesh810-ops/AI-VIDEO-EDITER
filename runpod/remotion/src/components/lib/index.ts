@@ -41,6 +41,9 @@ import { LOOKS as L_LibPackNumbers } from "./LibPackNumbers";
 import { LOOKS as L_LibPackVR } from "./LibPackVR";
 import { LOOKS as L_LibPhotosPro } from "./LibPhotosPro";
 import { LOOKS as L_LibPhotosPro2 } from "./LibPhotosPro2";
+import { LOOKS as L_LibDataPro } from "./LibDataPro";
+import { LOOKS as L_LibMapsPro } from "./LibMapsPro";
+import { LOOKS as L_LibDocsPro } from "./LibDocsPro";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -103,11 +106,21 @@ export const LIBRARY: Record<string, Look> = {
   // Pack VR, VidRush's date / time / caption text (LibPackVR): one place per look, the sound scheduled on its frames.
   ...pick(L_LibPackVR, ["vr-date-hero", "vr-time-card", "vr-caption-typed", "vr-year-line"]),
   // Photo looks, pro set (LibPhotosPro / LibPhotosPro2): full-frame photo moments, the sound in the registry;
-  // "autoPick": false until the owner approves them from their contact sheets.
+  // switched on 2026-10-02 (the owner approved the contact sheet).
   ...pick(L_LibPhotosPro, ["px-aperture-iris", "px-slit-reveal", "px-color-bloom", "px-diagonal-slices", "px-level-line",
     "px-detail-inset", "px-viewfinder", "px-torn-strips", "px-folded-print", "px-field-journal", "px-magazine-spread",
     "px-postcard"]),
   ...pick(L_LibPhotosPro2, ["px-contact-sheet", "px-negative-flip", "px-darkroom", "px-slide-projector", "px-flatbed-scan",
     "px-shutter-burst", "px-album-page", "px-archive-stamp", "px-book-plate", "px-archive-envelope", "px-drying-line",
     "px-dated-cascade", "px-then-now"]),
+  // Pro data (LibDataPro): charts, figures and a reservoir section that draw like a documentary's graphics desk.
+  // Registered with autoPick false: in the editor only, until the owner switches them on.
+  ...pick(L_LibDataPro, ["dx-line-endpoint", "dx-ghost-bars", "dx-nested-squares", "dx-unit-split", "dx-filled-figure",
+    "dx-capacity-gauge", "dx-drum-counter", "dx-reservoir-section"]),
+  // Pro maps (LibMapsPro): graded real imagery and vector outlines in one projection, refined markers and labels.
+  ...pick(L_LibMapsPro, ["mx-globe-dive", "mx-terrain-pin", "mx-route-draw", "mx-measure-line", "mx-region-pulse",
+    "mx-path-trace", "mx-pull-back"]),
+  // Pro documents and kinetic text (LibDocsPro): real type on real-looking paper, a camera that finds the line.
+  ...pick(L_LibDocsPro, ["kx-article-zoom", "kx-official-memo", "kx-report-cover", "kx-handwritten-note", "kx-keyword-stack",
+    "kx-quote-portrait", "kx-alert-strip", "kx-definition", "kx-letter-signature", "kx-social-post"]),
 };
