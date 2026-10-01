@@ -15,7 +15,7 @@ adding sounds on the timeline"): defaults.sounds, a list of cues the
 renderer plays inside the overlay (remotion/src/components/lib/LookSounds.tsx,
 cue fields in src/sfxplan.py). They are written here from the look's sound
 and hit frame as the timeline planner used them (so nothing loses its
-sound): a date's deep hit, a typing look's keys for its typing span, a
+sound): a date's soft tick, a typing look's keys for its typing span, a
 counting look's ticks up to its number, else the look's sound landing on its
 hit. A library look may give its own "sounds" (library_looks.json), and
 "sound_timing": "look" when its component schedules them from its real
@@ -65,6 +65,9 @@ P = {
     "soundGain": {"type": "number", "label": "Sound level", "min": 0.0, "max": 1.5, "default": 1.0},
     # Where a text-only look sits on the footage (the bold text looks).
     "align": {"type": "enum", "label": "Placement", "options": ["auto", "left", "right", "center"], "default": "auto"},
+    # How a text-only look is lettered (LibBoldText): "auto" turns through the four per occurrence.
+    "textStyle": {"type": "enum", "label": "Text style", "options": ["auto", "clean", "shine", "accent", "shade"],
+                  "default": "auto"},
 }
 COMMON = ["position", "scale", "opacity", "duration", "speed", "theme", "sfx", "soundGain"]
 
@@ -157,7 +160,7 @@ def sound_design(t: dict, replace: dict = None) -> list:
     """
     The cues of a look the designer's map does not list, from its sound and
     hit frame as the timeline planner used them (src/sfxplan.py _candidate):
-    a calendar date lands on the date slam at the date level; a look that
+    a calendar date lands on one soft digital tick (never a hit); a look that
     types runs the keys for its typing span (the take turns per video); a
     counting look rolls up to its number and lands on the final click (its
     own sound when it has no number); else its sound lands on its hit.
@@ -168,7 +171,7 @@ def sound_design(t: dict, replace: dict = None) -> list:
     at = d.get("sfxAt")
     hit = int(at) if isinstance(at, (int, float)) and not isinstance(at, bool) and at else sfxplan.DEFAULT_HIT
     if sfxplan.is_calendar_date(t):
-        return [{"name": sfxplan.DATE_SOUND, "alt": list(sfxplan.DATE_SOUND_ALT), "at": hit, "fixed": True}]
+        return [{"name": sfxplan.DATE_SOUND, "alt": list(sfxplan.DATE_SOUND_ALT), "at": hit, "gain_db": -2.0}]
     if sfxplan._types(t):
         fixed = sfxplan._FIXED_TYPING.get(t.get("component") or "")
         if fixed:
@@ -688,7 +691,8 @@ SFX = {
     "GLITCH_PRO": {"file": "glitch-pro", "volume": 0.13},
     "HIT_DEEP": {"file": "hit-deep", "volume": 0.13}, "KEYS_LAPTOP": {"file": "keys-laptop", "volume": 0.1},
     # The sound designer's premium set (2026-09-30), for the editor's own sounds on the timeline.
-    "DATE_SLAM": {"file": "date-slam", "volume": 0.25}, "LETTER_TICK": {"file": "letter-tick", "volume": 0.25},
+    # (No date slam and no impact punch: the owner, 2026-10-01, "remove that sound effect from our list".)
+    "LETTER_TICK": {"file": "letter-tick", "volume": 0.25},
     "UI_TICK": {"file": "ui-tick", "volume": 0.25}, "UI_POP": {"file": "ui-pop", "volume": 0.25},
     "UI_CLICK": {"file": "ui-click", "volume": 0.25}, "UI_SWIPE": {"file": "ui-swipe", "volume": 0.25},
     "SWOOSH_TEXT": {"file": "swoosh-text", "volume": 0.25}, "WHOOSH_FAST": {"file": "whoosh-fast", "volume": 0.25},
@@ -698,7 +702,7 @@ SFX = {
     "MAP_SWOOP": {"file": "map-swoop", "volume": 0.25}, "PIN_DROP": {"file": "pin-drop", "volume": 0.25},
     "RADAR_PING": {"file": "radar-ping", "volume": 0.25}, "COUNT_ROLL": {"file": "count-roll", "volume": 0.25},
     "COUNT_FINAL": {"file": "count-final", "volume": 0.25},
-    "IMPACT_PUNCH": {"file": "impact-punch", "volume": 0.25}, "BOOM_SUB": {"file": "boom-sub", "volume": 0.25},
+    "BOOM_SUB": {"file": "boom-sub", "volume": 0.25},
     "STAMP": {"file": "stamp", "volume": 0.25}, "FRAME_DROP": {"file": "frame-drop", "volume": 0.25},
     "PAPER_SLIDE_V2": {"file": "paper-slide-v2", "volume": 0.25},
     "PAGE_FLIP": {"file": "page-flip", "volume": 0.25}, "FOLDER_OPEN": {"file": "folder-open", "volume": 0.25},

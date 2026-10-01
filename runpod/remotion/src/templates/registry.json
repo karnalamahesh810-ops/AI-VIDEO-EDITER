@@ -7342,18 +7342,19 @@
     "exit": "fade",
     "variant": "title",
     "sfx": {
-     "name": "date-slam",
+     "name": "ui-tick",
      "volume": 0.3
     },
     "sfxAt": 34,
     "sounds": [
      {
-      "name": "date-slam",
+      "name": "ui-tick",
       "alt": [
-       "hit-deep"
+       "tick"
       ],
       "at": 34,
-      "align": "peak"
+      "align": "peak",
+      "gain_db": -2.0
      }
     ]
    },
@@ -20899,19 +20900,20 @@
     "exit": "fade",
     "variant": "pb-date-plate",
     "sfx": {
-     "name": "date-slam",
+     "name": "ui-tick",
      "volume": 0.3
     },
     "types": false,
     "sfxAt": 55,
     "sounds": [
      {
-      "name": "date-slam",
+      "name": "ui-tick",
       "alt": [
-       "hit-deep"
+       "tick"
       ],
       "at": 55,
-      "align": "peak"
+      "align": "peak",
+      "gain_db": -2.0
      }
     ]
    },
@@ -25579,19 +25581,20 @@
     "exit": "fade",
     "variant": "ch-year-tape",
     "sfx": {
-     "name": "date-slam",
+     "name": "ui-tick",
      "volume": 0.3
     },
     "types": false,
     "sfxAt": 45,
     "sounds": [
      {
-      "name": "date-slam",
+      "name": "ui-tick",
       "alt": [
-       "hit-deep"
+       "tick"
       ],
       "at": 45,
-      "align": "peak"
+      "align": "peak",
+      "gain_db": -2.0
      },
      {
       "name": "count-roll",
@@ -40557,20 +40560,12 @@
     "exit": "fade",
     "variant": "fx-zoom-tunnel",
     "sfx": {
-     "name": "impact-punch",
+     "name": "whoosh-fast",
      "volume": 0.3
     },
     "types": false,
     "sfxAt": 9,
     "sounds": [
-     {
-      "name": "impact-punch",
-      "alt": [
-       "hit-deep"
-      ],
-      "at": 9,
-      "align": "peak"
-     },
      {
       "name": "whoosh-fast",
       "alt": [
@@ -41689,16 +41684,16 @@
     "exit": "fade",
     "variant": "cn-spotlight-title",
     "sfx": {
-     "name": "impact-punch",
+     "name": "ui-click",
      "volume": 0.3
     },
     "types": false,
     "sfxAt": 5,
     "sounds": [
      {
-      "name": "impact-punch",
+      "name": "ui-click",
       "alt": [
-       "hit-deep"
+       "click"
       ],
       "at": 5,
       "align": "peak"
@@ -59270,19 +59265,20 @@
     "exit": "fade",
     "variant": "dt-clean-card",
     "sfx": {
-     "name": "date-slam",
+     "name": "ui-tick",
      "volume": 0.3
     },
     "sfxAt": 28,
     "types": false,
     "sounds": [
      {
-      "name": "date-slam",
+      "name": "ui-tick",
       "alt": [
-       "hit-deep"
+       "tick"
       ],
       "at": 28,
-      "align": "peak"
+      "align": "peak",
+      "gain_db": -2.0
      }
     ]
    },
@@ -60048,19 +60044,20 @@
     "exit": "fade",
     "variant": "dt-date-slam",
     "sfx": {
-     "name": "date-slam",
+     "name": "ui-tick",
      "volume": 0.3
     },
     "sfxAt": 17,
     "types": false,
     "sounds": [
      {
-      "name": "date-slam",
+      "name": "ui-tick",
       "alt": [
-       "hit-deep"
+       "tick"
       ],
       "at": 17,
-      "align": "peak"
+      "align": "peak",
+      "gain_db": -2.0
      }
     ]
    },
@@ -60532,19 +60529,20 @@
     "exit": "fade",
     "variant": "dt-bold-headline",
     "sfx": {
-     "name": "date-slam",
+     "name": "letter-tick",
      "volume": 0.3
     },
     "sfxAt": 11,
     "types": false,
     "sounds": [
      {
-      "name": "date-slam",
+      "name": "letter-tick",
       "alt": [
-       "hit-deep"
+       "ui-tick",
+       "tick"
       ],
       "at": 11,
-      "fixed": true
+      "gain_db": -2.0
      }
     ]
    },
@@ -60694,19 +60692,20 @@
     "exit": "fade",
     "variant": "dt-big-stack",
     "sfx": {
-     "name": "date-slam",
+     "name": "letter-tick",
      "volume": 0.3
     },
     "sfxAt": 8,
     "types": false,
     "sounds": [
      {
-      "name": "date-slam",
+      "name": "letter-tick",
       "alt": [
-       "hit-deep"
+       "ui-tick",
+       "tick"
       ],
       "at": 8,
-      "fixed": true
+      "gain_db": -2.0
      }
     ]
    },
@@ -60751,10 +60750,10 @@
   },
   {
    "id": "LIB_DT_LETTER_DROP",
-   "name": "Bold Date (Letter Drop)",
+   "name": "Clean Date (Letter Reveal)",
    "category": "TIMELINES",
    "component": "motion",
-   "description": "The date and nothing else: huge bold white condensed letters with a black outline and a soft shadow, no box or band behind them, dropping in one by one with a small bounce - a crisp tick as each letter lands, a deep hit on the last - then the weekday, year, time or place in a smaller outlined line under it. Low on the left, the right or the centre (Placement). Reads 'WEDNESDAY', 'SEPTEMBER 30', 'TUESDAY NIGHT', '3:45 PM', 'WED → THU'.",
+   "description": "The date or time and nothing else, in clean Anton caps (about 55 px tall at 1080p), low on the left or the right at the safe margin: the letters slide up out of a mask one by one with a soft digital tick each (no hit), the weekday, year or place in small tracked caps under it; a time reads as the big figure with AM/PM and the zone small beside it. Four letterings turn from one date to the next (Text style): clean white with a thin amber rule, silver with a light sweep, the day in amber, white on a soft feathered shade. Reads 'SEPTEMBER 29', 'TUESDAY NIGHT', '3:45 PM', '8 AM ET', 'WED → THU'.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -60781,6 +60780,18 @@
       "left",
       "right",
       "center"
+     ],
+     "default": "auto"
+    },
+    "textStyle": {
+     "type": "enum",
+     "label": "Text style",
+     "options": [
+      "auto",
+      "clean",
+      "shine",
+      "accent",
+      "shade"
      ],
      "default": "auto"
     },
@@ -60875,18 +60886,10 @@
        "ui-tick",
        "tick"
       ],
-      "at": 5,
+      "at": 7,
       "every": 2,
       "count": 10,
       "gain_db": -6
-     },
-     {
-      "name": "date-slam",
-      "alt": [
-       "hit-deep"
-      ],
-      "at": 26,
-      "fixed": true
      }
     ],
     "soundTiming": "look"
@@ -65617,16 +65620,16 @@
     "exit": "fade",
     "variant": "pf-spotlight",
     "sfx": {
-     "name": "impact-punch",
+     "name": "ui-click",
      "volume": 0.3
     },
     "sfxAt": 14,
     "types": false,
     "sounds": [
      {
-      "name": "impact-punch",
+      "name": "ui-click",
       "alt": [
-       "hit-deep"
+       "click"
       ],
       "at": 14,
       "align": "peak"
@@ -66596,10 +66599,10 @@
   },
   {
    "id": "LIB_BT_COUNT",
-   "name": "Bold Count",
+   "name": "Rolling Count",
    "category": "NUMBERS",
    "component": "motion",
-   "description": "The number and nothing else: huge bold white outlined digits counting up to the figure (90,000 / 22% / $1.2M) with a digit tick on every change and a hit as it lands, the words it counts in bold outlined caps beside or under it, no box behind them. Low on the left, the right or the centre (Placement).",
+   "description": "The number and nothing else: Anton digits roll into place like an odometer (every column easing out, the units spinning fastest) with a soft digital tick on each change and no landing hit; commas, %, $ and K/M/B in place, a unit word small beside the figure, what it counts in small tracked caps under it once it lands. Low on the left or the right at the safe margin; four letterings turn from one figure to the next (Text style).",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -66630,6 +66633,18 @@
       "left",
       "right",
       "center"
+     ],
+     "default": "auto"
+    },
+    "textStyle": {
+     "type": "enum",
+     "label": "Text style",
+     "options": [
+      "auto",
+      "clean",
+      "shine",
+      "accent",
+      "shade"
      ],
      "default": "auto"
     },
@@ -66712,7 +66727,7 @@
     "exit": "none",
     "variant": "bt-count",
     "sfx": {
-     "name": "swoosh-text",
+     "name": "letter-tick",
      "volume": 0.3
     },
     "sfxAt": 40,
@@ -66721,28 +66736,25 @@
      {
       "name": "ui-tick",
       "alt": [
+       "letter-tick",
        "tick"
       ],
-      "at": 6,
+      "at": 4,
       "every": 2,
-      "count": 16,
-      "gain_db": -5,
+      "count": 13,
+      "gain_db": -6,
       "when": "value"
      },
      {
-      "name": "count-final",
+      "name": "letter-tick",
       "alt": [
-       "hit-deep"
+       "ui-tick",
+       "tick"
       ],
-      "at": 40,
-      "when": "value"
-     },
-     {
-      "name": "swoosh-text",
-      "alt": [
-       "whoosh-soft"
-      ],
-      "at": 8,
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -6,
       "when": "no-value"
      }
     ],
@@ -67156,10 +67168,6 @@
    "file": "keys-laptop",
    "volume": 0.1
   },
-  "DATE_SLAM": {
-   "file": "date-slam",
-   "volume": 0.25
-  },
   "LETTER_TICK": {
    "file": "letter-tick",
    "volume": 0.25
@@ -67214,10 +67222,6 @@
   },
   "COUNT_FINAL": {
    "file": "count-final",
-   "volume": 0.25
-  },
-  "IMPACT_PUNCH": {
-   "file": "impact-punch",
    "volume": 0.25
   },
   "BOOM_SUB": {
@@ -67618,12 +67622,10 @@
    "camera-shutter": "camera",
    "count-final": "ui",
    "count-roll": "tick",
-   "date-slam": "impact",
    "folder-open": "paper",
    "frame-drop": "impact",
    "glitch-digital": "glitch",
    "glitch-short-v2": "glitch",
-   "impact-punch": "impact",
    "letter-tick": "tick",
    "light-shimmer": "shimmer",
    "magnifier-glide": "shimmer",
@@ -67658,7 +67660,6 @@
   "categoryFallback": {
    "impact": [
     "hit-deep",
-    "impact-punch",
     "boom-sub",
     "boom-soft",
     "impact"

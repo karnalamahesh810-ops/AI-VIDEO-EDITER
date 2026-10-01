@@ -296,7 +296,7 @@ class FollowsTheLook(SfxPlanTest):
 
 
 class Dates(SfxPlanTest):
-    """The owner (2026-09-30): every date is bold type on the deep hit."""
+    """The owner (2026-10-01): a date sounds like its digits - one soft tick, never a punch or a hit."""
 
     def setUp(self):
         super().setUp()
@@ -306,14 +306,16 @@ class Dates(SfxPlanTest):
                        "hit-deep": {"duration": 2.3, "peak": 0.02}}, fh)
         sfxplan.reload()
 
-    def test_every_date_lands_on_the_deep_hit_at_the_hits_level(self):
+    def test_every_date_ticks_softly_and_never_hits(self):
         looks = [ov("LIB_DT_DATE_SLAM", 300 * k, 90, text="SEPTEMBER 15") for k in range(4)]
         out = sfxplan.plan(looks, 30, 1.0)
-        # Never varied away from the deep hit, however often dates come.
-        self.assertEqual([s["name"] for s in out], ["hit-deep"] * 4)
-        self.assertTrue(all(s["volume"] == AT[5] for s in out), out)
-        # Its peak (frame 1 of the file) on the look's hit (sfxAt 18).
-        self.assertEqual(out[0]["startFrame"] - out[0].get("trimFrames", 0) + 1, 18)
+        # The tick's first stand-in that ships here ("tick"), never the deep hit beside it, however often dates come.
+        self.assertEqual(sfxplan.date_sound(), "tick")
+        self.assertEqual([s["name"] for s in out], ["tick"] * 4)
+        self.assertTrue(all(s["volume"] == AT[7] for s in out), out)       # the ticks' level, 7 dB under the voice
+        # On the look's hit (sfxAt 18), played whole however short it is.
+        self.assertEqual(out[0]["startFrame"], 18)
+        self.assertEqual(out[0]["durationFrames"], sfxplan.duration_frames("tick"))
 
     def test_a_clock_keeps_its_own_sound_and_an_editor_pick_wins(self):
         [s] = sfxplan.plan([ov("TL_CLOCK_LOOK", 0, 90, text="3:45 PM")], 30, 1.0)
@@ -466,7 +468,8 @@ class DeepHit(unittest.TestCase):
         self.assertEqual(sfxplan.plan(ovs, 30, 1.0), [])
         [s] = sfxplan.doc_look_sounds({"fps": 30, "overlays": ovs, "lookSounds": {}})
         self.assertEqual(s["name"], "hit-deep")
-        # A date lands on the designer's date slam, the owner's deep hit its stand-in.
-        self.assertEqual(sfxplan.DATE_SOUND, "date-slam")
-        self.assertEqual(sfxplan.resolve_sound("date-slam", ["hit-deep"]), "date-slam")
+        # A date lands on a soft digital tick, never the deep hit (the owner, 2026-10-01: no punch sound).
+        self.assertEqual(sfxplan.DATE_SOUND, "letter-tick")
+        self.assertEqual(sfxplan.date_sound(), "letter-tick")
+        self.assertIsNone(sfxplan.resolve_sound("date-slam"))
         self.assertIn("hit-deep", open("remotion/public/sfx/sfx_meta.json", encoding="utf-8").read())

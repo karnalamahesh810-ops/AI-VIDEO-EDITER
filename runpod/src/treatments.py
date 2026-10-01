@@ -31,7 +31,7 @@ import re
 import zlib
 from typing import Any, Dict, List, Optional
 
-from . import config, templates
+from . import config, numwords, templates
 from .transcribe import Segment
 
 # Read off VidRush's own timelines (an animation block every 8-10 s through
@@ -1341,8 +1341,11 @@ _LOOK_NEEDS_RX = {k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
 # day/date is mentioned ... I need BOLD TEXT date", then: "NO background layout,
 # ONLY TEXT: the date in white BOLD, on the sides, with a black stroke"): every
 # date, date-and-time and time of day is the letter-drop look (LibBoldText),
-# its letters dropping in one by one with a tick each and a deep hit on the
-# last, placed low on the left, the right or the centre in turn (_align_for).
+# redesigned 2026-10-01 (the owner: "cleaner ... not big, not small", "only a
+# digit sound", "use the font Anton"): clean Anton letters sliding up one by one
+# with a soft tick each and no hit, low on the left or the right at the safe
+# margin in turn (_align_for), lettered in turn (TEXT_LOOK_STYLES: clean,
+# shine, accent, shade), every spoken number in digits (numwords, _place).
 # The older bold cards on a band or a block (the date slam, the bold headline,
 # the big stack, the clean card, the spaced title) stand in only when the
 # registry has no letter drop. Never a calendar page, a stamp bar, a REC
@@ -1360,9 +1363,13 @@ LEGACY_DATE_LOOKS = ["LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK"]
 BOLD_COUNT_LOOK = "LIB_BT_COUNT"
 BOLD_COUNT_CUES = {"big-number", "count", "percent", "money", "age"}
 BOLD_COUNT_RUN = 2
-# Where the text-only looks sit, in turn (the owner: "on the sides"); the
-# centre never on a person's shot (a face is most likely there).
-TEXT_LOOK_ALIGNS = {TEXT_DATE_LOOK: ["left", "right", "center"], BOLD_COUNT_LOOK: ["right", "left", "center"]}
+# Where the text-only looks sit, in turn: the lower third at the safe margin,
+# left or right, never mid-frame (the owner, 2026-10-01: "not in perfect
+# places"); the editor may still choose the centre.
+TEXT_LOOK_ALIGNS = {TEXT_DATE_LOOK: ["left", "right"], BOLD_COUNT_LOOK: ["right", "left"]}
+# How they are lettered, in turn across both looks so no two in a row look the same
+# (LibBoldText: clean white with a rule, silver shine, the key part in amber, white on a soft shade).
+TEXT_LOOK_STYLES = ["clean", "shine", "accent", "shade"]
 # A bold look that cannot print a time would take a date-and-time line's date alone (none is left in use).
 DATE_ONLY_LOOKS: set = set()
 # A span of time ("3 DAYS LATER") counted up: the countdown card is banned (boxed), so the bold count does it.
@@ -1666,6 +1673,8 @@ _TEXT_CATEGORIES = {"TEXT", "HEADLINES", "QUOTES", "LOWER_THIRDS"}
 TEXT_FONT_SCALE = 1.1
 # A span of time ("3 days later") is a figure too: it counts up on the countdown look.
 FIGURE_CUES = SINGLE_FIGURE_CUES | FULL_DATA_CUES | {"count", "time-span"}
+# The cues whose looks show numbers: written in digits however they were said (numwords).
+DIGIT_CUES = FIGURE_CUES | set(DATE_CUES) | {"age"}
 # What a line asks for in words, strongest first; each still needs the rhythm.
 STRONG_LINE_CUES = ("recording", "document", "quote", "question", "warning", "route")
 SOFT_LINE_CUES = ("typewriter", "term")
@@ -1730,8 +1739,10 @@ class _Planner:
         self.last_locations: List[dict] = []
         self.last_forecast = -1e9
         self.first_date_done = False
-        # The text-only looks' placements in turn, and the figure looks shown (the bold count's run).
+        # The text-only looks' placements in turn, their letterings in turn (one turn shared by the
+        # date and the count, from a per-video start), and the figure looks shown (the bold count's run).
         self.align_turn: Dict[str, int] = {}
+        self.style_turn = _seed(segments) % len(TEXT_LOOK_STYLES)
         self.figure_looks: List[str] = []
         # The case-file devices, each rationed: one intro collage, a player
         # window at most every WINDOW_GAP seconds, an archive tag per archival run.
@@ -2458,6 +2469,13 @@ class _Planner:
         fps = self.fps
         at = float(seg.start)
         props = dict(props or {})
+        if t["id"] in TEXT_LOOK_ALIGNS or (cue or "") in DIGIT_CUES or t.get("category") in ("TIMELINES", "NUMBERS"):
+            # A date, a time or a number shows its numbers in digits, however the script spelled
+            # them out ("five days" -> "5 DAYS", "September twenty-ninth" -> "SEPTEMBER 29"; the
+            # owner, 2026-10-01). The spoken word that times it (_key) stays as said.
+            for k in ("text", "label", "subtitle"):
+                if isinstance(props.get(k), str) and props[k]:
+                    props[k] = numwords.normalize(props[k])
         if _needs_places(t, props):
             return None
         motion = props.pop("_motion", "")
@@ -2529,6 +2547,9 @@ class _Planner:
         apply_layout(overlay, t, klass)
         if t["id"] in TEXT_LOOK_ALIGNS and overlay.get("align") in (None, "auto"):
             overlay["align"] = self._align_for(t["id"], scene)
+        if t["id"] in TEXT_LOOK_ALIGNS and overlay.get("textStyle") in (None, "auto"):
+            overlay["textStyle"] = TEXT_LOOK_STYLES[self.style_turn % len(TEXT_LOOK_STYLES)]
+            self.style_turn += 1
         if t.get("category") in _TEXT_CATEGORIES and "fontScale" not in overlay:
             overlay["fontScale"] = 1.0 if t.get("kind") == "tag" else TEXT_FONT_SCALE
         media = req.get("media") or (req.get("media_for") or {}).get(t["id"])

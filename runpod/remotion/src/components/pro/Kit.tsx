@@ -320,21 +320,23 @@ export const Plate: React.FC<{ p: number; accent?: string; edge?: "left" | "top"
   };
 
 /**
- * The owner's text language (2026-09-30: "NO background layout, ONLY TEXT:
- * bold white text with a black stroke, on the sides"): no plate, pill, band
- * or box behind words that ride on footage - the letters carry their own
- * black outline (painted under the fill, so the glyphs keep their weight)
- * and a soft dark shadow, legible on bright sky and on night footage alike.
- * `size` is the font size in px; the outline scales with it (~5-6 px at 1080p
- * for display sizes).
+ * The owner's text language (2026-09-30: "NO background layout, ONLY TEXT ...
+ * on the sides"; 2026-10-01: a soft black shadow instead of the black stroke):
+ * no plate, pill, band or box behind words that ride on footage - the letters
+ * carry a soft dark shadow, legible on bright sky and on night footage alike.
+ * `size` is the font size in px; the shadow scales with it.
  */
 export const outline = (size: number, color = "#fff", k = 1): React.CSSProperties => {
-  const sw = Math.max(5 * k, Math.min(13 * k, size * 0.105));
+  // 2026-10-01 (the owner: "the stroke is not great - use a shadow instead of the stroke"):
+  // no outline any more, a soft black shadow in three layers - a tight edge, a close
+  // shadow and a wide soft one - scaled with the type, legible on snow and on night.
+  const e = Math.max(1, Math.min(2.2 * k, size * 0.02));
+  const near = Math.max(2 * k, size * 0.035);
+  const far = Math.max(10 * k, size * 0.24);
   return {
     color,
-    WebkitTextStroke: `${sw.toFixed(2)}px #000`,
-    paintOrder: "stroke fill",
-    textShadow: `0 ${(3 * k).toFixed(1)}px ${(4 * k).toFixed(1)}px rgba(0,0,0,.35), 0 ${(8 * k).toFixed(1)}px ${(26 * k).toFixed(1)}px rgba(0,0,0,.5)`,
+    textShadow: `0 0 ${e.toFixed(1)}px rgba(0,0,0,.75), 0 ${(near * 0.6).toFixed(1)}px ${near.toFixed(1)}px rgba(0,0,0,.5), `
+      + `0 ${(near * 1.4).toFixed(1)}px ${far.toFixed(1)}px rgba(0,0,0,.5)`,
   } as React.CSSProperties;
 };
 /** Bold condensed caps with the outline (Barlow Condensed 800): the house display type for text on footage. */

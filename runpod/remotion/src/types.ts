@@ -242,6 +242,13 @@ export interface Overlay {
   /** Where a text-only look sits (LibBoldText): low "left", "right" or "center"; "auto" = left. */
   align?: string;
   /**
+   * How a text-only look is lettered (LibBoldText): "clean" (white, soft shadow,
+   * a thin amber rule), "shine" (silver with one light sweep), "accent" (the key
+   * part in amber), "shade" (white on a soft feathered shade); "auto" or absent =
+   * one picked from the overlay's start frame. The planner turns them per occurrence.
+   */
+  textStyle?: string;
+  /**
    * The look's own sound (built in, components/lib/LookSounds.tsx): "none"
    * silences it; another file name plays that one sound on its hit instead.
    * The planner leaves it out; older documents may carry {name, volume}.

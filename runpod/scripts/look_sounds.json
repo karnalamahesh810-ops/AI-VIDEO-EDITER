@@ -33,15 +33,6 @@
    "count": "letters",
    "gain_db": -6.0,
    "note": "one per letter (2 frames per letter at 30 fps)"
-  },
-  {
-   "name": "date-slam",
-   "alt": [
-    "hit-deep"
-   ],
-   "at": "frame the whole date lands",
-   "align": "peak",
-   "gain_db": 0.0
   }
  ],
  "looks": {
@@ -1197,16 +1188,17 @@
    "event": "title lands ~29 (rules 3-28)"
   },
   "LIB_CH_YEAR_TAPE": {
-   "sfx": "date-slam",
+   "sfx": "ui-tick",
    "sfx_at": 45,
    "sounds": [
     {
-     "name": "date-slam",
+     "name": "ui-tick",
      "alt": [
-      "hit-deep"
+      "tick"
      ],
      "at": 45,
-     "align": "peak"
+     "align": "peak",
+     "gain_db": -2.0
     },
     {
      "name": "count-roll",
@@ -1218,7 +1210,7 @@
      "gain_db": -4.0
     }
    ],
-   "why": "year counter rolls and lands on the year",
+   "why": "year counter rolls and lands on the year; 2026-10-01: the owner removed the punch sounds (date slam, impact punch): the roll, then a soft tick on the year",
    "event": "year counter rolls 6-51 (fastest 16), reads the year at 45"
   },
   "LIB_CN_BW_FLASH_INTRO": {
@@ -1314,13 +1306,13 @@
    "event": "the place types 6-51 (no stamp in the code)"
   },
   "LIB_CN_SPOTLIGHT_TITLE": {
-   "sfx": "impact-punch",
+   "sfx": "ui-click",
    "sfx_at": 5,
    "sounds": [
     {
-     "name": "impact-punch",
+     "name": "ui-click",
      "alt": [
-      "hit-deep"
+      "click"
      ],
      "at": 5,
      "align": "peak"
@@ -1335,7 +1327,7 @@
      "gain_db": -4.0
     }
    ],
-   "why": "a hanging lamp clunks on",
+   "why": "a hanging lamp clunks on; 2026-10-01: the owner removed the punch sounds (date slam, impact punch): the lamp switches on with a click",
    "event": "lamp flickers on 1-5 (beam sweeps 3-35)"
   },
   "LIB_CN_TO_BE_CONTINUED": {
@@ -2030,19 +2022,20 @@
    "event": "marker circles the day 20-34 (page flips 0-18)"
   },
   "LIB_DT_CLEAN_CARD": {
-   "sfx": "date-slam",
+   "sfx": "ui-tick",
    "sfx_at": 28,
    "sounds": [
     {
-     "name": "date-slam",
+     "name": "ui-tick",
      "alt": [
-      "hit-deep"
+      "tick"
      ],
      "at": 28,
-     "align": "peak"
+     "align": "peak",
+     "gain_db": -2.0
     }
    ],
-   "why": "bold date card lands",
+   "why": "bold date card lands; 2026-10-01: the owner removed the punch sounds (date slam, impact punch): a soft tick as the date lands",
    "event": "count lands and the punch starts at 28"
   },
   "LIB_DT_CLOCK_TIME": {
@@ -2101,19 +2094,20 @@
    "event": "registry sfxAt"
   },
   "LIB_DT_DATE_SLAM": {
-   "sfx": "date-slam",
+   "sfx": "ui-tick",
    "sfx_at": 17,
    "sounds": [
     {
-     "name": "date-slam",
+     "name": "ui-tick",
      "alt": [
-      "hit-deep"
+      "tick"
      ],
      "at": 17,
-     "align": "peak"
+     "align": "peak",
+     "gain_db": -2.0
     }
    ],
-   "why": "full-width date band slams in",
+   "why": "full-width date band slams in; 2026-10-01: the owner removed the punch sounds (date slam, impact punch): a soft tick as the date lands",
    "event": "month 13, day 17, year 21 slam (registry 18 is 1f late)"
   },
   "LIB_DT_REC_STAMP": {
@@ -2473,17 +2467,9 @@
    "event": "shapes whip in fast to ~8, glide to 30"
   },
   "LIB_FX_ZOOM_TUNNEL": {
-   "sfx": "impact-punch",
+   "sfx": "whoosh-fast",
    "sfx_at": 9,
    "sounds": [
-    {
-     "name": "impact-punch",
-     "alt": [
-      "hit-deep"
-     ],
-     "at": 9,
-     "align": "peak"
-    },
     {
      "name": "whoosh-fast",
      "alt": [
@@ -2494,7 +2480,7 @@
      "gain_db": -4.0
     }
    ],
-   "why": "the text slams in with an impact ring and flash",
+   "why": "the text slams in with an impact ring and flash; 2026-10-01: the owner removed the punch sounds (date slam, impact punch): the whoosh only",
    "event": "text slams at 9 (flash 3, ring 2-18)"
   },
   "LIB_HL_CENTER_STACK": {
@@ -3861,19 +3847,20 @@
    "event": "first photo pinned at 28 (+9f each)"
   },
   "LIB_PB_DATE_PLATE": {
-   "sfx": "date-slam",
+   "sfx": "ui-tick",
    "sfx_at": 55,
    "sounds": [
     {
-     "name": "date-slam",
+     "name": "ui-tick",
      "alt": [
-      "hit-deep"
+      "tick"
      ],
      "at": 55,
-     "align": "peak"
+     "align": "peak",
+     "gain_db": -2.0
     }
    ],
-   "why": "the date lands on the photo",
+   "why": "the date lands on the photo; 2026-10-01: the owner removed the punch sounds (date slam, impact punch): a soft tick as the date lands",
    "event": "the date rolls 22-64 and settles ~55"
   },
   "LIB_PB_DOUBLE_EXPOSURE": {
@@ -4222,19 +4209,19 @@
    "event": "registry sfxAt"
   },
   "LIB_PF_SPOTLIGHT": {
-   "sfx": "impact-punch",
+   "sfx": "ui-click",
    "sfx_at": 14,
    "sounds": [
     {
-     "name": "impact-punch",
+     "name": "ui-click",
      "alt": [
-      "hit-deep"
+      "click"
      ],
      "at": 14,
      "align": "peak"
     }
    ],
-   "why": "a spotlight hits the portrait",
+   "why": "a spotlight hits the portrait; 2026-10-01: the owner removed the punch sounds (date slam, impact punch): the spotlight switches on with a click",
    "event": "registry sfxAt"
   },
   "LIB_PS_STAT_RIDE": {
@@ -6074,23 +6061,24 @@
      "gain_db": 4.4
     }
    ],
-   "why": "a small corner date: a soft click, not a slam (bold dates get date-slam)",
+   "why": "a small corner date: a soft click, not a slam",
    "event": "slides in (90% at 4), types 0-27"
   },
   "TL_DATE_TITLE_V1": {
-   "sfx": "date-slam",
+   "sfx": "ui-tick",
    "sfx_at": 34,
    "sounds": [
     {
-     "name": "date-slam",
+     "name": "ui-tick",
      "alt": [
-      "hit-deep"
+      "tick"
      ],
      "at": 34,
-     "align": "peak"
+     "align": "peak",
+     "gain_db": -2.0
     }
    ],
-   "why": "full date card: bold text slam",
+   "why": "full date card: bold text slam; 2026-10-01: the owner removed the punch sounds (date slam, impact punch): a soft tick as the date lands",
    "event": "date lands (year roll 6-48, visual land ~34; month/day 2-18)"
   },
   "TL_LINE_V1": {

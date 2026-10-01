@@ -9984,9 +9984,9 @@
  },
  {
   "id": "dt-letter-drop",
-  "name": "Bold Date (Letter Drop)",
+  "name": "Clean Date (Letter Reveal)",
   "category": "TIMELINES",
-  "description": "The date and nothing else: huge bold white condensed letters with a black outline and a soft shadow, no box or band behind them, dropping in one by one with a small bounce - a crisp tick as each letter lands, a deep hit on the last - then the weekday, year, time or place in a smaller outlined line under it. Low on the left, the right or the centre (Placement). Reads 'WEDNESDAY', 'SEPTEMBER 30', 'TUESDAY NIGHT', '3:45 PM', 'WED → THU'.",
+  "description": "The date or time and nothing else, in clean Anton caps (about 55 px tall at 1080p), low on the left or the right at the safe margin: the letters slide up out of a mask one by one with a soft digital tick each (no hit), the weekday, year or place in small tracked caps under it; a time reads as the big figure with AM/PM and the zone small beside it. Four letterings turn from one date to the next (Text style): clean white with a thin amber rule, silver with a light sweep, the day in amber, white on a soft feathered shade. Reads 'SEPTEMBER 29', 'TUESDAY NIGHT', '3:45 PM', '8 AM ET', 'WED → THU'.",
   "kind": "tag",
   "own_backdrop": false,
   "needs_media": 0,
@@ -9994,7 +9994,8 @@
    "text",
    "label",
    "subtitle",
-   "align"
+   "align",
+   "textStyle"
   ],
   "cues": [
    "date",
@@ -10012,18 +10013,10 @@
      "ui-tick",
      "tick"
     ],
-    "at": 5,
+    "at": 7,
     "every": 2,
     "count": 10,
     "gain_db": -6
-   },
-   {
-    "name": "date-slam",
-    "alt": [
-     "hit-deep"
-    ],
-    "at": 26,
-    "fixed": true
    }
   ],
   "sound_timing": "look",
@@ -11102,9 +11095,9 @@
  },
  {
   "id": "bt-count",
-  "name": "Bold Count",
+  "name": "Rolling Count",
   "category": "NUMBERS",
-  "description": "The number and nothing else: huge bold white outlined digits counting up to the figure (90,000 / 22% / $1.2M) with a digit tick on every change and a hit as it lands, the words it counts in bold outlined caps beside or under it, no box behind them. Low on the left, the right or the centre (Placement).",
+  "description": "The number and nothing else: Anton digits roll into place like an odometer (every column easing out, the units spinning fastest) with a soft digital tick on each change and no landing hit; commas, %, $ and K/M/B in place, a unit word small beside the figure, what it counts in small tracked caps under it once it lands. Low on the left or the right at the safe margin; four letterings turn from one figure to the next (Text style).",
   "kind": "tag",
   "own_backdrop": false,
   "needs_media": 0,
@@ -11113,7 +11106,8 @@
    "value",
    "suffix",
    "text",
-   "align"
+   "align",
+   "textStyle"
   ],
   "cues": [
    "big-number",
@@ -11130,28 +11124,25 @@
    {
     "name": "ui-tick",
     "alt": [
+     "letter-tick",
      "tick"
     ],
-    "at": 6,
+    "at": 4,
     "every": 2,
-    "count": 16,
-    "gain_db": -5,
+    "count": 13,
+    "gain_db": -6,
     "when": "value"
    },
    {
-    "name": "count-final",
+    "name": "letter-tick",
     "alt": [
-     "hit-deep"
+     "ui-tick",
+     "tick"
     ],
-    "at": 40,
-    "when": "value"
-   },
-   {
-    "name": "swoosh-text",
-    "alt": [
-     "whoosh-soft"
-    ],
-    "at": 8,
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -6,
     "when": "no-value"
    }
   ],

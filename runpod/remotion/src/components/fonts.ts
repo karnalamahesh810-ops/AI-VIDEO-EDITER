@@ -7,6 +7,8 @@ import { loadFont as loadBarlowCondensed } from "@remotion/google-fonts/BarlowCo
 import { loadFont as loadCaveat } from "@remotion/google-fonts/Caveat";
 import { loadFont as loadMarker } from "@remotion/google-fonts/PermanentMarker";
 import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
+import { loadFont as loadAnton } from "@remotion/google-fonts/Anton";
+import { loadFont as loadInterTight } from "@remotion/google-fonts/InterTight";
 
 /**
  * The composition's typefaces, loaded the same way in the RunPod render and in
@@ -30,6 +32,19 @@ export const INTER = `${loadInter("normal", { ...latin, weights: ["400", "700", 
 // Barlow Condensed for labels and tags.
 export const DISPLAY = `${loadBebas("normal", { ...latin, weights: ["400"] }).fontFamily}, Impact, sans-serif`;
 export const LABEL = `${loadBarlowCondensed("normal", { ...latin, weights: ["600", "700", "800"] }).fontFamily}, 'Arial Narrow', sans-serif`;
+
+// The white text on footage (the owner, 2026-10-01: "use the font Anton ... cleaner,
+// not big, not small"; picked over Bebas Neue, Oswald, Barlow Condensed, Montserrat
+// and Inter Tight on a side-by-side sheet): Anton for the words and figures that
+// carry the line, Inter Tight 600-700 in tracked caps for the small line under
+// them. Each loader holds the render until its font is in (delayRender), and the
+// stack falls back to the condensed faces above while it loads in a preview.
+export const ANTON = `${loadAnton("normal", { ...latin, weights: ["400"] }).fontFamily}, ${DISPLAY}`;
+export const SUBLINE = `${loadInterTight("normal", { ...latin, weights: ["600", "700"] }).fontFamily}, ${INTER}`;
+/** Anton's cap height and its line metrics (em; units per em 2048: caps 1760, ascender 2409, descender 674). */
+export const ANTON_CAP = 0.859;
+/** Inter Tight's cap height (em). */
+export const SUBLINE_CAP = 0.728;
 
 // The case-file graphics (components/pro/ProCase): handwriting for notes on a
 // board, a felt marker for the big words, a mono face for window chrome.

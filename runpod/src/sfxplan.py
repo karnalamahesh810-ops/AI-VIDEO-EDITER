@@ -19,7 +19,7 @@ six times a minute. This module does that for the planned overlays:
 
   * The sound comes from the look's template (registry defaults "sfx"), or a
     per-overlay "sfx"/"sfxVolume" override from the editor; "none" is silent.
-    A calendar date lands on the owner's deep hit (DATE_SOUND), always.
+    A calendar date lands on a soft digital tick (DATE_SOUND), never a hit.
   * Timing: every sound file has its loudest point some way in (a whoosh
     builds for 0.7 s). The sound starts early by that much so its peak lands
     on the look's own visual hit, the template's "sfxAt" frame - but never
@@ -36,8 +36,8 @@ six times a minute. This module does that for the planned overlays:
     puts a sound's loudest moment a known number of dB under the voice's
     integrated loudness: typing ~10 dB under, whooshes ~9, clicks, ticks and
     paper ~7, hits, glitches and risers ~5 (sfx_meta.json "category", else
-    the file's own name), times the style pack's intensity (a date's deep
-    hit excepted: always at the date level), and never above one cap (cap())
+    the file's own name), times the style pack's intensity (a date's tick
+    excepted: always at its own level), and never above one cap (cap())
     - an editor's override included.
   * Sparse: one overlay sound per GAP_SECONDS, the stronger look winning;
     a typing or date look alone on screen always keeps its sound, and of two
@@ -104,8 +104,8 @@ CATEGORY = {
     # The sound designer's premium set (2026-09-30; sfx_meta.json carries the
     # same categories): a look asking for one that does not ship plays its stand-in.
     "alert-tone": "ui", "boom-sub": "impact", "camera-flash-pop": "camera", "camera-shutter": "camera",
-    "count-final": "ui", "count-roll": "tick", "date-slam": "impact", "folder-open": "paper",
-    "frame-drop": "impact", "glitch-digital": "glitch", "glitch-short-v2": "glitch", "impact-punch": "impact",
+    "count-final": "ui", "count-roll": "tick", "folder-open": "paper",
+    "frame-drop": "impact", "glitch-digital": "glitch", "glitch-short-v2": "glitch",
     "letter-tick": "tick", "light-shimmer": "shimmer", "magnifier-glide": "shimmer", "map-swoop": "whoosh",
     "marker-draw": "marker", "marker-underline": "marker", "page-flip": "paper", "paper-pin": "paper",
     "paper-slide-v2": "paper", "paper-tear": "paper", "pen-scribble": "marker", "phone-buzz": "ui",
@@ -120,11 +120,12 @@ CATEGORY = {
 # loudest category, so nothing ever stands out over the hits.
 CAP_UNDER_DB = 5.0
 
-# Every calendar date lands on a bold hit (the owner, 2026-09-30: "BOLD TEXT
-# date with a better sound"), at the hits' level: the designer's date slam,
-# the owner's deep hit its sibling (a sub hit a phone speaker barely hears).
-DATE_SOUND = "date-slam"
-DATE_SOUND_ALT = ("hit-deep",)
+# A calendar date sounds like its digits: one soft digital tick, never a hit
+# (the owner, 2026-10-01: "only a digit sound ... you used a punch sound as
+# well, we don't need that, that sound is super bad, remove that sound effect
+# from our list" - the date slam and the impact punch are gone from the set).
+DATE_SOUND = "letter-tick"
+DATE_SOUND_ALT = ("ui-tick", "tick")
 
 TYPING_SOUND = "keys"
 # A number counts up on the counter's roll and lands on its final click.
@@ -141,7 +142,7 @@ TYPING_TAKES = ["keys-type", "keys-laptop", "keys-mech", "keys"]
 _CONTINUOUS = {"keys", "typewriter", "typing text", "count-tick", "keys-mech", "keys-type", "keys-laptop",
                "count-roll", "typewriter-clean"}
 # The only stand-ins allowed for a missing file: the older recordings.
-_FALLBACK = {"keys": "typewriter", "count-roll": "count-tick", "date-slam": "hit-deep"}
+_FALLBACK = {"keys": "typewriter", "count-roll": "count-tick"}
 
 # Siblings a repeated sound alternates with, in order of preference.
 VARIANTS = {
@@ -171,8 +172,7 @@ VARIANTS = {
     "whoosh-cinematic": ["whoosh-soft-v2", "map-swoop"], "whoosh-soft-v2": ["swoosh-text", "ui-swipe"],
     "swoosh-text": ["ui-swipe", "whoosh-soft-v2"], "whoosh-fast": ["ui-swipe", "swoosh-text"],
     "ui-swipe": ["whoosh-fast", "swoosh-text"], "map-swoop": ["whoosh-cinematic", "map-whoosh"],
-    "zoom-in-whoosh": ["whoosh-fast"], "impact-punch": ["hit-deep", "date-slam"],
-    "date-slam": ["hit-deep", "impact-punch"], "boom-sub": ["hit-deep"], "ui-pop": ["ui-click", "ui-tick"],
+    "zoom-in-whoosh": ["whoosh-fast"], "boom-sub": ["hit-deep"], "ui-pop": ["ui-click", "ui-tick"],
     "ui-click": ["ui-tick", "ui-pop"], "ui-tick": ["ui-click"], "paper-slide-v2": ["page-flip", "folder-open"],
     "page-flip": ["paper-slide-v2"], "folder-open": ["paper-slide-v2"], "tape-rip": ["paper-tear"],
     "paper-tear": ["tape-rip"], "marker-draw": ["marker-underline"], "marker-underline": ["marker-draw"],
@@ -443,6 +443,11 @@ def _resolve_file(name: str) -> Optional[str]:
     return alt if alt and exists(alt) else None
 
 
+def date_sound() -> Optional[str]:
+    """The file a calendar date ticks on: DATE_SOUND, else its first stand-in that ships."""
+    return next((n for n in (DATE_SOUND,) + tuple(DATE_SOUND_ALT) if exists(n)), None)
+
+
 def _candidate(i: int, overlay: dict, fps: int, spans: List[tuple]) -> Optional[dict]:
     t = templates.get(overlay.get("template") or "")
     if not t or plays_own_sound(t) or has_builtin_sound(t):
@@ -452,14 +457,14 @@ def _candidate(i: int, overlay: dict, fps: int, spans: List[tuple]) -> Optional[
     name, explicit, vol = _choice(overlay, t)
     if name is None:                       # silenced on purpose
         return None
-    # A calendar date always lands on the date slam (an editor's own pick still wins).
-    date_sound = _resolve_file(DATE_SOUND)
-    date = not explicit and is_calendar_date(t) and bool(date_sound)
+    # A calendar date always lands on its soft tick (an editor's own pick still wins).
+    tick = date_sound()
+    date = not explicit and is_calendar_date(t) and bool(tick)
     # A look that types always gets its keys (typing contract), even when
     # the registry left its sound at "none"; an explicit other sound wins.
     typing = _types(t) and not date and not (explicit and name not in _TYPING_NAMES)
     if date:
-        name = date_sound
+        name = tick
     if not typing and (not name or name == "none"):
         return None
     d = t.get("defaults") or {}
@@ -553,7 +558,7 @@ def _select(cands: List[dict], gap: int, clash: int = 0) -> List[dict]:
 
 
 # The owner's own recordings lead where they fit (2026-09-29): the deep hit
-# is the first choice for every impact / soft boom (date slams, bold cards).
+# is the first choice for every impact / soft boom (bold cards; never a date or a number).
 _PREFERRED = {"impact": "hit-deep", "boom-soft": "hit-deep"}
 
 
@@ -618,8 +623,10 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "",
             raw = c["hit"] - (0 if name in _CONTINUOUS else peak_frames(name, fps))
             start = max(c["start"], raw)
             trim = start - raw
-            audible = min(duration_frames(name, fps) - trim, c["end"] - start)
-            if audible < _scale(MIN_AUDIBLE, fps):
+            natural = duration_frames(name, fps) - trim
+            audible = min(natural, c["end"] - start)
+            # A short tick plays whole; only a sound the look's end cuts to almost nothing is dropped.
+            if audible <= 0 or (audible < natural and audible < _scale(MIN_AUDIBLE, fps)):
                 continue
             length = trim + audible
         else:
@@ -628,7 +635,7 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "",
             # The editor's own level stands as set, never above the cap.
             volume = min(top, c["volume"])
         else:
-            # A date's deep hit is always at the date level; the rest follow the pack's intensity.
+            # A date's tick is always at its own level; the rest follow the pack's intensity.
             volume = min(top, level(name, voice) * (1.0 if c["fixed"] else strength))
         volume = round(volume, 3)
         if volume <= 0.005:
@@ -673,7 +680,7 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "",
 #   gain_db    dB against the sound's category level for this voice
 #   fade       fade-out frames at its end (a sound cut by the look's end always fades)
 #   when       "value" | "no-value": only when the overlay has (no) number
-#   fixed      not scaled by the style pack's intensity (a date's deep hit)
+#   fixed      not scaled by the style pack's intensity
 #   scale      cue frames stretch with the look's duration against its default
 #   pitch      the render's tone change (1 = as recorded)
 #
@@ -685,7 +692,7 @@ def plan(overlays: List[dict], fps: int, intensity: float, style: str = "",
 
 # Stand-ins by category for a file that does not ship (the first that does wins).
 CATEGORY_FALLBACK = {
-    "impact": ["hit-deep", "impact-punch", "boom-sub", "boom-soft", "impact"],
+    "impact": ["hit-deep", "boom-sub", "boom-soft", "impact"],
     "tick": ["ui-tick", "tick", "letter-tick", "click"], "ui": ["ui-click", "ui-pop", "click", "pop"],
     "whoosh": ["whoosh-soft-v2", "swoosh-text", "whoosh-soft", "swipe"],
     "paper": ["paper-slide-v2", "paper-slide", "paper", "page"], "marker": ["marker-draw", "marker", "tick"],

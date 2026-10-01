@@ -90,11 +90,12 @@ class Registry(unittest.TestCase):
 
     def test_the_sound_designers_map_is_applied(self):
         reg = {t["id"]: t for t in _registry()["templates"]}
-        # Timing read off the components: the podium's first place lands at 60, the date slam's day at 17.
+        # Timing read off the components: the podium's first place lands at 60, the date slam look's day at 17,
+        # where it now ticks softly (the owner, 2026-10-01: no punch, no slam).
         self.assertEqual(reg["LIB_NS_PODIUM"]["defaults"]["sfxAt"], 60)
         self.assertEqual(reg["LIB_DT_DATE_SLAM"]["defaults"]["sfxAt"], 17)
-        self.assertEqual(reg["LIB_DT_DATE_SLAM"]["defaults"]["sounds"][0]["name"], "date-slam")
-        self.assertEqual(reg["LIB_DT_DATE_SLAM"]["defaults"]["sounds"][0]["alt"], ["hit-deep"])
+        self.assertEqual(reg["LIB_DT_DATE_SLAM"]["defaults"]["sounds"][0]["name"], "ui-tick")
+        self.assertEqual(reg["LIB_DT_DATE_SLAM"]["defaults"]["sounds"][0]["alt"], ["tick"])
         with open(os.path.join(ROOT, "scripts", "look_sounds.json"), encoding="utf-8") as fh:
             design = json.load(fh)["looks"]
         for tid, e in design.items():
@@ -103,6 +104,30 @@ class Registry(unittest.TestCase):
                 self.assertTrue(d.get("types"), tid)
             if not d.get("ownSound"):
                 self.assertEqual(d["sfx"]["name"], e["sfx"], tid)        # older documents: its main sound
+
+    def test_the_punch_sounds_are_gone(self):
+        # The owner, 2026-10-01: "you used a punch sound as well, we don't need that, that sound is super
+        # bad, remove that sound effect from our list".
+        reg = _registry()
+        gone = {"date-slam", "impact-punch"}
+        for t in reg["templates"]:
+            d = t["defaults"]
+            names = {c["name"] for c in d["sounds"]} | {a for c in d["sounds"] for a in c.get("alt") or []}
+            self.assertFalse(names & gone, t["id"])
+            self.assertNotIn(d["sfx"]["name"], gone, t["id"])
+        self.assertFalse({s["file"] for s in reg["sfx"].values()} & gone)          # the editor's sound list
+        for name in gone:
+            self.assertFalse(os.path.exists(os.path.join(REMOTION, "public", "sfx", name + ".mp3")), name)
+            self.assertNotIn(name, sfxplan._meta())
+            self.assertNotIn(name, sfxplan.CATEGORY)
+        # The date and number text looks tick softly and never land on a hit, not even as a stand-in.
+        for tid in ("LIB_DT_LETTER_DROP", "LIB_BT_COUNT"):
+            for c in templates.get(tid)["defaults"]["sounds"]:
+                for name in [c["name"]] + list(c.get("alt") or []):
+                    self.assertEqual(sfxplan.category(name), "tick", (tid, name))
+        # A calendar date the designer's map leaves alone ticks too.
+        self.assertEqual([c["name"] for c in templates.get("LIB_DT_BOLD_HEADLINE")["defaults"]["sounds"]],
+                         [sfxplan.DATE_SOUND])
 
     def test_counters_roll_and_land(self):
         d = templates.get("NUM_BIG_COUNTER_V1")["defaults"]
@@ -170,9 +195,9 @@ class Schedule(unittest.TestCase):
         self.assertAlmostEqual(s["volume"] / q["volume"], 10 ** (6 / 20), places=2)
         [g] = sched([dict(cue, gain_db=-6.0)], intensity=0.5, gain=0.5, master=0.5)
         self.assertAlmostEqual(g["volume"], sfxplan.level("whoosh-soft-v2") * 10 ** (-6 / 20) * 0.125, places=4)
-        # A fixed cue (a date's hit) ignores the pack's intensity, never the trims.
-        [f] = sched([{"name": "date-slam", "at": 20, "fixed": True}], intensity=0.5)
-        self.assertAlmostEqual(f["volume"], sfxplan.level("date-slam"), places=4)
+        # A fixed cue ignores the pack's intensity, never the trims.
+        [f] = sched([{"name": "hit-deep", "at": 20, "fixed": True}], intensity=0.5)
+        self.assertAlmostEqual(f["volume"], sfxplan.level("hit-deep"), places=4)
         # Never above the one cap, however it is pushed; a trim of 0 is silence.
         [loud] = sched([dict(cue, gain_db=20.0)], gain=1.5, master=2.0)
         self.assertLessEqual(loud["volume"], sfxplan.cap() + 1e-4)
@@ -199,9 +224,9 @@ class Schedule(unittest.TestCase):
     def test_a_missing_file_plays_its_stand_in_or_nothing(self):
         [s] = sched([{"name": "no-such-sound", "alt": ["tick"], "at": 10}])
         self.assertEqual(s["name"], "tick")
-        meta = {k: v for k, v in sfxplan._meta().items() if k != "date-slam"}
+        meta = {k: v for k, v in sfxplan._meta().items() if k != "boom-sub"}
         with mock.patch.object(sfxplan, "_meta", lambda: meta):
-            [d] = sched([{"name": "date-slam", "at": 20}])              # no alt: its category's stand-in
+            [d] = sched([{"name": "boom-sub", "at": 20}])               # no alt: its category's stand-in
             self.assertEqual(d["name"], "hit-deep")
         self.assertEqual(sched([{"name": "no-such-sound", "at": 10}]), [])
 
@@ -331,7 +356,12 @@ class Planner(unittest.TestCase):
                      if set(templates.cues_of(templates.get(o["template"]))) & set(treatments.DATE_CUES)]
             self.assertEqual(len(dated), 4, (pack, [o["template"] for o in out["overlays"]]))
             self.assertEqual({o["template"] for o in dated}, {treatments.TEXT_DATE_LOOK}, pack)
-            self.assertEqual([o["align"] for o in dated], ["left", "right", "center", "left"], pack)
+            # The lower third at the safe margin, left and right in turn - never mid-frame (2026-10-01).
+            self.assertEqual([o["align"] for o in dated], ["left", "right", "left", "right"], pack)
+            # Lettered in turn: no two dates in a row look the same.
+            styles = [o["textStyle"] for o in dated]
+            self.assertTrue(set(styles) <= set(treatments.TEXT_LOOK_STYLES), styles)
+            self.assertTrue(all(a != b for a, b in zip(styles, styles[1:])), styles)
 
     def test_never_the_centre_on_a_persons_shot(self):
         lines = ["On July 2, the rain began.", PLAIN, "On July 9, the river rose.", PLAIN, "On July 16, it fell."]

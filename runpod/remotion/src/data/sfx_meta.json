@@ -59,13 +59,6 @@
     "loop": false,
     "peak": 0.963
   },
-  "date-slam": {
-    "category": "impact",
-    "duration": 0.674,
-    "loop": false,
-    "lufs": -20.3,
-    "peak": 0.025
-  },
   "ding": {
     "category": "ui",
     "duration": 1.5,
@@ -147,13 +140,6 @@
     "duration": 2.463,
     "loop": false,
     "peak": 0.634
-  },
-  "impact-punch": {
-    "category": "impact",
-    "duration": 0.42,
-    "loop": false,
-    "lufs": -20.3,
-    "peak": 0.005
   },
   "keys": {
     "category": "typing",

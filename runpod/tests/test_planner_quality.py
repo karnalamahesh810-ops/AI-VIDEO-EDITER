@@ -146,10 +146,14 @@ class SoundLevels(unittest.TestCase):
         # Each look's loudest moment is no whisper (the old plan played 0.07-0.135).
         for look in {s["look"] for s in sounds}:
             self.assertGreaterEqual(max(s["volume"] for s in sounds if s["look"] == look), 0.2, look)
-        # The date's slam is the loudest thing there is.
-        hits = [s["volume"] for s in sounds if s["name"] in ("date-slam", "hit-deep")]
-        self.assertTrue(hits)
-        self.assertAlmostEqual(max(hits), top, places=3)
+        # No punch anywhere, and a date or a number only ever ticks (the owner, 2026-10-01).
+        self.assertFalse([s for s in sounds if s["name"] in ("date-slam", "impact-punch")])
+        texty = {i for i, o in enumerate(doc["overlays"])
+                 if o.get("template") in (treatments.TEXT_DATE_LOOK, treatments.BOLD_COUNT_LOOK)}
+        self.assertTrue(texty)
+        for s in sounds:
+            if s["look"] in texty:
+                self.assertEqual(sfxplan.category(s["name"]), "tick", s)
 
     def test_the_editors_full_volume_comes_back_under_the_cap(self):
         doc = build_doc(FLOOD[:3], inp={"voice_lufs": -20.0})
@@ -294,23 +298,22 @@ class Dates(unittest.TestCase):
         self.assertIn("time-of-day", cues_of(o))
         self.assertEqual(o["text"], "3:45 PM")
 
-    def test_every_date_lands_on_the_deep_hit(self):
+    def test_every_date_ticks_and_never_hits(self):
         lines = ["On July 2, the rain began.", "Plain words about the river.", "Plain words about the town.",
                  "By September 15, 2026, the lake had dropped.", "Plain words about the dam.",
                  "Plain words about the crews.", "Sept. 25 was the deadline."]
         _s, _sc, out = plan(lines, pack="documentary", brief={"kind": "explainer", "hookBeats": [], "sections": []})
         dated = [o for o in out["overlays"] if o["template"] in BOLD]
         self.assertGreaterEqual(len(dated), 3)
-        # The sound is the look's own: its ticks, then the date slam (the deep hit
-        # its stand-in) at the date level whatever the pack's intensity.
+        # The sound is the look's own: a soft digital tick per letter, and nothing
+        # lands at the end (the owner, 2026-10-01: "only a digit sound ... no punch").
         self.assertEqual(out["sfx"], [])
         sounds = sfxplan.doc_look_sounds({"fps": FPS, "overlays": out["overlays"], "lookSounds": out["lookSounds"]})
         for o in dated:
             mine = [s for s in sounds if out["overlays"][s["look"]] is o]
-            hits = [s for s in mine if s["name"] in ("date-slam", "hit-deep")]
-            self.assertEqual(len(hits), 1, o["template"])
-            self.assertEqual(hits[0], mine[-1])
-            self.assertAlmostEqual(hits[0]["volume"], sfxplan.level(hits[0]["name"]), places=3)
+            self.assertGreaterEqual(len(mine), 5, o["template"])
+            self.assertEqual({sfxplan.category(s["name"]) for s in mine}, {"tick"}, o["template"])
+            self.assertFalse([s for s in mine if s["name"] in ("hit-deep", "date-slam", "impact-punch", "count-final")])
 
     def test_the_bold_looks_work_with_or_without_the_newest_ones(self):
         # Bold text only: the letter drop for a date, a date and a time, a time of day.
