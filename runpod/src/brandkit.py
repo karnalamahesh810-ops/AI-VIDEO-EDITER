@@ -536,14 +536,26 @@ def _needs(ov: dict) -> Tuple[str, ...]:
     return tuple(out)
 
 
+def _cue_families() -> List[set]:
+    """Cues that draw the same kind of thing: one figure, several values, a date, words, a map, a person, a photo."""
+    from . import treatments as vt
+    return [set(vt.SINGLE_FIGURE_CUES) | {"count", "age", "big-number"}, set(vt.FULL_DATA_CUES),
+            set(vt.DATE_CUES) | {"year", "years", "time-span"}, set(vt.TEXT_CUES),
+            {"place", "route", "region", "multi", "map", "location", "forecast-rain", "forecast-wind"},
+            {"person", "person-full", "profile", "photo-person"},
+            {"photo", "photo-place", "photo-object", "place-photo", "object-photo", "subject-photo", "intro"}]
+
+
 def closest_look(template_id: str, allowed: Optional[Iterable[str]], *, card: bool = False,
                  needs: Iterable[str] = ()) -> Optional[str]:
     """
     The allowed look nearest `template_id`: one that answers the same cues
-    (what the look is about - a percentage, a place, a date), then the same
-    component, category, kind and family. It must draw the data the overlay
-    carries (`needs`: locations, items, a value) and, for a full-screen
-    scene (`card`), fill the frame. None when no allowed look shares a cue.
+    (what the look is about - a percentage, a place, a date), else a cue of
+    the same family (a percentage and a count are both one figure), then the
+    same component, category, kind and family of looks. It must draw the
+    data the overlay carries (`needs`: locations, items, a value) and, for a
+    full-screen scene (`card`), fill the frame. None when no allowed look is
+    about the same kind of thing.
     """
     if allowed is None:
         return template_id
@@ -555,6 +567,7 @@ def closest_look(template_id: str, allowed: Optional[Iterable[str]], *, card: bo
         return None
     from . import treatments
     cues = set(templates.cues_of(t))
+    kin = set().union(*[f for f in _cue_families() if f & cues]) if cues else set()
     pictures = treatments.look_slots(t)[0] > 0
     best, best_key = None, None
     for n, c in enumerate(templates.all_templates()):
@@ -566,10 +579,12 @@ def closest_look(template_id: str, allowed: Optional[Iterable[str]], *, card: bo
             continue
         if any(k not in (c.get("props") or {}) for k in needs):
             continue
-        shared = cues & set(templates.cues_of(c))
-        if not shared:
+        theirs = set(templates.cues_of(c))
+        shared = cues & theirs
+        related = bool(kin & theirs)
+        if not shared and not related:
             continue
-        score = 3 * len(shared) + 2 * (c.get("component") == t.get("component")) \
+        score = 3 * len(shared) + (1 if related else 0) + 2 * (c.get("component") == t.get("component")) \
             + 2 * (c.get("category") == t.get("category")) + (c.get("kind") == t.get("kind")) \
             + (templates.family(c) == templates.family(t)) \
             - 2 * (treatments.look_slots(c)[0] > 0 and not pictures)

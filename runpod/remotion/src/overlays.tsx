@@ -154,5 +154,10 @@ export const OVERLAYS: Record<OverlayType, OverlayComponent> = {
   },
 };
 
-/** The accent an overlay draws with: its theme colour, else the brand accent. */
-export const accentFor = (ov: Overlay, accent: string): string => THEMES[ov.theme || ""] || accent;
+/**
+ * The accent an overlay draws with: its theme colour, else the brand accent.
+ * The theme "accent2" is the brand kit's second colour (its figures and
+ * charts, src/brandkit.py second_colour); without one, the accent.
+ */
+export const accentFor = (ov: Overlay, accent: string, accent2?: string): string =>
+  (ov.theme === "accent2" ? accent2 : THEMES[ov.theme || ""]) || accent;

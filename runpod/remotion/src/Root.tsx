@@ -1,6 +1,7 @@
 import React from "react";
 import { Composition } from "remotion";
 import { Main } from "./Main";
+import { brandFrames } from "./components/brand/brandLayout";
 import type { TimelineProps } from "./types";
 
 const fallback: TimelineProps = {
@@ -26,9 +27,10 @@ export const RemotionRoot: React.FC = () => {
       height={fallback.height}
       defaultProps={fallback}
       // Dimensions and length come from the props document the worker writes,
-      // so one composition serves every video length and aspect ratio.
+      // so one composition serves every video length and aspect ratio. A
+      // brand kit's intro and outro play around the narration's timeline.
       calculateMetadata={({ props }) => ({
-        durationInFrames: Math.max(1, props.durationInFrames),
+        durationInFrames: Math.max(1, brandFrames(props).total),
         fps: props.fps,
         width: props.width,
         height: props.height,

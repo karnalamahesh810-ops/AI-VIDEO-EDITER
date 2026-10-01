@@ -238,7 +238,7 @@ export interface Overlay {
   labelPosition?: { x: number; y: number };
   /** Entrance move (MotionWrap.tsx): rise, drop, slide-left, zoom-in, glitch... */
   motion?: string;
-  /** Colour theme replacing the brand accent: gold, red, teal, blue, white, amber. */
+  /** Colour theme replacing the brand accent: gold, red, teal, blue, white, amber; "accent2" = the brand's second colour. */
   theme?: string;
   /**
    * The premade animation this overlay is an instance of (templates/registry.json)
@@ -282,6 +282,52 @@ export interface Overlay {
   emphasis?: string;
   startFrame: number;
   durationInFrames: number;
+}
+
+/** The brand kit's corner logo (src/brandkit.py; components/brand). */
+export interface BrandWatermark {
+  url: string;
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  /** Width of the logo's square, as a share of the frame's width (0.04-0.3). */
+  size: number;
+  opacity: number;
+}
+
+/** The customer's intro sting or outro video. `frames` is written by the render (none: not drawn). */
+export interface BrandClip {
+  url: string;
+  frames?: number;
+  seconds?: number;
+  /** Its sound against the narration (the render measures it); absent = 0.8. */
+  volume?: number;
+}
+
+/** The end card: title, subscribe button text, a line under it. `frames` is written by the render. */
+export interface BrandOutroCard {
+  kind: "card";
+  frames?: number;
+  seconds?: number;
+  title?: string;
+  text?: string;
+  subtext?: string;
+  logo?: string;
+}
+
+/**
+ * The brand kit's identity on a document (src/brandkit.py doc_brand): the
+ * accent colours and font every look and caption uses, the corner logo, and
+ * the intro and outro that play before and after the narration's timeline
+ * (components/brand/brandLayout.ts brandFrames).
+ */
+export interface BrandBlock {
+  accent?: string;
+  /** The second colour: the figures and charts (overlay theme "accent2"). */
+  accent2?: string;
+  fontFamily?: string;
+  watermark?: BrandWatermark;
+  intro?: BrandClip;
+  outro?: BrandOutroCard | (BrandClip & { kind: "video" });
+  kit?: { id?: string; name?: string };
 }
 
 /** A music section: the level the music sits at between two frames, by mood. */
@@ -348,6 +394,12 @@ export interface TimelineProps {
    * documents): the sfx rows carry every sound, exactly as before.
    */
   lookSounds?: { intensity?: number } | null;
+  /**
+   * The customer's brand kit. Its intro plays before the narration's
+   * timeline and its outro after it, so the video is longer than
+   * durationInFrames (brandFrames); absent = exactly as before.
+   */
+  brand?: BrandBlock | null;
   meta?: Record<string, unknown>;
   /**
    * Remotion requires composition props to be assignable to

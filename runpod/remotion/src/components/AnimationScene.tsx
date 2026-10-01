@@ -48,8 +48,8 @@ export const BlurBackdrop: React.FC<{ still: string; frames: number }> = ({ stil
   );
 };
 
-export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?: SceneMedia | null }> =
-  ({ scene, accent, backdrop }) => {
+export const AnimationScene: React.FC<{ scene: Scene; accent: string; accent2?: string; backdrop?: SceneMedia | null }> =
+  ({ scene, accent, accent2, backdrop }) => {
     const frame = useCurrentFrame();
     const { width, height } = useVideoConfig();
     const k = width / 1920;
@@ -76,7 +76,7 @@ export const AnimationScene: React.FC<{ scene: Scene; accent: string; backdrop?:
     const t = templateFor(ov.template);
     // Maps and the case-file looks (own-backdrop) draw their whole frame.
     const fullFrame = ov.type === "map" || t?.kind === "map" || Boolean(t?.tags?.includes("own-backdrop"));
-    const col = accentFor(ov, accent);
+    const col = accentFor(ov, accent, accent2);
     const drift = interpolate(frame, [0, Math.max(1, scene.durationInFrames)], [0, 1], clamp);
     // A still of the neighbouring clip (its thumbnail), never a second video
     // decode of it: two OffthreadVideos on one file at different times made
