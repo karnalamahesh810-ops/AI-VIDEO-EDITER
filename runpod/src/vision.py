@@ -281,6 +281,18 @@ def _extra(model: str, url: str, max_tokens: int) -> tuple:
     if model.startswith("gemini-") and "googleapis.com" in url:
         extra = {"reasoning_effort": config.VISION_GEMINI_REASONING} if config.VISION_GEMINI_REASONING else {}
         return max_tokens * 2, extra
+    if "openrouter.ai" in url:
+        # OpenRouter's own reasoning switch (measured 2026-10-01, 3 frames a check):
+        # gemini-2.5-flash with no thinking 2.3 s; gemini-3.x flash cannot turn it
+        # off (400 on "none") and thinks ~230 tokens at "minimal", 7 s; gpt-5-mini
+        # at "minimal" 3.1 s.
+        if "gemini-2.5" in model:
+            return max_tokens, {"reasoning": {"max_tokens": 0}}
+        if "gemini" in model:
+            return max_tokens * 2, {"reasoning": {"effort": "minimal"}}
+        if "/gpt-5" in model:
+            return max_tokens, {"reasoning": {"effort": "minimal"}}
+        return max_tokens, {}
     if config.VISION_REASONING_EFFORT and model.startswith("gpt-"):
         return max_tokens, {"reasoning_effort": config.VISION_REASONING_EFFORT}
     return max_tokens, {}

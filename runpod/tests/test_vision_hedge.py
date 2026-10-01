@@ -105,5 +105,26 @@ class HedgedVisionCalls(unittest.TestCase):
         self.assertTrue(accept('{"description": "flooded street", "score": 0.8}'))
 
 
+
+class OpenRouterSettings(unittest.TestCase):
+    """OpenRouter's own reasoning switch: Gemini 2.5 Flash without thinking, 3.x at minimal, GPT-5 minimal."""
+
+    URL = "https://openrouter.ai/api/v1/chat/completions"
+
+    def test_gemini_25_flash_does_not_think(self):
+        self.assertEqual(vision._extra("google/gemini-2.5-flash", self.URL, 400), (400, {"reasoning": {"max_tokens": 0}}))
+
+    def test_gemini_3_flash_gets_room_to_think(self):
+        budget, extra = vision._extra("google/gemini-3.8-flash", self.URL, 400)
+        self.assertEqual((budget, extra), (800, {"reasoning": {"effort": "minimal"}}))
+
+    def test_gpt5_mini_reasons_minimally(self):
+        self.assertEqual(vision._extra("openai/gpt-5-mini", self.URL, 300), (300, {"reasoning": {"effort": "minimal"}}))
+
+    def test_the_endpoint_is_the_base_path(self):
+        with mock.patch.object(config, "VISION_API_BASE", "https://openrouter.ai/api/v1"):
+            self.assertEqual(vision._endpoint("google/gemini-2.5-flash"), self.URL)
+
+
 if __name__ == "__main__":
     unittest.main()
