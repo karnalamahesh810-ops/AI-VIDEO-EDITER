@@ -1738,6 +1738,8 @@ BAR_TEXT_LOOKS = {
     "LIB_CH_GLITCH_RESOLVE", "LIB_FX_SHAPE_WIPE", "LIB_CN_FOCUS_VIGNETTE",
     # LibPackPlaces: a thin amber rule under the warning
     "LIB_PLC_WARNING_LABEL",
+    # a red strip behind the line (the owner, 2026-10-01: red-styled long text goes too)
+    "TEXT_WARNING_V1",
 }
 
 
