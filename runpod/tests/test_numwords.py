@@ -144,7 +144,7 @@ class Planner(unittest.TestCase):
                  "Some three thousand homes lost power.", PLAIN]
         out = _plan(lines)
         shown = [(o["template"], str(o.get("text") or ""), o.get("value")) for o in out["overlays"]]
-        dates = [s for s in shown if s[0] == treatments.TEXT_DATE_LOOK]
+        dates = [s for s in shown if s[0] in treatments.DATE_TEXT_LOOKS]
         self.assertEqual([s[1] for s in dates], ["SEPTEMBER 29"], shown)
         counts = [s for s in shown if s[2] is not None]
         self.assertTrue(counts, shown)
@@ -156,7 +156,7 @@ class Planner(unittest.TestCase):
         hint = {"type": "date-stamp", "text": "SEPTEMBER TWENTY-NINTH"}
         out = _plan(["The water came that week.", PLAIN], shots=[{"subject": "Lake Mead", "overlay": hint},
                                                                  {"subject": "Lake Mead"}])
-        [o] = [o for o in out["overlays"] if o["template"] == treatments.TEXT_DATE_LOOK]
+        [o] = [o for o in out["overlays"] if o["template"] in treatments.DATE_TEXT_LOOKS]
         self.assertEqual(o["text"], "SEPTEMBER 29")
 
     def test_the_registry_keeps_the_text_style_choice(self):

@@ -36,6 +36,288 @@
   }
  ],
  "looks": {
+  "LIB_DTX_TIME_STAMP": {
+   "sfx": "letter-tick",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 8,
+     "every": 2,
+     "count": 4,
+     "gain_db": -6.0
+    },
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 18,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): figures rise 2 frames apart from 4 (land ~8-14), AM/PM and zone settle ~18",
+   "event": "tick bar 2-11, figures 4-19, tags 15-25, exit last 11"
+  },
+  "LIB_DTX_DATE_TOP": {
+   "sfx": "letter-tick",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 6,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): letters rise centre-out from 3, a pair every 2 frames (land 7-17)",
+   "event": "letters 3-22, hairline 15-27, small line 19-30"
+  },
+  "LIB_DTX_DATE_PLACE": {
+   "sfx": "letter-tick",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 8,
+     "every": 2,
+     "count": 7,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): one line rises from 3 left to right (16-frame spread), quiet ticks through it",
+   "event": "line 3-28, small line 25-36"
+  },
+  "LIB_DTX_DATE_RANGE": {
+   "sfx": "ui-tick",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 26,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): first end rises 2-19, the arrow draws 12-22 (mid 17), the second end lands ~21-29",
+   "event": "end A 2-19, arrow 12-22, end B 17-34, small line 31-42"
+  },
+  "LIB_DTX_DAY_MARKER": {
+   "sfx": "ui-tick",
+   "sfx_at": 23,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 3,
+     "gain_db": -6.0
+    },
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 9,
+     "align": "start",
+     "until": 22,
+     "gain_db": -6.0
+    },
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 23,
+     "gain_db": -5.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): DAY rises 3-16 (ticks 7, 9, 11), the figure rolls 9-23 and lands",
+   "event": "word 3-16, figure rolls 9-23, small line 17-28"
+  },
+  "LIB_DTX_TIME_OF_DAY": {
+   "sfx": "ui-tick",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 24,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): the line rises from 3 (12-frame spread), the key part warms to amber at ~24",
+   "event": "line 3-24, amber warm 21-31, small line 22-33"
+  },
+  "LIB_DTX_LEAD_TIME": {
+   "sfx": "ui-tick",
+   "sfx_at": 24,
+   "sounds": [
+    {
+     "name": "count-roll",
+     "alt": [
+      "count-tick"
+     ],
+     "at": 6,
+     "align": "start",
+     "until": 22,
+     "gain_db": -6.0
+    },
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 24,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): the figure counts up 6-24 and lands; the window line fills after it",
+   "event": "lead word 2-13, line rises 5-24, count 6-24, window 20-44"
+  },
+  "LIB_DTX_UPDATED_STAMP": {
+   "sfx": "letter-tick",
+   "sfx_at": 3,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 12,
+     "every": 2,
+     "count": 4,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): the dot pops at 2-10, the time rises from 8 (land 12-18)",
+   "event": "dot 2-10, verb 4-15, time 8-23, AM/zone 19-28"
+  },
+  "LIB_DTX_WEEK_STRIP": {
+   "sfx": "ui-tick",
+   "sfx_at": 38,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 12,
+     "every": 2,
+     "count": 7,
+     "gain_db": -6.0
+    },
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 38,
+     "gain_db": -5.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): days fade in 10-22 two frames apart, the underline slides 26-38 and lands on the day",
+   "event": "date 2-21, days 10-33, underline slide 26-38, day warms 36-44"
+  },
+  "LIB_DTX_WEEKDAY_STACK": {
+   "sfx": "letter-tick",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 10,
+     "every": 2,
+     "count": 5,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): the weekday fades in 2-13, the date rises from 6 (land ~10-20)",
+   "event": "weekday 2-13, date 6-25, small line 23-34"
+  },
+  "LIB_DTX_YEAR_MARKER": {
+   "sfx": "letter-tick",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 3,
+     "count": 4,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): digits rise 3 frames apart from 3 (land 7, 10, 13, 16), the line runs out 14-30",
+   "event": "digits 3-21, line 14-30, node 28-36, small line 19-30"
+  },
+  "LIB_DTX_RELATIVE_TAG": {
+   "sfx": "letter-tick",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 9,
+     "every": 2,
+     "count": 5,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): the dash draws 2-11, the words rise from 5 (10-frame spread)",
+   "event": "dash 2-11, words 5-24, small line 22-33"
+  },
+  "LIB_DTX_CLOCK_LIVE": {
+   "sfx": "letter-tick",
+   "sfx_at": 3,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 9,
+     "every": 2,
+     "count": 4,
+     "gain_db": -6.0
+    }
+   ],
+   "why": "Pack A (2026-10-01): the live dot pops at 2-10, the figures rise from 5 (land 9-15)",
+   "event": "dot 2-10, figures 5-20, tags 16-26, pulse every 30 frames"
+  },
   "CALL_ARROW_V1": {
    "sfx": "ui-swipe",
    "sfx_at": 5,
@@ -6410,6 +6692,1117 @@
    ],
    "sfx": "map-swoop",
    "why": "animation audit 2026-09-30: DocumentaryMap: state label lands at 21"
+  },
+  "LIB_TXT_KEY_PHRASE": {
+   "sfx": "swoosh-text",
+   "sfx_at": 12,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2",
+      "whoosh-soft"
+     ],
+     "at": 4,
+     "gain_db": -4
+    }
+   ],
+   "why": "pack D text (2026-10-01): a text swoosh on the entrance; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "lines rise 3-12 (second line 8-17), key word warms to amber ~10-19"
+  },
+  "LIB_TXT_QUOTE_LINE": {
+   "sfx": "paper-slide-v2",
+   "sfx_at": 15,
+   "sounds": [
+    {
+     "name": "paper-slide-v2",
+     "alt": [
+      "paper-slide"
+     ],
+     "at": 6,
+     "gain_db": -3
+    }
+   ],
+   "why": "pack D text (2026-10-01): a soft paper slide for the quote; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "quote mark 0-12, lines rise 6-15 / 12-21, attribution ~14-24"
+  },
+  "LIB_TXT_HEADLINE_WORDS": {
+   "sfx": "letter-tick",
+   "sfx_at": 30,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 4,
+     "count": 6,
+     "gain_db": -6
+    }
+   ],
+   "why": "pack D text (2026-10-01): a soft letter tick per word; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "a word every 4 frames from 2 (closer for a long line), each tick 3 frames in; rule after the last"
+  },
+  "LIB_TXT_BREAKING_TAG": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 18,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start",
+     "gain_db": -7
+    },
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2",
+      "whoosh-soft"
+     ],
+     "at": 10,
+     "gain_db": -5
+    }
+   ],
+   "why": "pack D text (2026-10-01): a soft whoosh on the entrance; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "tag wipes 1-10, rule draws 3-17, headline rises 9-18"
+  },
+  "LIB_TXT_QUESTION": {
+   "sfx": "letter-tick",
+   "sfx_at": 27,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 4,
+     "count": 5,
+     "gain_db": -6
+    }
+   ],
+   "why": "pack D text (2026-10-01): a soft letter tick per word; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "a word every 4 frames from 2, the question mark 2 frames after its word; rule after the last"
+  },
+  "LIB_TXT_BULLET_TRIO": {
+   "sfx": "ui-pop",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 5,
+     "every": 8,
+     "count": 3,
+     "gain_db": -3
+    }
+   ],
+   "why": "pack D text (2026-10-01): a UI pop per bullet; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "bullets at 3, 11, 19 (pops 2 frames in)"
+  },
+  "LIB_TXT_WHAT_WE_KNOW": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 15,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start",
+     "gain_db": -7
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 15,
+     "every": 7,
+     "count": 3,
+     "gain_db": -3
+    }
+   ],
+   "why": "pack D text (2026-10-01): a soft whoosh on the entrance; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "title rises 2-11, rule 4-18, items at 13, 20, 27"
+  },
+  "LIB_TXT_MINI_TIMELINE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 2,
+     "align": "start",
+     "gain_db": -8
+    },
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 6,
+     "every": 6,
+     "count": 3,
+     "gain_db": -4
+    }
+   ],
+   "why": "pack D text (2026-10-01): a soft whoosh on the entrance; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "line draws 2-20, points land at 5, 11, 17"
+  },
+  "LIB_TXT_BEFORE_AFTER": {
+   "sfx": "swoosh-text",
+   "sfx_at": 11,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2",
+      "whoosh-soft"
+     ],
+     "at": 3,
+     "gain_db": -4
+    },
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2",
+      "whoosh-soft"
+     ],
+     "at": 10,
+     "gain_db": -5,
+     "pitch": 1.06
+    }
+   ],
+   "why": "pack D text (2026-10-01): a text swoosh on the entrance; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "BEFORE rises 2-11, AFTER 9-18, rules after each"
+  },
+  "LIB_TXT_UNDERLINE_SWEEP": {
+   "sfx": "swoosh-text",
+   "sfx_at": 14,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2",
+      "whoosh-soft"
+     ],
+     "at": 4,
+     "gain_db": -4
+    },
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker-draw",
+      "marker"
+     ],
+     "at": 14,
+     "align": "start",
+     "gain_db": -2
+    }
+   ],
+   "why": "pack D text (2026-10-01): a text swoosh on the entrance; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "lines rise 3-12 (8-17), sweep 2 frames after the last line lands (14 for one line)"
+  },
+  "LIB_TXT_KICKER_HEADLINE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 18,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start",
+     "gain_db": -7
+    },
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2",
+      "whoosh-soft"
+     ],
+     "at": 10,
+     "gain_db": -4
+    }
+   ],
+   "why": "pack D text (2026-10-01): a soft whoosh on the entrance; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "rule 0-9, kicker wipes 3-13, headline rises 9-18"
+  },
+  "LIB_TXT_CHAPTER_MINIMAL": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 16,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 0,
+     "align": "start",
+     "gain_db": -6
+    },
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2",
+      "whoosh-soft"
+     ],
+     "at": 8,
+     "gain_db": -5
+    }
+   ],
+   "why": "pack D text (2026-10-01): a soft whoosh on the entrance; never an impact, punch or hit; LibPackText schedules them on its real frames (useLookSound)",
+   "event": "rules draw 1-15, label 2-12, title rises 7-16"
+  },
+  "LIB_PLC_LOCATION_TAG": {
+   "sfx": "pin-drop",
+   "sfx_at": 8,
+   "sounds": [
+    {
+     "name": "pin-drop",
+     "alt": [
+      "ui-pop",
+      "pop"
+     ],
+     "at": 8,
+     "align": "peak"
+    },
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2"
+     ],
+     "at": 7,
+     "align": "start",
+     "gain_db": -9.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): the map pin lands with the pin-drop, the place slides out with a quiet swoosh; never an impact, punch or hit",
+   "event": "pin falls 0-8 (touches at 8, squash 8-14, ring 8-24), place slides 7-20"
+  },
+  "LIB_PLC_REGION_LABEL": {
+   "sfx": "swoosh-text",
+   "sfx_at": 4,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2"
+     ],
+     "at": 2,
+     "align": "start",
+     "gain_db": -4.0
+    },
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 16,
+     "align": "peak",
+     "gain_db": -6.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): a text swoosh as the region rises, a soft click as the divider sets and the area slides out",
+   "event": "region rises 2-14, divider grows 10-17, area slides 13-25"
+  },
+  "LIB_PLC_SECTION_MARKER": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 1,
+     "align": "start",
+     "gain_db": -3.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): a region change - one soft whoosh with the rule and the new region dropping in",
+   "event": "rule draws 2-16, NOW rises 1-11, region drops 6-19"
+  },
+  "LIB_PLC_ROUTE_LABEL": {
+   "sfx": "ui-click",
+   "sfx_at": 18,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swoosh-text"
+     ],
+     "at": 5,
+     "align": "start",
+     "gain_db": -6.0
+    },
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 18,
+     "align": "peak",
+     "gain_db": -3.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): a quick whoosh as the route slides out, a click as the status sets",
+   "event": "road draws 0-12, route slides 5-17, status rises 13-24 (in place ~18)"
+  },
+  "LIB_PLC_RIVER_GAUGE": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 2,
+     "align": "start",
+     "gain_db": -6.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): one soft whoosh as the waves flow in and the river rises",
+   "event": "waves reveal 0-14 (then flow), river rises 4-16, gauge 12-24"
+  },
+  "LIB_PLC_DISTANCE_LINE": {
+   "sfx": "ui-tick",
+   "sfx_at": 16,
+   "sounds": [
+    {
+     "name": "whoosh-fast",
+     "alt": [
+      "swoosh-text"
+     ],
+     "at": 2,
+     "align": "start",
+     "gain_db": -6.0
+    },
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 16,
+     "align": "peak",
+     "gain_db": -2.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): a quick whoosh as the scale bar measures out, a tick on its end mark",
+   "event": "bar draws 2-16 (dot rides to the end), end tick 15-20, figure rises 6-18, where-from 14-26"
+  },
+  "LIB_PLC_COORDINATES": {
+   "sfx": "ui-tick",
+   "sfx_at": 30,
+   "sounds": [
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 8,
+     "align": "peak",
+     "every": 3,
+     "count": 7,
+     "gain_db": -9.0
+    },
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 30,
+     "align": "peak",
+     "gain_db": -3.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): soft digital ticks while the digits decode, one tick as the last one locks",
+   "event": "crosshair turns 0-12, digits appear 4-14 and lock 10-30, place 18-30"
+  },
+  "LIB_PLC_SOURCE_CREDIT": {
+   "sfx": "ui-click",
+   "sfx_at": 6,
+   "sounds": [
+    {
+     "name": "ui-click",
+     "alt": [
+      "click"
+     ],
+     "at": 6,
+     "align": "peak",
+     "gain_db": -8.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): a tiny credit - one quiet click as the words part from the hairline",
+   "event": "hairline 1-7, words part 4-15"
+  },
+  "LIB_PLC_FOOTAGE_TAG": {
+   "sfx": "ui-pop",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 5,
+     "align": "peak",
+     "gain_db": -5.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): a soft pop as the mark appears, the type slides out silently",
+   "event": "mark pops 0-9 (full size ~5), type slides 4-15"
+  },
+  "LIB_PLC_WARNING_LABEL": {
+   "sfx": "ui-pop",
+   "sfx_at": 5,
+   "sounds": [
+    {
+     "name": "ui-pop",
+     "alt": [
+      "pop"
+     ],
+     "at": 5,
+     "align": "peak",
+     "gain_db": -4.0
+    },
+    {
+     "name": "marker-underline",
+     "alt": [
+      "marker-draw"
+     ],
+     "at": 10,
+     "align": "start",
+     "gain_db": -7.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): a soft pop on the alert mark, the underline sound as the amber rule draws; no siren, no hit",
+   "event": "mark pops 0-9, warning slides 5-17, rule draws 10-23, details 17-29"
+  },
+  "LIB_PLC_PLACE_TIME": {
+   "sfx": "ui-tick",
+   "sfx_at": 15,
+   "sounds": [
+    {
+     "name": "swoosh-text",
+     "alt": [
+      "whoosh-soft-v2"
+     ],
+     "at": 2,
+     "align": "start",
+     "gain_db": -6.0
+    },
+    {
+     "name": "ui-tick",
+     "alt": [
+      "tick"
+     ],
+     "at": 15,
+     "align": "peak",
+     "gain_db": -2.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): a text swoosh as the place rises, a digital tick as the time slides out",
+   "event": "place rises 2-14, divider 9-16, time slides 12-24, AM/PM 19-27"
+  },
+  "LIB_PLC_WHERE_LOWER": {
+   "sfx": "whoosh-soft-v2",
+   "sfx_at": 7,
+   "sounds": [
+    {
+     "name": "whoosh-soft-v2",
+     "alt": [
+      "whoosh-soft"
+     ],
+     "at": 3,
+     "align": "start",
+     "gain_db": -5.0
+    }
+   ],
+   "why": "pack C places (2026-10-01): one soft whoosh as the bar grows and the place slides out",
+   "event": "bar grows 0-12, place slides 4-17, county/state 10-23, shade 0-12"
+  },
+  "LIB_NUM_LOWER_THIRD": {
+   "sfx": "count-final",
+   "sfx_at": 32,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 32,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 32"
+  },
+  "LIB_NUM_PERCENT_LINE": {
+   "sfx": "count-final",
+   "sfx_at": 34,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 34,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 34"
+  },
+  "LIB_NUM_RAINFALL": {
+   "sfx": "count-final",
+   "sfx_at": 33,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 6,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 33,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 5 and land at 33"
+  },
+  "LIB_NUM_WIND_GAUGE": {
+   "sfx": "count-final",
+   "sfx_at": 34,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 34,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 34"
+  },
+  "LIB_NUM_BIG_FIGURE": {
+   "sfx": "count-final",
+   "sfx_at": 36,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 36,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 36"
+  },
+  "LIB_NUM_VERSUS": {
+   "sfx": "count-final",
+   "sfx_at": 38,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 28,
+     "gain_db": -3,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 38,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 38 (the first figure lands at 28)"
+  },
+  "LIB_NUM_TREND_ARROW": {
+   "sfx": "count-final",
+   "sfx_at": 34,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 34,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 34"
+  },
+  "LIB_NUM_RANK": {
+   "sfx": "count-final",
+   "sfx_at": 30,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 30,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 30"
+  },
+  "LIB_NUM_SPLIT_STAT": {
+   "sfx": "count-final",
+   "sfx_at": 36,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 28,
+     "gain_db": -3,
+     "when": "value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 36,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 36 (the first figure lands at 28)"
+  },
+  "LIB_NUM_WATER_LEVEL": {
+   "sfx": "count-final",
+   "sfx_at": 34,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 34,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 34"
+  },
+  "LIB_NUM_TEMPERATURE": {
+   "sfx": "count-final",
+   "sfx_at": 34,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 34,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 34"
+  },
+  "LIB_NUM_MONEY": {
+   "sfx": "count-final",
+   "sfx_at": 34,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 5,
+     "every": 2,
+     "count": 12,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 34,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 4 and land at 34"
+  },
+  "LIB_NUM_STEP_OF": {
+   "sfx": "count-final",
+   "sfx_at": 28,
+   "sounds": [
+    {
+     "name": "ui-tick",
+     "alt": [
+      "letter-tick",
+      "tick"
+     ],
+     "at": 10,
+     "every": 7,
+     "count": 3,
+     "gain_db": -7,
+     "when": "value"
+    },
+    {
+     "name": "letter-tick",
+     "alt": [
+      "ui-tick",
+      "tick"
+     ],
+     "at": 7,
+     "every": 2,
+     "count": 8,
+     "gain_db": -7,
+     "when": "no-value"
+    },
+    {
+     "name": "count-final",
+     "alt": [
+      "ui-click",
+      "tick"
+     ],
+     "at": 28,
+     "gain_db": -3,
+     "when": "value"
+    }
+   ],
+   "why": "Pack B (numbers, 2026-10-01): a soft ui-tick per digit change (one per 2 frames at most, rising) and a soft count-final click on the landing, never an impact; the component schedules them from its frames (useLookSound, sound_timing look)",
+   "event": "digits roll from frame 8 and land at 28"
   }
  }
 }

@@ -27,7 +27,8 @@ from src.media import MediaAsset
 from src.transcribe import Segment, Word
 
 FPS = 30
-BOLD = set(treatments.BOLD_DATE_LOOKS)
+# The letter drop and the placed date looks of pack A (2026-10-01) are all bold text.
+BOLD = set(treatments.BOLD_DATE_LOOKS) | treatments.DATE_TEXT_LOOKS
 NOT_A_DATE_LOOK = {"LIB_DT_CALENDAR_PAGE", "LIB_DT_REC_STAMP", "LIB_DT_COUNTDOWN_DAYS", "TL_DATE_STAMP_V1",
                    "LIB_DT_TIMELINE_TICK", "LIB_DT_STAMP_BAR"}
 AT_16 = {5: 0.891, 7: 0.708, 9: 0.562, 10: 0.501}      # 10 ** ((-16 - dB + 20) / 20)
@@ -283,7 +284,8 @@ class Dates(unittest.TestCase):
                              "Over the next 48 hours, more storms are expected."])
         # The countdown card is banned (boxed, 2026-09-30 audit): the bold count counts the span.
         self.assertEqual(treatments.span_look(), treatments.BOLD_COUNT_LOOK)
-        downs = [o for o in out["overlays"] if o["template"] == treatments.span_look()]
+        # A span ahead ("over the next 48 hours") takes the lead-time look of pack A.
+        downs = [o for o in out["overlays"] if o["template"] in (treatments.span_look(), "LIB_DTX_LEAD_TIME")]
         self.assertEqual([(o["text"], o["value"]) for o in downs], [("3 DAYS LATER", 3.0), ("48 HOURS", 48.0)])
         # Never a big number for the span as well.
         self.assertEqual([o for o in out["overlays"] if o.get("value") in (3.0, 48.0)], downs)
@@ -294,7 +296,7 @@ class Dates(unittest.TestCase):
         # The owner (2026-09-30): the date or time as bold text only - the letter drop.
         _s, _sc, out = plan(["The call came in at 3:45 pm.", "Plain words follow here."])
         [o] = [o for o in out["overlays"] if cues_of(o) & {"time-of-day", "datetime", "date"}]
-        self.assertEqual(o["template"], treatments.TEXT_DATE_LOOK)
+        self.assertIn(o["template"], BOLD)
         self.assertIn("time-of-day", cues_of(o))
         self.assertEqual(o["text"], "3:45 PM")
 

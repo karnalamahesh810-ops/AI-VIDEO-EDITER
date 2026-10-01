@@ -355,11 +355,15 @@ class Planner(unittest.TestCase):
             dated = [o for o in out["overlays"]
                      if set(templates.cues_of(templates.get(o["template"]))) & set(treatments.DATE_CUES)]
             self.assertEqual(len(dated), 4, (pack, [o["template"] for o in out["overlays"]]))
-            self.assertEqual({o["template"] for o in dated}, {treatments.TEXT_DATE_LOOK}, pack)
-            # The lower third at the safe margin, left and right in turn - never mid-frame (2026-10-01).
-            self.assertEqual([o["align"] for o in dated], ["left", "right", "left", "right"], pack)
+            # Bold text only: the letter drop in turn with the placed date looks of
+            # pack A (2026-10-01: "time on the top left, dates in the middle top...").
+            self.assertTrue({o["template"] for o in dated} <= treatments.DATE_TEXT_LOOKS, pack)
+            self.assertGreaterEqual(len({o["template"] for o in dated}), 2, pack)
+            drops = [o for o in dated if o["template"] == treatments.TEXT_DATE_LOOK]
+            # The letter drop sits in the lower third at the safe margin - never mid-frame.
+            self.assertTrue(drops and all(o["align"] in ("left", "right") for o in drops), pack)
             # Lettered in turn: no two dates in a row look the same.
-            styles = [o["textStyle"] for o in dated]
+            styles = [o["textStyle"] for o in drops]
             self.assertTrue(set(styles) <= set(treatments.TEXT_LOOK_STYLES), styles)
             self.assertTrue(all(a != b for a, b in zip(styles, styles[1:])), styles)
 
@@ -368,8 +372,9 @@ class Planner(unittest.TestCase):
         shots = [{"subject": "Lake Mead"}, {"subject": "x"}, {"subject": "x"}, {"subject": "x"},
                  {"subject": "residents", "subjectType": "person"}]
         out = _plan(lines, shots=shots)
-        self.assertEqual([o["align"] for o in out["overlays"] if o["template"] == treatments.TEXT_DATE_LOOK],
-                         ["left", "right", "left"])
+        aligns = [o.get("align") for o in out["overlays"] if o["template"] in treatments.DATE_TEXT_LOOKS]
+        self.assertEqual(len(aligns), 3)
+        self.assertNotIn("center", aligns)
 
     def test_a_number_leads_with_the_bold_count(self):
         lines = ["Lake Mead is now at 26 percent.", PLAIN, "Some 12,000 people lost power.", PLAIN,

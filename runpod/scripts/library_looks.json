@@ -11154,5 +11154,2279 @@
   "family": "bt",
   "file": "LibBoldText",
   "exit": "none"
+ },
+ {
+  "id": "txt-key-phrase",
+  "name": "Key Phrase Lower Third",
+  "category": "TEXT",
+  "description": "A key phrase low at the side on up to two lines: a thin amber rule grows beside it, the lines rise out of a clean mask one after the other with a small settle and the key word (highlight, else the longest) warms to amber; a small tracked line under it. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A text swoosh on the entrance; the lines drop back into the mask over the last 11 frames.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "subtitle",
+   "label",
+   "align"
+  ],
+  "cues": [
+   "key-phrase",
+   "caption",
+   "fact"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 12,
+  "types": false,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 4,
+    "gain_db": -4
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "The water simply stopped arriving",
+   "highlight": "stopped",
+   "subtitle": "Lake Mead, Nevada"
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-quote-line",
+  "name": "Quote Line",
+  "category": "QUOTES",
+  "description": "A spoken quote on up to two lines under a large faint amber quote mark, no box: the mark fades up, the lines rise out of a clean mask, then the speaker (label) and role (subtitle) follow a short amber rule in small tracked caps. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A soft paper slide as it comes in.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight",
+   "align"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 15,
+  "types": false,
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide"
+    ],
+    "at": 6,
+    "gain_db": -3
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "We are now in uncharted territory",
+   "label": "Pat Mulroy",
+   "subtitle": "Former head, SNWA"
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-headline-words",
+  "name": "Headline Word by Word",
+  "category": "HEADLINES",
+  "description": "A headline revealed word by word: each word rises out of a clean mask with a small settle and a soft letter tick, the key word (highlight, else the longest) in amber, then a short amber rule draws under it. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. The words drop back into the mask over the last 11 frames.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "headline",
+   "statement"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 30,
+  "types": false,
+  "sounds": [
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 4,
+    "count": 6,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "The largest reservoir in America is disappearing",
+   "highlight": "disappearing"
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-breaking-tag",
+  "name": "Breaking Tag",
+  "category": "HEADLINES",
+  "description": "A minimal news tag: BREAKING (or the label) wipes in in amber tracked caps and a thin amber rule draws out beside it - no red box - then the headline rises under it out of a clean mask. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A soft whoosh with the rule and a text swoosh on the headline.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "highlight",
+   "align"
+  ],
+  "cues": [
+   "headline",
+   "event"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 18,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 0,
+    "align": "start",
+    "gain_db": -7
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 10,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Federal water cuts take effect",
+   "label": "BREAKING"
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-question",
+  "name": "Question Line",
+  "category": "TEXT",
+  "description": "The narration's question (SO WHY IS THIS HAPPENING?) word by word in the lower third, each word rising out of a clean mask with a soft letter tick, the question mark in amber, a short amber rule under it once it has landed. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. Centred by default; left or right by Placement.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "align"
+  ],
+  "cues": [
+   "question"
+  ],
+  "duration": 3.5,
+  "sfx": "none",
+  "sfx_at": 27,
+  "types": false,
+  "sounds": [
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 4,
+    "count": 5,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "So why is this happening?"
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-bullet-trio",
+  "name": "Bullet Trio",
+  "category": "CALLOUTS",
+  "description": "Three short lines, staggered: an amber dot pops in, then its line rises out of a clean mask beside it, a soft UI pop per bullet. Items from the list, else the text cut at bars, semicolons or commas. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks to fit. One size for the three lines.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "text",
+   "align"
+  ],
+  "cues": [
+   "list",
+   "summary"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 5,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop"
+    ],
+    "at": 5,
+    "every": 8,
+    "count": 3,
+    "gain_db": -3
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "items": [
+    {
+     "label": "Lower lake levels"
+    },
+    {
+     "label": "Higher water bills"
+    },
+    {
+     "label": "Fewer crops planted"
+    }
+   ]
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-what-we-know",
+  "name": "What We Know",
+  "category": "CALLOUTS",
+  "description": "A WHAT WE KNOW list (or the label): the title rises over a thin amber rule, then three numbered items come up one by one in small tracked caps, an amber 01 / 02 / 03 before each and a soft UI pop each. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks to fit. Items from the list, else the text cut at bars or semicolons.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "text",
+   "label",
+   "align"
+  ],
+  "cues": [
+   "list",
+   "summary"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 15,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 0,
+    "align": "start",
+    "gain_db": -7
+   },
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop"
+    ],
+    "at": 15,
+    "every": 7,
+    "count": 3,
+    "gain_db": -3
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "label": "What we know",
+   "items": [
+    {
+     "label": "The intake was shut at 6 AM"
+    },
+    {
+     "label": "Two towns lost pressure"
+    },
+    {
+     "label": "Repairs will take 3 weeks"
+    }
+   ]
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-mini-timeline",
+  "name": "Mini Timeline Row",
+  "category": "TIMELINES",
+  "description": "Three points on one thin line, text only: the line draws left to right and as it reaches each point a small dot pops, the date rises above it (the last in amber) and what happened fades up under it in small tracked caps. Items (label = when, text = what), else the text cut at bars, each led by its date. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks to fit. Two to four points.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "text",
+   "align"
+  ],
+  "cues": [
+   "sequence",
+   "steps"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 6,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 2,
+    "align": "start",
+    "gain_db": -8
+   },
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop"
+    ],
+    "at": 6,
+    "every": 6,
+    "count": 3,
+    "gain_db": -4
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "items": [
+    {
+     "label": "1935",
+     "text": "Hoover Dam completed"
+    },
+    {
+     "label": "1983",
+     "text": "Spillways overflow"
+    },
+    {
+     "label": "2022",
+     "text": "Record low"
+    }
+   ]
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-before-after",
+  "name": "Before / After Labels",
+  "category": "COMPARISONS",
+  "description": "BEFORE over the left half and AFTER over the right half of a split (top and bottom on a vertical video), at the 96 px safe margin: each word rises out of a clean mask over its thin rule (white, then amber), a date or note small under it. Labels from the items, else the text cut at a bar; notes from the items or the subtitle (2019 | 2026). Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks to fit. A text swoosh for each.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "contrast"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 11,
+  "types": false,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -4
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 10,
+    "gain_db": -5,
+    "pitch": 1.06
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "items": [
+    {
+     "label": "Before",
+     "text": "2019"
+    },
+    {
+     "label": "After",
+     "text": "2026"
+    }
+   ]
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-underline-sweep",
+  "name": "Underline Sweep",
+  "category": "TEXT",
+  "description": "A phrase on up to two lines rises out of a clean mask, then an amber underline sweeps under its key words (highlight, else the longest) in reading order and they turn amber as it passes; the underline pulls back before the words drop out. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A text swoosh on the entrance, the marker underline on the sweep.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "align"
+  ],
+  "cues": [
+   "key-phrase",
+   "fact",
+   "statement"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 14,
+  "types": false,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 4,
+    "gain_db": -4
+   },
+   {
+    "name": "marker-underline",
+    "alt": [
+     "marker-draw",
+     "marker"
+    ],
+    "at": 14,
+    "align": "start",
+    "gain_db": -2
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Lake Mead supplies water to 25 million people",
+   "highlight": "25 million people"
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-kicker-headline",
+  "name": "Kicker + Headline",
+  "category": "HEADLINES",
+  "description": "A small kicker in tracked caps (label; else the words before a colon) wipes in after a short amber rule, then the headline rises under it out of a clean mask, the key word in amber. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A soft whoosh with the kicker, a text swoosh on the headline.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight",
+   "align"
+  ],
+  "cues": [
+   "headline",
+   "key-phrase"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 18,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 0,
+    "align": "start",
+    "gain_db": -7
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 10,
+    "gain_db": -4
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "label": "The investigation",
+   "text": "Where did all the water go",
+   "highlight": "water"
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "txt-chapter-minimal",
+  "name": "Minimal Chapter Title",
+  "category": "HEADLINES",
+  "description": "A minimal chapter title in the middle of the frame: small amber caps (label, else CHAPTER and the value in words) between two thin rules drawing outward, the title rising under them out of a clean mask, an optional small line under it. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A soft whoosh with the rules, a text swoosh on the title.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "value"
+  ],
+  "cues": [
+   "chapter"
+  ],
+  "duration": 3.5,
+  "sfx": "none",
+  "sfx_at": 16,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 0,
+    "align": "start",
+    "gain_db": -6
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 8,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "label": "Chapter two",
+   "text": "The river runs dry",
+   "subtitle": "2000 - 2026"
+  },
+  "family": "txt",
+  "file": "LibPackText",
+  "exit": "none"
+ },
+ {
+  "id": "plc-location-tag",
+  "name": "Location Tag (Pin)",
+  "category": "LOWER_THIRDS",
+  "description": "Top left at the 96 px safe margin: a small amber map pin falls onto the line, squashes a little and a ring spreads once from its tip; the place in clean white Anton caps (~40 px tall at 1080p, soft dark shadow, no box) slides out from behind the pin, an optional small line in tracked caps under it. Reads 'ATLANTIC CITY, NJ'. Pin-drop sound on the landing.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "place",
+   "location"
+  ],
+  "duration": 4.0,
+  "sfx": "pin-drop",
+  "sfx_at": 8,
+  "types": false,
+  "sample": {
+   "text": "Atlantic City, NJ",
+   "subtitle": "The boardwalk"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-region-label",
+  "name": "Region Label",
+  "category": "LOWER_THIRDS",
+  "description": "Lower left, a quarter up (clear of the captions): the region in clean Anton caps (~46 px) rises out of a mask, a thin amber divider grows beside it and the area slides out from behind it in small tracked caps, all on one line ('NORTH CAROLINA | OUTER BANKS'); a long pair stacks with a short amber rule. Soft shadow only, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "region",
+   "region-change",
+   "place"
+  ],
+  "duration": 4.0,
+  "sfx": "swoosh-text",
+  "sfx_at": 4,
+  "types": false,
+  "sample": {
+   "text": "North Carolina · Outer Banks"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-section-marker",
+  "name": "Section Marker (Now)",
+  "category": "LOWER_THIRDS",
+  "description": "A region change: 'NOW' small in amber caps on a thin amber rule that draws out, the new region in clean Anton caps (~52 px) drops out from under the rule with a small settle; lower left, a quarter up. Reads 'NOW: NEW JERSEY', 'BACK TO FLORIDA', 'MEANWHILE · TEXAS'.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "region-change",
+   "section"
+  ],
+  "duration": 3.5,
+  "sfx": "whoosh-soft-v2",
+  "sfx_at": 5,
+  "types": false,
+  "sample": {
+   "text": "Now: New Jersey"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-route-label",
+  "name": "Route Label (Road Status)",
+  "category": "LOWER_THIRDS",
+  "description": "A small road in perspective draws up (its amber centre dashes running), the route in clean Anton caps (~46 px) slides out beside it and its status rises in amber: 'NC-12 CLOSED', 'I-95 SOUTHBOUND FLOODED'; the place small under it. Lower left, no shield box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "route",
+   "road",
+   "road-closure"
+  ],
+  "duration": 4.0,
+  "sfx": "ui-click",
+  "sfx_at": 18,
+  "types": false,
+  "sample": {
+   "text": "NC-12 closed",
+   "subtitle": "Hatteras Island"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-river-gauge",
+  "name": "River Gauge Label",
+  "category": "LOWER_THIRDS",
+  "description": "Three short waves (the top one amber) flow in from the left, the river in clean Anton caps (~46 px) rises out of a mask, the gauge in small tracked caps under it with a reading in amber from value and unit: 'HUDSON RIVER' over 'SANDY HOOK · 8.4 FT'. Lower left.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "value",
+   "suffix",
+   "align"
+  ],
+  "cues": [
+   "river",
+   "gauge",
+   "place"
+  ],
+  "duration": 4.0,
+  "sfx": "whoosh-soft-v2",
+  "sfx_at": 6,
+  "types": false,
+  "sample": {
+   "text": "Hudson River · Sandy Hook",
+   "value": 8.4,
+   "suffix": "FT"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-distance-line",
+  "name": "Distance Line",
+  "category": "LOWER_THIRDS",
+  "description": "A distance as said: the figure in clean Anton caps (~50 px) rises over a thin scale bar that measures itself out (an amber dot riding to its end tick), where from in small tracked caps under it: '31 MILES' / 'NORTH OF DALLAS'. Spoken numbers in digits; value and unit when given. Lower left.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "value",
+   "suffix",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "distance",
+   "place"
+  ],
+  "duration": 4.0,
+  "sfx": "ui-tick",
+  "sfx_at": 16,
+  "types": false,
+  "sample": {
+   "text": "31 miles north of Dallas"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-coordinates",
+  "name": "Coordinates Tag",
+  "category": "LOWER_THIRDS",
+  "description": "Small mono coordinates: a thin crosshair turns in, the latitude and longitude decode digit by digit with soft digital ticks and lock by frame 30, the place in small amber caps under them. From the overlay's place (gazetteer) or read off the text ('39.36 N 74.42 W'); lower left.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "locations",
+   "align"
+  ],
+  "cues": [
+   "coordinates",
+   "location",
+   "place"
+  ],
+  "duration": 4.0,
+  "sfx": "ui-tick",
+  "sfx_at": 30,
+  "types": false,
+  "sample": {
+   "text": "Atlantic City, NJ",
+   "locations": [
+    {
+     "label": "Atlantic City",
+     "lat": 39.3643,
+     "lon": -74.4229,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-source-credit",
+  "name": "Source Credit",
+  "category": "LOWER_THIRDS",
+  "description": "Tiny, bottom right at the safe margin: the source word in amber and the name in white tracked caps part from a hairline divider: 'VIDEO | @STORMCHASER', 'VIA | STORM CHASER', 'COURTESY | NWS'. Holds quietly and slides back into the hairline.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "align"
+  ],
+  "cues": [
+   "source",
+   "credit"
+  ],
+  "duration": 4.5,
+  "sfx": "ui-click",
+  "sfx_at": 6,
+  "types": false,
+  "sample": {
+   "text": "Video: @stormchaserjoe"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-footage-tag",
+  "name": "Footage Tag",
+  "category": "LOWER_THIRDS",
+  "description": "Minimal, top right: a small mark pops (a viewfinder for drone or camera views, a pulsing amber dot for LIVE, an amber dot for archive film) and the footage type slides out in tracked caps as its spacing closes, a year in amber: 'DRONE VIEW', 'LIVE CAM', 'ARCHIVE 2012'.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "footage-tag",
+   "archive",
+   "live"
+  ],
+  "duration": 4.0,
+  "sfx": "ui-pop",
+  "sfx_at": 5,
+  "types": false,
+  "sample": {
+   "text": "Drone view"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-warning-label",
+  "name": "Warning Label",
+  "category": "LOWER_THIRDS",
+  "description": "A small amber alert mark pops, the warning in clean Anton caps (~46 px) slides out beside it with the alert word in amber ('FLOOD WARNING'), a thin amber rule draws under it and the details follow in small caps ('UNTIL 8 PM · ATLANTIC COUNTY'). No red box. Lower left.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "align"
+  ],
+  "cues": [
+   "warning",
+   "alert"
+  ],
+  "duration": 4.0,
+  "sfx": "ui-pop",
+  "sfx_at": 5,
+  "types": false,
+  "sample": {
+   "text": "Flood warning",
+   "subtitle": "Until 8 PM · Atlantic County"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-place-time",
+  "name": "Place and Time",
+  "category": "LOWER_THIRDS",
+  "description": "Top left: the place in clean Anton caps (~40 px) rises out of a mask, a thin amber divider grows, the local time slides out beside it with AM / PM small in amber: 'ATLANTIC CITY | 6:40 AM'. A day or note small under it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "place-time",
+   "place",
+   "location"
+  ],
+  "duration": 4.0,
+  "sfx": "ui-tick",
+  "sfx_at": 15,
+  "types": false,
+  "sample": {
+   "text": "Atlantic City · 6:40 AM"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "plc-where-lower",
+  "name": "Where Lower Third",
+  "category": "LOWER_THIRDS",
+  "description": "The WHERE lower third: a thin amber bar grows down the left edge, the place in clean Anton caps (~54 px) slides out from behind it, the county and state follow in small tracked caps, over a soft feathered shade (no box, no band). Lower left, a quarter up.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "place",
+   "location",
+   "where"
+  ],
+  "duration": 4.5,
+  "sfx": "whoosh-soft-v2",
+  "sfx_at": 7,
+  "types": false,
+  "sample": {
+   "text": "Long Beach Island",
+   "subtitle": "Ocean County, New Jersey"
+  },
+  "family": "plc",
+  "file": "LibPackPlaces",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-time-stamp",
+  "name": "Time Stamp (Top Left)",
+  "category": "TIMELINES",
+  "description": "A clock time as a clean stamp in the top-left corner at the 96 px safe margin: a thin amber tick draws down, the figures ('3:45', '8:00') rise out of a mask 2 frames apart with a small settle, AM/PM (amber) and the zone stacked small beside them, the weekday or place in small tracked caps under it. White Anton (cap ~54 px at 1080p) with a soft dark shadow and a feathered shade, no box. Soft letter ticks as the figures land; out over the last 11 frames.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "time-of-day",
+   "datetime"
+  ],
+  "duration": 3.5,
+  "sfx": "letter-tick",
+  "sfx_at": 8,
+  "types": false,
+  "sample": {
+   "text": "3:45 PM ET",
+   "label": "SATURDAY"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-date-top",
+  "name": "Date (Top Center)",
+  "category": "TIMELINES",
+  "description": "The date centred at the top: 'SEPTEMBER 26' rises out of a mask from the middle out, the day in amber, a short amber hairline draws under it and the weekday and year come in small and tracked. Clean Anton caps (cap ~52 px at 1080p), a soft dark shadow and a feathered shade, no box. A soft text swoosh and letter ticks as the pairs land.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "value"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 3.5,
+  "sfx": "swoosh-text",
+  "sfx_at": 4,
+  "types": false,
+  "sample": {
+   "text": "SEPTEMBER 26, 2026",
+   "label": "SATURDAY"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-date-place",
+  "name": "Dateline (Bottom Left)",
+  "category": "TIMELINES",
+  "description": "A dateline in the bottom-left corner: 'SATURDAY • ATLANTIC CITY' as one clean Anton line (cap ~44 px at 1080p) rising letter by letter, an amber dot between the day and the place, the full date small under it. Reads 'day · place' text, or a date with the place in Label / Subtitle. Soft shadow, feathered shade, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 4.0,
+  "sfx": "swoosh-text",
+  "sfx_at": 5,
+  "types": false,
+  "sample": {
+   "text": "SATURDAY, SEPTEMBER 26, 2026 · ATLANTIC CITY"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-date-range",
+  "name": "Date Range (Arrow)",
+  "category": "TIMELINES",
+  "description": "A span of dates low on the left: the first end rises ('SEP 26'), an amber arrow draws across, the second end rises after it ('SEP 28'); the length ('3 DAYS') and the year small under it. Reads month-day, weekday, year and clock ranges ('Monday through Wednesday', '1983 to 2026', '3 PM - 5 PM'). Clean Anton caps, soft shadow, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 4.0,
+  "sfx": "swoosh-text",
+  "sfx_at": 4,
+  "types": false,
+  "sample": {
+   "text": "SEPT 26 TO SEPT 28, 2026"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-day-marker",
+  "name": "Day Marker (Top Right)",
+  "category": "TIMELINES",
+  "description": "'DAY 3' in the top-right corner: the word rises letter by letter and the figure rolls up to its value in amber like an odometer; what it counts ('OF THE SEARCH') small under it. Reads 'day three', 'the third day', 'WEEK 2'; Value sets the figure. Clean Anton caps, soft shadow, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "value",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 3.5,
+  "sfx": "ui-tick",
+  "sfx_at": 23,
+  "types": false,
+  "sample": {
+   "text": "DAY 3",
+   "label": "OF THE SEARCH"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-time-of-day",
+  "name": "Time of Day (Lower Left)",
+  "category": "TIMELINES",
+  "description": "When it happens, low on the left: 'TONIGHT 8 PM', 'TOMORROW MORNING' in clean Anton caps rising letter by letter; the time (or the part of the day) lands white and warms to amber; a place or weekday small under it. Soft shadow, feathered shade, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "time-of-day"
+  ],
+  "duration": 3.5,
+  "sfx": "swoosh-text",
+  "sfx_at": 5,
+  "types": false,
+  "sample": {
+   "text": "TONIGHT 8 PM",
+   "subtitle": "ATLANTIC CITY"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-lead-time",
+  "name": "Lead Time (Next 72 Hours)",
+  "category": "TIMELINES",
+  "description": "A lead time low on the right: 'NEXT' small and tracked, the figure counting up in amber in equal digit cells with its unit beside it ('72 HOURS'), a hairline under it filling with amber like a time window; what follows ('UNTIL LANDFALL') small under it. Reads 'in 48 hours', 'over the next seventy-two hours', 'within 3 days'. Clean Anton caps, soft shadow, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "value",
+   "suffix",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "time-of-day"
+  ],
+  "duration": 4.0,
+  "sfx": "ui-tick",
+  "sfx_at": 24,
+  "types": false,
+  "sample": {
+   "text": "NEXT 72 HOURS",
+   "subtitle": "UNTIL LANDFALL"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-updated-stamp",
+  "name": "Updated Stamp (Top Left)",
+  "category": "TIMELINES",
+  "description": "A small stamp in the top-left corner: an amber dot, 'UPDATED' in small tracked caps and the time in Anton ('6:00') with AM (amber) and the zone beside it. Reads 'AS OF 9:30 PM ET', 'ISSUED SEPT 26'. Soft shadow, a light feathered shade, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "time-of-day",
+   "datetime"
+  ],
+  "duration": 3.0,
+  "sfx": "ui-click",
+  "sfx_at": 3,
+  "types": false,
+  "sample": {
+   "text": "UPDATED 6:00 AM ET"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-week-strip",
+  "name": "Week Strip",
+  "category": "TIMELINES",
+  "description": "A minimal week, low in the centre: the date in clean Anton over MON TUE WED THU FRI SAT SUN in small tracked caps fading in one by one; an amber underline slides along to the day, which warms to amber. Text only, no box; soft shadow and a feathered shade.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "value"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 4.0,
+  "sfx": "ui-tick",
+  "sfx_at": 38,
+  "types": false,
+  "sample": {
+   "text": "SATURDAY, SEPTEMBER 26"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-weekday-stack",
+  "name": "Weekday Over Date (Bottom Right)",
+  "category": "TIMELINES",
+  "description": "The weekday small in amber tracked caps over the date in clean Anton ('SATURDAY' / 'SEPTEMBER 26') in the bottom-right corner, the year or place small under it; the weekday fades in as its tracking settles, the date rises letter by letter. Soft shadow, feathered shade, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "value"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 3.5,
+  "sfx": "swoosh-text",
+  "sfx_at": 4,
+  "types": false,
+  "sample": {
+   "text": "SEPTEMBER 26, 2026",
+   "label": "SATURDAY"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-year-marker",
+  "name": "Year Marker (History)",
+  "category": "TIMELINES",
+  "description": "A year for a moment in history, low on the left: '1937' in clean Anton (cap ~62 px at 1080p) rises digit by digit, an amber line runs out from it to a small node, the day and the place small under it. Reads 'May 6, 1937', 'the 1930s'. Soft shadow, feathered shade, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "value",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 3.5,
+  "sfx": "letter-tick",
+  "sfx_at": 7,
+  "types": false,
+  "sample": {
+   "text": "MAY 6, 1937",
+   "subtitle": "LAKEHURST, NEW JERSEY"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-relative-tag",
+  "name": "Relative Time Tag",
+  "category": "TIMELINES",
+  "description": "When it happened, said plainly, in the top-left corner: an amber dash draws and 'LAST NIGHT' / 'THIS MORNING' rises letter by letter in clean Anton; the time or place small under it. Picks the phrase out of a longer line. Soft shadow, feathered shade, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "time-of-day",
+   "date"
+  ],
+  "duration": 3.0,
+  "sfx": "swoosh-text",
+  "sfx_at": 7,
+  "types": false,
+  "sample": {
+   "text": "LAST NIGHT",
+   "subtitle": "ATLANTIC CITY"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "dtx-clock-live",
+  "name": "Live Clock (Top Right)",
+  "category": "TIMELINES",
+  "description": "A clock time in the top-right corner with a tiny pulsing red live dot (no box): the figures rise out of a mask, AM/PM (amber) and the zone stacked small beside them, the colon breathing once a second; the place small under it. Clean Anton caps, soft shadow, feathered shade.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "time-of-day"
+  ],
+  "duration": 3.5,
+  "sfx": "ui-pop",
+  "sfx_at": 3,
+  "types": false,
+  "sample": {
+   "text": "3:45 PM ET",
+   "subtitle": "ATLANTIC CITY"
+  },
+  "family": "dtx",
+  "file": "LibPackDates",
+  "exit": "none"
+ },
+ {
+  "id": "num-lower-third",
+  "name": "Lower-Third Count",
+  "category": "NUMBERS",
+  "description": "The figure in the lower third with what it counts beside it on its baseline (one or two lines of tracked caps), a small amber kicker over it (subtitle or label) and a hairline under it drawing out from an amber lead. The digits roll like an odometer and land at frame 32. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "label",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "big-number",
+   "count"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 32,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 32,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 90000,
+   "text": "CUSTOMERS WITHOUT POWER",
+   "subtitle": "POWER OUTAGES"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-percent-line",
+  "name": "Percent Line",
+  "category": "NUMBERS",
+  "description": "A percent counting up (caps 60 px) over a thin track whose amber fill runs to the share in step with the count, a bright head on its end and quarter ticks; what it is a share of in tracked caps under it. Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "percent"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 34,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 34,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "text": "OF LAKE MEAD LEFT"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-rainfall",
+  "name": "Rainfall Total",
+  "category": "NUMBERS",
+  "description": "A rainfall total: a small vector cloud with drops falling from it beside the figure, INCHES (and OF RAIN) in tracked caps beside the digits, where or when under it. For lines about rain (the planner's _LOOK_NEEDS). Lands at frame 33. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "measurement"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 33,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 6,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 33,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 4.5,
+   "suffix": "IN",
+   "text": "OF RAIN",
+   "subtitle": "IN 24 HOURS"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-wind-gauge",
+  "name": "Wind Gauge",
+  "category": "NUMBERS",
+  "description": "A wind speed beside a minimal dial: a 240-degree track, an amber arc and a white needle sweeping to the speed on a round scale (a small flutter once it lands), MPH over GUSTS in tracked caps beside the figure. For lines about wind (the planner's _LOOK_NEEDS). Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "measurement",
+   "big-number"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 34,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 34,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 60,
+   "suffix": "MPH",
+   "text": "WIND GUSTS",
+   "subtitle": "ALONG THE COAST"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-big-figure",
+  "name": "Big Figure",
+  "category": "NUMBERS",
+  "description": "One large figure (caps 72 px) rolling into place, what it counts under it in tracked caps with its last word in amber ('WITHOUT POWER'), a subtitle smaller under that. Lands at frame 36. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "big-number",
+   "count"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 36,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 36,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 90000,
+   "text": "PEOPLE WITHOUT POWER"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-versus",
+  "name": "Two Figures",
+  "category": "NUMBERS",
+  "description": "Two figures compared side by side ('22%  VS  45%'): the first white, the second amber, a small amber VS between them, each figure's label (a year, then / now) under it and what they measure under both. From the first two items with values, else the first two numbers in the words; one number draws the big figure. The first lands at 28, the second at 38. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "suffix",
+   "label",
+   "align"
+  ],
+  "cues": [
+   "then-now"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 38,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 28,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 38,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "items": [
+    {
+     "label": "2020",
+     "value": 22,
+     "suffix": "%"
+    },
+    {
+     "label": "2026",
+     "value": 45,
+     "suffix": "%"
+    }
+   ],
+   "text": "OF HOMES INSURED"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-trend-arrow",
+  "name": "Trend Arrow",
+  "category": "NUMBERS",
+  "description": "A figure with a small amber arrow beside it rising into place (pointing down for the planner's label 'down', a negative value or 'fell / dropped / declined' in the words) and nudging once as the digits land, what changed under it. Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text",
+   "label",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "change"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 34,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 34,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 37,
+   "suffix": "%",
+   "text": "RISE IN CLAIMS SINCE 2020",
+   "label": "up"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-rank",
+  "name": "Rank",
+  "category": "NUMBERS",
+  "description": "A rank: '#' small and amber at the cap top, the place rolling down from the 9s to it ('#1'), an amber hairline and what it ranks beside it in one or two lines of tracked caps. The rank from value or the words ('#1', 'No. 1', 'number one', 'first', '3rd'). Lands at frame 30. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "rank"
+  ],
+  "duration": 3.5,
+  "sfx": "none",
+  "sfx_at": 30,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 30,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 1,
+   "text": "MOST EXPENSIVE STORM IN TEXAS HISTORY"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-split-stat",
+  "name": "Split Stat",
+  "category": "NUMBERS",
+  "description": "Two or three figures with their words on one line ('3 DEAD · 12 MISSING'), parted by amber dots, each rolling in turn (8 frames apart) and its word arriving as it lands, the later words in amber; where or when under them. From items with values, else every 'N WORD' in the words. The first lands at 28, the second at 36. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "value",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "count"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 36,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 28,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 36,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "3 DEAD, 12 MISSING",
+   "subtitle": "KERR COUNTY, TEXAS"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-water-level",
+  "name": "Water Level",
+  "category": "NUMBERS",
+  "description": "A river or lake level ('8.9 FT') beside a slim staff gauge: a scale with ticks, the water rising to the level with a gentle moving line, and a dashed amber flood-stage mark when a flood stage is said ('flood stage 7 ft' in the words or subtitle, or total with 'flood' said), named in amber in the line under the figure. For lines about rivers, lakes and floods (the planner's _LOOK_NEEDS). Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "total",
+   "align"
+  ],
+  "cues": [
+   "measurement"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 34,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 34,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 8.9,
+   "suffix": "FT",
+   "text": "CEDAR RIVER",
+   "subtitle": "FLOOD STAGE 7 FT"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-temperature",
+  "name": "Temperature",
+  "category": "NUMBERS",
+  "description": "A temperature ('102°F', the degree sign and scale small at the cap top) beside a slim thermometer whose column rises with the count - amber when hot, ice when freezing, white between; what and where under it. For lines about heat and cold (the planner's _LOOK_NEEDS). Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "big-number",
+   "measurement"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 34,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 34,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 102,
+   "suffix": "°F",
+   "text": "HEAT INDEX",
+   "subtitle": "PHOENIX"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-money",
+  "name": "Money Figure",
+  "category": "NUMBERS",
+  "description": "A sum of money: '$' small and amber at the cap top, the figure rolling ('1.2'), the scale word beside it (BILLION; a raw 1,200,000,000 is written 1.2 BILLION) with a short label stacked under it in amber ('IN DAMAGE'), else the label under the figure. Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "money"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 34,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 12,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 34,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 1.2,
+   "prefix": "$",
+   "suffix": "BILLION",
+   "text": "IN DAMAGE"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
+ },
+ {
+  "id": "num-step-of",
+  "name": "Step Counter",
+  "category": "NUMBERS",
+  "description": "A step or score ('3 OF 5'): the digit steps up one at a time (a soft tick each) while a row of thin segments lights in amber in step, 'OF 5' small beside it, what it counts under the row. From value and total, or 'N of M' / 'N out of M' in the words. Lands at frame 28 for 3 of 5 (8 + 7 per step). Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "share-of"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 28,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 10,
+    "every": 7,
+    "count": 3,
+    "gain_db": -7,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -7,
+    "when": "no-value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 28,
+    "gain_db": -3,
+    "when": "value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 3,
+   "total": 5,
+   "text": "HURRICANES THIS SEASON"
+  },
+  "family": "num",
+  "file": "LibPackNumbers",
+  "exit": "none"
  }
 ]

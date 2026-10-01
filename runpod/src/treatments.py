@@ -1335,8 +1335,15 @@ _LOOK_NEEDS = {
     "NUM_MEASURE_V1": r"\b(feet|foot|ft|inches|meters?|metres?|deep|depth|height|level|elevation|fell|fallen|"
                       r"dropp?ed|rose|risen|lower|higher)\b",
     "LIB_CO_MEASURE_LINE": r"\b(feet|foot|ft|inches|meters?|metres?|miles?|km|long|wide|tall|deep)\b",
+    # Pack B (LibPackNumbers): the figures drawn with a picture of their subject.
+    "LIB_NUM_RAINFALL": r"\b(rain\w*|precipitation|downpours?|showers?|deluge)\b",
+    "LIB_NUM_WIND_GAUGE": r"\b(winds?|gusts?|gusting|windy)\b",
+    "LIB_NUM_WATER_LEVEL": r"\b(rivers?|creeks?|streams?|crest\w*|flood\w*|gauges?|lakes?|reservoirs?|tides?|surge|"
+                           r"water levels?)\b",
+    "LIB_NUM_TEMPERATURE": r"\b(degrees?|temperatures?|heat|hott?er|hottest|warm\w*|cold\w*|fahrenheit|celsius|"
+                           r"freez\w*|chill)\b|°",
 }
-_LOOK_NEEDS_RX = {k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
+_LOOK_NEEDS_RX ={k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
 # A date is BOLD TEXT and nothing else (the owner, 2026-09-30: "when a
 # day/date is mentioned ... I need BOLD TEXT date", then: "NO background layout,
 # ONLY TEXT: the date in white BOLD, on the sides, with a black stroke"): every
@@ -1375,6 +1382,32 @@ DATE_ONLY_LOOKS: set = set()
 # A span of time ("3 DAYS LATER") counted up: the countdown card is banned (boxed), so the bold count does it.
 COUNTDOWN_LOOK = "LIB_DT_COUNTDOWN_DAYS"
 DATE_LOOKS = BOLD_DATE_LOOKS
+# What a date or time line says, for the placed looks of pack A (_date_lead).
+_RELATIVE_TIME = re.compile(r"\b(last night|this morning|this afternoon|this evening|yesterday|earlier today|overnight)\b")
+_CLOCK_TIME = re.compile(r"\b\d{1,2}(:\d{2})?\s*(a\.?m\.?|p\.?m\.?)|\b\d{1,2}:\d{2}\b")
+_LIVE_WORDS = re.compile(r"\b(live|right now|at this hour|as we speak)\b")
+_DATE_RANGE = re.compile(r"\s(through|thru|to|until|into)\s|→|\s[-–]\s")
+_DAY_N = re.compile(r"\bday (\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)\b")
+_YEAR_ONLY = re.compile(r"(1[5-9]\d\d|20\d\d)")
+_WEEKDAY_ONLY = re.compile(r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday)( (morning|afternoon|evening|night))?",
+                           re.I)
+# "Now let's head to New Jersey", "Down in North Carolina", "Moving north into
+# Virginia": the narration walks to a new region (the reference channel's
+# sections) - the section marker names it (pack C, LibPackPlaces).
+_REGION_CHANGE = re.compile(
+    r"^\s*(?i:and\s+)?(?i:now,?\s+|next,?\s+|so\s+)?(?i:"
+    r"let'?s\s+(?:head|move|go|turn|look)\s+(?:up\s+|down\s+|over\s+|north\s+|south\s+|east\s+|west\s+)?(?:to|into|towards?|at)\s+"
+    r"|(?:down|up|over|out|back)\s+in\s+"
+    r"|(?:moving|heading|turning)\s+(?:north|south|east|west|inland|up|down|over)\s+(?:to|into|towards?)\s+)"
+    r"(?i:the\s+)?(?P<place>[A-Z][\w.'-]+(?:\s+[A-Z][\w.'-]+){0,3})")
+SECTION_LOOK = "LIB_PLC_SECTION_MARKER"
+# Every bold text look a date or a time may land on: the letter drop and the
+# placed looks of pack A (LibPackDates).
+DATE_TEXT_LOOKS = {TEXT_DATE_LOOK, "LIB_DTX_TIME_STAMP", "LIB_DTX_DATE_TOP", "LIB_DTX_DATE_PLACE",
+                   "LIB_DTX_DATE_RANGE", "LIB_DTX_DAY_MARKER", "LIB_DTX_TIME_OF_DAY", "LIB_DTX_LEAD_TIME",
+                   "LIB_DTX_UPDATED_STAMP", "LIB_DTX_WEEK_STRIP", "LIB_DTX_WEEKDAY_STACK", "LIB_DTX_YEAR_MARKER",
+                   "LIB_DTX_RELATIVE_TAG", "LIB_DTX_CLOCK_LIVE"}
+_AHEAD_SPAN = re.compile(r"\b(next|in|within|over the next|coming)\s+(\d+|\w+)\s+(hours|days)\b", re.I)
 NOT_FOR_A_DATE = {"LIB_TL_CALENDAR_FLIP", "LIB_TL_DATE_STAMP_CIRCLE", "LIB_LT_DATE_PLACE", "LIB_FX_LIGHT_STREAK",
                   "LIB_FX_FILM_BURN", "LIB_FX_PAPER_TEAR", "LIB_TL_YEAR_SCROLLER", "LIB_TL_DECADE_GRID",
                   "LIB_CH_YEAR_TAPE", "LIB_PB_DATE_PLATE", COUNTDOWN_LOOK}
@@ -1739,6 +1772,9 @@ class _Planner:
         self.last_locations: List[dict] = []
         self.last_forecast = -1e9
         self.first_date_done = False
+        # Dates and times take turns between the letter drop and the placed
+        # looks of pack A (LibPackDates), matched to what was said.
+        self.date_turn = _seed(segments) % 2
         # The text-only looks' placements in turn, their letterings in turn (one turn shared by the
         # date and the count, from a per-video start), and the figure looks shown (the bold count's run).
         self.align_turn: Dict[str, int] = {}
@@ -2130,6 +2166,13 @@ class _Planner:
                     out.append({"cues": ["person-full"], "props": props, "mode": "must", "group": "person",
                                 "emphasis": "high", "layout": "person", "media": _still_of(scene.get("media")),
                                 "offset": _offset(text, props.get("_key", ""))})
+        region = _REGION_CHANGE.search(text)
+        if region and not out and lead_look(SECTION_LOOK):
+            # The walk to a new region gets its marker ("NOW · NEW JERSEY"), on
+            # a line that has no date or figure of its own.
+            out.append({"ids": [SECTION_LOOK], "cues": [], "cue": "section", "group": "section",
+                        "props": {"text": region.group("place").rstrip(".,;:").upper()[:28]}, "mode": "normal",
+                        "emphasis": "medium", "offset": 0})
         out.sort(key=lambda r: r.get("offset", 0))
         return out, repeated
 
@@ -2154,10 +2197,12 @@ class _Planner:
         req = {"cues": cues, "props": props, "props_by_cue": by_cue, "props_by_id": by_id, "demote": demote,
                "mode": "must", "group": "date",
                "emphasis": c.get("emphasis") or "high", "offset": _offset(text, props.get("_key", ""))}
-        lead = lead_look(TEXT_DATE_LOOK)
+        lead = self._date_lead(c, props, text) or lead_look(TEXT_DATE_LOOK)
         if lead:
-            # Every date is the letter drop, whenever it was last shown: its
-            # placement turns instead (no group keeps it from following itself).
+            # A date, a time or both always lands on a bold text look: the
+            # letter drop in turn with the placed looks that fit what was said
+            # (a clock time top-left, a date top-centre, a weekday, a range, a
+            # "day 3", "last night", a year); no group keeps it from following itself.
             req.update(lead=lead, group="")
         elif not self.first_date_done and c["cue"] in ("date", "datetime"):
             # The story's first date is a statement: a bold full card, not a thin strip.
@@ -2165,6 +2210,43 @@ class _Planner:
         if c["cue"] in ("date", "datetime"):
             self.first_date_done = True
         return req
+
+    def _date_lead(self, c: dict, props: dict, text: str) -> Optional[str]:
+        """
+        The placed date or time look (LibPackDates) that fits this line, taking
+        turns with the letter drop so no two dates in a row look the same (the
+        owner, 2026-10-01: "time on the top left, dates in the middle top and
+        the left corner bottom ... not the same style every time").
+        """
+        shown = str(props.get("text") or "")
+        low = f"{shown} {text}".lower()
+        options: List[str] = []
+        if c["cue"] == "time-of-day":
+            if _RELATIVE_TIME.search(low):
+                options = ["LIB_DTX_RELATIVE_TAG"]
+            elif _CLOCK_TIME.search(shown.lower()):
+                options = (["LIB_DTX_CLOCK_LIVE"] if _LIVE_WORDS.search(low) else []) + ["LIB_DTX_TIME_STAMP"]
+            else:
+                options = ["LIB_DTX_TIME_OF_DAY"]
+        else:
+            if _DATE_RANGE.search(shown.lower()):
+                options = ["LIB_DTX_DATE_RANGE"]
+            elif _DAY_N.search(low):
+                options = ["LIB_DTX_DAY_MARKER"]
+            elif _YEAR_ONLY.fullmatch(shown.strip()):
+                options = ["LIB_DTX_YEAR_MARKER"]
+            elif _WEEKDAY_ONLY.fullmatch(shown.strip()):
+                options = ["LIB_DTX_WEEKDAY_STACK", "LIB_DTX_WEEK_STRIP"]
+            elif c["cue"] == "date":
+                options = ["LIB_DTX_DATE_TOP"] + (["LIB_DTX_DATE_PLACE"] if props.get("subtitle") else [])
+        usable = [o for o in options if lead_look(o) and look_fits(o, text)]
+        if not usable:
+            return None
+        turn = self.date_turn
+        self.date_turn += 1
+        if turn % 2 == 0 and lead_look(TEXT_DATE_LOOK):
+            return None       # the letter drop this time
+        return usable[(turn // 2) % len(usable)]
 
     def _cue_request(self, c: dict, seg) -> dict:
         props = dict(c.get("props") or {})
@@ -2183,7 +2265,8 @@ class _Planner:
             # "3 DAYS LATER", "48 HOURS": the countdown look, and only for a real
             # span of time. It is the one look for a span, so no group keeps it
             # from following itself.
-            req.update(ids=[span_look()], cues=[], cue="time-span", group="")
+            ahead = "LIB_DTX_LEAD_TIME" if _AHEAD_SPAN.search(seg.text or "") and lead_look("LIB_DTX_LEAD_TIME") else None
+            req.update(ids=[x for x in (ahead, span_look()) if x], cues=[], cue="time-span", group="")
         return req
 
     def _fact_request(self, seg, repeated: dict) -> Optional[dict]:

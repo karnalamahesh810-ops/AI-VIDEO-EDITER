@@ -66801,6 +66801,8982 @@
     "lib",
     "bt"
    ]
+  },
+  {
+   "id": "LIB_TXT_KEY_PHRASE",
+   "name": "Key Phrase Lower Third",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A key phrase low at the side on up to two lines: a thin amber rule grows beside it, the lines rise out of a clean mask one after the other with a small settle and the key word (highlight, else the longest) warms to amber; a small tracked line under it. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A text swoosh on the entrance; the lines drop back into the mask over the last 11 frames.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-key-phrase",
+    "sfx": {
+     "name": "swoosh-text",
+     "volume": 0.3
+    },
+    "sfxAt": 12,
+    "types": false,
+    "sounds": [
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 4,
+      "gain_db": -4
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "key-phrase",
+    "caption",
+    "fact"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_QUOTE_LINE",
+   "name": "Quote Line",
+   "category": "QUOTES",
+   "component": "motion",
+   "description": "A spoken quote on up to two lines under a large faint amber quote mark, no box: the mark fades up, the lines rise out of a clean mask, then the speaker (label) and role (subtitle) follow a short amber rule in small tracked caps. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A soft paper slide as it comes in.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-quote-line",
+    "sfx": {
+     "name": "paper-slide-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 15,
+    "types": false,
+    "sounds": [
+     {
+      "name": "paper-slide-v2",
+      "alt": [
+       "paper-slide"
+      ],
+      "at": 6,
+      "gain_db": -3
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "quote"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_HEADLINE_WORDS",
+   "name": "Headline Word by Word",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A headline revealed word by word: each word rises out of a clean mask with a small settle and a soft letter tick, the key word (highlight, else the longest) in amber, then a short amber rule draws under it. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. The words drop back into the mask over the last 11 frames.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-headline-words",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 4,
+      "count": 6,
+      "gain_db": -6
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "statement"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_BREAKING_TAG",
+   "name": "Breaking Tag",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A minimal news tag: BREAKING (or the label) wipes in in amber tracked caps and a thin amber rule draws out beside it - no red box - then the headline rises under it out of a clean mask. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A soft whoosh with the rule and a text swoosh on the headline.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-breaking-tag",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 18,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "align": "start",
+      "gain_db": -7
+     },
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 10,
+      "gain_db": -5
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "event"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_QUESTION",
+   "name": "Question Line",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "The narration's question (SO WHY IS THIS HAPPENING?) word by word in the lower third, each word rising out of a clean mask with a soft letter tick, the question mark in amber, a short amber rule under it once it has landed. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. Centred by default; left or right by Placement.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-question",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 27,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 4,
+      "count": 5,
+      "gain_db": -6
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "question"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_BULLET_TRIO",
+   "name": "Bullet Trio",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Three short lines, staggered: an amber dot pops in, then its line rises out of a clean mask beside it, a soft UI pop per bullet. Items from the list, else the text cut at bars, semicolons or commas. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks to fit. One size for the three lines.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-bullet-trio",
+    "sfx": {
+     "name": "ui-pop",
+     "volume": 0.3
+    },
+    "sfxAt": 5,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop"
+      ],
+      "at": 5,
+      "every": 8,
+      "count": 3,
+      "gain_db": -3
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "summary"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_WHAT_WE_KNOW",
+   "name": "What We Know",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "A WHAT WE KNOW list (or the label): the title rises over a thin amber rule, then three numbered items come up one by one in small tracked caps, an amber 01 / 02 / 03 before each and a soft UI pop each. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks to fit. Items from the list, else the text cut at bars or semicolons.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-what-we-know",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 15,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "align": "start",
+      "gain_db": -7
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop"
+      ],
+      "at": 15,
+      "every": 7,
+      "count": 3,
+      "gain_db": -3
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "list",
+    "summary"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_MINI_TIMELINE",
+   "name": "Mini Timeline Row",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "Three points on one thin line, text only: the line draws left to right and as it reaches each point a small dot pops, the date rises above it (the last in amber) and what happened fades up under it in small tracked caps. Items (label = when, text = what), else the text cut at bars, each led by its date. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks to fit. Two to four points.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-mini-timeline",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 6,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 2,
+      "align": "start",
+      "gain_db": -8
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop"
+      ],
+      "at": 6,
+      "every": 6,
+      "count": 3,
+      "gain_db": -4
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "sequence",
+    "steps"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_BEFORE_AFTER",
+   "name": "Before / After Labels",
+   "category": "COMPARISONS",
+   "component": "motion",
+   "description": "BEFORE over the left half and AFTER over the right half of a split (top and bottom on a vertical video), at the 96 px safe margin: each word rises out of a clean mask over its thin rule (white, then amber), a date or note small under it. Labels from the items, else the text cut at a bar; notes from the items or the subtitle (2019 | 2026). Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks to fit. A text swoosh for each.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-before-after",
+    "sfx": {
+     "name": "swoosh-text",
+     "volume": 0.3
+    },
+    "sfxAt": 11,
+    "types": false,
+    "sounds": [
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 3,
+      "gain_db": -4
+     },
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 10,
+      "gain_db": -5,
+      "pitch": 1.06
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "contrast"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_UNDERLINE_SWEEP",
+   "name": "Underline Sweep",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A phrase on up to two lines rises out of a clean mask, then an amber underline sweeps under its key words (highlight, else the longest) in reading order and they turn amber as it passes; the underline pulls back before the words drop out. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A text swoosh on the entrance, the marker underline on the sweep.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-underline-sweep",
+    "sfx": {
+     "name": "swoosh-text",
+     "volume": 0.3
+    },
+    "sfxAt": 14,
+    "types": false,
+    "sounds": [
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 4,
+      "gain_db": -4
+     },
+     {
+      "name": "marker-underline",
+      "alt": [
+       "marker-draw",
+       "marker"
+      ],
+      "at": 14,
+      "align": "start",
+      "gain_db": -2
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "key-phrase",
+    "fact",
+    "statement"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_KICKER_HEADLINE",
+   "name": "Kicker + Headline",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A small kicker in tracked caps (label; else the words before a colon) wipes in after a short amber rule, then the headline rises under it out of a clean mask, the key word in amber. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A soft whoosh with the kicker, a text swoosh on the headline.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-kicker-headline",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 18,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "align": "start",
+      "gain_db": -7
+     },
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 10,
+      "gain_db": -4
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "headline",
+    "key-phrase"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_TXT_CHAPTER_MINIMAL",
+   "name": "Minimal Chapter Title",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A minimal chapter title in the middle of the frame: small amber caps (label, else CHAPTER and the value in words) between two thin rules drawing outward, the title rising under them out of a clean mask, an optional small line under it. Clean white Anton caps with a soft dark shadow (no stroke, no box), the key word in amber, 96 px safe margins; a long line shrinks, then takes two lines. A soft whoosh with the rules, a text swoosh on the title.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "txt-chapter-minimal",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 16,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "align": "start",
+      "gain_db": -6
+     },
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 8,
+      "gain_db": -5
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "chapter"
+   ],
+   "tags": [
+    "lib",
+    "txt"
+   ]
+  },
+  {
+   "id": "LIB_PLC_LOCATION_TAG",
+   "name": "Location Tag (Pin)",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "Top left at the 96 px safe margin: a small amber map pin falls onto the line, squashes a little and a ring spreads once from its tip; the place in clean white Anton caps (~40 px tall at 1080p, soft dark shadow, no box) slides out from behind the pin, an optional small line in tracked caps under it. Reads 'ATLANTIC CITY, NJ'. Pin-drop sound on the landing.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-location-tag",
+    "sfx": {
+     "name": "pin-drop",
+     "volume": 0.3
+    },
+    "sfxAt": 8,
+    "types": false,
+    "sounds": [
+     {
+      "name": "pin-drop",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "at": 8,
+      "align": "peak"
+     },
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2"
+      ],
+      "at": 7,
+      "align": "start",
+      "gain_db": -9.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place",
+    "location"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_REGION_LABEL",
+   "name": "Region Label",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "Lower left, a quarter up (clear of the captions): the region in clean Anton caps (~46 px) rises out of a mask, a thin amber divider grows beside it and the area slides out from behind it in small tracked caps, all on one line ('NORTH CAROLINA | OUTER BANKS'); a long pair stacks with a short amber rule. Soft shadow only, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-region-label",
+    "sfx": {
+     "name": "swoosh-text",
+     "volume": 0.3
+    },
+    "sfxAt": 4,
+    "types": false,
+    "sounds": [
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2"
+      ],
+      "at": 2,
+      "align": "start",
+      "gain_db": -4.0
+     },
+     {
+      "name": "ui-click",
+      "alt": [
+       "click"
+      ],
+      "at": 16,
+      "align": "peak",
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "region",
+    "region-change",
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_SECTION_MARKER",
+   "name": "Section Marker (Now)",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "A region change: 'NOW' small in amber caps on a thin amber rule that draws out, the new region in clean Anton caps (~52 px) drops out from under the rule with a small settle; lower left, a quarter up. Reads 'NOW: NEW JERSEY', 'BACK TO FLORIDA', 'MEANWHILE · TEXAS'.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-section-marker",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 5,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 1,
+      "align": "start",
+      "gain_db": -3.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "region-change",
+    "section"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_ROUTE_LABEL",
+   "name": "Route Label (Road Status)",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "A small road in perspective draws up (its amber centre dashes running), the route in clean Anton caps (~46 px) slides out beside it and its status rises in amber: 'NC-12 CLOSED', 'I-95 SOUTHBOUND FLOODED'; the place small under it. Lower left, no shield box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-route-label",
+    "sfx": {
+     "name": "ui-click",
+     "volume": 0.3
+    },
+    "sfxAt": 18,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-fast",
+      "alt": [
+       "swoosh-text"
+      ],
+      "at": 5,
+      "align": "start",
+      "gain_db": -6.0
+     },
+     {
+      "name": "ui-click",
+      "alt": [
+       "click"
+      ],
+      "at": 18,
+      "align": "peak",
+      "gain_db": -3.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "route",
+    "road",
+    "road-closure"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_RIVER_GAUGE",
+   "name": "River Gauge Label",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "Three short waves (the top one amber) flow in from the left, the river in clean Anton caps (~46 px) rises out of a mask, the gauge in small tracked caps under it with a reading in amber from value and unit: 'HUDSON RIVER' over 'SANDY HOOK · 8.4 FT'. Lower left.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-river-gauge",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 6,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 2,
+      "align": "start",
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "river",
+    "gauge",
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_DISTANCE_LINE",
+   "name": "Distance Line",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "A distance as said: the figure in clean Anton caps (~50 px) rises over a thin scale bar that measures itself out (an amber dot riding to its end tick), where from in small tracked caps under it: '31 MILES' / 'NORTH OF DALLAS'. Spoken numbers in digits; value and unit when given. Lower left.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-distance-line",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 16,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-fast",
+      "alt": [
+       "swoosh-text"
+      ],
+      "at": 2,
+      "align": "start",
+      "gain_db": -6.0
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 16,
+      "align": "peak",
+      "gain_db": -2.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "distance",
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_COORDINATES",
+   "name": "Coordinates Tag",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "Small mono coordinates: a thin crosshair turns in, the latitude and longitude decode digit by digit with soft digital ticks and lock by frame 30, the place in small amber caps under them. From the overlay's place (gazetteer) or read off the text ('39.36 N 74.42 W'); lower left.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-coordinates",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 8,
+      "align": "peak",
+      "every": 3,
+      "count": 7,
+      "gain_db": -9.0
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 30,
+      "align": "peak",
+      "gain_db": -3.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "coordinates",
+    "location",
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_SOURCE_CREDIT",
+   "name": "Source Credit",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "Tiny, bottom right at the safe margin: the source word in amber and the name in white tracked caps part from a hairline divider: 'VIDEO | @STORMCHASER', 'VIA | STORM CHASER', 'COURTESY | NWS'. Holds quietly and slides back into the hairline.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-source-credit",
+    "sfx": {
+     "name": "ui-click",
+     "volume": 0.3
+    },
+    "sfxAt": 6,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-click",
+      "alt": [
+       "click"
+      ],
+      "at": 6,
+      "align": "peak",
+      "gain_db": -8.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "source",
+    "credit"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_FOOTAGE_TAG",
+   "name": "Footage Tag",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "Minimal, top right: a small mark pops (a viewfinder for drone or camera views, a pulsing amber dot for LIVE, an amber dot for archive film) and the footage type slides out in tracked caps as its spacing closes, a year in amber: 'DRONE VIEW', 'LIVE CAM', 'ARCHIVE 2012'.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-footage-tag",
+    "sfx": {
+     "name": "ui-pop",
+     "volume": 0.3
+    },
+    "sfxAt": 5,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop"
+      ],
+      "at": 5,
+      "align": "peak",
+      "gain_db": -5.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "footage-tag",
+    "archive",
+    "live"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_WARNING_LABEL",
+   "name": "Warning Label",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "A small amber alert mark pops, the warning in clean Anton caps (~46 px) slides out beside it with the alert word in amber ('FLOOD WARNING'), a thin amber rule draws under it and the details follow in small caps ('UNTIL 8 PM · ATLANTIC COUNTY'). No red box. Lower left.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-warning-label",
+    "sfx": {
+     "name": "ui-pop",
+     "volume": 0.3
+    },
+    "sfxAt": 5,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop"
+      ],
+      "at": 5,
+      "align": "peak",
+      "gain_db": -4.0
+     },
+     {
+      "name": "marker-underline",
+      "alt": [
+       "marker-draw"
+      ],
+      "at": 10,
+      "align": "start",
+      "gain_db": -7.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "warning",
+    "alert"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_PLACE_TIME",
+   "name": "Place and Time",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "Top left: the place in clean Anton caps (~40 px) rises out of a mask, a thin amber divider grows, the local time slides out beside it with AM / PM small in amber: 'ATLANTIC CITY | 6:40 AM'. A day or note small under it.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-place-time",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 15,
+    "types": false,
+    "sounds": [
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2"
+      ],
+      "at": 2,
+      "align": "start",
+      "gain_db": -6.0
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 15,
+      "align": "peak",
+      "gain_db": -2.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place-time",
+    "place",
+    "location"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_PLC_WHERE_LOWER",
+   "name": "Where Lower Third",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "The WHERE lower third: a thin amber bar grows down the left edge, the place in clean Anton caps (~54 px) slides out from behind it, the county and state follow in small tracked caps, over a soft feathered shade (no box, no band). Lower left, a quarter up.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "plc-where-lower",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 7,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 3,
+      "align": "start",
+      "gain_db": -5.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place",
+    "location",
+    "where"
+   ],
+   "tags": [
+    "lib",
+    "plc"
+   ]
+  },
+  {
+   "id": "LIB_DTX_TIME_STAMP",
+   "name": "Time Stamp (Top Left)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A clock time as a clean stamp in the top-left corner at the 96 px safe margin: a thin amber tick draws down, the figures ('3:45', '8:00') rise out of a mask 2 frames apart with a small settle, AM/PM (amber) and the zone stacked small beside them, the weekday or place in small tracked caps under it. White Anton (cap ~54 px at 1080p) with a soft dark shadow and a feathered shade, no box. Soft letter ticks as the figures land; out over the last 11 frames.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-time-stamp",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 8,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 8,
+      "every": 2,
+      "count": 4,
+      "gain_db": -6.0
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 18,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_DATE_TOP",
+   "name": "Date (Top Center)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "The date centred at the top: 'SEPTEMBER 26' rises out of a mask from the middle out, the day in amber, a short amber hairline draws under it and the weekday and year come in small and tracked. Clean Anton caps (cap ~52 px at 1080p), a soft dark shadow and a feathered shade, no box. A soft text swoosh and letter ticks as the pairs land.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-date-top",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 4,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 6,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_DATE_PLACE",
+   "name": "Dateline (Bottom Left)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A dateline in the bottom-left corner: 'SATURDAY • ATLANTIC CITY' as one clean Anton line (cap ~44 px at 1080p) rising letter by letter, an amber dot between the day and the place, the full date small under it. Reads 'day · place' text, or a date with the place in Label / Subtitle. Soft shadow, feathered shade, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-date-place",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 5,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 8,
+      "every": 2,
+      "count": 7,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_DATE_RANGE",
+   "name": "Date Range (Arrow)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A span of dates low on the left: the first end rises ('SEP 26'), an amber arrow draws across, the second end rises after it ('SEP 28'); the length ('3 DAYS') and the year small under it. Reads month-day, weekday, year and clock ranges ('Monday through Wednesday', '1983 to 2026', '3 PM - 5 PM'). Clean Anton caps, soft shadow, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-date-range",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 4,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 26,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_DAY_MARKER",
+   "name": "Day Marker (Top Right)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "'DAY 3' in the top-right corner: the word rises letter by letter and the figure rolls up to its value in amber like an odometer; what it counts ('OF THE SEARCH') small under it. Reads 'day three', 'the third day', 'WEEK 2'; Value sets the figure. Clean Anton caps, soft shadow, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-day-marker",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 23,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 3,
+      "gain_db": -6.0
+     },
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 9,
+      "align": "start",
+      "until": 22,
+      "gain_db": -6.0
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 23,
+      "gain_db": -5.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_TIME_OF_DAY",
+   "name": "Time of Day (Lower Left)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "When it happens, low on the left: 'TONIGHT 8 PM', 'TOMORROW MORNING' in clean Anton caps rising letter by letter; the time (or the part of the day) lands white and warms to amber; a place or weekday small under it. Soft shadow, feathered shade, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-time-of-day",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 5,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 24,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_LEAD_TIME",
+   "name": "Lead Time (Next 72 Hours)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A lead time low on the right: 'NEXT' small and tracked, the figure counting up in amber in equal digit cells with its unit beside it ('72 HOURS'), a hairline under it filling with amber like a time window; what follows ('UNTIL LANDFALL') small under it. Reads 'in 48 hours', 'over the next seventy-two hours', 'within 3 days'. Clean Anton caps, soft shadow, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-lead-time",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 24,
+    "types": false,
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 6,
+      "align": "start",
+      "until": 22,
+      "gain_db": -6.0
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 24,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_UPDATED_STAMP",
+   "name": "Updated Stamp (Top Left)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A small stamp in the top-left corner: an amber dot, 'UPDATED' in small tracked caps and the time in Anton ('6:00') with AM (amber) and the zone beside it. Reads 'AS OF 9:30 PM ET', 'ISSUED SEPT 26'. Soft shadow, a light feathered shade, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-updated-stamp",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 3,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 12,
+      "every": 2,
+      "count": 4,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_WEEK_STRIP",
+   "name": "Week Strip",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A minimal week, low in the centre: the date in clean Anton over MON TUE WED THU FRI SAT SUN in small tracked caps fading in one by one; an amber underline slides along to the day, which warms to amber. Text only, no box; soft shadow and a feathered shade.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-week-strip",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 38,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 12,
+      "every": 2,
+      "count": 7,
+      "gain_db": -6.0
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 38,
+      "gain_db": -5.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_WEEKDAY_STACK",
+   "name": "Weekday Over Date (Bottom Right)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "The weekday small in amber tracked caps over the date in clean Anton ('SATURDAY' / 'SEPTEMBER 26') in the bottom-right corner, the year or place small under it; the weekday fades in as its tracking settles, the date rises letter by letter. Soft shadow, feathered shade, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-weekday-stack",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 4,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 10,
+      "every": 2,
+      "count": 5,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_YEAR_MARKER",
+   "name": "Year Marker (History)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A year for a moment in history, low on the left: '1937' in clean Anton (cap ~62 px at 1080p) rises digit by digit, an amber line runs out from it to a small node, the day and the place small under it. Reads 'May 6, 1937', 'the 1930s'. Soft shadow, feathered shade, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-year-marker",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 7,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 3,
+      "count": 4,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_RELATIVE_TAG",
+   "name": "Relative Time Tag",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "When it happened, said plainly, in the top-left corner: an amber dash draws and 'LAST NIGHT' / 'THIS MORNING' rises letter by letter in clean Anton; the time or place small under it. Picks the phrase out of a longer line. Soft shadow, feathered shade, no box.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-relative-tag",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 7,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 9,
+      "every": 2,
+      "count": 5,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day",
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_DTX_CLOCK_LIVE",
+   "name": "Live Clock (Top Right)",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A clock time in the top-right corner with a tiny pulsing red live dot (no box): the figures rise out of a mask, AM/PM (amber) and the zone stacked small beside them, the colon breathing once a second; the place small under it. Clean Anton caps, soft shadow, feathered shade.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "dtx-clock-live",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 3,
+    "types": false,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 9,
+      "every": 2,
+      "count": 4,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day"
+   ],
+   "tags": [
+    "lib",
+    "dtx"
+   ]
+  },
+  {
+   "id": "LIB_NUM_LOWER_THIRD",
+   "name": "Lower-Third Count",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "The figure in the lower third with what it counts beside it on its baseline (one or two lines of tracked caps), a small amber kicker over it (subtitle or label) and a hairline under it drawing out from an amber lead. The digits roll like an odometer and land at frame 32. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-lower-third",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 32,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 32,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "count"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_PERCENT_LINE",
+   "name": "Percent Line",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A percent counting up (caps 60 px) over a thin track whose amber fill runs to the share in step with the count, a bright head on its end and quarter ticks; what it is a share of in tracked caps under it. Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-percent-line",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 34,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 34,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_RAINFALL",
+   "name": "Rainfall Total",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A rainfall total: a small vector cloud with drops falling from it beside the figure, INCHES (and OF RAIN) in tracked caps beside the digits, where or when under it. For lines about rain (the planner's _LOOK_NEEDS). Lands at frame 33. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-rainfall",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 33,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 6,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 33,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "measurement"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_WIND_GAUGE",
+   "name": "Wind Gauge",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A wind speed beside a minimal dial: a 240-degree track, an amber arc and a white needle sweeping to the speed on a round scale (a small flutter once it lands), MPH over GUSTS in tracked caps beside the figure. For lines about wind (the planner's _LOOK_NEEDS). Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-wind-gauge",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 34,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 34,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "measurement",
+    "big-number"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_BIG_FIGURE",
+   "name": "Big Figure",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "One large figure (caps 72 px) rolling into place, what it counts under it in tracked caps with its last word in amber ('WITHOUT POWER'), a subtitle smaller under that. Lands at frame 36. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-big-figure",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 36,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 36,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "count"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_VERSUS",
+   "name": "Two Figures",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "Two figures compared side by side ('22%  VS  45%'): the first white, the second amber, a small amber VS between them, each figure's label (a year, then / now) under it and what they measure under both. From the first two items with values, else the first two numbers in the words; one number draws the big figure. The first lands at 28, the second at 38. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-versus",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 38,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 28,
+      "gain_db": -3,
+      "when": "value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 38,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "then-now"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_TREND_ARROW",
+   "name": "Trend Arrow",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A figure with a small amber arrow beside it rising into place (pointing down for the planner's label 'down', a negative value or 'fell / dropped / declined' in the words) and nudging once as the digits land, what changed under it. Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-trend-arrow",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 34,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 34,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "change"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_RANK",
+   "name": "Rank",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A rank: '#' small and amber at the cap top, the place rolling down from the 9s to it ('#1'), an amber hairline and what it ranks beside it in one or two lines of tracked caps. The rank from value or the words ('#1', 'No. 1', 'number one', 'first', '3rd'). Lands at frame 30. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-rank",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 30,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "rank"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_SPLIT_STAT",
+   "name": "Split Stat",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "Two or three figures with their words on one line ('3 DEAD · 12 MISSING'), parted by amber dots, each rolling in turn (8 frames apart) and its word arriving as it lands, the later words in amber; where or when under them. From items with values, else every 'N WORD' in the words. The first lands at 28, the second at 36. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-split-stat",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 36,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 28,
+      "gain_db": -3,
+      "when": "value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 36,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "count"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_WATER_LEVEL",
+   "name": "Water Level",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A river or lake level ('8.9 FT') beside a slim staff gauge: a scale with ticks, the water rising to the level with a gentle moving line, and a dashed amber flood-stage mark when a flood stage is said ('flood stage 7 ft' in the words or subtitle, or total with 'flood' said), named in amber in the line under the figure. For lines about rivers, lakes and floods (the planner's _LOOK_NEEDS). Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-water-level",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 34,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 34,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "measurement"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_TEMPERATURE",
+   "name": "Temperature",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A temperature ('102°F', the degree sign and scale small at the cap top) beside a slim thermometer whose column rises with the count - amber when hot, ice when freezing, white between; what and where under it. For lines about heat and cold (the planner's _LOOK_NEEDS). Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-temperature",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 34,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 34,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "measurement"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_MONEY",
+   "name": "Money Figure",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A sum of money: '$' small and amber at the cap top, the figure rolling ('1.2'), the scale word beside it (BILLION; a raw 1,200,000,000 is written 1.2 BILLION) with a short label stacked under it in amber ('IN DAMAGE'), else the label under the figure. Lands at frame 34. Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-money",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 34,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 5,
+      "every": 2,
+      "count": 12,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 34,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "money"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
+  },
+  {
+   "id": "LIB_NUM_STEP_OF",
+   "name": "Step Counter",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A step or score ('3 OF 5'): the digit steps up one at a time (a soft tick each) while a row of thin segments lights in amber in step, 'OF 5' small beside it, what it counts under the row. From value and total, or 'N of M' / 'N out of M' in the words. Lands at frame 28 for 3 of 5 (8 + 7 per step). Clean white Anton figures with a soft dark shadow (no stroke, no box; a feathered shade at most), amber accents, 96 px safe margins, low left or right (Placement). Sound built in: a soft digit tick on each change (never two within 2 frames) and a soft count-final click on the landing - never a hit.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "num-step-of",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 28,
+    "types": false,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "letter-tick",
+       "tick"
+      ],
+      "at": 10,
+      "every": 7,
+      "count": 3,
+      "gain_db": -7,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 7,
+      "every": 2,
+      "count": 8,
+      "gain_db": -7,
+      "when": "no-value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-click",
+       "tick"
+      ],
+      "at": 28,
+      "gain_db": -3,
+      "when": "value"
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "share-of"
+   ],
+   "tags": [
+    "lib",
+    "num"
+   ]
   }
  ],
  "imageTreatments": [

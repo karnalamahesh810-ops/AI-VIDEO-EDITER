@@ -34,6 +34,10 @@ import { LOOKS as L_LibPhotoEditor } from "./LibPhotoEditor";
 import { LOOKS as L_LibPersonFull } from "./LibPersonFull";
 import { LOOKS as L_LibVideoMarks } from "./LibVideoMarks";
 import { LOOKS as L_LibBoldText } from "./LibBoldText";
+import { LOOKS as L_LibPackText } from "./LibPackText";
+import { LOOKS as L_LibPackPlaces } from "./LibPackPlaces";
+import { LOOKS as L_LibPackDates } from "./LibPackDates";
+import { LOOKS as L_LibPackNumbers } from "./LibPackNumbers";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -77,4 +81,20 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibVideoMarks, ["vm-arrow", "vm-circle", "vm-box"]),
   // Text only, the sound built in (LookSounds): the letter-drop date and the bold count.
   ...pick(L_LibBoldText, ["dt-letter-drop", "bt-count"]),
+  // Pack D, text emphasis and news lines (LibPackText): clean Anton words, the sound built in.
+  ...pick(L_LibPackText, ["txt-key-phrase", "txt-quote-line", "txt-headline-words", "txt-breaking-tag", "txt-question",
+    "txt-bullet-trio", "txt-what-we-know", "txt-mini-timeline", "txt-before-after", "txt-underline-sweep",
+    "txt-kicker-headline", "txt-chapter-minimal"]),
+  // Pack C, places and labels (LibPackPlaces): where it is, what it is, who shot it; the sound in look_sounds.json.
+  ...pick(L_LibPackPlaces, ["plc-location-tag", "plc-region-label", "plc-section-marker", "plc-route-label",
+    "plc-river-gauge", "plc-distance-line", "plc-coordinates", "plc-source-credit", "plc-footage-tag",
+    "plc-warning-label", "plc-place-time", "plc-where-lower"]),
+  // Pack A, dates and times (LibPackDates): clean Anton dates at their places; the sound in look_sounds.json.
+  ...pick(L_LibPackDates, ["dtx-time-stamp", "dtx-date-top", "dtx-date-place", "dtx-date-range", "dtx-day-marker",
+    "dtx-time-of-day", "dtx-lead-time", "dtx-updated-stamp", "dtx-week-strip", "dtx-weekday-stack", "dtx-year-marker",
+    "dtx-relative-tag", "dtx-clock-live"]),
+  // Pack B, numbers and stats (LibPackNumbers): odometer figures, a soft tick per digit and a click on the landing.
+  ...pick(L_LibPackNumbers, ["num-lower-third", "num-percent-line", "num-rainfall", "num-wind-gauge", "num-big-figure",
+    "num-versus", "num-trend-arrow", "num-rank", "num-split-stat", "num-water-level", "num-temperature", "num-money",
+    "num-step-of"]),
 };
