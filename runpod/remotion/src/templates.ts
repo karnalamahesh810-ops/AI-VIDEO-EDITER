@@ -23,6 +23,8 @@ export interface TemplateDef {
   variants: { style: string[]; entrance: string[]; exit: string[] };
   cues: string[];
   tags: string[];
+  /** false: the planner never picks this look on its own (it waits for the owner's approval); the editor still offers it. */
+  autoPick?: boolean;
 }
 
 export interface Registry {
