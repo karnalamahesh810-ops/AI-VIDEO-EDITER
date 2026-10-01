@@ -214,6 +214,17 @@ class WrongPlaceEventYear(Styled):
         self.assertFalse(pools.place_subject("Lake Powell", jobs))          # the event's own subject
         self.assertFalse(pools.place_subject("Bureau of Reclamation", [{"subject_type": ""}]))
 
+    def test_a_real_photo_desk_picture_is_not_called_painted(self):
+        # 2026-10-01: CLIP called an AP News Lake Powell photo "painted"; the label names the photo desk.
+        from unittest import mock
+        from src import slop
+        with mock.patch.object(slop, "enabled", return_value=True),                 mock.patch.object(slop, "metadata_reason", return_value=""),                 mock.patch.object(slop, "check_file", return_value="an AI-generated or painted picture"),                 mock.patch.object(media, "_is_still", return_value=True):
+            self.assertEqual(media.slop_reason("x.jpg", "Lake Powell shrinks | AP News"), "")
+            self.assertEqual(media.slop_reason("x.jpg", "Glen Canyon Dam | Bureau of Reclamation"), "")
+            self.assertTrue(media.slop_reason("x.jpg", "lake powell 4k wallpaper | pinterest"))
+        with mock.patch.object(slop, "enabled", return_value=True),                 mock.patch.object(slop, "metadata_reason", return_value=""),                 mock.patch.object(slop, "check_file", return_value="an AI-generated or painted picture"),                 mock.patch.object(media, "_is_still", return_value=False):
+            self.assertTrue(media.slop_reason("x.mp4", "Lake Powell | AP News"))   # footage keeps the check
+
     def test_not_an_event_story_no_title_rules(self):
         director.LAST_STORY.clear()
         director.LAST_STORY.update({"kind": "history", "year": 1942, "places": ["Midway"]})

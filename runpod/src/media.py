@@ -1224,6 +1224,19 @@ def judge_clip(path: str, job: Dict[str, Any], label: str = "") -> tuple:
             var.reset(token)
 
 
+# Photo desks and archives whose pictures are real (the label carries the
+# source: "... | AP News", "... | Bureau of Reclamation", "static.independent.co.uk").
+# Red-rock desert and saturated lake photos read as "painted" to CLIP: on
+# 2026-10-01 it threw out an AP News Lake Powell photo and a Wikimedia Glen
+# Canyon Dam one. The vision judge still looks at them.
+_REAL_PHOTO_SOURCE = re.compile(
+    r"\b(?:AP News|Associated Press|AP Photo|apnews|Reuters|Getty|AFP|EPA|USGS|Bureau of Reclamation|usbr|"
+    r"National Park Service|nps\.gov|NOAA|NASA|Wikimedia|Wikipedia|commons|CNN|NBC|CBS|ABC News|Fox News|BBC|"
+    r"New York Times|nytimes|Washington Post|washingtonpost|Guardian|independent\.co\.uk|Axios|Los Angeles Times|"
+    r"latimes|Salt Lake Tribune|sltrib|KSL|azcentral|Arizona Republic|Deseret|AccuWeather|weather\.com|"
+    r"National Geographic|nationalgeographic|Smithsonian|NPR|PBS|USA Today|Bloomberg|Al Jazeera)\b", re.I)
+
+
 def slop_reason(path: str, label: str = "") -> str:
     """Why src/slop.py turns a downloaded candidate down for this scene ("" = keep), counted."""
     from . import slop
@@ -1239,6 +1252,9 @@ def slop_reason(path: str, label: str = "") -> str:
     except Exception as e:  # noqa: BLE001 - a filter error never drops a clip
         print(f"[slop] check failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
         return ""
+    if why.startswith("an AI-generated or painted picture") and kind == "image" \
+            and _REAL_PHOTO_SOURCE.search(label or ""):
+        why = ""
     if why:
         with _CACHE_LOCK:
             key = why.split(" (")[0]
