@@ -119,6 +119,59 @@ STYLES: Dict[str, dict] = {
     },
 }
 
+# The owner's overlay transition pack (remotion/public/transitions, 2026-10-01:
+# "not on every clip - some clips don't need a transition, some need one; never
+# the same transition on the next one; use it tastefully; update this for every
+# style that needs transitions"). timeline.plan_pack_transitions reads, per style:
+#   gap        - fewest seconds between two pack transitions
+#   every      - the spacing it aims for on average: a cut that has only a pause
+#                or a new subject going for it waits this long after the last
+#   fill       - after this long without one, any sentence start may take one
+#                (0: never - only the moments the style names)
+#   only       - when set, the only moments that may take one
+#   impact     - how much an impact line ("exploded", "collapsed") counts
+#   clear      - seconds either side kept free of the style's own transitions
+#   characters - how much the style likes each look (flash, burn, leak, film,
+#                glitch, streak); the line's own words add to it
+# Calm styles mark their turns rarely and softly (leaks, burns, film); news,
+# trending and compilations punctuate more, with flashes and glitches; Nature &
+# Weather only at a region change and the end of the hook, flashes and leaks.
+PACK_TRANSITIONS: Dict[str, dict] = {
+    "documentary": {"gap": 12.0, "every": 38.0, "fill": 75.0, "impact": 0.5, "clear": 4.0,
+                    "characters": {"leak": 3.0, "burn": 2.6, "film": 2.2, "flash": 1.2, "streak": 0.6, "glitch": 0.2}},
+    "history": {"gap": 12.0, "every": 36.0, "fill": 75.0, "impact": 0.5, "clear": 4.0,
+                "characters": {"burn": 3.0, "film": 3.0, "leak": 2.0, "flash": 1.0, "streak": 0.4, "glitch": 0.2}},
+    "story": {"gap": 12.0, "every": 40.0, "fill": 80.0, "impact": 0.5, "clear": 4.0,
+              "characters": {"leak": 3.0, "burn": 2.6, "film": 1.8, "flash": 1.4, "streak": 0.5, "glitch": 0.2}},
+    "explainer": {"gap": 10.0, "every": 32.0, "fill": 60.0, "impact": 1.0, "clear": 3.0,
+                  "characters": {"flash": 2.6, "streak": 2.6, "leak": 2.2, "glitch": 1.6, "film": 1.0, "burn": 1.0}},
+    "trending_news": {"gap": 8.0, "every": 25.0, "fill": 45.0, "impact": 1.5, "clear": 2.5,
+                      "characters": {"flash": 3.0, "glitch": 2.6, "streak": 2.6, "burn": 1.2, "leak": 0.8,
+                                     "film": 0.6}},
+    "compilation": {"gap": 8.0, "every": 25.0, "fill": 45.0, "impact": 1.5, "clear": 2.5,
+                    "characters": {"flash": 3.0, "glitch": 2.6, "streak": 2.4, "burn": 1.6, "film": 1.0, "leak": 0.8}},
+    "news_compilation": {"gap": 10.0, "every": 30.0, "fill": 60.0, "impact": 1.5, "clear": 2.5,
+                         "characters": {"flash": 3.0, "glitch": 2.2, "streak": 2.2, "leak": 1.4, "burn": 0.8,
+                                        "film": 0.6}},
+    "nature_weather": {"gap": 15.0, "every": 60.0, "fill": 0.0, "impact": 0.0, "clear": 2.5,
+                       "only": ("region", "hook"),
+                       "characters": {"flash": 3.0, "leak": 3.0, "streak": 1.0, "burn": 0.4, "film": 0.2,
+                                      "glitch": 0.2}},
+}
+# A job with no video style cuts in a transition style (timeline.STYLES); the
+# pack rhythm that goes with it.
+PACK_FOR_CUT_STYLE = {"documentary": "documentary", "history": "history", "story": "story",
+                      "explainer": "explainer", "news": "trending_news", "trending": "trending_news",
+                      "compilation": "compilation", "weather": "nature_weather", "crossfade": "news_compilation"}
+
+
+def pack_rhythm(video_style: str = "", cut_style: str = "") -> dict:
+    """The pack-transition rhythm of a job: its video style's, else its cutting style's, else the documentary one."""
+    key = resolve(video_style) or PACK_FOR_CUT_STYLE.get(str(cut_style or "").strip().lower(), "")
+    key = key if key in PACK_TRANSITIONS else "documentary"
+    return {"style": key, **PACK_TRANSITIONS[key]}
+
+
 _ALIASES = {"news": "trending_news", "news-compilation": "news_compilation", "compilation_news":
             "news_compilation", "top": "compilation", "top_list": "compilation", "documentary_story": "story",
             "nature": "nature_weather", "weather": "nature_weather", "nature_&_weather": "nature_weather",

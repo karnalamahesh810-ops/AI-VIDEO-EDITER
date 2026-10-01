@@ -73,6 +73,17 @@ class Planning(unittest.TestCase):
             self.assertIn(a, starts, "a chunk starts on a scene cut")
             self.assertNotIn(starts[a], ("crossfade", "flash"), f"chunk start {a} is inside a transition")
 
+    def test_cuts_never_fall_under_a_pack_transition(self):
+        # The owner's overlay clips (and their own sound) play across their cut.
+        doc = _doc([200] * 60, {i: ("pack:mlt5" if i % 2 else "none") for i in range(60)})
+        clean, visual, _every = fanout.chunk_cuts(doc)
+        packs = {s["startFrame"] for s in doc["scenes"] if s["transition"].startswith("pack:")}
+        self.assertTrue(packs)
+        self.assertFalse(packs & set(visual))
+        self.assertFalse(packs & set(clean))
+        for a, _b in fanout.plan_chunks(doc, 10, 300)[1:]:
+            self.assertNotIn(a, packs)
+
     def test_cuts_avoid_a_sound_effect_or_an_overlay_entrance_across_them(self):
         lengths = [150] * 40                     # scene cuts every 150 frames
         doc = _doc(lengths, sfx=[{"name": "whoosh", "startFrame": 1490, "durationFrames": 30}],

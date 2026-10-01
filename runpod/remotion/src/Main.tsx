@@ -11,6 +11,7 @@ import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
 import sfxMeta from "./data/sfx_meta.json";   // a copy of public/sfx/sfx_meta.json (a test keeps them equal)
 import { LookSoundContext, LookSounds, type LookSoundScope } from "./components/lib/LookSounds";
 import { lookSoundsOn, planDocSounds, type SoundCue, type SoundTemplate } from "./components/lib/lookSoundPlan";
+import { PackTransitions } from "./transitions/PackTransition";
 
 const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
 // Case-file looks that show a still of the story when they were given no
@@ -319,6 +320,12 @@ export const Main: React.FC<TimelineProps> = (props) => {
           </CrossfadeIn>
         </Sequence>
       ))}
+
+      {/* The owner's overlay transitions ("pack:<name>"): a clip screen-blended
+          over a hard cut, its own sound at its own level (never raised; the
+          editor's sound switch mutes it, its master level can turn it down). */}
+      <PackTransitions scenes={scenes} fps={fps} durationInFrames={props.durationInFrames} premountFor={premount}
+        volume={props.sfxEnabled === false ? 0 : Math.min(1, Math.max(0, Number(props.sfxVolume ?? 1)))} />
 
       {/* Caption track, burned in over the visuals but under the graphics */}
       {captions.enabled &&

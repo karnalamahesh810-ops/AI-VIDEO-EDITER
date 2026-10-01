@@ -587,6 +587,307 @@ def _plan_crossfades(shots: List[dict], durations: Optional[List[int]] = None) -
     return out
 
 
+# --------------------------------------------------------------------------- #
+# The owner's overlay transition pack
+# --------------------------------------------------------------------------- #
+# remotion/public/transitions/mlt<N>.mp4 (the Mr.YTR pack, 2026-10-01): film
+# burns, light leaks, white flashes, film strips, glitches and streaks shot on
+# black, each with its own sound. A scene entering with "pack:<name>" is a hard
+# cut with the clip screen-blended over it, its most covered frame on the cut
+# (remotion/src/transitions/PackTransition.tsx), its sound at its own level -
+# so no timeline transition sound is ever planned on that cut. The owner: not
+# on every cut, never the same one twice running, placed where the story turns.
+PACK_PREFIX = "pack:"
+PACK_CHARACTERS = ("flash", "burn", "leak", "film", "glitch", "streak")
+PACK_META_PATH = os.path.join(os.path.dirname(templates.PATH), "..", "data", "transitions_meta.json")
+PACK_EDGE_START = 1.5       # seconds at the start of the video with no pack transition
+PACK_EDGE_END = 2.0         # ... and at its end
+PACK_RECENT = 3             # a clip is not used again within this many picks
+PACK_ROOM = 0.25            # seconds each scene keeps clear of the clip beyond the cut it covers
+PACK_SOUND_CLEAR = 0.3      # seconds: another sound this close to the clip's span blocks the cut
+_PACK_META_CACHE: Dict[str, Any] = {}
+
+_SENTENCE_END = re.compile(r"[.!?…][\"'”’)\]]*\s*$")
+# Words that turn the story to a new part ("Now let's head to...", "Years later", "Number 5").
+_PACK_SECTION = re.compile(
+    r"^\W*(?:(?:all right|alright|okay|ok|so|and|but|well)[,.]?\s+)*(?:"
+    r"now,?\s+let'?s\b|let'?s (?:take a (?:closer )?look|look at|turn to|talk about|go back|start|begin|dive|rewind)\b|"
+    r"meanwhile\b|elsewhere\b|moving on\b|next up\b|up next\b|but first\b|first,|finally,|fast[- ]forward\b|"
+    r"(?:years|decades|months|weeks|days|hours|centuries) later\b|back in\b|in (?:the )?(?:year )?(?:1[5-9]\d\d|20\d\d)\b|"
+    r"number (?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b|#\d+|chapter\b|part (?:\d+|one|two|three)\b|"
+    r"so (?:what|how|why)\b|here'?s (?:what|why|how|the thing)\b|but (?:then|that'?s not all)\b|"
+    r"the next (?:day|morning|year|week)\b)", re.I)
+_PACK_IMPACT = re.compile(
+    r"\b(?:suddenly|explo(?:ded|sion|des)|blast|crash(?:ed|es)?|collaps(?:ed|es)|slamm(?:ed|ing)|struck|"
+    r"shock(?:ing|ed)|stunn(?:ing|ed)|devastat(?:ing|ed|ion)|destroy(?:ed|s)|deadly|killed|catastroph\w*|"
+    r"breaking|out of nowhere|that'?s when|turns? out)\b", re.I)
+# The look a line asks for by its own words (glitch for tech and alerts, film
+# and burns for the past, a flash for an impact or a reveal, a leak for a calm move).
+_PACK_CUES = (
+    ("glitch", re.compile(r"\b(?:breaking|alert|warning|emergency|hack(?:ed|ers?|ing)?|cyber\w*|glitch\w*|"
+                          r"computers?|software|digital|internet|online|data|signal|radar|satellite|malfunction\w*|"
+                          r"outage|blackout|virus|AI|artificial intelligence|robots?|technology)\b", re.I)),
+    ("streak", re.compile(r"\b(?:fast(?:er|est)?|speed\w*|rac(?:e|ing)|rush(?:ed|ing)|scan\w*|tracking|lightning|"
+                          r"electric\w*|lasers?|in seconds|instantly|across the (?:country|state|region|world))\b", re.I)),
+    ("film", re.compile(r"\b(?:1[5-9]\d\d|archive\w*|footage|filmed|newsreel|photographs?|vintage|decades ago|"
+                        r"back then|histor(?:y|ic|ical)|memories)\b", re.I)),
+    ("burn", re.compile(r"\b(?:centur(?:y|ies)|ancient|empire|kings?|queens?|war|battle|burn(?:ed|ing|s)?|flames?|"
+                        r"founded|legend\w*|long ago|origins?|blaze|inferno)\b", re.I)),
+    ("flash", re.compile(r"\b(?:suddenly|explo(?:ded|sion|des)|blast|crash(?:ed|es)?|collaps(?:ed|es)|struck|"
+                         r"slamm(?:ed|ing)|shock(?:ing|ed)|stunn(?:ing|ed)|reveal(?:ed|s)?|discover(?:ed|y)|massive|"
+                         r"devastat(?:ing|ed)|destroyed|deadly|but then|that'?s when|turns? out|boom)\b", re.I)),
+    ("leak", re.compile(r"\b(?:meanwhile|elsewhere|morning|evening|sunset|sunrise|dawn|dusk|quiet(?:ly)?|calm|"
+                        r"peaceful|journey|travel\w*|head(?:ing|ed)? (?:to|north|south|east|west|over)|"
+                        r"let'?s (?:head|move|go)|over in|down in|up in|summer|spring|golden)\b", re.I)),
+)
+
+
+# How far a line's own words pull toward a look: an alert or an impact is a
+# strong ask; a calm or a historic word only leans (the style still decides).
+_PACK_CUE_WEIGHT = {"glitch": 3.0, "flash": 2.5, "film": 2.0, "burn": 2.0, "leak": 2.0, "streak": 2.0}
+
+
+def pack_meta() -> Dict[str, dict]:
+    """{name: {duration, fps, frames, peakFrame, peak, audioPeak, character, ...}} of every pack clip
+    (remotion/src/data/transitions_meta.json); {} when it cannot be read."""
+    try:
+        stamp = os.path.getmtime(PACK_META_PATH)
+    except OSError:
+        return {}
+    if _PACK_META_CACHE.get("stamp") != stamp:
+        try:
+            import json
+            with open(PACK_META_PATH, encoding="utf-8") as fh:
+                data = (json.load(fh) or {}).get("transitions") or {}
+        except (OSError, ValueError, AttributeError):
+            return {}
+        _PACK_META_CACHE.update(stamp=stamp, data={
+            k: v for k, v in data.items() if isinstance(v, dict) and v.get("character") in PACK_CHARACTERS
+            and float(v.get("duration") or 0) > 0 and 0 <= float(v.get("peak") or 0) <= float(v["duration"])})
+    return _PACK_META_CACHE["data"]
+
+
+def pack_name(t: Any) -> str:
+    """ "mlt5" for "pack:mlt5" when the pack ships that clip, else "". """
+    if isinstance(t, str) and t.startswith(PACK_PREFIX) and t[len(PACK_PREFIX):] in pack_meta():
+        return t[len(PACK_PREFIX):]
+    return ""
+
+
+def _pack_span(m: dict, fps: int) -> tuple:
+    """(frames before the cut, frames from the cut on) a clip covers at this fps (as PackTransition.tsx lays it)."""
+    same = abs(float(m.get("fps") or 0) - fps) < 1e-6
+    lead = int(m["peakFrame"]) if same else int(round(float(m["peak"]) * fps))
+    length = int(m["frames"]) if same else max(1, int(math.floor(float(m["duration"]) * fps)))
+    return lead, max(1, length - lead)
+
+
+def _pack_moments(segments: List[Segment], shots: List[dict], bounds: List[int], fps: int,
+                  rhythm: dict, brief: Optional[dict], busy: List[tuple]) -> List[dict]:
+    """
+    Every cut that may take a pack transition, with how strongly the story
+    turns there: {"i", "t", "score", "tags", "cues"}. Only sentence starts (or
+    a long pause in an unpunctuated transcript), outside the first
+    PACK_EDGE_START and last PACK_EDGE_END seconds, with room on both sides for
+    the shortest clip, and clear of every other sound (`busy` frame spans): a
+    graphic's own sound on that beat wins and two sounds never stack.
+    """
+    from .director import region_turn
+    n = len(segments)
+    meta = pack_meta()
+    if n < 2 or not meta:
+        return []
+    total = bounds[-1]
+    spans = [_pack_span(m, fps) for m in meta.values()]
+    min_lead, min_tail = min(s[0] for s in spans), min(s[1] for s in spans)
+    max_lead, max_tail = max(s[0] for s in spans), max(s[1] for s in spans)
+    room = int(round(PACK_ROOM * fps))
+    clear = int(round(PACK_SOUND_CLEAR * fps))
+    punctuated = any(_SENTENCE_END.search(s.text or "") for s in segments)
+    shots = list(shots) + [{}] * max(0, n - len(shots))
+
+    def first_word(k):
+        w = getattr(segments[k], "words", None) or []
+        return float(w[0].start) if w else float(segments[k].start)
+
+    def last_word(k):
+        w = getattr(segments[k], "words", None) or []
+        return float(w[-1].end) if w else float(segments[k].end)
+
+    def opens_sentence(k):
+        if k <= 0:
+            return True
+        if punctuated:
+            return bool(_SENTENCE_END.search(segments[k - 1].text or ""))
+        return first_word(k) - last_word(k - 1) >= 0.35
+
+    # The end of the hook: the first beat after the hook beats (director marks
+    # them), else the sentence start after the longest pause 12-40 s in.
+    hooks = [k for k, sh in enumerate(shots[:n]) if (sh or {}).get("hook")]
+    hook_end = max(hooks) + 1 if hooks else None
+    while hook_end is not None and hook_end < n and not opens_sentence(hook_end):
+        hook_end += 1
+    if hook_end is None:
+        early = [k for k in range(1, n) if 12.0 <= bounds[k] / fps <= 40.0 and opens_sentence(k)]
+        if early:
+            hook_end = max(early, key=lambda k: (first_word(k) - last_word(k - 1), -k))
+    sections = {}
+    prev_sec = None
+    for sec in sorted([s for s in (brief or {}).get("sections") or [] if isinstance(s, dict)
+                       and isinstance(s.get("from"), int)], key=lambda s: s["from"]):
+        if prev_sec is not None and (sec.get("where"), sec.get("when")) != (prev_sec.get("where"), prev_sec.get("when")):
+            sections[sec["from"]] = True
+        prev_sec = sec
+    only = set(rhythm.get("only") or ())
+    out = []
+    for k in range(1, n):
+        cut, t = bounds[k], bounds[k] / fps
+        if t < PACK_EDGE_START or t > total / fps - PACK_EDGE_END or not opens_sentence(k):
+            continue
+        if bounds[k] - bounds[k - 1] < min_lead + room or bounds[k + 1] - bounds[k] < min_tail + room:
+            continue
+        lo, hi = cut - max_lead - clear, cut + max_tail + clear
+        if any(s < hi and lo < e for s, e in busy):
+            continue
+        text = segments[k].text or ""
+        shot, before = shots[k] or {}, shots[k - 1] or {}
+        tags, score = [], 0.0
+        if hook_end == k:
+            tags.append("hook"); score += 3.0
+        if (shot.get("overlay") or {}).get("type") in ("chapter", "title"):
+            tags.append("section"); score += 3.0
+        elif sections.get(k):
+            tags.append("section"); score += 2.5
+        region, was = str(shot.get("region") or "").strip().lower(), str(before.get("region") or "").strip().lower()
+        if region and was and region != was:
+            tags.append("region"); score += 3.0
+        elif region_turn(text):
+            tags.append("region"); score += 2.5
+        if "section" not in tags and _PACK_SECTION.search(text):
+            tags.append("section"); score += 2.0
+        pause = first_word(k) - last_word(k - 1)
+        if pause >= 0.6:
+            tags.append("pause"); score += 1.5 if pause >= 1.0 else 1.0
+        subject = str(shot.get("subject") or "").strip().lower()
+        if subject and subject != str(before.get("subject") or "").strip().lower() and before.get("subject"):
+            tags.append("subject"); score += 1.3 if shot.get("subjectType") == "place" else 1.0
+        if _PACK_IMPACT.search(text) and float(rhythm.get("impact") or 0) > 0:
+            tags.append("impact"); score += float(rhythm["impact"])
+        if only and not only & set(tags):
+            continue
+        out.append({"i": k, "t": t, "score": score, "tags": tags,
+                    "cues": [c for c, rx in _PACK_CUES if rx.search(text)]})
+    return out
+
+
+def plan_pack_transitions(segments: List[Segment], shots: List[dict], bounds: List[int], fps: int,
+                          rhythm: dict, brief: Optional[dict] = None, busy: Optional[List[dict]] = None) -> Dict[int, str]:
+    """
+    {scene index: pack clip name} - where the owner's overlay transitions go.
+
+    A strong turn (the end of the hook, a chapter, a region change) takes one
+    as soon as `gap` seconds have passed since the last; a section phrase
+    ("Now let's head to...") after 0.6 x `every`; a long pause, a new subject or
+    an impact line after `every`; any other sentence start only after `fill`
+    (never when 0). A stronger moment just ahead wins over a weaker one now,
+    and the total stays near one per `every` seconds. Each pick takes the clip
+    whose look (rhythm["characters"] plus the line's own words) fits best,
+    never one of the last PACK_RECENT, and never one that would overrun its
+    scenes. `busy` is every other planned sound ({startFrame, durationFrames}).
+    """
+    meta = pack_meta()
+    n = len(segments)
+    if not meta or n < 2 or len(bounds) < n + 1:
+        return {}
+    spans = []
+    for o in busy or []:
+        s = int(o.get("startFrame", 0))
+        d = o.get("durationFrames")
+        if not isinstance(d, (int, float)) or d <= 0:
+            m = sfx_meta().get(o.get("name")) or {}
+            d = math.ceil(float(m.get("duration", 1.0)) * fps)
+        spans.append((s, s + max(1, int(math.ceil(d)) - int(o.get("trimFrames") or 0))))
+    moments = _pack_moments(segments, shots, bounds, fps, rhythm, brief, spans)
+    gap, every = float(rhythm.get("gap", 12.0)), float(rhythm.get("every", 38.0))
+    fill = float(rhythm.get("fill", 0.0) or 0.0)
+
+    def need(score: float) -> float:
+        if score >= 3.0:
+            return gap
+        if score >= 2.0:
+            return max(gap, 0.6 * every)
+        if score >= 1.0:
+            return max(gap, every)
+        return max(gap, fill) if fill > 0 else math.inf
+
+    picks, last = [], None
+    for k, m in enumerate(moments):
+        since = m["t"] - (last if last is not None else 0.0)
+        want = need(m["score"]) * (0.5 if last is None else 1.0)
+        if since < want:
+            continue
+        ahead = [d for d in moments[k + 1:] if d["t"] - m["t"] < gap and d["score"] > m["score"]
+                 and d["t"] - (last if last is not None else 0.0) >= need(d["score"]) * (0.5 if last is None else 1.0)]
+        if ahead:
+            continue
+        picks.append(m)
+        last = m["t"]
+    budget = max(1, int(round(bounds[-1] / fps / every)))
+    while len(picks) > budget:
+        picks.remove(min(picks, key=lambda p: (p["score"], -p["t"])))
+
+    likes = dict(rhythm.get("characters") or {})
+    room = int(round(PACK_ROOM * fps))
+    out: Dict[int, str] = {}
+    recent: List[str] = []
+    prev_look = ""
+    for p in picks:
+        i = p["i"]
+        cut, before, after = bounds[i], bounds[i] - bounds[i - 1], bounds[i + 1] - bounds[i]
+        best, best_w = "", -math.inf
+        for name in sorted(meta):
+            m = meta[name]
+            lead, tail = _pack_span(m, fps)
+            if name in recent[-PACK_RECENT:] or before < lead + room or after < tail + room \
+                    or cut - lead < 0 or cut + tail > bounds[-1]:
+                continue
+            look = m["character"]
+            w = float(likes.get(look, 0.5)) + (_PACK_CUE_WEIGHT.get(look, 2.0) if look in p["cues"] else 0.0) \
+                - (1.2 if look == prev_look else 0.0) + 0.4 * float(m.get("coverage") or 0.0) \
+                + (zlib.crc32(f"{i}:{name}".encode("utf-8")) % 100) / 250.0
+            if w > best_w:
+                best, best_w = name, w
+        if best:
+            out[i] = best
+            recent.append(best)
+            prev_look = meta[best]["character"]
+    return out
+
+
+def apply_pack_transitions(scenes: List[dict], picks: Dict[int, str], fps: int, clear_seconds: float = 3.0) -> int:
+    """
+    Set each picked scene's entrance to its pack clip (any crossfade or style
+    transition there becomes the hard cut the clip covers) and clear the
+    style's own transitions within `clear_seconds` of it (crossfades stay).
+    Returns how many pack transitions were set.
+    """
+    near = int(round(max(0.0, clear_seconds) * fps))
+    cuts = [int(scenes[i]["startFrame"]) for i in picks if 0 < i < len(scenes)]
+    for i, sc in enumerate(scenes):
+        t = sc.get("transition") or "none"
+        if i in picks and 0 < i < len(scenes):
+            sc["transition"] = PACK_PREFIX + picks[i]
+        elif t not in ("none", "crossfade") and not pack_name(t) \
+                and any(abs(int(sc.get("startFrame", 0)) - c) <= near for c in cuts):
+            sc["transition"] = "none"
+        else:
+            continue
+        vt = sc.get("visualTreatment")
+        if isinstance(vt, dict) and "transitionIn" in vt:
+            vt["transitionIn"] = sc["transition"]
+    return len(cuts)
+
+
 def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
                         intensity: float = 1.0, voice_lufs: Optional[float] = None) -> List[dict]:
     """
@@ -1008,10 +1309,22 @@ def build(segments: List[Segment], shots: List[dict],
         music = planned["music"]
         treatment_counts = planned["counts"]
         look_sounds = planned.get("lookSounds")
+    busy = list(sfx_list) + (sfxplan.builtin_busy(overlays, scenes, fps) if look_sounds is not None else [])
+    # The owner's overlay transition pack: a few chosen cuts take a clip that
+    # brings its own sound, so only where no other sound is on that beat
+    # (config.TRANSITION_PACK, a job's "transition_pack"; a job that pins its
+    # own "transitions" list gets them only when it names "pack").
+    want_pack = inp.get("transition_pack")
+    pinned = inp.get("transitions") if isinstance(inp.get("transitions"), list) else []
+    if (want_pack if isinstance(want_pack, bool) else config.TRANSITION_PACK) and (
+            not pinned or any(str(t).startswith("pack") for t in pinned)):
+        from . import styles as video_styles
+        rhythm = video_styles.pack_rhythm(str(inp.get("video_style") or ""), style)
+        apply_pack_transitions(scenes, plan_pack_transitions(segments, shots, bounds, fps, rhythm, brief, busy),
+                               fps, float(rhythm.get("clear", 3.0)))
     # Each transition's own sound, peaking on its cut, unless a graphic's
     # sound is already there (a row, or the sound built into a look); then
-    # every sound under the one cap.
-    busy = list(sfx_list) + (sfxplan.builtin_busy(overlays, scenes, fps) if look_sounds is not None else [])
+    # every sound under the one cap. A pack transition plays its own: none here.
     sfx_list = sorted(list(sfx_list) + plan_transition_sfx(
                           scenes, fps, busy, (pack or {}).get("sfxIntensity", 1.0), voice_lufs=voice_lufs),
                       key=lambda s: int(s.get("startFrame", 0)))

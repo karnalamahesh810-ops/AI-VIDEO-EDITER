@@ -861,7 +861,8 @@ def chunk_cuts(doc: dict) -> Tuple[List[int], List[int], List[int]]:
             continue
         every.append(f)
         t = str(sc.get("transition") or "none")
-        if t == "crossfade" or t in CUT_TRANSITIONS:
+        # A pack transition's clip (and its own sound) plays across its cut.
+        if t == "crossfade" or t in CUT_TRANSITIONS or t.startswith("pack:"):
             continue
         visual.append(f)
         if any(a < f < b for a, b in sfx) or any(a < f < b for a, b in entries):

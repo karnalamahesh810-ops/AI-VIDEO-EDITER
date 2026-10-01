@@ -2054,7 +2054,7 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # Video styles (src/styles.py) ride on these.
                       "MIN_SCENE_SECONDS", "TARGET_SCENE_SECONDS", "MAX_SCENE_SECONDS",
                       "ALLOW_VERTICAL", "VERTICAL_BAND_ASPECT", "NEWS_FOOTAGE", "GRAPHICS_DENSITY",
-                      "TRANSITION_STYLE", "UPSCALE_ENABLED", "LOCAL_VISION_ENABLED",
+                      "TRANSITION_STYLE", "TRANSITION_PACK", "UPSCALE_ENABLED", "LOCAL_VISION_ENABLED",
                       # The news styles turn AI images off (the owner's review,
                       # 2026-09-30), and any style may tune the variety rules.
                       "IMAGE_MAX_PER_VIDEO", "PREFER_GENERATED_IMAGES", "GENERATED_IMAGES_IN_HOOK",

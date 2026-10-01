@@ -638,6 +638,11 @@ ALLOW_YANDEX_IMAGES = _flag("ALLOW_YANDEX_IMAGES", True)
 # ("documentary" | "energetic" | "crossfade"). "" = the planner's defaults.
 GRAPHICS_DENSITY = os.getenv("GRAPHICS_DENSITY", "").strip().lower()
 TRANSITION_STYLE = os.getenv("TRANSITION_STYLE", "").strip().lower()
+# The owner's overlay transition pack (remotion/public/transitions, 2026-10-01):
+# a few chosen cuts get a screen-blended film burn / leak / flash / glitch with
+# its own sound (timeline.plan_pack_transitions; per-style rhythm in
+# styles.PACK_TRANSITIONS). Off: the planned cuts stay as they were.
+TRANSITION_PACK = _flag("TRANSITION_PACK", True)
 VERTICAL_BAND_ASPECT = float(os.getenv("VERTICAL_BAND_ASPECT", "0.8"))
 ANIMATION_OVER_FOOTAGE_BELOW = float(os.getenv("ANIMATION_OVER_FOOTAGE_BELOW", "0.6"))
 CLIP_LIBRARY_MIN_SCORE = float(os.getenv("CLIP_LIBRARY_MIN_SCORE", "0.8"))

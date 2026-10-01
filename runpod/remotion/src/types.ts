@@ -37,7 +37,12 @@ export type SceneTransition =
   | "chromatic-flash" | "vhs-glitch"
   // News-compilation cross-dissolve: the outgoing shot plays on under the
   // incoming one while it fades in (Main.tsx extends the outgoing scene).
-  | "crossfade";
+  | "crossfade"
+  // The owner's overlay transition pack ("pack:mlt5"): a hard cut with the
+  // pack clip laid over it, screen-blended, its own sound at its own level
+  // (transitions/PackTransition.tsx). The names are data/transitions_meta.json's,
+  // checked against timeline.pack_meta() rather than this list.
+  | `pack:${string}`;
 
 /**
  * One effect per clip, so borrowed footage reads as designed.
