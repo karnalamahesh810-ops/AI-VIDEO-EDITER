@@ -14115,6 +14115,7 @@
   ],
   "cues": [
    "measurement",
+   "change-length",
    "level"
   ],
   "duration": 6.0,
@@ -14995,7 +14996,7 @@
   "category": "DOCUMENTS",
   "description": "A letter's excerpt in italic Newsreader on aged, folded paper, fitted to its words; the signature (label) is written in ink from frame 26 with a pen sound for its stroke, the printed name and role (subtitle) under it. For a line that says someone wrote or signed (the planner's _LOOK_NEEDS).",
   "kind": "card",
-  "own_backdrop": true,
+  "own_backdrop": false,
   "needs_media": 0,
   "props": [
    "text",
@@ -15058,8 +15059,7 @@
    "highlight"
   ],
   "cues": [
-   "quote",
-   "statement"
+   "quote"
   ],
   "duration": 6.0,
   "sfx": "none",

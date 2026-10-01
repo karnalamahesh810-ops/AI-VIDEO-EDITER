@@ -1873,6 +1873,8 @@ _AGENCY_NAME = re.compile(r"\b((?:U\.S\.\s+|US\s+)?(?:[A-Z][a-z]+\s+){0,3}(?:Bur
 _FULL_POOL = re.compile(r"\b(?:full pool|full)\b[^.\d]{0,24}?(\d[\d,]{2,})\s*(?:feet|ft|foot)\b|\bdown from\s+(?:about\s+)?"
                         r"(\d[\d,]{2,})\s*(?:feet|ft)\b", re.I)
 _POOLS = re.compile(r"\b(minimum power pool|power pool|dead pool|flood stage)\b[^.\d]{0,24}?(\d[\d,]{2,})\s*(?:feet|ft)?", re.I)
+_TO_LEVEL = re.compile(r"\b(?:to|at)\s+(?:about\s+|roughly\s+|just\s+|nearly\s+)?(\d[\d,]*(?:\.\d+)?)\s*(?:feet|ft|foot|"
+                       r"meters?|metres?)\b", re.I)
 _DOWN = re.compile(r"\b(fell|fallen|fall|falling|dropped|drop|dropping|declin\w*|sank|sunk|shrank|lowest|record low|"
                    r"down)\b", re.I)
 _UP = re.compile(r"\b(rose|risen|rise|rising|climbed|gained|up)\b", re.I)
@@ -1931,7 +1933,10 @@ def pro_props(t: dict, cue: str, props: dict, text: str, shot: Optional[dict] = 
     if tid == "LIB_DX_DRUM_COUNTER":
         return p if v is not None and 10 <= abs(v) < 1e9 else None
     if tid == "LIB_DX_RESERVOIR_SECTION":
-        if v is None or v < 100 or unit not in ("FT", "M") or cue != "measurement":
+        if v is None or v < 100 or unit not in ("FT", "M") or cue not in ("measurement", "change-length"):
+            return None
+        # "fell 12 feet" is a change; "fell to 3,517 feet" is the level the lake is at now.
+        if cue == "change-length" and not any(_num(m.group(1)) == v for m in _TO_LEVEL.finditer(text)):
             return None
         m = _FULL_POOL.search(text)
         full = _num(m.group(1) or m.group(2)) if m else None
@@ -1971,7 +1976,7 @@ def pro_props(t: dict, cue: str, props: dict, text: str, shot: Optional[dict] = 
             return None
         agency = _AGENCY_NAME.search(text)
         if agency:
-            p["subtitle"] = agency.group(1).strip()
+            p["subtitle"] = re.sub(r"^the\s+", "", agency.group(1).strip(), flags=re.I)
         return p
     if tid == "LIB_KX_HANDWRITTEN_NOTE":
         return p if 4 <= len(str(p.get("text") or "")) <= 64 else None

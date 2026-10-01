@@ -249,7 +249,7 @@ const LineEndpoint: Look = ({ overlay, accent }) => {
   const decimals = sc.step < 1 ? Math.min(2, Math.max(0, -Math.floor(Math.log10(sc.step)))) : 0;
   const tickLabel = (v: number) => {
     const fv = figureOf(v, plan.suffix, plan.prefix);
-    return `${fv.prefix}${fmtNumber(v, decimals)}${fv.glued}`;
+    return `${fv.prefix}${fmtNumber(v, decimals, plan.suffix || plan.prefix ? true : undefined)}${fv.glued}`;
   };
   const yLabelSize = 26 * k;
 
@@ -1122,7 +1122,7 @@ const ReservoirSection: Look = ({ overlay, accent }) => {
   const valSize = 74 * k;
   const label = clip(digits(str(overlay.text)), 28).toUpperCase();
   const strata = [0.06, 0.13, 0.22, 0.29, 0.41, 0.5, 0.58, 0.68, 0.75, 0.86, 0.93];
-  const unitTxt = (e: number) => `${fmtNumber(e)}${fig.unit ? ` ${fig.unit}` : ""}`;
+  const unitTxt = (e: number) => `${fmtNumber(e, undefined, true)}${fig.unit ? ` ${fig.unit}` : ""}`;
   const dash = `${12 * k} ${10 * k}`;
   const fullY = plan.full !== null ? Y(plan.full) : 0;
   const showDrop = plan.change !== null && Math.abs(fullY - Y(plan.v)) > 24 * k;
@@ -1132,7 +1132,7 @@ const ReservoirSection: Look = ({ overlay, accent }) => {
   // when there is room between the two lines, else under the level's plate.
   const bx = R + 70 * kw;
   const bigGap = Math.abs(fullY - Y(plan.v)) > 120 * k;
-  const dropText = plan.change !== null ? `${fmtNumber(Math.abs(plan.change))}${fig.unit ? ` ${fig.unit}` : ""}` : "";
+  const dropText = plan.change !== null ? `${fmtNumber(Math.abs(plan.change), undefined, true)}${fig.unit ? ` ${fig.unit}` : ""}` : "";
   const dropWords = plan.change !== null && plan.change < 0 ? "BELOW FULL POOL" : "ABOVE FULL POOL";
   const items = [
     { key: "level", y: Y(plan.v) + plateH / 2 - valSize * 0.55, h: plateH },

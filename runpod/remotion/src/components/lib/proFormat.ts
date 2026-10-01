@@ -39,7 +39,7 @@ export const digits = (s: string): string => {
   }
 };
 
-const SMALL_TAIL = /[\s,;:\-–—]+(?:the|a|an|of|in|at|on|and|or|to|for|by|with|from|before|after|near|as|is|was)?$/i;
+const SMALL_TAIL = /[\s,;:\-–—]+(?:the|a|an|of|in|at|on|and|or|to|for|by|with|from|before|after|near|as|is|was|its|their|his|her|our|this|that)?$/i;
 
 /** At most n characters, cut at a word, never ending on a dangling small word or a comma. `dots` adds an ellipsis. */
 export const clip = (s: string, n: number, dots = false): string => {
@@ -75,13 +75,16 @@ export const decimalsOf = (v: number): number => {
   return most;
 };
 
-/** "3,517", "22", "4.5", "2026" (a year is never grouped), "−183" with the typographic minus. */
-export const fmtNumber = (v: number, decimals?: number, grouping = true): string => {
+/**
+ * "3,517", "22", "4.5", "2026" (a bare year is never grouped), "−183" with the typographic minus.
+ * `grouping` overrides the year rule: a figure with a unit ("2,026 FT") is grouped like any number.
+ */
+export const fmtNumber = (v: number, decimals?: number, grouping?: boolean): string => {
   if (!Number.isFinite(v)) return "";
   const d = decimals ?? decimalsOf(v);
   const x = Math.abs(v) < 10 ** -(d + 1) ? 0 : v;
   const text = Math.abs(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d,
-    useGrouping: grouping && !isYear(Math.abs(x)) });
+    useGrouping: grouping ?? !isYear(Math.abs(x)) });
   return `${x < 0 ? "−" : ""}${text}`;
 };
 
@@ -297,11 +300,11 @@ export const milesBetween = (a: { lat: number; lon: number }, b: { lat: number; 
 export const distanceText = (miles: number | null, said?: number | null, saidUnit?: unknown): string => {
   const u = unitOf(saidUnit);
   if (said !== null && said !== undefined && Number.isFinite(said) && said > 0 && (u === "MI" || u === "KM")) {
-    return `${fmtNumber(said)} ${u}`;
+    return `${fmtNumber(said, undefined, true)} ${u}`;
   }
   if (miles === null || !Number.isFinite(miles) || miles <= 0) return "";
   const v = miles < 10 ? Math.round(miles * 10) / 10 : Math.round(miles);
-  return `${fmtNumber(v)} MI`;
+  return `${fmtNumber(v, undefined, true)} MI`;
 };
 
 /** "36.9375° N · 111.4844° W" (four decimals). */
