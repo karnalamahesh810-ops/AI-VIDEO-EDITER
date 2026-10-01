@@ -65,16 +65,21 @@ SIB_BAND = (4500.0, 10000.0)   # esses
 CLEAN_SNR_DB = 38.0
 FLOOR_MIN_DB = -72.0           # a floor under this is inaudible whatever the voice level
 FLOOR_CLUSTER_DB = 6.0         # pauses: p15 within this of p5 among the non-silent frames
-# Under 70 Hz a voice only leaks (the Lake Powell narration: -31 dB against
-# its body); a desk, traffic or handling noise brings it within 20 dB.
+# Rumble: the loud end of the band under 70 Hz (p90 of the frames) against
+# the loud vowels (p90 of the 300-3000 Hz band). A voice only leaks there
+# (the Lake Powell narration: -32 dB); a desk, traffic or handling noise
+# brings it within 20 dB (-12 with a low rumble added).
 RUMBLE_DB = -20.0
 # Mains hum: a 50 or 60 Hz line (or its harmonics) standing this far over the
 # noise around it in the pauses.
 HUM_PROMINENCE_DB = 10.0
-# The loudest esses (p95 of the sibilant band against the voice's body in the
-# speech frames): natural speech sits near -4 dB (Lake Powell -3.6), a voice
-# with a harsh 7 kHz presence (+9 dB) near +19.
-SIBILANCE_DB = 6.0
+# Esses: the loudest of them (p98 of the 4.5-10 kHz band) against the loud
+# vowels. Natural speech sits near -12 dB (Lake Powell -11.9, the same voice
+# with room noise or rumble added -11.7), a harsh 7 kHz presence (+9 dB) at
+# -4. Over SIBILANCE_DB the high band is compressed above where natural esses
+# sit (SIBILANCE_TARGET_DB under the vowels).
+SIBILANCE_DB = -7.0
+SIBILANCE_TARGET_DB = -11.0
 PEAK_PLR_DB = 15.0             # true peak this far over the loudness: tame the peaks
 LEVEL_LRA_LU = 7.5             # loudness range over this: level the drift
 
@@ -87,6 +92,7 @@ LOUDNESS_TOLERANCE = 0.5       # LU between the original and the cleaned narrati
 ALIGN_TOLERANCE_S = 0.001      # seconds of lag allowed between them
 
 _FFMPEG = "ffmpeg"
+FRAMING = "asetnsamples=n=4096:p=0"
 
 
 # --------------------------------------------------------------------------- #
@@ -188,19 +194,66 @@ def frame_stats(path: str, timeout: float = 300) -> Optional[Dict[str, Any]]:
         return (freqs >= lo) & (freqs < hi)
     lf, core, sib = band(*LF_BAND), band(*CORE_BAND), band(*SIB_BAND)
     full = band(20.0, ANALYSIS_RATE / 2.0)
-    parts: Dict[str, list] = {"rms": [], "lf": [], "core": [], "sib": [], "full": []}
+    # Mains hum is a line, not a band: four frames at a time give ~6 Hz bins
+    # under HUM_TOP_HZ, kept per group with the group's level.
+    long_window = np.hanning(FRAME * HUM_GROUP).astype(np.float32)
+    parts: Dict[str, list] = {"rms": [], "lf": [], "core": [], "sib": [], "full": [], "humSpec": [], "humRms": []}
     tiny = 1e-20
+    # A band's power in the one-sided spectrum of a Hann-windowed frame, as the
+    # mean square of that band in the signal (Parseval, the window's energy put back).
+    to_ms = 2.0 / (FRAME * FRAME * float(np.mean(window ** 2)))
     try:
         for frames in _frames(path, timeout):
             parts["rms"].append(10.0 * np.log10(np.mean(frames ** 2, axis=1) + tiny))
             power = np.abs(np.fft.rfft(frames * window, axis=1)) ** 2
             for key, sel in (("lf", lf), ("core", core), ("sib", sib), ("full", full)):
-                parts[key].append(10.0 * np.log10(power[:, sel].sum(axis=1) + tiny))
+                parts[key].append(10.0 * np.log10(power[:, sel].sum(axis=1) * to_ms + tiny))
+            g = len(frames) // HUM_GROUP
+            if g:
+                groups = frames[: g * HUM_GROUP].reshape(g, FRAME * HUM_GROUP)
+                parts["humSpec"].append((np.abs(np.fft.rfft(groups * long_window, axis=1)) ** 2)[:, :HUM_BINS])
+                parts["humRms"].append(10.0 * np.log10(np.mean(groups ** 2, axis=1) + tiny))
     except (OSError, TimeoutError, ValueError):
         return None
     if not parts["rms"]:
         return None
-    return {k: np.concatenate(v) for k, v in parts.items()}
+    return {k: np.concatenate(v) for k, v in parts.items() if v}
+
+
+HUM_GROUP = 4                                       # frames per hum spectrum (~5.9 Hz bins)
+HUM_TOP_HZ = 420.0
+HUM_BINS = int(HUM_TOP_HZ / (ANALYSIS_RATE / (FRAME * HUM_GROUP))) + 1
+
+
+def hum_lines(spec, rms, floor: float) -> Tuple[Optional[float], Optional[int], List[int]]:
+    """
+    (prominence dB, mains frequency, harmonics standing out) of a 50 or 60 Hz
+    hum in the pauses: the strongest of its first four harmonics against the
+    median of the bins 6-25 Hz either side. (None, None, []) without pauses.
+    """
+    import numpy as np
+    quiet = rms <= floor + 6.0
+    if quiet.sum() < 5:
+        return None, None, []
+    avg = spec[quiet].mean(axis=0) + 1e-30
+    df = ANALYSIS_RATE / (FRAME * HUM_GROUP)
+    best: Tuple[float, Optional[int], List[int]] = (-100.0, None, [])
+    for f0 in (50, 60):
+        proms = []
+        for h in range(1, 5):
+            k = int(round(h * f0 / df))
+            if k + 5 >= len(avg):
+                break
+            peak = float(avg[max(0, k - 1): k + 2].max())
+            around = np.concatenate([avg[max(0, k - 4): max(0, k - 1)], avg[k + 2: k + 5]])
+            local = float(np.median(around)) if len(around) else peak
+            proms.append((10.0 * math.log10(peak / max(local, 1e-30)), h))
+        if not proms:
+            continue
+        top = max(p for p, _h in proms)
+        if top > best[0]:
+            best = (top, f0, [h for p, h in proms if p > HUM_PROMINENCE_DB])
+    return (round(best[0], 1), best[1], best[2]) if best[1] else (None, None, [])
 
 
 def analyze(path: str, timeout: float = 300) -> Optional[Dict[str, Any]]:
@@ -238,19 +291,17 @@ def analyze(path: str, timeout: float = 300) -> Optional[Dict[str, Any]]:
     stats["floorReliable"] = bool(reliable)
     stats["snr"] = round(lufs - floor, 1) if floor is not None else None
     stats["silentShare"] = round(float(1.0 - live.mean()), 3)
-    speech = rms > lufs - 10.0
-    if speech.sum() >= 20:
-        stats["rumble"] = round(float(np.median(fs["lf"][speech] - fs["core"][speech])), 1)
-        ratio = fs["sib"][speech] - fs["core"][speech]
-        stats["sibilance"] = round(float(np.percentile(ratio, 95)), 1)
-        stats["sibilantShare"] = round(float((ratio > 0).mean()), 3)
-    else:
-        stats["rumble"] = stats["sibilance"] = stats["sibilantShare"] = None
-    if floor is not None and reliable:
-        quiet = live & (rms <= floor + 6.0)
-        if quiet.sum() >= 10:
-            stats["hum"] = round(float(np.median(fs["lf"][quiet] - fs["full"][quiet])), 1)
-    stats.setdefault("hum", None)
+    # Levels compared as percentiles over the whole narration, so no choice of
+    # "speech frames" can skew them (an 's' is exactly a frame whose vowel band
+    # is weak; a rumble raises every frame's level).
+    vowels = float(np.percentile(fs["core"], 90))
+    stats["vowelDb"] = round(vowels, 1)
+    stats["rumble"] = round(float(np.percentile(fs["lf"], 90)) - vowels, 1)
+    stats["sibilance"] = round(float(np.percentile(fs["sib"], 98)) - vowels, 1)
+    stats["humProminence"], stats["humHz"], stats["humHarmonics"] = None, None, []
+    if floor is not None and reliable and "humSpec" in fs:
+        prom, f0, harmonics = hum_lines(fs["humSpec"], fs["humRms"], floor)
+        stats["humProminence"], stats["humHz"], stats["humHarmonics"] = prom, f0, harmonics
     return stats
 
 
@@ -281,6 +332,14 @@ def plan(stats: Dict[str, Any]) -> Dict[str, Any]:
         filters.append(f"highpass=f={HIGHPASS_HZ:g}")
     else:
         skipped["highpass"] = "no rumble or hum"
+    f0 = stats.get("humHz")
+    lines = [h for h in (stats.get("humHarmonics") or []) if h >= 2]
+    if hum is not None and hum > HUM_PROMINENCE_DB and f0 and lines:
+        # The high-pass takes the mains line itself; its harmonics inside the
+        # voice's range get narrow notches (a few Hz wide), the voice around them kept.
+        steps.append({"step": "dehum", "why": f"{f0} Hz hum harmonics {', '.join(str(h * f0) for h in lines)} Hz",
+                      "hz": [h * f0 for h in lines]})
+        filters.extend(f"equalizer=f={h * f0}:t=q:w=16:g=-18" for h in lines)
 
     floor, snr = stats.get("noiseFloor"), stats.get("snr")
     if not stats.get("floorReliable") or floor is None:
@@ -297,14 +356,14 @@ def plan(stats: Dict[str, Any]) -> Dict[str, Any]:
         filters.append(f"afftdn=nr={nr:.1f}:nf={nf:.1f}:tn=1")
 
     sib = stats.get("sibilance")
-    if sib is not None and sib > SIBILANCE_DB:
-        # The high band is compressed above the level its loudest esses reach
-        # minus a few dB: ordinary consonants pass, a hissing 's' comes down.
-        over = sib - SIBILANCE_DB
-        ratio = max(2.0, min(5.0, 2.0 + over * 0.4))
-        steps.append({"step": "deess", "why": f"esses {sib:+.0f} dB against the voice's body", "ratio": round(ratio, 1)})
-        filters.append("__DEESS__")
-        stats = dict(stats, _deess_ratio=ratio)
+    if sib is not None and sib > SIBILANCE_DB and stats.get("vowelDb") is not None:
+        # The band over 5 kHz is compressed above where natural esses sit
+        # (SIBILANCE_TARGET_DB under the vowels): ordinary consonants pass, a
+        # hissing 's' comes down most of the way to them.
+        threshold = float(stats["vowelDb"]) + SIBILANCE_TARGET_DB
+        steps.append({"step": "deess", "why": f"loudest esses {sib:+.0f} dB against the vowels",
+                      "ratio": 4.0, "thresholdDb": round(threshold, 1)})
+        filters.append(f"__DEESS__:{threshold:.2f}")
     else:
         skipped["deess"] = "esses in proportion" if sib is not None else "not measured"
 
@@ -334,13 +393,10 @@ def _graph(chain: List[str], stats: Dict[str, Any]) -> Tuple[str, str]:
     for f in chain:
         n += 1
         out = f"p{n}"
-        if f == "__DEESS__":
-            ratio = float(stats.get("_deess_ratio") or 3.0)
-            # Its loudest esses reach about lufs + sibilance (dB) in the band;
-            # the compressor starts 6 dB under that.
-            thr = min(0.5, _lin(float(stats["lufs"]) + float(stats.get("sibilance") or 0.0) - 6.0))
+        if f.startswith("__DEESS__"):
+            thr = max(_lin(-60.0), min(0.5, _lin(float(f.split(":", 1)[1]))))
             parts.append(f"[{label}]acrossover=split={DEESS_SPLIT_HZ:g}[lo{n}][hi{n}]")
-            parts.append(f"[hi{n}]acompressor=threshold={thr:.6f}:ratio={ratio:.2f}:attack=1:release=60:"
+            parts.append(f"[hi{n}]acompressor=threshold={thr:.6f}:ratio=4:attack=1:release=60:"
                          f"knee=2:makeup=1[hc{n}]")
             # amix halves two inputs; the volume puts the bands back at unity.
             parts.append(f"[lo{n}][hc{n}]amix=inputs=2:duration=first:dropout_transition=0,volume=2[{out}]")
@@ -362,20 +418,20 @@ def _ffmpeg_ok(argv: List[str], timeout: float) -> Tuple[bool, str]:
     return p.returncode == 0, (p.stderr or "")[-300:]
 
 
-def alignment(a: str, b: str, timeout: float = 120) -> Optional[float]:
+def lags(a: str, b: str, timeout: float = 120) -> List[float]:
     """
-    The lag (seconds) of `b` against `a`, the worst of three 4-second windows
-    (cross-correlation within +-50 ms); None when it cannot be measured.
+    How late `b` plays against `a` (seconds; negative = early) in three
+    4-second windows (cross-correlation within +-50 ms); [] when it cannot be
+    measured. A filter with latency (afftdn: 25 ms) shows here.
     """
     try:
         import numpy as np
     except ImportError:
-        return None
+        return []
     seconds = probe(a).get("seconds") or 0.0
     if seconds < 6.0:
-        return None
-    worst = 0.0
-    found = False
+        return []
+    out: List[float] = []
     for frac in (0.2, 0.5, 0.8):
         start = max(0.0, seconds * frac - 2.0)
         sigs = []
@@ -384,7 +440,7 @@ def alignment(a: str, b: str, timeout: float = 120) -> Optional[float]:
                 p = _run([_FFMPEG, "-v", "error", "-ss", f"{start:.3f}", "-i", path, "-t", "4", "-ac", "1",
                           "-ar", str(ANALYSIS_RATE), "-f", "f32le", "-"], timeout, binary=True)
             except (OSError, subprocess.TimeoutExpired):
-                return None
+                return []
             sigs.append(np.frombuffer(p.stdout, dtype="<f4"))
         n = min(len(sigs[0]), len(sigs[1]))
         if n < ANALYSIS_RATE:
@@ -395,11 +451,23 @@ def alignment(a: str, b: str, timeout: float = 120) -> Optional[float]:
         size = 1 << int(math.ceil(math.log2(2 * n)))
         corr = np.fft.irfft(np.fft.rfft(y, size) * np.conj(np.fft.rfft(x, size)), size)
         span = int(0.05 * ANALYSIS_RATE)
-        lags = np.concatenate([corr[-span:], corr[:span + 1]])
-        lag = int(np.argmax(lags)) - span
-        worst = max(worst, abs(lag) / ANALYSIS_RATE)
-        found = True
-    return worst if found else None
+        window = np.concatenate([corr[-span:], corr[:span + 1]])
+        out.append((int(np.argmax(window)) - span) / ANALYSIS_RATE)
+    return out
+
+
+def alignment(a: str, b: str, timeout: float = 120) -> Optional[float]:
+    """The worst lag (seconds, either way) of `b` against `a`; None when it cannot be measured."""
+    got = lags(a, b, timeout)
+    return max(abs(x) for x in got) if got else None
+
+
+def latency(a: str, b: str, timeout: float = 120) -> Optional[float]:
+    """The steady delay (seconds) of `b` against `a` when its windows agree within 1 ms, else None."""
+    got = lags(a, b, timeout)
+    if not got or max(got) - min(got) > ALIGN_TOLERANCE_S:
+        return None
+    return sorted(got)[len(got) // 2]
 
 
 def polish(src: str, dst: str, *, stats: Optional[Dict[str, Any]] = None,
@@ -430,6 +498,8 @@ def polish(src: str, dst: str, *, stats: Optional[Dict[str, Any]] = None,
         report["why"] = "nothing to fix"
         return report
     graph, last = _graph(decided["chain"], decided["stats"])
+    graph += f";[{last}]{FRAMING}[out]"
+    last = "out"
     tmp = dst + ".work.flac"
     for leftover in (tmp, dst):
         if os.path.exists(leftover):
@@ -448,9 +518,29 @@ def polish(src: str, dst: str, *, stats: Optional[Dict[str, Any]] = None,
         # The original's loudness back, never over the true-peak ceiling.
         gain = float(stats["lufs"]) - float(mid["lufs"])
         gain = min(gain, TRUE_PEAK_MAX - float(mid["tp"]))
+        # A filter that delays the sound (afftdn's FFT window: 25 ms) is put
+        # back in time: its head cut by the delay, the same length of silence
+        # after the last word, so every word lands where it was transcribed.
+        delay = latency(src, tmp, left())
+        if delay is None:
+            report["why"] = "the timing of the cleaned narration could not be measured"
+            return report
+        shift = int(round(delay * int(stats["rate"]))) if abs(delay) > ALIGN_TOLERANCE_S / 2 else 0
+        report["latencyMs"] = round(delay * 1000.0, 2)
+        af = []
+        if shift > 0:
+            af.append(f"atrim=start_sample={shift},asetpts=N/SR/TB,apad=pad_len={shift}")
+        elif shift < 0:
+            report["why"] = f"the cleaned narration plays {-delay * 1000:.1f} ms early"
+            return report
         if abs(gain) >= 0.05:
-            ok, err = _ffmpeg_ok([_FFMPEG, "-hide_banner", "-v", "error", "-y", "-i", tmp, "-af",
-                                  f"volume={gain:.2f}dB", *fmt, dst], left())
+            af.append(f"volume={gain:.2f}dB")
+        if af:
+            # Even frames for the FLAC encoder (a trimmed first frame of odd
+            # length made it refuse to start: "invalid block size").
+            af.append(FRAMING)
+            ok, err = _ffmpeg_ok([_FFMPEG, "-hide_banner", "-v", "error", "-y", "-i", tmp, "-af", ",".join(af),
+                                  *fmt, dst], left())
             if not ok or not os.path.isfile(dst):
                 report["why"] = f"the level match failed: {err.strip()[-160:]}"
                 return report
