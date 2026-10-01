@@ -227,6 +227,7 @@ def source_one(ctx: SourceContext):
     earlier one can change the context (a generated still tried early is
     not tried again at the end).
     """
+    from . import ytdlp
     for p in REGISTRY:
         if ctx.enabled_names is not None and p.name not in ctx.enabled_names:
             continue
@@ -234,6 +235,8 @@ def source_one(ctx: SourceContext):
             continue
         if not p.applies(ctx):
             continue
+        if ytdlp.stopped():
+            return None                 # the scene's time is up: no more providers
         asset = p.find(ctx)
         if asset:
             return asset

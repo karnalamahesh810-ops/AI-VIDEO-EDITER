@@ -1754,16 +1754,19 @@ def _channel_candidates(query: str, channels: List[str], subject: str = "") -> L
             return _YT_CANDIDATES_CACHE[key]
     targets = [f"https://www.youtube.com/{ch}/search?query={urllib.parse.quote_plus(query)}"
                for ch in channels]
+    # The scene's time box goes with each lookup thread (ytdlp.with_stop).
+    one = _ytdlp.with_stop(lambda t: _yt_candidates(t, False, limit=6, timeout=45))
     with ThreadPoolExecutor(max_workers=max(1, len(targets))) as ex:
-        lists = list(ex.map(lambda t: _yt_candidates(t, False, limit=6, timeout=45), targets))
+        lists = list(ex.map(one, targets))
     merged, seen = [], set()
     for rank in range(max((len(x) for x in lists), default=0)):
         for found in lists:
             if rank < len(found) and found[rank]["id"] not in seen:
                 seen.add(found[rank]["id"])
                 merged.append(found[rank])
-    with _CACHE_LOCK:
-        _YT_CANDIDATES_CACHE[key] = merged
+    if merged or not _ytdlp.stopped():
+        with _CACHE_LOCK:
+            _YT_CANDIDATES_CACHE[key] = merged
     return merged
 
 
@@ -1784,6 +1787,8 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
     with _CACHE_LOCK:
         if key in _GOOGLE_VIDEO_CACHE:
             return _GOOGLE_VIDEO_CACHE[key]
+    if _ytdlp.stopped():
+        return []
     rows: List[dict] = []
     if brightdata_available():
         costs.record("serp.call")
@@ -1807,8 +1812,9 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
         # Bright Data off or empty-handed (2026-10-01: "not JSON: ''"): SerpApi's
         # Google Videos, a few per video (the owner's plan is 250 searches a month).
         rows = _serpapi_videos(query, limit)
-    with _CACHE_LOCK:
-        _GOOGLE_VIDEO_CACHE[key] = rows
+    if rows or not _ytdlp.stopped():
+        with _CACHE_LOCK:
+            _GOOGLE_VIDEO_CACHE[key] = rows
     return rows
 
 
@@ -1883,7 +1889,7 @@ def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
         have = {c["id"] for c in found}
         found = found + [c for c in _google_youtube_candidates(target.split(":", 1)[-1])
                          if c["id"] not in have]
-    if subject:
+    if subject and not (_ytdlp.stopped() and not found):
         with _CACHE_LOCK:
             _YT_CANDIDATES_CACHE[key] = found
     return found
@@ -1993,8 +1999,9 @@ def _plan_grabs(eligible: List[dict], grab: float, start_at: float,
 
     scouts = eligible[:max(1, config.MOMENT_PARALLEL)]
     results: Dict[str, Optional[dict]] = {}
+    scout = _ytdlp.with_stop(_scout)               # the scene's time box goes with each scout
     with ThreadPoolExecutor(max_workers=len(scouts)) as pool:
-        futures = {pool.submit(_scout, c, grab, intent, context): c["id"] for c in scouts}
+        futures = {pool.submit(scout, c, grab, intent, context): c["id"] for c in scouts}
         for fut in as_completed(futures):
             try:
                 results[futures[fut]] = fut.result()
@@ -2026,7 +2033,7 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
     on different IPs gets ~95% through."""
     attempts = 0
     while True:
-        if _ytdlp.past_deadline():
+        if _ytdlp.stopped():
             return ""
         path = _yt_fetch(video_id, out_dir, start_at, seconds)
         if path:
@@ -2341,21 +2348,33 @@ def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             "--merge-output-format", "mp4", "--no-playlist", "--no-warnings",
             "--ignore-config", "--socket-timeout", "20", "--retries", "2",
             "-o", out_tpl, "--print", "after_move:filepath"]
-    for proxy in ("", _acquire_proxy("dailymotion.com")):
-        cmd = base + (["--proxy", proxy] if proxy else [])
-        started = time.time()
-        try:
-            with _NET_SEM:
+    for routed in (False, True):
+        if routed and not _PROXIES:
+            break
+        if _ytdlp.stopped():
+            return ""
+        with _ytdlp._net_slot(_ytdlp.DOWNLOAD) as ok:
+            if not ok:
+                return ""
+            # The proxy is claimed only for the proxied try, once a slot is
+            # free: claimed up front, it was never given back when the direct
+            # try worked, and the route looked busier with every clip.
+            proxy = _acquire_proxy("dailymotion.com") if routed else ""
+            if routed and not proxy:
+                break
+            cmd = base + (["--proxy", proxy] if proxy else [])
+            started = time.time()
+            try:
                 p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                    errors="replace", timeout=timeout)
-        except subprocess.TimeoutExpired:
-            if proxy:
-                _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started, "dailymotion.com")
-            continue
-        except FileNotFoundError:
-            if proxy:
-                _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started, "dailymotion.com")
-            continue
+            except subprocess.TimeoutExpired:
+                if proxy:
+                    _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started, "dailymotion.com")
+                continue
+            except FileNotFoundError:
+                if proxy:
+                    _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started, "dailymotion.com")
+                continue
         for line in (p.stdout or "").splitlines():
             line = line.strip()
             if line and os.path.exists(line):
@@ -2364,8 +2383,6 @@ def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
                 return line
         if proxy:
             _release_proxy(proxy, False, classify_ytdlp(p.stderr, p.returncode), started, "dailymotion.com")
-        if not proxy and not _PROXIES:
-            break
     return ""
 
 
@@ -2457,19 +2474,23 @@ def _web_fetch(url: str, out_dir: str, start_at: float, seconds: float, timeout:
            "--no-playlist", "--no-warnings", "--quiet", "--max-filesize", "300M",
            "--merge-output-format", "mp4", "-o", out_tpl, "--print", "after_move:filepath"]
     domain = (urllib.parse.urlparse(url).hostname or "web").removeprefix("www.")
-    proxy = _acquire_proxy(domain)
-    cmd += _yt_network_args(proxy)
-    started = time.time()
-    try:
-        with _NET_SEM:
+    if _ytdlp.stopped():
+        return ""
+    with _ytdlp._net_slot(_ytdlp.DOWNLOAD) as ok:
+        if not ok:
+            return ""
+        proxy = _acquire_proxy(domain)
+        cmd += _yt_network_args(proxy)
+        started = time.time()
+        try:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                errors="replace", timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started, domain)
-        return ""
-    except FileNotFoundError:
-        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started, domain)
-        return ""
+        except subprocess.TimeoutExpired:
+            _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started, domain)
+            return ""
+        except FileNotFoundError:
+            _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started, domain)
+            return ""
     if p.returncode != 0:
         _release_proxy(proxy, False, classify_ytdlp(p.stderr, p.returncode), started, domain)
         return ""
@@ -2636,7 +2657,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
                                         require_cc, subject, variant), "search"
 
     with ThreadPoolExecutor(max_workers=max(1, min(4, len(targets)))) as ex:
-        for t, rows, via in ex.map(fetch_one, targets):
+        for t, rows, via in ex.map(_ytdlp.with_stop(fetch_one), targets):
             pool.add(rows, query=t[0], variant=t[1], via=via)
 
     ranked = [c for c in pool.ranked()
@@ -3087,6 +3108,8 @@ def _cached_search(fn, query: str, cache_key: str = "", key: str = "") -> List[M
     with _CACHE_LOCK:
         if key in _SEARCH_CACHE:
             return _SEARCH_CACHE[key]
+    if _ytdlp.stopped():
+        return []
     try:
         found = fn(query)
     except Exception as e:  # noqa: BLE001
@@ -3097,12 +3120,16 @@ def _cached_search(fn, query: str, cache_key: str = "", key: str = "") -> List[M
         st = _source_stat(name)
         st["searches"] += 1
         st["withResults"] += 1 if found else 0
+    if not found and _ytdlp.stopped():
+        return found                    # cut short by the scene's time box: another scene may ask again
     with _CACHE_LOCK:
         _SEARCH_CACHE[key] = found
     return found
 
 
 def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[MediaAsset]:
+    if _ytdlp.stopped():
+        return None
     ext = ".mp4" if candidate.kind == "video" else ".jpg"
     safe = "".join(ch for ch in query if ch.isalnum())[:24] or "asset"
     dest = os.path.join(
@@ -3194,8 +3221,9 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     2026-09-30). recency "month": a line of a story about now, whose searches
     ask for the last month's uploads first.
     """
-    if _ytdlp.past_deadline():
-        # The job's sourcing time is spent: the beat becomes an animation scene.
+    if _ytdlp.stopped():
+        # The job's sourcing time is spent (or this scene's): the beat goes to
+        # the fallback ladder and, failing that, becomes a graphic.
         return None
     if config.REQUIRE_AI and vision.ai_exhausted():
         return None   # the job is stopping; do not spend on searches it will discard
@@ -3220,6 +3248,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
         for attempt in attempts:
+            if _ytdlp.stopped():
+                break
             got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
                               nth=nth, used=used, prompt=prompt,
                               allow_youtube=allow_youtube,
@@ -3364,6 +3394,20 @@ def _budget(base: float, per_item: float, n: int) -> float:
     if base <= 0:
         return 0.0       # an explicit 0 turns the pass off
     return max(base, per_item * n)
+
+
+def scene_seconds(left: float, workers: int, n: int) -> float:
+    """
+    One scene's own share of a time-boxed pass, or 0 (no limit of its own):
+    when more scenes wait than threads run, the pass's seconds x threads /
+    scenes, kept between SCENE_SECONDS_MIN and SCENE_SECONDS_MAX - every scene
+    gets its turn before the box closes, instead of the first ones spending it
+    on fallback after fallback (Lake Powell: 49 of 130 scenes in 1800 s).
+    """
+    if config.SCENE_SECONDS_MAX <= 0 or left <= 0 or n <= max(1, workers):
+        return 0.0
+    share = left * max(1, workers) / float(n)
+    return max(config.SCENE_SECONDS_MIN, min(config.SCENE_SECONDS_MAX, share))
 
 
 def _until(futures, deadline: float):
@@ -3534,18 +3578,29 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
               f"{before:.2f} -> {after:.2f}", flush=True)
         return alt
 
+    # Pass 1's time box, shared by its scenes (closed when the pass ends, so a
+    # scene it gave up on stops at its next network call), and each scene's
+    # own share of it when more scenes wait than threads run (scene_seconds).
+    box = _ytdlp.Box()
+    share = [0.0]
+
     def fetch(job, nth):
+        own = (time.time() + share[0] * (1.5 if job.get("hook") else 1.0)) if share[0] else 0.0
+        token = _ytdlp.STOP.set((box, own))
         try:
-            got = attempt(job, nth)
-        except Exception as e:  # noqa: BLE001
-            print(f"[media] '{job['query']}' failed: {e}", flush=True)
-            return None
-        if got:
-            with lock:
-                live_used.add(got.identity)
-            if job.get("hook") and got.relevance_score is not None:
-                got = stronger_hook(job, nth, got)
-        return got
+            try:
+                got = attempt(job, nth)
+            except Exception as e:  # noqa: BLE001
+                print(f"[media] '{job['query']}' failed: {e}", flush=True)
+                return None
+            if got:
+                with lock:
+                    live_used.add(got.identity)
+                if job.get("hook") and got.relevance_score is not None:
+                    got = stronger_hook(job, nth, got)
+            return got
+        finally:
+            _ytdlp.STOP.reset(token)
 
     # Not a `with` block: its exit waits for every thread, and one hung
     # download then holds the whole video. A real job sat at "Sourced 22/23"
@@ -3553,6 +3608,17 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # running in the background and their scenes fall through to the
     # recheck / fill steps below, which exist for exactly that.
     pool = _new_pool(max(1, workers))
+    started = time.time()
+    deadline = started + _budget(config.PASS1_BUDGET_SECONDS, 3.0, len(pass1))
+    if _ytdlp.DEADLINE[0]:
+        # The job's sourcing deadline wins: a part must hand back what it found
+        # (and upload it) before the parent stops waiting, or all of it is lost.
+        deadline = min(deadline, _ytdlp.DEADLINE[0] - 25.0)
+    box.shorten(deadline)
+    share[0] = scene_seconds(deadline - started, workers, len(pass1))
+    if share[0]:
+        print(f"[media] pass 1: {len(pass1)} scene(s) on {workers} thread(s) in {deadline - started:.0f}s, "
+              f"{share[0]:.0f}s a scene at most", flush=True)
     # Started in coverage order (src/gapfill.py): the hook's lines first, then
     # every other line spread over the whole video. In story order the pool
     # reached the ending last, and when the owner's 159-scene Lake Powell job
@@ -3561,12 +3627,6 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     from . import gapfill
     futures = {pool.submit(fetch, job, nths[job["index"]]): job["index"]
                for job in gapfill.coverage_order([j for j, _nth in pass1])}
-    started = time.time()
-    deadline = started + _budget(config.PASS1_BUDGET_SECONDS, 3.0, len(pass1))
-    if _ytdlp.DEADLINE[0]:
-        # The job's sourcing deadline wins: a part must hand back what it found
-        # (and upload it) before the parent stops waiting, or all of it is lost.
-        deadline = min(deadline, _ytdlp.DEADLINE[0] - 25.0)
     pending = set(futures)
     try:
         while pending:
@@ -3588,17 +3648,21 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             # period rather than the whole budget.
             if pending and len(pending) <= max(1, len(futures) // 10):
                 deadline = min(deadline, time.time() + config.STRAGGLER_GRACE_SECONDS)
+                box.shorten(deadline)
         if pending:
             stuck = sorted(futures[f] + 1 for f in pending)
             print(f"[media] gave up waiting on scene(s) {stuck}; they go to the recheck",
                   flush=True)
             LAST_STATS["pass1_stragglers"] = len(stuck)
+            LAST_STATS["pass1_never_started"] = sum(1 for f in pending if not f.running())
             with lock:
                 done += len(pending)
                 if on_done:
                     on_done(done, len(jobs))
     finally:
+        box.end()                       # the scenes still running stop at their next network call
         pool.shutdown(wait=False, cancel_futures=True)
+    LAST_STATS["scene_seconds"] = round(share[0], 1)
 
     t_pass2 = time.time()
     # Pass 2: nothing may appear twice, and nothing unusable may stay.
@@ -3646,8 +3710,16 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # spending its own time box here held the whole video for minutes.
     deadline = time.time() + (_budget(config.REPLACE_BUDGET_SECONDS, 3.0, len(todo)) if refill else 0.0)
     replaced = [0]
+    box2 = _ytdlp.Box(deadline)         # pass 2's own box, closed when it ends
 
     def replace(job, nth, bad_reason, is_dup):
+        token = _ytdlp.STOP.set((box2, 0.0))
+        try:
+            return replace_in_box(job, nth, bad_reason, is_dup)
+        finally:
+            _ytdlp.STOP.reset(token)
+
+    def replace_in_box(job, nth, bad_reason, is_dup):
         for attempt in range(1, 4):
             if time.time() >= deadline:
                 return None
@@ -3708,6 +3780,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 if on_review:
                     on_review(n, len(todo))
         finally:
+            box2.end()
             pool.shutdown(wait=False, cancel_futures=True)
 
     if duplicates:
@@ -3754,11 +3827,13 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             on_recheck(len(empties))
         ideas = rescue([recheck_item(j) for j in empties]) or {}
         rescue_deadline = time.time() + _budget(config.RESCUE_BUDGET_SECONDS, 3.0, len(empties))
+        box3 = _ytdlp.Box(rescue_deadline)
 
         def rescue_one(job):
             alts = ideas.get(job["index"]) or []
             if not alts or time.time() >= rescue_deadline:
                 return None
+            _ytdlp.STOP.set((box3, 0.0))      # this task runs in its own copied context
             try:
                 got = source_for_segment(
                     alts[0], float(job.get("seconds") or 0), work_dir,
@@ -3789,6 +3864,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                     results[futures[fut]["index"]] = got
                     filled_by_ai += 1
         finally:
+            box3.end()
             pool.shutdown(wait=False, cancel_futures=True)
         print(f"[media] AI recheck gave {filled_by_ai}/{len(empties)} missing or "
               f"repeated scene(s) a shot of their own", flush=True)

@@ -7,7 +7,10 @@ media.py re-exports every name, so callers and tests are unchanged;
 higher-level orchestration (which candidate, which moment, retries by
 class) stays in media.py.
 """
+import contextlib
 import contextvars
+import heapq
+import itertools
 import json
 import os
 import re
@@ -53,6 +56,65 @@ def past_deadline() -> bool:
     return bool(DEADLINE[0]) and time.time() > DEADLINE[0]
 
 
+class Box:
+    """
+    One time-boxed pass's stop time (epoch seconds, 0 = open), shared by every
+    scene the pass starts. end() closes it: each of them stops at its next
+    search, metadata call or download instead of running on unseen.
+    """
+
+    def __init__(self, at: float = 0.0):
+        self.at = float(at or 0.0)
+
+    def shorten(self, at: float) -> None:
+        self.at = min(self.at, at) if self.at else float(at)
+
+    def end(self) -> None:
+        self.shorten(time.time())
+
+    def closed(self, now: Optional[float] = None) -> bool:
+        # At or past: end() must close the box at once, and the clock may not
+        # move between the two reads (Windows' clock ticks every ~15 ms).
+        return bool(self.at) and (now or time.time()) >= self.at
+
+
+# What the scene this thread works for may still spend: (its pass's Box or
+# None, its own stop time or 0). Set by media.source_many; the threads a scene
+# starts carry it (with_stop). Past either, the network calls below return
+# empty at once. On the owner's Lake Powell pod (2026-10-01) pass 1 gave up on
+# 81 scenes at its 1800 s box, but their threads ran on unseen: at the end of
+# sourcing ~370 requests still sat in the proxies' queues behind 16 network
+# slots, ahead of pass 2 and the rescue pass, whose results were kept.
+STOP: contextvars.ContextVar = contextvars.ContextVar("stop", default=None)
+
+
+def stopped() -> bool:
+    """The job's sourcing deadline is past, or this scene's pass or own time is up."""
+    if past_deadline():
+        return True
+    got = STOP.get()
+    if not got:
+        return False
+    box, own = got
+    now = time.time()
+    return bool((box is not None and box.closed(now)) or (own and now >= own))
+
+
+def with_stop(fn):
+    """`fn` running under this thread's scene stop, for a pool thread the scene starts."""
+    got = STOP.get()
+    if got is None:
+        return fn
+
+    def run(*a, **kw):
+        token = STOP.set(got)
+        try:
+            return fn(*a, **kw)
+        finally:
+            STOP.reset(token)
+    return run
+
+
 def reset() -> None:
     """Between jobs: forget unavailable videos, the metadata cache and the counters."""
     EPOCH[0] += 1
@@ -92,10 +154,80 @@ _FAIL_LOCK = threading.Lock()
 _LAST_FAILURE: contextvars.ContextVar = contextvars.ContextVar("last_failure", default=None)
 
 
-# Bounds how many yt-dlp subprocesses run at once, across every scene and
-# every scout, so sourcing does not send more simultaneous requests than
-# there are proxy IPs to carry them. See config.NETWORK_CONCURRENCY.
-_NET_SEM = threading.Semaphore(config.NETWORK_CONCURRENCY)
+# What a yt-dlp call is, for the queue: the work nearest a finished scene first.
+DOWNLOAD, METADATA, SEARCH = 0, 1, 2
+
+
+class Slots:
+    """
+    At most `n` yt-dlp processes at once, across every scene and every scout
+    (config.NETWORK_CONCURRENCY), so sourcing never sends more requests than
+    the proxy IPs carry. A waiting download goes before a waiting metadata
+    read, and both before a search: with 28 scenes searching at once, a scene
+    that had found its clip queued its download behind the next scenes'
+    searches (Lake Powell: downloads waited up to 218 s, 27.7 s on average).
+    A waiter whose scene is stopped (`give_up`) leaves the queue.
+    """
+
+    def __init__(self, n: int):
+        self.n = max(1, int(n))
+        self.busy = 0
+        self.cond = threading.Condition()
+        self.queue: list = []
+        self.seq = itertools.count()
+
+    def acquire(self, priority: int = SEARCH, give_up=None) -> bool:
+        with self.cond:
+            ticket = (priority, next(self.seq))
+            heapq.heappush(self.queue, ticket)
+            try:
+                while not (self.busy < self.n and self.queue[0] == ticket):
+                    if give_up is not None and give_up():
+                        self.queue.remove(ticket)
+                        heapq.heapify(self.queue)
+                        return False
+                    self.cond.wait(timeout=1.0)
+                heapq.heappop(self.queue)
+                self.busy += 1
+                return True
+            finally:
+                self.cond.notify_all()          # the next in line may fit as well
+
+    def release(self) -> None:
+        with self.cond:
+            self.busy = max(0, self.busy - 1)
+            self.cond.notify_all()
+
+    def waiting(self) -> int:
+        with self.cond:
+            return len(self.queue)
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+        return False
+
+
+_NET_SEM = Slots(config.NETWORK_CONCURRENCY)
+
+
+@contextlib.contextmanager
+def _net_slot(priority: int = SEARCH):
+    """One network slot for a yt-dlp call; yields False when the scene stopped while it waited."""
+    sem = _NET_SEM
+    if isinstance(sem, Slots):
+        ok = sem.acquire(priority, give_up=stopped)
+        try:
+            yield ok
+        finally:
+            if ok:
+                sem.release()
+    else:                                       # a plain semaphore (tests)
+        with sem:
+            yield True
 
 
 def _next_proxy() -> str:
@@ -306,20 +438,27 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 20,
             "--playlist-items", f"1-{limit}",
             "--print", "%(id)s\t%(duration)s\t%(url)s\t%(channel)s\t%(title)s",
         ]
-    proxy = _acquire_proxy()
-    cmd += _yt_network_args(proxy)
-    started = time.time()
-
-    try:
-        with _NET_SEM:
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started)
-        print(f"[media] search timed out via proxy #{_proxy_index(proxy)}", flush=True)
+    if stopped():
         return []
-    except FileNotFoundError:
-        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
-        return []
+    with _net_slot(SEARCH) as ok:
+        if not ok:
+            return []
+        # The route is claimed once a slot is free and timed from the start:
+        # claimed while queueing, the Lake Powell pod's proxies showed 34-59
+        # "active" requests each and the queue's wait (1.3-19 s) as latency.
+        proxy = _acquire_proxy()
+        cmd += _yt_network_args(proxy)
+        started = time.time()
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started)
+            print(f"[media] search timed out via proxy #{_proxy_index(proxy)}", flush=True)
+            return []
+        except FileNotFoundError:
+            _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
+            return []
     if looks_blocked(p.stderr):
         cls = classify_ytdlp(p.stderr, p.returncode)
         _release_proxy(proxy, False, cls, started)
@@ -371,35 +510,37 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
     """
     with _INFO_LOCK:
         cached = _YT_INFO_CACHE.get(video_id)
-    if cached is None and past_deadline():
+    if cached is None and stopped():
         return {}, None
     if cached is not None:
         return cached
 
     if _video_unavailable(video_id):
         return {}, ""
-    proxy = _acquire_proxy()
-    # The same network arguments as a download (runtime, retries, cookies,
-    # the ffmpeg proxy): this call used to skip them and fail quietly, which
-    # sent scouting back to the fixed grab point.
-    cmd = ["yt-dlp", f"https://www.youtube.com/watch?v={video_id}", "-J",
-           "--no-warnings", "--ignore-config"] + _yt_network_args(proxy)
-    started = time.time()
-    try:
-        with _NET_SEM:
+    with _net_slot(METADATA) as ok:
+        if not ok:
+            return {}, None
+        proxy = _acquire_proxy()
+        # The same network arguments as a download (runtime, retries, cookies,
+        # the ffmpeg proxy): this call used to skip them and fail quietly, which
+        # sent scouting back to the fixed grab point.
+        cmd = ["yt-dlp", f"https://www.youtube.com/watch?v={video_id}", "-J",
+               "--no-warnings", "--ignore-config"] + _yt_network_args(proxy)
+        started = time.time()
+        try:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                errors="replace", timeout=timeout)
-        info = json.loads(p.stdout) if p.returncode == 0 and p.stdout else {}
-    except subprocess.TimeoutExpired:
-        _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started)
-        print(f"[media] metadata timed out ({video_id}) via proxy #{_proxy_index(proxy)}", flush=True)
-        return {}, proxy
-    except FileNotFoundError:
-        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
-        return {}, proxy
-    except ValueError:
-        _release_proxy(proxy, False, FailureClass.INVALID_MEDIA, started)
-        return {}, proxy
+            info = json.loads(p.stdout) if p.returncode == 0 and p.stdout else {}
+        except subprocess.TimeoutExpired:
+            _release_proxy(proxy, False, FailureClass.NETWORK_TIMEOUT, started)
+            print(f"[media] metadata timed out ({video_id}) via proxy #{_proxy_index(proxy)}", flush=True)
+            return {}, proxy
+        except FileNotFoundError:
+            _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
+            return {}, proxy
+        except ValueError:
+            _release_proxy(proxy, False, FailureClass.INVALID_MEDIA, started)
+            return {}, proxy
     if not info:
         cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode), proxy)
         _release_proxy(proxy, False, cls, started)
@@ -445,30 +586,35 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     if _video_unavailable(video_id):
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
-    if past_deadline():
+    if stopped():
+        # Not the video's fault: nothing is recorded, and no retry follows.
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
-    proxy = _acquire_proxy()
-    cmd += _yt_network_args(proxy, hls_fix=hls_fix)
-    # After the shared network args: yt-dlp keeps the LAST value of a repeated
-    # option, so placed before them these were silently overridden by "2".
-    cmd += ["--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3"]
-    started = time.time()
     epoch = EPOCH[0]
-    try:
-        with _NET_SEM:
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-    except subprocess.TimeoutExpired:
-        cls = _note_failure(video_id, FailureClass.NETWORK_TIMEOUT, proxy)
-        _release_proxy(proxy, False, cls, started)
-        print(f"[media] YouTube clip download timed out ({video_id}, {start_at:.1f}s) "
-              f"via proxy #{_proxy_index(proxy)}", flush=True)
-        return ""
-    except FileNotFoundError:
-        _note_failure(video_id, FailureClass.PROVIDER_UNAVAILABLE, proxy)
-        _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
-        print("[media] yt-dlp executable is missing; cannot download YouTube footage", flush=True)
-        return ""
+    with _net_slot(DOWNLOAD) as ok:
+        if not ok:
+            _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
+            return ""
+        proxy = _acquire_proxy()
+        cmd += _yt_network_args(proxy, hls_fix=hls_fix)
+        # After the shared network args: yt-dlp keeps the LAST value of a repeated
+        # option, so placed before them these were silently overridden by "2".
+        cmd += ["--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3"]
+        started = time.time()
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=timeout)
+        except subprocess.TimeoutExpired:
+            cls = _note_failure(video_id, FailureClass.NETWORK_TIMEOUT, proxy)
+            _release_proxy(proxy, False, cls, started)
+            print(f"[media] YouTube clip download timed out ({video_id}, {start_at:.1f}s) "
+                  f"via proxy #{_proxy_index(proxy)}", flush=True)
+            return ""
+        except FileNotFoundError:
+            _note_failure(video_id, FailureClass.PROVIDER_UNAVAILABLE, proxy)
+            _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
+            print("[media] yt-dlp executable is missing; cannot download YouTube footage", flush=True)
+            return ""
     if p.returncode != 0:
         cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode), proxy)
         _release_proxy(proxy, False, cls, started)

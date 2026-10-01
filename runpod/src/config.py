@@ -406,6 +406,14 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # short grace for the rest. One stalled download used to hold a job for
 # 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
 PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+# Each scene's own share of pass 1 when there are more scenes than threads:
+# the pass's seconds x threads / scenes, kept between these. The owner's Lake
+# Powell pod (2026-10-01, 130 scenes on 28 threads, 1800 s) finished 49 scenes:
+# no scene had a limit, the ones that found nothing kept trying every fallback
+# search and source (~14 minutes a scene on average), and 81 never got their
+# turn. With 300 s a scene every one of them starts within the box. 0 = off.
+SCENE_SECONDS_MIN = float(os.getenv("SCENE_SECONDS_MIN", "120"))
+SCENE_SECONDS_MAX = float(os.getenv("SCENE_SECONDS_MAX", "300"))
 # Split one long video's sourcing across workers (src/fanout.py). RunPod
 # injects RUNPOD_ENDPOINT_ID into its workers; the API key is set on the
 # template (FANOUT_API_KEY) so a worker can queue parts on its own endpoint.
