@@ -378,7 +378,7 @@ def _from_still(job: dict, used: Used, work: str, stop: float, allow_generated: 
                   and not media._photo_seen_before(got.local_path))
         verdict = None
         if ok:
-            ok, verdict = media.judge_clip(got.local_path, job, media._image_label(got))
+            ok, verdict = media.judge_clip(got.local_path, job, media._image_label(got), source_url=got.url)
         if not ok:
             used.release(i, s)
             continue

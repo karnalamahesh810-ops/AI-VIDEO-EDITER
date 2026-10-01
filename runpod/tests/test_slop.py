@@ -230,5 +230,135 @@ class TheGate(unittest.TestCase):
         self.assertIn("an AI-generated or painted picture", v.reasons)
 
 
+# What OpenAI's image models write (seen in all 19 gpt-image pictures, 2026-10-01).
+_XMP_AI = (b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF><rdf:Description '
+           b'Iptc4xmpExt:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/'
+           b'trainedAlgorithmicMedia"/></rdf:RDF></x:xmpmeta>')
+
+
+class Provenance(unittest.TestCase):
+    """Layer 0: the picture's own content credentials (2026-10-01, the Lake Powell review)."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, True)
+
+    def png(self, name, **text):
+        from PIL import Image, PngImagePlugin
+        info = PngImagePlugin.PngInfo()
+        for k, v in text.items():
+            info.add_text(k, v)
+        p = os.path.join(self.d, name)
+        Image.new("RGB", (64, 36), (120, 90, 60)).save(p, "PNG", pnginfo=info)
+        return p
+
+    def test_content_credentials_mark_a_generated_picture(self):
+        p = self.png("gen.png", **{"XML:com.adobe.xmp": _XMP_AI.decode()})
+        with mock.patch.object(localvision, "available", return_value=False):
+            self.assertTrue(slop.check_file(p, "image").startswith("an AI-generated picture (content credentials"))
+
+    def test_stable_diffusion_parameters_and_comfyui_workflows(self):
+        sd = self.png("sd.png", parameters="a dam at dusk\nNegative prompt: blurry\nSteps: 30, Sampler: Euler a")
+        comfy = self.png("comfy.png", prompt='{"3": {"class_type": "KSampler", "inputs": {}}}')
+        self.assertTrue(slop.provenance_reason(sd))
+        self.assertTrue(slop.provenance_reason(comfy))
+
+    def test_a_camera_photo_is_not_marked(self):
+        from PIL import Image
+        p = os.path.join(self.d, "camera.jpg")
+        exif = Image.Exif()
+        exif[0x010F] = "Canon"                               # Make
+        exif[0x0110] = "Canon EOS 5D Mark III"               # Model
+        exif[0x0131] = "Adobe Photoshop CS6 (Macintosh)"     # Software
+        Image.new("RGB", (64, 36), (30, 60, 90)).save(p, "JPEG", exif=exif)
+        self.assertEqual(slop.provenance_reason(p), "")
+        self.assertEqual(slop.provenance_reason(os.path.join(self.d, "missing.jpg")), "")
+
+    def test_the_mark_survives_imagefix_rewriting_the_picture(self):
+        # A WebP is rewritten as a clean JPEG, and its credentials go with the old bytes.
+        from PIL import Image
+        from src import imagefix
+        def data(path):
+            with open(path, "rb") as fh:
+                return fh.read()
+        p = os.path.join(self.d, "gen.webp")
+        Image.new("RGB", (64, 36), (120, 90, 60)).save(p, "WEBP", xmp=_XMP_AI)
+        if b"trainedAlgorithmicMedia" not in data(p):
+            self.skipTest("this Pillow does not write XMP into WebP")
+        out = imagefix.fetch(p, os.path.join(self.d, "unused.jpg"))
+        self.assertNotIn(b"trainedAlgorithmicMedia", data(out))
+        self.assertTrue(slop.provenance_reason(out))
+
+    def test_a_photo_desk_never_waives_content_credentials(self):
+        p = self.png("gen.png", **{"XML:com.adobe.xmp": _XMP_AI.decode()})
+        with mock.patch.object(slop, "enabled", return_value=True), \
+                mock.patch.object(localvision, "available", return_value=False):
+            self.assertTrue(media.slop_reason(p, "Lake Powell shrinks | AP News",
+                                              source_url="https://apnews.com/x.png"))
+        media.SLOP_REJECTED.clear()
+
+
+class PaintedOrPhoto(unittest.TestCase):
+    """Layer 3's floors after the Lake Powell measurement (2026-10-01): CLIP read
+    34% of the real web photos and 4% of the real clips the owner approved as
+    painted; the landscape / press / drone photo labels fix that."""
+
+    def verdict(self, art, kind):
+        with mock.patch.object(localvision, "available", return_value=True), \
+                mock.patch.object(localvision, "embed_images", side_effect=lambda ims: np.ones((len(ims), 4))), \
+                mock.patch.object(slop, "_softmax_share", side_effect=lambda emb, pos, neg: np.full(len(emb), art)), \
+                mock.patch.object(slop, "_layout_shares",
+                                  side_effect=lambda emb: {k: np.full(len(emb), 0.9 if k == "footage" else 0.0)
+                                                           for k in slop.LAYOUT}):
+            from PIL import Image
+            return slop.clip_verdict([Image.new("RGB", (64, 36)) for _ in range(3)], kind=kind)
+
+    def test_a_photo_needs_a_clearer_painted_look_than_a_clip(self):
+        self.assertEqual(self.verdict(0.52, "image")["reject"], "")
+        self.assertEqual(self.verdict(0.52, "video")["reject"], "an AI-generated or painted picture")
+        self.assertEqual(self.verdict(0.6, "image")["reject"], "an AI-generated or painted picture")
+
+    def test_documentary_photographs_are_photo_labels(self):
+        for label in ("a landscape photograph", "an aerial photograph of a landscape", "a press photograph",
+                      "a drone photograph"):
+            self.assertIn(label, slop.PHOTO)
+        self.assertNotIn("a landscape photograph", slop.ART)
+
+    def test_check_file_judges_a_photo_as_a_photo(self):
+        seen = {}
+
+        def verdict(images, allow_people=False, allow_maps=False, kind="video"):
+            seen["kind"] = kind
+            return {"reject": ""}
+        with mock.patch.object(slop, "enabled", return_value=True), \
+                mock.patch.object(slop, "_rgb_frames", return_value=[object()]), \
+                mock.patch.object(slop, "clip_verdict", side_effect=verdict):
+            slop.check_file(os.path.join(HERE, "fixtures", "slop", "ai_courthouse_0018.jpg"), "image")
+        self.assertEqual(seen["kind"], "image")
+
+    def test_a_photo_desk_host_waives_the_colour_reading(self):
+        with mock.patch.object(slop, "enabled", return_value=True), \
+                mock.patch.object(slop, "metadata_reason", return_value=""), \
+                mock.patch.object(slop, "check_file", return_value="an AI-generated or painted picture"):
+            for url in ("https://assets.science.nasa.gov/content/lakepowell_oli_20260910_lrg.jpg",
+                        "https://npr.brightspotcdn.com/dims4/x.jpg", "https://upload.wikimedia.org/a/b/x.jpg",
+                        "https://www.usbr.gov/uc/water/x.jpg"):
+                self.assertEqual(media.slop_reason("x.jpg", "Lake Powell from above", source_url=url), "", url)
+            self.assertTrue(media.slop_reason("x.jpg", "Lake Powell from above",
+                                              source_url="https://wallpapercave.com/x.jpg"))
+            self.assertTrue(media.slop_reason("x.mp4", "Lake Powell | NASA"))       # footage keeps the check
+        media.SLOP_REJECTED.clear()
+
+    @unittest.skipUnless(os.path.isdir(config.LOCAL_VISION_DIR), "the CLIP model is not installed here")
+    def test_the_owners_examples_as_photos_with_the_real_model(self):
+        from PIL import Image
+        if not localvision.available():
+            self.skipTest("CLIP runtime not available")
+        for name in ("ai_courthouse_0018.jpg", "creator_painting_0037.jpg"):
+            im = Image.open(os.path.join(HERE, "fixtures", "slop", name)).convert("RGB")
+            self.assertEqual(slop.clip_verdict([im], kind="image")["reject"], "an AI-generated or painted picture",
+                             name)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,6 +11,10 @@ QR code, and TV forecast maps. A real-footage style shows none of these.
 
 Layers, cheapest first; each rejects on its own:
 
+0. provenance - a picture whose own bytes say it was generated: C2PA / IPTC
+               content credentials of type "trainedAlgorithmicMedia" (OpenAI,
+               Adobe Firefly, Microsoft, Google and Meta write them), Stable
+               Diffusion parameters, a ComfyUI workflow: provenance_reason().
 1. metadata  - a title, channel, description or tag that names an AI generator
                or AI story ("AI generated", "#ai", Sora, Veo, Midjourney, Runway,
                Kling...): metadata_reason().
@@ -31,8 +35,9 @@ Layers, cheapest first; each rejects on its own:
                (a presenter, anchor, streamer or YouTuber, a subscribe button,
                creator captions) and rejects either outright.
 
-check_file() runs 1-3 on a downloaded candidate (videos and photos); the
-thresholds were set on the Texas test render's frames (scratchpad ws_slop).
+check_file() runs 0-3 on a downloaded candidate (videos and photos); the
+thresholds were set on the Texas test render's frames (scratchpad ws_slop)
+and the owner-approved Lake Powell video (2026-10-01, see ART_SHARE).
 Nothing here raises: an unreadable file or a missing model is "no finding".
 """
 from __future__ import annotations
@@ -40,9 +45,68 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import threading
 from typing import Dict, List, Optional
 
 from . import config
+
+# --------------------------------------------------------------------------- #
+# 0. Provenance: the picture's own bytes say it was generated
+# --------------------------------------------------------------------------- #
+
+# What generators write into the file. "trainedAlgorithmicMedia" is the IPTC
+# digital source type inside C2PA / XMP content credentials (also matched in
+# "compositeWithTrainedAlgorithmicMedia", an AI edit); a camera's own C2PA says
+# "digitalCapture" and does not match. Stable Diffusion front-ends write their
+# generation parameters into a PNG, ComfyUI its workflow. Measured 2026-10-01:
+# all 19 gpt-image pictures in the scratchpad (4 of them the Lake Powell
+# video's own) carry the first; none of the 56 real Lake Powell photos, as
+# sourcing downloaded them, carry any of these.
+_AI_MARK = re.compile(rb"trainedAlgorithmicMedia|Steps: \d+, Sampler: |Negative prompt: |\"class_type\"\s*:")
+_SCAN_HEAD, _SCAN_TAIL = 4 << 20, 1 << 20
+# Raw downloads found marked, by path: imagefix rewrites a WebP, AVIF or HEIC
+# as a clean JPEG and the credentials go with the old bytes.
+_PROVENANCE: Dict[str, str] = {}
+_PROVENANCE_LOCK = threading.Lock()
+
+
+def provenance_mark(path: str) -> str:
+    """The generator marker found in a file's bytes ("" = none): the first
+    _SCAN_HEAD bytes and the last _SCAN_TAIL, where pictures keep metadata."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as fh:
+            data = fh.read(_SCAN_HEAD)
+            if size > _SCAN_HEAD:
+                fh.seek(max(_SCAN_HEAD, size - _SCAN_TAIL))
+                data += fh.read(_SCAN_TAIL)
+    except OSError:
+        return ""
+    m = _AI_MARK.search(data)
+    return m.group(0).decode("latin-1").strip()[:40] if m else ""
+
+
+def note_download(path: str) -> str:
+    """Read a downloaded picture's raw bytes for a generator marker before
+    anything rewrites them (imagefix.fetch); returns the marker found."""
+    mark = provenance_mark(path)
+    if mark:
+        with _PROVENANCE_LOCK:
+            if len(_PROVENANCE) > 20000:
+                _PROVENANCE.clear()
+            _PROVENANCE[os.path.abspath(path)] = mark
+    return mark
+
+
+def provenance_reason(path: str) -> str:
+    """"an AI-generated picture (content credentials ...)" when the picture says so, else ""."""
+    if not path:
+        return ""
+    with _PROVENANCE_LOCK:
+        mark = _PROVENANCE.get(os.path.abspath(path), "")
+    mark = mark or provenance_mark(path)
+    return f"an AI-generated picture (content credentials: {mark[:24]})" if mark else ""
+
 
 # --------------------------------------------------------------------------- #
 # 1. Metadata
@@ -333,8 +397,14 @@ def captions_verdict(path: str) -> str:
 
 ART = ["an AI generated image", "a digital painting", "an oil painting", "an illustration", "concept art",
        "a hyperrealistic 3d render", "digital art", "a painting with visible brush strokes"]
+# The landscape, aerial, press and drone photographs a documentary is made of:
+# without these CLIP put vivid real photos - red rock under a blue sky, a
+# saturated lake, a satellite view - closer to "digital art" and "concept art"
+# than to "a photograph" (see ART_SHARE).
 PHOTO = ["a photograph", "a real photo taken with a phone", "a frame from a real video", "news footage",
-         "security camera footage", "drone footage", "an amateur video"]
+         "security camera footage", "drone footage", "an amateur video",
+         "a landscape photograph", "an aerial photograph of a landscape", "a nature photograph with vivid colors",
+         "a press photograph", "a travel photograph", "a drone photograph"]
 LAYOUT: Dict[str, List[str]] = {
     "studio": ["a TV weather presenter standing in front of a weather map", "a news anchor in a television studio",
                "a meteorologist pointing at a radar map"],
@@ -345,9 +415,21 @@ LAYOUT: Dict[str, List[str]] = {
     "footage": ["real footage filmed outdoors", "a phone video of a street", "aerial drone footage of a town",
                 "a video frame of real news footage", "a press conference", "a photograph of a place"],
 }
-# Median over the sampled frames; set on the Texas test render (ws_slop):
-# painted/generated 0.5-0.9 on the frame or one half, real 0.01-0.2.
-ART_SHARE = 0.55
+# Median over the sampled frames of each frame's highest share (whole frame or
+# one half). Set on the Texas test render (ws_slop) - painted/generated 0.5-0.9,
+# real 0.01-0.2 - and re-measured on the owner-approved Lake Powell video
+# (2026-10-01, scratchpad lp_eval) after its build threw out 263 candidates as
+# "AI-generated or painted": with the old photo labels and one 0.55 floor,
+# 19 of its 56 real web photos as downloaded (34%; 5 after the photo-desk rule,
+# media._REAL_PHOTO_SOURCE) and 4 of its 90 real clips (4.4%) read as painted,
+# while 1 of its 4 generated stills did not. With the landscape/press/drone
+# photo labels: real photos 5 of 56 at 0.55 (2 after the photo-desk rule),
+# real clips 2 of 90 at 0.50; the Texas AI and painted clips keep their scores
+# (4 of 6 and 3 of 4 caught, as before), and every generated still is caught by
+# its content credentials (layer 0). Clips keep the lower floor: an AI video
+# scene sits nearer it than an AI still.
+ART_SHARE = 0.50
+ART_SHARE_IMAGE = 0.55
 # Studio, TV-map and stream frames score footage 0.00-0.05, real 0.12+.
 FOOTAGE_FLOOR = 0.10
 NOT_FOOTAGE_SHARE = 0.75
@@ -406,13 +488,15 @@ def _rgb_frames(path: str, n: int = 3) -> list:
         return []
 
 
-def clip_verdict(images: list, allow_people: bool = False, allow_maps: bool = False) -> Optional[dict]:
+def clip_verdict(images: list, allow_people: bool = False, allow_maps: bool = False,
+                 kind: str = "video") -> Optional[dict]:
     """
     {"art", "studio", "creator", "tvmap", "footage", "reject"} from the local
     CLIP model over PIL frames (medians over the frames; "art" is each
     frame's highest of the whole frame and its two halves), or None without
     the model. `allow_people`: a line about a named person (their press
     conference or interview is the shot). `allow_maps`: the line wants a map.
+    `kind` "image" holds a photo to ART_SHARE_IMAGE, a clip to ART_SHARE.
     """
     if not images:
         return None
@@ -434,7 +518,7 @@ def clip_verdict(images: list, allow_people: bool = False, allow_maps: bool = Fa
         return None
     med = {k: float(np.median(v)) for k, v in lay.items()}
     out = {"art": round(float(np.median(art)), 3), **{k: round(v, 3) for k, v in med.items()}, "reject": ""}
-    if out["art"] >= ART_SHARE:
+    if out["art"] >= (ART_SHARE_IMAGE if kind == "image" else ART_SHARE):
         out["reject"] = "an AI-generated or painted picture"
     elif med["footage"] < FOOTAGE_FLOOR:
         studio = med["studio"] + med["creator"]
@@ -462,6 +546,10 @@ def check_file(path: str, kind: str = "video", allow_people: bool = False, allow
     """
     if not enabled() or not path or not os.path.isfile(path):
         return ""
+    if kind == "image":
+        why = provenance_reason(path)
+        if why:
+            return why
     if kind == "video":
         why = still_verdict(path) if footage else ""
         if why:
@@ -469,5 +557,5 @@ def check_file(path: str, kind: str = "video", allow_people: bool = False, allow
         why = captions_verdict(path)
         if why:
             return why
-    v = clip_verdict(_rgb_frames(path, 3), allow_people=allow_people, allow_maps=allow_maps)
+    v = clip_verdict(_rgb_frames(path, 3), allow_people=allow_people, allow_maps=allow_maps, kind=kind)
     return (v or {}).get("reject") or ""

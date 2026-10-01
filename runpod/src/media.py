@@ -1206,7 +1206,7 @@ def _rescue_local_ok(path: str, intent_text: str) -> bool:
 SLOP_REJECTED: Dict[str, int] = {}
 
 
-def judge_clip(path: str, job: Dict[str, Any], label: str = "") -> tuple:
+def judge_clip(path: str, job: Dict[str, Any], label: str = "", source_url: str = "") -> tuple:
     """
     (keep, verdict) for a clip found outside the per-scene search (a subject
     pool's moment): the same gate a searched clip passes - the AI-slop and
@@ -1218,7 +1218,8 @@ def judge_clip(path: str, job: Dict[str, Any], label: str = "") -> tuple:
               (_SCENE_INTENT, _SCENE_INTENT.set(job.get("scene_intent") or None)),
               (_IN_HOOK, _IN_HOOK.set(bool(job.get("hook"))))]
     try:
-        return _vision_gate(path, job.get("intent") or job.get("query") or "", job.get("context") or "", label)
+        return _vision_gate(path, job.get("intent") or job.get("query") or "", job.get("context") or "", label,
+                            source_url)
     finally:
         for var, token in reversed(tokens):
             var.reset(token)
@@ -1237,8 +1238,16 @@ _REAL_PHOTO_SOURCE = re.compile(
     r"National Geographic|nationalgeographic|Smithsonian|NPR|PBS|USA Today|Bloomberg|Al Jazeera)\b", re.I)
 
 
-def slop_reason(path: str, label: str = "") -> str:
-    """Why src/slop.py turns a downloaded candidate down for this scene ("" = keep), counted."""
+def _real_photo_source(label: str = "", source_url: str = "") -> bool:
+    """A picture from a photo desk or archive, by its label or by the host it came
+    from (assets.science.nasa.gov, npr.brightspotcdn.com, upload.wikimedia.org)."""
+    host = urllib.parse.urlparse(source_url or "").netloc if str(source_url or "").startswith("http") else ""
+    return bool(_REAL_PHOTO_SOURCE.search(label or "") or (host and _REAL_PHOTO_SOURCE.search(host)))
+
+
+def slop_reason(path: str, label: str = "", source_url: str = "") -> str:
+    """Why src/slop.py turns a downloaded candidate down for this scene ("" = keep), counted.
+    `source_url`: where a picture was downloaded from (its host can name the photo desk)."""
     from . import slop
     if not slop.enabled():
         return ""
@@ -1252,8 +1261,10 @@ def slop_reason(path: str, label: str = "") -> str:
     except Exception as e:  # noqa: BLE001 - a filter error never drops a clip
         print(f"[slop] check failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
         return ""
+    # Only CLIP's reading of the colours is waived for a photo desk; a picture
+    # whose own content credentials say "generated" never is.
     if why.startswith("an AI-generated or painted picture") and kind == "image" \
-            and _REAL_PHOTO_SOURCE.search(label or ""):
+            and _real_photo_source(label, source_url):
         why = ""
     if why:
         with _CACHE_LOCK:
@@ -1262,7 +1273,7 @@ def slop_reason(path: str, label: str = "") -> str:
     return why
 
 
-def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
+def _vision_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
     """
     (keep, verdict) for a downloaded candidate.
 
@@ -1275,7 +1286,7 @@ def _vision_gate(path: str, intent: str, context: str, label: str) -> tuple:
     another creator's captions, a TV studio, presenter, stream or TV map is
     turned down on the spot, intent or not (the owner, 2026-09-30).
     """
-    why = slop_reason(path, label)
+    why = slop_reason(path, label, source_url)
     if why:
         print(f"[slop] REJECT {why}: {label[:60]!r}", flush=True)
         return False, None
@@ -3147,7 +3158,7 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
         if got.kind == "image" and _photo_seen_before(got.local_path):
             continue
         judged += 1
-        keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got))
+        keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got), source_url=got.url)
         if keep:
             return got.apply_verdict(verdict, intent)
         if judged >= config.VISION_MAX_CANDIDATES:
@@ -4437,7 +4448,8 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                     continue
                 got = _download(_dc_replace(cand), q, work_dir)
                 if got and (not _asset_ok(got)[0] or not _rescue_local_ok(got.local_path, intent_text)
-                            or _photo_seen_before(got.local_path) or slop_reason(got.local_path)):
+                            or _photo_seen_before(got.local_path)
+                            or slop_reason(got.local_path, _image_label(got), source_url=got.url)):
                     got = None
                 if got:
                     with lock:
