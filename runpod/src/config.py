@@ -592,6 +592,14 @@ SFX_MIN_GAP_SECONDS = float(os.getenv("SFX_MIN_GAP_SECONDS", "45"))
 # narration (and so our render) sat at -23.8. 0 turns the step off.
 LOUDNESS_TARGET_LUFS = float(os.getenv("LOUDNESS_TARGET_LUFS", "-14"))
 LOUDNESS_TRUE_PEAK = float(os.getenv("LOUDNESS_TRUE_PEAK", "-1.5"))
+# Narration polish before every render (src/voicepolish.py): rumble/hum
+# high-pass, denoise, de-ess, peak compression and level drift, each only when
+# the narration measures as needing it (a clean recording is never denoised),
+# at the original's loudness, length and timing; any failure keeps the
+# original. A document's audio.polish false skips it for that video.
+VOICE_POLISH = _flag("VOICE_POLISH", True)
+# The whole polish (download, analysis, filters, checks) gives up after this.
+VOICE_POLISH_SECONDS = float(os.getenv("VOICE_POLISH_SECONDS", "240"))
 # Picture quality of h264 renders (x264 CRF). Remotion's own default, 18, made
 # ~13 Mbit/s at 1080p: a 22-minute render passed 2 GB and the app's storage
 # (Lovable Cloud: 2 GB a file by default) refused it after the whole render.
