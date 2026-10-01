@@ -547,9 +547,18 @@ FANOUT_RENDER_CHUNK_SECONDS = float(os.getenv("FANOUT_RENDER_CHUNK_SECONDS", "90
 # A candidate no vision model could judge is rejected (vision.acceptable).
 ACCEPT_UNJUDGED = os.getenv("ACCEPT_UNJUDGED", "0").strip().lower() in ("1", "true", "yes")
 # Sound effects on big animation moments (timeline.plan_sfx). SFX_VOLUME
-# scales every sound (each already sits at 20-35%); 0.0 silences them.
+# scales every sound (each already sits under the voice); 0.0 silences them.
+# 0.5 = the owner's approved Lake Powell mix (2026-10-01): at 1.0 a new video
+# played its sounds ~6 dB louder than that video, which he had turned down.
 SFX_ENABLED = os.getenv("SFX_ENABLED", "1").strip().lower() not in ("0", "false", "no")
-SFX_VOLUME = float(os.getenv("SFX_VOLUME", "1.0"))
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.5"))
+# The music bed's level when the job sets none (the editor's Music volume):
+# flat under the whole video, x MUSIC_DUCK while a word is spoken - the owner's
+# Lake Powell mix, "set to 20% music" (2026-10-01). The voice-relative
+# automation (timeline.music_automation) put that bed at 60% under a loud
+# narration. 0 = the automation.
+MUSIC_LEVEL = float(os.getenv("MUSIC_LEVEL", "0.2"))
+MUSIC_DUCK = float(os.getenv("MUSIC_DUCK", "0.8"))
 SFX_MIN_GAP_SECONDS = float(os.getenv("SFX_MIN_GAP_SECONDS", "45"))
 # The finished video's loudness (integrated LUFS) and true-peak ceiling. YouTube
 # plays at -14; GoMotion's Glen Canyon render measured -14.3 while the raw

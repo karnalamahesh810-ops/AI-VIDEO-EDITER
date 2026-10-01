@@ -484,6 +484,33 @@ def _speech_spans(segments: List[Segment]) -> List[tuple]:
     return sorted(spans)
 
 
+def music_flat(music: Optional[dict], bgm: Optional[dict], fps: int, total: int, voice_lufs: float,
+               level: float) -> dict:
+    """
+    The music at one level under the whole video (the editor's Music volume),
+    x config.MUSIC_DUCK while a word is spoken, faded in from silence at the
+    start and out at the end: the owner's approved Lake Powell mix (20%,
+    2026-10-01). Same shape as music_automation's result.
+    """
+    music = dict(music or {})
+    fps = int(fps or 30)
+    total = max(1, int(total))
+    level = round(max(0.0, min(1.0, float(level))), 4)
+    mood = str(((music.get("sections") or [{}])[0] or {}).get("mood") or (bgm or {}).get("genre") or "")
+    fade_out = max(2, total - int(round(MUSIC_FADE_OUT * fps)))
+    fade_half = max(fade_out + 1, total - int(round(MUSIC_RAMP * fps)))
+    out = [{"startFrame": 0, "volume": 0.0, "mood": mood, "kind": "fade-in"},
+           {"startFrame": 1, "volume": level, "mood": mood, "kind": "voice"},
+           {"startFrame": fade_out, "volume": round(level / 2, 4), "mood": mood, "kind": "fade-out"},
+           {"startFrame": fade_half, "volume": 0.0, "mood": mood, "kind": "fade-out"}]
+    for k, s in enumerate(out):
+        s["endFrame"] = max(s["startFrame"] + 1, out[k + 1]["startFrame"] if k + 1 < len(out) else total)
+    track_lufs = BGM_LUFS.get(str((bgm or {}).get("track") or ""), BGM_LUFS_UNKNOWN)
+    return {**music, "sections": out, "duck": round(max(0.0, min(1.0, float(config.MUSIC_DUCK))), 3),
+            "levels": {"voiceLufs": round(float(voice_lufs), 1), "trackLufs": track_lufs, "mode": "flat",
+                       "speech": level}}
+
+
 def music_automation(music: Optional[dict], bgm: Optional[dict], segments: List[Segment], fps: int, total: int,
                      voice_lufs: float, level: Optional[float] = None) -> dict:
     """
@@ -1460,9 +1487,13 @@ def build(segments: List[Segment], shots: List[dict],
     bgm = _bgm_for(inp, pack, brief, audio_duration, story_text=story_text)
     if bgm:
         own_level = inp.get("bgm_volume") if "bgm_volume" in inp else None
-        music = music_automation(music, bgm, segments, fps, total, voice_lufs,
-                                 level=float(own_level) if isinstance(own_level, (int, float))
-                                 and not isinstance(own_level, bool) else None)
+        own_level = (float(own_level) if isinstance(own_level, (int, float)) and not isinstance(own_level, bool)
+                     else None)
+        if own_level is None and config.MUSIC_LEVEL > 0:
+            # The owner's level (20%), the same in every video and in the editor.
+            music = music_flat(music, bgm, fps, total, voice_lufs, config.MUSIC_LEVEL)
+        else:
+            music = music_automation(music, bgm, segments, fps, total, voice_lufs, level=own_level)
         bgm["volume"] = music["levels"]["speech"]
 
     missing = sum(1 for a in assets if a is None)

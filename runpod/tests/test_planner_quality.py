@@ -138,7 +138,8 @@ class SoundLevels(unittest.TestCase):
         self.assertEqual(sfxplan.cap(-6.0), 1.0)
 
     def test_a_whole_plan_is_under_the_cap_and_no_longer_a_whisper(self):
-        doc = build_doc(FLOOD, inp={"voice_lufs": -20.0})
+        # The planned levels at a master of 1.0 (the default master, 0.5, halves them all).
+        doc = build_doc(FLOOD, inp={"voice_lufs": -20.0, "sfx_volume": 1.0})
         self.assertEqual((doc["meta"]["voiceLufs"], doc["meta"]["voiceLufsSource"]), (-20.0, "given"))
         top = round(sfxplan.cap(-20.0), 3)
         # Every look plays its own sound (doc.lookSounds, LookSounds.tsx): the
@@ -494,12 +495,27 @@ class Music(unittest.TestCase):
             self.assertAlmostEqual(m["sections"][1]["volume"], want, places=3)
 
     def test_build_writes_the_automation(self):
-        doc = build_doc(FLOOD[:5], inp={"voice_lufs": -18.0})
+        with mock.patch.object(config, "MUSIC_LEVEL", 0.0):
+            doc = build_doc(FLOOD[:5], inp={"voice_lufs": -18.0})
         m = doc["music"]
         self.assertEqual(m["duck"], 1.0)
         self.assertEqual(m["sections"][0]["volume"], 0.0)
         self.assertEqual(m["levels"]["voiceLufs"], -18.0)
         self.assertEqual(doc["bgm"]["volume"], m["levels"]["speech"])
+
+    def test_a_new_video_gets_the_owners_mix_music_20_sounds_50(self):
+        # 2026-10-01: "set to 20% music"; the sounds as in the approved Lake Powell video.
+        doc = build_doc(FLOOD[:5], inp={"voice_lufs": -14.0})
+        m = doc["music"]
+        self.assertEqual(doc["bgm"]["volume"], 0.2)
+        self.assertEqual(m["levels"]["mode"], "flat")
+        self.assertEqual(m["duck"], 0.8)
+        self.assertEqual([s["volume"] for s in m["sections"]], [0.0, 0.2, 0.1, 0.0])  # fade in, bed, fade out
+        self.assertEqual(m["sections"][-1]["endFrame"], doc["durationInFrames"])
+        self.assertEqual(doc["sfxVolume"], 0.5)
+        # A job's own level still takes the voice-relative automation.
+        doc = build_doc(FLOOD[:5], inp={"voice_lufs": -14.0, "bgm_volume": 0.12})
+        self.assertNotEqual(doc["music"]["levels"].get("mode"), "flat")
 
 
 # --------------------------------------------------------------------------- E. styles
