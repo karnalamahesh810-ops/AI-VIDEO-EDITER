@@ -199,6 +199,21 @@ class WrongPlaceEventYear(Styled):
         finally:
             media._SCENE_INTENT.reset(token)
 
+    def test_a_named_place_pool_takes_the_last_few_years(self):
+        # 2026-10-01 Lake Powell: every landmark clip was "uploaded in 2022, before this 2026 story".
+        from src import pools
+        director.LAST_STORY.update({"event": f"Lake Powell drops to 22% {YEAR}", "title": "Lake Powell DROPS"})
+        old = {"title": "Cathedral in the Desert re-emerges", "upload_date": f"{YEAR - 4}0601"}
+        older = {"title": "Cathedral in the Desert", "upload_date": f"{YEAR - 9}0601"}
+        self.assertTrue(media.upload_conflict(old).startswith("uploaded in"))
+        self.assertEqual(media.upload_conflict(old, older_ok_years=4), "")
+        self.assertTrue(media.upload_conflict(older, older_ok_years=4).startswith("uploaded in"))
+        jobs = [{"subject_type": "place"}, {"subject_type": ""}]
+        self.assertTrue(pools.place_subject("Cathedral in the Desert", jobs))
+        self.assertTrue(pools.place_subject("Cataract Canyon", [{"subject_type": ""}]))
+        self.assertFalse(pools.place_subject("Lake Powell", jobs))          # the event's own subject
+        self.assertFalse(pools.place_subject("Bureau of Reclamation", [{"subject_type": ""}]))
+
     def test_not_an_event_story_no_title_rules(self):
         director.LAST_STORY.clear()
         director.LAST_STORY.update({"kind": "history", "year": 1942, "places": ["Midway"]})

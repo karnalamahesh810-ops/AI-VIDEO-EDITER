@@ -1477,11 +1477,12 @@ def title_conflict(title: str, context: str = "") -> str:
     return ""
 
 
-def upload_conflict(info: Optional[dict]) -> str:
+def upload_conflict(info: Optional[dict], older_ok_years: int = 0) -> str:
     """
     An upload that cannot show this event: named for AI (src/slop.py
     metadata), or - for a line that must show this event in a story about
-    now - uploaded before the story's year.
+    now - uploaded before the story's year. `older_ok_years`: a subject pool
+    for a named place (a landmark, a dam) takes uploads this many years older.
     """
     if not isinstance(info, dict):
         return ""
@@ -1499,7 +1500,7 @@ def upload_conflict(info: Optional[dict]) -> str:
     year = brief.get("year")
     up = str(info.get("upload_date") or "")
     if isinstance(year, int) and not isinstance(year, bool) and re.fullmatch(r"\d{8}", up):
-        grace = 1 if datetime.date.today().month <= 2 else 0
+        grace = max(1 if datetime.date.today().month <= 2 else 0, int(older_ok_years or 0))
         if int(up[:4]) < year - grace:
             return f"uploaded in {up[:4]}, before this {year} story"
     return ""

@@ -156,6 +156,28 @@ def subject_key(subject: str) -> str:
     return " ".join(text.split())
 
 
+_PLACE_WORDS = re.compile(
+    r"\b(?:canyon|dam|lake|river|bridge|mountains?|desert|falls|glacier|valley|bay|island|reservoir|arch|"
+    r"mesa|butte|creek|national park|monument|gorge|basin|delta|beach|coast|peak|plateau|marina|spring|cave)s?\b",
+    re.I)
+
+
+def place_subject(subject: str, sjobs: List[dict]) -> bool:
+    """
+    True for a named place that is not the event itself (Cathedral in the
+    Desert in a Lake Powell story): its pool may take the last few years'
+    uploads (config.PLACE_FOOTAGE_YEARS). The story's own subject ("Lake
+    Powell" in "Lake Powell drops to 22%") still needs this year's footage.
+    """
+    from . import director            # lazy: director never imports pools
+    if not subject or not sjobs:
+        return False
+    placey = (sum(1 for j in sjobs if j.get("subject_type") == "place") * 2 >= len(sjobs)
+              or bool(_PLACE_WORDS.search(subject)))
+    event = subject_key(" ".join(str(director.LAST_STORY.get(k) or "") for k in ("event", "title")))
+    return placey and subject_key(subject) not in event
+
+
 def _pool_name(job: dict) -> str:
     """What a line's pool is about: the place the line names (director
     linePlace, job "place") before its subject, so a "Dallas and Fort Worth"
@@ -396,7 +418,7 @@ def pool_intent(subject: str, story: Optional[dict]) -> str:
 
 
 def rate_video(cand: dict, subject: str, context: str, seconds: float,
-               intent: str = "") -> List[dict]:
+               intent: str = "", place: bool = False) -> List[dict]:
     """
     Approved moments of one video: [{"start", "score", "description"}].
 
@@ -407,7 +429,9 @@ def rate_video(cand: dict, subject: str, context: str, seconds: float,
     info, proxy = media._yt_info(cand["id"])
     if not info:
         return []
-    why = media.upload_conflict(info) or media.title_conflict(info.get("title") or "", subject)
+    # A place subject (a landmark, a dam) may use the last few years' uploads.
+    why = (media.upload_conflict(info, older_ok_years=config.PLACE_FOOTAGE_YEARS if place else 0)
+           or media.title_conflict(info.get("title") or "", subject))
     if why:
         print(f"[pools] {subject}: skip {cand['id']}: {why}", flush=True)
         return []
@@ -517,6 +541,9 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
     story = subject_story(sjobs)
     intent = pool_intent(subject, story)
     context = " ".join((j.get("context") or "") for j in sjobs[:6])
+    # A named place that is not the event itself (Cathedral in the Desert in a
+    # Lake Powell story) may use the last few years' uploads.
+    place = place_subject(subject, sjobs)
     # Several reports, a few moments each (GoMotion), rather than every line
     # from the first long video that clears the floor.
     per_video = _per_video(story)
@@ -549,7 +576,7 @@ def plan_subject(subject: str, sjobs: List[dict], require_cc: bool, skip_ids: Se
     for cand in candidates(subject, require_cc, skip_ids, story=story)[:config.POOL_MAX_VIDEOS]:
         if not open_lines or ytdlp.past_deadline():
             break
-        found = spaced(rate_video(cand, subject, context, seconds, intent=intent),
+        found = spaced(rate_video(cand, subject, context, seconds, intent=intent, place=place),
                        config.POOL_MIN_GAP_SECONDS)
         # Never a moment an earlier video showed (src/ledger.py); the
         # video's other moments stay.

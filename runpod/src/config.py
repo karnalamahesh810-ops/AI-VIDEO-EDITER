@@ -465,6 +465,11 @@ HOOK_JUDGE_MAX_PER_SCENE = int(os.getenv("HOOK_JUDGE_MAX_PER_SCENE", "16"))
 # only when nothing recent passes. The owner's reference channel shows this
 # week's footage of the town the narration names. Off = this year's first.
 RECENT_FOOTAGE_FIRST = _flag("RECENT_FOOTAGE_FIRST", True)
+# A named place (a dam, a canyon, a landmark) looks the same in the last few
+# years' uploads; only footage of the event itself must be from the story's
+# year (2026-10-01: every Lake Powell landmark clip was dropped as "uploaded in
+# 2022, before this 2026 story" and 18 lines found nothing).
+PLACE_FOOTAGE_YEARS = int(os.getenv("PLACE_FOOTAGE_YEARS", "4"))
 # "When a person's name is mentioned, show that person WHILE it is said, not
 # before, not after" (the owner, 2026-09-30): a beat is split where it names
 # one of the story's people and that beat shows the person (src/mentions.py).
