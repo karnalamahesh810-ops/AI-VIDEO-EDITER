@@ -2806,7 +2806,7 @@ class _Planner:
         by_kind = bool(own)
         own = line + own
         many = self._stills_after(i) >= 3
-        pool, specific = [], []
+        pool, for_line, for_kind = [], [], []
         for c in own + ["photo"]:
             for t in templates.for_cue(c, self.style):
                 tags = set(t.get("tags") or [])
@@ -2819,10 +2819,14 @@ class _Planner:
                 if t["id"] in {x["id"] for x in pool}:
                     continue
                 pool.append(t)
-                if c in own:
-                    specific.append(t["id"])
+                if c in line:
+                    for_line.append(t["id"])
+                elif c in own:
+                    for_kind.append(t["id"])
         if not pool:
             return None
+        # The looks drawn for what the line says lead (those the planner may pick); else the subject's own.
+        specific = [x for x in for_line if auto_ok(x)] or for_kind
         props = {"text": subject.upper()} if subject and not by_kind else ({"text": subject} if subject else {})
         by_id = {}
         hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else {}
