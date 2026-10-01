@@ -35,7 +35,10 @@ class Preflight(unittest.TestCase):
             r = mock.Mock()
             r.status_code = 500 if "broken" in url else 206
             return r
+        # The readable clip's length is measured too (it has no clipSeconds); offline, ffprobe is faked:
+        # 3 s, just its own scene, so it cannot be held over the broken one.
         with mock.patch("requests.get", side_effect=get), \
+                mock.patch.object(handler.quality, "probe_video", return_value=handler.quality.Check(seconds=3.0)), \
                 mock.patch.object(config, "ANIMATION_FILL", False):
             n = handler._preflight_media(doc)
         self.assertEqual(n, 1)

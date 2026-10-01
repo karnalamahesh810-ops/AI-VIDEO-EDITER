@@ -960,3 +960,23 @@ AI_SLOP_FILTER = _flag("AI_SLOP_FILTER", True)
 # clip also goes through the vision judge against its own line (the news and
 # weather styles: a chyron naming another town is only readable full size).
 POOL_JUDGE_CLIPS = _flag("POOL_JUDGE_CLIPS", False)
+
+# --- the quality gate (src/quality.py, the owner's rule 2026-10-01) ------------
+# QUALITY_GATE: before every render (build and render actions) every scene,
+# picture and sound of the document the renderer will draw is checked - media
+# present, the file reachable, a clip long enough to cover its scene, a still
+# that decodes and is not tiny, no repeats, every overlay picture loadable -
+# and whatever fails is repaired through the fallback ladder (src/gapfill.py).
+QUALITY_GATE = _flag("QUALITY_GATE", True)
+# Checks run QUALITY_PARALLEL at a time, each request QUALITY_HTTP_TIMEOUT s,
+# all of them inside QUALITY_AUDIT_SECONDS (what is still out then is trusted).
+QUALITY_PARALLEL = int(os.getenv("QUALITY_PARALLEL", "16"))
+QUALITY_HTTP_TIMEOUT = float(os.getenv("QUALITY_HTTP_TIMEOUT", "12"))
+QUALITY_AUDIT_SECONDS = float(os.getenv("QUALITY_AUDIT_SECONDS", "90"))
+# The ladder's own time box for the scenes the gate repairs, and per scene.
+QUALITY_REPAIR_SECONDS = float(os.getenv("QUALITY_REPAIR_SECONDS", "150"))
+QUALITY_REPAIR_SCENE_SECONDS = float(os.getenv("QUALITY_REPAIR_SCENE_SECONDS", "45"))
+# A repair may ask the image model for a picture (paid) only when this is on.
+QUALITY_REPAIR_GENERATED = _flag("QUALITY_REPAIR_GENERATED", False)
+# A still whose long side is under this many pixels is too small to show.
+QUALITY_MIN_IMAGE_SIDE = int(os.getenv("QUALITY_MIN_IMAGE_SIDE", "320"))

@@ -52,7 +52,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, styles, upscale
-from src import gapfill
+from src import gapfill, quality
 
 
 def _work_dir(job_id: str) -> str:
@@ -148,6 +148,8 @@ class Reporter:
         self._update = None
         self._pushed_count = -1
         self._stop = threading.Event()
+        # Fields every later update carries (the quality check's one-liner).
+        self.extra: dict = {}
         if job and job.get("id"):
             threading.Thread(target=self._heartbeat, daemon=True).start()
 
@@ -210,6 +212,7 @@ class Reporter:
                   "phase_started_at": round(self._phase_started)}
         if self._estimate:
             update["estimate_minutes"] = list(self._estimate)
+        update.update(self.extra)
         if done is not None and total is not None:
             update.update(done=done, total=total)
         print(f"[worker] {step}" + (f" ({progress}%)" if progress is not None else ""),
@@ -1539,7 +1542,7 @@ def _no_repeats(doc: dict, report: Reporter = None) -> dict:
     return got
 
 
-def _sanitize_stills(doc: dict, work: str) -> int:
+def _sanitize_stills(doc: dict, work: str, fetched: dict = None) -> int:
     """
     Re-encode every still to a real JPEG before Chrome sees it.
 
@@ -1547,9 +1550,10 @@ def _sanitize_stills(doc: dict, work: str) -> int:
     for: a WebP, an AVIF or an HTML error page named ".jpg". Chrome refuses to
     decode it and Remotion fails the WHOLE render - a real 23-scene job died at
     frame 356 on one airport photo. Each still is decoded by ffmpeg into a
-    clean JPEG (remote ones are fetched first); one that cannot be decoded is
-    turned into an empty scene, which _fill_missing_media then covers with a
-    matching shot. Returns how many stills were dropped.
+    clean JPEG (remote ones are fetched first, or taken from `fetched`: the
+    copies the quality check downloaded to decode them); one that cannot be
+    decoded is turned into an empty scene, which _fill_missing_media then
+    covers with a matching shot. Returns how many stills were dropped.
     """
     from src.assetserver import is_local
     dropped = 0
@@ -1560,6 +1564,8 @@ def _sanitize_stills(doc: dict, work: str) -> int:
             continue
         url = media["url"]
         src = url if is_local(url) and os.path.isfile(url) else ""
+        if not src and os.path.isfile((fetched or {}).get(url) or ""):
+            src = fetched[url]
         if not src and url.startswith("http"):
             src = os.path.join(work, f"still_src_{n}")
             try:
@@ -1650,57 +1656,19 @@ def _contact_sheets(video: str, work: str, every: float = 3.0, per_sheet: int = 
     return sheets
 
 
-def _preflight_media(doc: dict, workers: int = 16) -> int:
+def _preflight_media(doc: dict, gate=None) -> int:
     """
-    Read the first bytes of every remote clip and still in the document. A
-    scene whose file cannot be read (storage 4xx/5xx, a dead link) gets the
-    empty-scene treatment (_fill_missing_media: an animation scene or a
-    matching shot) so the render never dies on it. Returns how many.
+    The quality check before the render (src/quality.py Gate.before_render):
+    every scene, still, overlay picture, the narration and the music are read
+    (our R2 objects by an S3 HEAD, other links by a small range GET, in
+    parallel), clips measured against their scenes, stills decoded, repeats
+    found; whatever fails is repaired through the fallback ladder and the last
+    resort, so the render never dies on one file - one unreadable clip killed
+    a 15-minute render at frame 22,534 (storage answered 500 for it). Returns
+    how many scenes were repaired.
     """
-    import requests as _rq
-    from concurrent.futures import ThreadPoolExecutor
-
-    def ok(url: str) -> bool:
-        for _ in range(2):
-            try:
-                r = _rq.get(url, headers={"Range": "bytes=0-1023"}, timeout=25, stream=True)
-                code = r.status_code
-                r.close()
-                if code in (200, 206):
-                    return True
-                if code in (400, 401, 403, 404, 410):
-                    return False
-            except _rq.RequestException:
-                pass
-        return False
-
-    scenes = doc.get("scenes") or []
-    todo = [(i, s["media"]["url"]) for i, s in enumerate(scenes)
-            if (s.get("media") or {}).get("type") in ("video", "image")
-            and str((s.get("media") or {}).get("url", "")).startswith("http")]
-    if not todo:
-        return 0
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(lambda t: ok(t[1]), todo))
-    bad = [i for (i, _u), good in zip(todo, results) if not good]
-    # Thumbnails double as animation backdrops: one that cannot be read is dropped.
-    thumbs = [(i, s["media"]["thumbnail"]) for i, s in enumerate(scenes)
-              if str((s.get("media") or {}).get("thumbnail", "")).startswith("http")]
-    if thumbs:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            tres = list(pool.map(lambda t: ok(t[1]), thumbs))
-        for (i, _u), good in zip(thumbs, tres):
-            if not good:
-                scenes[i]["media"].pop("thumbnail", None)
-    for i in bad:
-        s = scenes[i]
-        print(f"[worker] scene {i + 1}: clip unreadable in storage; replacing it", flush=True)
-        s["media"] = {"type": "color", "url": "", "source": "none"}
-        s["reviewRequired"] = True
-        s["reviewReason"] = "The clip could not be read from storage; replace it"
-    if bad:
-        _fill_missing_media(doc)
-    return len(bad)
+    gate = gate or quality.Gate(doc, config.WORK_DIR)
+    return gate.before_render()
 
 
 def _all_remote(doc: dict) -> bool:
@@ -1748,9 +1716,10 @@ def _keep_render(out_path: str) -> None:
 def do_render(doc: dict, inp: dict, work: str, report: Reporter,
               split: bool = False) -> dict:
     # The document may have come back from a browser, so validate before
-    # spending GPU minutes on it.
+    # spending GPU minutes on it. A scene without media is the quality check's
+    # to repair first (below); the render requires every one after that.
     timeline.drop_invalid_overlays(doc)
-    timeline.validate(doc, require_media=True, allow_stock=inp.get("allow_stock"))
+    timeline.validate(doc, require_media=False, allow_stock=inp.get("allow_stock"))
 
     # A plan can sit in the editor for days; any signed URL in it has long
     # since expired. Re-resolve the narration from the reference the plan
@@ -1771,20 +1740,157 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         timeline.relevel_to_voice(doc)
     except Exception as e:  # noqa: BLE001
         print(f"[worker] narration level not re-measured: {type(e).__name__}: {str(e)[:100]}", flush=True)
-    # One unreadable clip killed a 15-minute render at frame 22,534 (storage
-    # answered 500 for it). Every clip is checked first; a broken one is
-    # replaced like an empty scene, before any frame is drawn.
-    broken = _preflight_media(doc)
+    # The quality check (src/quality.py): every scene, picture and sound the
+    # renderer will load is checked, and whatever fails is repaired through
+    # the fallback ladder before any frame is drawn - one unreadable clip
+    # killed a 15-minute render at frame 22,534 (storage answered 500 for it).
+    gate = quality.Gate(doc, work, report)
+    broken = _preflight_media(doc, gate=gate)
     if broken:
-        report(f"Replaced {broken} unreadable clip(s)", 69)
+        report(f"Repaired {broken} scene(s) before the render", 69)
+    timeline.validate(doc, require_media=True, allow_stock=inp.get("allow_stock"))
+    out_path = os.path.join(work, "final.mp4")
+    _draw(doc, inp, work, report, split, out_path, gate)
+    checked = gate.finish()
+    doc.setdefault("meta", {})["quality"] = checked
+    report(checked["summary"], 90)
+    # Over the app's per-file storage limit: re-encode to fit, not fail the
+    # upload. R2 has no such cap, so the full-quality file goes there as is.
+    if not r2.enabled():
+        renderer.fit_size(out_path)
+    _keep_render(out_path)
+
+    report("Uploading video", 91)
+    events.phase("upload")
+    duration = doc["durationInFrames"] / doc["fps"]
+
+    # Preferred: the caller pre-signed a destination for us, so this worker
+    # needs no Supabase credentials at all. The app's video-render edge
+    # function already does this — it holds the service key, we do not.
+    LAST_FRAMES.clear()
+    if inp.get("return_frames"):
+        LAST_FRAMES.extend(_contact_sheets(out_path, work))
+
+    if inp.get("return_video"):
+        # A benchmark render with no project to upload to: the file rides
+        # back in the job result (RunPod caps results, so small renders only).
+        import base64
+        size = os.path.getsize(out_path)
+        cap = int(config.RETURN_VIDEO_MAX_MB * 1024 * 1024)
+        if size > cap:
+            raise RuntimeError(f"rendered file is {size / 1e6:.1f} MB, over the {config.RETURN_VIDEO_MAX_MB} MB "
+                               "return cap; render smaller (width/height) or give the job a project")
+        with open(out_path, "rb") as fh:
+            payload = base64.b64encode(fh.read()).decode("ascii")
+        return {"video_url": "", "public_url": "", "object_path": "", "bucket": "",
+                "uploadedVia": "inline", "size_bytes": size, "duration": duration,
+                "video_b64": payload, "quality": checked}
+
+    upload_url = inp.get("upload_url")
+    if upload_url:
+        size = storage.upload_to_signed_url(out_path, upload_url)
+        public_url = inp.get("public_url") or ""
+        return {
+            "video_url": public_url,
+            "public_url": public_url,
+            "object_path": inp.get("video_path") or "",
+            "bucket": "",
+            "uploadedVia": "signed_url",
+            "size_bytes": size,
+            "duration": duration,
+            "quality": checked,
+        }
+
+    # Cloudflare R2 first: no 2 GB cap, no download fees. The object name ends
+    # in a random token, so the public link is unguessable. Any failure falls
+    # through to the app's own storage below.
+    if r2.enabled():
+        project_id = inp.get("project_id") or "adhoc"
+        key = f"projects/{project_id}/final-{int(time.time())}-{uuid.uuid4().hex[:12]}.mp4"
+        try:
+            url = r2.upload(out_path, key, deadline=time.time() + config.FINAL_UPLOAD_RETRY_SECONDS)
+            print(f"[worker] final video on R2: {key}", flush=True)
+            return {
+                "video_url": url,
+                "public_url": url,
+                "object_path": key,
+                "bucket": f"r2:{config.R2_BUCKET}",
+                "uploadedVia": "r2",
+                "size_bytes": os.path.getsize(out_path),
+                "duration": duration,
+                "quality": checked,
+            }
+        except Exception as e:  # noqa: BLE001 - the app's storage is the fallback
+            print(f"[worker] R2 upload failed, using app storage: {type(e).__name__}: {str(e)[:200]}",
+                  flush=True)
+            renderer.fit_size(out_path)     # app storage still caps each file
+
+    # No key on this worker: the app's broker signs the one destination.
+    if storage.broker_enabled() and inp.get("project_id"):
+        bucket = config.RENDER_BUCKET
+        object_path = f"projects/{inp['project_id']}/final-{int(time.time())}.mp4"
+        playable = storage.broker_upload(
+            out_path, bucket, object_path, inp["project_id"], inp.get("_job_id", ""),
+            read_ttl=int(inp.get("signed_url_ttl", 60 * 60 * 24 * 7)),
+            # The whole video rides on this one upload: wait out an app outage.
+            deadline=time.time() + config.FINAL_UPLOAD_RETRY_SECONDS)
+        return {
+            "video_url": playable,
+            "public_url": "",
+            "object_path": object_path,
+            "bucket": bucket,
+            "uploadedVia": "broker",
+            "size_bytes": os.path.getsize(out_path),
+            "duration": duration,
+            "quality": checked,
+        }
+
+    # Fallback: upload with our own service-role key.
+    project_id = inp.get("project_id") or uuid.uuid4().hex
+    object_path = inp.get("object_path") or f"projects/{project_id}/final.mp4"
+    bucket = inp.get("bucket") or config.SUPABASE_BUCKET
+    public_url = storage.upload_to_supabase(out_path, object_path, bucket=bucket)
+
+    # The bucket may be private. A public-form URL 400s there, so sign the
+    # object as well — signing works against public buckets too, making this
+    # correct either way. Both are returned so the app can re-sign from the
+    # path when a long-lived link expires.
+    playable = public_url
+    try:
+        playable = storage.signed_url(
+            object_path, bucket=bucket,
+            expires_in=int(inp.get("signed_url_ttl", 60 * 60 * 24 * 7)),
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[worker] could not sign render, falling back to public url: {e}", flush=True)
+
+    return {
+        "video_url": playable,
+        "public_url": public_url,
+        "object_path": object_path,
+        "bucket": bucket,
+        "uploadedVia": "service_key",
+        "size_bytes": os.path.getsize(out_path),
+        "duration": duration,
+        "quality": checked,
+    }
+
+
+def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, gate=None) -> None:
+    """
+    Draw `doc` to `out_path`, picture and balanced sound, whichever way this
+    render runs: a pod's render spread over the workers, the serverless chunk
+    render, or one machine.
+    """
     # Chunk workers get the document with its web links and clean their own
     # stills; the cleaned copies below are files on this worker's disk only.
     remote_doc = copy.deepcopy(doc) if split else None
-    _sanitize_stills(doc, work)
+    _sanitize_stills(doc, work, fetched=getattr(gate, "fetched", None))
+    if gate is not None:
+        gate.no_empty_scenes()          # a still that would not decode leaves no empty frame
 
     report(f"Rendering {doc['meta'].get('sceneCount', len(doc['scenes']))} scenes", 70)
     events.phase("render")
-    out_path = os.path.join(work, "final.mp4")
     last_pct = [70]
 
     def on_render(frac: float):
@@ -1861,122 +1967,6 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     if not finished:
         report("Balancing the sound", 90)
         renderer.normalize_loudness(out_path)
-    # Over the app's per-file storage limit: re-encode to fit, not fail the
-    # upload. R2 has no such cap, so the full-quality file goes there as is.
-    if not r2.enabled():
-        renderer.fit_size(out_path)
-    _keep_render(out_path)
-
-    report("Uploading video", 91)
-    events.phase("upload")
-    duration = doc["durationInFrames"] / doc["fps"]
-
-    # Preferred: the caller pre-signed a destination for us, so this worker
-    # needs no Supabase credentials at all. The app's video-render edge
-    # function already does this — it holds the service key, we do not.
-    LAST_FRAMES.clear()
-    if inp.get("return_frames"):
-        LAST_FRAMES.extend(_contact_sheets(out_path, work))
-
-    if inp.get("return_video"):
-        # A benchmark render with no project to upload to: the file rides
-        # back in the job result (RunPod caps results, so small renders only).
-        import base64
-        size = os.path.getsize(out_path)
-        cap = int(config.RETURN_VIDEO_MAX_MB * 1024 * 1024)
-        if size > cap:
-            raise RuntimeError(f"rendered file is {size / 1e6:.1f} MB, over the {config.RETURN_VIDEO_MAX_MB} MB "
-                               "return cap; render smaller (width/height) or give the job a project")
-        with open(out_path, "rb") as fh:
-            payload = base64.b64encode(fh.read()).decode("ascii")
-        return {"video_url": "", "public_url": "", "object_path": "", "bucket": "",
-                "uploadedVia": "inline", "size_bytes": size, "duration": duration,
-                "video_b64": payload}
-
-    upload_url = inp.get("upload_url")
-    if upload_url:
-        size = storage.upload_to_signed_url(out_path, upload_url)
-        public_url = inp.get("public_url") or ""
-        return {
-            "video_url": public_url,
-            "public_url": public_url,
-            "object_path": inp.get("video_path") or "",
-            "bucket": "",
-            "uploadedVia": "signed_url",
-            "size_bytes": size,
-            "duration": duration,
-        }
-
-    # Cloudflare R2 first: no 2 GB cap, no download fees. The object name ends
-    # in a random token, so the public link is unguessable. Any failure falls
-    # through to the app's own storage below.
-    if r2.enabled():
-        project_id = inp.get("project_id") or "adhoc"
-        key = f"projects/{project_id}/final-{int(time.time())}-{uuid.uuid4().hex[:12]}.mp4"
-        try:
-            url = r2.upload(out_path, key, deadline=time.time() + config.FINAL_UPLOAD_RETRY_SECONDS)
-            print(f"[worker] final video on R2: {key}", flush=True)
-            return {
-                "video_url": url,
-                "public_url": url,
-                "object_path": key,
-                "bucket": f"r2:{config.R2_BUCKET}",
-                "uploadedVia": "r2",
-                "size_bytes": os.path.getsize(out_path),
-                "duration": duration,
-            }
-        except Exception as e:  # noqa: BLE001 - the app's storage is the fallback
-            print(f"[worker] R2 upload failed, using app storage: {type(e).__name__}: {str(e)[:200]}",
-                  flush=True)
-            renderer.fit_size(out_path)     # app storage still caps each file
-
-    # No key on this worker: the app's broker signs the one destination.
-    if storage.broker_enabled() and inp.get("project_id"):
-        bucket = config.RENDER_BUCKET
-        object_path = f"projects/{inp['project_id']}/final-{int(time.time())}.mp4"
-        playable = storage.broker_upload(
-            out_path, bucket, object_path, inp["project_id"], inp.get("_job_id", ""),
-            read_ttl=int(inp.get("signed_url_ttl", 60 * 60 * 24 * 7)),
-            # The whole video rides on this one upload: wait out an app outage.
-            deadline=time.time() + config.FINAL_UPLOAD_RETRY_SECONDS)
-        return {
-            "video_url": playable,
-            "public_url": "",
-            "object_path": object_path,
-            "bucket": bucket,
-            "uploadedVia": "broker",
-            "size_bytes": os.path.getsize(out_path),
-            "duration": duration,
-        }
-
-    # Fallback: upload with our own service-role key.
-    project_id = inp.get("project_id") or uuid.uuid4().hex
-    object_path = inp.get("object_path") or f"projects/{project_id}/final.mp4"
-    bucket = inp.get("bucket") or config.SUPABASE_BUCKET
-    public_url = storage.upload_to_supabase(out_path, object_path, bucket=bucket)
-
-    # The bucket may be private. A public-form URL 400s there, so sign the
-    # object as well — signing works against public buckets too, making this
-    # correct either way. Both are returned so the app can re-sign from the
-    # path when a long-lived link expires.
-    playable = public_url
-    try:
-        playable = storage.signed_url(
-            object_path, bucket=bucket,
-            expires_in=int(inp.get("signed_url_ttl", 60 * 60 * 24 * 7)),
-        )
-    except Exception as e:  # noqa: BLE001
-        print(f"[worker] could not sign render, falling back to public url: {e}", flush=True)
-
-    return {
-        "video_url": playable,
-        "public_url": public_url,
-        "object_path": object_path,
-        "bucket": bucket,
-        "uploadedVia": "service_key",
-        "size_bytes": os.path.getsize(out_path),
-        "duration": duration,
-    }
 
 
 def _done_fields(out: dict) -> dict:
@@ -2086,6 +2076,7 @@ def handler(job):
     report = Reporter(project_id, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
+    quality.reset()                     # and so is the quality check's
 
     try:
         if action in ("plan", "build", "resource", "source_part"):
@@ -2284,10 +2275,19 @@ def handler(job):
                 raise ValueError("render requires a `timeline` document")
             # Export must not fail over one empty scene either: that was the
             # "Scene 6 still needs media before it can render" a user hit
-            # pressing Render. The gap is filled and flagged in the render
-            # copy only; the saved timeline still shows it for Find footage.
+            # pressing Render. The quality check before the render (do_render,
+            # src/quality.py) gives every empty or broken scene a picture -
+            # the fallback ladder first, here with this timeline's story and
+            # the project's clip library - in the render copy only; the saved
+            # timeline still shows the gap for Find footage.
             doc = copy.deepcopy(doc)
-            patched = _fill_missing_media(doc)
+            meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+            bucket = inp.get("media_bucket") or config.MEDIA_BUCKET
+            quality.set_context(
+                ladder=True, story=meta.get("story") if isinstance(meta.get("story"), dict) else None,
+                require_cc=bool(inp["require_cc"] if inp.get("require_cc") is not None else config.REQUIRE_CC),
+                allow_generated=config.QUALITY_REPAIR_GENERATED,
+                library_loader=(lambda: library.Library.load(project_id, job_id, bucket)) if project_id else None)
             # Editor renders are split across every worker too. They used to
             # render the whole video on one worker: a 15-minute video took
             # 15 minutes of one CPU and then failed on one broken clip.
@@ -2302,7 +2302,8 @@ def handler(job):
                     "render_manifest": media.LAST_STATS.get("render_manifest"),
                     "costs": costs.summary(time.time() - started),
                     "events": events.summary(),
-                    "filledScenes": patched,
+                    "filledScenes": sum(1 for r in (out.get("quality") or {}).get("repairs") or []
+                                        if r.get("problem") == "empty"),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "build":
@@ -2325,6 +2326,9 @@ def handler(job):
                      "nearby clip so the render could complete", flush=True)
             split = (project_id and inp.get("publish_media", True)
                      and fanout.render_enabled(doc, project_id))
+            # The quality check before the render repairs with this job's own
+            # plan: its lines, clip library, spare pool moments and flags.
+            quality.set_context(ladder=True, plan=True, allow_generated=config.QUALITY_REPAIR_GENERATED)
             if split:
                 # Long video: save the clips first so every worker can fetch
                 # them, then render in chunks across the workers.
@@ -2335,6 +2339,11 @@ def handler(job):
                 out = do_render(local_doc, inp, work, report, split=True)
             else:
                 out = do_render(local_doc, inp, work, report)
+            if isinstance(out.get("quality"), dict):
+                # What the check found and repaired, with the saved timeline -
+                # and the scenes it replaced in the video flagged for the editor.
+                doc.setdefault("meta", {})["quality"] = out["quality"]
+                quality.mark_for_review(doc, out["quality"])
             if not split and project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))
@@ -2354,6 +2363,9 @@ def handler(job):
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
         msg = str(e)[:800]
+        # A render that failed still says what its quality check found and did.
+        gate = quality.LAST.get("gate")
+        checked = gate.finish() if gate is not None else None
         if project_id:
             # The broker takes events only while the project is "rendering":
             # send them before the status changes, or a failed job has no log.
@@ -2366,6 +2378,7 @@ def handler(job):
                     "status": "failed", "error_message": msg, "current_step": "Failed",
                 })
         return {"ok": False, "error": msg, "elapsed": round(time.time() - started, 1),
+                **({"quality": checked} if checked else {}),
                 **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {}),
                 **({"timeline": dict(LAST_TIMELINE)} if inp.get("return_frames") and LAST_TIMELINE else {})}
     finally:
@@ -2373,6 +2386,7 @@ def handler(job):
         # before the work directory goes and the next job starts.
         media.drain_pools(config.DRAIN_SECONDS)
         _restore_config(config_before)
+        quality.reset()
         events.phase("")
         try:
             events.flush(storage.broker_events)

@@ -224,3 +224,45 @@ def delete(key: str, bucket: str = "") -> bool:
     headers = _auth_headers("DELETE", key, {}, hashlib.sha256(b"").hexdigest(), bucket=bucket)
     r = requests.delete(_object_url(key, bucket), headers=headers, timeout=60)
     return r.status_code in (200, 204)
+
+
+def locate(url: str) -> Optional[tuple]:
+    """(bucket, key) of a link under one of our public bases (videos or library), else None."""
+    for base, bucket in ((config.R2_PUBLIC_BASE, config.R2_BUCKET),
+                         (getattr(config, "R2_LIBRARY_PUBLIC_BASE", ""), getattr(config, "R2_LIBRARY_BUCKET", ""))):
+        base = (base or "").rstrip("/")
+        if base and bucket and str(url or "").startswith(base + "/"):
+            return bucket, urllib.parse.unquote(str(url)[len(base) + 1:].split("?", 1)[0])
+    return None
+
+
+def _presign_url(method: str, host: str, path: str, region: str, key_id: str, secret: str,
+                 now: datetime.datetime, expires: int) -> str:
+    """A SigV4 query-signed link (only `host` signed, payload unsigned): AWS's
+    documented example is reproduced by tests/test_quality.py."""
+    amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+    day = now.strftime("%Y%m%d")
+    scope = f"{day}/{region}/s3/aws4_request"
+    query = {"X-Amz-Algorithm": "AWS4-HMAC-SHA256", "X-Amz-Credential": f"{key_id}/{scope}",
+             "X-Amz-Date": amz_date, "X-Amz-Expires": str(int(expires)), "X-Amz-SignedHeaders": "host"}
+    canonical = "\n".join([method, path, _query_string(query), f"host:{host}\n", "host", "UNSIGNED-PAYLOAD"])
+    to_sign = "\n".join(["AWS4-HMAC-SHA256", amz_date, scope,
+                         hashlib.sha256(canonical.encode("utf-8")).hexdigest()])
+    k = _sign(("AWS4" + secret).encode("utf-8"), day)
+    for part in (region, "s3", "aws4_request"):
+        k = _sign(k, part)
+    sig = hmac.new(k, to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"https://{host}{path}?{_query_string(query)}&X-Amz-Signature={sig}"
+
+
+def presign(key: str, bucket: str = "", expires: int = 900, method: str = "GET",
+            now: Optional[datetime.datetime] = None) -> str:
+    """
+    A short-lived signed link to one object through the S3 API, for a tool
+    that only takes a URL (ffprobe reading a clip's length). The public r2.dev
+    link is rate limited; the S3 API is not.
+    """
+    host = urllib.parse.urlparse(_endpoint()).netloc
+    path = "/" + urllib.parse.quote(f"{bucket or config.R2_BUCKET}/{key}", safe=_SAFE)
+    return _presign_url(method, host, path, "auto", config.R2_ACCESS_KEY_ID, config.R2_SECRET_ACCESS_KEY,
+                        now or datetime.datetime.now(datetime.timezone.utc), expires)
