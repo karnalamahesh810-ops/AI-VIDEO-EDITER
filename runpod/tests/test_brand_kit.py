@@ -488,6 +488,16 @@ class RendererContract(unittest.TestCase):
         self.assertEqual(tuple(re.findall(r'"([a-z-]+)"', positions)), brandkit.POSITIONS)
         self.assertIn(f'defaultPosition: "{brandkit.DEFAULT_POSITION}"', src)
 
+    def test_the_editor_only_list_is_current(self):
+        # The app's picks grid leaves these out (a pick of one could never show).
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("weo", os.path.join(ROOT, "scripts", "write_editor_only.py"))
+        weo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(weo)
+        with open(weo.PATH, encoding="utf-8") as fh:
+            saved = json.load(fh)["ids"]
+        self.assertEqual(saved, weo.editor_only(), "stale: run python scripts/write_editor_only.py")
+
     def test_fonts_match(self):
         src = self._read("components", "brand", "brandFonts.ts")
         self.assertEqual(tuple(re.findall(r'^\s*"([^"]+)":', src, re.M)), brandkit.FONTS)
