@@ -833,7 +833,10 @@ def _library() -> list:
         if isinstance(look.get("sfx_at"), (int, float)) and not isinstance(look.get("sfx_at"), bool):
             t["defaults"]["sfxAt"] = int(round(look["sfx_at"]))
         t["defaults"]["types"] = bool(look.get("types"))
-        if look.get("auto_pick") is False:
+        # "autoPick": false (library_looks*.json "autoPick" / "auto_pick") - built and in the editor, but the
+        # planner never chooses it on its own until the owner switches it on (templates.auto_pick); absent or
+        # true means the planner may pick it as before (only false is written to the registry).
+        if look.get("autoPick", look.get("auto_pick")) is False:
             t["autoPick"] = False
         out.append(with_sound(t, look, design["looks"].get(t["id"]), design["replace"]))
     return out

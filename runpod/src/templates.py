@@ -65,6 +65,22 @@ def banned(template_id: str) -> bool:
     return (template_id or "") in BANNED
 
 
+def auto_pick(t) -> bool:
+    """
+    False for a look registered with "autoPick": false (library_looks.json):
+    built, rendered and offered in the editor, but never chosen by the
+    planner on its own until the owner switches it on (the new pro looks
+    wait for his approval of their contact sheets). Takes a template or its
+    id; an id that is not in the registry is False. A template without the
+    flag is picked as before.
+    """
+    if isinstance(t, str):
+        t = get(t)
+    if not isinstance(t, dict):
+        return False
+    return t.get("autoPick", True) is not False
+
+
 # The planner's cue vocabulary for the built-in looks. The library looks carry
 # the new cues in library_looks.json; the built-ins predate them, so the
 # planner reads these on top of each template's own "cues" (the registry file
@@ -135,8 +151,9 @@ def family(t: Optional[dict]) -> str:
 
 
 def for_component(component: str, style: str = "") -> List[dict]:
-    """Templates drawn by one renderer component, the style pack's favourites first (never a banned look)."""
-    found = [t for t in load()["templates"] if t["component"] == component and t["id"] not in BANNED]
+    """Templates drawn by one renderer component, the style pack's favourites first (never a banned look, never
+    one waiting to be switched on: auto_pick)."""
+    found = [t for t in load()["templates"] if t["component"] == component and t["id"] not in BANNED and auto_pick(t)]
     if style:
         found.sort(key=lambda t: 0 if style in t["variants"]["style"] else 1)
     return found
@@ -160,8 +177,10 @@ def _by_cue() -> Dict[str, List[dict]]:
 
 
 def for_cue(cue: str, style: str = "", exclude: Optional[set] = None) -> List[dict]:
-    """Templates the planner may use for a narration cue, in preference order (never a banned look)."""
-    out = [t for t in _by_cue().get(cue, []) if t["id"] not in (exclude or set()) and t["id"] not in BANNED]
+    """Templates the planner may use for a narration cue, in preference order (never a banned look, never one
+    waiting to be switched on: auto_pick)."""
+    out = [t for t in _by_cue().get(cue, []) if t["id"] not in (exclude or set()) and t["id"] not in BANNED
+           and auto_pick(t)]
     if style:
         out.sort(key=lambda t: (0 if style in t["tags"] else 1, 0 if style in t["variants"]["style"] else 1))
     return out

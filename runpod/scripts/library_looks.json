@@ -13615,5 +13615,1476 @@
   "family": "vr",
   "file": "LibPackVR",
   "exit": "none"
+ },
+ {
+  "id": "dx-line-endpoint",
+  "name": "Line Chart (Endpoint Called Out)",
+  "category": "CHARTS",
+  "description": "A Bloomberg-style line chart that draws with the camera: it opens close on the first point, follows the line's glowing head as it draws through the years (x to time scale when the labels are years, a monotone curve with no fake plateaus), then pulls back to the whole chart. Each point pops as the line passes it; the first value sits small beside its point and the last lands at frame 50 with a pulse and its value and year called out beside it. Title top-left (text, label as a kicker), source bottom-left (subtitle). Sound: a soft tick per point, one count-final click on the landing - never a whoosh.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "series",
+   "years"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 50,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick"
+    ],
+    "at": 20,
+    "every": 6,
+    "count": 5,
+    "gain_db": -10
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 50,
+    "gain_db": -4
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Lake Powell's surface elevation",
+   "label": "Feet above sea level",
+   "suffix": "FT",
+   "items": [
+    {
+     "label": "1965",
+     "value": 3530
+    },
+    {
+     "label": "1980",
+     "value": 3700
+    },
+    {
+     "label": "1999",
+     "value": 3690
+    },
+    {
+     "label": "2005",
+     "value": 3555
+    },
+    {
+     "label": "2011",
+     "value": 3660
+    },
+    {
+     "label": "2022",
+     "value": 3522
+    },
+    {
+     "label": "2026",
+     "value": 3517
+    }
+   ],
+   "subtitle": "Source: Bureau of Reclamation"
+  },
+  "family": "dx",
+  "file": "LibDataPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "dx-ghost-bars",
+  "name": "Ghost Bars (Then and Now)",
+  "category": "COMPARISONS",
+  "description": "Then vs now in two thick bars: the earlier value grows and counts, then its dashed ghost appears on the later row and the later bar grows inside it; the gap between them fills with accent hatching and the change lands in a pill at frame 45 - in points for two percentages ('-73 PTS'), else in percent. Uses the first and the last item. Ticks while each value counts, a click as it lands.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "then-now",
+   "money-compare",
+   "compare-values"
+  ],
+  "duration": 5.5,
+  "sfx": "none",
+  "sfx_at": 45,
+  "types": false,
+  "sounds": [
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 6,
+    "align": "start",
+    "until": 23,
+    "gain_db": -12
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 24,
+    "gain_db": -5
+   },
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 27,
+    "align": "start",
+    "until": 44,
+    "gain_db": -11
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 45,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "How full Lake Powell is",
+   "items": [
+    {
+     "label": "2000",
+     "value": 95,
+     "suffix": "%"
+    },
+    {
+     "label": "2026",
+     "value": 22,
+     "suffix": "%"
+    }
+   ]
+  },
+  "family": "dx",
+  "file": "LibDataPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "dx-nested-squares",
+  "name": "Nested Squares to Scale",
+  "category": "COMPARISONS",
+  "description": "Two or three quantities as area-true squares from one corner (Vox style): the largest draws its outline and fills faintly, the smaller grows out of the shared corner in the accent and lands at frame 40, each value counting at its square's corner with its label; the ratio of the largest to the smallest ('4.6x') stands beside them over the two labels as a fraction.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "compare-values",
+   "then-now",
+   "money-compare"
+  ],
+  "duration": 5.5,
+  "sfx": "none",
+  "sfx_at": 40,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick"
+    ],
+    "at": 19,
+    "gain_db": -10
+   },
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 24,
+    "align": "start",
+    "until": 39,
+    "gain_db": -12
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 40,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Water in Lake Powell",
+   "label": "Million acre-feet",
+   "items": [
+    {
+     "label": "Full capacity",
+     "value": 24.3,
+     "suffix": "MAF"
+    },
+    {
+     "label": "In the lake today",
+     "value": 5.3,
+     "suffix": "MAF"
+    }
+   ]
+  },
+  "family": "dx",
+  "file": "LibDataPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "dx-unit-split",
+  "name": "Unit Chart Split",
+  "category": "NUMBERS",
+  "description": "A hundred units (people, drawn clean, when the line counts people; else dots) on a darkened, blurred frame: the share lights up in the accent column by column while the figure counts, lands at frame 38, then the lit units separate from the rest. 'One in four' (value 1, total 4) draws four large units, one lit. What it counts (text) sits under the figure.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "suffix",
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "percent",
+   "ratio",
+   "share-of"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 38,
+  "types": false,
+  "sounds": [
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 14,
+    "align": "start",
+    "until": 37,
+    "gain_db": -12
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 38,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "text": "of Lake Powell's capacity is left"
+  },
+  "family": "dx",
+  "file": "LibDataPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "dx-filled-figure",
+  "name": "Water-Filled Figure",
+  "category": "NUMBERS",
+  "description": "The percentage as a giant outlined Anton figure on the left: its outline draws on, then water rises inside the letters to the share (a gentle wave on the surface, a little slosh as it lands at frame 42) while the number counts; what it is (text) and its unit line (subtitle) come in beside it. For a reservoir, a lake or a capacity (the planner's _LOOK_NEEDS).",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "percent"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 42,
+  "types": false,
+  "sounds": [
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 10,
+    "align": "start",
+    "until": 41,
+    "gain_db": -12
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 42,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "text": "Lake Powell",
+   "subtitle": "of its capacity"
+  },
+  "family": "dx",
+  "file": "LibDataPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "dx-capacity-gauge",
+  "name": "Capacity Gauge (E to F)",
+  "category": "NUMBERS",
+  "description": "A fuel gauge for a reservoir: a dark glass half-dial, E to F, ticks with the low quarter in the accent; the needle swings from E to the share with a small overshoot and settles at frame 38 while the arc fills behind it and the figure counts under the hub, its word (subtitle, 'FULL') beside it and the subject (text) over the dial.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "percent",
+   "level"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 38,
+  "types": false,
+  "sounds": [
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 12,
+    "align": "start",
+    "until": 37,
+    "gain_db": -13
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 38,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "text": "Lake Powell",
+   "subtitle": "Full"
+  },
+  "family": "dx",
+  "file": "LibDataPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "dx-drum-counter",
+  "name": "Drum Counter",
+  "category": "NUMBERS",
+  "description": "A mechanical counter on a frosted plate: each digit on its own lit drum (cylinder shading, motion blur while it spins), the drums landing left to right, the last at frame 42; the unit in the accent beside them and what it counts (text) in tracked caps under it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text"
+  ],
+  "cues": [
+   "big-number",
+   "count",
+   "money",
+   "measurement"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 42,
+  "types": false,
+  "sounds": [
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 6,
+    "align": "start",
+    "until": 41,
+    "gain_db": -12
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 42,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 3517,
+   "suffix": "FT",
+   "text": "Lake Powell's surface elevation"
+  },
+  "family": "dx",
+  "file": "LibDataPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "dx-reservoir-section",
+  "name": "Reservoir Cross-Section",
+  "category": "CHARTS",
+  "description": "A canyon reservoir in cross-section, the rock in strata running off both edges: the water falls from full pool (total, when said) to the level said, leaving a pale bathtub ring on the walls, and lands at frame 46 while the level counts in a plate at the right; full pool and any thresholds (items, 'minimum power pool') are dashed across with their labels, the drop bracketed with its feet. label 'up' fills it from below instead. For a lake or reservoir elevation (the planner's _LOOK_NEEDS).",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "suffix",
+   "text",
+   "label",
+   "items"
+  ],
+  "cues": [
+   "measurement",
+   "level"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 46,
+  "types": false,
+  "sounds": [
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 14,
+    "align": "start",
+    "until": 45,
+    "gain_db": -12
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 46,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 3517,
+   "total": 3700,
+   "suffix": "FT",
+   "text": "Lake Powell",
+   "label": "down",
+   "items": [
+    {
+     "label": "Minimum power pool",
+     "value": 3490
+    }
+   ]
+  },
+  "family": "dx",
+  "file": "LibDataPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "mx-globe-dive",
+  "name": "Globe Dive",
+  "category": "MAPS",
+  "description": "A lit globe turns to the place, then dives: globe, region, then the real ground (USGS imagery in the US, Blue Marble elsewhere, graded dark and cool), the state's outline dashed as the imagery takes over; the marker lands at frame 68 and the place is named on a glass plate with its region and coordinates.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "locations"
+  ],
+  "cues": [
+   "place"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 68,
+  "types": false,
+  "sounds": [
+   {
+    "name": "map-whoosh",
+    "alt": [
+     "whoosh-cinematic-for-maps",
+     "map-swoop",
+     "whoosh-soft-v2"
+    ],
+    "at": 40,
+    "gain_db": -7
+   },
+   {
+    "name": "pin-drop",
+    "alt": [
+     "ui-pop",
+     "pop"
+    ],
+    "at": 68,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "locations": [
+    {
+     "label": "Glen Canyon Dam, Arizona",
+     "lat": 36.9375,
+     "lon": -111.4844,
+     "kind": "dam"
+    }
+   ]
+  },
+  "family": "mx",
+  "file": "LibMapsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "mx-terrain-pin",
+  "name": "Terrain Pin (Monochrome)",
+  "category": "MAPS",
+  "description": "A monochrome terrain push onto the place: the imagery graded as relief (navy shadows, paper highlights), a soft spotlight on it, survey hairlines closing in from the edges and a ring tightening; the marker lands at frame 34 and the name, region and coordinates come in beside it.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "locations"
+  ],
+  "cues": [
+   "place"
+  ],
+  "duration": 5.5,
+  "sfx": "none",
+  "sfx_at": 34,
+  "types": false,
+  "sounds": [
+   {
+    "name": "zoom-in-whoosh",
+    "alt": [
+     "whoosh-soft-v2",
+     "swoosh-text"
+    ],
+    "at": 16,
+    "gain_db": -9
+   },
+   {
+    "name": "pin-drop",
+    "alt": [
+     "ui-pop",
+     "pop"
+    ],
+    "at": 34,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "locations": [
+    {
+     "label": "Lees Ferry, Arizona",
+     "lat": 36.8653,
+     "lon": -111.5875,
+     "kind": "village"
+    }
+   ]
+  },
+  "family": "mx",
+  "file": "LibMapsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "mx-route-draw",
+  "name": "Route Draw",
+  "category": "MAPS",
+  "description": "Two places framed on graded imagery: the route bows from the first to the second with a glowing head and direction marks, the second marker lands at frame 48, both are named, and the distance sits in a tag at the route's middle (the figure said, else the straight-line miles).",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "locations",
+   "value",
+   "suffix"
+  ],
+  "cues": [
+   "route"
+  ],
+  "duration": 5.5,
+  "sfx": "none",
+  "sfx_at": 48,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "swoosh-text",
+     "whoosh-soft"
+    ],
+    "at": 18,
+    "gain_db": -9
+   },
+   {
+    "name": "pin-drop",
+    "alt": [
+     "ui-pop",
+     "pop"
+    ],
+    "at": 48,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Page to Glen Canyon Dam",
+   "locations": [
+    {
+     "label": "Page, Arizona",
+     "lat": 36.9147,
+     "lon": -111.4558,
+     "kind": "city"
+    },
+    {
+     "label": "Glen Canyon Dam, Arizona",
+     "lat": 36.9375,
+     "lon": -111.4844,
+     "kind": "dam"
+    }
+   ]
+  },
+  "family": "mx",
+  "file": "LibMapsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "mx-measure-line",
+  "name": "Measured Distance",
+  "category": "MAPS",
+  "description": "A surveyor's dimension line between two places on graded imagery and a faint grid: extension lines from both markers, the line growing out from its middle to arrowheads, the distance counting in a tag set along it and landing at frame 44 (the figure said, else straight-line miles); both places named.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "locations",
+   "value",
+   "suffix"
+  ],
+  "cues": [
+   "distance"
+  ],
+  "duration": 5.5,
+  "sfx": "none",
+  "sfx_at": 44,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick"
+    ],
+    "at": 8,
+    "gain_db": -8
+   },
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick"
+    ],
+    "at": 14,
+    "gain_db": -8
+   },
+   {
+    "name": "count-roll",
+    "alt": [
+     "count-tick",
+     "ui-tick"
+    ],
+    "at": 20,
+    "align": "start",
+    "until": 43,
+    "gain_db": -12
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 44,
+    "gain_db": -5
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "locations": [
+    {
+     "label": "Glen Canyon Dam, Arizona",
+     "lat": 36.9375,
+     "lon": -111.4844,
+     "kind": "dam"
+    },
+    {
+     "label": "Hoover Dam, Nevada",
+     "lat": 36.0161,
+     "lon": -114.7377,
+     "kind": "dam"
+    }
+   ]
+  },
+  "family": "mx",
+  "file": "LibMapsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "mx-region-pulse",
+  "name": "Region Pulse",
+  "category": "MAPS",
+  "description": "A clean vector map (the lower 48 on an Albers projection, or the country's neighbours): the state or country named (text) or holding the place fills in the accent and its outline pulses outward three times from frame 22 while the camera leans in; its name (label, else the state's) and a line (subtitle) beside it.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "region"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 22,
+  "types": false,
+  "sounds": [
+   {
+    "name": "radar-ping",
+    "alt": [
+     "ui-pop",
+     "pop"
+    ],
+    "at": 22,
+    "gain_db": -10
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "subtitle": "Upper and Lower Basin meet here",
+   "locations": [
+    {
+     "label": "Page, Arizona",
+     "lat": 36.9147,
+     "lon": -111.4558,
+     "kind": "city"
+    }
+   ]
+  },
+  "family": "mx",
+  "file": "LibMapsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "mx-path-trace",
+  "name": "Path Trace (Numbered Stops)",
+  "category": "MAPS",
+  "description": "Three to eight places in order on graded imagery: one smooth line flows through them, a numbered stop popping as it reaches each (the last at frame 60) with its name on a small plate, then a gentle flow runs along the finished line. A soft pop per stop.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "locations"
+  ],
+  "cues": [
+   "several-places"
+  ],
+  "duration": 6.5,
+  "sfx": "none",
+  "sfx_at": 60,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop",
+     "ui-tick"
+    ],
+    "at": 10,
+    "every": 17,
+    "count": "locations",
+    "gain_db": -10
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Lake Powell, end to end",
+   "locations": [
+    {
+     "label": "Hite, Utah",
+     "lat": 37.878,
+     "lon": -110.3917
+    },
+    {
+     "label": "Bullfrog Marina, Utah",
+     "lat": 37.5167,
+     "lon": -110.7254
+    },
+    {
+     "label": "Rainbow Bridge, Utah",
+     "lat": 37.0775,
+     "lon": -110.964
+    },
+    {
+     "label": "Glen Canyon Dam, Arizona",
+     "lat": 36.9375,
+     "lon": -111.4844
+    }
+   ]
+  },
+  "family": "mx",
+  "file": "LibMapsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "mx-pull-back",
+  "name": "Pull-Back Reveal",
+  "category": "MAPS",
+  "description": "The reverse of a zoom: from the ground at the place (its marker pulsing) the camera pulls up and out until the whole country is in view, the imagery handing over to a clean vector map with the place's state lit in the accent; it lands at frame 66 and the place is named - where in the world this is.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "locations"
+  ],
+  "cues": [
+   "place"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 66,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-cinematic",
+    "alt": [
+     "map-swoop",
+     "whoosh-soft-v2"
+    ],
+    "at": 26,
+    "gain_db": -9
+   },
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop",
+     "ui-tick"
+    ],
+    "at": 66,
+    "gain_db": -7
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "locations": [
+    {
+     "label": "Glen Canyon Dam, Arizona",
+     "lat": 36.9375,
+     "lon": -111.4844,
+     "kind": "dam"
+    }
+   ]
+  },
+  "family": "mx",
+  "file": "LibMapsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-article-zoom",
+  "name": "Article Zoom (Sentence Highlight)",
+  "category": "DOCUMENTS",
+  "description": "VidRush's most used look, rebuilt: a newspaper page in Newsreader on the blurred, darkened clip - the publication as a plain masthead (subtitle, only when named), the headline (text), two columns with the scene's picture - the camera pushes from the top of the page down to the key sentence (highlight) while everything else falls out of focus, and a highlighter sweeps it line by line from frame 40. The page's other lines are the narration's own sentences (body), never filler text.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "highlight",
+   "body",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "document",
+   "report",
+   "headline"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 40,
+  "types": false,
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide",
+     "paper"
+    ],
+    "at": 2,
+    "gain_db": -9
+   },
+   {
+    "name": "marker-draw",
+    "alt": [
+     "marker-underline",
+     "marker"
+    ],
+    "at": 40,
+    "align": "start",
+    "gain_db": -9
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Lake Powell falls to its lowest level since it first filled",
+   "highlight": "The lake fell to 3,517 feet on Sept. 15, the lowest level since Lake Powell first filled in the 1960s.",
+   "body": "The lake fell to 3,517 feet on Sept. 15, the lowest level since Lake Powell first filled in the 1960s. Officials said the reservoir was 22% full and still falling.",
+   "subtitle": "The Arizona Republic"
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-official-memo",
+  "name": "Official Memo (Redacted, Stamped)",
+  "category": "DOCUMENTS",
+  "description": "A typed agency memo on aged paper: the agency (subtitle) over a rule, the document's kind (label), the subject (text); redaction bars slam across word runs of the surrounding lines (never the key sentence), a worn FILE COPY stamp lands at frame 28, the camera pushes in and the key sentence (highlight) is marked.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "body",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "document",
+   "record"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 28,
+  "types": false,
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide",
+     "paper"
+    ],
+    "at": 2,
+    "gain_db": -9
+   },
+   {
+    "name": "stamp",
+    "alt": [
+     "paper-pin",
+     "frame-drop"
+    ],
+    "at": 28,
+    "gain_db": -9
+   },
+   {
+    "name": "marker-draw",
+    "alt": [
+     "marker-underline",
+     "marker"
+    ],
+    "at": 40,
+    "align": "start",
+    "gain_db": -10
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Lake Powell operations under the 24-Month Study",
+   "subtitle": "Bureau of Reclamation",
+   "label": "Memorandum",
+   "highlight": "Releases from Glen Canyon Dam will be reduced to protect the 3,490-foot minimum power pool."
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-report-cover",
+  "name": "Report Cover (Opens to the Line)",
+  "category": "DOCUMENTS",
+  "description": "A bound report on the desk: its dark cover holds long enough to read the issuer (subtitle), the title (text) and its kind (label), swings open on its spine, and the camera pushes onto the first page where the key sentence (highlight) is highlighted from frame 46.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "body",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "document",
+   "report"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 46,
+  "types": false,
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide",
+     "paper"
+    ],
+    "at": 2,
+    "gain_db": -9
+   },
+   {
+    "name": "page-flip",
+    "alt": [
+     "page",
+     "paper"
+    ],
+    "at": 30,
+    "gain_db": -8
+   },
+   {
+    "name": "marker-draw",
+    "alt": [
+     "marker-underline",
+     "marker"
+    ],
+    "at": 46,
+    "align": "start",
+    "gain_db": -10
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "24-Month Study: Lake Powell and Lake Mead Operations",
+   "subtitle": "U.S. Bureau of Reclamation",
+   "label": "Report",
+   "highlight": "Lake Powell is projected to end the water year at 3,517 feet, 22% of its capacity."
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-handwritten-note",
+  "name": "Handwritten Note",
+  "category": "TEXT",
+  "description": "A torn notebook page slides in on the right, fitted to its words, and the phrase is written on its rules in a pen hand (Caveat), letter by letter at the typing contract's pace (frame 6 on, 2 frames a letter), a soft pen sound for exactly that span.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "key-phrase",
+   "caption"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 6,
+  "types": true,
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide",
+     "paper"
+    ],
+    "at": 1,
+    "gain_db": -11
+   },
+   {
+    "name": "pen-scribble",
+    "alt": [
+     "marker-draw",
+     "marker"
+    ],
+    "at": 6,
+    "align": "start",
+    "until": 60,
+    "gain_db": -10
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "The canyon is coming back."
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-keyword-stack",
+  "name": "Keyword Stack",
+  "category": "HEADLINES",
+  "description": "The line's words stacked left in heavy Anton caps, two to four lines of one to three words: solid white, a hollow outline, the key word (highlight, else the last line) in the accent - each rising out of its own mask, one light sweep across them, then each slides back up into its mask. No bar, no underline; a feathered shade keeps it legible.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight"
+  ],
+  "cues": [
+   "headline",
+   "key-phrase"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 18,
+  "types": false,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "ui-swipe"
+    ],
+    "at": 6,
+    "gain_db": -9
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "The lake is still falling",
+   "highlight": "falling"
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-quote-portrait",
+  "name": "Portrait Quote",
+  "category": "QUOTES",
+  "description": "A magazine pull quote on the darkened clip: the speaker's own portrait (the scene's picture) in monochrome on the left, a large accent quote mark, the quote in Instrument Serif rising line by line, then the name (label) and role (subtitle). Without a picture the quote takes the frame alone.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "quote",
+   "person"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 9,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "swoosh-text",
+     "whoosh-soft"
+    ],
+    "at": 2,
+    "gain_db": -11
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Every foot of sandstone you see is a foot of water that isn't there anymore.",
+   "label": "Lake Powell boater"
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-alert-strip",
+  "name": "Alert Strip",
+  "category": "HEADLINES",
+  "description": "A tasteful alert, always top-left: a slim dark-glass strip wipes in, a softly pulsing dot and the label (BREAKING / WARNING / ALERT) in the accent, then the line (at most about 56 characters) slides in white. No red bar behind the words; it wipes back out to the left.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "warning",
+   "alert",
+   "breaking"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 10,
+  "types": false,
+  "sounds": [
+   {
+    "name": "alert-tone",
+    "alt": [
+     "ding",
+     "ui-pop"
+    ],
+    "at": 4,
+    "gain_db": -12
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Lake Powell falls to a new record low",
+   "label": "Breaking"
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-definition",
+  "name": "Definition Card",
+  "category": "TEXT",
+  "description": "A dictionary entry, low left on a glass plate fitted to its words: a small accent kicker (label, else DEFINITION), the term (text) in Instrument Serif rising out of its mask, and what it means (subtitle) in two or three lines - only the narration's own explanation, never one made up.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "term"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 10,
+  "types": false,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "ui-swipe"
+    ],
+    "at": 6,
+    "gain_db": -10
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Dead pool",
+   "subtitle": "The level at which water can no longer flow downstream from a dam."
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-letter-signature",
+  "name": "Signed Letter",
+  "category": "DOCUMENTS",
+  "description": "A letter's excerpt in italic Newsreader on aged, folded paper, fitted to its words; the signature (label) is written in ink from frame 26 with a pen sound for its stroke, the printed name and role (subtitle) under it. For a line that says someone wrote or signed (the planner's _LOOK_NEEDS).",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "quote",
+   "document"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 26,
+  "types": false,
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide",
+     "paper"
+    ],
+    "at": 1,
+    "gain_db": -10
+   },
+   {
+    "name": "pen-scribble",
+    "alt": [
+     "marker-draw",
+     "marker"
+    ],
+    "at": 26,
+    "align": "start",
+    "until": 48,
+    "gain_db": -9
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "We are building a reservoir that the river, in a dry century, cannot fill.",
+   "label": "Thomas Hale",
+   "subtitle": "Chief Hydrologist"
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
+ },
+ {
+  "id": "kx-social-post",
+  "name": "Social Post",
+  "category": "DOCUMENTS",
+  "description": "A dark post card with no platform's branding, tilting up into place on the blurred clip: initials in an accent avatar, who posted (label) and their handle (subtitle, only when given), the words lighting up in reading order with the key phrase (highlight) in the accent, the picture when one was added. No made-up counts. For a line that says it was posted (the planner's _LOOK_NEEDS).",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "quote",
+   "statement"
+  ],
+  "duration": 6.0,
+  "sfx": "none",
+  "sfx_at": 8,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop",
+     "ui-tick"
+    ],
+    "at": 6,
+    "gain_db": -9
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Lake Powell just dropped below 3,520 feet for the first time since the 1960s.",
+   "label": "Lake Powell Water Watch",
+   "highlight": "below 3,520 feet"
+  },
+  "family": "kx",
+  "file": "LibDocsPro",
+  "exit": "none",
+  "autoPick": false
  }
 ]

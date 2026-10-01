@@ -1537,7 +1537,7 @@ def _least_used(ids: List[str], counts: Optional[Dict[str, int]]) -> Optional[st
     """The first of `ids` that exists and has been used least (registry order breaks ties); never a banned look."""
     real = []
     for tid in ids:
-        if tid and templates.get(tid) and tid not in real and not templates.banned(tid):
+        if tid and templates.get(tid) and tid not in real and not templates.banned(tid) and templates.auto_pick(tid):
             real.append(tid)
     if not real:
         return None
@@ -1568,7 +1568,7 @@ def _place_maps(pack: dict, still: bool = False, n_maps: int = 0) -> List[str]:
         out.append("MAP_PHOTO_PIN_V1")
     if own and not _is_satellite(own) and n_maps % VECTOR_MAP_EVERY == VECTOR_MAP_EVERY - 1:
         out.insert(0, own)
-    return out
+    return out + _pro(MX_PLACE)
 
 
 def _map_ids(overlay: dict, pack: dict, still: bool = False, n_maps: int = 0) -> tuple:
@@ -1578,14 +1578,14 @@ def _map_ids(overlay: dict, pack: dict, still: bool = False, n_maps: int = 0) ->
     by_variant = next((t["id"] for t in templates.for_component("map")
                        if (t.get("defaults") or {}).get("variant") == variant), "") if variant else ""
     if variant.startswith("route") or variant == "satellite-route":
-        ids, fits = [pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"], by_variant.startswith("MAP_ROUTE")
+        ids, fits = [pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"] + _pro(MX_ROUTE), by_variant.startswith("MAP_ROUTE")
     elif variant.startswith("spread") or n_locs >= 3:
         # Three or more areas: the spread map lights each one in turn.
-        ids, fits = [pack["multi"]], by_variant.startswith("MAP_SPREAD")
+        ids, fits = [pack["multi"]] + _pro(MX_MANY if n_locs >= 3 else []), by_variant.startswith("MAP_SPREAD")
     elif variant == "region":
-        ids, fits = [pack["region"]], False
+        ids, fits = [pack["region"]] + _pro(MX_REGION), False
     elif n_locs == 2:
-        ids, fits = list(TWO_PLACE_MAPS), by_variant in TWO_PLACE_MAPS
+        ids, fits = list(TWO_PLACE_MAPS) + _pro(MX_PAIR), by_variant in TWO_PLACE_MAPS
     else:
         ids = _place_maps(pack, still, n_maps)
         fits = _is_satellite(by_variant) and by_variant not in ("MAP_DISTANCE_V1", "MAP_ROUTE_SAT_V1") \
@@ -1666,6 +1666,17 @@ _LOOK_NEEDS = {
                            r"freez\w*|chill)\b|°",
     # The waterline drawn on a photo: only for a line about where the water stood.
     "LIB_PX_LEVEL_LINE": r"\b(water|lake|reservoir|river|level|line|feet|foot|ft|high[- ]water|bathtub|pool)\b",
+    # The pro looks (LibDataPro / LibDocsPro): a reservoir drawn in section only for a lake's or a reservoir's
+    # level, a water-filled figure or a fuel gauge only for a capacity, a letter only when one was written, a
+    # post only when one was posted.
+    "LIB_DX_RESERVOIR_SECTION": r"^(?!.*\b(tall|wide|long|deep|high)\b)(?=.*\b(lakes?|reservoirs?|dams?|pool)\b)"
+                                r"(?=.*\b(elevation|levels?|above sea level|sits? at|stands? at|surface|fell to|"
+                                r"dropped to|rose to|full pool|power pool|dead pool)\b)",
+    "LIB_DX_FILLED_FIGURE": r"\b(reservoirs?|lakes?|capacity|full|storage|aquifers?|snowpack|tanks?)\b",
+    "LIB_DX_CAPACITY_GAUGE": r"\b(capacity|full|empty|reservoirs?|tanks?|storage)\b",
+    "LIB_KX_LETTER_SIGNATURE": r"\b(wrote|writes|written|letter|signed|penned)\b",
+    "LIB_KX_SOCIAL_POST": r"\b(posted|tweeted|retweeted|wrote on (?:x|twitter|facebook|instagram)|on social media|"
+                          r"in a post|on (?:x|twitter|facebook|instagram))\b",
 }
 _LOOK_NEEDS_RX ={k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
 # The letter drop (LibBoldText): every date, date-and-time and time of day
@@ -1750,13 +1761,11 @@ def auto_ok(template_id: str) -> bool:
     False for a look the planner never picks on its own: BAR_TEXT_LOOKS, the
     old date rotation, and any look the registry marks "autoPick": false (new
     looks wait in the editor until the owner approves them from their
-    contact sheets; scripts/library_looks_*.json "auto_pick").
+    contact sheets; templates.auto_pick is the one shared check).
     """
     tid = template_id or ""
-    if tid in BAR_TEXT_LOOKS or tid in OLD_DATE_LOOKS or tid.startswith("LIB_DTX_"):
-        return False
-    t = templates.get(tid)
-    return not (t and t.get("autoPick") is False)
+    return tid not in BAR_TEXT_LOOKS and tid not in OLD_DATE_LOOKS and not tid.startswith("LIB_DTX_") \
+        and templates.auto_pick(tid)
 
 
 # The photo looks' hooks (LibPhotosPro, "px-"): what a still's line says about
@@ -1827,6 +1836,183 @@ def look_fits(template_id: str, text: str) -> bool:
     return rx is None or bool(rx.search(text or ""))
 
 
+# ------------------------------------------------------------------ the pro looks (dx / mx / kx)
+# 25 looks built for the owner's approval (remotion LibDataPro / LibMapsPro /
+# LibDocsPro, registry family dx / mx / kx). They are registered "autoPick":
+# false: the editor offers them, the planner leaves them alone (auto_ok,
+# templates.for_cue) until the owner switches them on in library_looks.json.
+# Then the maps join their rotations (_place_maps / _map_ids), the rest come
+# through their cues, and pro_props gives each the words it needs from the
+# line - or keeps it off a line it does not fit.
+PRO_PREFIXES = ("LIB_DX_", "LIB_MX_", "LIB_KX_")
+MX_PLACE = ["LIB_MX_GLOBE_DIVE", "LIB_MX_TERRAIN_PIN", "LIB_MX_PULL_BACK"]
+MX_REGION = ["LIB_MX_REGION_PULSE"]
+MX_ROUTE = ["LIB_MX_ROUTE_DRAW"]
+MX_PAIR = ["LIB_MX_ROUTE_DRAW", "LIB_MX_MEASURE_LINE"]
+MX_MANY = ["LIB_MX_PATH_TRACE"]
+
+
+def _pro(ids: List[str]) -> List[str]:
+    """The pro looks among `ids` the planner may use now: registered and switched on (templates.auto_pick)."""
+    return [tid for tid in ids if templates.get(tid) and templates.auto_pick(tid)]
+
+
+# Which document a line names (treatments._document's kind) and the look that draws it.
+_DOC_ARTICLE = {"NEWSPAPER", "HEADLINE"}
+_DOC_REPORT = {"REPORT", "STUDY", "SURVEY", "ANALYSIS", "ASSESSMENT", "AUDIT"}
+_DOC_MEMO = {"RECORDS", "DOCUMENTS", "COURT FILINGS", "MEMO", "FILING", "LAW", "BILL", "ACT", "RULING", "LAWSUIT",
+             "ORDER", "AGREEMENT", "COMPACT", "TREATY", "DECREE", "DOCUMENT"}
+# A newspaper named in the line ("according to the Arizona Republic", "The Salt Lake Tribune reported").
+_PAPER_NAME = re.compile(r"\b((?:The\s+)?(?:[A-Z][A-Za-z.&'-]*\s+){0,4}(?:Times|Post|Journal|Republic|Tribune|Gazette|"
+                         r"Herald|News|Review|Chronicle|Examiner|Register|Independent|Guardian|Economist|Bee|Globe|"
+                         r"Inquirer|Observer|Telegraph|Bulletin|Press|Reuters))\b")
+# An agency or an office named in the line ("the Bureau of Reclamation", "U.S. Geological Survey").
+_AGENCY_NAME = re.compile(r"\b((?:U\.S\.\s+|US\s+)?(?:[A-Z][a-z]+\s+){0,3}(?:Bureau|Department|Agency|Service|Commission|"
+                          r"Office|Administration|Authority|Board|Council|Institute|Survey|Corps|District)"
+                          r"(?:\s+of\s+(?:the\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})?)\b")
+_FULL_POOL = re.compile(r"\b(?:full pool|full)\b[^.\d]{0,24}?(\d[\d,]{2,})\s*(?:feet|ft|foot)\b|\bdown from\s+(?:about\s+)?"
+                        r"(\d[\d,]{2,})\s*(?:feet|ft)\b", re.I)
+_POOLS = re.compile(r"\b(minimum power pool|power pool|dead pool|flood stage)\b[^.\d]{0,24}?(\d[\d,]{2,})\s*(?:feet|ft)?", re.I)
+_DOWN = re.compile(r"\b(fell|fallen|fall|falling|dropped|drop|dropping|declin\w*|sank|sunk|shrank|lowest|record low|"
+                   r"down)\b", re.I)
+_UP = re.compile(r"\b(rose|risen|rise|rising|climbed|gained|up)\b", re.I)
+_WRITER = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z.'-]+){1,2})\s+(?:wrote|had written|signed|penned)\b")
+_POSTER = re.compile(r"\b((?:the\s+)?[A-Z][\w.&'-]+(?:\s+(?:of\s+)?[A-Z][\w.&'-]+){0,4})\s+(?:posted|tweeted|"
+                     r"wrote on (?:X|Twitter|Facebook|Instagram))\b")
+_DEF_LEAD = re.compile(r"^[\s,:;\-–—]*(?:(?:which|that)\s+(?:is|means)|meaning|or|is)?\s*[,:;\-–—]?\s*", re.I)
+
+
+def _items(props: dict) -> list:
+    return [it for it in (props.get("items") or []) if isinstance(it, dict) and _num(str(it.get("value"))) is not None]
+
+
+def _value(props: dict) -> Optional[float]:
+    try:
+        v = float(props.get("value"))
+    except (TypeError, ValueError):
+        return None
+    return v if v == v else None
+
+
+def pro_props(t: dict, cue: str, props: dict, text: str, shot: Optional[dict] = None) -> Optional[dict]:
+    """
+    The props a pro look (dx / mx / kx) draws for this line, or None when the
+    line's data does not fit it. Only the line's own words and numbers: a
+    publication, an agency, a writer, a full pool or a threshold appears only
+    when the line names it. Any other template passes through unchanged.
+    """
+    tid = str((t or {}).get("id") or "")
+    if not tid.startswith(PRO_PREFIXES):
+        return props
+    p = dict(props or {})
+    text = text or ""
+    items = _items(p)
+    v = _value(p)
+    unit = str(p.get("suffix") or "").strip().upper()
+    locs = [x for x in (p.get("locations") or p.get("places") or []) if isinstance(x, dict)]
+    if tid == "LIB_DX_LINE_ENDPOINT":
+        return p if len(items) >= 3 else None
+    if tid == "LIB_DX_GHOST_BARS":
+        return p if len(items) == 2 else None
+    if tid == "LIB_DX_NESTED_SQUARES":
+        vals = [float(_num(str(it["value"]))) for it in items]
+        if not 2 <= len(vals) <= 3 or min(vals) <= 0 or max(vals) / min(vals) < 1.15:
+            return None
+        return p
+    if tid == "LIB_DX_UNIT_SPLIT":
+        total = _value({"value": p.get("total")})
+        if v is None or v <= 0:
+            return None
+        if total is not None and cue == "ratio":
+            return p if 2 <= total <= 10 and v < total else None
+        return p if v <= 100 else None
+    if tid in ("LIB_DX_FILLED_FIGURE", "LIB_DX_CAPACITY_GAUGE"):
+        return p if v is not None and 0 < v <= 100 and unit in ("%", "") and cue in ("percent", "level") else None
+    if tid == "LIB_DX_DRUM_COUNTER":
+        return p if v is not None and 10 <= abs(v) < 1e9 else None
+    if tid == "LIB_DX_RESERVOIR_SECTION":
+        if v is None or v < 100 or unit not in ("FT", "M") or cue != "measurement":
+            return None
+        m = _FULL_POOL.search(text)
+        full = _num(m.group(1) or m.group(2)) if m else None
+        if full is not None and abs(full - v) > 1e-9 and 0.5 * v < full < 2 * v:
+            p["total"] = full
+        pools = []
+        for pm in _POOLS.finditer(text):
+            pv = _num(pm.group(2))
+            if pv is not None and abs(pv - v) > 1e-9 and 0.5 * v < pv < 2 * v:
+                pools.append({"label": pm.group(1).capitalize(), "value": pv})
+        if pools:
+            p["items"] = pools[:2]
+        if _DOWN.search(text):
+            p["label"] = "down"
+        elif _UP.search(text):
+            p["label"] = "up"
+        return p
+    if tid in MX_PLACE:
+        return p if len(locs) >= 1 else None
+    if tid in MX_REGION:
+        return p if len(locs) >= 1 else None
+    if tid in MX_PAIR:
+        return p if len(locs) == 2 else None
+    if tid in MX_MANY:
+        return p if len(locs) >= 3 else None
+    kind = str(p.get("label") or "").upper()
+    if tid == "LIB_KX_ARTICLE_ZOOM":
+        paper = _PAPER_NAME.search(text)
+        if paper:
+            p["subtitle"] = re.sub(r"^the\s+", "The ", paper.group(1).strip())
+        if kind not in _DOC_ARTICLE and not paper:
+            return None
+        p["label"] = ""
+        return p
+    if tid in ("LIB_KX_OFFICIAL_MEMO", "LIB_KX_REPORT_COVER"):
+        if kind not in (_DOC_MEMO if tid == "LIB_KX_OFFICIAL_MEMO" else _DOC_REPORT):
+            return None
+        agency = _AGENCY_NAME.search(text)
+        if agency:
+            p["subtitle"] = agency.group(1).strip()
+        return p
+    if tid == "LIB_KX_HANDWRITTEN_NOTE":
+        return p if 4 <= len(str(p.get("text") or "")) <= 64 else None
+    if tid == "LIB_KX_KEYWORD_STACK":
+        words = str(p.get("text") or "").split()
+        return p if 2 <= len(words) <= 7 and len(" ".join(words)) <= 44 else None
+    if tid == "LIB_KX_QUOTE_PORTRAIT":
+        # The speaker's own picture only: a line about a named person, on that person's shot.
+        subject = str((shot or {}).get("subject") or "").strip()
+        if str((shot or {}).get("subjectType") or "").lower() != "person" or not _real_person(subject):
+            return None
+        p["label"] = subject
+        return p
+    if tid == "LIB_KX_ALERT_STRIP":
+        p["label"] = "BREAKING" if re.search(r"\bbreaking\b", text, re.I) else (
+            "WARNING" if cue == "warning" else "ALERT")
+        return p if 4 <= len(str(p.get("text") or "")) <= 56 else None
+    if tid == "LIB_KX_DEFINITION":
+        term = str(p.get("text") or "").strip()
+        at = text.lower().find(term.lower()) if term else -1
+        if at < 0:
+            return None
+        rest = _DEF_LEAD.sub("", text[at + len(term):]).strip().rstrip(".")
+        if len(rest.split()) < 4:
+            return None
+        p["subtitle"] = (rest[0].upper() + rest[1:])[:150]
+        return p
+    if tid == "LIB_KX_LETTER_SIGNATURE":
+        writer = _WRITER.search(text)
+        if writer and _real_person(writer.group(1)):
+            p["label"] = writer.group(1)
+        return p
+    if tid == "LIB_KX_SOCIAL_POST":
+        poster = _POSTER.search(text)
+        if not poster:
+            return None
+        p["label"] = re.sub(r"^the\s+", "", poster.group(1).strip(), flags=re.I)
+        return p
+    return p
+
+
 def _needs_places(t: dict, props: Optional[dict]) -> bool:
     """A map look drawn from places, asked for with none: it would render nothing."""
     return (t.get("category") == "MAPS" and "locations" in (t.get("props") or {})
@@ -1847,7 +2033,7 @@ def _looks_for(ids: List[str], cue: str) -> List[dict]:
     out = []
     for tid in ids:
         t = templates.get(tid)
-        if t and not templates.banned(tid) and cue in templates.cues_of(t):
+        if t and not templates.banned(tid) and templates.auto_pick(t) and cue in templates.cues_of(t):
             out.append(t)
     return out
 
@@ -1888,7 +2074,7 @@ def _template_for_cue(cue: str, pack: dict, used_recently: set,
                       counts: Optional[Dict[str, int]] = None, text: str = "",
                       props: Optional[dict] = None) -> Optional[str]:
     if cue == "route":
-        return _least_used([pack["route"], "MAP_TRACE_V1"], counts)
+        return _least_used([pack["route"], "MAP_TRACE_V1"] + _pro(MX_ROUTE), counts)
     if cue == "place":
         return _least_used(_place_maps(pack), counts)
     if cue == "chapter":
@@ -2073,7 +2259,7 @@ class _Looks:
         """(fresh, stale): the looks in the order to try them."""
         seen, uniq = set(), []
         for t in pool:
-            if t and t["id"] not in seen and not templates.banned(t["id"]):
+            if t and t["id"] not in seen and not templates.banned(t["id"]) and templates.auto_pick(t):
                 seen.add(t["id"])
                 uniq.append(t)
         if text_beat and self.last_text_family:
@@ -2655,8 +2841,8 @@ class _Planner:
             # The bold count leads; after BOLD_COUNT_RUN of them in a row, one other look for variety.
             req["lead"] = lead
         if c["cue"] == "route":
-            req.update(ids=[self.pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"], cues=[], cue="route",
-                       group="map", mode="seq")
+            req.update(ids=[self.pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"] + _pro(MX_ROUTE), cues=[],
+                       cue="route", group="map", mode="seq")
         # (A span of time - "3 days later", "48 hours" - is a relative time: _musts gives it no graphic.)
         return req
 
@@ -2966,6 +3152,11 @@ class _Planner:
             for k in ("text", "label", "subtitle"):
                 if isinstance(props.get(k), str) and props[k]:
                     props[k] = numwords.normalize(props[k])
+        if str(t.get("id") or "").startswith(PRO_PREFIXES):
+            shot = self.shots[self.i] if 0 <= self.i < len(self.shots) else {}
+            props = pro_props(t, cue or "", props, seg.text or "", shot)
+            if props is None:
+                return None
         if _needs_places(t, props):
             return None
         motion = props.pop("_motion", "")
@@ -3699,7 +3890,8 @@ def animation_for(seg, shot: dict, pack: dict, brief: Optional[dict],
             for name in [cue["cue"]] + (CUE_FALLBACK.get(cue["cue"], []) if cue["cue"] == "count" else []):
                 options = [t for t in templates.for_cue(name, pack.get("id", ""))
                            if t["kind"] in CARD_KINDS and look_fits(t["id"], seg.text or "")
-                           and not _needs_places(t, cue["props"]) and auto_ok(t["id"])]
+                           and not _needs_places(t, cue["props"]) and auto_ok(t["id"])
+                           and pro_props(t, name, cue["props"], seg.text or "", shot) is not None]
                 if options:
                     break
             if not options:
