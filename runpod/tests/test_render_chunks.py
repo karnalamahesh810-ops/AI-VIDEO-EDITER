@@ -397,6 +397,29 @@ class Spread(unittest.TestCase):
         self.assertFalse(calls["finalize"])
         self.assertFalse(fanout._LIVE)
 
+    def test_the_pods_own_chunk_failing_goes_to_a_worker(self):
+        # 2026-10-01: the pod's first chunk failed and the whole 18-minute video
+        # went back to one machine; a worker draws that chunk instead now.
+        doc = _doc([150] * 16)
+        workers = FakeWorkers()
+        ok, calls, _ = self._run(doc, workers, pod_fails=(0,))
+        self.assertTrue(ok)
+        self.assertEqual(calls["render"], [(0, 599)])            # tried here once
+        self.assertEqual(calls["joined"], ["FRAMES=600"] * 4)
+        self.assertEqual(calls["stats"]["handedOver"], 1)
+        self.assertEqual(calls["stats"]["onWorkers"], 4)
+        self.assertTrue(calls["stats"]["errors"][0].startswith("chunk 0: failed on the pod (RenderError"))
+        self.assertFalse(fanout._LIVE)
+
+    def test_a_pod_whose_renders_keep_failing_stops_and_the_spread_ends(self):
+        doc = _doc([150] * 16)
+        workers = FakeWorkers({1: "fail"})
+        ok, calls, _ = self._run(doc, workers, pod_fails=(0, 600, 1200, 1800))
+        self.assertFalse(ok)                                     # the caller renders the whole video
+        self.assertEqual(calls["render"], [(0, 599), (600, 1199)])
+        self.assertIn("could not be rendered", calls["stats"]["error"])
+        self.assertFalse(fanout._LIVE)
+
     def test_a_failed_join_gives_up_the_spread_render(self):
         ok, calls, _ = self._run(_doc([150] * 16), FakeWorkers(), finalize_ok=False)
         self.assertFalse(ok)

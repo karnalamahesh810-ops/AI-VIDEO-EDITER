@@ -803,6 +803,9 @@ AUDIO_RATE = 48000
 # looks for something to render itself.
 POD_POLL_SECONDS = 3.0
 POD_IDLE_SECONDS = 1.0
+# After this many chunks failed on the pod it stops drawing chunks itself (the
+# workers draw the rest): a pod that cannot render a range would fail them all.
+POD_LOCAL_FAILURES_MAX = 2
 
 # RunPod job ids of chunks a worker still holds, for cancel_live_jobs().
 _LIVE: Dict[str, str] = {}
@@ -1284,6 +1287,7 @@ class _Chunk:
         self.local_cancel: Optional[threading.Event] = None
         self.speculative = False      # the pod races a worker for it
         self.local_failed = False
+        self.handing = False          # failed on the pod, being queued for a worker
         self.done = False
         self.source = ""              # "worker" | "pod"
         self.video = self.audio = ""
@@ -1313,7 +1317,11 @@ class _PodRender:
         self.local_fps = 0.0
         self.fatal = ""
         self.counts = {"queued": 0, "submitFailed": 0, "takenBack": 0, "raced": 0, "workerFailed": 0,
-                       "timedOut": 0}
+                       "timedOut": 0, "handedOver": 0}
+        # Why chunks failed, here and on the workers: the pod's log is gone once
+        # it stops, so the reasons travel in the stats and the job's events.
+        self.errors: List[str] = []
+        self.local_failures = 0
         self._last_pct = -1
 
     # ---- worker jobs
@@ -1356,7 +1364,15 @@ class _PodRender:
         c.job, c.remote_dead = "", True
         if why:
             print(f"[pod-render] chunk {c.i}: {why}; the pod renders it", flush=True)
+            self._note(c, why, "worker_chunk_dropped")
         self.wake.set()
+
+    def _note(self, c: _Chunk, why: str, event: str) -> None:
+        """Keep a chunk's failure for the stats and the job's events (the first few)."""
+        if len(self.errors) < 12:
+            self.errors.append(f"chunk {c.i}: {why}"[:240])
+            events.emit("render", event, level="warning", message=f"chunk {c.i}: {why}",
+                        data={"chunk": c.i, "frames": [c.a, c.b]})
 
     def _poll(self, pool: ThreadPoolExecutor, fetch_pool: ThreadPoolExecutor) -> None:
         with self.lock:
@@ -1421,6 +1437,8 @@ class _PodRender:
     # ---- the pod's own rendering
     def _next_local(self) -> Optional[_Chunk]:
         """What the pod renders next (caller holds the lock)."""
+        if self.local_failures >= POD_LOCAL_FAILURES_MAX:
+            return None                                  # the pod's own renders keep failing: workers only
         now = time.time()
         todo = [c for c in self.chunks if not c.done and not c.local and not c.fetching and not c.local_failed]
         first = self.chunks[0]
@@ -1463,6 +1481,7 @@ class _PodRender:
         def prog(frac: float) -> None:
             c.local_frac = max(c.local_frac, float(frac))
         ok = cancelled = False
+        err = ""
         try:
             # The same bytes the workers draw: the document's links fetched
             # through R2 (the pod's own stills are local files already).
@@ -1473,11 +1492,14 @@ class _PodRender:
                             cancel=c.local_cancel)
             ok = _chunk_ok(c.pod_video, c.pod_audio, c.frames)
             if not ok:
-                print(f"[pod-render] chunk {c.i} rendered on the pod is incomplete", flush=True)
+                err = f"incomplete on the pod ({_count_frames(c.pod_video)} of {c.frames} frames)"
         except renderer.RenderCancelled:
             cancelled = True
         except Exception as e:  # noqa: BLE001 - reported below
-            print(f"[pod-render] chunk {c.i} failed on the pod: {str(e)[:300]}", flush=True)
+            err = f"failed on the pod ({type(e).__name__}: {str(e)[:300]})"
+        if err:
+            print(f"[pod-render] chunk {c.i} {err}", flush=True)
+        hand = False
         with self.lock:
             c.local = False
             if ok:
@@ -1488,8 +1510,27 @@ class _PodRender:
                         self._drop_worker(c, "", cancel=True)
             elif not cancelled and not c.done:
                 c.local_failed = True
+                self.local_failures += 1
+                self._note(c, err or "failed on the pod", "pod_chunk_failed")
                 if not c.job:
-                    self.fatal = f"chunk {c.i} (frames {c.a}-{c.b}) could not be rendered"
+                    c.handing = hand = True
+        if hand:
+            # One failure here need not end the spread render (2026-10-01: the
+            # pod's own first chunk failed and an 18-minute video went back to
+            # one machine, 45 minutes): a worker draws the chunk instead.
+            jid, why = _pod_submit(self._payload(c))
+            with self.lock:
+                c.handing = False
+                if c.done:
+                    pass
+                elif jid:
+                    c.job, c.queued_at, c.started_at, c.frac, c.remote_dead = jid, time.time(), 0.0, 0.0, False
+                    _register(jid)
+                    self.counts["handedOver"] += 1
+                    print(f"[pod-render] chunk {c.i} goes to a worker instead", flush=True)
+                else:
+                    self.fatal = (f"chunk {c.i} (frames {c.a}-{c.b}) could not be rendered: {err[:160]}; "
+                                  f"no worker took it ({why})")
         self.wake.set()
 
     def _local_loop(self) -> None:
@@ -1529,11 +1570,16 @@ class _PodRender:
                 with self.lock:
                     if self.fatal or all(c.done for c in self.chunks):
                         break
-                    watching = any(c.job or c.fetching for c in self.chunks)
-                    stuck = next((c for c in self.chunks if not c.done and c.local_failed and not c.job
-                                  and not c.fetching and not c.local), None)
+                    watching = any(c.job or c.fetching or c.handing for c in self.chunks)
+                    # Nobody left to draw a chunk: it failed here and on a
+                    # worker, or no worker will and the pod no longer renders.
+                    broken = self.local_failures >= POD_LOCAL_FAILURES_MAX
+                    stuck = next((c for c in self.chunks if not c.done and not c.job and not c.fetching
+                                  and not c.local and not c.handing
+                                  and (c.local_failed or (broken and c.remote_dead))), None)
                     if stuck is not None:
-                        self.fatal = f"chunk {stuck.i} (frames {stuck.a}-{stuck.b}) could not be rendered"
+                        last = f": {self.errors[-1]}" if self.errors else ""
+                        self.fatal = f"chunk {stuck.i} (frames {stuck.a}-{stuck.b}) could not be rendered{last}"
                         break
                 if not watching and not local.is_alive():
                     self.fatal = self.fatal or "nobody is rendering the remaining chunks"
@@ -1561,7 +1607,8 @@ class _PodRender:
     def stats(self) -> dict:
         return {"chunks": len(self.chunks), "onWorkers": sum(1 for c in self.chunks if c.source == "worker"),
                 "onPod": sum(1 for c in self.chunks if c.source == "pod"), **self.counts,
-                "podFps": round(self.local_fps, 1), "seconds": round(time.time() - self.started, 1)}
+                "podFps": round(self.local_fps, 1), "seconds": round(time.time() - self.started, 1),
+                "errors": list(self.errors[:6])}
 
     # ---- joining
     def join(self) -> Tuple[str, str]:
@@ -1632,6 +1679,7 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     keys: List[str] = []
     runner = None
     ok = False
+    reason = ""
     try:
         report(f"Rendering video 0% on {len(ranges)} machines", 70)
         remote, asset_keys = _publish_files(doc, prefix, time.time() + 300)
@@ -1649,14 +1697,23 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
         renderer.finalize(video, audio, out_path)
         ok = True
     except Exception as e:  # noqa: BLE001 - the whole video is rendered on the pod instead
-        print(f"[pod-render] spread render stopped ({type(e).__name__}: {str(e)[:300]}); "
-              "rendering the whole video on the pod", flush=True)
+        reason = f"{type(e).__name__}: {str(e)[:300]}"
+        print(f"[pod-render] spread render stopped ({reason}); rendering the whole video on the pod", flush=True)
     finally:
+        stats = {**(runner.stats() if runner is not None else {"chunks": len(ranges)}), "ok": ok}
+        if reason:
+            stats["error"] = reason
         if runner is not None:
             runner.cancel_all()
             keys += runner.keys()
-            media.LAST_STATS["pod_render"] = {**runner.stats(), "ok": ok}
-            print(f"[pod-render] {media.LAST_STATS['pod_render']}", flush=True)
+        media.LAST_STATS["pod_render"] = stats
+        print(f"[pod-render] {stats}", flush=True)
+        # The job's events keep it after the pod is gone: how long the spread
+        # took on how many machines, or why it stopped.
+        events.emit("render", "spread_render" if ok else "spread_stopped", level="info" if ok else "warning",
+                    message=(f"{stats.get('onWorkers', 0)} chunks on workers, {stats.get('onPod', 0)} on the pod, "
+                             f"{stats.get('seconds', 0)} s") if ok else reason,
+                    data={k: v for k, v in stats.items() if k != "errors"})
         if not config.POD_RENDER_KEEP_CHUNKS and (keys or runner is not None):
             threading.Thread(target=_delete_prefix, args=(prefix, list(keys)), daemon=True).start()
     return ok
