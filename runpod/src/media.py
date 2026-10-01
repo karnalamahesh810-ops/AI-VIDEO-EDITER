@@ -207,8 +207,13 @@ def brightdata_available() -> bool:
     return bool(config.BRIGHTDATA_API_KEY and config.BRIGHTDATA_SERP_ZONE and not _BRIGHTDATA_REFUSED["why"])
 
 
-def _brightdata_serp(google_url: str, timeout: int = 150) -> dict:
-    """The parsed JSON Bright Data returns for one Google results URL (raises on failure)."""
+def _brightdata_serp(google_url: str, timeout: int = 45) -> dict:
+    """
+    The parsed JSON Bright Data returns for one Google results URL (raises on
+    failure). 45 s a try: it answers in seconds or not at all ("not JSON: ''"
+    13 times on the Lake Powell job), and each try holds one of three slots
+    the scenes' video and picture searches share (was 150 s, and 90 s).
+    """
     if _BRIGHTDATA_REFUSED["why"]:
         raise ValueError(f"Bright Data off for this worker: {_BRIGHTDATA_REFUSED['why']}")
     last = ""
@@ -295,7 +300,7 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
         costs.record("serp.call")
         try:
             body = _brightdata_serp("https://www.google.com/search?tbm=isch&brd_json=1&q="
-                                    + urllib.parse.quote_plus(query), timeout=90)
+                                    + urllib.parse.quote_plus(query))
             for it in (body.get("images") or [])[:limit * 3]:
                 rows.append((it.get("original_image"), 0, 0,
                              it.get("image_alt") or it.get("source") or "",
@@ -1205,6 +1210,40 @@ def _rescue_local_ok(path: str, intent_text: str) -> bool:
 # Candidates the AI-slop / not-footage filters turned down, by reason (job stats).
 SLOP_REJECTED: Dict[str, int] = {}
 
+# Candidates found unusable for a reason that holds for every line - generated
+# or painted, a slideshow or a held still, another creator's captions, burned-in
+# text, a download that will not play - by source video ("yt:<id>", "dm:<id>"),
+# by moment ("yt:<id>@<10 s bucket>") or by picture: every other scene skips
+# them instead of downloading and checking them again. The Lake Powell job
+# (2026-10-01) fetched one Dailymotion section at least four times and could
+# not read it any time. A studio or a TV map is not here: a line about a named
+# person or one asking for a map may use it.
+_BAD: Dict[str, str] = {}
+_LINE_FREE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a still with a slow pan or zoom",
+              "a slideshow of stills", "a frozen", "another creator's burned-in captions", "burned-in text or UI",
+              "a download that will not play")
+_VIDEO_WIDE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a download that will not play")
+# The AI-slop filter's reason for the gate's last rejection on this thread ("" = not slop).
+_GATE_SLOP: contextvars.ContextVar = contextvars.ContextVar("gate_slop", default="")
+
+
+def _is_bad(*keys: str) -> str:
+    """Why one of these candidates is unusable for any line ("" = not known to be)."""
+    with _CACHE_LOCK:
+        return next((_BAD[k] for k in keys if k and k in _BAD), "")
+
+
+def _mark_bad(video: str, moment: str, why: str) -> None:
+    """Remember a line-independent rejection: for the whole source video when the
+    reason covers it (generated, unreadable), else for that moment only."""
+    if not why or not why.startswith(_LINE_FREE):
+        return
+    key = video if why.startswith(_VIDEO_WIDE) or not moment else moment
+    with _CACHE_LOCK:
+        if len(_BAD) > 20000:
+            _BAD.clear()
+        _BAD[key] = why[:80]
+
 
 def judge_clip(path: str, job: Dict[str, Any], label: str = "", source_url: str = "") -> tuple:
     """
@@ -1287,6 +1326,7 @@ def _vision_gate(path: str, intent: str, context: str, label: str, source_url: s
     turned down on the spot, intent or not (the owner, 2026-09-30).
     """
     why = slop_reason(path, label, source_url)
+    _GATE_SLOP.set(why)
     if why:
         print(f"[slop] REJECT {why}: {label[:60]!r}", flush=True)
         return False, None
@@ -1884,8 +1924,11 @@ def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
     found = _yt_candidates(target, require_cc)
     # Google finds YouTube videos yt-dlp's own search misses; they join the
     # list after the direct hits (never for a Creative-Commons-only search,
-    # whose licence filter Google cannot apply).
-    if not require_cc and target.startswith("ytsearch"):
+    # whose licence filter Google cannot apply). For the plain query, not its
+    # rewordings ("... drone aerial footage", the intent's own searches): one
+    # paid Google search per attempt instead of four, behind three SERP slots
+    # (Lake Powell: 170 SERP calls, 13 answered "not JSON").
+    if not require_cc and target.startswith("ytsearch") and variant not in ("broll", "intent"):
         have = {c["id"] for c in found}
         found = found + [c for c in _google_youtube_candidates(target.split(":", 1)[-1])
                          if c["id"] not in have]
@@ -2169,8 +2212,13 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         searches.append((f"{query_or_url} {B_ROLL_INTENT}", "broll", False))
     searches.append((query_or_url, "plain", False))
     # The archive / news channels first: that is where the real footage of
-    # an era or an event is, ahead of general uploads.
-    if _story_channels() and not require_cc:
+    # an era or an event is, ahead of general uploads. Once per scene: every
+    # fallback query asked all of them again (7 lookups each attempt in a
+    # news story, Lake Powell 2026-10-01), and what the channels hold on the
+    # subject is in the scene's pool from its first search.
+    tried = _scene_tried()
+    if _story_channels() and not require_cc and "__channels__" not in tried:
+        tried.add("__channels__")
         searches.insert(0, (query_or_url, "channels", False))
 
     if config.CANDIDATE_POOL:
@@ -2431,21 +2479,40 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
         point = _fixed_point(c, grab, 10.0)
         if ledger.url_used(page, point, point + grab):
             continue                                # an earlier video showed this moment
+        vkey, mkey = f"dm:{c['id']}", f"dm:{c['id']}@{int(point // 10)}"
+        if _is_bad(vkey, mkey):
+            continue                                # another scene found it unusable
         margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
         path = _dm_fetch(c["id"], out_dir, max(0.0, point - margin), grab + 2 * margin)
+        if path and not playable_video(path):
+            # yt-dlp exited 0 with no picture to read (an audio-only or
+            # duration-less section): the Lake Powell job judged 109 of these
+            # ("no frames"), the same few videos again and again.
+            print(f"[media] Dailymotion {c['id']}: the download will not play; skipped for this video",
+                  flush=True)
+            _mark_bad(vkey, mkey, "a download that will not play")
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
         if path and margin:
             path = tidy_clip(path, grab, prefer=min(point, margin))[0]
         if not path:
             continue
-        if has_burned_captions(path) or motion_rejects(path):
+        why = "burned-in text or UI" if has_burned_captions(path) else motion_rejects(path)
+        if why:
+            _mark_bad(vkey, mkey, why)
             try:
                 os.remove(path)
             except OSError:
                 pass
             continue
         judged += 1
+        _GATE_SLOP.set("")
         keep, verdict = _vision_gate(path, intent, context, c["title"])
         if not keep:
+            _mark_bad(vkey, mkey, _GATE_SLOP.get())
             try:
                 os.remove(path)
             except OSError:
@@ -2535,6 +2602,9 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
         start = _fixed_point({"duration": row["seconds"]}, grab, 5.0) if row["seconds"] else 5.0
         if ledger.url_used(row["url"], start, start + grab):
             continue                                # an earlier video showed this moment
+        key = f"web:{row['url']}"
+        if _is_bad(key):
+            continue                                # another scene found it unusable
         margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
         path = _web_fetch(row["url"], out_dir, max(0.0, start - margin), grab + 2 * margin)
         if path and margin:
@@ -2542,16 +2612,19 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
         if not path:
             continue
         w, h = _video_dims(path)
-        if (w and h and w < h * 1.2 and not config.ALLOW_VERTICAL) or has_burned_captions(path) \
-                or motion_rejects(path):
+        why = "burned-in text or UI" if has_burned_captions(path) else motion_rejects(path)
+        if (w and h and w < h * 1.2 and not config.ALLOW_VERTICAL) or why:
+            _mark_bad(key, "", why)
             try:
                 os.remove(path)
             except OSError:
                 pass
             continue
         judged += 1
+        _GATE_SLOP.set("")
         keep, verdict = _vision_gate(path, intent, context, row["title"])
         if not keep:
+            _mark_bad(key, "", _GATE_SLOP.get())
             try:
                 os.remove(path)
             except OSError:
@@ -2639,6 +2712,12 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     the pass that may take older uploads).
     """
     si = intent.SceneIntent.from_dict(_SCENE_INTENT.get()) if _SCENE_INTENT.get() else None
+    # A scene that cannot scout or judge one more candidate does not search
+    # for one: each fallback query cost its searches (and a news story's 7
+    # channel lookups) before this same check turned it away.
+    if _vision_budget_left() < 2:
+        print(f"[pool] scene out of vision budget ({_judge_limits()['per_scene']}); no more searches", flush=True)
+        return None
     pool = candidates.CandidatePool(si, query, seconds, used=used)
     targets = list(searches)
     tried = _scene_tried()
@@ -2662,7 +2741,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
 
     ranked = [c for c in pool.ranked()
               if c.id not in tried and _usable_title(c.title, c.channel, c.aspect)
-              and not title_conflict(c.title, context)]
+              and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")]
     if config.EYEWITNESS_SEARCHES:
         # Phone, drone, chaser and helicopter titles first, compilations last
         # (the Nature & Weather edit), on top of the metadata score.
@@ -2721,6 +2800,10 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             print(f"[ledger] skip {c.id} @ {point:.0f}s: shown in an earlier video", flush=True)
             _release_inflight(c.id)
             continue
+        mkey = f"yt:{c.id}@{int(point // 10)}"
+        if _is_bad(mkey):
+            _release_inflight(c.id)
+            continue                        # another scene found this moment unusable
         path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title)
         if not path:
             _release_inflight(c.id)
@@ -2728,6 +2811,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         still = motion_rejects(path)
         if has_burned_captions(path) or still:
             print(f"[media] {still or 'hardsubs'}, skipping: {c.title[:60]}", flush=True)
+            _mark_bad(f"yt:{c.id}", mkey, still or "burned-in text or UI")
             try:
                 os.remove(path)
             except OSError:
@@ -2736,8 +2820,10 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             continue
         judged += 1
         _count_judged()
+        _GATE_SLOP.set("")
         keep, verdict = _vision_gate(path, intent_text, context, c.title)
         if not keep:
+            _mark_bad(f"yt:{c.id}", mkey, _GATE_SLOP.get())
             v = verdict or {}
             score = float(v.get("score") or 0.0)
             clear_no = bool(v.get("has_text_or_watermark")) or bool(v.get("is_talking_head")) \
@@ -3032,6 +3118,8 @@ def reset_cache():
     with _MOTION_LOCK:
         _MOTION_CACHE.clear()
     SLOP_REJECTED.clear()
+    with _CACHE_LOCK:
+        _BAD.clear()                    # what was unusable is decided again per job
     _LIBRARY_KEEP["on"] = False         # the job's Library.load turns it on
     _BRIGHTDATA_REFUSED["why"] = ""     # a topped-up account works again on the next job
     from . import official
@@ -3179,15 +3267,19 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
         if slop.enabled() and (slop.ai_host(candidate.url, getattr(candidate, "page_url", "") or "")
                                or slop.metadata_reason(candidate.attribution)):
             continue
+        if _is_bad(candidate.identity):
+            continue                        # another scene found this picture unusable
         got = _download(candidate, query, work_dir)
         if not got:
             continue
         if got.kind == "image" and _photo_seen_before(got.local_path):
             continue
         judged += 1
+        _GATE_SLOP.set("")
         keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got), source_url=got.url)
         if keep:
             return got.apply_verdict(verdict, intent)
+        _mark_bad(candidate.identity, "", _GATE_SLOP.get())
         if judged >= config.VISION_MAX_CANDIDATES:
             break
     return None
