@@ -27,6 +27,10 @@ health  : cheap readiness probe.
 selftest: render the whole template library in-container, upload nothing.
           Proves ffmpeg, Chrome, the asset server, every animation and the
           whisper model all work on this worker — with no credentials set.
+pack_build: build or refresh one niche's footage pack on R2 (NASA, Wikimedia
+          Commons, Internet Archive, the owner's unused library clips):
+          {"niche": "water", "max_clips": 40, "dry_run": false}. See
+          src/packbuild.py and scripts/build_pack.py. No project is touched.
 
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
@@ -52,7 +56,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
-from src import ambience, gapfill, grade, quality, voicepolish
+from src import ambience, gapfill, grade, packs, quality, voicepolish
 from src import brandkit
 
 
@@ -832,6 +836,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     report("Reading the whole story", 13)
     events.phase("plan")
     brief = director.story_brief(segments, title, configured=director.is_configured())
+    # Which footage packs this story is about (src/packs.py): a Lake Powell video
+    # reads the water and nature shelves, for the fallback ladder's first rung.
+    packs.use_job(title=title, brief=brief, style=styles.resolve(inp.get("video_style")))
     # Every vision judgement sees the whole story, not just its own line.
     vision.set_story(brief)
     # And YouTube searches the archive or news channels for this kind of story.
@@ -977,32 +984,40 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     gapfill.remember(jobs, work, library=lib, require_cc=require_cc, youtube_only=flags["youtube_only"])
     # Parts on other workers apply the same per-job config overrides.
     fan_flags = ({**flags, "config": inp["config"]} if isinstance(inp.get("config"), dict) else flags)
+    # PACKS_FIRST (off; A/B one job with {"config": {"PACKS_FIRST": true}}): before any
+    # search, the lines a niche pack clip fits best (src/packs.py) - never the hook,
+    # never a line that needs its exact event or place. Those lines are settled here
+    # and left out of every search below.
+    packed = packs.first_pass(jobs, work, require_cc=require_cc) if config.PACKS_FIRST else {}
+    open_jobs = [j for j in jobs if j["index"] not in packed] if packed else jobs
     pools_wanted = bool(config.SUBJECT_POOLS and inp.get("allow_youtube") is not False)
-    in_parts = bool(pools_wanted and config.POOLS_IN_PARTS and jobs
-                    and fanout.enabled_for(len(jobs), project_id))
+    in_parts = bool(pools_wanted and config.POOLS_IN_PARTS and open_jobs
+                    and fanout.enabled_for(len(open_jobs), project_id))
     if pools_wanted and not in_parts:
-        report("Finding footage by subject", 22, done=0, total=len(jobs))
-        pooled = pools.source_by_subject(jobs, work, require_cc=require_cc, report=report, library=lib)
-        print(f"[worker] subject pools covered {len(pooled)}/{len(jobs)} lines", flush=True)
+        report("Finding footage by subject", 22, done=0, total=len(open_jobs))
+        pooled = pools.source_by_subject(open_jobs, work, require_cc=require_cc, report=report, library=lib)
+        print(f"[worker] subject pools covered {len(pooled)}/{len(open_jobs)} lines", flush=True)
     pool_stats = dict(media.LAST_STATS.get("pools") or {}, covered_lines=len(pooled))
-    taken = {a.identity for a in pooled.values()} | pools.video_ids(pooled)
-    rest = [j for j in jobs if j["index"] not in pooled]
-    assets = [pooled.get(j["index"]) for j in jobs]
+    if packed:
+        pool_stats["packs_first"] = len(packed)
+    taken = {a.identity for a in pooled.values()} | pools.video_ids(pooled) | {a.identity for a in packed.values()}
+    rest = [j for j in open_jobs if j["index"] not in pooled]
+    assets = [pooled.get(j["index"]) or packed.get(j["index"]) for j in jobs]
     if in_parts:
         # Every worker starts now: each part pools its own subjects, sources
         # the rest and fills from its spare moments; the parent's own share
         # goes through the same path with the clip library.
-        report("Finding footage on every worker", 22, done=0, total=len(jobs))
+        report("Finding footage on every worker", 22, done=0, total=len(open_jobs))
         pool_stats["in_parts"] = True
         got = fanout.source(
-            jobs, sequences or [], brief,
+            open_jobs, sequences or [], brief,
             parent_job_id=(report.job or {}).get("id", ""), project_id=project_id,
             bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
             flags={**fan_flags, "pools": True}, report=report, exclude=set(),
             local=lambda some, exclude: _source_with_pools(
                 some, work, require_cc=require_cc, exclude=exclude,
                 source_rest=lambda r, ex: local(r, ex, progress=False), library=lib)[0])
-        for j in jobs:
+        for j in open_jobs:
             assets[j["index"]] = got[j["index"]] if j["index"] < len(got) else None
     elif rest and fanout.enabled_for(len(rest), project_id):
         # Long video: each part is found, vision-checked and repaired on its
@@ -2080,7 +2095,11 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "AMBIENCE", "AMBIENCE_UNDER_VOICE_DB", "RISERS",
                       # Smart reframing (src/reframe.py); the news styles keep clips as shot.
                       "REFRAME_ENABLED", "REFRAME_CLIPS", "REFRAME_STILLS", "REFRAME_MAX_SCALE",
-                      "REFRAME_SHARE", "REFRAME_SECONDS", "REFRAME_MIN_SECONDS")
+                      "REFRAME_SHARE", "REFRAME_SECONDS", "REFRAME_MIN_SECONDS",
+                      # Niche footage packs (src/packs.py): PACKS_FIRST (pack clips before any search)
+                      # is the one to A/B; the rest tune what a pack may supply.
+                      "PACKS_FILL", "PACKS_FIRST", "PACKS_NICHES", "PACKS_MIN_SIMILARITY",
+                      "PACKS_FIRST_MIN_SIMILARITY", "PACKS_FIRST_MAX_SHARE", "PACKS_LICENSES")
 
 
 def _apply_config(overrides) -> dict:
@@ -2165,6 +2184,7 @@ def handler(job):
     report = Reporter(project_id, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
+    packs.reset()                       # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's
     kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
     kit_scope.__enter__()
@@ -2262,6 +2282,25 @@ def handler(job):
         if action == "selftest":
             out = selftest.run(work, width=int(inp.get("width", 854)), report=report)
             return {"ok": out.get("ok", False), "action": "selftest", **out,
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action == "pack_build":
+            # Build or refresh one niche's footage pack (src/packbuild.py, scripts/build_pack.py):
+            # NASA, Wikimedia Commons, the Internet Archive and - with "library" in sources and a
+            # running project - the owner's unused library clips; nothing else. Touches no project.
+            from src import packbuild
+            lib = None
+            if inp.get("project_id") and "library" in (inp.get("sources") or []) and not inp.get("dry_run"):
+                storage.CURRENT_JOB[0] = job_id           # the broker authorises the running job only
+                lib = library.Library(inp["project_id"], job_id)
+                if not (lib.enabled and lib._load_db()):
+                    lib = None
+            out = packbuild.run(
+                str(inp.get("niche") or ""), max_clips=int(inp.get("max_clips") or 40),
+                sources=inp.get("sources") or None, dry_run=bool(inp.get("dry_run")),
+                resolve=bool(inp.get("resolve")), seconds=float(inp.get("seconds") or 1500),
+                library=lib, parallel=int(inp.get("parallel") or 2), work=work, report=report)
+            return {**out, "ok": bool(out.get("ok", True)), "action": "pack_build",
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "health":
@@ -2374,6 +2413,10 @@ def handler(job):
             doc = copy.deepcopy(doc)
             meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
             bucket = inp.get("media_bucket") or config.MEDIA_BUCKET
+            # A scene the quality check repairs may take a clip from the niche
+            # packs of the timeline's own story (src/packs.py).
+            packs.use_job(brief=meta.get("story") if isinstance(meta.get("story"), dict) else None,
+                          style=str(meta.get("videoStyle") or ""))
             quality.set_context(
                 ladder=True, story=meta.get("story") if isinstance(meta.get("story"), dict) else None,
                 require_cc=bool(inp["require_cc"] if inp.get("require_cc") is not None else config.REQUIRE_CC),

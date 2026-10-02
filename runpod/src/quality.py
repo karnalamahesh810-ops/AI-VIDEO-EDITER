@@ -31,7 +31,8 @@ What it answers for (each has a test in tests/test_quality.py):
                         and every look that shows pictures has one;
                       - the narration and the music can load.
                       A broken scene goes through the same ladder as an empty
-                      one (gapfill.fill_empty: the clip library, the pools'
+                      one (gapfill.fill_empty: a niche pack clip that fits its
+                      line (src/packs.py), the clip library, the pools'
                       spare moments, one picture), then the last resort
                       (gapfill.hold_or_animate: the line's own graphic, the
                       neighbouring shot held over it), never a repeat; a line
@@ -583,6 +584,8 @@ def _how(asset) -> str:
         return "an AI picture"
     if getattr(asset, "kind", "") == "image":
         return "a picture"
+    if str(getattr(asset, "moment_key", "") or "").startswith("pack:"):
+        return "a niche pack clip"
     if "library" in str(getattr(asset, "review_reason", "") or "").lower():
         return "a library clip"
     return "a spare clip from the footage pools"
@@ -590,7 +593,7 @@ def _how(asset) -> str:
 
 def _kind_of(how: str) -> str:
     """The report's bucket for a repair: replaced / held / graphic / text / none."""
-    if how.startswith(("a library", "a spare", "a picture", "an AI")):
+    if how.startswith(("a library", "a niche", "a spare", "a picture", "an AI")):
         return "replaced"
     if how.startswith("held"):
         return "held"

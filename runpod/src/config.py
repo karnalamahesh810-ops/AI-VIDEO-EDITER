@@ -1092,3 +1092,53 @@ QUALITY_BLACK_SECONDS = float(os.getenv("QUALITY_BLACK_SECONDS", "0.5"))
 QUALITY_FREEZE_SECONDS = float(os.getenv("QUALITY_FREEZE_SECONDS", "0.8"))
 QUALITY_SILENCE_SECONDS = float(os.getenv("QUALITY_SILENCE_SECONDS", "4"))
 QUALITY_SCAN_TIMEOUT = float(os.getenv("QUALITY_SCAN_TIMEOUT", "900"))
+
+# --- niche footage packs (src/packs.py, src/packbuild.py) ----------------------
+# A shelf of pre-checked clips per niche (water, weather, fire, earth, nature,
+# cities) kept on R2 and read by their public link: the owner's rule "no empty
+# scenes, every clip fits its own line" (2026-10-01) answered with footage that
+# is already cut, checked and reachable. PACKS_FILL = the fallback ladder's
+# first rung (src/gapfill.py): a scene still empty after the footage search
+# takes a pack clip whose CLIP picture fits its line. PACKS_FIRST = pack clips
+# are tried before any search for the lines they fit best (off: sourcing is
+# unchanged). PACKS_NICHES forces the niches ("water,nature"); empty = read
+# them off the story and the line. PACKS_PUBLIC_BASE is where packs are read
+# from (default: the footage library's public domain); PACKS_DIR reads them
+# from a local folder instead (a pack build's --local-dir output).
+PACKS_FILL = _flag("PACKS_FILL", True)
+PACKS_FIRST = _flag("PACKS_FIRST", False)
+PACKS_NICHES = os.getenv("PACKS_NICHES", "").strip()
+PACKS_PUBLIC_BASE = os.getenv("PACKS_PUBLIC_BASE", "").strip()
+PACKS_PREFIX = os.getenv("PACKS_PREFIX", "packs/").strip()
+PACKS_DIR = os.getenv("PACKS_DIR", "").strip()
+# A manifest is kept in memory this long (a missing one is not asked again for a minute).
+PACKS_CACHE_SECONDS = float(os.getenv("PACKS_CACHE_SECONDS", "600"))
+# The least CLIP cosine (B/16: ~0.15 off-topic, ~0.32 exact) between a line and a
+# clip for the clip to be used at all. A line that names its own event or place
+# (specificity "event"/"location" and not generic_ok) needs PACKS_SPECIFIC_EXTRA
+# more: a general clip proves little about an exact place.
+PACKS_MIN_SIMILARITY = float(os.getenv("PACKS_MIN_SIMILARITY", "0.25"))
+PACKS_FIRST_MIN_SIMILARITY = float(os.getenv("PACKS_FIRST_MIN_SIMILARITY", "0.29"))
+PACKS_SPECIFIC_EXTRA = float(os.getenv("PACKS_SPECIFIC_EXTRA", "0.03"))
+# Ranking only (never lets a clip under the minimum in): a clip whose topics
+# share words with the line gains up to this much.
+PACKS_TOPIC_BONUS = float(os.getenv("PACKS_TOPIC_BONUS", "0.02"))
+# Licence classes a job may take: pd, cc0, cc-by, cc-by-sa (the author and licence
+# go on the clip) and unverified (a clip from the owner's own library, the
+# licence posture of every library clip). "pd,cc0" = nothing to credit.
+PACKS_LICENSES = os.getenv("PACKS_LICENSES", "pd,cc0,cc-by,cc-by-sa,unverified").strip().lower()
+# PACKS_FIRST never takes more than this share of a video's lines, and never the hook.
+PACKS_FIRST_MAX_SHARE = float(os.getenv("PACKS_FIRST_MAX_SHARE", "0.35"))
+PACKS_FIRST_SECONDS = float(os.getenv("PACKS_FIRST_SECONDS", "90"))
+# Building a pack (src/packbuild.py): a source video is skipped over
+# PACKS_MAX_SOURCE_MB or PACKS_MAX_SOURCE_SECONDS, cut into segments of
+# PACKS_SEGMENT_MIN..PACKS_SEGMENT_MAX seconds (PACKS_MAX_PER_SOURCE at most from
+# one source video), a topic keeps at most PACKS_TOPIC_QUOTA clips, and a clip
+# whose best topic is under PACKS_TOPIC_MIN_SIMILARITY is not about the niche.
+PACKS_MAX_SOURCE_MB = float(os.getenv("PACKS_MAX_SOURCE_MB", "400"))
+PACKS_MAX_SOURCE_SECONDS = float(os.getenv("PACKS_MAX_SOURCE_SECONDS", "1200"))
+PACKS_SEGMENT_MIN = float(os.getenv("PACKS_SEGMENT_MIN", "4"))
+PACKS_SEGMENT_MAX = float(os.getenv("PACKS_SEGMENT_MAX", "10"))
+PACKS_MAX_PER_SOURCE = int(os.getenv("PACKS_MAX_PER_SOURCE", "6"))
+PACKS_TOPIC_QUOTA = int(os.getenv("PACKS_TOPIC_QUOTA", "40"))
+PACKS_TOPIC_MIN_SIMILARITY = float(os.getenv("PACKS_TOPIC_MIN_SIMILARITY", "0.23"))
