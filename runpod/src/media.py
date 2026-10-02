@@ -2164,6 +2164,9 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
         # (library.record_from_doc): their files stay until the job ends.
         keep = keep_files or (_LIBRARY_KEEP["on"] and a.kind == "video" and not a.review_reason.startswith(
             "Best available") and (a.relevance_score or 0) >= config.CLIP_LIBRARY_MIN_SCORE)
+        # Pick-a-shot: the best PICK_A_SHOT_CHOICES runner-ups keep their files for the editor's choices.
+        if getattr(config, "PICK_A_SHOT", False) and len(winner.alternatives) < config.PICK_A_SHOT_CHOICES                 and not a.review_reason.startswith("Best available"):
+            keep = True
         if keep:
             entry["localPath"] = a.local_path
         winner.alternatives.append(entry)

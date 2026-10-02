@@ -289,6 +289,12 @@ def _json_env(name: str):
 DRAIN_SECONDS = float(os.getenv("DRAIN_SECONDS", "15"))
 # Replace Clip: how many ranked choices a re-source returns (winner + rest).
 REPLACE_ALTERNATIVES = int(os.getenv("REPLACE_ALTERNATIVES", "5"))
+# Pick-a-shot (the owner, 2026-10-02): every scene of a build keeps its best
+# runner-up clips - already downloaded and judged, so no extra search or AI
+# call - published beside the winner so the editor offers "3 other options"
+# the moment a clip is clicked. Storage only (~3 x 2 MB a scene on R2).
+PICK_A_SHOT = _flag("PICK_A_SHOT", True)
+PICK_A_SHOT_CHOICES = int(os.getenv("PICK_A_SHOT_CHOICES", "3"))
 META_WEIGHTS = _json_env("META_WEIGHTS")
 FINAL_WEIGHTS = _json_env("FINAL_WEIGHTS")
 

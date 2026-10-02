@@ -630,7 +630,8 @@ class Library:
         have = {e.get("id") for e in self.entries}
         if on_r2 and saves_unused():
             picks = self._unused_picks(doc, have)
-            _strip_local_alternatives(doc)
+            # (The runner-ups' local paths stay on the document until the handler has published the
+            # editor's choices too - pick-a-shot; handler.strip_choice_paths removes them before saving.)
             return self._keep(doc, picks, on_r2)
         picks = []
         for s in doc.get("scenes", []):

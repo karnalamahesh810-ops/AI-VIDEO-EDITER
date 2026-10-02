@@ -1324,6 +1324,46 @@ def _publish_alternatives(cands: List[dict], project_id: str, bucket: str, job_i
         c["media"] = {k: v for k, v in media_fields.items() if v is not None}
 
 
+def _publish_choices(doc: dict, project_id: str, bucket: str, job_id: str, work: str, report: Reporter) -> int:
+    """
+    Pick-a-shot: every scene's runner-up clips whose files were kept
+    (media._best_of, PICK_A_SHOT) are uploaded like Replace Clip's choices and
+    their links put on semanticMetadata.alternatives[].media - the app's
+    plan store turns those into playable choices the editor shows on a click.
+    Nothing is searched or judged again. Returns the number published.
+    """
+    if not getattr(config, "PICK_A_SHOT", False):
+        return 0
+    todo = []
+    for s in doc.get("scenes") or []:
+        sem = s.get("semanticMetadata") if isinstance(s, dict) else None
+        alts = [a for a in ((sem or {}).get("alternatives") or []) if isinstance(a, dict)
+                and a.get("localPath") and os.path.isfile(a.get("localPath") or "")]
+        if alts:
+            todo.append((s, alts[:config.PICK_A_SHOT_CHOICES]))
+    if not todo:
+        return 0
+    report(f"Saving other choices for {len(todo)} scenes", 67)
+    n = 0
+
+    def one(item):
+        s, alts = item
+        cands = [{"localPath": a["localPath"], "media": {}} for a in alts]
+        _publish_alternatives(cands, project_id, bucket, job_id, str(s.get("id") or ""), work)
+        got = 0
+        for a, c in zip(alts, cands):
+            if c.get("media", {}).get("url"):
+                a["media"] = c["media"]
+                got += 1
+        return got
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for got in pool.map(one, todo):
+            n += got
+    print(f"[choices] pick-a-shot: {n} runner-up clip(s) published for {len(todo)} scene(s)", flush=True)
+    return n
+
+
 def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
     """
     Replace Clip: re-source ONE scene and return the timeline plus the ranked
@@ -2389,6 +2429,10 @@ def handler(job):
                 publish_media(doc, project_id,
                               inp.get("media_bucket") or config.MEDIA_BUCKET, report,
                               job_id=job_id)
+                # Pick-a-shot: each scene's runner-ups go up too, so the editor can swap in one at once.
+                _publish_choices(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
+                                 job_id, work, report)
+            library._strip_local_alternatives(doc)      # no work-dir path ever reaches the saved timeline
             if project_id:
                 storage.patch_project(project_id, {
                     "scene_data": doc, "status": "editing",

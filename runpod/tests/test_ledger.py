@@ -360,7 +360,9 @@ class TheLibraryKeepsWhatWasNotShown(Base):
         self.assertEqual(sorted(stored), sorted(["yt:otherclip01@5", "yt:sparevideo1@7"]))
         self.assertNotIn(shown, checked)
         self.assertEqual(fetch.call_args.args[:2], ("sparevideo1", media._WORK["dir"] or tempfile.gettempdir()))
-        # No local path goes into the saved timeline.
+        # No local path goes into the saved timeline: the handler strips them once the editor's choices
+        # (pick-a-shot) are published too - library._strip_local_alternatives.
+        library._strip_local_alternatives(doc)
         self.assertTrue(all("localPath" not in a for a in doc["scenes"][0]["semanticMetadata"]["alternatives"]))
 
 

@@ -52,7 +52,14 @@ class BestOfN(unittest.TestCase):
         self.assertAlmostEqual(asset.relevance_score, 0.95)
         self.assertEqual([a["score"] for a in asset.alternatives], [0.88, 0.72])
         self.assertTrue(os.path.exists(asset.local_path))
-        self.assertEqual(len([f for f in os.listdir(d) if f.endswith(".mp4")]), 1)   # losers' files removed
+        # The runner-ups keep their files for the editor's choices (pick-a-shot, 2026-10-02); off, they go.
+        self.assertEqual(len([f for f in os.listdir(d) if f.endswith(".mp4")]), 3)
+        self.assertTrue(all(os.path.isfile(a["localPath"]) for a in asset.alternatives))
+
+    def test_without_pick_a_shot_the_losers_files_are_removed(self):
+        with mock.patch.object(config, "PICK_A_SHOT", False):
+            asset, fetched, d = self._run([0.72, 0.88, 0.95], best_of=3)
+        self.assertEqual(len([f for f in os.listdir(d) if f.endswith(".mp4")]), 1)
 
     def test_best_of_two_stops_after_two_passes(self):
         asset, fetched, _ = self._run([0.72, 0.88, 0.95], best_of=2)
