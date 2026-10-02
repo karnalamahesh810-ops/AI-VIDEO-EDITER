@@ -695,6 +695,9 @@ MIN_IMAGE_LONG_SIDE_UPSCALED = int(os.getenv("MIN_IMAGE_LONG_SIDE_UPSCALED", "64
 # scenes at once); no move above REFRAME_MAX_SCALE, none on a shot shorter than
 # REFRAME_MIN_SECONDS, and about REFRAME_SHARE of the shots that could move do.
 REFRAME_ENABLED = _flag("REFRAME_ENABLED", False)
+# Footage moves and still aiming separately (the news styles keep their
+# clips as shot: src/styles.py).
+REFRAME_CLIPS = _flag("REFRAME_CLIPS", True)
 REFRAME_STILLS = _flag("REFRAME_STILLS", True)
 REFRAME_SECONDS = float(os.getenv("REFRAME_SECONDS", "75"))
 REFRAME_PARALLEL = int(os.getenv("REFRAME_PARALLEL", "6"))
@@ -702,8 +705,10 @@ REFRAME_MAX_SCALE = float(os.getenv("REFRAME_MAX_SCALE", "1.15"))
 REFRAME_MIN_SECONDS = float(os.getenv("REFRAME_MIN_SECONDS", "3.0"))
 REFRAME_SHARE = float(os.getenv("REFRAME_SHARE", "0.6"))
 REFRAME_MIN_CONFIDENCE = float(os.getenv("REFRAME_MIN_CONFIDENCE", "0.45"))
-# YuNet face detector (OpenCV Zoo, MIT, 230 KB ONNX; scripts/fetch_models.py).
+# YuNet face detector (OpenCV Zoo, MIT, 230 KB ONNX) and U2-Net-p salient-object
+# maps (Apache-2.0, 4.6 MB ONNX); both baked in by scripts/fetch_models.py.
 FACE_MODEL = os.getenv("FACE_MODEL", "/opt/models/face_detection_yunet_2023mar.onnx")
+SALIENCY_MODEL = os.getenv("SALIENCY_MODEL", "/opt/models/u2netp.onnx")
 # Vertical / square phone video (news-compilation styles, src/styles.py):
 # accepted and framed on a blurred copy of itself before render, the way news
 # compilation channels show TikTok/X clips. The sharp band keeps the middle

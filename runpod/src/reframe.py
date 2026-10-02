@@ -229,9 +229,9 @@ def _yunet(rgb, long_side: int, threshold: float) -> list:
             r, c = divmod(int(i), cols)
             bb = outs[f"bbox_{stride}"][0, i]
             kp = outs[f"kps_{stride}"][0, i]
-            cx, cy = (c + bb[0]) * stride, (r + bb[1]) * stride
+            cx, cy = (c + float(bb[0])) * stride, (r + float(bb[1])) * stride
             bw, bh = math.exp(float(bb[2])) * stride, math.exp(float(bb[3])) * stride
-            eye_y = ((kp[1] + r) * stride + (kp[3] + r) * stride) / 2.0
+            eye_y = ((float(kp[1]) + r) * stride + (float(kp[3]) + r) * stride) / 2.0
             found.append([(cx - bw / 2) / w2, (cy - bh / 2) / h2, bw / w2, bh / h2, float(score[i]), eye_y / h2])
     return found
 
@@ -294,6 +294,171 @@ def _face_tracks(per_frame: List[list], min_h: float) -> list:
                     "eye": sum(b[5] for b in bs) / seen, "seen": seen, "h": h_mean})
     out.sort(key=lambda t: -t["h"])
     return out
+
+
+# --------------------------------------------------------------------------- #
+# The main object: U2-Net-p (Apache-2.0, 4.6 MB ONNX) salient-object maps
+# --------------------------------------------------------------------------- #
+
+_U2: Dict[str, object] = {"loaded": False, "error": ""}
+_MEAN = (0.485, 0.456, 0.406)
+_STD = (0.229, 0.224, 0.225)
+
+
+def _u2_session():
+    if _U2["loaded"]:
+        return _U2.get("session")
+    with _LOCK:
+        if _U2["loaded"]:
+            return _U2.get("session")
+        _U2["loaded"] = True
+        path = config.SALIENCY_MODEL
+        if not os.path.isfile(path):
+            _U2["error"] = f"no model at {path}"
+            return None
+        try:
+            import onnxruntime as ort
+            opts = ort.SessionOptions()
+            opts.intra_op_num_threads = 2
+            opts.inter_op_num_threads = 1
+            _U2["session"] = ort.InferenceSession(path, opts, providers=["CPUExecutionProvider"])
+            _U2["input"] = _U2["session"].get_inputs()[0].name
+            print(f"[reframe] salient-object model loaded from {path}", flush=True)
+        except Exception as e:  # noqa: BLE001 - no runtime: the pixel saliency stands in
+            _U2["error"] = f"{type(e).__name__}: {str(e)[:120]}"
+            _U2.pop("session", None)
+            print(f"[reframe] salient-object model off: {_U2['error']}", flush=True)
+    return _U2.get("session")
+
+
+def object_map(rgb, grid_w: int = 80):
+    """
+    Where the main object is (0..1 probability on a grid_w-wide grid of the
+    frame's own aspect), or None without the model. Trained on salient-object
+    photos: a dam, a boat, a person, a ruin light up; an even landscape stays
+    dark - which is the honest "no subject" this needs.
+    """
+    sess = _u2_session()
+    if sess is None:
+        return None
+    a = _resize(rgb, 320, 320).astype(np.float32)
+    a = a / max(1e-6, float(a.max()))
+    a = (a - np.array(_MEAN, np.float32)) / np.array(_STD, np.float32)
+    try:
+        out = sess.run(None, {_U2["input"]: a.transpose(2, 0, 1)[None].astype(np.float32)})[0][0, 0]
+    except Exception as e:  # noqa: BLE001
+        print(f"[reframe] salient-object pass failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
+        return None
+    H, W = rgb.shape[:2]
+    gh = max(8, int(round(grid_w * H / float(W))))
+    return _resize((np.clip(out, 0, 1) * 255).astype(np.uint8), grid_w, gh).astype(np.float32) / 255.0
+
+
+def subject_from_objects(p) -> Optional[dict]:
+    """
+    The main object's box from an object_map, or None when the map holds no
+    clear object: {"box", "share", "area", "peak", "confidence"}.
+    """
+    if p is None:
+        return None
+    peak = float(p.max())
+    if peak < 0.6:
+        return None
+    h, w = p.shape
+    mask = p >= 0.5
+    if mask.mean() < 0.002:
+        return None
+    comps = _components(mask)
+    scored = sorted(((float(sum(p[y, x] for y, x in c)), c) for c in comps), key=lambda t: -t[0])
+    total = sum(m for m, _ in scored)
+    top_mass, top = scored[0]
+    ys0, xs0 = [q[0] for q in top], [q[1] for q in top]
+    bx0, bx1, by0, by1 = min(xs0), max(xs0), min(ys0), max(ys0)
+    mass = top_mass
+    for m, comp in scored[1:6]:
+        if m < 0.3 * top_mass:
+            break
+        ys, xs = [q[0] for q in comp], [q[1] for q in comp]
+        gap_x = max(0, max(min(xs) - bx1, bx0 - max(xs))) / w
+        gap_y = max(0, max(min(ys) - by1, by0 - max(ys))) / h
+        if gap_x < 0.1 and gap_y < 0.1:
+            bx0, bx1 = min(bx0, min(xs)), max(bx1, max(xs))
+            by0, by1 = min(by0, min(ys)), max(by1, max(ys))
+            mass += m
+    # The soft edge of the object counts as the object: grow the box to
+    # where the map is still above 0.25 next to it (never cut a wing tip).
+    soft = p >= 0.25
+    for _ in range(3):
+        grown = False
+        if bx0 > 0 and soft[by0:by1 + 1, bx0 - 1].any():
+            bx0 -= 1; grown = True  # noqa: E702
+        if bx1 < w - 1 and soft[by0:by1 + 1, bx1 + 1].any():
+            bx1 += 1; grown = True  # noqa: E702
+        if by0 > 0 and soft[by0 - 1, bx0:bx1 + 1].any():
+            by0 -= 1; grown = True  # noqa: E702
+        if by1 < h - 1 and soft[by1 + 1, bx0:bx1 + 1].any():
+            by1 += 1; grown = True  # noqa: E702
+        if not grown:
+            break
+    box = [bx0 / w, by0 / h, (bx1 + 1 - bx0) / w, (by1 + 1 - by0) / h]
+    area = box[2] * box[3]
+    share = mass / max(total, 1e-6)
+    inside = float(p[by0:by1 + 1, bx0:bx1 + 1][mask[by0:by1 + 1, bx0:bx1 + 1]].mean()) if mask[
+        by0:by1 + 1, bx0:bx1 + 1].any() else 0.0
+    # Sure (bright inside), alone (most of the map's mass) and not the whole
+    # frame (a subject filling 70% of it leaves nothing to push toward).
+    size = 1.0 if area <= 0.4 else max(0.0, 1.0 - (area - 0.4) / 0.4)
+    confidence = max(0.0, min(1.0, inside * share * size))
+    return {"box": box, "share": round(share, 3), "area": round(area, 3), "peak": round(peak, 3),
+            "confidence": round(confidence, 3)}
+
+
+def text_in(rgb, box: list) -> bool:
+    """A box of the frame that is mostly lettering (burned-in text the object model lit up)."""
+    H, W = rgb.shape[:2]
+    x0, y0 = int(max(0, box[0]) * W), int(max(0, box[1]) * H)
+    x1, y1 = int(min(1, box[0] + box[2]) * W), int(min(1, box[1] + box[3]) * H)
+    if x1 - x0 < 12 or y1 - y0 < 6:
+        return False
+    g = _gray(rgb[y0:y1, x0:x1])
+    dens = (np.abs(np.diff(g, axis=1)) > 48).mean(axis=1)
+    texty = dens > 0.08
+    quiet = ~texty
+    # Lettering: rows dense with letter strokes (vertical edges) in a few
+    # bands, with nearly empty rows between and around them - a rock face or
+    # a forest is dense everywhere, a smooth object nowhere.
+    if texty.mean() < 0.12 or quiet.mean() < 0.15:
+        return False
+    line, gap = float(dens[texty].mean()), float(np.median(dens[quiet]))
+    rows = list(np.nonzero(texty)[0])
+    bands = 1 + sum(1 for a, b in zip(rows, rows[1:]) if b - a > 2)
+    return bool(line >= 0.10 and gap <= 0.25 * line and _longest_run(rows) >= 4 and bands <= 6)
+
+
+def black_bars(frames: list) -> Dict[str, float]:
+    """Letterbox / pillarbox bars (near-black, flat, on every sampled frame): their size per side."""
+    out = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
+    if not frames:
+        return out
+    g = np.stack([_gray(f) for f in frames[:: max(1, len(frames) // 4)][:4]]).max(axis=0)
+    h, w = g.shape
+    cols = g.max(axis=0)
+    rows = g.max(axis=1)
+    dark_c = cols < 22
+    dark_r = rows < 22
+
+    def run(flags) -> int:
+        n = 0
+        for f in flags:
+            if not f:
+                break
+            n += 1
+        return n
+    out["left"] = run(dark_c) / w
+    out["right"] = run(dark_c[::-1]) / w
+    out["top"] = run(dark_r) / h
+    out["bottom"] = run(dark_r[::-1]) / h
+    return {k: round(v, 3) for k, v in out.items()}
 
 
 # --------------------------------------------------------------------------- #
@@ -666,4 +831,611 @@ def effective_lines(g) -> int:
     if not len(above):
         return 0
     cutoff = (int(above.max()) + 2) / 64.0 * 0.5               # cycles per pixel
-    return int(round(min(1.0, cutoff / 0.5) * min(h, w if w < h else h)))
+    return int(round(min(1.0, cutoff / 0.5) * min(h, w)))
+
+
+def _focus_of(motion: Optional[dict], grays: Optional[list], picks: list) -> dict:
+    """
+    The subject of a shot from its sampled frames: faces first, else the
+    main object (U2-Net), else - without that model - pixel saliency with a
+    capped confidence; on a locked-off shot, where things move adds to it.
+    """
+    tracks = _face_tracks([find_faces(p) for p in picks], FACE_MIN_H) if faces_available() else []
+    out: Dict[str, object] = {"faces": len(tracks)}
+    if tracks:
+        big = tracks[0]["h"]
+        keep = [t for t in tracks if t["h"] >= 0.4 * big]
+        # Head and shoulders, not the face box: YuNet's box runs from the
+        # brows to the chin, and a crop at its edge cuts the head.
+        boxes = []
+        for t in keep:
+            x, y, w, h = t["box"]
+            boxes.append([x - FACE_PAD_SIDE * w, y - FACE_PAD_TOP * h, w * (1 + 2 * FACE_PAD_SIDE),
+                          h * (1 + FACE_PAD_TOP + FACE_PAD_BOTTOM)])
+        box = _union(boxes)
+        out.update(box=_clip01(box), kind="face",
+                   confidence=round(min(1.0, sum(t["score"] for t in keep) / len(keep)
+                                        * min(1.0, sum(t["seen"] for t in keep) / (len(keep) * len(picks)))), 3),
+                   eye=round(float(min(t["eye"] for t in keep)), 4),
+                   faceBoxes=[[round(float(v), 4) for v in t["box"]] for t in keep])
+        return out
+    act = None
+    if grays and motion and not motion.get("moving"):
+        a = action_map(grays)
+        # Real movement (a boat, people, a spillway), not sensor noise.
+        if a is not None and a[1] > 1.2:
+            act = a[0]
+    objs = [object_map(p) for p in picks]
+    if all(o is not None for o in objs) and objs:
+        omap = np.min(np.stack(objs), axis=0) if len(objs) > 1 else objs[0]
+        # The object over the whole stretch: where it is in ANY sampled frame
+        # (so a crop never loses it), judged by how sure the map is in all.
+        union = np.max(np.stack(objs), axis=0) if len(objs) > 1 else objs[0]
+        got = subject_from_objects(omap if float(omap.max()) >= 0.6 else union)
+        if got:
+            got_u = subject_from_objects(union) or got
+            box = _union([got["box"], got_u["box"]])
+            if any(text_in(p, box) for p in picks):
+                out.update(kind="text", confidence=0.0, box=_clip01(box))
+                out["overlay"] = True
+                return out
+            out.update(box=_clip01(box), kind="object", confidence=got["confidence"], share=got["share"],
+                       peak=got["peak"])
+            return out
+        if act is not None:
+            got = subject_from_map(act)
+            if got and got["confidence"] >= 0.45:
+                out.update(box=_clip01(got["box"]), kind="action", confidence=round(got["confidence"] * 0.8, 3))
+                return out
+        out.update(kind="none", confidence=0.0)
+        return out
+    # No object model: pixel saliency, never trusted as much (it likes skies).
+    maps = [saliency_map(p) for p in picks]
+    sal = np.median(np.stack(maps), axis=0) if len(maps) > 1 else maps[0]
+    kind = "saliency"
+    if act is not None:
+        got = subject_from_map(act)
+        if got and got["confidence"] >= 0.35:
+            sal = _norm01(0.55 * sal + 0.45 * act)
+            kind = "action"
+    got = subject_from_map(sal)
+    if not got:
+        out.update(kind="none", confidence=0.0)
+        return out
+    out.update(box=_clip01(got["box"]), kind=kind, confidence=round(min(0.5, got["confidence"]), 3),
+               share=got["share"])
+    return out
+
+
+FACE_MIN_H = 0.035          # a face shorter than this share of the frame is part of the scenery
+FACE_PAD_TOP, FACE_PAD_BOTTOM, FACE_PAD_SIDE = 0.6, 0.8, 0.45
+
+
+def _union(boxes: list) -> list:
+    x0 = min(b[0] for b in boxes)
+    y0 = min(b[1] for b in boxes)
+    x1 = max(b[0] + b[2] for b in boxes)
+    y1 = max(b[1] + b[3] for b in boxes)
+    return [x0, y0, x1 - x0, y1 - y0]
+
+
+def _clip01(b: list) -> dict:
+    b = [float(v) for v in b]
+    x0, y0 = max(0.0, b[0]), max(0.0, b[1])
+    x1, y1 = min(1.0, b[0] + b[2]), min(1.0, b[1] + b[3])
+    return {"x": round(x0, 4), "y": round(y0, 4), "w": round(max(0.0, x1 - x0), 4), "h": round(max(0.0, y1 - y0), 4)}
+
+
+def detect_clip(path: str, shown: float, timeout: float = 30.0) -> Optional[dict]:
+    """
+    media.focus for the first `shown` seconds of a clip (what its scene
+    plays), or None when it cannot be read:
+    {"box": {x, y, w, h} of the source, "kind": face / saliency / action / none,
+     "confidence", "motion": {...camera_motion}, "overlay": bool,
+     "lines": real detail in lines, "srcLines": the file's lines, "faces": n}
+    """
+    if np is None or not path or not os.path.isfile(path):
+        return None
+    t0 = time.time()
+    w, h, dur = _probe(path)
+    if not w or not h:
+        return None
+    shown = max(0.5, min(shown, dur) if dur > 0 else shown)
+    aw = ANALYSIS_W
+    ah = _even(aw * h / float(w))
+    fps = max(3.0, min(8.0, 24.0 / shown))
+    frames = _decode(path, shown, fps, aw, ah, timeout=timeout)
+    if len(frames) < 3:
+        return None
+    grays = [_resize(_gray(f).astype(np.uint8), MOTION_W, MOTION_H).astype(np.float32) for f in frames]
+    motion = camera_motion(grays, 1.0 / fps)
+    bars = black_bars(frames)
+    focus: Dict[str, object] = {"motion": motion, "overlay": burned_overlay(grays), "bars": bars,
+                                "srcLines": min(w, h), "aspect": round(w / float(h), 4)}
+    # A clip that can never take a move (the camera moves, a cut, a station
+    # logo, letterbox bars) is not looked at any further: most of a drone-
+    # heavy documentary, and the time box is shared.
+    why = ("camera moves" if motion["moving"] else "logo or text burned in" if focus["overlay"]
+           else "letterbox bars" if max(bars.values()) > 0.02 else "")
+    if why:
+        focus.update(kind="none", confidence=0.0, why=why, seconds=round(time.time() - t0, 2))
+        return focus
+    picks = [frames[0], frames[len(frames) // 2], frames[-1]]
+    focus.update(_focus_of(motion, grays, picks))
+    focus["lines"] = effective_lines(_full_gray(path, shown / 2.0, w, h))
+    focus["seconds"] = round(time.time() - t0, 2)
+    return focus
+
+
+def detect_still(path: str) -> Optional[dict]:
+    """media.focus for a photo (no motion, no overlay check: a photo has none of either)."""
+    if np is None or not path or not os.path.isfile(path):
+        return None
+    t0 = time.time()
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im = im.convert("RGB")
+            w, h = im.size
+            aw = ANALYSIS_W if w >= h else max(64, int(round(ANALYSIS_W * w / float(h))))
+            ah = max(64, int(round(aw * h / float(w))))
+            rgb = np.asarray(im.resize((aw, ah), Image.BILINEAR))
+            gray = np.asarray(im.convert("L"))
+    except Exception:  # noqa: BLE001 - an unreadable picture just keeps its motion
+        return None
+    focus = _focus_of(None, None, [rgb])
+    focus["srcLines"] = min(w, h)
+    focus["lines"] = effective_lines(gray)
+    focus["aspect"] = round(w / float(h), 4)
+    focus["seconds"] = round(time.time() - t0, 2)
+    return focus
+
+
+# --------------------------------------------------------------------------- #
+# Planning: focus -> a gentle move (pure data the renderer interpolates)
+# --------------------------------------------------------------------------- #
+
+MIN_SCALE = 1.05            # less does not read as a move at all
+ZOOM_RATE = 0.035           # scale change per second (1.12x needs 3.4 s): a camera operator's push
+PAN_RATE = 0.03             # viewport travel per second, a share of the frame
+MARGIN = 0.035              # room kept around the subject, a share of the frame
+# Moves turn in this order so neighbours differ; most are pushes.
+KINDS = ("push", "push", "pull", "push", "drift")
+# Entrances that already zoom: a move that STARTS zoomed in would double it.
+ZOOM_ENTRANCES = {"zoom", "punch", "zoom-punch"}
+FULL = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
+_NEWS = None
+
+
+def _news_re():
+    global _NEWS
+    if _NEWS is None:
+        import re
+        _NEWS = re.compile(
+            r"\b(news|newscast|nbc|cbs|abc ?\d*|fox ?\d*|cnn|msnbc|pbs|bbc|reuters|associated press|ap archive|"
+            r"weather channel|fox ?weather|ksl|kutv|kjzz|azfamily|12news|8newsnow|ktnv|kvvu|"
+            r"newshour|60 minutes|sky news|al jazeera|cbc|ctv|wral|wfaa|khou|kprc|ksat|kxan|wthr)\b", re.I)
+    return _NEWS
+
+
+def is_news(media: dict) -> bool:
+    """A clip from a news outlet by its title or credit: shown as it is (the owner: no crop)."""
+    text = " ".join(str(media.get(k) or "") for k in ("attribution", "channel"))
+    return bool(_news_re().search(text))
+
+
+def scale_cap(focus: dict) -> float:
+    """
+    How far this picture may be pushed and stay sharp: its real detail
+    (effective_lines) and its file's lines, never past REFRAME_MAX_SCALE.
+    0 when it is too soft to push at all.
+    """
+    lines = int(focus.get("lines") or 0) or int(focus.get("srcLines") or 0)
+    src = int(focus.get("srcLines") or 0) or lines
+    if lines < 500 or src < 480:
+        return 0.0
+    cap = 1.2 if lines >= 800 and src >= 1000 else 1.15 if lines >= 650 else 1.1
+    return min(cap, float(config.REFRAME_MAX_SCALE))
+
+
+def cover_box(box: dict, src_aspect: float, frame_aspect: float) -> Optional[dict]:
+    """
+    A box of the source picture in the frame's coordinates once the picture
+    is cover-fitted (objectFit: cover), the part outside the frame cut off.
+    None when less than 80% of it is on screen.
+    """
+    try:
+        x, y, w, h = (float(box[k]) for k in ("x", "y", "w", "h"))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if src_aspect <= 0 or frame_aspect <= 0 or w <= 0 or h <= 0:
+        return None
+    if src_aspect > frame_aspect:            # wider: the sides are cut
+        keep = frame_aspect / src_aspect
+        off = (1 - keep) / 2
+        x0, x1, y0, y1 = (x - off) / keep, (x + w - off) / keep, y, y + h
+    else:                                    # taller: top and bottom are cut
+        keep = src_aspect / frame_aspect
+        off = (1 - keep) / 2
+        x0, x1, y0, y1 = x, x + w, (y - off) / keep, (y + h - off) / keep
+    cx0, cy0, cx1, cy1 = max(0.0, x0), max(0.0, y0), min(1.0, x1), min(1.0, y1)
+    if cx1 <= cx0 or cy1 <= cy0 or (cx1 - cx0) * (cy1 - cy0) < 0.8 * (x1 - x0) * (y1 - y0):
+        return None
+    return {"x": cx0, "y": cy0, "w": cx1 - cx0, "h": cy1 - cy0}
+
+
+def _r4(b: dict) -> dict:
+    return {k: round(float(b[k]), 4) for k in ("x", "y", "w", "h")}
+
+
+def contains(outer: dict, inner: dict, eps: float = 1e-4) -> bool:
+    return (outer["x"] <= inner["x"] + eps and outer["y"] <= inner["y"] + eps
+            and outer["x"] + outer["w"] >= inner["x"] + inner["w"] - eps
+            and outer["y"] + outer["h"] >= inner["y"] + inner["h"] - eps)
+
+
+def _place_view(keep: dict, z: float, at: Tuple[float, float], target: Tuple[float, float]) -> dict:
+    """
+    A viewport of scale z (a square share of the frame: the frame's own
+    aspect) with `target` at the `at` share of it, then moved just enough to
+    hold `keep` and stay inside the frame.
+    """
+    v = 1.0 / z
+    x = min(max(target[0] - at[0] * v, 0.0), 1.0 - v)
+    y = min(max(target[1] - at[1] * v, 0.0), 1.0 - v)
+    x = max(min(x, keep["x"]), keep["x"] + keep["w"] - v)
+    y = max(min(y, keep["y"]), keep["y"] + keep["h"] - v)
+    x = min(max(x, 0.0), 1.0 - v)
+    y = min(max(y, 0.0), 1.0 - v)
+    return {"x": x, "y": y, "w": v, "h": v}
+
+
+def _composition(keep: dict, eye: Optional[float]) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    """
+    (at, target): the subject's centre on a vertical third when it is off
+    centre (centred when it is central); a face's eye line on the upper third.
+    """
+    cx, cy = keep["x"] + keep["w"] / 2, keep["y"] + keep["h"] / 2
+    at_x = 1 / 3.0 if cx < 0.42 else 2 / 3.0 if cx > 0.58 else 0.5
+    if eye is not None:
+        return (at_x, 1 / 3.0), (cx, eye)
+    return (at_x, 0.5), (cx, cy)
+
+
+def plan_clip(focus: dict, seconds: float, frame_aspect: float, kind: str = "push",
+              transition: str = "") -> Optional[dict]:
+    """
+    A move for one footage scene from its focus, or None when there should be
+    none: {"from", "to", "kind", "subject", "zoom"}, every box in frame
+    coordinates. The subject box (with its margin) is inside both ends, so it
+    is inside every box between them: no frame of the move cuts it.
+    """
+    if not focus or focus.get("kind") not in ("face", "object", "action") or not focus.get("box"):
+        return None
+    m = focus.get("motion") or {}
+    if m.get("moving", True) or m.get("cut") or focus.get("overlay"):
+        return None
+    if max(list((focus.get("bars") or {}).values()) or [0.0]) > 0.02:
+        return None
+    need = {"face": 0.6, "object": 0.55, "action": 0.5}[focus["kind"]]
+    if float(focus.get("confidence") or 0) < max(need, float(config.REFRAME_MIN_CONFIDENCE)):
+        return None
+    if seconds < float(config.REFRAME_MIN_SECONDS):
+        return None
+    cap = scale_cap(focus)
+    if cap < MIN_SCALE:
+        return None
+    src_aspect = float(focus.get("aspect") or frame_aspect)
+    subject = cover_box(focus["box"], src_aspect, frame_aspect)
+    if subject is None:
+        return None
+    pad = MARGIN + 0.08 * max(subject["w"], subject["h"])
+    keep = {"x": max(0.0, subject["x"] - pad), "y": max(0.0, subject["y"] - pad)}
+    keep["w"] = min(1.0, subject["x"] + subject["w"] + pad) - keep["x"]
+    keep["h"] = min(1.0, subject["y"] + subject["h"] + pad) - keep["y"]
+    eye = None
+    if focus["kind"] == "face" and focus.get("eye") is not None:
+        eb = cover_box({"x": 0.0, "y": float(focus["eye"]), "w": 1.0, "h": 1e-3}, src_aspect, frame_aspect)
+        eye = eb["y"] if eb else None
+    at, target = _composition(keep, eye)
+    z = min(cap, 1.0 / max(keep["w"], keep["h"], 1e-6), 1.0 + ZOOM_RATE * seconds)
+    view = None
+    while z >= MIN_SCALE - 1e-9:
+        cand = _place_view(keep, z, at, target)
+        travel = math.hypot(cand["x"] + cand["w"] / 2 - 0.5, cand["y"] + cand["h"] / 2 - 0.5)
+        if travel / max(seconds, 0.1) <= PAN_RATE and contains(cand, keep):
+            view = cand
+            break
+        z -= 0.01
+    if view is None:
+        return None
+    if kind == "pull" and transition in ZOOM_ENTRANCES:
+        kind = "push"
+    if kind == "drift":
+        drift = _drift(keep, z, at, target, seconds)
+        if drift:
+            return drift
+        kind = "push"
+    out = {"kind": kind if kind == "pull" else "push", "subject": _r4(keep), "zoom": round(z, 3)}
+    if kind == "pull":
+        out.update({"from": _r4(view), "to": dict(FULL)})
+    else:
+        out.update({"from": dict(FULL), "to": _r4(view)})
+    return out
+
+
+def _drift(keep: dict, z: float, at, target, seconds: float) -> Optional[dict]:
+    """A slow lateral reframe at a fixed scale that ends with the subject on its third; None without room."""
+    z_d = min(z, 1.12)
+    if z_d < MIN_SCALE:
+        return None
+    v = 1.0 / z_d
+    end = _place_view(keep, z_d, at, target)
+    # Start where the subject sits on the opposite side of the viewport.
+    lo, hi = max(0.0, keep["x"] + keep["w"] - v), min(1.0 - v, keep["x"])
+    start_x = lo if abs(lo - end["x"]) >= abs(hi - end["x"]) else hi
+    travel = abs(start_x - end["x"])
+    if travel < 0.04:
+        return None
+    if travel / seconds > PAN_RATE:
+        start_x = end["x"] + math.copysign(PAN_RATE * seconds, start_x - end["x"])
+        if abs(start_x - end["x"]) < 0.04:
+            return None
+    start = {"x": start_x, "y": end["y"], "w": v, "h": v}
+    if not (contains(start, keep) and contains(end, keep)):
+        return None
+    return {"from": _r4(start), "to": _r4(end), "kind": "drift", "subject": _r4(keep), "zoom": round(z_d, 3)}
+
+
+def bezier(t: float, x1: float = 0.45, y1: float = 0.05, x2: float = 0.55, y2: float = 0.95) -> float:
+    """CSS cubic-bezier(x1, y1, x2, y2) at t: Remotion's Easing.bezier, the stills' gentle ease in and out."""
+    if t <= 0 or t >= 1:
+        return min(1.0, max(0.0, t))
+    lo, hi = 0.0, 1.0
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        x = 3 * (1 - mid) ** 2 * mid * x1 + 3 * (1 - mid) * mid ** 2 * x2 + mid ** 3
+        lo, hi = (mid, hi) if x < t else (lo, mid)
+    s = (lo + hi) / 2
+    return 3 * (1 - s) ** 2 * s * y1 + 3 * (1 - s) * s ** 2 * y2 + s ** 3
+
+
+def box_at(move: dict, progress: float) -> dict:
+    """
+    The viewport at `progress` (0..1) of a move, eased and interpolated
+    exactly as the renderer does it (remotion/src/components/reframe.ts).
+    """
+    e = bezier(min(1.0, max(0.0, progress)))
+    a, b = move["from"], move["to"]
+    return {k: a[k] + (b[k] - a[k]) * e for k in ("x", "y", "w", "h")}
+
+
+def aim_still(focus: dict, frame_aspect: float) -> Optional[dict]:
+    """The subject box (frame coordinates, with a little room) a still's own motion is aimed at, or None."""
+    if not focus or focus.get("kind") not in ("face", "object") or not focus.get("box"):
+        return None
+    if float(focus.get("confidence") or 0) < 0.5:
+        return None
+    s = cover_box(focus["box"], float(focus.get("aspect") or frame_aspect), frame_aspect)
+    if s is None or s["w"] * s["h"] > 0.6:
+        return None                     # a "subject" filling the picture is no aim at all
+    pad = 0.02
+    x0, y0 = max(0.0, s["x"] - pad), max(0.0, s["y"] - pad)
+    x1, y1 = min(1.0, s["x"] + s["w"] + pad), min(1.0, s["y"] + s["h"] + pad)
+    return _r4({"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0})
+
+
+# --------------------------------------------------------------------------- #
+# The pass over a document
+# --------------------------------------------------------------------------- #
+
+def _local(url: str) -> bool:
+    return bool(url) and not str(url).startswith(("http://", "https://")) and os.path.isfile(url)
+
+
+def shown_seconds(scene: dict, fps: float) -> float:
+    """How much of its clip file a scene plays (SceneClip slows a short clip to fill, never below 0.6x)."""
+    scene_s = int(scene.get("durationInFrames") or 0) / float(fps or 30)
+    clip = float((scene.get("media") or {}).get("clipSeconds") or 0)
+    if clip <= 0 or clip >= scene_s:
+        return scene_s
+    return min(clip, scene_s * max(0.6, clip / scene_s))
+
+
+def _anchored_spans(doc: dict) -> List[Tuple[int, int]]:
+    """Frames under a graphic placed ON the picture (a mark's arrow, a callout's point): never reframed under it."""
+    out = []
+    for ov in doc.get("overlays") or []:
+        if isinstance(ov, dict) and (ov.get("anchor") or ov.get("labelPosition")):
+            s = int(ov.get("startFrame") or 0)
+            out.append((s, s + int(ov.get("durationInFrames") or 0)))
+    return out
+
+
+def _plain(v):
+    """Numpy scalars and arrays as plain JSON values (the document is saved as JSON)."""
+    if isinstance(v, dict):
+        return {str(k): _plain(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_plain(x) for x in v]
+    if np is not None and isinstance(v, np.ndarray):
+        return _plain(v.tolist())
+    if np is not None and isinstance(v, np.generic):
+        return v.item()
+    return v
+
+
+def _compact(focus: dict) -> dict:
+    """What the document keeps of a detection (small: it is saved with every timeline)."""
+    f = _plain(focus)
+    keep = {}
+    for k in ("box", "kind", "confidence", "faces", "eye", "faceBoxes", "overlay", "lines", "srcLines", "aspect",
+              "why"):
+        v = f.get(k)
+        if v is None or (isinstance(v, (str, list, dict)) and not v):
+            continue
+        keep[k] = v
+    m = f.get("motion")
+    if isinstance(m, dict):
+        keep["motion"] = {k: m.get(k) for k in ("moving", "pan", "panRate", "zoom", "shake", "cut")}
+    return keep
+
+
+def _seed(scene: dict) -> int:
+    return int(hashlib.md5(str(scene.get("id") or "").encode()).hexdigest()[:8], 16)
+
+
+def place(doc: dict, deadline_seconds: float = 0.0, detect_clip_fn=None, detect_still_fn=None) -> Dict[str, object]:
+    """
+    Detect, plan and write media.focus / media.reframe for a document whose
+    media are still local files. Time-boxed (REFRAME_SECONDS), parallel
+    (REFRAME_PARALLEL); never raises. Returns counts for doc.meta.reframe.
+    """
+    if not config.REFRAME_ENABLED or np is None:
+        return {}
+    t0 = time.time()
+    stats: Dict[str, object] = {"clips": 0, "stills": 0, "detected": 0, "moved": 0, "aimed": 0, "skippedTime": 0,
+                                "kinds": {}, "why": {}}
+    try:
+        return _place(doc, t0, deadline_seconds or float(config.REFRAME_SECONDS), stats,
+                      detect_clip_fn or detect_clip, detect_still_fn or detect_still)
+    except Exception as e:  # noqa: BLE001 - a nicety, never a failure
+        print(f"[reframe] skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+        stats["error"] = f"{type(e).__name__}: {str(e)[:160]}"
+        return stats
+
+
+def _place(doc: dict, t0: float, budget: float, stats: dict, detect_clip_fn, detect_still_fn) -> dict:
+    fps = float(doc.get("fps") or 30)
+    fa = float(doc.get("width") or 1920) / float(doc.get("height") or 1080)
+    scenes = [s for s in (doc.get("scenes") or []) if isinstance(s, dict)]
+    anchored = _anchored_spans(doc)
+    why: Dict[str, int] = {}
+
+    def skip(reason: str) -> None:
+        why[reason] = why.get(reason, 0) + 1
+
+    try:
+        from . import upscale
+        framed = upscale.is_framed
+    except Exception:  # noqa: BLE001
+        framed = lambda _p: False  # noqa: E731
+    tasks = []
+    for i, s in enumerate(scenes):
+        m = s.get("media")
+        if not isinstance(m, dict) or m.get("reframe") or s.get("reframe") is not None:
+            continue                    # planned already, or the editor's own choice
+        if (s.get("frame") or "full") != "full" or not _local(m.get("url") or ""):
+            continue
+        seconds = int(s.get("durationInFrames") or 0) / fps
+        if m.get("type") == "video":
+            if not config.REFRAME_CLIPS:
+                skip("clips off for this style")
+            elif seconds < float(config.REFRAME_MIN_SECONDS):
+                skip("short shot")
+            elif is_news(m):
+                skip("news footage")
+            elif framed(m["url"]):
+                skip("vertical clip framed on its blur")
+            elif any(a < int(s.get("startFrame") or 0) + int(s.get("durationInFrames") or 0)
+                     and int(s.get("startFrame") or 0) < b for a, b in anchored):
+                skip("a graphic points into it")
+            else:
+                tasks.append(("clip", i, m["url"], shown_seconds(s, fps)))
+        elif m.get("type") == "image" and config.REFRAME_STILLS:
+            motion = s.get("motion") or "none"
+            if motion == "parallax" or (motion == "none" and s.get("effect") != "ken-burns"):
+                continue                # the whole picture shows, or it is held still
+            tasks.append(("still", i, m["url"], seconds))
+    stats["clips"] = sum(1 for t in tasks if t[0] == "clip")
+    stats["stills"] = sum(1 for t in tasks if t[0] == "still")
+    if not tasks:
+        stats["why"] = why
+        return stats
+    # Stills first (cheap, and most of them get an aim), then the longest
+    # shots (the likeliest to take a move) - what the time box cuts is the least.
+    tasks.sort(key=lambda t: (t[0] != "still", -t[3]))
+    deadline = t0 + budget
+    found: Dict[int, dict] = {}
+
+    def run(task):
+        kind, i, path, secs = task
+        if time.time() > deadline:
+            return i, None, True
+        try:
+            f = detect_clip_fn(path, secs) if kind == "clip" else detect_still_fn(path)
+        except Exception as e:  # noqa: BLE001 - one unreadable file is "no focus"
+            print(f"[reframe] scene {i + 1}: {type(e).__name__}: {str(e)[:100]}", flush=True)
+            f = None
+        return i, f, False
+
+    pool = ThreadPoolExecutor(max_workers=max(1, int(config.REFRAME_PARALLEL)), thread_name_prefix="reframe")
+    futures = [pool.submit(run, t) for t in tasks]
+    from concurrent.futures import wait
+    done, pending = wait(futures, timeout=max(1.0, deadline - time.time() + 5.0))
+    pool.shutdown(wait=False, cancel_futures=True)
+    stats["skippedTime"] = len(pending)
+    for fut in done:
+        i, f, late = fut.result()
+        if late:
+            stats["skippedTime"] = int(stats["skippedTime"]) + 1
+        elif f:
+            found[i] = f
+    stats["detected"] = len(found)
+
+    # Clips: a move where it is safe and worth it, spread out.
+    moves: Dict[int, dict] = {}
+    for i, f in found.items():
+        s = scenes[i]
+        m = s["media"]
+        m["focus"] = _compact(f)
+        if m.get("type") != "video":
+            continue
+        seconds = int(s.get("durationInFrames") or 0) / fps
+        plan = plan_clip(f, seconds, fa, "push", str(s.get("transition") or ""))
+        if plan:
+            moves[i] = plan
+        else:
+            skip(f.get("why") or ("no clear subject" if f.get("kind") in ("none", None) else "not safe or too small"))
+    eligible = sorted(moves, key=lambda i: (-(float(found[i].get("confidence") or 0) * (moves[i]["zoom"] - 1)), i))
+    cap = max(1, int(math.ceil(float(config.REFRAME_SHARE) * len(eligible)))) if eligible else 0
+    chosen: List[int] = []
+    for i in eligible:
+        if len(chosen) >= cap:
+            skip("variety")
+            continue
+        if any(abs(i - j) <= 1 for j in chosen):
+            skip("next to another move")
+            continue
+        chosen.append(i)
+    kinds: Dict[str, int] = {}
+    for n, i in enumerate(sorted(chosen)):
+        s = scenes[i]
+        m = s["media"]
+        seconds = int(s.get("durationInFrames") or 0) / fps
+        want = KINDS[(n + _seed(s)) % len(KINDS)]
+        plan = plan_clip(found[i], seconds, fa, want, str(s.get("transition") or "")) or moves[i]
+        m["reframe"] = {"from": plan["from"], "to": plan["to"], "kind": plan["kind"], "subject": plan["subject"],
+                        "zoom": plan["zoom"], "aspect": round(fa, 4), "seconds": round(seconds, 2),
+                        "source": str(m.get("source") or ""), "by": "auto"}
+        kinds[plan["kind"]] = kinds.get(plan["kind"], 0) + 1
+    stats["moved"] = len(chosen)
+    stats["kinds"] = kinds
+
+    # Stills: their own motion, aimed at the subject.
+    for i, f in found.items():
+        s = scenes[i]
+        m = s["media"]
+        if m.get("type") != "image":
+            continue
+        subject = aim_still(f, fa)
+        if subject:
+            m["reframe"] = {"subject": subject, "aspect": round(fa, 4), "source": str(m.get("source") or ""),
+                            "by": "auto"}
+            stats["aimed"] = int(stats["aimed"]) + 1
+    stats["why"] = why
+    stats["seconds"] = round(time.time() - t0, 1)
+    print(f"[reframe] {stats['moved']} clip move(s) {kinds}, {stats['aimed']} still(s) aimed; "
+          f"{stats['detected']}/{len(tasks)} looked at in {stats['seconds']}s"
+          f"{' (' + str(stats['skippedTime']) + ' skipped for time)' if stats['skippedTime'] else ''}", flush=True)
+    return stats
