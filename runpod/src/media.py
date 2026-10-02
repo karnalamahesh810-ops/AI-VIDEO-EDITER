@@ -1622,7 +1622,13 @@ _MOTION_LOCK = threading.Lock()
 
 def _motion_weight(hook: Optional[bool] = None) -> float:
     w = max(0.0, float(config.MOTION_PREFERENCE or 0.0))
-    return w * (2.0 if (_IN_HOOK.get() if hook is None else hook) else 1.0)
+    in_hook = _IN_HOOK.get() if hook is None else hook
+    if in_hook and getattr(config, "HOOK_BOOST", False):
+        # The hook booster (src/hookboost.py): the opening prefers footage that
+        # moves even where MOTION_PREFERENCE is 0.
+        from . import hookboost
+        w = max(w, hookboost.motion_weight())
+    return w * (2.0 if in_hook else 1.0)
 
 
 def motion_rejects(path: str) -> str:
@@ -2124,8 +2130,16 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
     def rank(a: MediaAsset) -> float:
         # The combined score when the pool computed one; the judge's appeal
         # (relevance first, quality second) for clips found the old way.
-        return a.final_score if a.final_score is not None else vision.appeal(a.relevance_score, a.quality)
+        base = a.final_score if a.final_score is not None else vision.appeal(a.relevance_score, a.quality)
+        if hook_boost:
+            # The hook booster: a near-tie goes to the clip with more scale,
+            # people and action (a small, bounded bonus - relevance still leads).
+            base += hookboost.rank_bonus(a)
+        return base
 
+    hook_boost = bool(_IN_HOOK.get() and getattr(config, "HOOK_BOOST", False))
+    if hook_boost:
+        from . import hookboost
     ranked = sorted(passed, key=rank, reverse=True)
     winner, losers = ranked[0], ranked[1:]
     keep_files = bool(_KEEP_ALT_FILES.get())

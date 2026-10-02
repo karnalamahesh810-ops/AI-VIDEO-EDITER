@@ -1016,6 +1016,32 @@ COMING_SHOTS = _flag("COMING_SHOTS", False)
 # HOOK_INTENSITY: the opening asks for the most dramatic real footage of the
 # event (water over roads and seawalls, cars in water, waves, rescues).
 HOOK_INTENSITY = _flag("HOOK_INTENSITY", False)
+# HOOK_BOOST (src/hookboost.py): the first HOOK_BOOST_SECONDS cut and dressed
+# like a top documentary's opening. Before the shots are planned, a beat there
+# longer than HOOK_BOOST_SPLIT_OVER is cut into 2-3 shots of HOOK_BOOST_MIN_SHOT
+# to HOOK_BOOST_MAX_SHOT seconds on word boundaries, each sourced and judged like
+# any beat; the hook's picks lean toward footage that moves and shows scale,
+# people and action (HOOK_BOOST_MOTION, HOOK_BOOST_DRAMA - bounded, relevance
+# still leads); stills and static clips get a slow push-in; the first
+# HOOK_BOOST_SFX_CUTS cuts get a soft whoosh at the owner's sound level; no text
+# graphic in the first HOOK_BOOST_QUIET_SECONDS unless it is a date or number the
+# planner must show. Off = the video is cut exactly as before.
+HOOK_BOOST = _flag("HOOK_BOOST", False)
+HOOK_BOOST_SECONDS = float(os.getenv("HOOK_BOOST_SECONDS", "30"))
+HOOK_BOOST_SPLIT_OVER = float(os.getenv("HOOK_BOOST_SPLIT_OVER", "3.5"))
+HOOK_BOOST_MIN_SHOT = float(os.getenv("HOOK_BOOST_MIN_SHOT", "1.8"))
+HOOK_BOOST_MAX_SHOT = float(os.getenv("HOOK_BOOST_MAX_SHOT", "3.0"))
+HOOK_BOOST_MOTION = float(os.getenv("HOOK_BOOST_MOTION", "0.04"))
+HOOK_BOOST_DRAMA = float(os.getenv("HOOK_BOOST_DRAMA", "0.05"))
+HOOK_BOOST_QUIET_SECONDS = float(os.getenv("HOOK_BOOST_QUIET_SECONDS", "5"))
+HOOK_BOOST_SFX_CUTS = int(os.getenv("HOOK_BOOST_SFX_CUTS", "3"))
+# HOOK_TEASER: a cold open - HOOK_TEASER_SHOTS one-second flashes of the video's
+# most striking LATER shots under the first line, only when that line is a hook
+# question or statement. A flashed shot shows again at its own line (that is the
+# point of a teaser) and nowhere else. Off by default.
+HOOK_TEASER = _flag("HOOK_TEASER", False)
+HOOK_TEASER_SHOTS = int(os.getenv("HOOK_TEASER_SHOTS", "3"))
+HOOK_TEASER_SECONDS = float(os.getenv("HOOK_TEASER_SECONDS", "1.0"))
 # MOTION_PREFERENCE: weight of measured on-screen motion (4 frames at 160 px of
 # the cut clip) in picking between clips that passed the judge; a frozen
 # shot or a slideshow is turned down. Doubled in the hook. 0 = off.

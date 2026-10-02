@@ -164,6 +164,8 @@ class Shot:
 
     @classmethod
     def of_scene(cls, scene: dict, fps: int) -> Optional["Shot"]:
+        if scene.get("teaser"):
+            return None         # a cold-open flash (src/hookboost.py): the shot's own line is its use
         m = scene.get("media") or {}
         if m.get("type") not in ("video", "image") or not m.get("url"):
             return None
