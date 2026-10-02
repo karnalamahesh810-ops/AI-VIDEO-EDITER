@@ -458,6 +458,16 @@ def black_bars(frames: list) -> Dict[str, float]:
     out["right"] = run(dark_c[::-1]) / w
     out["top"] = run(dark_r) / h
     out["bottom"] = run(dark_r[::-1]) / h
+    # A picture framed on a blurred copy of itself (a phone clip or a 4:3
+    # loop pillarboxed by its uploader, or upscale.frame_vertical): the side
+    # panels have almost no fine detail next to the sharp band.
+    if not out["left"] and not out["right"]:
+        f = frames[len(frames) // 2]
+        lap = np.abs(np.diff(_gray(f), n=2, axis=1))
+        side = max(4, int(w * 0.12))
+        centre = float(lap[:, int(w * 0.3):int(w * 0.7)].mean())
+        if centre > 2.0 and max(float(lap[:, :side].mean()), float(lap[:, -side:].mean())) < 0.12 * centre:
+            out["left"] = out["right"] = 0.12
     return {k: round(v, 3) for k, v in out.items()}
 
 
@@ -844,8 +854,13 @@ def burned_overlay(frames: list, grays: Optional[list] = None) -> bool:
     if not frames:
         return False
     picks = frames[:: max(1, len(frames) // 4)][:4]
-    found = [text_bands(_resize(p, MOTION_W, max(8, int(round(MOTION_W * p.shape[0] / float(p.shape[1]))))))
-             for p in picks]
+    # At two sizes: big lettering (a name title, a creator's captions) is too
+    # sparse per row at 640 px, a thin caption line (a satellite loop's
+    # credit, a ticker) only two rows tall at 320. Bands in 320-px rows.
+    found = []
+    for p in picks:
+        small = _resize(p, MOTION_W, max(8, int(round(MOTION_W * p.shape[0] / float(p.shape[1])))))
+        found.append(text_bands(small) + [(a // 2, b // 2) for a, b in text_bands(p)])
     for k, bands in enumerate(found):
         for a0, b0 in bands:
             again = sum(1 for other in found[k + 1:] if any(a1 <= b0 + 2 and a0 <= b1 + 2 for a1, b1 in other))
@@ -867,10 +882,12 @@ def burned_overlay(frames: list, grays: Optional[list] = None) -> bool:
 
 def effective_lines(g) -> int:
     """
-    The picture's real detail, in lines: where its spectrum falls to the
-    noise floor. A 720p clip upscaled to 1080 (or a soft phone video) has
-    nothing above 720/1080 of the file's Nyquist frequency, however many
-    pixels the file has. 0 when it cannot be told.
+    The picture's real detail, in lines. A natural picture's spectrum falls
+    off steadily (about 1/f^2 in power) all the way to the file's Nyquist
+    frequency; a 720p clip upscaled to 1080, or a soft phone video, follows
+    that line only up to its real resolution and then drops off a cliff. So:
+    fit the line on the low band every source has, and find where the power
+    falls 10 dB under it for good. 0 when it cannot be told.
     """
     if g is None:
         return 0
@@ -879,24 +896,32 @@ def effective_lines(g) -> int:
     y0, x0 = (h - side) // 2, (w - side) // 2
     a = g[y0:y0 + side, x0:x0 + side].astype(np.float32)
     a -= a.mean()
+    if float(a.std()) < 1.0:
+        return 0                                                 # a flat frame: nothing to measure
     win = np.outer(np.hanning(side), np.hanning(side)).astype(np.float32)
-    p = np.abs(np.fft.fftshift(np.fft.fft2(a * win))) ** 2
-    yy, xx = np.indices(p.shape)
-    r = np.hypot(yy - side / 2, xx - side / 2) / side            # cycles per pixel, 0..~0.7
-    bins = np.clip((r / 0.5 * 64).astype(int), 0, 80)
-    radial = np.bincount(bins.ravel(), p.ravel()) / np.maximum(np.bincount(bins.ravel()), 1)
-    radial = radial[:64]
-    if radial[1:8].mean() <= 0:
-        return 0
-    floor = float(np.median(radial[58:64]))
-    lr = np.log10(radial[1:] + 1e-12)
-    ref = float(np.log10(floor + 1e-12))
-    # The highest frequency still clearly (6 dB+) above the floor.
-    above = np.where(lr > ref + 0.6)[0]
-    if not len(above):
-        return 0
-    cutoff = (int(above.max()) + 2) / 64.0 * 0.5               # cycles per pixel
-    return int(round(min(1.0, cutoff / 0.5) * min(h, w)))
+    p = np.abs(np.fft.fft2(a * win)) ** 2
+    fy = np.fft.fftfreq(side)[:, None]
+    fx = np.fft.fftfreq(side)[None, :]
+    r = np.hypot(fy, fx)                                         # cycles per pixel
+    bins = np.clip((r * 128).astype(int), 0, 127)
+    radial = (np.bincount(bins.ravel(), p.ravel(), minlength=128)
+              / np.maximum(np.bincount(bins.ravel(), minlength=128), 1))[:64]
+    freqs = (np.arange(64) + 0.5) / 128.0
+    lp = np.log10(np.convolve(radial, np.ones(3) / 3, mode="same") + 1e-9)
+    ref = (freqs > 0.03) & (freqs < 0.12)
+    slope, icpt = np.polyfit(np.log10(freqs[ref]), lp[ref], 1)
+    if slope > -0.8:
+        return int(min(h, w))                                    # grain or texture to the limit
+    if slope < -3.3:
+        # Soft already in the low band (measured: a blurry old upload -4.6,
+        # a pillarboxed archive clip -5.9; sharp footage -2.0 to -2.7).
+        return int(round(0.45 * min(h, w)))
+    under = (lp < icpt + slope * np.log10(freqs) - 1.0) & (freqs > 0.12)
+    # The first frequency from which it stays under (two bins in a row).
+    for k in range(len(freqs) - 1):
+        if under[k] and under[k + 1]:
+            return int(round(min(1.0, freqs[k] / 0.5) * min(h, w)))
+    return int(min(h, w))
 
 
 def _focus_of(motion: Optional[dict], grays: Optional[list], picks: list) -> dict:
@@ -1015,8 +1040,13 @@ def detect_clip(path: str, shown: float, timeout: float = 30.0) -> Optional[dict
     grays = [_resize(_gray(f).astype(np.uint8), MOTION_W, MOTION_H).astype(np.float32) for f in frames]
     motion = camera_motion(grays, 1.0 / fps)
     bars = black_bars(frames)
+    try:
+        from . import upscale
+        before = upscale.original_lines(path)           # sharpened up to 1080 from this many
+    except Exception:  # noqa: BLE001
+        before = 0
     focus: Dict[str, object] = {"motion": motion, "overlay": burned_overlay(frames, grays), "bars": bars,
-                                "srcLines": min(w, h), "aspect": round(w / float(h), 4)}
+                                "srcLines": min(w, h, before or min(w, h)), "aspect": round(w / float(h), 4)}
     # A clip that can never take a move (the camera moves, a cut, a station
     # logo, letterbox bars) is not looked at any further: most of a drone-
     # heavy documentary, and the time box is shared.
@@ -1105,6 +1135,8 @@ def scale_cap(focus: dict) -> float:
     if lines < 500 or src < 480:
         return 0.0
     cap = 1.2 if lines >= 800 and src >= 1000 else 1.15 if lines >= 650 else 1.1
+    if src < 600:
+        cap = min(cap, 1.1)            # SD sharpened up to 1080: the gentlest push only
     return min(cap, float(config.REFRAME_MAX_SCALE))
 
 
