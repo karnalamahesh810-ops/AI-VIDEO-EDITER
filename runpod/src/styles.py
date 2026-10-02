@@ -61,7 +61,9 @@ STYLES: Dict[str, dict] = {
                    # News shows what happened: never an AI-generated picture.
                    "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False,
                    "EYEWITNESS_SEARCHES": True, "REGION_BLOCKS": True, "CHAIN_SHOTS": True,
-                   "MOTION_PREFERENCE": 0.08, "RECENT_FOOTAGE_FIRST": True, "POOL_JUDGE_CLIPS": True},
+                   "MOTION_PREFERENCE": 0.08, "RECENT_FOOTAGE_FIRST": True, "POOL_JUDGE_CLIPS": True,
+                   # News clips as shot: never pushed or cropped (the owner, src/reframe.py).
+                   "REFRAME_CLIPS": False},
     },
     "nature_weather": {
         "label": "Nature & Weather",
@@ -86,15 +88,16 @@ STYLES: Dict[str, dict] = {
                    "MOTION_PREFERENCE": 0.12, "POOL_JUDGE_CLIPS": True,
                    # Dates are the only graphics (the date look is the renderer's).
                    "MARKS_ENABLED": False,
-                   # Real photos held still, as the reference shows them (no zoom or pan).
-                   "STILL_MOTION": "none"},
+                   # Real photos held still, as the reference shows them (no zoom or pan),
+                   # and its eyewitness/news clips as shot (src/reframe.py).
+                   "STILL_MOTION": "none", "REFRAME_CLIPS": False},
     },
     "trending_news": {
         "label": "Trending news",
         "transitions": "trending", "graphics": "normal",
         "config": {"MIN_SCENE_SECONDS": 3.0, "TARGET_SCENE_SECONDS": 5.0, "MAX_SCENE_SECONDS": 9.0,
                    "ALLOW_VERTICAL": True, "NEWS_FOOTAGE": True,
-                   "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False},
+                   "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False, "REFRAME_CLIPS": False},
     },
     "story": {
         "label": "Story narration",

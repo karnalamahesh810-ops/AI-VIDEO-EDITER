@@ -756,11 +756,6 @@ def action_map(grays: list, grid_w: int = 80):
 # Burned-in logos, chyrons and tickers (never cropped: the owner's rule)
 # --------------------------------------------------------------------------- #
 
-def _text_rows(g) -> list:
-    edges = np.abs(np.diff(g.astype(np.int16), axis=1)) > 48
-    return [i for i, c in enumerate(edges.sum(axis=1)) if c > g.shape[1] * 0.12]
-
-
 def _longest_run(rows: list) -> int:
     run = best = 1 if rows else 0
     for a, b in zip(rows, rows[1:]):
@@ -769,29 +764,99 @@ def _longest_run(rows: list) -> int:
     return best
 
 
-def burned_overlay(grays: list) -> bool:
+def text_bands(rgb) -> List[Tuple[int, int]]:
     """
-    A station bug, chyron, ticker or caption band: text-like rows near the
-    top or bottom that stay put across the frames, or a static corner logo
-    over a moving picture (filters._corner_watermark).
+    Rows of a frame that read as lines of lettering: dense with letter strokes
+    (vertical edges in ANY colour channel - orange captions on grey gravel
+    have almost no luma edge), a few rows tall, with quiet rows around them.
     """
+    a = rgb.astype(np.int16)
+    dens = (np.abs(np.diff(a, axis=1)).max(axis=2) > 48).mean(axis=1)
+    h = len(dens)
+    texty = np.nonzero(dens > 0.12)[0]
+    bands, out = [], []
+    for r in texty:
+        if bands and r - bands[-1][1] <= 2:
+            bands[-1][1] = r
+        else:
+            bands.append([r, r])
+    for a0, b0 in bands:
+        tall = b0 - a0 + 1
+        if tall < 3 or tall > 0.15 * h:
+            continue
+        around = np.concatenate([dens[max(0, a0 - 4):a0], dens[b0 + 1:b0 + 5]])
+        if around.size and float(around.mean()) > 0.45 * float(dens[a0:b0 + 1].mean()):
+            continue                    # texture that goes on: a fence, a forest, a cliff
+        out.append((int(a0), int(b0)))
+    return out
+
+
+_LOGO_PROMPTS = ["a TV channel logo", "a watermark logo", "a round emblem badge",
+                 "a small logo in the corner of a video", "white text", "a news channel logo"]
+_CORNER_SCENE = ["rocks", "a canyon wall", "water", "the sky", "clouds", "trees", "a road", "sand", "a building",
+                 "a person", "a mountain", "grass", "a car", "a boat", "a dam", "dirt"]
+CORNER_W, CORNER_H = 0.22, 0.30
+LOGO_SHARE = 0.5
+
+
+def corner_logos(rgb) -> List[dict]:
+    """
+    Corners of a frame that hold a channel bug or watermark (local CLIP:
+    the corner reads as a logo rather than as scenery), as source boxes. On
+    a locked-off shot a logo cannot be told from the scene by motion, and a
+    push would slide it half out of the frame; a move keeps these corners
+    whole instead (plan_clip). Measured on the Lake Powell clips: the real
+    bugs scored 0.51-0.97, clean corners up to 0.70 - so a clean corner is
+    sometimes kept too, which only makes a move smaller.
+    """
+    try:
+        from . import localvision
+        if not localvision.available():
+            return []
+        from PIL import Image
+        im = Image.fromarray(rgb)
+        W, H = im.size
+        cw, ch = int(W * CORNER_W), int(H * CORNER_H)
+        boxes = {(0.0, 0.0): (0, 0, cw, ch), (1 - CORNER_W, 0.0): (W - cw, 0, W, ch),
+                 (0.0, 1 - CORNER_H): (0, H - ch, cw, H), (1 - CORNER_W, 1 - CORNER_H): (W - cw, H - ch, W, H)}
+        prompts = _LOGO_PROMPTS + [f"a photo of {p}" for p in _CORNER_SCENE]
+        with localvision._RUN:
+            emb = localvision.embed_images([im.crop(b) for b in boxes.values()])
+            logits = 100.0 * emb @ localvision.embed_texts(prompts).T
+        logits -= logits.max(axis=1, keepdims=True)
+        p = np.exp(logits)
+        p /= p.sum(axis=1, keepdims=True)
+        share = p[:, :len(_LOGO_PROMPTS)].sum(axis=1)
+    except Exception as e:  # noqa: BLE001 - no CLIP: only the motion check below the clip finds logos
+        print(f"[reframe] corner check skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+        return []
+    return [{"x": x, "y": y, "w": CORNER_W, "h": CORNER_H, "share": round(float(s), 3)}
+            for (x, y), s in zip(boxes, share) if s >= LOGO_SHARE]
+
+
+def burned_overlay(frames: list, grays: Optional[list] = None) -> bool:
+    """
+    Somebody else's graphics on the picture - a station bug, chyron, ticker,
+    a creator's captions: lines of lettering at the same rows in at least two
+    of the sampled frames, or a static corner logo over a moving picture
+    (filters._corner_watermark). Such a clip is never cropped (the owner).
+    """
+    if not frames:
+        return False
+    picks = frames[:: max(1, len(frames) // 4)][:4]
+    found = [text_bands(_resize(p, MOTION_W, max(8, int(round(MOTION_W * p.shape[0] / float(p.shape[1]))))))
+             for p in picks]
+    for k, bands in enumerate(found):
+        for a0, b0 in bands:
+            again = sum(1 for other in found[k + 1:] if any(a1 <= b0 + 2 and a0 <= b1 + 2 for a1, b1 in other))
+            if again >= 1:
+                return True
     if not grays:
         return False
-    hits = 0
-    for g in grays[:: max(1, len(grays) // 4)][:4]:
-        h = g.shape[0]
-        rows = _text_rows(g)
-        low = [r for r in rows if r >= h * 0.66]
-        top = [r for r in rows if r <= h * 0.14]
-        if _longest_run(low) >= 3 or _longest_run(top) >= 3:
-            hits += 1
-    sampled = len(grays[:: max(1, len(grays) // 4)][:4])
-    if hits >= max(2, (sampled + 1) // 2):
-        return True
     try:
         from .filters import _corner_watermark
-        picks = grays[:: max(1, len(grays) // 5)][:5]
-        return bool(len(picks) >= 3 and _corner_watermark([p.astype(np.uint8) for p in picks], np))
+        gp = grays[:: max(1, len(grays) // 5)][:5]
+        return bool(len(gp) >= 3 and _corner_watermark([g.astype(np.uint8) for g in gp], np))
     except Exception:  # noqa: BLE001
         return False
 
@@ -950,7 +1015,7 @@ def detect_clip(path: str, shown: float, timeout: float = 30.0) -> Optional[dict
     grays = [_resize(_gray(f).astype(np.uint8), MOTION_W, MOTION_H).astype(np.float32) for f in frames]
     motion = camera_motion(grays, 1.0 / fps)
     bars = black_bars(frames)
-    focus: Dict[str, object] = {"motion": motion, "overlay": burned_overlay(grays), "bars": bars,
+    focus: Dict[str, object] = {"motion": motion, "overlay": burned_overlay(frames, grays), "bars": bars,
                                 "srcLines": min(w, h), "aspect": round(w / float(h), 4)}
     # A clip that can never take a move (the camera moves, a cut, a station
     # logo, letterbox bars) is not looked at any further: most of a drone-
@@ -962,7 +1027,12 @@ def detect_clip(path: str, shown: float, timeout: float = 30.0) -> Optional[dict
         return focus
     picks = [frames[0], frames[len(frames) // 2], frames[-1]]
     focus.update(_focus_of(motion, grays, picks))
-    focus["lines"] = effective_lines(_full_gray(path, shown / 2.0, w, h))
+    if focus.get("kind") in ("face", "object", "action"):
+        # Only a clip that may take a move pays for these two.
+        logos = corner_logos(picks[1])
+        if logos:
+            focus["logos"] = logos
+        focus["lines"] = effective_lines(_full_gray(path, shown / 2.0, w, h))
     focus["seconds"] = round(time.time() - t0, 2)
     return focus
 
@@ -1133,6 +1203,16 @@ def plan_clip(focus: dict, seconds: float, frame_aspect: float, kind: str = "pus
     keep = {"x": max(0.0, subject["x"] - pad), "y": max(0.0, subject["y"] - pad)}
     keep["w"] = min(1.0, subject["x"] + subject["w"] + pad) - keep["x"]
     keep["h"] = min(1.0, subject["y"] + subject["h"] + pad) - keep["y"]
+    # A corner logo stays whole (never pushed half out of the frame): it is
+    # kept like the subject, which anchors the move at its corner or, when
+    # the subject is across the frame, leaves no room for one.
+    for logo in focus.get("logos") or []:
+        lb = cover_box(logo, src_aspect, frame_aspect)
+        if lb:
+            x0, y0 = min(keep["x"], lb["x"]), min(keep["y"], lb["y"])
+            x1 = max(keep["x"] + keep["w"], lb["x"] + lb["w"])
+            y1 = max(keep["y"] + keep["h"], lb["y"] + lb["h"])
+            keep = {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}
     eye = None
     if focus["kind"] == "face" and focus.get("eye") is not None:
         eb = cover_box({"x": 0.0, "y": float(focus["eye"]), "w": 1.0, "h": 1e-3}, src_aspect, frame_aspect)
@@ -1269,8 +1349,8 @@ def _compact(focus: dict) -> dict:
     """What the document keeps of a detection (small: it is saved with every timeline)."""
     f = _plain(focus)
     keep = {}
-    for k in ("box", "kind", "confidence", "faces", "eye", "faceBoxes", "overlay", "lines", "srcLines", "aspect",
-              "why"):
+    for k in ("box", "kind", "confidence", "faces", "eye", "faceBoxes", "logos", "overlay", "lines", "srcLines",
+              "aspect", "why"):
         v = f.get(k)
         if v is None or (isinstance(v, (str, list, dict)) and not v):
             continue

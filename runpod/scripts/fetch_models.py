@@ -5,6 +5,9 @@ Bake the local models into the image (run once at docker build).
   src/localvision.py - ~150 MB.
 * Real-ESRGAN general x4v3, ONNX (Qualcomm AI Hub release, BSD-3 model) for
   src/upscale.py - ~5 MB.
+* YuNet face detector 2023mar, ONNX (OpenCV Zoo on Hugging Face, MIT) and
+  U2-Net-p salient-object maps, ONNX (U-2-Net, Apache-2.0; the export rembg
+  publishes) for src/reframe.py - 0.2 MB + 4.6 MB.
 
 Every file is pinned to a revision and checked against its SHA-256; a
 mismatch fails the build rather than shipping an unknown model.
@@ -28,6 +31,16 @@ CLIP_FILES = {
 ESRGAN_URL = ("https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/"
               "real_esrgan_general_x4v3/releases/v0.63.0/real_esrgan_general_x4v3-onnx-float.zip")
 ESRGAN_ZIP_SHA = "a468eb143dee386191c81b6c6d1791575f304e5c0802eea4da04afdebd95d4e4"
+# Smart reframing (src/reframe.py): faces, then the main object.
+REFRAME_FILES = {
+    "face_detection_yunet_2023mar.onnx": (
+        "https://huggingface.co/opencv/face_detection_yunet/resolve/3cc26e7f1014a5ee5d74a42acee58bafc9d0a310/"
+        "face_detection_yunet_2023mar.onnx",
+        "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"),
+    "u2netp.onnx": (
+        "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
+        "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8"),
+}
 
 
 def sha(data: bytes) -> str:
@@ -62,6 +75,14 @@ def main() -> None:
                 with open(os.path.join(ROOT, base), "wb") as fh:
                     fh.write(z.read(member))
                 print(f"esrgan {base}")
+
+    for name, (url, want) in REFRAME_FILES.items():
+        data = get(url)
+        if sha(data) != want:
+            raise SystemExit(f"checksum mismatch for {name}")
+        with open(os.path.join(ROOT, name), "wb") as fh:
+            fh.write(data)
+        print(f"reframe {name}: {len(data) // 1000} KB")
 
 
 if __name__ == "__main__":

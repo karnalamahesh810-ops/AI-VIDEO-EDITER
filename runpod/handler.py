@@ -51,7 +51,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
                  render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
 from src import templates
-from src import ledger, localvision, marks, r2, styles, upscale
+from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import gapfill, quality
 
 
@@ -1148,6 +1148,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
     if fallback or any(last.values()):
         print(f"[worker] {gapfill.summary(fallback, last)}", flush=True)
+    # A slow push toward the subject of a locked-off shot, and stills aimed at
+    # theirs (src/reframe.py): the scenes' final lengths are known and the
+    # files are still local. Time-boxed; written into the document, so every
+    # machine of a split render draws the same move.
+    if config.REFRAME_ENABLED:
+        report("Framing shots on their subjects")
+        doc["meta"]["reframe"] = reframe.place(doc)
     # A signed URL expires; keep the original reference so render can re-sign.
     unsupported = [k for k in ("own_clips", "channels")
                    if inp.get(k) and inp.get("source") in ("clips", "channels")]
@@ -2023,7 +2030,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "CUT_LEAD_SECONDS", "EYEWITNESS_SEARCHES", "COMING_SHOTS", "HOOK_INTENSITY",
                       "MOTION_PREFERENCE", "PHOTO_MAX_PER_10MIN", "REGION_BLOCKS", "CHAIN_SHOTS",
                       "CHAIN_MAX", "POOL_JUDGE_CLIPS", "AI_SLOP_FILTER", "CROSS_VIDEO_REUSE_DAYS",
-                      "CROSS_VIDEO_GAP_SECONDS", "LIBRARY_SAVE_UNUSED")
+                      "CROSS_VIDEO_GAP_SECONDS", "LIBRARY_SAVE_UNUSED",
+                      # Smart reframing (src/reframe.py); the news styles keep clips as shot.
+                      "REFRAME_ENABLED", "REFRAME_CLIPS", "REFRAME_STILLS", "REFRAME_MAX_SCALE",
+                      "REFRAME_SHARE", "REFRAME_SECONDS", "REFRAME_MIN_SECONDS")
 
 
 def _apply_config(overrides) -> dict:

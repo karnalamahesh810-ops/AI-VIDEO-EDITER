@@ -124,6 +124,55 @@ export interface SceneWord {
   end: number;
 }
 
+/** A rectangle as shares (0..1) of the frame - or, in focus.box, of the source picture. x/y: top-left. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** What the worker found in a scene's picture (src/reframe.py), kept for the editor. */
+export interface MediaFocus {
+  /** The subject: head and shoulders for faces, the main object, or where the action is (source shares). */
+  box?: Box;
+  kind?: "face" | "object" | "action" | "saliency" | "text" | "none";
+  confidence?: number;
+  /** The clip's own camera move over the shown stretch: a moving shot is never reframed. */
+  motion?: { moving?: boolean; pan?: number; panRate?: number; zoom?: number; shake?: number; cut?: boolean };
+  /** Burned-in lettering or a station logo: such a clip is never cropped. */
+  overlay?: boolean;
+  /** Real detail in lines (soft or upscaled pictures are pushed less, or not at all). */
+  lines?: number;
+  why?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * The worker's planned move for THIS picture (src/reframe.py): `from` and
+ * `to` viewports (frame shares) drawn by components/reframe.ts; on a still
+ * only `subject`, which the still's own motion is aimed at. Bound to the
+ * picture by `source` and planned for the frame `aspect`.
+ */
+export interface MediaReframe {
+  from?: Box;
+  to?: Box;
+  kind?: "push" | "pull" | "drift";
+  subject?: Box;
+  zoom?: number;
+  aspect?: number;
+  seconds?: number;
+  source?: string;
+  by?: string;
+}
+
+/**
+ * The editor's per-scene say on reframing: "off" (or false) = no move on
+ * this scene whatever the plan; "auto" / absent = the plan (media.reframe);
+ * {from, to} = its own move, in frame shares.
+ */
+export type SceneReframe = "off" | "auto" | false | null | { from: Box; to: Box };
+
 export interface SceneMedia {
   /** "animation": the scene is a full-screen motion graphic (scene.animation). */
   type: "video" | "image" | "color" | "animation";
@@ -135,6 +184,9 @@ export interface SceneMedia {
   clipSeconds?: number;
   /** A still frame of the clip (the editor's thumbnail); an animation scene's blurred backdrop. */
   thumbnail?: string;
+  /** Smart reframing: what was found in the picture, and the move planned for it. */
+  focus?: MediaFocus;
+  reframe?: MediaReframe;
 }
 
 export interface Scene {
@@ -165,6 +217,8 @@ export interface Scene {
   /** "inset": media framed on a backdrop at its own shape (archival, low-res, 4:3). */
   /** "window": the footage plays inside a floating player window on a designed backdrop (case-file look). */
   frame?: "full" | "inset" | "window";
+  /** The editor's reframing choice for this scene (see SceneReframe). */
+  reframe?: SceneReframe;
   /** Per-clip effect drawn over / applied to the media. */
   effect?: SceneEffect;
   /** Vision-model match record: what the frames actually show, and how well. */
