@@ -21,7 +21,7 @@
  *     from the rest is moved. Archival and vintage scenes keep their colour.
  *  2. look (doc.grade.preset): a soft S-curve around a pivot whose toe is
  *     lifted and shoulder rolled (blacks are never crushed: black itself
- *     lifts to about 1%, no shadow is pulled down by more than about 1% of
+ *     lifts to about 1%, no shadow is pulled down by more than about 1.5% of
  *     full scale, and the white rolls off to 98.5% instead of clipping), a
  *     tint in the midtones only (black and white stay neutral: no
  *     orange-and-teal), a saturation trim.
@@ -64,14 +64,19 @@ export const LOOKS: Record<GradePreset, Look | null> = {
   neutral: { lift: 0, gain: 1, pivot: 0.45, contrast: 1, sat: 1, tint: [1, 1, 1] },
   // The default: a touch of contrast and a filmic toe and shoulder, colour a
   // shade restrained, the faintest warmth in the midtones.
-  documentary: { lift: 0.012, gain: 0.985, pivot: 0.42, contrast: 1.12, sat: 0.97, tint: [1.008, 1, 0.99] },
+  documentary: { lift: 0.012, gain: 0.985, pivot: 0.42, contrast: 1.12, sat: 0.98, tint: [1.008, 1, 0.99] },
   "warm-doc": { lift: 0.012, gain: 0.985, pivot: 0.42, contrast: 1.1, sat: 1.0, tint: [1.022, 1.004, 0.97] },
-  "cool-news": { lift: 0.008, gain: 0.99, pivot: 0.45, contrast: 1.15, sat: 0.98, tint: [0.988, 1.0, 1.018] },
+  "cool-news": { lift: 0.012, gain: 0.99, pivot: 0.45, contrast: 1.13, sat: 0.98, tint: [0.988, 1.0, 1.018] },
   // Faded print: lifted blacks, lowered whites, less contrast, half the colour, a warm cast.
   archival: { lift: 0.045, gain: 0.93, pivot: 0.45, contrast: 0.92, sat: 0.72, tint: [1.03, 1.0, 0.945] },
 };
 
 export const TABLE_SIZE = 33;
+
+/** Exposure: a scene within this (log) of the target is left as it is (about +-10%) ... */
+export const EXPOSURE_FREE = Math.log(1.1);
+/** ... and past it, this share of the rest is corrected (at strength 1). */
+export const EXPOSURE_PULL = 0.6;
 
 /** One scene's filter: the saturation and the three channel tables (0-1). */
 export interface SceneGrade { sat: number; r: number[]; g: number[]; b: number[] }
@@ -157,18 +162,23 @@ export const normalizeFor = (tone: Tone, medians: GradeMedians, strength: number
   if (tone.hi < 0.88 && tone.hi > tone.lo + 0.2) wp = 1 - clamp((0.88 - tone.hi) * 0.5 * k, 0, 0.08);
   if (bp > 0 && (tone.lo - bp) / (wp - bp) < 0.04) bp = Math.max(0, (tone.lo - 0.04 * wp) / 0.96);
   // Exposure: a gamma that moves the mean part of the way toward the
-  // median (itself pulled a little toward a documentary middle grey).
+  // median (itself pulled a little toward a documentary middle grey). A
+  // scene within EXPOSURE_FREE of it is left alone (a sunny shot is meant to
+  // be brighter than a dusk one); past that, EXPOSURE_PULL of the rest.
   const l = clamp((tone.l - bp) / (wp - bp), 0.02, 0.98);
   const target = clamp(medians.l + (0.44 - medians.l) * 0.3, 0.34, 0.52);
   let gamma = 1;
   if (tone.l > 0.04 && tone.l < 0.96) {
-    const full = Math.log(target) / Math.log(l);
-    gamma = Math.exp(Math.log(full) * 0.6 * k);
-    gamma = clamp(gamma, tone.l < 0.12 ? 0.88 : 0.8, tone.l > 0.7 ? 1.15 : 1.25);
+    const off = Math.log(l / target);
+    const excess = Math.sign(off) * Math.max(0, Math.abs(off) - EXPOSURE_FREE);
+    const aim = l * Math.exp(-excess * EXPOSURE_PULL * k);
+    gamma = clamp(Math.log(aim) / Math.log(l), tone.l < 0.12 ? 0.9 : 0.85, 1.18);
   }
   let sat = 1, gr = 1, gb = 1;
   if (!keepColour && tone.s >= 0.04 && medians.s >= 0.04) {
-    sat = clamp(Math.exp(Math.log(medians.s / tone.s) * 0.5 * k), 0.85, 1.18);
+    // A dull clip gains more colour than a vivid one loses: matching must not
+    // drain a red-rock video (the first pass took 9% of its colour).
+    sat = clamp(Math.exp(Math.log(medians.s / tone.s) * 0.4 * k), 0.93, 1.15);
     gr = clamp(Math.exp(Math.log(medians.rg / tone.rg) * 0.5 * k), 0.96, 1.04);
     gb = clamp(Math.exp(Math.log(medians.bg / tone.bg) * 0.5 * k), 0.96, 1.04);
   }

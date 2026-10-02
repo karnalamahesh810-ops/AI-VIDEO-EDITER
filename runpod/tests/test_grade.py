@@ -222,7 +222,9 @@ class RendererMath(unittest.TestCase):
                 self.assertGreater(ys[0], 0.005, name)                            # black lifted, not crushed
                 self.assertLess(ys[-1], 0.995, name)                              # white rolled off
             for i in range(31):                                                   # no shadow pulled down
-                self.assertGreaterEqual(ys[i], i / 100 - 0.012, (name, i))
+                self.assertGreaterEqual(ys[i], i / 100 - 0.015, (name, i))
+            for i in range(11):                                                   # the deep ones least
+                self.assertGreaterEqual(ys[i], i / 100 - 0.01, (name, i))
 
     def test_none_and_zero_strength_draw_nothing_and_the_default_is_gentle(self):
         scene = {"media": {"type": "video", "tone": _tone()}}
@@ -235,7 +237,7 @@ class RendererMath(unittest.TestCase):
         for c in ("r", "g", "b"):
             for i, v in enumerate(doc[c]):
                 self.assertLess(abs(v - i / (size - 1)), 0.03, (c, i))           # a touch, not a look
-        self.assertAlmostEqual(doc["sat"], 0.97)
+        self.assertAlmostEqual(doc["sat"], 0.98)
         graphic = self._run(cases=[{"scene": {"media": {"type": "animation"}}, "settings": {}, "medians": None}])
         self.assertIsNone(graphic["grades"][0])
 
@@ -244,7 +246,7 @@ class RendererMath(unittest.TestCase):
         dark = {"media": {"type": "video", "tone": _tone(l=0.2, s=0.1, rg=0.95, bg=1.1)}}
         bright = {"media": {"type": "image", "tone": _tone(l=0.7, s=0.3)}}
         typical = {"media": {"type": "video", "tone": _tone(l=0.42, s=0.2)}}
-        old = {"treatment": "archival", "media": {"type": "video", "tone": _tone(l=0.42, s=0.2, rg=0.8, bg=1.3)}}
+        old = {"treatment": "archival", "media": {"type": "video", "tone": _tone(l=0.25, s=0.2, rg=0.8, bg=1.3)}}
         settings = {"preset": "neutral"}
         g_dark, g_bright, g_typ, g_old = self._run(cases=[{"scene": s, "settings": settings, "medians": med}
                                                           for s in (dark, bright, typical, old)])["grades"]
@@ -252,9 +254,13 @@ class RendererMath(unittest.TestCase):
         self.assertGreater(g_dark["g"][mid], 0.5)          # lifted
         self.assertLess(g_bright["g"][mid], 0.5)           # brought down
         self.assertGreater(g_dark["sat"], 1.0)             # dull clip: more colour
-        self.assertLess(g_bright["sat"], 1.0)              # loud clip: less
+        self.assertLess(g_bright["sat"], 1.0)              # loud clip: less ...
+        self.assertGreaterEqual(g_bright["sat"], 0.93)     # ... but never drained
         self.assertGreater(g_dark["r"][mid], g_dark["b"][mid])   # its blue cast: blue lowered against red
-        self.assertIsNone(g_typ)                           # nothing to correct, no look: no filter
+        self.assertIsNone(g_typ)                           # at the median, no look: no filter
+        # A shot a little brighter than the rest (within ~10%) keeps its exposure.
+        sunny = {"media": {"type": "video", "tone": _tone(l=0.46, s=0.2)}}
+        self.assertIsNone(self._run(cases=[{"scene": sunny, "settings": settings, "medians": med}])["grades"][0])
         self.assertEqual(g_old["sat"], 1.0)                # an archival scene keeps its colour
         self.assertEqual(g_old["r"], g_old["b"])
         for g in (g_dark, g_bright):
