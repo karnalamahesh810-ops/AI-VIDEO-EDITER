@@ -5,8 +5,8 @@ LibPhotosPro2.tsx; the owner, 2026-10-01: "add new extra animations ... great qu
   * the registry carries all 25 (LIB_PX_*), from their own list (scripts/library_looks_px.json):
     ids unique, each variant drawn by a component and picked in the library index, its props the
     editor's own, its picture slots counted;
-  * every one is "autoPick": false: it stays in the editor and the planner never chooses it on its
-    own, on any path, until the owner approves it from its contact sheet;
+  * all 25 were approved by the owner from their contact sheet (2026-10-02) and are switched on
+    (autoPick false keeps a look out of the planner on every path until it is approved);
   * switched on, a still's line chooses among them by what it says (a waterline, then and now,
     something coming back, an old photograph), with only the line's own words on screen;
   * each plays its own sound on its visual hit, under the voice, never past the look.
@@ -117,29 +117,34 @@ class Registry(unittest.TestCase):
         self.assertEqual(listed, {t["id"] for t in px_templates()})
 
 
-class NeverOnItsOwn(unittest.TestCase):
-    def test_every_new_look_waits_for_the_owner(self):
+class SwitchedOn(unittest.TestCase):
+    """The owner approved all 25 from their contact sheet (2026-10-02: "these 25 look good")."""
+
+    def test_every_new_look_is_switched_on(self):
         for t in px_templates():
-            self.assertIs(t.get("autoPick"), False, t["id"])
-            self.assertFalse(treatments.auto_ok(t["id"]), t["id"])
+            self.assertIsNot(t.get("autoPick"), False, t["id"])
+            self.assertTrue(treatments.auto_ok(t["id"]), t["id"])
         # Looks without the flag are as before.
         self.assertTrue(treatments.auto_ok("LIB_PE_SPLIT_PANELS"))
         self.assertTrue(treatments.auto_ok("PHOTO_CARD_V1"))
         self.assertFalse(treatments.auto_ok("TEXT_KEY_PHRASE_V1"))
 
-    def test_no_planned_video_shows_them(self):
-        texts = [WATERLINE, PLAIN, ARCHIVAL, PLAIN, "It started to come back in 2021.", PLAIN,
-                 "In 1964 the gates closed; today the ramp ends in sand.", PLAIN, "Look closely at the canyon wall."]
-        kinds = ["image" if i % 2 == 0 else "video" for i in range(len(texts))]
-        out = small(texts, [dict(PLACE) for _ in texts], kinds)
-        picked = [o["template"] for o in out["overlays"]]
-        self.assertFalse([tid for tid in picked if tid.startswith("LIB_PX_")], picked)
-        self.assertTrue(picked)                       # the other photo looks still take the stills
+    def test_a_look_still_waiting_for_approval_is_never_chosen(self):
+        # The flag keeps working for the next family that waits for the owner.
+        real = treatments.templates.get
+        with mock.patch.object(treatments.templates, "get",
+                               side_effect=lambda tid, *a, **k: ({**(real(tid) or {}), "autoPick": False}
+                                                                 if str(tid) == "LIB_PX_APERTURE_IRIS" else real(tid, *a, **k))):
+            self.assertFalse(treatments.auto_ok("LIB_PX_APERTURE_IRIS"))
 
-    def test_the_other_automatic_paths_skip_them_too(self):
-        self.assertFalse([x for x in treatments._lib_looks("photo") if x.startswith("LIB_PX_")])
-        self.assertFalse([x for x in treatments._lib_looks("photo-place") if x.startswith("LIB_PX_")])
-        self.assertFalse([x for x in treatments._lib_looks("photo-archival", still=False) if x.startswith("LIB_PX_")])
+    def test_the_automatic_paths_can_choose_them(self):
+        found = set()
+        for cue, still in (("photo", True), ("photo-place", True), ("photo-archival", False), ("photo-archival", True)):
+            try:
+                found.update(x for x in treatments._lib_looks(cue, still=still) if x.startswith("LIB_PX_"))
+            except TypeError:
+                found.update(x for x in treatments._lib_looks(cue) if x.startswith("LIB_PX_"))
+        self.assertTrue(found)
 
 
 class Hooks(unittest.TestCase):

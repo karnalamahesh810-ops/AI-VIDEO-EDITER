@@ -76584,8 +76584,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_SLIT_REVEAL",
@@ -76746,8 +76745,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_COLOR_BLOOM",
@@ -76908,8 +76906,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_DIAGONAL_SLICES",
@@ -77070,8 +77067,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_LEVEL_LINE",
@@ -77230,8 +77226,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_DETAIL_INSET",
@@ -77392,8 +77387,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_VIEWFINDER",
@@ -77553,8 +77547,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_TORN_STRIPS",
@@ -77715,8 +77708,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_FOLDED_PRINT",
@@ -77876,8 +77868,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_FIELD_JOURNAL",
@@ -78039,8 +78030,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_MAGAZINE_SPREAD",
@@ -78200,8 +78190,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_POSTCARD",
@@ -78361,8 +78350,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_CONTACT_SHEET",
@@ -78532,8 +78520,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_NEGATIVE_FLIP",
@@ -78693,8 +78680,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_DARKROOM",
@@ -78853,8 +78839,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_SLIDE_PROJECTOR",
@@ -79014,8 +78999,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_FLATBED_SCAN",
@@ -79175,8 +79159,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_SHUTTER_BURST",
@@ -79346,8 +79329,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_ALBUM_PAGE",
@@ -79507,8 +79489,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_ARCHIVE_STAMP",
@@ -79667,8 +79648,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_BOOK_PLATE",
@@ -79830,8 +79810,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_ARCHIVE_ENVELOPE",
@@ -79990,8 +79969,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_DRYING_LINE",
@@ -80151,8 +80129,7 @@
     "px",
     "own-backdrop",
     "still"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_DATED_CASCADE",
@@ -80315,8 +80292,7 @@
     "px",
     "own-backdrop",
     "stills"
-   ],
-   "autoPick": false
+   ]
   },
   {
    "id": "LIB_PX_THEN_NOW",
@@ -80478,8 +80454,7 @@
     "px",
     "own-backdrop",
     "stills"
-   ],
-   "autoPick": false
+   ]
   }
  ],
  "imageTreatments": [

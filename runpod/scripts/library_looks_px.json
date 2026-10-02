@@ -7,18 +7,39 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo", "photo-object"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo",
+   "photo-object"
+  ],
   "duration": 4.5,
   "sfx": "camera-shutter",
   "sfx_at": 6,
   "types": false,
-  "sounds": [{"name": "camera-shutter", "alt": ["shutter"], "at": 6, "gain_db": -2.0}],
-  "sample": {"text": "Rainbow Bridge", "label": "Lake Powell", "subtitle": "One of the largest natural bridges on Earth"},
+  "sounds": [
+   {
+    "name": "camera-shutter",
+    "alt": [
+     "shutter"
+    ],
+    "at": 6,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Rainbow Bridge",
+   "label": "Lake Powell",
+   "subtitle": "One of the largest natural bridges on Earth"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "none",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-slit-reveal",
@@ -28,18 +49,39 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "whoosh-cinematic",
   "sfx_at": 10,
   "types": false,
-  "sounds": [{"name": "whoosh-cinematic", "alt": ["whoosh-soft-v2", "whoosh-soft"], "at": 10, "gain_db": -3.0}],
-  "sample": {"text": "Lake Powell", "label": "Utah · Arizona", "subtitle": "3,517 ft above sea level"},
+  "sounds": [
+   {
+    "name": "whoosh-cinematic",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 10,
+    "gain_db": -3.0
+   }
+  ],
+  "sample": {
+   "text": "Lake Powell",
+   "label": "Utah · Arizona",
+   "subtitle": "3,517 ft above sea level"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "none",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-color-bloom",
@@ -49,18 +91,38 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-return", "photo-place", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-return",
+   "photo-place",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "light-shimmer",
   "sfx_at": 18,
   "types": false,
-  "sounds": [{"name": "light-shimmer", "alt": ["whoosh-soft-v2"], "at": 18, "gain_db": -3.0}],
-  "sample": {"text": "Gregory Natural Bridge", "subtitle": "Back above the water since 2021"},
+  "sounds": [
+   {
+    "name": "light-shimmer",
+    "alt": [
+     "whoosh-soft-v2"
+    ],
+    "at": 18,
+    "gain_db": -3.0
+   }
+  ],
+  "sample": {
+   "text": "Gregory Natural Bridge",
+   "subtitle": "Back above the water since 2021"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-diagonal-slices",
@@ -70,18 +132,38 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo", "photo-object"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo",
+   "photo-object"
+  ],
   "duration": 4.5,
   "sfx": "whoosh-fast",
   "sfx_at": 10,
   "types": false,
-  "sounds": [{"name": "whoosh-fast", "alt": ["swipe"], "at": 10, "gain_db": -2.0}],
-  "sample": {"text": "Glen Canyon Dam", "label": "Page, Arizona"},
+  "sounds": [
+   {
+    "name": "whoosh-fast",
+    "alt": [
+     "swipe"
+    ],
+    "at": 10,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Glen Canyon Dam",
+   "label": "Page, Arizona"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "none",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-level-line",
@@ -91,18 +173,37 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-level"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-level"
+  ],
   "duration": 5.0,
   "sfx": "whoosh-soft-v2",
   "sfx_at": 24,
   "types": false,
-  "sounds": [{"name": "whoosh-soft-v2", "alt": ["whoosh-soft"], "at": 24, "gain_db": -3.0}],
-  "sample": {"text": "Lake Powell", "label": "High water, 1983", "subtitle": "3,708 ft"},
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 24,
+    "gain_db": -3.0
+   }
+  ],
+  "sample": {
+   "text": "Lake Powell",
+   "label": "High water, 1983",
+   "subtitle": "3,708 ft"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-detail-inset",
@@ -112,18 +213,38 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-detail", "photo-object", "photo-place"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-detail",
+   "photo-object",
+   "photo-place"
+  ],
   "duration": 4.5,
   "sfx": "zoom-in-whoosh",
   "sfx_at": 20,
   "types": false,
-  "sounds": [{"name": "zoom-in-whoosh", "alt": ["whoosh-soft-v2"], "at": 20, "gain_db": -3.0}],
-  "sample": {"text": "A granary, sealed for 800 years", "subtitle": "Glen Canyon"},
+  "sounds": [
+   {
+    "name": "zoom-in-whoosh",
+    "alt": [
+     "whoosh-soft-v2"
+    ],
+    "at": 20,
+    "gain_db": -3.0
+   }
+  ],
+  "sample": {
+   "text": "A granary, sealed for 800 years",
+   "subtitle": "Glen Canyon"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-viewfinder",
@@ -133,18 +254,37 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "camera-shutter",
   "sfx_at": 18,
   "types": false,
-  "sounds": [{"name": "camera-shutter", "alt": ["shutter"], "at": 18, "gain_db": -2.0}],
-  "sample": {"text": "Cathedral in the Desert", "label": "Glen Canyon"},
+  "sounds": [
+   {
+    "name": "camera-shutter",
+    "alt": [
+     "shutter"
+    ],
+    "at": 18,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Cathedral in the Desert",
+   "label": "Glen Canyon"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-torn-strips",
@@ -154,18 +294,39 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "paper-slide-v2",
   "sfx_at": 19,
   "types": false,
-  "sounds": [{"name": "paper-slide-v2", "alt": ["paper-slide", "paper"], "at": 19, "gain_db": -2.0}],
-  "sample": {"text": "Horseshoe Bend", "label": "Arizona", "subtitle": "The Colorado River below Glen Canyon Dam"},
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide",
+     "paper"
+    ],
+    "at": 19,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Horseshoe Bend",
+   "label": "Arizona",
+   "subtitle": "The Colorado River below Glen Canyon Dam"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "none",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-folded-print",
@@ -175,18 +336,37 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "page-flip",
   "sfx_at": 18,
   "types": false,
-  "sounds": [{"name": "page-flip", "alt": ["paper"], "at": 18, "gain_db": -2.0}],
-  "sample": {"text": "Lake Powell from the air", "label": "Glen Canyon"},
+  "sounds": [
+   {
+    "name": "page-flip",
+    "alt": [
+     "paper"
+    ],
+    "at": 18,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Lake Powell from the air",
+   "label": "Glen Canyon"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-field-journal",
@@ -196,18 +376,40 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo-object", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo-object",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "tape-rip",
   "sfx_at": 13,
   "types": false,
-  "sounds": [{"name": "tape-rip", "alt": ["paper-tear", "paper"], "at": 13, "gain_db": -3.0}],
-  "sample": {"text": "Music Temple", "label": "1869", "subtitle": "Powell's expedition camped here"},
+  "sounds": [
+   {
+    "name": "tape-rip",
+    "alt": [
+     "paper-tear",
+     "paper"
+    ],
+    "at": 13,
+    "gain_db": -3.0
+   }
+  ],
+  "sample": {
+   "text": "Music Temple",
+   "label": "1869",
+   "subtitle": "Powell's expedition camped here"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-magazine-spread",
@@ -217,18 +419,38 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "paper-slide-v2",
   "sfx_at": 12,
   "types": false,
-  "sounds": [{"name": "paper-slide-v2", "alt": ["paper-slide"], "at": 12, "gain_db": -2.0}],
-  "sample": {"text": "The Lake That Built the West", "label": "Lake Powell", "subtitle": "How a reservoir in the desert came to hold 26 million acre-feet"},
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide"
+    ],
+    "at": 12,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "The Lake That Built the West",
+   "label": "Lake Powell",
+   "subtitle": "How a reservoir in the desert came to hold 26 million acre-feet"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-postcard",
@@ -238,18 +460,38 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-place", "photo-archival"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-place",
+   "photo-archival"
+  ],
   "duration": 4.5,
   "sfx": "page-flip",
   "sfx_at": 22,
   "types": false,
-  "sounds": [{"name": "page-flip", "alt": ["paper"], "at": 22, "gain_db": -2.0}],
-  "sample": {"text": "Rainbow Bridge", "label": "1955", "subtitle": "Rowed fifty miles up the canyon to see it"},
+  "sounds": [
+   {
+    "name": "page-flip",
+    "alt": [
+     "paper"
+    ],
+    "at": 22,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Rainbow Bridge",
+   "label": "1955",
+   "subtitle": "Rowed fifty miles up the canyon to see it"
+  },
   "family": "px",
   "file": "LibPhotosPro",
   "exit": "none",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-contact-sheet",
@@ -259,21 +501,47 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival", "photo", "photo-place"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival",
+   "photo",
+   "photo-place"
+  ],
   "duration": 5.0,
   "sfx": "marker-draw",
   "sfx_at": 16,
   "types": false,
   "sounds": [
-   {"name": "marker-draw", "alt": ["marker"], "at": 6, "align": "start", "gain_db": -3.0},
-   {"name": "whoosh-soft-v2", "alt": ["whoosh-soft"], "at": 28, "gain_db": -6.0}
+   {
+    "name": "marker-draw",
+    "alt": [
+     "marker"
+    ],
+    "at": 6,
+    "align": "start",
+    "gain_db": -3.0
+   },
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 28,
+    "gain_db": -6.0
+   }
   ],
-  "sample": {"text": "Cathedral in the Desert", "label": "Glen Canyon"},
+  "sample": {
+   "text": "Cathedral in the Desert",
+   "label": "Glen Canyon"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-negative-flip",
@@ -283,18 +551,37 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "camera-flash-pop",
   "sfx_at": 16,
   "types": false,
-  "sounds": [{"name": "camera-flash-pop", "alt": ["shutter"], "at": 16, "gain_db": -2.0}],
-  "sample": {"text": "Bullfrog Marina", "label": "Lake Powell"},
+  "sounds": [
+   {
+    "name": "camera-flash-pop",
+    "alt": [
+     "shutter"
+    ],
+    "at": 16,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Bullfrog Marina",
+   "label": "Lake Powell"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-darkroom",
@@ -304,18 +591,37 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival"
+  ],
   "duration": 4.5,
   "sfx": "click",
   "sfx_at": 24,
   "types": false,
-  "sounds": [{"name": "click", "alt": ["ui-click"], "at": 24, "gain_db": 0.0}],
-  "sample": {"text": "Glen Canyon Dam", "label": "1962", "subtitle": "Bureau of Reclamation"},
+  "sounds": [
+   {
+    "name": "click",
+    "alt": [
+     "ui-click"
+    ],
+    "at": 24,
+    "gain_db": 0.0
+   }
+  ],
+  "sample": {
+   "text": "Glen Canyon Dam",
+   "label": "1962",
+   "subtitle": "Bureau of Reclamation"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-slide-projector",
@@ -325,18 +631,37 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival", "photo-place"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival",
+   "photo-place"
+  ],
   "duration": 4.5,
   "sfx": "shutter-slide",
   "sfx_at": 6,
   "types": false,
-  "sounds": [{"name": "shutter-slide", "alt": ["paper-slide"], "at": 6, "gain_db": -2.0}],
-  "sample": {"text": "Lake Powell", "label": "1974"},
+  "sounds": [
+   {
+    "name": "shutter-slide",
+    "alt": [
+     "paper-slide"
+    ],
+    "at": 6,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Lake Powell",
+   "label": "1974"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-flatbed-scan",
@@ -346,18 +671,38 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival"
+  ],
   "duration": 4.5,
   "sfx": "ui-swipe",
   "sfx_at": 16,
   "types": false,
-  "sounds": [{"name": "ui-swipe", "alt": ["swipe", "whoosh-soft"], "at": 16, "gain_db": -3.0}],
-  "sample": {"text": "Glen Canyon", "label": "1898", "subtitle": "Photograph by George Wharton James"},
+  "sounds": [
+   {
+    "name": "ui-swipe",
+    "alt": [
+     "swipe",
+     "whoosh-soft"
+    ],
+    "at": 16,
+    "gain_db": -3.0
+   }
+  ],
+  "sample": {
+   "text": "Glen Canyon",
+   "label": "1898",
+   "subtitle": "Photograph by George Wharton James"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-shutter-burst",
@@ -367,21 +712,47 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-detail", "photo-place", "photo-object", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-detail",
+   "photo-place",
+   "photo-object",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "camera-shutter",
   "sfx_at": 18,
   "types": false,
   "sounds": [
-   {"name": "camera-shutter", "alt": ["shutter"], "at": 8, "gain_db": -4.0},
-   {"name": "camera-shutter", "alt": ["shutter"], "at": 18, "gain_db": -2.0}
+   {
+    "name": "camera-shutter",
+    "alt": [
+     "shutter"
+    ],
+    "at": 8,
+    "gain_db": -4.0
+   },
+   {
+    "name": "camera-shutter",
+    "alt": [
+     "shutter"
+    ],
+    "at": 18,
+    "gain_db": -2.0
+   }
   ],
-  "sample": {"text": "Glen Canyon Dam", "label": "High-flow release"},
+  "sample": {
+   "text": "Glen Canyon Dam",
+   "label": "High-flow release"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-album-page",
@@ -391,18 +762,37 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival", "photo-place"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival",
+   "photo-place"
+  ],
   "duration": 4.5,
   "sfx": "paper-slide",
   "sfx_at": 14,
   "types": false,
-  "sounds": [{"name": "paper-slide", "alt": ["paper"], "at": 14, "gain_db": -2.0}],
-  "sample": {"text": "Cathedral in the Desert", "label": "1962"},
+  "sounds": [
+   {
+    "name": "paper-slide",
+    "alt": [
+     "paper"
+    ],
+    "at": 14,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Cathedral in the Desert",
+   "label": "1962"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-archive-stamp",
@@ -412,18 +802,36 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival"
+  ],
   "duration": 4.5,
   "sfx": "stamp",
   "sfx_at": 14,
   "types": false,
-  "sounds": [{"name": "stamp", "alt": ["paper-pin"], "at": 14, "gain_db": -2.0}],
-  "sample": {"text": "Glen Canyon Dam", "label": "1962"},
+  "sounds": [
+   {
+    "name": "stamp",
+    "alt": [
+     "paper-pin"
+    ],
+    "at": 14,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Glen Canyon Dam",
+   "label": "1962"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-book-plate",
@@ -433,18 +841,39 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival", "photo-place", "photo-object"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival",
+   "photo-place",
+   "photo-object"
+  ],
   "duration": 4.5,
   "sfx": "page-flip",
   "sfx_at": 14,
   "types": false,
-  "sounds": [{"name": "page-flip", "alt": ["page", "paper"], "at": 14, "gain_db": -2.0}],
-  "sample": {"text": "Rock art panel", "subtitle": "Glen Canyon survey, 1958"},
+  "sounds": [
+   {
+    "name": "page-flip",
+    "alt": [
+     "page",
+     "paper"
+    ],
+    "at": 14,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Rock art panel",
+   "subtitle": "Glen Canyon survey, 1958"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-archive-envelope",
@@ -454,18 +883,36 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival"
+  ],
   "duration": 4.5,
   "sfx": "paper-slide-v2",
   "sfx_at": 14,
   "types": false,
-  "sounds": [{"name": "paper-slide-v2", "alt": ["paper-slide"], "at": 14, "gain_db": -2.0}],
-  "sample": {"text": "Halls Crossing ferry", "subtitle": "Lake Powell, 1985"},
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide"
+    ],
+    "at": 14,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Halls Crossing ferry",
+   "subtitle": "Lake Powell, 1985"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-drying-line",
@@ -475,18 +922,37 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 1,
-  "props": ["text", "subtitle", "label"],
-  "cues": ["photo-archival", "photo"],
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-archival",
+   "photo"
+  ],
   "duration": 4.5,
   "sfx": "paper-pin",
   "sfx_at": 16,
   "types": false,
-  "sounds": [{"name": "paper-pin", "alt": ["click"], "at": 16, "gain_db": 0.0}],
-  "sample": {"text": "Natural Bridge", "label": "Utah"},
+  "sounds": [
+   {
+    "name": "paper-pin",
+    "alt": [
+     "click"
+    ],
+    "at": 16,
+    "gain_db": 0.0
+   }
+  ],
+  "sample": {
+   "text": "Natural Bridge",
+   "label": "Utah"
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-dated-cascade",
@@ -496,18 +962,48 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 2,
-  "props": ["text", "label", "items"],
-  "cues": ["photo-then-now", "photos"],
+  "props": [
+   "text",
+   "label",
+   "items"
+  ],
+  "cues": [
+   "photo-then-now",
+   "photos"
+  ],
   "duration": 5.0,
   "sfx": "paper-slide-v2",
   "sfx_at": 23,
   "types": false,
-  "sounds": [{"name": "paper-slide-v2", "alt": ["paper-slide"], "at": 23, "gain_db": -2.0}],
-  "sample": {"text": "Lake Powell from orbit", "label": "NASA Earth Observatory", "items": [{"label": "1999"}, {"label": "2017"}, {"label": "2022"}]},
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide"
+    ],
+    "at": 23,
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Lake Powell from orbit",
+   "label": "NASA Earth Observatory",
+   "items": [
+    {
+     "label": "1999"
+    },
+    {
+     "label": "2017"
+    },
+    {
+     "label": "2022"
+    }
+   ]
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  },
  {
   "id": "px-then-now",
@@ -517,17 +1013,43 @@
   "kind": "card",
   "own_backdrop": true,
   "needs_media": 2,
-  "props": ["text", "subtitle", "items"],
-  "cues": ["photo-then-now"],
+  "props": [
+   "text",
+   "subtitle",
+   "items"
+  ],
+  "cues": [
+   "photo-then-now"
+  ],
   "duration": 5.0,
   "sfx": "whoosh-cinematic",
   "sfx_at": 14,
   "types": false,
-  "sounds": [{"name": "whoosh-cinematic", "alt": ["whoosh-soft-v2"], "at": 14, "gain_db": -3.0}],
-  "sample": {"text": "Lake Powell", "subtitle": "The same reach, 23 years apart", "items": [{"label": "1999"}, {"label": "2022"}]},
+  "sounds": [
+   {
+    "name": "whoosh-cinematic",
+    "alt": [
+     "whoosh-soft-v2"
+    ],
+    "at": 14,
+    "gain_db": -3.0
+   }
+  ],
+  "sample": {
+   "text": "Lake Powell",
+   "subtitle": "The same reach, 23 years apart",
+   "items": [
+    {
+     "label": "1999"
+    },
+    {
+     "label": "2022"
+    }
+   ]
+  },
   "family": "px",
   "file": "LibPhotosPro2",
   "exit": "fade",
-  "auto_pick": false
+  "auto_pick": true
  }
 ]
