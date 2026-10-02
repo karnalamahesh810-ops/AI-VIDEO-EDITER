@@ -12,6 +12,9 @@ import sfxMeta from "./data/sfx_meta.json";   // a copy of public/sfx/sfx_meta.j
 import { LookSoundContext, LookSounds, type LookSoundScope } from "./components/lib/LookSounds";
 import { lookSoundsOn, planDocSounds, type SoundCue, type SoundTemplate } from "./components/lib/lookSoundPlan";
 import { PackTransitions } from "./transitions/PackTransition";
+import { GradeContext, gradeStateFor } from "./components/Grade";
+import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve, type Ambience, type Bed }
+  from "./components/ambienceMix";
 
 // The music beds were replaced by the owner's own tracks (2026-10-01); a
 // document planned before names the old bed, which no longer ships (its 404
@@ -295,6 +298,37 @@ const doublesLook = (overlays: Overlay[], sounds: Record<string, { scope: LookSo
     || (!fx.kind && Boolean(own.get(Math.round(fx.startFrame || 0))?.has(fx.name)));
 };
 
+/**
+ * Ambience beds (src/ambience.py, doc.ambience): one bed at a time under the
+ * scenes that are somewhere, its file played pass after pass, at the level
+ * ambienceMix.ts works out frame by frame (planned against the voice, the
+ * document's master, faded at its cuts, silent under full-screen graphics,
+ * ducked under the words).
+ */
+const bedNode = (b: Bed, i: number, fps: number, master: number, duck: number, speech: Float32Array) => {
+  const volume = bedVolume(b, fps, master, duck, speech);
+  if (!volume) return null;
+  const start = Math.round(Number(b.startFrame) || 0);
+  const frames = Math.max(1, Math.round(Number(b.durationInFrames) || 0));
+  // The file played pass after pass, crossfaded over 0.25 s (ambienceMix.ts bedPasses).
+  const passes = bedPasses(frames, (SFX_META[b.name]?.duration ?? 0) * fps, fps * 0.25);
+  const src = staticFile(`sfx/${b.name}.mp3`);
+  return (
+    <React.Fragment key={`amb-${i}`}>
+      {passes.map((p, k) => (
+        <Sequence key={k} from={start + p.from} durationInFrames={p.frames} layout="none">
+          {p.loop ? (
+            // No file length known: Remotion's loop, the volume counting frames across every pass.
+            <Audio src={src} volume={(f: number) => volume(p.from + f)} loop loopVolumeCurveBehavior="extend" />
+          ) : (
+            <Audio src={src} volume={(f: number) => volume(p.from + f) * passGain(p, f)} />
+          )}
+        </Sequence>
+      ))}
+    </React.Fragment>
+  );
+};
+
 /** Frames a "crossfade" scene takes to fade in over the previous one (0.5 s). */
 const CROSSFADE_FRAMES = 15;
 
@@ -353,6 +387,19 @@ export const Main: React.FC<TimelineProps> = (props) => {
   // When the looks carry their own sounds, a row planned for an overlay
   // would double its look's sound: only transitions and the editor's own play.
   const builtIn = lookSoundsOn(props);
+  // The video's grade (gradeMath.ts): settings and the scenes' median tone,
+  // read by every SceneClip. Absent from the document = no grade, as before.
+  const grade = React.useMemo(() => gradeStateFor(props.grade, scenes), [props.grade, scenes]);
+  // The ambience beds (src/ambience.py): the editor's sound switch mutes them
+  // with every other sound; "enabled" false or level 0 turns them off.
+  const ambience = props.ambience as Ambience;
+  const bedNodes = React.useMemo(() => {
+    const on = ambienceSettings(ambience, props.sfxEnabled);
+    if (!on || !ambience?.beds) return [];
+    const speech = speechCurve(props);
+    return ambience.beds.map((b, i) => bedNode(b, i, fps, on.master, on.duck, speech));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ambience, scenes, props.sfxEnabled, props.durationInFrames, fps]);
   const sfxNodes = React.useMemo(() => {
     if (props.sfxEnabled === false) return [];
     const doubles = builtIn ? doublesLook(overlays || [], lookSounds) : () => false;
@@ -363,7 +410,8 @@ export const Main: React.FC<TimelineProps> = (props) => {
     <AbsoluteFill className="tg-composition" style={{ backgroundColor: "#000" }}>
       {/* The page's own CSS must not resize the pictures (the editor's Player). */}
       <style>{PAGE_CSS_GUARD}</style>
-      {/* Visual track — one clip per spoken clause */}
+      {/* Visual track — one clip per spoken clause, under the video's one grade */}
+      <GradeContext.Provider value={grade}>
       {scenes.map((scene, i) => (
         <Sequence
           key={scene.id}
@@ -382,6 +430,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           </CrossfadeIn>
         </Sequence>
       ))}
+      </GradeContext.Provider>
 
       {/* The owner's overlay transitions ("pack:<name>"): a clip screen-blended
           over a hard cut, its own sound levelled under the narration
@@ -427,6 +476,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           loopVolumeCurveBehavior="extend"
         />
       ) : null}
+      {bedNodes}
       {sfxNodes}
     </AbsoluteFill>
   );

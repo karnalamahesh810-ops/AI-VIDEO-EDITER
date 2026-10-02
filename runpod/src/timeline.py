@@ -284,12 +284,20 @@ def relevel_to_voice(doc: Dict[str, Any], measure=None) -> bool:
         k = 10 ** (drop / 20.0)
         for fx in doc.get("sfx") or []:
             v = fx.get("volume") if isinstance(fx, dict) else None
-            if fx.get("kind") in ("transition", "overlay") and isinstance(v, (int, float)) and not isinstance(v, bool):
+            if fx.get("kind") in ("transition", "overlay", "riser") and isinstance(v, (int, float)) \
+                    and not isinstance(v, bool):
                 fx["volume"] = round(float(v) * k, 3)
         for sc in doc.get("scenes") or []:
             g = sc.get("transitionGain") if isinstance(sc, dict) else None
             if isinstance(g, (int, float)) and not isinstance(g, bool):
                 sc["transitionGain"] = round(float(g) * k, 3)
+        # The ambience beds were set against the same voice (src/ambience.py).
+        amb = doc.get("ambience") if isinstance(doc.get("ambience"), dict) else {}
+        for bed in amb.get("beds") or []:
+            for key in ("volume", "ceiling"):
+                v = bed.get(key) if isinstance(bed, dict) else None
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    bed[key] = round(float(v) * k, 4)
     cap_sfx_levels(doc)
     print(f"[worker] narration measured at render: {got:.1f} LUFS (planned against {planned:.1f})", flush=True)
     return True

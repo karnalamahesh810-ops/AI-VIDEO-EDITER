@@ -592,6 +592,42 @@ SFX_MIN_GAP_SECONDS = float(os.getenv("SFX_MIN_GAP_SECONDS", "45"))
 # narration (and so our render) sat at -23.8. 0 turns the step off.
 LOUDNESS_TARGET_LUFS = float(os.getenv("LOUDNESS_TARGET_LUFS", "-14"))
 LOUDNESS_TRUE_PEAK = float(os.getenv("LOUDNESS_TRUE_PEAK", "-1.5"))
+# Narration polish before every render (src/voicepolish.py): rumble/hum
+# high-pass, denoise, de-ess, peak compression and level drift, each only when
+# the narration measures as needing it (a clean recording is never denoised),
+# at the original's loudness, length and timing; any failure keeps the
+# original. A document's audio.polish false skips it for that video.
+VOICE_POLISH = _flag("VOICE_POLISH", True)
+# The whole polish (download, analysis, filters, checks) gives up after this.
+VOICE_POLISH_SECONDS = float(os.getenv("VOICE_POLISH_SECONDS", "240"))
+# One grade for the whole video (src/grade.py, drawn by the renderer's
+# gradeMath.ts on every scene picture, never on graphics): each clip pulled
+# toward the video's common exposure, saturation and colour cast
+# (GRADE_NORMALIZE, from each scene's measured tone), then one gentle look
+# (GRADE_PRESET: none, neutral, documentary, warm-doc, cool-news, archival) at
+# GRADE_STRENGTH (0-1). GRADE=1 gives a plan or render without one the
+# default; a document's own grade (the editor's) always wins.
+GRADE = _flag("GRADE", True)
+GRADE_PRESET = os.getenv("GRADE_PRESET", "documentary")
+GRADE_STRENGTH = float(os.getenv("GRADE_STRENGTH", "1.0"))
+GRADE_NORMALIZE = _flag("GRADE_NORMALIZE", True)
+# Measuring the scenes' tone: the time box and the parallel reads.
+GRADE_MEASURE_SECONDS = float(os.getenv("GRADE_MEASURE_SECONDS", "60"))
+GRADE_MEASURE_WORKERS = int(os.getenv("GRADE_MEASURE_WORKERS", "8"))
+# Ambience beds under the scenes that are somewhere (src/ambience.py, drawn by
+# Main.tsx): wind, water, river, rain, storm, city, crowd, fire or machinery -
+# synthesised loops in public/sfx (amb-*.mp3, scripts/build_ambience.py) -
+# one at a time, faded at cuts, quiet under full-screen graphics,
+# AMBIENCE_UNDER_VOICE_DB under the narration and ducked under its words.
+# Planned with a new plan; a document's ambience {enabled, level} is the
+# editor's switch and master. Off until the owner has listened: the beds are
+# synthesised, and their levels, seams and split renders are measured but not
+# yet heard (A/B one job with "config": {"AMBIENCE": 1, "RISERS": 1}).
+AMBIENCE = _flag("AMBIENCE", False)
+AMBIENCE_UNDER_VOICE_DB = float(os.getenv("AMBIENCE_UNDER_VOICE_DB", "26"))
+# A soft swell (riser-soft) into the biggest reveals: section changes, chapter
+# cards, big figures marked high - an sfx row of kind "riser" under the sfx master.
+RISERS = _flag("RISERS", False)
 # Picture quality of h264 renders (x264 CRF). Remotion's own default, 18, made
 # ~13 Mbit/s at 1080p: a 22-minute render passed 2 GB and the app's storage
 # (Lovable Cloud: 2 GB a file by default) refused it after the whole render.

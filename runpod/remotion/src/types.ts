@@ -135,6 +135,13 @@ export interface SceneMedia {
   clipSeconds?: number;
   /** A still frame of the clip (the editor's thumbnail); an animation scene's blurred backdrop. */
   thumbnail?: string;
+  /**
+   * The picture's measured tone (src/grade.py): mean luma l, its 2nd/98th
+   * percentiles lo/hi, mean chroma s, red and blue against green in the
+   * midtones rg/bg. The video's grade pulls each scene toward the median of
+   * these (components/gradeMath.ts).
+   */
+  tone?: { l: number; lo: number; hi: number; s: number; rg: number; bg: number; v?: number };
 }
 
 export interface Scene {
@@ -334,8 +341,9 @@ export interface TimelineProps {
     /** Frames skipped at the head of the file, so its peak lands on the look's
      *  hit without the sound starting before the look is on screen. */
     trimFrames?: number;
-    /** What planned it: an overlay's animation (older documents), a scene transition; absent = the editor's. */
-    kind?: "overlay" | "transition";
+    /** What planned it: an overlay's animation (older documents), a scene transition, a swell into a
+     *  reveal (src/ambience.py); absent = the editor's. */
+    kind?: "overlay" | "transition" | "riser";
   }[];
   sfxVolume?: number;
   sfxEnabled?: boolean;
@@ -348,6 +356,28 @@ export interface TimelineProps {
    * documents): the sfx rows carry every sound, exactly as before.
    */
   lookSounds?: { intensity?: number } | null;
+  /**
+   * One grade over every scene's picture, never the graphics
+   * (components/gradeMath.ts, src/grade.py): preset none | neutral |
+   * documentary | warm-doc | cool-news | archival, strength 0-1 (1 = as
+   * designed), normalize (default true) pulls each scene toward the video's
+   * median tone first. Absent or null = the pictures as sourced.
+   */
+  grade?: { preset?: string; strength?: number; normalize?: boolean } | null;
+  /**
+   * Ambience beds (src/ambience.py): looped sfx/amb-*.mp3 under the scenes
+   * that are somewhere, one at a time. `level` is their master (1 = as
+   * planned against the voice, 0 = off; never over a bed's ceiling),
+   * `enabled` false turns them off, `duck` is the share kept while a word is
+   * spoken. Each bed: name, startFrame, durationInFrames, volume, ceiling,
+   * fadeIn / fadeOut (frames), holes ([start, end] frames from its start:
+   * silent under full-screen graphics). Absent = no ambience, as before.
+   */
+  ambience?: {
+    enabled?: boolean; level?: number; duck?: number;
+    beds?: { name: string; startFrame: number; durationInFrames: number; volume: number; ceiling?: number;
+      fadeIn?: number; fadeOut?: number; holes?: number[][] }[];
+  } | null;
   meta?: Record<string, unknown>;
   /**
    * Remotion requires composition props to be assignable to

@@ -52,7 +52,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, styles, upscale
-from src import gapfill, quality
+from src import ambience, gapfill, grade, quality, voicepolish
 
 
 def _work_dir(job_id: str) -> str:
@@ -1148,6 +1148,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
     if fallback or any(last.values()):
         print(f"[worker] {gapfill.summary(fallback, last)}", flush=True)
+    # One grade for the whole video (src/grade.py): its settings, and each
+    # scene's tone measured from the files while they are still on this disk.
+    report("Matching the colour of the clips")
+    doc["meta"]["grade"] = grade.prepare(doc, remote=False)
     # A signed URL expires; keep the original reference so render can re-sign.
     unsupported = [k for k in ("own_clips", "channels")
                    if inp.get(k) and inp.get("source") in ("clips", "channels")]
@@ -1191,6 +1195,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     doc["meta"]["videoStyle"] = styles.resolve(inp.get("video_style"))
     # The music sections, ducking and sound effects were laid out by the build.
     report("Mixing music and sound effects")
+    # The air under the scenes (wind, water, rain, city...) and a soft swell
+    # into the biggest reveals, against the measured voice (src/ambience.py).
+    doc["meta"]["ambience"] = ambience.apply(doc)
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).
@@ -1385,6 +1392,11 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         clip_s = timeline._clip_seconds(asset)
         if clip_s:
             scene["media"]["clipSeconds"] = round(clip_s, 2)
+    # Its tone for the video's grade (src/grade.py), read while the file is here
+    # (a link is left for the render's own time-boxed pass).
+    tone = grade.measure(scene["media"]) if grade.is_local(scene["media"].get("url")) else None
+    if tone:
+        scene["media"]["tone"] = tone
     scene["query"] = query
     scene["motion"] = (timeline._IMAGE_MOTIONS[idx % len(timeline._IMAGE_MOTIONS)]
                        if asset.kind == "image" else "none")
@@ -1749,6 +1761,18 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     if broken:
         report(f"Repaired {broken} scene(s) before the render", 69)
     timeline.validate(doc, require_media=True, allow_stock=inp.get("allow_stock"))
+    # The narration cleaned once (src/voicepolish.py: rumble, hum, room noise,
+    # harsh esses, peaks, level drift - only what it measures as needed), at
+    # its own loudness and timing; every draw below reads the cleaned copy.
+    # Any failure keeps the original.
+    report("Polishing the narration", 69)
+    voicepolish.for_render(doc, work, inp)
+    # The video's grade: the default when the document has none (GRADE), and
+    # the tone of any scene without one (an older plan, a repaired scene) -
+    # time-boxed; a scene left unmeasured keeps the shared look only.
+    grade.prepare(doc, remote=True)
+    # A bed the renderer cannot play (an unknown file, an editor's bad numbers) is dropped.
+    ambience.clean(doc)
     out_path = os.path.join(work, "final.mp4")
     try:
         _draw(doc, inp, work, report, split, out_path, gate)
@@ -2023,7 +2047,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "CUT_LEAD_SECONDS", "EYEWITNESS_SEARCHES", "COMING_SHOTS", "HOOK_INTENSITY",
                       "MOTION_PREFERENCE", "PHOTO_MAX_PER_10MIN", "REGION_BLOCKS", "CHAIN_SHOTS",
                       "CHAIN_MAX", "POOL_JUDGE_CLIPS", "AI_SLOP_FILTER", "CROSS_VIDEO_REUSE_DAYS",
-                      "CROSS_VIDEO_GAP_SECONDS", "LIBRARY_SAVE_UNUSED")
+                      "CROSS_VIDEO_GAP_SECONDS", "LIBRARY_SAVE_UNUSED",
+                      # The look and sound pass (2026-10-02): A/B one job without a redeploy.
+                      "VOICE_POLISH", "GRADE", "GRADE_PRESET", "GRADE_STRENGTH", "GRADE_NORMALIZE",
+                      "AMBIENCE", "AMBIENCE_UNDER_VOICE_DB", "RISERS")
 
 
 def _apply_config(overrides) -> dict:

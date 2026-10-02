@@ -7,6 +7,87 @@
     "peak": 0.01,
     "peakDb": -5.6
   },
+  "amb-city": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -19.8,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -11.2
+  },
+  "amb-crowd": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -20.2,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -10.4
+  },
+  "amb-fire": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -21.4,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -8.7
+  },
+  "amb-machinery": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -23.3,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -12.7
+  },
+  "amb-rain": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -22.8,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -13.5
+  },
+  "amb-river": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -22.7,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -12.0
+  },
+  "amb-storm": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -22.8,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -12.3
+  },
+  "amb-water": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -19.6,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -10.2
+  },
+  "amb-wind": {
+    "category": "ambience",
+    "duration": 60.0,
+    "loop": true,
+    "lufs": -19.7,
+    "lufsIntegrated": -24.0,
+    "peak": 0.0,
+    "peakDb": -10.9
+  },
   "boom-soft": {
     "category": "impact",
     "duration": 1.71,
@@ -406,6 +487,14 @@
     "lufs": -20.1,
     "peak": 0.993,
     "peakDb": -11.6
+  },
+  "riser-soft": {
+    "category": "riser",
+    "duration": 1.8,
+    "loop": false,
+    "lufs": -20.0,
+    "peak": 1.6,
+    "peakDb": -10.9
   },
   "shutter": {
     "category": "camera",
