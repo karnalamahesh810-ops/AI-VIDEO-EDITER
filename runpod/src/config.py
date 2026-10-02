@@ -549,9 +549,11 @@ FALLBACK_MOMENT_GAP_SECONDS = float(os.getenv("FALLBACK_MOMENT_GAP_SECONDS", "30
 FALLBACK_FILL = _flag("FALLBACK_FILL", True)
 FALLBACK_SECONDS = float(os.getenv("FALLBACK_SECONDS", "180"))
 FALLBACK_SECONDS_PER_SCENE = float(os.getenv("FALLBACK_SECONDS_PER_SCENE", "6"))
-FALLBACK_MAX_SECONDS = float(os.getenv("FALLBACK_MAX_SECONDS", "600"))
+# 2026-10-02: 600 s and 8 at a time left 97 of the Mount Rainier video's 138 empty scenes without
+# a picture; the picture rung needs no proxy, so it can run wider and longer.
+FALLBACK_MAX_SECONDS = float(os.getenv("FALLBACK_MAX_SECONDS", "900"))
 FALLBACK_SCENE_SECONDS = float(os.getenv("FALLBACK_SCENE_SECONDS", "45"))
-FALLBACK_PARALLEL = int(os.getenv("FALLBACK_PARALLEL", "8"))
+FALLBACK_PARALLEL = int(os.getenv("FALLBACK_PARALLEL", "16"))
 FALLBACK_STILLS = _flag("FALLBACK_STILLS", True)
 # The last resort for a scene nothing filled (never in the hook while
 # anything else is possible): the planner's own number/map graphic for the
@@ -577,14 +579,17 @@ ACCEPT_UNJUDGED = os.getenv("ACCEPT_UNJUDGED", "0").strip().lower() in ("1", "tr
 # "the transition SFX and the other SFX are too high ... around 20%". It is the
 # one master for every sound: the cut sounds (sfx rows), the sounds built into
 # the looks (lookSoundPlan) and the pack transitions' own sound (packLevels).
+# 0.4 = the owner, 2026-10-02, after the Mount Rainier video at 0.2: "SFX sounds
+# I can barely listen ... try to increase that as well" (with the music up to 50%).
 SFX_ENABLED = os.getenv("SFX_ENABLED", "1").strip().lower() not in ("0", "false", "no")
-SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.2"))
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.4"))
 # The music bed's level when the job sets none (the editor's Music volume):
 # flat under the whole video, x MUSIC_DUCK while a word is spoken - the owner's
 # Lake Powell mix, "set to 20% music" (2026-10-01). The voice-relative
 # automation (timeline.music_automation) put that bed at 60% under a loud
-# narration. 0 = the automation.
-MUSIC_LEVEL = float(os.getenv("MUSIC_LEVEL", "0.2"))
+# narration. 0 = the automation. 0.5 = the owner, 2026-10-02: "the music sound
+# is I think 20%. I think put it on fifty percent."
+MUSIC_LEVEL = float(os.getenv("MUSIC_LEVEL", "0.5"))
 MUSIC_DUCK = float(os.getenv("MUSIC_DUCK", "0.8"))
 SFX_MIN_GAP_SECONDS = float(os.getenv("SFX_MIN_GAP_SECONDS", "45"))
 # The finished video's loudness (integrated LUFS) and true-peak ceiling. YouTube

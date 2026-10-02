@@ -48,6 +48,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import config, ytdlp
 
+# Pictures tried per search in the ladder's picture rung (it was 6; most of the
+# Mount Rainier video's first six came from sites that refuse downloads).
+STILL_TRIES = 10
+
 _YT_ID = re.compile(r"yt:([\w-]{11})")
 _WATCH = re.compile(r"[?&]v=([\w-]{11})")
 _T = re.compile(r"[?&]t=(\d+(?:\.\d+)?)")
@@ -346,11 +350,37 @@ def _from_reserve(job: dict, used: Used, work: str, stop: float, require_cc: boo
 
 def _from_still(job: dict, used: Used, work: str, stop: float, allow_generated: bool):
     """(c) One picture search for the line's subject (web, then Wikimedia), judged like any still."""
-    from . import ledger, media, slop
+    from . import imagefix, ledger, media, slop
     i = job["index"]
-    query = next(iter(_names(job)), "") or " ".join(str(job.get("query") or "").split())
-    if not query:
+    # The line's subject first, then the scene's own search words: the Mount Rainier video (2026-10-02) left
+    # 97 scenes without a picture when the one search's few pictures all failed to download.
+    queries = []
+    for q in (next(iter(_names(job)), ""), " ".join(str(job.get("query") or "").split())):
+        if q and q not in queries:
+            queries.append(q)
+    if not queries:
         return None
+    query = queries[0]
+    intent = job.get("intent") or query
+    for query in queries:
+        got = _still_for(job, i, query, intent, used, work, stop, imagefix, ledger, media, slop)
+        if got is not None or time.time() > stop:
+            return got
+    if allow_generated and media._may_generate_for(job) and media._generation_budget_left():
+        left = max(20, int(stop - time.time()))
+        try:
+            made = media.generate_image(job.get("prompt") or query, work, timeout=left)
+        except Exception:  # noqa: BLE001
+            made = None
+        if made is not None:
+            used.add(i, Shot.of_asset(made, job.get("start")))
+            return made
+    return None
+
+
+def _still_for(job: dict, i: int, query: str, intent: str, used: Used, work: str, stop: float,
+               imagefix, ledger, media, slop):
+    """The first of one picture search's results that downloads, passes its checks and is not on the timeline."""
     found = []
     for fn, key in ((media.search_web_images, "search_web_images"), (media.search_wikimedia, "search_wikimedia")):
         if time.time() > stop:
@@ -361,10 +391,11 @@ def _from_still(job: dict, used: Used, work: str, stop: float, allow_generated: 
             found = []
         if found:
             break
-    intent = job.get("intent") or query
-    for cand in found[:6]:
+    for cand in found[:STILL_TRIES]:
         if time.time() > stop:
             return None
+        if imagefix.host_refused(cand.url):
+            continue                                    # its site refused the last downloads
         if ledger.photo_used(cand.url):
             continue                                    # shown in an earlier video
         if slop.enabled() and (slop.ai_host(cand.url, getattr(cand, "page_url", "") or "")
@@ -388,15 +419,6 @@ def _from_still(job: dict, used: Used, work: str, stop: float, allow_generated: 
         got.review_required = True
         got.review_reason = "A picture found when the footage search ran out of time - check it fits"
         return got
-    if allow_generated and media._may_generate_for(job) and media._generation_budget_left():
-        left = max(20, int(stop - time.time()))
-        try:
-            made = media.generate_image(job.get("prompt") or query, work, timeout=left)
-        except Exception:  # noqa: BLE001
-            made = None
-        if made is not None:
-            used.add(i, Shot.of_asset(made, job.get("start")))
-            return made
     return None
 
 

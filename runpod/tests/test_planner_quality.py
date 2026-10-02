@@ -503,16 +503,17 @@ class Music(unittest.TestCase):
         self.assertEqual(m["levels"]["voiceLufs"], -18.0)
         self.assertEqual(doc["bgm"]["volume"], m["levels"]["speech"])
 
-    def test_a_new_video_gets_the_owners_mix_music_20_sounds_20(self):
-        # 2026-10-01: "set to 20% music"; the sounds as in the approved Lake Powell video.
+    def test_a_new_video_gets_the_owners_mix_music_50_sounds_40(self):
+        # 2026-10-02, after the Mount Rainier video: "put it [the music] on fifty percent", and the sounds,
+        # barely heard at 20%, up too.
         doc = build_doc(FLOOD[:5], inp={"voice_lufs": -14.0})
         m = doc["music"]
-        self.assertEqual(doc["bgm"]["volume"], 0.2)
+        self.assertEqual(doc["bgm"]["volume"], 0.5)
         self.assertEqual(m["levels"]["mode"], "flat")
         self.assertEqual(m["duck"], 0.8)
-        self.assertEqual([s["volume"] for s in m["sections"]], [0.0, 0.2, 0.1, 0.0])  # fade in, bed, fade out
+        self.assertEqual([s["volume"] for s in m["sections"]], [0.0, 0.5, 0.25, 0.0])  # fade in, bed, fade out
         self.assertEqual(m["sections"][-1]["endFrame"], doc["durationInFrames"])
-        self.assertEqual(doc["sfxVolume"], 0.2)
+        self.assertEqual(doc["sfxVolume"], 0.4)
         # A job's own level still takes the voice-relative automation.
         doc = build_doc(FLOOD[:5], inp={"voice_lufs": -14.0, "bgm_volume": 0.12})
         self.assertNotEqual(doc["music"]["levels"].get("mode"), "flat")
