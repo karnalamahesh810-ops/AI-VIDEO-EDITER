@@ -798,5 +798,467 @@ class Switches(unittest.TestCase):
         self.assertFalse(config.PACKS_FIRST)
 
 
+# --------------------------------------------------------------------------- #
+# Building a pack (src/packbuild.py, scripts/build_pack.py)
+# --------------------------------------------------------------------------- #
+
+from src import libstore, packbuild  # noqa: E402
+
+
+class Licences(unittest.TestCase):
+    """The licensing rule: only footage we may show. Each case is a real example or its shape."""
+
+    def wm(self, slug, short, **extra):
+        meta = {"License": {"value": slug}, "LicenseShortName": {"value": short},
+                "LicenseUrl": {"value": "https://creativecommons.org/licenses/by-sa/4.0"}}
+        meta.update({k: {"value": v} for k, v in extra.items()})
+        return packbuild.wikimedia_verdict(meta)
+
+    def test_commons_keeps_public_domain_cc0_and_cc_by_and_drops_nc_nd_and_the_unknown(self):
+        self.assertEqual(self.wm("pd", "Public domain")["class"], "pd")
+        self.assertEqual(self.wm("pd", "Public Domain")["class"], "pd")
+        self.assertEqual(self.wm("cc0", "CC0")["class"], "cc0")
+        self.assertEqual(self.wm("cc-by-4.0", "CC BY 4.0")["class"], "cc-by")
+        self.assertEqual(self.wm("cc-by-3.0", "CC BY 3.0")["class"], "cc-by")
+        self.assertEqual(self.wm("cc-by-sa-4.0", "CC BY-SA 4.0")["class"], "cc-by-sa")
+        self.assertEqual(self.wm("", "CC BY-SA 3.0 igo")["class"], "cc-by-sa")
+        for slug, short in (("cc-by-nc-4.0", "CC BY-NC 4.0"), ("cc-by-nd-3.0", "CC BY-ND 3.0"),
+                            ("cc-by-nc-sa-3.0", "CC BY-NC-SA 3.0"), ("", "GFDL 1.2"), ("", "No restrictions"),
+                            ("", "")):
+            v = self.wm(slug, short)
+            self.assertFalse(v["ok"], (slug, short))
+            self.assertTrue(v["why"])
+        self.assertIn("NC", self.wm("cc-by-nc-4.0", "CC BY-NC 4.0")["why"])
+        self.assertFalse(self.wm("pd", "Public domain", NonFree="true")["ok"])               # a non-free file is never kept
+
+    def test_the_internet_archive_needs_an_explicit_public_domain_or_cc0_licence_url(self):
+        self.assertEqual(packbuild.archive_verdict("https://creativecommons.org/publicdomain/mark/1.0/")["class"], "pd")
+        self.assertEqual(packbuild.archive_verdict("http://creativecommons.org/publicdomain/zero/1.0/")["class"], "cc0")
+        self.assertEqual(packbuild.archive_verdict("http://creativecommons.org/licenses/publicdomain/")["class"], "pd")
+        for bad in (None, "", [], "https://creativecommons.org/licenses/by/4.0/",
+                    "https://creativecommons.org/licenses/by-nc-nd/3.0/",
+                    ["https://creativecommons.org/publicdomain/mark/1.0/", "https://creativecommons.org/licenses/by/4.0/"]):
+            self.assertFalse(packbuild.archive_verdict(bad)["ok"], bad)                      # a collection name proves nothing
+
+    def test_nasa_is_kept_unless_its_own_text_carries_a_notice_or_a_third_party_credit(self):
+        ok = lambda desc, title="A title": packbuild.nasa_verdict({"title": title, "description": desc})
+        self.assertTrue(ok("Drought over the west.\nCredit: NASA/JPL-Caltech")[0])
+        self.assertTrue(ok("Footage of a reservoir.\nVideo credit: NASA/Ames Research Center\nA short video")[0])
+        self.assertTrue(ok("Reservoirs.\nCredit: Video production and NISAR animations: NASA/JPL-Caltech; "
+                           "Methane animations: NASA's Scientific Visualization Studio")[0])
+        self.assertTrue(ok("A lake timelapse. Music courtesy Moby\nCredit: NASA's Goddard Space Flight Center")[0])
+        self.assertTrue(ok("Music Provided by Universal Production Music: The Butterfly\nCredit: NASA/GSFC")[0])
+        self.assertTrue(ok("No credit line at all, just water.")[0])
+        for desc, why in (("Movie Footage courtesy of Focus Features Asteroid City\nCredit: NASA", "third-party"),
+                          ("Additional imagery and footage courtesy of ISRO, U.S. National Park Service", "third-party"),
+                          ("Credit: NASA/Bill Ingalls", "third-party"),
+                          ("A lake. (c) 2019 Some Agency", "notice"), ("Footage © Reuters", "notice"),
+                          ("This clip is copyrighted by its maker", "notice"),
+                          ("Shot by a crew; licensed from Getty Images", "notice")):
+            keep, reason = ok(desc)
+            self.assertFalse(keep, desc)
+            self.assertIn(why, reason)
+
+    def test_only_the_three_sources_may_be_fetched(self):
+        for url in ("https://images-assets.nasa.gov/video/x/x~large.mp4", "https://upload.wikimedia.org/a/b.webm",
+                    "https://ia800000.us.archive.org/1/items/x/x.mp4", "https://archive.org/download/x/x.mp4"):
+            self.assertEqual(packbuild.check_host(url), url)
+        for url in ("https://www.youtube.com/watch?v=ABCDEFGHIJK", "https://www.shutterstock.com/x.mp4",
+                    "https://evilarchive.org/x.mp4", "https://nasa.gov.evil.com/x.mp4", "file:///etc/passwd", ""):
+            with self.assertRaises(ValueError):
+                packbuild.check_host(url)
+        self.assertEqual(packbuild.check_host("https://pub-1.r2.dev/a.mp4", extra=["pub-1.r2.dev"]),
+                         "https://pub-1.r2.dev/a.mp4")
+
+
+class Cutting(unittest.TestCase):
+    def test_segments_are_whole_shots_of_four_to_ten_seconds_split_evenly_when_longer(self):
+        got = packbuild.plan_segments(60.0, [3.0, 12.0, 14.0, 40.0], lo=4, hi=10, target=8, trim=0.25, per_source=99)
+        # 0-3 s too short; 3-12 s one 8.5 s clip; 12-14 too short; 14-40 s is 25.5 s -> 4 pieces; 40-60 s 19.5 s -> 3 pieces
+        self.assertEqual(len(got), 1 + 4 + 3)
+        self.assertEqual(got[0], (3.25, 8.5))
+        self.assertTrue(all(4 <= length <= 10 for _s, length in got))
+        starts = [s for s, _l in got]
+        self.assertEqual(starts, sorted(starts))
+        for (s1, l1), (s2, _l2) in zip(got, got[1:]):
+            self.assertLessEqual(s1 + l1, s2 + 1e-6)                                         # never overlapping
+
+    def test_a_single_long_take_gives_a_few_clips_spread_over_the_video(self):
+        got = packbuild.plan_segments(600.0, [], lo=4, hi=10, target=8, per_source=6)
+        self.assertEqual(len(got), 6)
+        self.assertLess(got[0][0], 10)
+        self.assertGreater(got[-1][0], 560)                                                    # the whole video, not the start
+        self.assertEqual(packbuild.plan_segments(3.0, [], per_source=6), [])                  # nothing usable in a 3 s file
+        self.assertEqual(packbuild.plan_segments(20.0, [3.0, 6.0, 9.0, 12.0, 15.0, 18.0], per_source=6), [])  # rapid cutting
+
+    def test_the_filter_makes_sixteen_by_nine_never_upscales_and_caps_the_frame_rate(self):
+        plain = packbuild.video_filter(1920, 1080, 30)
+        self.assertNotIn("crop", plain)
+        self.assertIn("scale=min(1920\\,iw):-2", plain)
+        self.assertIn("crop=trunc(ih*16/9/2)*2:ih", packbuild.video_filter(3840, 1920, 30))        # 2:1 data movies
+        self.assertIn("crop=iw:trunc(iw*9/16/2)*2", packbuild.video_filter(1440, 1080, 30))        # 4:3
+        self.assertNotIn("fps=30", plain)
+        self.assertIn("fps=30", packbuild.video_filter(1920, 1080, 59.94))
+        self.assertTrue(plain.endswith("format=yuv420p"))
+
+    def test_the_nasa_file_list_gives_the_large_rendition_then_medium_never_the_master_first(self):
+        urls = ["http://images-assets.nasa.gov/video/X/X~orig.mp4", "http://images-assets.nasa.gov/video/X/X~small.mp4",
+                "http://images-assets.nasa.gov/video/X/X~medium.mp4", "http://images-assets.nasa.gov/video/X/X~large.mp4",
+                "http://images-assets.nasa.gov/video/X/X.srt", "http://images-assets.nasa.gov/video/X/X~thumb.jpg"]
+        self.assertEqual(packbuild.pick_nasa_rendition(urls), "https://images-assets.nasa.gov/video/X/X~large.mp4")
+        self.assertEqual(packbuild.pick_nasa_rendition(urls[:3]), "https://images-assets.nasa.gov/video/X/X~medium.mp4")
+        self.assertEqual(packbuild.pick_nasa_rendition(urls[:2]), "https://images-assets.nasa.gov/video/X/X~orig.mp4")
+        self.assertEqual(packbuild.pick_nasa_rendition(["http://x.nasa.gov/a.srt"]), "")
+
+
+def nasa_item(nid, title, desc, center="GSFC"):
+    return {"href": f"https://images-assets.nasa.gov/video/{nid}/collection.json",
+            "data": [{"nasa_id": nid, "title": title, "description": desc, "center": center, "media_type": "video",
+                      "keywords": []}]}
+
+
+def commons_page(title, slug, short, w=1920, h=1080, size=12_000_000, mime="video/webm", artist="<a href='/u'>Jane Doe</a>",
+                 **extra):
+    meta = {"License": {"value": slug}, "LicenseShortName": {"value": short},
+            "LicenseUrl": {"value": "https://creativecommons.org/licenses/by/4.0"},
+            "Artist": {"value": artist}, "ObjectName": {"value": title},
+            "ImageDescription": {"value": f"<p>{title}: drought and a reservoir</p>"}}
+    meta.update({k: {"value": v} for k, v in extra.items()})
+    return {"title": f"File:{title}.webm", "imageinfo": [{
+        "url": f"https://upload.wikimedia.org/wikipedia/commons/a/ab/{title.replace(' ', '_')}.webm",
+        "descriptionurl": f"https://commons.wikimedia.org/wiki/File:{title.replace(' ', '_')}.webm",
+        "size": size, "width": w, "height": h, "mime": mime, "extmetadata": meta}]}
+
+
+class FakeHttp:
+    """Http.get_json over canned answers: the same answer to every query, so duplicates are exercised."""
+
+    def __init__(self, nasa=(), commons=(), archive=(), files=None):
+        self.nasa, self.commons, self.archive, self.files = list(nasa), list(commons), list(archive), files or {}
+        self.calls = []
+
+    def get_json(self, url, params=None):
+        self.calls.append(url)
+        if url.startswith(packbuild.NASA_SEARCH):
+            return {"collection": {"items": self.nasa}}
+        if url.startswith(packbuild.COMMONS_API):
+            return {"query": {"pages": {str(i): p for i, p in enumerate(self.commons)}}}
+        if url.startswith(packbuild.ARCHIVE_SEARCH):
+            return {"response": {"docs": self.archive}}
+        if url in self.files:
+            return self.files[url]
+        raise RuntimeError(f"no answer for {url}")
+
+
+def sample_http():
+    return FakeHttp(
+        nasa=[nasa_item("GSFC_DROUGHT_OK", "Megadroughts Projected for American West",
+                        "Drought and reservoir levels across the west.\nCredit: NASA/Goddard Space Flight Center"),
+              nasa_item("KSC_FOCUS", "Drought footage", "Reservoir drought.\nMovie Footage courtesy of Focus Features"),
+              nasa_item("ARC_MARS", "Mars Helicopter", "A helicopter flies on Mars."),
+              nasa_item("HQ_NOTICE", "Dam and reservoir", "Reservoir and dam footage (c) 2019 Some Agency")],
+        commons=[commons_page("Lake Mead drought pd", "pd", "Public domain"),
+                 commons_page("Reservoir cc0", "cc0", "CC0"),
+                 commons_page("Dam drought by", "cc-by-4.0", "CC BY 4.0"),
+                 commons_page("Drought reservoir sa", "cc-by-sa-4.0", "CC BY-SA 4.0"),
+                 commons_page("Drought nc", "cc-by-nc-4.0", "CC BY-NC 4.0"),
+                 commons_page("Reservoir gfdl", "", "GFDL 1.2"),
+                 commons_page("Reservoir nonfree", "pd", "Public domain", NonFree="true"),
+                 commons_page("Mars rover", "pd", "Public domain", ImageDescription="<p>A rover on Mars</p>"),
+                 commons_page("Reservoir picture", "pd", "Public domain", mime="image/png")],
+        archive=[{"identifier": "usbr_dam_film", "title": "Dam construction film", "description": "A reservoir and dam",
+                  "licenseurl": "https://creativecommons.org/publicdomain/mark/1.0/", "creator": ["Bureau"]},
+                 {"identifier": "prelinger_drought", "title": "Drought and water", "description": "irrigation",
+                  "licenseurl": "http://creativecommons.org/publicdomain/zero/1.0/"},
+                 {"identifier": "by_licensed", "title": "Reservoir by", "description": "reservoir dam",
+                  "licenseurl": "https://creativecommons.org/licenses/by/4.0/"},
+                 {"identifier": "prelinger_no_url", "title": "Drought film", "description": "reservoir drought"},
+                 {"identifier": "coffee_ad", "title": "Folgers Coffee Commercial", "description": "coffee",
+                  "licenseurl": "https://creativecommons.org/publicdomain/mark/1.0/"}])
+
+
+class DryRun(unittest.TestCase):
+    def setUp(self):
+        self.guards = [mock.patch.object(packbuild, "download_capped", side_effect=AssertionError("a dry run downloads nothing")),
+                       mock.patch.object(packs.requests, "get", side_effect=AssertionError("no web here")),
+                       mock.patch.object(packs, "available", return_value=False)]
+        for g in self.guards:
+            g.start()
+
+    def tearDown(self):
+        for g in reversed(self.guards):
+            g.stop()
+
+    def test_it_lists_what_it_would_fetch_with_the_licence_of_each_and_downloads_nothing(self):
+        http = sample_http()
+        out = packbuild.run("water", dry_run=True, http=http, max_clips=5)
+        self.assertTrue(out["ok"] and out["dryRun"])
+        self.assertEqual(out["found"]["nasa"]["found"], 4)
+        self.assertEqual(out["found"]["nasa"]["licence"], 2)                              # the Focus Features credit, the notice
+        self.assertEqual(out["found"]["nasa"]["off topic"], 1)                             # Mars
+        self.assertEqual(out["licences"]["nasa"], {"pd": 1})
+        self.assertEqual(out["found"]["wikimedia"]["licence"], 3)                         # NC, GFDL, non-free
+        self.assertEqual(out["licences"]["wikimedia"], {"pd": 1, "cc0": 1, "cc-by": 1, "cc-by-sa": 1})
+        self.assertEqual(out["found"]["archive"]["licence"], 2)                           # CC BY, no URL at all
+        self.assertEqual(out["found"]["archive"]["off topic"], 1)                         # the coffee advertisement
+        self.assertEqual(out["licences"]["archive"], {"pd": 1, "cc0": 1})                # explicit PD / CC0 only
+        self.assertEqual(out["candidates"], 1 + 4 + 2)
+        self.assertEqual(len(out["planned"]), out["wouldTry"])
+        self.assertTrue(all(r["licenseClass"] in ("pd", "cc0", "cc-by", "cc-by-sa") for r in out["planned"]))
+        self.assertEqual({r["source"] for r in out["planned"]}, {"nasa", "wikimedia", "archive"})
+        self.assertNotIn("GSFC_DROUGHT_OK drought nc", json.dumps(out))
+        json.dumps(out)                                                                    # a handler result: all JSON
+
+    def test_a_credit_is_stored_for_cc_by_and_the_licence_with_it(self):
+        found = packbuild.discover_wikimedia("water", sample_http())
+        by = {c.source_id: c for c in found}
+        cc = by["Dam drought by.webm"]
+        self.assertEqual((cc.klass, cc.license, cc.license_url), ("cc-by", "CC BY 4.0", "https://creativecommons.org/licenses/by/4.0"))
+        self.assertIn("Jane Doe", cc.attribution)
+        self.assertIn("CC BY 4.0", cc.attribution)
+        self.assertEqual(cc.page_url, "https://commons.wikimedia.org/wiki/File:Dam_drought_by.webm")
+        self.assertEqual(by["Lake Mead drought pd.webm"].klass, "pd")
+        self.assertNotIn("Drought nc.webm", by)
+        self.assertNotIn("Reservoir gfdl.webm", by)
+        self.assertNotIn("Reservoir nonfree.webm", by)
+        self.assertNotIn("Reservoir picture.webm", by)
+        self.assertEqual(len(cc.topics), len(set(cc.topics)))                              # found by several searches, listed once
+
+    def test_the_plan_spreads_over_the_topics_and_skips_what_the_pack_already_has(self):
+        out = packbuild.run("water", dry_run=True, http=sample_http(), max_clips=50)
+        topics = [r["topic"] for r in out["planned"]]
+        self.assertEqual(topics[0], "drought")                                              # one source per topic in turn, nasa first
+        self.assertEqual(out["planned"][0]["source"], "nasa")
+        d = tempfile.mkdtemp()
+        store = packbuild.LocalStore(d)
+        store.write_manifest("water", packs.manifest("water", [entry(1, unit((0, 1.0)))],
+                                                     sources={"nasa:GSFC_DROUGHT_OK": {"kept": 2}}))
+        again = packbuild.run("water", dry_run=True, http=sample_http(), store=store, max_clips=50)
+        self.assertEqual(again["existing"], 1)
+        self.assertEqual(again["alreadyDone"], 1)
+        self.assertNotIn("GSFC_DROUGHT_OK", [r["id"] for r in again["planned"]])           # resumable: a source done is skipped
+        shutil.rmtree(d, ignore_errors=True)
+
+    def test_resolve_looks_up_each_items_file_without_downloading(self):
+        http = sample_http()
+        http.files["https://images-assets.nasa.gov/video/GSFC_DROUGHT_OK/collection.json"] = [
+            "http://images-assets.nasa.gov/video/GSFC_DROUGHT_OK/GSFC_DROUGHT_OK~orig.mp4",
+            "http://images-assets.nasa.gov/video/GSFC_DROUGHT_OK/GSFC_DROUGHT_OK~large.mp4"]
+        http.files["https://archive.org/metadata/usbr_dam_film"] = {"files": [
+            {"name": "usbr_dam_film.mp4", "size": "30000000", "height": "480", "width": "640", "length": "300"},
+            {"name": "usbr_dam_film_hd.mp4", "size": "80000000", "height": "720", "width": "1280", "length": "300"},
+            {"name": "usbr_dam_film_meta.xml", "size": "100"}]}
+        out = packbuild.run("water", dry_run=True, resolve=True, http=http, max_clips=60)
+        rows = {r["id"]: r for r in out["planned"]}
+        self.assertEqual(rows["GSFC_DROUGHT_OK"]["file"], "https://images-assets.nasa.gov/video/GSFC_DROUGHT_OK/GSFC_DROUGHT_OK~large.mp4")
+        self.assertEqual(rows["usbr_dam_film"]["file"], "https://archive.org/download/usbr_dam_film/usbr_dam_film_hd.mp4")
+        self.assertEqual(rows["usbr_dam_film"]["height"], 720)
+        self.assertTrue(rows["Lake Mead drought pd.webm"]["file"].startswith("https://upload.wikimedia.org/"))
+        self.assertEqual(rows["Lake Mead drought pd.webm"]["sizeMB"], 12.0)
+
+    def test_an_unknown_niche_or_a_failing_search_is_an_answer_not_a_crash(self):
+        self.assertFalse(packbuild.run("nonsense", dry_run=True, http=sample_http())["ok"])
+
+        class Down:
+            def get_json(self, url, params=None):
+                raise RuntimeError("503")
+        out = packbuild.run("water", dry_run=True, http=Down())
+        self.assertTrue(out["ok"])
+        self.assertEqual((out["candidates"], out["planned"]), (0, []))
+        self.assertGreater(out["found"]["nasa"]["errors"], 5)
+
+
+@unittest.skipUnless(FFMPEG, "needs ffmpeg")
+class Build(unittest.TestCase):
+    """A real cut of a synthetic source video; CLIP and the library gate are stubs."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.mkdtemp(prefix="packbuild_test_")
+        cls.src = os.path.join(cls.dir, "source.mp4")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=1280x720:r=30:d=22",
+                        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", cls.src], check=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.dir, ignore_errors=True)
+
+    def setUp(self):
+        self.out = tempfile.mkdtemp(prefix="packout_")
+        self.n = 0
+        self.vecs = [unit((0, 1.0)), unit((0, 1.0), (4, 0.2)), unit((1, 1.0))]
+
+        def check(path, kind="video", subject="", event="", known=None, clip=True):
+            v = libstore.Verdict(kind=kind)
+            v.checked = True
+            info = libstore.probe(path)
+            v.width, v.height, v.seconds = info["width"], info["height"], info["seconds"]
+            import random
+            rnd = random.Random(self.n)
+            v.hashes = [rnd.getrandbits(64) for _ in range(3)]            # far apart: no duplicates
+            v.embedding = [float(x) for x in self.vecs[self.n % len(self.vecs)]]
+            self.n += 1
+            v.measures["sharpness"] = 40.0
+            return v
+
+        def fetch(url, dest, max_bytes, timeout=0):
+            shutil.copyfile(self.src, dest)
+            return os.path.getsize(dest)
+        self.patches = [mock.patch.object(libstore, "check", side_effect=check),
+                        mock.patch.object(filters, "has_burned_captions", return_value=False),
+                        mock.patch.object(packbuild, "download_capped", side_effect=fetch),
+                        mock.patch.object(packs, "_clip", return_value=FakeClip()),
+                        mock.patch.object(packs, "available", return_value=False),
+                        mock.patch.object(config, "PACKS_SEGMENT_MIN", 4.0)]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in reversed(self.patches):
+            p.stop()
+        shutil.rmtree(self.out, ignore_errors=True)
+
+    def http(self):
+        return FakeHttp(commons=[commons_page("Lake Mead drought pd", "pd", "Public domain")])
+
+    def test_a_build_cuts_checks_uploads_and_lists_the_clips_and_a_second_run_continues(self):
+        store = packbuild.LocalStore(self.out)
+        out = packbuild.run("water", sources=["wikimedia"], max_clips=2, http=self.http(), store=store, parallel=1)
+        self.assertTrue(out["ok"], out)
+        self.assertEqual((out["added"], out["total"], out["stoppedBy"]), (2, 2, "max_clips"))
+        data = store.read_manifest("water")
+        pack = packs.Pack.from_manifest("water", data)
+        self.assertEqual(len(pack.entries), 2)
+        e = pack.entries[0]
+        self.assertEqual((e.source, e.license_class, e.topics[0], e.niche), ("wikimedia", "pd", "drought", "water"))
+        self.assertTrue(e.id.startswith("wm-Lake_Mead_drought_pd_webm@"))
+        self.assertTrue(os.path.isfile(e.url))                                              # a local pack: the clip is a file
+        info = libstore.probe(e.url)
+        self.assertEqual((info["ok"], info["width"], info["height"]), (True, 1280, 720))   # H.264, not upscaled
+        self.assertGreaterEqual(info["seconds"], 4.0)
+        self.assertLessEqual(info["seconds"], 10.5)
+        self.assertEqual(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+                                         "-of", "csv=p=0", e.url], capture_output=True, text=True).stdout.strip(), "")  # no sound
+        self.assertEqual(e.source_url, "https://commons.wikimedia.org/wiki/File:Lake_Mead_drought_pd.webm")
+        self.assertTrue(e.thumb and os.path.isfile(e.thumb))
+        self.assertEqual(len(e.phash), 3)
+        self.assertEqual(e.checks["topicSim"], 1.0)
+        self.assertEqual(data["sources"]["wikimedia:Lake Mead drought pd.webm"]["kept"], 2)
+        # the pack works as a shelf: PACKS_DIR reads it, find() fits a drought line to it
+        packs.clear_cache()
+        with mock.patch.object(config, "PACKS_DIR", self.out), mock.patch.object(packs, "available", return_value=True), \
+                mock.patch.object(ledger, "pack_used", return_value=False):
+            hits = packs.find("a drought", ["water"], min_similarity=0.5, n=9)
+        packs.clear_cache()
+        self.assertEqual(len(hits), 2)
+        # run again: the source is done, nothing is fetched twice, the 2 clips stay
+        again = packbuild.run("water", sources=["wikimedia"], max_clips=5, http=self.http(), store=store, parallel=1)
+        self.assertEqual((again["added"], again["total"], again["alreadyDone"]), (0, 2, 1))
+        self.assertEqual(len(store.read_manifest("water")["entries"]), 2)
+
+    def test_a_clip_that_fails_the_gate_or_is_not_about_the_niche_is_not_listed(self):
+        self.vecs = [unit((4, 1.0)), unit((3, 1.0)), unit((0, 1.0))]                       # (gated out), a city, a drought
+        real = libstore.check
+
+        def reject_first(path, **kw):
+            v = real(path, **kw)
+            if self.n == 1:
+                v.bad("frozen frame")
+            return v
+        with mock.patch.object(libstore, "check", side_effect=reject_first):
+            out = packbuild.run("water", sources=["wikimedia"], max_clips=9, http=self.http(), parallel=1,
+                                store=packbuild.LocalStore(self.out))
+        self.assertEqual(out["added"], 1)
+        self.assertEqual(out["rejected"].get("frozen frame"), 1)
+        self.assertEqual(out["rejected"].get("not about the niche"), 1)                    # the city fits no water topic
+        self.assertEqual(out["topics"], {"drought": 1})
+
+    def test_a_topic_never_takes_more_than_its_quota(self):
+        with mock.patch.object(config, "PACKS_TOPIC_QUOTA", 1):
+            out = packbuild.run("water", sources=["wikimedia"], max_clips=9, http=self.http(), parallel=1,
+                                store=packbuild.LocalStore(self.out))
+        self.assertEqual(out["added"], 2)                                                    # drought once, dams once
+        self.assertGreaterEqual(out["rejected"].get("topic full", 0), 1)
+
+    def test_a_build_without_the_r2_keys_or_the_model_says_so(self):
+        with mock.patch.object(r2_mod(), "library_enabled", return_value=False):
+            out = packbuild.run("water", sources=["wikimedia"], http=self.http())
+        self.assertFalse(out["ok"])
+        self.assertIn("R2", out["error"])
+        with mock.patch.object(packs, "_clip", return_value=None):
+            out = packbuild.run("water", sources=["wikimedia"], http=self.http(), store=packbuild.LocalStore(self.out))
+        self.assertFalse(out["ok"])
+        self.assertIn("CLIP", out["error"])
+
+
+def r2_mod():
+    from src import r2
+    return r2
+
+
+class FromTheLibrary(unittest.TestCase):
+    def test_unused_unshown_library_clips_are_catalogued_with_their_own_embedding_and_stay_unverified(self):
+        def row(i, **kw):
+            base = {"id": f"yt:LIB{i:08d}@4", "kind": "video", "saved": True, "bucket": "r2:thumbgenius-library",
+                    "read_url": f"https://pub.r2.dev/clips/lib{i}.mp4", "source": "youtube", "subject": f"Lake Mead {i}",
+                    "url": f"https://www.youtube.com/watch?v=LIB{i:08d}&t=35", "seconds": 6.5, "width": 1920, "height": 1080,
+                    "license": "unverified - you must hold the rights", "analysis": {"embeddingKey": f"embeddings/e{i}.json",
+                                                                                      "phash": ["00ff00ff00ff00ff"]}}
+            base.update(kw)
+            return base
+        shown = row(2)
+        shown["analysis"] = dict(shown["analysis"], shownIn="project-1")
+        lib = type("Lib", (), {})()
+        lib.entries = [row(1), shown, row(3, kind="image"), row(4, saved=False), row(5, bucket="video-media"),
+                       row(6, analysis={}), row(7), row(8)]
+        sidecars = {"embeddings/e1.json": [1.0, 0, 0, 0, 0], "embeddings/e7.json": [0, 0, 0, 1.0, 0],
+                    "embeddings/e8.json": [0, 0, 0, 1.0, 0]}
+
+        class H:
+            def get_json(self, url, params=None):
+                return {"embedding": sidecars[url.rsplit("/", 2)[-2] + "/" + url.rsplit("/", 1)[-1]]}
+        with mock.patch.object(libstore, "url_for", side_effect=lambda bucket, key: f"https://pub.r2.dev/{key}"), \
+                mock.patch.object(packs, "_clip", return_value=FakeClip()), \
+                mock.patch.object(ledger, "on", return_value=False):
+            got = packbuild.library_entries("water", lib, H())
+        self.assertEqual([e.id for e in got], ["lib-yt_LIB00000001_4@0"])               # not shown, not an image, not removed,
+        e = got[0]                                                                          # on R2, with an embedding that fits water
+        self.assertEqual((e.source, e.license_class, e.topics, e.niche), ("library", "unverified", ["drought"], "water"))
+        self.assertEqual(e.url, "https://pub.r2.dev/clips/lib1.mp4")
+        self.assertEqual(e.source_url, "https://www.youtube.com/watch?v=LIB00000001&t=35")
+        self.assertEqual(e.asset_id, "pack:water:lib-yt_LIB00000001_4@0")
+        self.assertEqual(gapfill._video_of(e.asset_id, e.moment_url), "yt:LIB00000001")     # a moment of its YouTube video
+
+
+class HandlerAction(unittest.TestCase):
+    def test_pack_build_is_an_action_that_touches_no_project(self):
+        seen = {}
+
+        def run(niche, **kw):
+            seen.update(niche=niche, **kw)
+            return {"ok": True, "niche": niche, "added": 3}
+        with mock.patch.object(packbuild, "run", side_effect=run), \
+                mock.patch.object(handler.storage, "patch_project", side_effect=AssertionError("no project")):
+            out = handler.handler({"id": "job-pack", "input": {"action": "pack_build", "niche": "Water", "max_clips": "12",
+                                                              "dry_run": True, "sources": ["nasa"]}})
+        self.assertEqual((out["ok"], out["action"], out["added"]), (True, "pack_build", 3))
+        self.assertEqual((seen["niche"], seen["max_clips"], seen["dry_run"], seen["sources"]), ("Water", 12, True, ["nasa"]))
+        self.assertIsNone(seen["library"])
+        bad = handler.handler({"id": "job-pack2", "input": {"action": "pack_build", "niche": "nonsense", "dry_run": True}})
+        self.assertFalse(bad["ok"])
+        self.assertIn("unknown niche", bad["error"])
+
+    def test_the_script_lists_the_niches_and_refuses_a_library_build_without_a_library(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_pack", os.path.join(ROOT, "scripts", "build_pack.py"))
+        script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(script)
+        with mock.patch("sys.stdout"):
+            listed = script.main(["--list-niches"])
+        self.assertIn("bathtub rings", listed["water"])
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr"):
+            script.main(["--niche", "water", "--sources", "library"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -27,6 +27,10 @@ health  : cheap readiness probe.
 selftest: render the whole template library in-container, upload nothing.
           Proves ffmpeg, Chrome, the asset server, every animation and the
           whisper model all work on this worker — with no credentials set.
+pack_build: build or refresh one niche's footage pack on R2 (NASA, Wikimedia
+          Commons, Internet Archive, the owner's unused library clips):
+          {"niche": "water", "max_clips": 40, "dry_run": false}. See
+          src/packbuild.py and scripts/build_pack.py. No project is touched.
 
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
@@ -2278,6 +2282,25 @@ def handler(job):
         if action == "selftest":
             out = selftest.run(work, width=int(inp.get("width", 854)), report=report)
             return {"ok": out.get("ok", False), "action": "selftest", **out,
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action == "pack_build":
+            # Build or refresh one niche's footage pack (src/packbuild.py, scripts/build_pack.py):
+            # NASA, Wikimedia Commons, the Internet Archive and - with "library" in sources and a
+            # running project - the owner's unused library clips; nothing else. Touches no project.
+            from src import packbuild
+            lib = None
+            if inp.get("project_id") and "library" in (inp.get("sources") or []) and not inp.get("dry_run"):
+                storage.CURRENT_JOB[0] = job_id           # the broker authorises the running job only
+                lib = library.Library(inp["project_id"], job_id)
+                if not (lib.enabled and lib._load_db()):
+                    lib = None
+            out = packbuild.run(
+                str(inp.get("niche") or ""), max_clips=int(inp.get("max_clips") or 40),
+                sources=inp.get("sources") or None, dry_run=bool(inp.get("dry_run")),
+                resolve=bool(inp.get("resolve")), seconds=float(inp.get("seconds") or 1500),
+                library=lib, parallel=int(inp.get("parallel") or 2), work=work, report=report)
+            return {**out, "ok": bool(out.get("ok", True)), "action": "pack_build",
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "health":
