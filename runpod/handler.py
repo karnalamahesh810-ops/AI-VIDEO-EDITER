@@ -2158,7 +2158,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # The hook booster (src/hookboost.py): A/B one job without a redeploy.
                       "HOOK_BOOST", "HOOK_BOOST_SECONDS", "HOOK_BOOST_SPLIT_OVER", "HOOK_BOOST_MIN_SHOT",
                       "HOOK_BOOST_MAX_SHOT", "HOOK_BOOST_MOTION", "HOOK_BOOST_DRAMA", "HOOK_BOOST_QUIET_SECONDS",
-                      "HOOK_BOOST_SFX_CUTS", "HOOK_TEASER", "HOOK_TEASER_SHOTS", "HOOK_TEASER_SECONDS")
+                      "HOOK_BOOST_SFX_CUTS", "HOOK_TEASER", "HOOK_TEASER_SHOTS", "HOOK_TEASER_SECONDS",
+                      # Auto maps (src/automaps.py): named rivers, reservoirs, dams and canals on real geography.
+                      "AUTO_MAPS", "AUTO_MAP_GAP")
 
 
 def _apply_config(overrides) -> dict:

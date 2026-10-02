@@ -44,6 +44,7 @@ import zlib
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, hookboost, numwords, templates
+from . import automaps, config, numwords, templates
 from .transcribe import Segment
 
 # Read off VidRush's own timelines (an animation block every 8-10 s through
@@ -2673,6 +2674,8 @@ class _Planner:
         self.phrases: Dict[str, float] = {}
         self.skip_next_still = False
         self.n_maps = 0
+        # Auto maps (src/automaps.py): (feature id, section) already mapped - one per feature per section.
+        self.auto_used: set = set()
         self.i = 0
         # Video style (src/styles.py): "minimal" = a news compilation's cut -
         # dates, spaced figures and maps only; "normal" drops the filler label.
@@ -2970,6 +2973,14 @@ class _Planner:
                 got = self._request(req, seg, scene, "seq" if placed else req.get("mode", "normal"))
                 if got:
                     placed.append(got)
+        # 2b. A river, lake, reservoir, dam or canal the line names, drawn on real geography (src/automaps.py).
+        if config.AUTO_MAPS and not placed and not (hint and hint.get("type") == "map"):
+            req = self._auto_map_request(i, seg, text)
+            if req:
+                got = self._request(req, seg, scene, "normal")
+                if got:
+                    placed.append(got)
+                    self.auto_used.add((req["auto_id"], req["auto_section"]))
         if minimal:
             self.treatments.append(self._entry(scene, placed, i))
             return
@@ -3072,6 +3083,36 @@ class _Planner:
             # "Footage shows...": the clip plays in a player window on the desk.
             scene["frame"] = "window"
             self.last_window = at
+
+    def _section_of(self, i: int, at: float) -> int:
+        """The brief section line i belongs to (else a four-minute slot): the unit of 'one auto map per feature'."""
+        for n, sec in enumerate(self.brief.get("sections") or []):
+            if isinstance(sec, dict) and isinstance(sec.get("from"), int) and isinstance(sec.get("to"), int) \
+                    and sec["from"] <= i <= sec["to"]:
+                return n
+        return int(at // LOOK_GAP)
+
+    def _auto_map_request(self, i: int, seg, text: str) -> Optional[dict]:
+        """The auto map this line asks for (automaps.plan_for_line) as a placement request, or None."""
+        at = float(seg.start)
+        if at - max([s["end"] for s in self.spans if s["klass"] == "map"] or [-1e9]) < config.AUTO_MAP_GAP:
+            return None                                # maps keep their distance from each other
+        section = self._section_of(i, at)
+        around = " ".join(getattr(s, "text", "") or "" for s in self.segments[max(0, i - 2):i + 2])
+        said = [str(self.brief.get(k) or "") for k in ("subject", "title", "topic", "where")]
+        for sec in self.brief.get("sections") or []:
+            if isinstance(sec, dict) and isinstance(sec.get("from"), int) and isinstance(sec.get("to"), int) \
+                    and sec["from"] <= i <= sec["to"]:
+                said.append(str(sec.get("where") or ""))
+        said += [str(loc.get("label") or "") for loc in self.last_locations if isinstance(loc, dict)]
+        used = {fid for fid, sec in self.auto_used if sec == section}
+        plan = automaps.plan_for_line(text, around + " " + " ".join(said), list(self.last_locations), used)
+        if not plan:
+            return None
+        return {"ids": [plan["look"]], "first": plan["look"], "props": {"text": plan["label"], "_key": plan["key"],
+                                                                         "_geo": plan["geo"]},
+                "group": "map", "emphasis": "high", "cue": "place", "layout": "map", "auto_map": True,
+                "auto_id": plan["id"], "auto_section": section}
 
     def _animation_scene(self, seg, scene: dict, at: float, scene_frames: int) -> None:
         """The beat already IS a graphic (timeline.build filled it): no overlay on top, but it counts."""
@@ -3427,6 +3468,13 @@ class _Planner:
         prefer = set(req.get("prefer") or ())
         by_cue = req.get("props_by_cue") or {}
         by_id = req.get("props_by_id") or {}
+        if req.get("auto_map"):
+            # An auto map (src/automaps.py): its own looks, registered autoPick false, asked for by name.
+            for tid in req["ids"]:
+                t = templates.get(tid)
+                if t and look_fits(tid, text):
+                    yield t, req.get("cue", ""), dict(req["props"])
+            return
         stages = []
         if req.get("ids"):
             pool = [templates.get(x) for x in req["ids"]]
@@ -3493,7 +3541,8 @@ class _Planner:
         for t, cue, props in self._candidates(req, seg, scene, mode):
             # (The VidRush date looks carry generic cues - "caption", "date" - but only
             # the date pass, _vr_request, may place them.)
-            if t["id"] in tried or not auto_ok(t["id"]) or (t["id"] in VR_LOOKS and not req.get("vr")):
+            if t["id"] in tried or not (auto_ok(t["id"]) or req.get("auto_map")) \
+                    or (t["id"] in VR_LOOKS and not req.get("vr")):
                 continue
             tried.add(t["id"])
             got = self._place(t, cue, props, req, seg, scene, mode)
@@ -3525,6 +3574,7 @@ class _Planner:
             return None
         motion = props.pop("_motion", "")
         key = props.pop("_key", "")
+        geo = props.pop("_geo", None)
         resolved = templates.resolve(t["id"], style=self.style, entrance=motion, props=props, pack=self.pack)
         if not resolved:
             return None
@@ -3602,6 +3652,8 @@ class _Planner:
         sfx = resolved.pop("sfx", {"name": "none", "volume": 0.0})
         overlay = {**resolved, "startFrame": o_start, "durationInFrames": frames}
         overlay.pop("seconds", None)
+        if geo:
+            overlay["geo"] = geo           # the auto map's geometry (src/automaps.py), drawn by the renderer
         if t["id"] in VR_LOOKS:
             # One theme for every date and time look of the video, whatever the pack's colour.
             overlay["theme"] = self.vr_theme
