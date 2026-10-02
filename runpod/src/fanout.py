@@ -543,6 +543,14 @@ def _media_ref(m: dict) -> str:
     return str(m.get("url") or "").split("?", 1)[0]
 
 
+def _renderer_id() -> str:
+    """What draws the frames (render.renderer_fingerprint), '' when it cannot be read."""
+    try:
+        return renderer.renderer_fingerprint()
+    except OSError:
+        return ""
+
+
 def chunk_hash(doc: dict, a: int, b: int) -> str:
     """
     A fingerprint of everything that draws frames a..b: the scenes and
@@ -550,7 +558,10 @@ def chunk_hash(doc: dict, a: int, b: int) -> str:
     URL does not count as a change), the caption settings and the frame size.
     A scene counts over the frames it really draws: it plays on under the
     next scene's crossfade, and the next scene's cut transition draws its
-    out half over this scene's last frames.
+    out half over this scene's last frames. The video's grade (doc.grade,
+    with its frozen median tone) and each scene's measured tone count, and so
+    does the renderer itself (render.renderer_fingerprint): a chunk drawn by
+    older renderer code (before the grade, say) must not be joined to new ones.
     Two renders whose chunk hashes match can share the chunk file.
     """
     def overlaps(item: dict, extra: int = 0) -> bool:
@@ -568,12 +579,13 @@ def chunk_hash(doc: dict, a: int, b: int) -> str:
         scenes.append({k: sc.get(k) for k in ("id", "startFrame", "durationInFrames", "text",
                                                 "motion", "transition", "effect", "treatment", "frame")}
                       | {"nextTransition": nxt.get("transition"),
-                         "media": [m.get("type"), _media_ref(m), m.get("sourceStart"), m.get("sourceEnd")],
+                         "media": [m.get("type"), _media_ref(m), m.get("sourceStart"), m.get("sourceEnd"),
+                                   m.get("tone")],
                          "words": [(w.get("text"), w.get("start"), w.get("end")) for w in sc.get("words") or []]})
     overlays = [o for o in doc.get("overlays") or [] if overlaps(o)]
     payload = {"fps": doc.get("fps"), "width": doc.get("width"), "height": doc.get("height"),
                "captions": doc.get("captions"), "brand": doc.get("brand"), "overlaysEnabled": doc.get("overlaysEnabled"),
-               "scenes": scenes, "overlays": overlays}
+               "scenes": scenes, "overlays": overlays, "grade": doc.get("grade"), "renderer": _renderer_id()}
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
 
 

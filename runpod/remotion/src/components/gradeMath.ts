@@ -112,7 +112,13 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 
-/** The video's common tone: the median of its colour scenes' tones (null under 3 such scenes). */
+const r4 = (v: number) => Math.round(v * 10000) / 10000;
+
+/**
+ * The video's common tone: the median of its colour scenes' tones (null under
+ * 3 such scenes). src/grade.py medians() is its twin: the worker freezes the
+ * result in doc.grade.medians.
+ */
 export const gradeMedians = (scenes: GradedScene[]): GradeMedians | null => {
   const tones = scenes
     .filter((sc) => !KEEPS_COLOUR.has(String(sc.treatment || "")) && (sc.media?.type === "video" || sc.media?.type === "image"))
@@ -120,8 +126,14 @@ export const gradeMedians = (scenes: GradedScene[]): GradeMedians | null => {
     .filter(validTone)
     .filter((t) => t.s >= 0.04);
   if (tones.length < 3) return null;
-  return { l: median(tones.map((t) => t.l)), s: median(tones.map((t) => t.s)), rg: median(tones.map((t) => t.rg)),
-    bg: median(tones.map((t) => t.bg)), n: tones.length };
+  return { l: r4(median(tones.map((t) => t.l))), s: r4(median(tones.map((t) => t.s))),
+    rg: r4(median(tones.map((t) => t.rg))), bg: r4(median(tones.map((t) => t.bg))), n: tones.length };
+};
+
+export const validMedians = (m: unknown): m is GradeMedians => {
+  const o = m as GradeMedians | null;
+  return !!o && typeof o === "object" && [o.l, o.s, o.rg, o.bg].every(finite) && o.l > 0 && o.l < 1
+    && o.rg > 0 && o.bg > 0;
 };
 
 export const presetOf = (settings: GradeSettings | null | undefined): GradePreset | null => {

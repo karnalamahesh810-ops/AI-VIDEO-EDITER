@@ -52,7 +52,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, styles, upscale
-from src import gapfill, quality, voicepolish
+from src import gapfill, grade, quality, voicepolish
 
 
 def _work_dir(job_id: str) -> str:
@@ -1148,6 +1148,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
     if fallback or any(last.values()):
         print(f"[worker] {gapfill.summary(fallback, last)}", flush=True)
+    # One grade for the whole video (src/grade.py): its settings, and each
+    # scene's tone measured from the files while they are still on this disk.
+    report("Matching the colour of the clips")
+    doc["meta"]["grade"] = grade.prepare(doc, remote=False)
     # A signed URL expires; keep the original reference so render can re-sign.
     unsupported = [k for k in ("own_clips", "channels")
                    if inp.get(k) and inp.get("source") in ("clips", "channels")]
@@ -1385,6 +1389,10 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         clip_s = timeline._clip_seconds(asset)
         if clip_s:
             scene["media"]["clipSeconds"] = round(clip_s, 2)
+    # Its tone for the video's grade (src/grade.py), read while the file is here.
+    tone = grade.measure(scene["media"])
+    if tone:
+        scene["media"]["tone"] = tone
     scene["query"] = query
     scene["motion"] = (timeline._IMAGE_MOTIONS[idx % len(timeline._IMAGE_MOTIONS)]
                        if asset.kind == "image" else "none")
@@ -1755,6 +1763,10 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # Any failure keeps the original.
     report("Polishing the narration", 69)
     voicepolish.for_render(doc, work, inp)
+    # The video's grade: the default when the document has none (GRADE), and
+    # the tone of any scene without one (an older plan, a repaired scene) -
+    # time-boxed; a scene left unmeasured keeps the shared look only.
+    grade.prepare(doc, remote=True)
     out_path = os.path.join(work, "final.mp4")
     try:
         _draw(doc, inp, work, report, split, out_path, gate)

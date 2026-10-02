@@ -1,5 +1,5 @@
 import React from "react";
-import { gradeMedians, sceneGrade, type GradeMedians, type GradeSettings } from "./gradeMath";
+import { gradeMedians, sceneGrade, validMedians, type GradeMedians, type GradeSettings } from "./gradeMath";
 import type { Scene } from "../types";
 
 /**
@@ -12,8 +12,16 @@ export interface GradeState { settings: GradeSettings; medians: GradeMedians | n
 
 export const GradeContext = React.createContext<GradeState | null>(null);
 
-export const gradeStateFor = (grade: unknown, scenes: Scene[]): GradeState | null =>
-  grade && typeof grade === "object" ? { settings: grade as GradeSettings, medians: gradeMedians(scenes) } : null;
+/**
+ * The medians the worker froze in the document (doc.grade.medians: a Replace
+ * Clip must not shift every other scene's grade, or every chunk of a split
+ * render would change), else the scenes' own.
+ */
+export const gradeStateFor = (grade: unknown, scenes: Scene[]): GradeState | null => {
+  if (!grade || typeof grade !== "object") return null;
+  const settings = grade as GradeSettings & { medians?: unknown };
+  return { settings, medians: validMedians(settings.medians) ? settings.medians : gradeMedians(scenes) };
+};
 
 const table = (values: number[]) => values.map((v) => v.toFixed(4)).join(" ");
 

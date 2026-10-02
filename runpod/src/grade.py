@@ -68,8 +68,12 @@ def clean_settings(value: Any) -> Optional[Dict[str, Any]]:
         strength = 1.0
     if not math.isfinite(strength):
         strength = 1.0
-    return {"preset": preset, "strength": round(max(0.0, min(1.0, strength)), 3),
-            "normalize": value.get("normalize") is not False}
+    out = {"preset": preset, "strength": round(max(0.0, min(1.0, strength)), 3),
+           "normalize": value.get("normalize") is not False}
+    frozen = value.get("medians")
+    if isinstance(frozen, dict) and _valid_tone({**frozen, "lo": 0.0, "hi": 1.0}):
+        out["medians"] = {k: frozen[k] for k in ("l", "s", "rg", "bg", "n") if k in frozen}
+    return out
 
 
 def ensure(doc: Dict[str, Any]) -> bool:
@@ -244,11 +248,49 @@ def measure_scenes(doc: Dict[str, Any], budget: Optional[float] = None, workers:
     return out
 
 
+KEEPS_COLOUR = ("archival", "vintage")
+
+
+def _valid_tone(t: Any) -> bool:
+    if not isinstance(t, dict):
+        return False
+    vals = [t.get(k) for k in ("l", "lo", "hi", "s", "rg", "bg")]
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in vals):
+        return False
+    return 0 < t["l"] < 1 and t["rg"] > 0 and t["bg"] > 0
+
+
+def _median(xs: List[float]) -> float:
+    s = sorted(xs)
+    m = len(s) // 2
+    return s[m] if len(s) % 2 else (s[m - 1] + s[m]) / 2.0
+
+
+def medians(doc: Dict[str, Any]) -> Optional[Dict[str, float]]:
+    """
+    The video's common tone: the median of its colour scenes' tones, None
+    under 3 of them. The twin of gradeMedians in gradeMath.ts (a test runs both).
+    """
+    tones = []
+    for sc in doc.get("scenes") or []:
+        if not isinstance(sc, dict) or str(sc.get("treatment") or "") in KEEPS_COLOUR:
+            continue
+        m = sc.get("media") if isinstance(sc.get("media"), dict) else {}
+        if m.get("type") in ("video", "image") and _valid_tone(m.get("tone")) and m["tone"]["s"] >= 0.04:
+            tones.append(m["tone"])
+    if len(tones) < 3:
+        return None
+    return {k: round(_median([float(t[k]) for t in tones]), 4) for k in ("l", "s", "rg", "bg")} | {"n": len(tones)}
+
+
 def prepare(doc: Dict[str, Any], *, remote: bool = True, budget: Optional[float] = None) -> Dict[str, Any]:
     """
     The grade before a plan is saved or a render is drawn: the default
-    settings when the document has none (config.GRADE), then the tone of every
-    scene that lacks it. Returns what was done; never raises.
+    settings when the document has none (config.GRADE), the tone of every
+    scene that lacks it, and the video's median tone frozen in the document
+    (doc.grade.medians) the first time it can be: later Replace Clips are
+    pulled toward it without shifting every other scene's grade (which would
+    change every chunk of a split render). Returns what was done; never raises.
     """
     report: Dict[str, Any] = {"added": False}
     try:
@@ -257,6 +299,10 @@ def prepare(doc: Dict[str, Any], *, remote: bool = True, budget: Optional[float]
         if not isinstance(grade, dict) or grade.get("preset") == "none" or grade.get("normalize") is False:
             return report
         report.update(measure_scenes(doc, budget=budget, remote=remote))
+        if not isinstance(grade.get("medians"), dict):
+            got = medians(doc)
+            if got:
+                grade["medians"] = got
         if report.get("measured") or report.get("missing"):
             print(f"[grade] {grade.get('preset')} at {grade.get('strength')}: measured {report.get('measured', 0)} "
                   f"scene(s), {report.get('missing', 0)} without a tone ({report.get('seconds', 0)} s)", flush=True)
