@@ -347,7 +347,7 @@ class Punch(unittest.TestCase):
             self.assertIn(fx["name"], {n for n, _ in timeline._TRANSITION_SFX.values()})   # an existing sound
             self.assertLessEqual(fx["volume"], sfxplan.cap(doc["meta"]["voiceLufs"], fx["name"]) + 1e-9)
         # The owner's mix: the master stays 20%, and nothing is lowered or raised by the cap.
-        self.assertEqual(doc["sfxVolume"], 0.2)
+        self.assertEqual(doc["sfxVolume"], 0.4)       # the owner's level since 2026-10-02
         self.assertEqual(timeline.cap_sfx_levels(doc), 0)
         self.assertEqual(doc["meta"]["hookBoost"]["cutSounds"], 3)
 
