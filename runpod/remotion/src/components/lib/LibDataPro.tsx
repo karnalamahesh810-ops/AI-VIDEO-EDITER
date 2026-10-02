@@ -538,7 +538,7 @@ const NestedSquares: Look = ({ overlay, accent }) => {
                 </g>
               );
             }
-            const p = fills[i];
+            const p = Math.max(0, fills[i]);
             return (
               <rect key={i} x={left} y={bottom - s * p} width={s * p} height={s * p}
                 fill={i === 1 ? hot : mixHex(hot, "#ffffff", 0.5)}
@@ -643,7 +643,6 @@ const UnitSplit: Look = ({ overlay, accent }) => {
   const fx = gx + gridW + 140 * kw;
   const labelFit = fit(label, { font: SUBLINE, weight: 700, tracking: 0.08 }, width - fx - 110 * kw, 40 * k, 26 * k, 3);
   const textP = inOf(f, (UNIT.land - 4) * S, 14 * S);
-  const shownLit = Math.round(lit * countP);
   return (
     <AbsoluteFill>
       {sound}
@@ -652,8 +651,9 @@ const UnitSplit: Look = ({ overlay, accent }) => {
         <svg width={width} height={height} style={{ position: "absolute", inset: 0 }}>{units}</svg>
         <div style={{ position: "absolute", left: fx, top: cy - figSize * 0.72 }}>
           {plan.ratio ? (
-            <span style={{ ...heavy(figSize * 0.78, WHITE), textShadow: lift(k, 0.5) }}>
-              <span style={{ color: hot }}>{fmtNumber(Math.max(0, Math.min(lit, shownLit)))}</span>
+            <span style={{ ...heavy(figSize * 0.78, WHITE), textShadow: lift(k, 0.5), display: "inline-block",
+              opacity: inOf(f, UNIT.lightAt * S, 10 * S), transform: `translateY(${((1 - inOf(f, UNIT.lightAt * S, 14 * S)) * 30 * k).toFixed(1)}px)` }}>
+              <span style={{ color: hot }}>{fmtNumber(lit)}</span>
               <span style={{ fontSize: figSize * 0.4, margin: `0 ${figSize * 0.12}px`, color: SOFT }}>IN</span>
               {fmtNumber(count)}
             </span>
@@ -1267,8 +1267,9 @@ const ReservoirSection: Look = ({ overlay, accent }) => {
           ) : null}
         </div>
         {showDrop && plan.change !== null && bigGap ? (
-          <div style={{ position: "absolute", left: bx + 22 * k, top: (fullY + Y(plan.v)) / 2 - 34 * k, opacity: landP,
-            transform: `translateX(${((1 - landP) * -12 * k).toFixed(1)}px)` }}>
+          <div style={{ position: "absolute", right: width - bx + 22 * k, top: (fullY + Y(plan.v)) / 2 - 34 * k, opacity: landP,
+            display: "flex", flexDirection: "column", alignItems: "flex-end",
+            transform: `translateX(${((1 - landP) * 12 * k).toFixed(1)}px)` }}>
             <div style={{ ...heavy(48 * k, hot), textShadow: lift(k, 0.7) }}>{dropText}</div>
             <div style={{ ...caps(20 * k, WHITE, 0.14), marginTop: 8 * k, textShadow: lift(k, 0.8) }}>{dropWords}</div>
           </div>

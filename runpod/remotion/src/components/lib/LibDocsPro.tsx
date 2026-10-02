@@ -181,12 +181,12 @@ const ArticleZoom: Look = ({ overlay, accent }) => {
   const drift = 0.02 * clamp01((f - (ART.pushAt + ART.pushFrames) * S) / Math.max(1, dur));
   const cam = camera(startView, { ...endView, s: endView.s * (1 + drift) }, push, width / 2, height * 0.5);
   const enter = inOf(f, ART.inAt * S, 14 * S);
-  const dof = 5.5 * k * push;
+  const dof = 7.5 * k * push;
   const tilt = lerp(9, 1.5, push);
   const text = (lines: string[], x: number, top: number, w: number, blur: number, key?: string) => (
     <div key={key} style={{ position: "absolute", left: x, top, width: w, filter: blur > 0.2 ? `blur(${blur.toFixed(2)}px)` : undefined }}>
       {lines.map((ln, i) => (
-        <div key={i} style={{ fontFamily: NEWS, fontSize: bodySize, lineHeight: `${lineH}px`, color: "#2b2b2e", whiteSpace: "nowrap",
+        <div key={i} style={{ fontFamily: NEWS, fontSize: bodySize, lineHeight: `${lineH}px`, color: "#4a4a4e", whiteSpace: "nowrap",
           textAlign: "justify" }}>{ln}</div>
       ))}
     </div>
@@ -776,7 +776,7 @@ const Definition: Look = ({ overlay, accent }) => {
   const maxW = 1080 * kw;
   const pad = 52 * k;
   const termFit = fit(plan.term, { font: DISPLAY_SERIF }, maxW - 2 * pad, 128 * k, 70 * k, 2);
-  const mFit = plan.meaning ? fit(plan.meaning, { font: INTER, weight: 500 }, Math.max(560 * k, Math.min(maxW - 2 * pad, termFit.width * 1.4)),
+  const mFit = plan.meaning ? fit(plan.meaning, { font: INTER, weight: 500 }, Math.min(maxW - 2 * pad, Math.max(780 * k, termFit.width)),
     38 * k, 28 * k, 3) : null;
   const W = Math.min(maxW, Math.max(termFit.width, mFit ? mFit.width : 0, textWidth(plan.label, SUBLINE, 22 * k, 700, 0.24)) + 2 * pad + 8 * k);
   const H = pad * 2 + 46 * k + termFit.lines.length * termFit.size * 1.05 + (mFit ? 28 * k + mFit.lines.length * mFit.size * 1.42 : 0);
@@ -874,7 +874,7 @@ const LetterSignature: Look = ({ overlay }) => {
               {plan.signer ? (
                 <div style={{ position: "absolute", left: PW - M - Math.max(sigW, 420 * k), top: sigTop }}>
                   <div style={{ fontFamily: SIGNATURE, fontSize: sigSize, lineHeight: 1, color: "#14254a", whiteSpace: "nowrap",
-                    clipPath: `inset(-30% ${((1 - sigP) * 100).toFixed(2)}% -30% -5%)` }}>{plan.signer}</div>
+                    clipPath: `inset(-30% ${((1 - sigP) * 100).toFixed(2)}% -30% -5%)`, opacity: sigP > 0.002 ? 1 : 0 }}>{plan.signer}</div>
                   <div style={{ ...caps(26 * k, "#3d3a33", 0.18), marginTop: 20 * k, opacity: inOf(f, (LETTER.sign + 10) * S, 12 * S) }}>
                     {plan.signer.toUpperCase()}
                   </div>
