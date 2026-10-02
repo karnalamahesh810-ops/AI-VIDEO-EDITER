@@ -1,0 +1,532 @@
+[
+ {
+  "id": "tx-sentence-highlight",
+  "name": "Sentence Highlight",
+  "category": "TEXT",
+  "description": "LOWER LEFT. VidRush's sentence highlight, refined: the spoken sentence types in a warm Playfair Display a letter at a time (no cursor) on up to three balanced lines; as its key phrase types, a marker in the video's accent wipes in under it and the phrase sets in dark italic on the marker (highlight, else the line's longest word). No bar, no underline. A soft marker stroke as it draws.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight"
+  ],
+  "cues": [
+   "fact",
+   "statement"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 20,
+  "types": false,
+  "sounds": [
+   {
+    "name": "marker-draw",
+    "alt": [
+     "marker-underline",
+     "marker"
+    ],
+    "at": 18,
+    "align": "start",
+    "gain_db": -7
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Lake Powell is now at its lowest level since the dam was filled",
+   "highlight": "lowest level"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-typewriter-lower",
+  "name": "Typewriter Lower Third",
+  "category": "LOWER_THIRDS",
+  "description": "LOWER LEFT. VidRush's type-writer lower third: the line types in cream Courier Prime Bold (cap ~31 px) from frame 6, 2 frames a letter (the typing contract), a block cursor in the accent after it; the small line under it types at a letter a frame; the cursor blinks for 24 frames and goes. A clean typewriter for the typing span.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "typewriter",
+   "caption"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 6,
+  "types": true,
+  "sounds": [
+   {
+    "name": "typewriter-clean",
+    "alt": [
+     "typewriter",
+     "keys"
+    ],
+    "at": 5,
+    "align": "start",
+    "until": 40,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Glen Canyon Dam",
+   "subtitle": "Page, Arizona - completed 1966"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-kicker-headline",
+  "name": "Kicker and Headline",
+  "category": "HEADLINES",
+  "description": "LOWER LEFT. A small kicker in tracked accent caps (label, only when given), then the headline in Anton caps on up to two balanced lines, each word rising out of its own mask a beat after the one before, the key word in the accent (highlight, else the longest); a serif italic line under it when a subtitle is given. A soft text swoosh.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "headline"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 16,
+  "types": false,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 6,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "label": "The Colorado River",
+   "text": "The river that no longer reaches the sea",
+   "highlight": "no longer"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-word-kinetic",
+  "name": "Kinetic Phrase",
+  "category": "TEXT",
+  "description": "LOWER LEFT. A short line word by word, each landing out of a blur with a soft overshoot: the words that carry it in Anton caps, the small words (the, of, is...) in Playfair italic, the key word in the accent; one or two balanced lines. A very soft tick as each word lands.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight"
+  ],
+  "cues": [
+   "headline"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 22,
+  "types": false,
+  "sounds": [
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 6,
+    "every": 3,
+    "count": 6,
+    "gain_db": -11
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "The lake is running out of time",
+   "highlight": "time"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-quote-serif",
+  "name": "Spoken Quote",
+  "category": "QUOTES",
+  "description": "CENTRE. VidRush's quote: the frame darkens softly at its edges, the quote in Playfair Display (cap ~44 px) fades in word by word as if spoken, between accent quotation marks, balanced lines centred; who said it (label, and subtitle: their role) small and tracked under a short accent dash once it is in.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 30,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft",
+     "swoosh-text"
+    ],
+    "at": 3,
+    "gain_db": -9
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "We have never seen the reservoir this low, and we are planning for it to fall further.",
+   "label": "Bureau of Reclamation official"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-pull-quote",
+  "name": "Pull Quote",
+  "category": "QUOTES",
+  "description": "MIDDLE LEFT. An editorial pull-quote over a soft left-side darkening: a large accent quotation mark scales in, the quote in Playfair Display rises line by line out of clean masks, the key words (highlight) in accent italic; the speaker (label) and their role (subtitle) in tracked caps under it. A soft paper slide.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "highlight"
+  ],
+  "cues": [
+   "quote"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 15,
+  "types": false,
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide",
+     "swoosh-text"
+    ],
+    "at": 4,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Every drop that leaves this lake is a decision someone made decades ago.",
+   "label": "Hydrologist",
+   "subtitle": "Colorado River Research Group",
+   "highlight": "a decision"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-statement-card",
+  "name": "Statement Card",
+  "category": "QUOTES",
+  "description": "RIGHT, vertically centred. An official statement on a dark glass card (a frosted fill that softens the picture, a hairline edge) sliding in from the right: the source as its header in accent tracked caps beside a small dot (label), the statement in Playfair italic word by word, how it was given under it (subtitle: 'IN A STATEMENT'). A soft swipe.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "quote-official",
+   "quote"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 14,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-swipe",
+    "alt": [
+     "swipe",
+     "whoosh-soft-v2"
+    ],
+    "at": 2,
+    "gain_db": -7
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Reclamation will take additional actions to protect Glen Canyon Dam operations and Lake Powell elevations.",
+   "label": "Bureau of Reclamation",
+   "subtitle": "In a statement"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-name-card",
+  "name": "Name Card",
+  "category": "LOWER_THIRDS",
+  "description": "LOWER LEFT. A name in Anton caps pulled into focus (blur 12 -> 0) as its tracking closes from wide to tight, one soft light passing across it in the accent; the role under it in tracked caps, the organisation or years in the accent under that. No bar, no box.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 16,
+  "types": false,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 2,
+    "gain_db": -7
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Floyd Dominy",
+   "subtitle": "Commissioner, Bureau of Reclamation",
+   "label": "1959 - 1969"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-question",
+  "name": "Question on Screen",
+  "category": "TEXT",
+  "description": "LOWER LEFT. The question in Playfair italic (cap ~51 px) word by word out of a soft blur, on balanced lines; its question mark drops in last in the accent with a small settle. A very soft tick per word and a soft pop on the mark.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text"
+  ],
+  "cues": [
+   "question"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 24,
+  "types": false,
+  "sounds": [
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 6,
+    "every": 3,
+    "count": 6,
+    "gain_db": -12
+   },
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop",
+     "tick"
+    ],
+    "at": 24,
+    "gain_db": -8
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "So where did all the water go?"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-contrast",
+  "name": "Contrast Statement",
+  "category": "TEXT",
+  "description": "LOWER LEFT. Two lines that turn on each other: the first lands word by word in white Anton caps, then steps back (smaller, dimmed) as the second rises under it in the accent, larger ('THIS IS NOT A DROUGHT' / 'IT'S THE NEW NORMAL'). items [first, second], else text and subtitle. A soft swoosh on each line.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items"
+  ],
+  "cues": [
+   "contrast-line",
+   "contrast"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 26,
+  "types": false,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 2,
+    "gain_db": -8
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 18,
+    "gain_db": -6
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "This is not a drought",
+   "subtitle": "It's the new normal"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-ink-reveal",
+  "name": "Ink Reveal Headline",
+  "category": "HEADLINES",
+  "description": "LOWER LEFT. A headline in Playfair Display Bold (cap ~54 px) revealed like ink soaking into paper: a soft, uneven front of blots travels across each line (the second following the first); a small accent kicker over it (label, only when given). A soft whoosh.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "headline",
+   "intro"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 26,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft",
+     "swoosh-text"
+    ],
+    "at": 6,
+    "gain_db": -7
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "The Lake That Swallowed a Canyon",
+   "label": "Glen Canyon, 1963"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "tx-notice",
+  "name": "Notice",
+  "category": "TEXT",
+  "description": "LOWER LEFT. A tasteful warning, no red bar: an accent warning triangle draws itself, its mark pops in with one soft pulse ring, the warning as said in Anton caps beside it, a small line under it (subtitle). A soft pop.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle"
+  ],
+  "cues": [
+   "warning"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 13,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop",
+     "tick"
+    ],
+    "at": 13,
+    "gain_db": -6
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 5,
+    "gain_db": -9
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Dead pool",
+   "subtitle": "Below 3,370 feet no water flows past the dam"
+  },
+  "family": "tx",
+  "file": "LibTextPro",
+  "exit": "none",
+  "auto_pick": false
+ }
+]
