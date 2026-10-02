@@ -1392,8 +1392,9 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         clip_s = timeline._clip_seconds(asset)
         if clip_s:
             scene["media"]["clipSeconds"] = round(clip_s, 2)
-    # Its tone for the video's grade (src/grade.py), read while the file is here.
-    tone = grade.measure(scene["media"])
+    # Its tone for the video's grade (src/grade.py), read while the file is here
+    # (a link is left for the render's own time-boxed pass).
+    tone = grade.measure(scene["media"]) if grade.is_local(scene["media"].get("url")) else None
     if tone:
         scene["media"]["tone"] = tone
     scene["query"] = query

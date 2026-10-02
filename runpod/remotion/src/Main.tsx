@@ -13,7 +13,8 @@ import { LookSoundContext, LookSounds, type LookSoundScope } from "./components/
 import { lookSoundsOn, planDocSounds, type SoundCue, type SoundTemplate } from "./components/lib/lookSoundPlan";
 import { PackTransitions } from "./transitions/PackTransition";
 import { GradeContext, gradeStateFor } from "./components/Grade";
-import { ambienceSettings, bedVolume, speechCurve, type Ambience, type Bed } from "./components/ambienceMix";
+import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve, type Ambience, type Bed }
+  from "./components/ambienceMix";
 
 // The music beds were replaced by the owner's own tracks (2026-10-01); a
 // document planned before names the old bed, which no longer ships (its 404
@@ -298,20 +299,33 @@ const doublesLook = (overlays: Overlay[], sounds: Record<string, { scope: LookSo
 };
 
 /**
- * Ambience beds (src/ambience.py, doc.ambience): one looped bed at a time
- * under the scenes that are somewhere, at the level ambienceMix.ts works out
- * frame by frame (planned against the voice, the document's master, faded at
- * its cuts, silent under full-screen graphics, ducked under the words).
+ * Ambience beds (src/ambience.py, doc.ambience): one bed at a time under the
+ * scenes that are somewhere, its file played pass after pass, at the level
+ * ambienceMix.ts works out frame by frame (planned against the voice, the
+ * document's master, faded at its cuts, silent under full-screen graphics,
+ * ducked under the words).
  */
 const bedNode = (b: Bed, i: number, fps: number, master: number, duck: number, speech: Float32Array) => {
   const volume = bedVolume(b, fps, master, duck, speech);
   if (!volume) return null;
+  const start = Math.round(Number(b.startFrame) || 0);
+  const frames = Math.max(1, Math.round(Number(b.durationInFrames) || 0));
+  // The file played pass after pass, crossfaded over 0.25 s (ambienceMix.ts bedPasses).
+  const passes = bedPasses(frames, (SFX_META[b.name]?.duration ?? 0) * fps, fps * 0.25);
+  const src = staticFile(`sfx/${b.name}.mp3`);
   return (
-    <Sequence key={`amb-${i}`} from={Math.round(Number(b.startFrame) || 0)}
-      durationInFrames={Math.max(1, Math.round(Number(b.durationInFrames) || 0))} layout="none">
-      {/* Looped, the volume must keep counting frames across every pass. */}
-      <Audio src={staticFile(`sfx/${b.name}.mp3`)} volume={volume} loop loopVolumeCurveBehavior="extend" />
-    </Sequence>
+    <React.Fragment key={`amb-${i}`}>
+      {passes.map((p, k) => (
+        <Sequence key={k} from={start + p.from} durationInFrames={p.frames} layout="none">
+          {p.loop ? (
+            // No file length known: Remotion's loop, the volume counting frames across every pass.
+            <Audio src={src} volume={(f: number) => volume(p.from + f)} loop loopVolumeCurveBehavior="extend" />
+          ) : (
+            <Audio src={src} volume={(f: number) => volume(p.from + f) * passGain(p, f)} />
+          )}
+        </Sequence>
+      ))}
+    </React.Fragment>
   );
 };
 

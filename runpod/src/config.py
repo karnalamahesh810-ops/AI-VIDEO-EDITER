@@ -620,12 +620,14 @@ GRADE_MEASURE_WORKERS = int(os.getenv("GRADE_MEASURE_WORKERS", "8"))
 # one at a time, faded at cuts, quiet under full-screen graphics,
 # AMBIENCE_UNDER_VOICE_DB under the narration and ducked under its words.
 # Planned with a new plan; a document's ambience {enabled, level} is the
-# editor's switch and master.
-AMBIENCE = _flag("AMBIENCE", True)
+# editor's switch and master. Off until the owner has listened: the beds are
+# synthesised, and their levels, seams and split renders are measured but not
+# yet heard (A/B one job with "config": {"AMBIENCE": 1, "RISERS": 1}).
+AMBIENCE = _flag("AMBIENCE", False)
 AMBIENCE_UNDER_VOICE_DB = float(os.getenv("AMBIENCE_UNDER_VOICE_DB", "26"))
 # A soft swell (riser-soft) into the biggest reveals: section changes, chapter
 # cards, big figures marked high - an sfx row of kind "riser" under the sfx master.
-RISERS = _flag("RISERS", True)
+RISERS = _flag("RISERS", False)
 # Picture quality of h264 renders (x264 CRF). Remotion's own default, 18, made
 # ~13 Mbit/s at 1080p: a 22-minute render passed 2 GB and the app's storage
 # (Lovable Cloud: 2 GB a file by default) refused it after the whole render.

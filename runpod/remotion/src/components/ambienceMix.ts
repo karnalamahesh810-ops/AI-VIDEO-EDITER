@@ -50,6 +50,44 @@ export const ambienceSettings = (amb: Ambience, sfxEnabled?: unknown): { master:
   return master > 0 && amb.beds.length ? { master, duck } : null;
 };
 
+/**
+ * How a bed longer than its file is played: one pass of the file after
+ * another, each starting `overlap` frames before the last one ends, the
+ * two crossfaded at equal power. Not Remotion's own loop: measured on
+ * Remotion 4.0.511, a looped MP3 pass starts 16 samples into the file and the
+ * next one on the frame boundary, leaving 16 silent samples (a faint tick)
+ * at every repeat; under a crossfade any such edge is covered by the
+ * incoming pass. `from` is the pass's first frame in the bed; fadeIn /
+ * fadeOut are its crossfades (0 at the bed's own ends: the bed's fades
+ * apply there). With an unknown file length, one looping pass.
+ */
+export type BedPass = { from: number; frames: number; fadeIn: number; fadeOut: number; loop: boolean };
+
+export const bedPasses = (bedFrames: number, fileFrames: number, overlap: number): BedPass[] => {
+  const total = Math.max(1, Math.round(bedFrames));
+  const file = Math.round(fileFrames);
+  const ov = Math.max(1, Math.round(overlap));
+  if (!(file > 2 * ov)) return [{ from: 0, frames: total, fadeIn: 0, fadeOut: 0, loop: true }];
+  const step = file - ov;
+  const out: BedPass[] = [];
+  for (let from = 0; ; from += step) {
+    const last = from + file >= total;
+    out.push({ from, frames: last ? total - from : file, fadeIn: from > 0 ? ov : 0, fadeOut: last ? 0 : ov,
+      loop: false });
+    if (last) break;
+  }
+  return out;
+};
+
+/** A pass's own crossfade gain at frame f of the pass (equal power: the two overlapping passes' squares sum to 1). */
+export const passGain = (p: BedPass, f: number): number => {
+  let g = 1;
+  if (p.fadeIn > 0 && f < p.fadeIn) g *= Math.sin((Math.PI / 2) * Math.max(0, f / p.fadeIn));
+  const tail = p.frames - p.fadeOut;
+  if (p.fadeOut > 0 && f > tail) g *= Math.cos((Math.PI / 2) * Math.min(1, (f - tail) / p.fadeOut));
+  return g;
+};
+
 /** A bed's level at frame f of its own timeline (0 = its first frame), or null for a bed that plays nothing. */
 export const bedVolume = (b: Bed, fps: number, master: number, duck: number, speech: Float32Array) => {
   const start = Math.round(Number(b.startFrame) || 0);

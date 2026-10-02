@@ -226,7 +226,7 @@ def _node():
 
 
 HARNESS = """
-import { ambienceSettings, bedVolume, speechCurve } from "%(mix)s";
+import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve } from "%(mix)s";
 import * as fs from "fs";
 const input = JSON.parse(fs.readFileSync(0, "utf-8"));
 const speech = speechCurve(input.doc);
@@ -236,7 +236,14 @@ const curves = input.doc.ambience.beds.map((b: any) => {
   return v ? input.frames.map((f: number) => v(f)) : null;
 });
 const off = input.offs.map((o: any) => ambienceSettings(o.ambience, o.sfxEnabled));
-process.stdout.write(JSON.stringify({ on, curves, off, speech: input.frames.map((f: number) => speech[f]) }));
+const passes = (input.passes || []).map((c: any) => {
+  const ps = bedPasses(c.bed, c.file, c.overlap);
+  // the summed power of every pass at each frame of the bed
+  const power = Array.from({ length: c.bed }, (_, f) => ps.reduce((s, p) =>
+    s + (f >= p.from && f < p.from + p.frames ? passGain(p, f - p.from) ** 2 : 0), 0));
+  return { ps, power };
+});
+process.stdout.write(JSON.stringify({ on, curves, off, passes, speech: input.frames.map((f: number) => speech[f]) }));
 """
 
 
@@ -283,6 +290,29 @@ class RendererMix(unittest.TestCase):
         self.assertEqual(v[899] < 0.01, True)
         self.assertAlmostEqual(max(got["curves"][1]), 0.25, places=4)   # never over its ceiling
         self.assertEqual(got["off"], [None, None, None, None])
+
+    def test_a_long_bed_plays_its_file_pass_after_pass_crossfaded_at_equal_power(self):
+        cases = [{"bed": 5000, "file": 1800, "overlap": 8}, {"bed": 1200, "file": 1800, "overlap": 8},
+                 {"bed": 3592, "file": 1800, "overlap": 8}, {"bed": 900, "file": 0, "overlap": 8}]
+        doc = {"fps": 30, "durationInFrames": 10, "scenes": [], "ambience": {"beds": []}}
+        run = subprocess.run([self.node, self.bundle], input=json.dumps({"doc": doc, "frames": [], "offs": [],
+                                                                         "passes": cases}),
+                             capture_output=True, text=True, timeout=60, check=True)
+        got = json.loads(run.stdout)["passes"]
+        for case, res in zip(cases, got):
+            ps = res["ps"]
+            if case["file"] == 0:                       # no file length known: Remotion's loop
+                self.assertEqual(ps, [{"from": 0, "frames": 900, "fadeIn": 0, "fadeOut": 0, "loop": True}])
+                continue
+            self.assertEqual(ps[0]["from"], 0)
+            self.assertEqual(ps[-1]["from"] + ps[-1]["frames"], case["bed"])     # to the bed's last frame
+            for p in ps:
+                self.assertLessEqual(p["frames"], case["file"])                     # never past the file's end
+            for a, b in zip(ps, ps[1:]):
+                self.assertEqual(a["from"] + a["frames"] - b["from"], case["overlap"])
+            for f, pw in enumerate(res["power"]):
+                self.assertAlmostEqual(pw, 1.0, places=6, msg=(case, f))          # no dip, no bump
+        self.assertEqual(len(got[1]["ps"]), 1)
 
 
 if __name__ == "__main__":

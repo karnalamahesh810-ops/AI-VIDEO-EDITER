@@ -173,6 +173,11 @@ def _local(url: str) -> str:
     return u if u and "://" not in u and os.path.isfile(u) else ""
 
 
+def is_local(url: Any) -> bool:
+    """True when the picture is a file on this disk (measuring it costs no request)."""
+    return bool(_local(str(url or "")))
+
+
 def measure(media: Dict[str, Any], timeout: float = 20.0) -> Optional[Dict[str, float]]:
     """
     The tone of a scene's picture: a still read whole; a clip on this disk at
