@@ -51,8 +51,8 @@ UNDER_VOICE_DB = 26.0
 EXTRA_UNDER_DB = {"crowd": 3.0, "city": 1.0}
 CEILING_UNDER_DB = 18.0
 DUCK = 0.7
-MIN_BED_SECONDS = 8.0
-BRIDGE_SECONDS = 6.0
+MIN_BED_SECONDS = 12.0
+BRIDGE_SECONDS = 8.0
 FADE_IN_SECONDS = 1.0
 FADE_OUT_SECONDS = 1.2
 HOLE_RAMP_SECONDS = 0.4
@@ -164,7 +164,7 @@ def _graphic_spans(doc: dict) -> List[Tuple[int, int]]:
 
 
 def _file_lufs(name: str) -> float:
-    meta = sfxplan._meta().get(FILE_PREFIX + name) or {}
+    meta = sfxplan._meta().get(name) or {}
     v = meta.get("lufsIntegrated", meta.get("lufs"))
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else -24.0
 
@@ -172,11 +172,55 @@ def _file_lufs(name: str) -> float:
 def bed_volume(name: str, voice_lufs=None) -> Tuple[float, float]:
     """(planned volume, ceiling) of a bed against the voice: UNDER_VOICE_DB under it, never over CEILING_UNDER_DB."""
     voice = sfxplan.voice_level(voice_lufs)
-    loud = _file_lufs(name)
-    under = UNDER_VOICE_DB + EXTRA_UNDER_DB.get(name, 0.0)
+    loud = _file_lufs(FILE_PREFIX + name if not name.startswith(FILE_PREFIX) else name)
+    name = name[len(FILE_PREFIX):] if name.startswith(FILE_PREFIX) else name
+    under = float(getattr(config, "AMBIENCE_UNDER_VOICE_DB", UNDER_VOICE_DB)) + EXTRA_UNDER_DB.get(name, 0.0)
     vol = 10 ** ((voice - under - loud) / 20.0)
     ceiling = 10 ** ((voice - CEILING_UNDER_DB - loud) / 20.0)
     return round(min(1.0, vol), 4), round(min(1.0, ceiling), 4)
+
+
+def _runs(labels: List[Optional[str]], lengths: List[int]) -> List[list]:
+    """[label, first scene, last scene, frames] for each stretch of one label."""
+    runs: List[list] = []
+    for i, lab in enumerate(labels):
+        if runs and runs[-1][0] == lab:
+            runs[-1][2] = i
+            runs[-1][3] += lengths[i]
+        else:
+            runs.append([lab, i, i, lengths[i]])
+    return runs
+
+
+def _settle(labels: List[Optional[str]], lengths: List[int], fps: int) -> List[list]:
+    """
+    The beds a calm edit keeps: the shortest stretch under MIN_BED_SECONDS
+    goes first - between two stretches of one bed it becomes that bed (the
+    shot changes, the place does not), otherwise it falls silent - until
+    every stretch left is long enough.
+    Returns [label, first scene, last scene] of the beds.
+    """
+    labels = list(labels)
+    shortest = MIN_BED_SECONDS * fps
+    bridge = BRIDGE_SECONDS * fps
+    while True:
+        runs = _runs(labels, lengths)
+        moves = []
+        for k, (lab, a, b, n) in enumerate(runs):
+            before = runs[k - 1][0] if k > 0 else None
+            after = runs[k + 1][0] if k + 1 < len(runs) else None
+            # (A full-screen graphic inside a bed silences it there: the bed's holes.)
+            between = before is not None and before == after
+            if lab is not None and n < shortest:
+                moves.append((n, k, before if between else None))     # absorbed, or silent
+            elif lab is None and between and n <= bridge:
+                moves.append((n, k, before))                          # a short gap in one place
+        if not moves:
+            break
+        _n, k, fill = min(moves, key=lambda m: (m[0], m[1]))
+        for i in range(runs[k][1], runs[k][2] + 1):
+            labels[i] = fill
+    return [[r[0], r[1], r[2]] for r in _runs(labels, lengths) if r[0] is not None and r[3] >= shortest]
 
 
 def plan_beds(doc: dict, voice_lufs=None) -> List[dict]:
@@ -187,32 +231,8 @@ def plan_beds(doc: dict, voice_lufs=None) -> List[dict]:
     fps = int(doc.get("fps") or 30)
     total = int(doc.get("durationInFrames") or 0) or sum(int(s.get("durationInFrames") or 0) for s in scenes)
     labels = [scene_bed(s) for s in scenes]
-    graphic = [(s.get("media") or {}).get("type") == "animation" for s in scenes]
     lengths = [int(s.get("durationInFrames") or 0) for s in scenes]
-    # A short scene that says nothing (or something else) between two of the same bed is bridged.
-    for i in range(1, len(scenes) - 1):
-        if (labels[i] != labels[i - 1] and labels[i - 1] is not None and labels[i - 1] == labels[i + 1]
-                and lengths[i] <= BRIDGE_SECONDS * fps):
-            labels[i] = labels[i - 1]
-    runs: List[List[int]] = []                    # [label index, first scene, last scene]
-    for i, lab in enumerate(labels):
-        if runs and labels[runs[-1][1]] == lab:
-            runs[-1][2] = i
-        else:
-            runs.append([i, i, i])
-    # Short runs go; then same-bed runs a short unplaced stretch apart join up.
-    kept = []
-    for _k, a, b in runs:
-        lab = labels[a]
-        frames = sum(lengths[a:b + 1])
-        if lab is None or frames < MIN_BED_SECONDS * fps:
-            continue
-        if kept and kept[-1][0] == lab:
-            gap = sum(lengths[kept[-1][2] + 1:a])
-            if gap <= BRIDGE_SECONDS * fps and not any(graphic[kept[-1][2] + 1:a]):
-                kept[-1][2] = b
-                continue
-        kept.append([lab, a, b])
+    kept = _settle(labels, lengths, fps)
     holes_all = _graphic_spans(doc)
     beds = []
     for lab, a, b in kept:

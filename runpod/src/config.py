@@ -614,6 +614,18 @@ GRADE_NORMALIZE = _flag("GRADE_NORMALIZE", True)
 # Measuring the scenes' tone: the time box and the parallel reads.
 GRADE_MEASURE_SECONDS = float(os.getenv("GRADE_MEASURE_SECONDS", "60"))
 GRADE_MEASURE_WORKERS = int(os.getenv("GRADE_MEASURE_WORKERS", "8"))
+# Ambience beds under the scenes that are somewhere (src/ambience.py, drawn by
+# Main.tsx): wind, water, river, rain, storm, city, crowd, fire or machinery -
+# synthesised loops in public/sfx (amb-*.mp3, scripts/build_ambience.py) -
+# one at a time, faded at cuts, quiet under full-screen graphics,
+# AMBIENCE_UNDER_VOICE_DB under the narration and ducked under its words.
+# Planned with a new plan; a document's ambience {enabled, level} is the
+# editor's switch and master.
+AMBIENCE = _flag("AMBIENCE", True)
+AMBIENCE_UNDER_VOICE_DB = float(os.getenv("AMBIENCE_UNDER_VOICE_DB", "26"))
+# A soft swell (riser-soft) into the biggest reveals: section changes, chapter
+# cards, big figures marked high - an sfx row of kind "riser" under the sfx master.
+RISERS = _flag("RISERS", True)
 # Picture quality of h264 renders (x264 CRF). Remotion's own default, 18, made
 # ~13 Mbit/s at 1080p: a 22-minute render passed 2 GB and the app's storage
 # (Lovable Cloud: 2 GB a file by default) refused it after the whole render.

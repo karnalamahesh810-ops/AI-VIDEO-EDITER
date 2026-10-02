@@ -13,6 +13,7 @@ import { LookSoundContext, LookSounds, type LookSoundScope } from "./components/
 import { lookSoundsOn, planDocSounds, type SoundCue, type SoundTemplate } from "./components/lib/lookSoundPlan";
 import { PackTransitions } from "./transitions/PackTransition";
 import { GradeContext, gradeStateFor } from "./components/Grade";
+import { ambienceSettings, bedVolume, speechCurve, type Ambience, type Bed } from "./components/ambienceMix";
 
 // The music beds were replaced by the owner's own tracks (2026-10-01); a
 // document planned before names the old bed, which no longer ships (its 404
@@ -296,6 +297,24 @@ const doublesLook = (overlays: Overlay[], sounds: Record<string, { scope: LookSo
     || (!fx.kind && Boolean(own.get(Math.round(fx.startFrame || 0))?.has(fx.name)));
 };
 
+/**
+ * Ambience beds (src/ambience.py, doc.ambience): one looped bed at a time
+ * under the scenes that are somewhere, at the level ambienceMix.ts works out
+ * frame by frame (planned against the voice, the document's master, faded at
+ * its cuts, silent under full-screen graphics, ducked under the words).
+ */
+const bedNode = (b: Bed, i: number, fps: number, master: number, duck: number, speech: Float32Array) => {
+  const volume = bedVolume(b, fps, master, duck, speech);
+  if (!volume) return null;
+  return (
+    <Sequence key={`amb-${i}`} from={Math.round(Number(b.startFrame) || 0)}
+      durationInFrames={Math.max(1, Math.round(Number(b.durationInFrames) || 0))} layout="none">
+      {/* Looped, the volume must keep counting frames across every pass. */}
+      <Audio src={staticFile(`sfx/${b.name}.mp3`)} volume={volume} loop loopVolumeCurveBehavior="extend" />
+    </Sequence>
+  );
+};
+
 /** Frames a "crossfade" scene takes to fade in over the previous one (0.5 s). */
 const CROSSFADE_FRAMES = 15;
 
@@ -357,6 +376,16 @@ export const Main: React.FC<TimelineProps> = (props) => {
   // The video's grade (gradeMath.ts): settings and the scenes' median tone,
   // read by every SceneClip. Absent from the document = no grade, as before.
   const grade = React.useMemo(() => gradeStateFor(props.grade, scenes), [props.grade, scenes]);
+  // The ambience beds (src/ambience.py): the editor's sound switch mutes them
+  // with every other sound; "enabled" false or level 0 turns them off.
+  const ambience = props.ambience as Ambience;
+  const bedNodes = React.useMemo(() => {
+    const on = ambienceSettings(ambience, props.sfxEnabled);
+    if (!on || !ambience?.beds) return [];
+    const speech = speechCurve(props);
+    return ambience.beds.map((b, i) => bedNode(b, i, fps, on.master, on.duck, speech));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ambience, scenes, props.sfxEnabled, props.durationInFrames, fps]);
   const sfxNodes = React.useMemo(() => {
     if (props.sfxEnabled === false) return [];
     const doubles = builtIn ? doublesLook(overlays || [], lookSounds) : () => false;
@@ -433,6 +462,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           loopVolumeCurveBehavior="extend"
         />
       ) : null}
+      {bedNodes}
       {sfxNodes}
     </AbsoluteFill>
   );
