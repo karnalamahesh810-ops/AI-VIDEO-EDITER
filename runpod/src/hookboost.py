@@ -530,6 +530,93 @@ def add_teaser(segments: list, shots: list, assets: list, fps: int, measure=None
 
 
 # --------------------------------------------------------------------------- #
+# After the footage is found: never a weaker shot for the sake of a faster cut
+# --------------------------------------------------------------------------- #
+
+def _weak(scene: dict) -> bool:
+    """A shot that did not clear the relevance gate (a near-miss kept so no beat is empty)."""
+    m = scene.get("media") or {}
+    if m.get("type") not in ("video", "image") or not m.get("url"):
+        return False
+    rel = m.get("relevanceScore")
+    return isinstance(rel, (int, float)) and not isinstance(rel, bool) and rel < float(config.VISION_MIN_SCORE)
+
+
+def _solid(scene: dict) -> bool:
+    m = scene.get("media") or {}
+    return m.get("type") in ("video", "image") and bool(m.get("url")) and not _weak(scene)
+
+
+def settle(doc: dict, info: Optional[dict]) -> Dict[str, int]:
+    """
+    The rule behind the cuts: a faster opening never shows a worse-fitting clip.
+    Every beat prepare() cut into shots is looked at once the footage is found; a
+    shot of it whose clip did not clear the relevance gate (VISION_MIN_SCORE: a
+    near-miss kept so that no beat is empty) is not shown - the shot beside it from
+    the same beat, which did clear it, is held over its words while its clip still
+    covers the longer scene (the renderer's 0.6x floor), so that beat is as long
+    on one good shot as it was before the booster. A beat whose shots all missed
+    the gate is left as the sourcing made it. Returns {"beats", "held"}.
+    """
+    from . import gapfill, timeline
+    scenes = doc.get("scenes") or []
+    fps = max(1, int(doc.get("fps") or 30))
+    out = {"beats": 0, "held": 0}
+    for split in reversed((info or {}).get("splits") or []):
+        lo, hi = float(split["start"]), float(split["end"])
+        group = [sc for sc in scenes if lo - 0.05 <= int(sc.get("startFrame", 0)) / fps < hi - 0.05
+                 and not sc.get("teaser")]
+        if len(group) < 2 or not any(_solid(sc) for sc in group):
+            continue
+        out["beats"] += 1
+        members = {id(x) for x in group}
+        for sc in reversed(group):
+            if not _weak(sc):
+                continue
+            i = next((k for k, x in enumerate(scenes) if x is sc), -1)
+            prev = scenes[i - 1] if i > 0 and id(scenes[i - 1]) in members and _solid(scenes[i - 1]) else None
+            nxt = scenes[i + 1] if 0 <= i + 1 < len(scenes) and id(scenes[i + 1]) in members \
+                and _solid(scenes[i + 1]) else None
+            need = int(sc.get("durationInFrames", 0))
+            side = None
+            for rate in (float(getattr(config, "HOLD_MIN_RATE", 0.85)), 0.6):
+                if prev is not None and gapfill._room(prev, fps, rate) >= need:
+                    side = "prev"
+                    break
+                if nxt is not None and gapfill._room(nxt, fps, rate) >= need:
+                    side = "next"
+                    break
+            if side is None:
+                continue
+            start = int(sc.get("startFrame", 0))
+            keep = prev if side == "prev" else nxt
+            words, text = list(sc.get("words") or []), str(sc.get("text") or "")
+            if side == "prev":
+                keep["words"] = list(keep.get("words") or []) + words
+                keep["text"] = f"{keep.get('text') or ''} {text}".strip()
+                gone = start                                      # the cut into the dropped shot
+            else:
+                keep["startFrame"] = start
+                keep["words"] = words + list(keep.get("words") or [])
+                keep["text"] = f"{text} {keep.get('text') or ''}".strip()
+                gone = start + need                               # the cut out of it
+            keep["durationInFrames"] = int(keep.get("durationInFrames", 0)) + need
+            keep.setdefault("semanticMetadata", {}).setdefault("heldOver", []).append(sc.get("id") or "")
+            del scenes[i]
+            meta = timeline.sfx_meta()
+            doc["sfx"] = [fx for fx in (doc.get("sfx") or [])
+                          if not (fx.get("kind") == "transition" and abs(
+                              int(fx.get("startFrame", 0)) + int(round(float(meta.get(fx.get("name"), {}).get("peak", 0.0))
+                                                                          * fps)) - gone) <= 1)]
+            out["held"] += 1
+    if out["held"]:
+        doc.setdefault("meta", {})["sceneCount"] = len(scenes)
+        print(f"[hookboost] {out['held']} shot(s) of the cut opening missed the relevance gate; the better shot "
+              "of the same beat is held over them", flush=True)
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # The report
 # --------------------------------------------------------------------------- #
 

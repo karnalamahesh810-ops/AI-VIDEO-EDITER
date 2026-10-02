@@ -1156,6 +1156,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Never an empty scene, never another scene's clip.
     last = gapfill.hold_or_animate(doc, label="after the fallback fill")
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
+    if boost_info and doc["meta"].get("hookBoost") is not None:
+        # A shot of a cut beat that missed the relevance gate gives way to the good shot beside it.
+        doc["meta"]["hookBoost"]["settled"] = hookboost.settle(doc, boost_info)
     if fallback or any(last.values()):
         print(f"[worker] {gapfill.summary(fallback, last)}", flush=True)
     # One grade for the whole video (src/grade.py): its settings, and each

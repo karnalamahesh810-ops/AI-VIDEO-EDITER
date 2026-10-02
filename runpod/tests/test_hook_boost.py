@@ -554,6 +554,85 @@ class ColdOpen(unittest.TestCase):
         self.assertIsNotNone(gapfill.Shot.of_scene(scene, FPS))
 
 
+# --------------------------------------------------------------------------- D2. never a weaker shot
+class NeverAWeakerShot(unittest.TestCase):
+    """A faster cut never shows a clip that fits its line worse than the gate: the good shot of the beat is held."""
+
+    def setUp(self):
+        self.segs = story(OPENING + SHORT + LATER + plain(6))
+        with boosted():
+            self.cut, self.parents, self.info = hookboost.split_opening(self.segs)
+        self.first = [i for i, par in enumerate(self.parents) if par == 0]            # the pieces of the first beat
+        self.assertGreaterEqual(len(self.first), 2)
+
+    def doc(self, weak=(), clip=8.0, relevance=0.9):
+        assets = []
+        for i in range(len(self.cut)):
+            a = video(i, rel=0.5 if i in weak else relevance)
+            a.duration = clip
+            assets.append(a)
+        with boosted():
+            return build(self.cut, assets)
+
+    def test_a_shot_under_the_gate_gives_way_to_the_good_shot_beside_it(self):
+        weak = self.first[1]
+        doc = self.doc(weak={weak})
+        n = len(doc["scenes"])
+        weak_id = doc["scenes"][weak]["id"]
+        keep = doc["scenes"][weak - 1]
+        frames = keep["durationInFrames"] + doc["scenes"][weak]["durationInFrames"]
+        words = len(keep["words"]) + len(doc["scenes"][weak]["words"])
+        with boosted():
+            got = hookboost.settle(doc, self.info)
+        self.assertEqual(got["held"], 1)
+        self.assertEqual(len(doc["scenes"]), n - 1)
+        self.assertNotIn(weak_id, [sc["id"] for sc in doc["scenes"]])
+        self.assertEqual(keep["durationInFrames"], frames)                          # its clip covers the beat now
+        self.assertEqual(len(keep["words"]), words)                                # the words went with the frames
+        self.assertIn(weak_id, keep["semanticMetadata"]["heldOver"])
+        self.assertEqual(doc["meta"]["sceneCount"], n - 1)
+        for a, b in zip(doc["scenes"], doc["scenes"][1:]):                          # still tiles the narration
+            self.assertEqual(a["startFrame"] + a["durationInFrames"], b["startFrame"])
+        self.assertFalse([sc for sc in doc["scenes"] if sc["media"].get("relevanceScore", 1) < config.VISION_MIN_SCORE])
+
+    def test_the_sound_of_the_cut_that_is_gone_goes_with_it(self):
+        weak = self.first[1]
+        doc = self.doc(weak={weak})
+        cut = doc["scenes"][weak]["startFrame"]
+        peaks = timeline.sfx_meta()
+
+        def at_cut(d):
+            return [fx for fx in d["sfx"] if fx.get("kind") == "transition"
+                    and abs(fx["startFrame"] + int(round(peaks.get(fx["name"], {}).get("peak", 0.0) * FPS)) - cut) <= 1]
+
+        self.assertTrue(at_cut(doc))                                               # the booster's whoosh was there
+        with boosted():
+            hookboost.settle(doc, self.info)
+        self.assertFalse(at_cut(doc))
+
+    def test_a_beat_whose_shots_all_missed_the_gate_is_left_as_sourced(self):
+        doc = self.doc(weak=set(self.first))
+        before = json.dumps(doc["scenes"], sort_keys=True)
+        with boosted():
+            got = hookboost.settle(doc, self.info)
+        self.assertEqual(got["held"], 0)
+        self.assertEqual(json.dumps(doc["scenes"], sort_keys=True), before)
+
+    def test_a_neighbour_whose_clip_is_too_short_to_cover_it_is_not_stretched(self):
+        weak = self.first[1]
+        doc = self.doc(weak={weak}, clip=1.2)                                        # 1.2 s of footage for a 2.5 s shot
+        with boosted():
+            got = hookboost.settle(doc, self.info)
+        self.assertEqual(got["held"], 0)
+
+    def test_nothing_was_cut_nothing_is_held(self):
+        doc = self.doc(weak={self.first[1]})
+        before = json.dumps(doc, sort_keys=True)
+        self.assertEqual(hookboost.settle(doc, {}), {"beats": 0, "held": 0})
+        self.assertEqual(hookboost.settle(doc, None), {"beats": 0, "held": 0})
+        self.assertEqual(json.dumps(doc, sort_keys=True), before)
+
+
 # --------------------------------------------------------------------------- E. the report
 class TheReport(unittest.TestCase):
     def test_the_document_says_what_changed(self):
