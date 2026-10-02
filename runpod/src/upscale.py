@@ -41,6 +41,10 @@ STATS = {"images": 0, "ai": 0, "clips": 0, "failed": 0, "seconds": 0.0}
 # not enter the shared clip library, where a documentary job would reuse a
 # pillarboxed phone clip as ordinary footage.
 FRAMED: set = set()
+# Clips of this job sharpened up to 1080 lines in place (upscale_clip), with
+# the lines they had: the file says 1080, the detail is the original's
+# (src/reframe.py pushes a 720p clip no further than ~1.15x).
+UPSCALED: dict = {}
 
 
 def is_framed(path: str) -> bool:
@@ -49,6 +53,14 @@ def is_framed(path: str) -> bool:
         return False
     with _LOCK:
         return os.path.abspath(path) in FRAMED
+
+
+def original_lines(path: str) -> int:
+    """The lines a clip had before upscale_clip replaced it in this job, or 0."""
+    if not path:
+        return 0
+    with _LOCK:
+        return int(UPSCALED.get(os.path.abspath(path), 0))
 
 
 def available() -> bool:
@@ -195,6 +207,7 @@ def upscale_clip(path: str, min_lines: int = 0) -> bool:
         with _LOCK:
             STATS["clips"] += 1
             STATS["seconds"] += time.time() - t0
+            UPSCALED[os.path.abspath(path)] = lines
         return True
     except Exception as e:  # noqa: BLE001 - the original stays
         with _LOCK:
@@ -288,6 +301,7 @@ def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
     deadline = time.time() + (deadline_seconds or config.UPSCALE_SECONDS)
     with _LOCK:
         FRAMED.clear()                  # this job's framed clips only
+        UPSCALED.clear()
     seen, jobs = set(), []
     for a in assets:
         path = getattr(a, "local_path", "") or ""

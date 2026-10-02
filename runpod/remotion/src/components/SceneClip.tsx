@@ -9,6 +9,7 @@ import { AnimationScene } from "./AnimationScene";
 import { useSceneGrade } from "./Grade";
 import { PlayerWindow } from "./pro/ProCase";
 import { StillPicture, TransitionFrame } from "../transitions";
+import { reframeStyle, resolveAim, resolveMove } from "./reframe";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
 
 /**
@@ -28,7 +29,7 @@ export const SceneClip: React.FC<{
   scene: Scene; accent?: string; backdrop?: SceneMedia | null; nextTransition?: SceneTransition;
 }> = ({ scene, accent, backdrop, nextTransition }) => {
   const frame = useCurrentFrame();
-  const { durationInFrames, fps, width } = useVideoConfig();
+  const { durationInFrames, fps, width, height } = useVideoConfig();
   const { media, motion, treatment, transition, effect } = scene;
   // The video's grade (Grade.tsx): this picture's filter, first in its list,
   // and the SVG that defines it. Null for an ungraded document or scene.
@@ -38,11 +39,16 @@ export const SceneClip: React.FC<{
 
   // Footage plays as it is, full frame, never zoomed or cropped (the owner:
   // GoMotion does not zoom into clips - a 6% crop on every clip and a 1.24x
-  // cut-in halfway through long ones read as zooming). Stills move with the
+  // cut-in halfway through long ones read as zooming) - except the planned
+  // smart reframe (./reframe.ts, src/reframe.py): on a few locked-off shots
+  // only, a slow push toward the subject, which stays in frame throughout
+  // (the owner, 2026-10-01: "auto-zoom/crop onto the subject ... it feels
+  // hand-edited"). Stills move with the
   // scene's own motion (timeline.py rotates it so neighbours differ); the
   // "ken-burns" effect only stands in when a still has no motion at all. It
   // used to be checked first, so every still in 7 of 8 style packs got the
-  // same slow zoom-in and the rotation never showed.
+  // same slow zoom-in and the rotation never showed. A still's motion is
+  // aimed at its subject when the plan found one.
   const stillMotion: Motion | undefined =
     motion && motion !== "none" ? motion : effect === "ken-burns" ? "zoom-in" : undefined;
 
@@ -168,6 +174,13 @@ export const SceneClip: React.FC<{
     );
   }
 
+  // The planned (or the editor's) move: one transform from the frame number
+  // and the scene's own length (not the Sequence's, which a crossfade into
+  // the next scene extends: the move holds its last framing under it).
+  const move = resolveMove(scene, width / height);
+  const aim = media.type === "image" && !move ? resolveAim(scene, width / height) : undefined;
+  const moved = move ? reframeStyle(move, frame, scene.durationInFrames, fps) : null;
+
   return (
     <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
       <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#000" }}>
@@ -180,10 +193,21 @@ export const SceneClip: React.FC<{
           }}
         >
           {media.type === "video" ? (
-            <OffthreadVideo src={media.url} style={fill} muted playbackRate={rate} />
+            moved ? (
+              <AbsoluteFill style={moved}>
+                <OffthreadVideo src={media.url} style={fill} muted playbackRate={rate} />
+              </AbsoluteFill>
+            ) : (
+              <OffthreadVideo src={media.url} style={fill} muted playbackRate={rate} />
+            )
+          ) : moved ? (
+            // A still the editor framed by hand: the boxes replace its motion.
+            <AbsoluteFill style={moved}>
+              <Img src={media.url} style={fill} />
+            </AbsoluteFill>
           ) : (
             <StillPicture src={media.url} motion={stillMotion} frame={frame} durationInFrames={durationInFrames}
-              fps={fps} width={width} filter={filters || undefined} />
+              fps={fps} width={width} filter={filters || undefined} subject={aim} />
           )}
         </AbsoluteFill>
         <EffectLayer effect={effect} durationInFrames={durationInFrames} />
