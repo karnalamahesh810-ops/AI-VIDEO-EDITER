@@ -19,13 +19,15 @@ never leave a scene empty, every clip must fit its own line.
                    same source video only FALLBACK_MOMENT_GAP_SECONDS from
                    its other moments and never on the next scene;
   fill_empty       the fast ladder for scenes still empty when the budget is
-                   gone, cheapest first - (a) the clip library's unused clips
-                   of the line's subject or place, (b) the subject pools'
-                   unused approved moments, (c) one web/Wikimedia picture
-                   search for the subject (an AI image only when the job
-                   allows one) - each through the gates already in place
-                   (the library's and the pools' slop checks, the vision
-                   judge), under its own short time box;
+                   gone, cheapest first - (pack) a clip from the niche packs
+                   (src/packs.py) whose picture fits the line: already cut,
+                   checked and on R2, no search, no vision call; (a) the clip
+                   library's unused clips of the line's subject or place,
+                   (b) the subject pools' unused approved moments, (c) one
+                   web/Wikimedia picture search for the subject (an AI image
+                   only when the job allows one) - each through the gates
+                   already in place (the library's and the pools' slop
+                   checks, the vision judge), under its own short time box;
   hold_or_animate  (d) the last resort: the planner's own number/map graphic
                    for the line, else the neighbouring shot held over it (the
                    scenes merge) while the clip still covers the longer scene;
@@ -50,6 +52,9 @@ from . import config, ytdlp
 
 _YT_ID = re.compile(r"yt:([\w-]{11})")
 _WATCH = re.compile(r"[?&]v=([\w-]{11})")
+# A niche pack clip (src/packs.py): "pack:<niche>:<source>@<start second>". Every clip cut from
+# one source video shares "pack:<niche>:<source>" and is a moment of it, like a YouTube video's.
+_PACK = re.compile(r"^(pack:[a-z0-9_]+:.+)@\d+$")
 _T = re.compile(r"[?&]t=(\d+(?:\.\d+)?)")
 _SCENE_ID = re.compile(r"^s(\d+)$")
 
@@ -107,7 +112,10 @@ def coverage_order(jobs: List[dict]) -> List[dict]:
 
 def _video_of(identity: str, url: str) -> str:
     m = _YT_ID.search(identity or "") or _WATCH.search(url or "")
-    return f"yt:{m.group(1)}" if m else ""
+    if m:
+        return f"yt:{m.group(1)}"
+    p = _PACK.match(identity or "")
+    return p.group(1) if p else ""
 
 
 def _start_from(moment: Any, url: str, path: str) -> Optional[float]:
@@ -272,6 +280,46 @@ def _names(job: dict) -> List[str]:
     return out
 
 
+def _library_knows(job: dict, library) -> bool:
+    """
+    The line names its own event or place and the clip library has an unused
+    clip of that subject: that clip shows the place itself, where a pack clip
+    shows only the kind of thing - so the library rung gets the line.
+    """
+    from . import packs
+    if library is None or not getattr(library, "entries", None) or not packs.is_specific(job):
+        return False
+    taken = set(getattr(library, "used", set()) or set())
+    for name in _names(job):
+        try:
+            if library.find(name, exclude=taken, n=1, kind="video"):
+                return True
+        except Exception:  # noqa: BLE001 - an unreadable library is an empty one
+            pass
+    return False
+
+
+def _from_pack(job: dict, used: Used, library, work: str, stop: float, require_cc: bool):
+    """
+    (pack) The cheapest rung: a clip from the niche packs (src/packs.py) whose
+    picture fits the line - already cut, checked and kept on R2, so no search,
+    no download from a site that may refuse us, no vision call. Never a clip
+    this video shows or an earlier video of the owner showed, never one under
+    the line's similarity floor. A line that names its own place and has an
+    unused library clip of it is left to the library rung.
+    """
+    from . import packs
+    if _library_knows(job, library):
+        return None
+    got = packs.pick(job, used, work, stop, require_cc=require_cc)
+    if got is None:
+        return None
+    base = "From a niche footage pack - the footage search ran out of time for this line; check it fits"
+    got.review_required = True
+    got.review_reason = f"{base}. {got.review_reason}" if got.review_reason else base
+    return got
+
+
 def _from_library(job: dict, used: Used, library, work: str, stop: float):
     """(a) An unused library clip of the line's subject or place (library.fetch runs the slop gates)."""
     if library is None or not getattr(library, "entries", None):
@@ -414,18 +462,20 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
                scene_seconds: Optional[float] = None, label: str = "") -> Dict[str, int]:
     """
     Fill every empty line of `results` (a list by index, or a dict) - or just
-    `indices` - in place through the ladder: (a) library, (b) the pools'
-    spare moments, (c) a picture. Nothing another scene shows is ever taken
-    (Used). Runs FALLBACK_PARALLEL scenes at once under its own time box, with
-    a download window of its own (the sourcing deadline may be long past) and
-    FALLBACK_SCENE_SECONDS a scene. Returns {"asked", "library", "reserve",
-    "still", "generated", "left", "seconds"}.
+    `indices` - in place through the ladder: (pack) a niche pack clip that
+    fits the line (PACKS_FILL), (a) library, (b) the pools' spare moments,
+    (c) a picture. Nothing another scene shows is ever taken (Used). Runs
+    FALLBACK_PARALLEL scenes at once under its own time box, with a download
+    window of its own (the sourcing deadline may be long past) and
+    FALLBACK_SCENE_SECONDS a scene. Returns {"asked", "pack", "library",
+    "reserve", "still", "generated", "left", "seconds"}.
     """
-    from . import media
+    from . import media, packs
     by_index = {j["index"]: j for j in jobs or []}
     want = sorted(by_index) if indices is None else [i for i in indices if i in by_index]
     todo = [i for i in want if _at(results, i) is None]
-    out = {"asked": len(todo), "library": 0, "reserve": 0, "still": 0, "generated": 0, "left": 0, "seconds": 0.0}
+    out = {"asked": len(todo), "pack": 0, "library": 0, "reserve": 0, "still": 0, "generated": 0, "left": 0,
+           "seconds": 0.0}
     if not todo or not config.FALLBACK_FILL or not work:
         out["left"] = len(todo)
         return out
@@ -441,7 +491,10 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
         stop = min(deadline, time.time() + per_scene)
         tokens = _scene_context(job)
         try:
-            steps: List[Tuple[str, Callable]] = [
+            steps: List[Tuple[str, Callable]] = []
+            if packs.usable(job, media.youtube_only()):
+                steps.append(("pack", lambda: _from_pack(job, used, library, work, stop, require_cc)))
+            steps += [
                 ("library", lambda: _from_library(job, used, library, work, stop)),
                 ("reserve", lambda: _from_reserve(job, used, work, stop, require_cc, library)),
             ]
@@ -487,7 +540,8 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
     out["seconds"] = round(time.time() - t0, 1)
     filled = out["asked"] - out["left"]
     print(f"[fill] {label or 'fallback'}: filled {filled} of {out['asked']} empty scene(s) - "
-          f"{out['library']} from the library, {out['reserve']} from spare pool moments, "
+          f"{out['pack']} from the niche packs, {out['library']} from the library, "
+          f"{out['reserve']} from spare pool moments, "
           f"{out['still']} stills, {out['generated']} generated; {out['left']} left for hold/graphic "
           f"({out['seconds']:.0f}s)", flush=True)
     return out
@@ -768,11 +822,11 @@ def summary(*parts: Dict[str, int]) -> str:
     """'filled 23 scenes from library/stills/hold' style line for the job's log."""
     c = Counter()
     for p in parts:
-        for k in ("library", "reserve", "still", "generated", "graphic", "held", "card"):
+        for k in ("pack", "library", "reserve", "still", "generated", "graphic", "held", "card"):
             c[k] += int((p or {}).get(k) or 0)
     total = sum(c.values())
-    names = {"library": "library", "reserve": "spare moments", "still": "stills", "generated": "generated",
-             "graphic": "graphics", "held": "hold", "card": "text"}
+    names = {"pack": "packs", "library": "library", "reserve": "spare moments", "still": "stills",
+             "generated": "generated", "graphic": "graphics", "held": "hold", "card": "text"}
     used = "/".join(names[k] for k in names if c[k])
     detail = ", ".join(f"{c[k]} {names[k]}" for k in names if c[k])
     return f"filled {total} scenes from {used or 'nothing'}" + (f" ({detail})" if detail else "")

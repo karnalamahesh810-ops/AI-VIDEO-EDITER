@@ -14,6 +14,8 @@ there already:
     photo          its URL + a 64-bit perceptual hash (dHash), so a resized or
                    re-hosted copy is still the same photo
     library        the asset id of every clip shown (library ids are asset ids)
+    pack clip      a niche pack clip (src/packs.py) is recorded the same way - its
+                   asset id and its source page with the clip's start in it
 
 Sourcing skips a moment of a video that overlaps a used one or comes within
 CROSS_VIDEO_GAP_SECONDS of it - the other moments of a long report stay
@@ -188,7 +190,7 @@ class Ledger:
         self.assets: set = set()
         self.jobs: set = set()
         self.items = 0
-        self.skipped: Dict[str, int] = {"moment": 0, "url": 0, "photo": 0, "library": 0}
+        self.skipped: Dict[str, int] = {"moment": 0, "url": 0, "photo": 0, "library": 0, "pack": 0}
 
     # ------------------------------------------------------------ filling
     def _fresh(self, ts) -> bool:
@@ -499,6 +501,22 @@ def library_used(entry: dict) -> bool:
     hit = current().library_used(entry)
     if hit:
         _count("library")
+    return hit
+
+
+def pack_used(asset_id: str, url: str = "", start: Optional[float] = None, end: Optional[float] = None) -> bool:
+    """
+    A niche pack clip (src/packs.py) an earlier video showed: its asset id
+    ("pack:<niche>:<source>@<start>"), or its source page near the same moment
+    (the clip's start in that source, widened by CROSS_VIDEO_GAP_SECONDS - the
+    way a YouTube video's moments are kept apart).
+    """
+    if not on() or not asset_id:
+        return False
+    led = current()
+    hit = led.asset_used(asset_id) or (bool(url) and led.url_used(url, start, end))
+    if hit:
+        _count("pack")
     return hit
 
 
