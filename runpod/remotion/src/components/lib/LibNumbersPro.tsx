@@ -52,7 +52,7 @@ import { type Drawn, type Fig, clip, digits, drawnOf, figureOf, figureSpan, numO
 // ------------------------------------------------------------------ shared
 const LOW_RX = /\b(LOW|LOWEST|LEAST|MINIMUM|DRIEST|SMALLEST|FEWEST|SHALLOWEST|WORST|DEAD POOL|FELL|DROPPED|SANK|DOWN|BELOW)\b/;
 const HIGH_RX = /\b(HIGH|HIGHEST|MOST|PEAK|LARGEST|BIGGEST|HOTTEST|WETTEST|ABOVE|RECORD HIGH|TOPPED|SURPASSED)\b/;
-const UPRIGHT_RX = /\b(HIGH|HIGHER|HIGHEST|TALL|TALLER|DEEP|DEEPER|DEPTH|HEIGHT|ELEVATION|ABOVE|BELOW|SEA LEVEL|DROP|DROPPED|FELL|FALLEN|LOWER|RISE|ROSE|RISEN|UNDERWATER|SURFACE|LEVEL|STAGE|CREST)\b/;
+const UPRIGHT_RX = /\b(HIGH|HIGHER|HIGHEST|TALL|TALLER|DEEP|DEEPER|DEPTH|HEIGHT|ELEVATION|ABOVE|BELOW|SEA LEVEL|DROP|DROPPED|FELL|FALLEN|LOWER|RISE|ROSE|RISEN|UNDERWATER|SURFACE|LEVEL|STAGE|CREST|DOWN|UP)\b/;
 
 /** "PEOPLE DISPLACED" -> "People displaced"; a line in its own case is left as said. */
 const asSaid = (s: string): string => {
@@ -223,11 +223,11 @@ const RingLabelDraw: React.FC<{ overlay: Overlay; accent: string; f: Fig }> = ({
   const head = (fill * 360 - 90) * (Math.PI / 180);
   const hx = D / 2 + r * Math.cos(head);
   const hy = D / 2 + r * Math.sin(head);
-  const label = clip(f.label || "", 34);
+  const label = clip(f.label || "", 60);
   const extra = f.label ? f.extra : "";
   const maxW = Math.min(0.34 * t.width, 660 * t.kw);
   const lcap = 48;
-  const words = label ? wrapBalanced(label.split(" "), maxW, (s) => antonEm(s) * (lcap / ANTON_CAP) * k, 2) : [];
+  const words = label ? wrapBalanced(label.split(" "), maxW, (s) => antonEm(s) * (lcap / ANTON_CAP) * k, label.length > 30 ? 3 : 2) : [];
   const lsize = Math.min((lcap / ANTON_CAP) * k, ...words.map((l) => maxW / Math.max(0.5, antonEm(l))));
   return (
     <AbsoluteFill>

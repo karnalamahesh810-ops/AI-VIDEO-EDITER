@@ -514,7 +514,7 @@ export const SerifWords: React.FC<{
   styleOf?: (i: number) => CSS | undefined; out?: number;
 }> = ({ words, t, at, step, size, italic = false, weight = 400, color = WHITE, maxW, align = "left", lineHeight = 1.18, len = 9,
   styleOf, out = 1 }) => (
-  <div style={{ fontFamily: italic ? SERIF_ITAL : SERIF_TEXT, fontStyle: italic ? "italic" : "normal", fontWeight: weight,
+  <div style={{ fontFamily: italic ? SERIF_ITAL : SERIF_TEXT, fontVariantNumeric: "lining-nums", fontStyle: italic ? "italic" : "normal", fontWeight: weight,
     fontSize: size, lineHeight, color, maxWidth: maxW, textAlign: align, textWrap: "balance", filter: shadow(t.k),
     opacity: out } as CSS}>
     {words.map((w, i) => {

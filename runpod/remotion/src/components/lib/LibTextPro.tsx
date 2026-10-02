@@ -116,7 +116,9 @@ const SentenceHighlight: Look = ({ overlay, accent }) => {
   // A marker holds a few words on one line (VidRush's "less rain"): a longer phrase keeps its first words marked.
   const [before, phrase0, after0] = parts;
   const phrase = phrase0.length > 26 ? clip(phrase0, 26) : phrase0;
-  const after = `${phrase0.slice(phrase.length)}${after0}`;
+  const after1 = `${phrase0.slice(phrase.length)}${after0}`;
+  const glued = phrase ? (/^[,.;:!?)\u201d"']+/.exec(after1) || [""])[0] : "";
+  const after = after1.slice(glued.length);
   const marker = mixMarker(accent);
   const all = `${before}${phrase}${after}`;
   const n = Array.from(all).length;
@@ -159,7 +161,7 @@ const SentenceHighlight: Look = ({ overlay, accent }) => {
       {sound}
       <CornerShade o={prog(t.f, 0, 10) * out} />
       <Stage t={t} place="lower-left" push={pushOf(t, typedEnd, 0.01)}>
-        <div style={{ maxWidth: maxW, fontFamily: SERIF_TEXT, fontWeight: 500, fontSize: size, lineHeight: 1.36, color: "#F7F2E8",
+        <div style={{ maxWidth: maxW, fontFamily: SERIF_TEXT, fontVariantNumeric: "lining-nums", fontWeight: 500, fontSize: size, lineHeight: 1.36, color: "#F7F2E8",
           textWrap: "balance", filter: shadow(k), opacity: out, transform: `translateY(${((1 - out) * -10 * k).toFixed(2)}px)` } as CSS}>
           {run(before, 0)}
           {phrase ? (
@@ -167,12 +169,13 @@ const SentenceHighlight: Look = ({ overlay, accent }) => {
               <span style={{ position: "absolute", left: 0, right: 0, top: "0.12em", bottom: "0.06em", background: marker, borderRadius: "0.07em",
                 transform: `scaleX(${mp.toFixed(4)})`, transformOrigin: "0% 50%", opacity: mp > 0 ? 1 : 0,
                 boxShadow: `0 ${px(3 * k)} ${px(10 * k)} rgba(0,0,0,.25)` }} />
-              <span style={{ position: "relative", fontFamily: SERIF_ITAL, fontStyle: "italic", fontWeight: 700, filter: "none" }}>
+              <span style={{ position: "relative", fontFamily: SERIF_ITAL, fontVariantNumeric: "lining-nums", fontStyle: "italic", fontWeight: 700, filter: "none" }}>
                 {Array.from(phrase).map((c, j) => letter(c, pa + j, ink))}
               </span>
+              {glued ? <span style={{ position: "relative", marginLeft: "0.16em" }}>{Array.from(glued).map((c, j) => letter(c, pb + j))}</span> : null}
             </span>
           ) : null}
-          {run(after, pb)}
+          {run(after, pb + Array.from(glued).length)}
         </div>
       </Stage>
     </AbsoluteFill>
@@ -187,24 +190,32 @@ const TYPE_START = 6;
 const TypewriterLower: Look = ({ overlay, accent }) => {
   const t = useClock();
   const { k, kw } = t;
-  const name = clip(said(overlay.text, 60), 48);
-  const line = clip(said(overlay.subtitle || overlay.label, 60), 52);
+  // The typing contract runs on the whole line as the planner times it (2 frames a letter up to 48, else 1).
+  const name = said(overlay.text, 72);
+  const line = said(overlay.subtitle || overlay.label, 60);
   const nn = Array.from(name).length;
   const per = nn <= 48 ? 2 : 1;
   const nameEnd = TYPE_START + per * nn;
   const L0 = nameEnd + 4;
   const nl = Array.from(line).length;
-  const lineEnd = L0 + nl;
-  const typedEnd = line ? lineEnd : nameEnd;
+  const typedEnd = line ? L0 + nl : nameEnd;
   const shown = (start: number, step: number, count: number) => Math.max(0, Math.min(count, Math.floor((t.f - start) / step) + 1));
   const a = shown(TYPE_START, per, nn);
   const b = line ? shown(L0, 1, nl) : 0;
   const out = outOf(t, 9);
   const after = t.f - typedEnd;
   const cursorOn = t.f >= TYPE_START - 2 && (after < 0 || (after < 24 && Math.floor(after / 5) % 2 === 0));
-  const onLine2 = line && t.f >= L0 - 1;
-  const size1 = 54 * k;
-  const size2 = 31 * k;
+  const onLine2 = Boolean(line) && t.f >= L0 - 1;
+  // Courier Prime's every advance is 0.6 em: the line at its size when it fits, smaller, then on two balanced lines.
+  const maxW = Math.min(0.6 * t.width, 1150 * kw);
+  const CP = 0.6;
+  let size1 = 54 * k;
+  let rows = [name];
+  if (nn * CP * size1 > maxW) {
+    size1 = Math.max(42 * k, maxW / (nn * CP));
+    if (nn * CP * size1 > maxW) rows = wrapBalanced(name.split(" ").filter(Boolean), maxW, (x) => x.length * CP * size1, 2);
+  }
+  const size2 = Math.max(22 * k, Math.min(31 * k, maxW / Math.max(1, nl * CP)));
   const acc = readable(accent);
   const sound = useLookSound([{ name: "typewriter-clean", alt: ["typewriter", "keys"], at: TYPE_START - 1, align: "start", until: typedEnd,
     gain_db: -6 }]);
@@ -212,16 +223,29 @@ const TypewriterLower: Look = ({ overlay, accent }) => {
     <span style={{ display: "inline-block", width: "0.5em", height: "0.72em", marginLeft: "0.08em", verticalAlign: "-0.04em",
       background: acc, opacity: cursorOn ? 0.95 : 0, fontSize: size }} />
   );
+  // The typed count across the rows (a row break takes no time), and the row the cursor is on.
+  let left = a;
+  let at = 0;
+  const typedRows = rows.map((r, i) => {
+    const n = Array.from(r).length;
+    const take = Math.max(0, Math.min(n, left));
+    left -= take + (i < rows.length - 1 ? 1 : 0);             // the space the break replaced
+    if (take > 0 || i === 0) at = i;
+    return Array.from(r).slice(0, take).join("");
+  });
   return (
     <AbsoluteFill>
       {sound}
       <CornerShade o={prog(t.f, 0, 10) * out} strength={1.1} />
       <div style={{ position: "absolute", left: 96 * kw, bottom: t.height * 0.25, display: "flex", flexDirection: "column",
         alignItems: "flex-start", opacity: out, filter: shadow(k, true) }}>
-        <div style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: size1, lineHeight: 1.1, color: CREAM, whiteSpace: "pre" }}>
-          {Array.from(name).slice(0, a).join("")}
-          {!onLine2 ? cursor(size1) : null}
-        </div>
+        {rows.map((r, i) => (
+          <div key={i} style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: size1, lineHeight: 1.12, color: CREAM, whiteSpace: "pre",
+            minHeight: size1 * 1.12 }}>
+            {typedRows[i]}
+            {!onLine2 && i === at ? cursor(size1) : null}
+          </div>
+        ))}
         {line ? (
           <div style={{ marginTop: 12 * k, fontFamily: TYPEWRITER, fontWeight: 400, fontSize: size2, lineHeight: 1.1, letterSpacing: "0.02em",
             color: "rgba(244,238,226,.82)", whiteSpace: "pre", minHeight: size2 * 1.1 }}>
@@ -280,7 +304,7 @@ const KickerHeadline: Look = ({ overlay, accent }) => {
           </div>
         ))}
         {sub ? (
-          <div style={{ marginTop: 16 * k, fontFamily: SERIF_ITAL, fontStyle: "italic", fontWeight: 400, fontSize: 34 * k, color: SOFT,
+          <div style={{ marginTop: 16 * k, fontFamily: SERIF_ITAL, fontVariantNumeric: "lining-nums", fontStyle: "italic", fontWeight: 400, fontSize: 34 * k, color: SOFT,
             maxWidth: maxW, opacity: prog(t.f, lastAt + 4, 10) * out, filter: shadow(k, true),
             transform: `translateY(${((1 - prog(t.f, lastAt + 4, 10)) * 8 * k).toFixed(2)}px)` }}>{sub}</div>
         ) : null}
@@ -356,7 +380,7 @@ const WordKinetic: Look = ({ overlay, accent }) => {
                 transform: `translateY(${((1 - s) * 0.16 + q * 0.2).toFixed(4)}em) scale(${(1.14 - 0.14 * s).toFixed(4)})`,
                 transformOrigin: "50% 80%", filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined };
               return small[i] ? (
-                <span key={i} style={{ ...base, fontFamily: SERIF_ITAL, fontStyle: "italic", fontWeight: 400, fontSize: size * 0.92,
+                <span key={i} style={{ ...base, fontFamily: SERIF_ITAL, fontVariantNumeric: "lining-nums", fontStyle: "italic", fontWeight: 400, fontSize: size * 0.92,
                   color: "rgba(255,255,255,.92)", lineHeight: 1 }}>{words[i].toLowerCase()}</span>
               ) : (
                 <span key={i} style={{ ...base, fontFamily: ANTON, fontSize: size, lineHeight: 1, letterSpacing: "0.012em",
@@ -395,7 +419,7 @@ const QuoteSerif: Look = ({ overlay, accent }) => {
       <Vignette o={prog(t.f, 0, 12) * out} centre={0.42} edge={0.68} />
       <Stage t={t} place="center" push={pushOf(t, end, 0.012)}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", maxWidth: Math.min(1360 * t.kw, 0.74 * t.width) }}>
-          <div style={{ fontFamily: SERIF_TEXT, fontWeight: 400, fontSize: size, lineHeight: 1.32, color: "#FBF8F2", textAlign: "center",
+          <div style={{ fontFamily: SERIF_TEXT, fontVariantNumeric: "lining-nums", fontWeight: 400, fontSize: size, lineHeight: 1.32, color: "#FBF8F2", textAlign: "center",
             textWrap: "balance", filter: shadow(k), opacity: out } as CSS}>
             <span style={{ color: acc, opacity: prog(t.f, T0 - 2, 8), marginRight: "0.06em" }}>“</span>
             {words.map((w, i) => {
@@ -455,7 +479,7 @@ const PullQuote: Look = ({ overlay, accent }) => {
         background: "linear-gradient(90deg, rgba(0,0,0,.72) 0%, rgba(0,0,0,.55) 30%, rgba(0,0,0,.2) 58%, rgba(0,0,0,0) 75%)" }} />
       <Stage t={t} place="mid-left" push={pushOf(t, lastLine, 0.012)}>
         <div style={{ position: "relative", paddingTop: 92 * k }}>
-          <div style={{ position: "absolute", left: -10 * k, top: -34 * k, fontFamily: SERIF_TEXT, fontWeight: 700, fontSize: 240 * k, lineHeight: 1,
+          <div style={{ position: "absolute", left: -10 * k, top: -34 * k, fontFamily: SERIF_TEXT, fontVariantNumeric: "lining-nums", fontWeight: 700, fontSize: 240 * k, lineHeight: 1,
             color: acc, opacity: markP * out, transform: `scale(${(0.75 + 0.25 * easeOut(markP)).toFixed(4)})`, transformOrigin: "20% 60%",
             filter: shadow(k, true) }}>“</div>
           {lines.map((l, li) => {
@@ -463,14 +487,14 @@ const PullQuote: Look = ({ overlay, accent }) => {
             const ws = l.split(" ");
             return (
               <div key={li} style={{ clipPath: MASK, marginTop: li ? size * 0.16 : 0 }}>
-                <div style={{ fontFamily: SERIF_TEXT, fontWeight: 500, fontSize: size, lineHeight: 1.12, color: WHITE, whiteSpace: "nowrap",
+                <div style={{ fontFamily: SERIF_TEXT, fontVariantNumeric: "lining-nums", fontWeight: 500, fontSize: size, lineHeight: 1.12, color: WHITE, whiteSpace: "nowrap",
                   transform: `translateY(${glyphY(t, at, t.exit + li * 1.5).toFixed(4)}em)`, filter: shadow(k) }}>
                   {ws.map((w, j) => {
                     const i = wi++;
                     const em = hasKey && key[i];
                     return (
                       <React.Fragment key={j}>
-                        <span style={em ? { fontFamily: SERIF_ITAL, fontStyle: "italic", fontWeight: 700, color: acc } : undefined}>{w}</span>
+                        <span style={em ? { fontFamily: SERIF_ITAL, fontVariantNumeric: "lining-nums", fontStyle: "italic", fontWeight: 700, color: acc } : undefined}>{w}</span>
                         {j < ws.length - 1 ? " " : null}
                       </React.Fragment>
                     );
@@ -527,7 +551,7 @@ const StatementCard: Look = ({ overlay, accent }) => {
               <span style={{ fontFamily: SUBLINE, fontWeight: 700, fontSize: 21 * k, letterSpacing: "0.2em", color: acc, whiteSpace: "nowrap" }}>{source}</span>
             </div>
           ) : null}
-          <div style={{ fontFamily: SERIF_ITAL, fontStyle: "italic", fontWeight: 400, fontSize: size, lineHeight: 1.34, color: "#FBF8F2" }}>
+          <div style={{ fontFamily: SERIF_ITAL, fontVariantNumeric: "lining-nums", fontStyle: "italic", fontWeight: 400, fontSize: size, lineHeight: 1.34, color: "#FBF8F2" }}>
             {words.map((w, i) => {
               const p = prog(t.f, T0 + i * STEP, 8);
               return (
@@ -621,7 +645,7 @@ const Question: Look = ({ overlay, accent }) => {
       {sound}
       <CornerShade o={prog(t.f, 0, 10) * out} />
       <Stage t={t} place="lower-left" push={pushOf(t, qAt, 0.012)}>
-        <div style={{ maxWidth: maxW, fontFamily: SERIF_ITAL, fontStyle: "italic", fontWeight: 500, fontSize: size, lineHeight: 1.22,
+        <div style={{ maxWidth: maxW, fontFamily: SERIF_ITAL, fontVariantNumeric: "lining-nums", fontStyle: "italic", fontWeight: 500, fontSize: size, lineHeight: 1.22,
           color: "#FBF8F2", textWrap: "balance", filter: shadow(k), opacity: out } as CSS}>
           {words.map((w, i) => {
             const p = prog(t.f, T0 + i * STEP, 8);
@@ -636,7 +660,7 @@ const Question: Look = ({ overlay, accent }) => {
                 {isLast ? (
                   <span style={{ display: "inline-block", whiteSpace: "nowrap" }}>
                     {word}
-                    <span style={{ display: "inline-block", marginLeft: "0.05em", fontFamily: SERIF_TEXT, fontStyle: "normal", fontWeight: 700,
+                    <span style={{ display: "inline-block", marginLeft: "0.05em", fontFamily: SERIF_TEXT, fontVariantNumeric: "lining-nums", fontStyle: "normal", fontWeight: 700,
                       fontSize: "1.12em", lineHeight: 0.8, color: acc, opacity: Math.min(1, qp * 2),
                       transform: `translateY(${((1 - qs) * -0.45).toFixed(4)}em) rotate(${((1 - qs) * -12).toFixed(2)}deg)`,
                       transformOrigin: "50% 100%", filter: qBlur > 0.05 ? `blur(${qBlur.toFixed(2)}px)` : undefined }}>?</span>
@@ -770,7 +794,7 @@ const InkReveal: Look = ({ overlay, accent }) => {
           return (
             <div key={li} style={{ position: "relative", margin: `${li ? size * 0.04 - pad : -pad}px ${-pad}px ${-pad}px`, padding: pad,
               maskImage: m, WebkitMaskImage: m, maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat" } as CSS}>
-              <div style={{ fontFamily: SERIF_TEXT, fontWeight: 700, fontSize: size, lineHeight: 1.12, color: WHITE, whiteSpace: "nowrap",
+              <div style={{ fontFamily: SERIF_TEXT, fontVariantNumeric: "lining-nums", fontWeight: 700, fontSize: size, lineHeight: 1.12, color: WHITE, whiteSpace: "nowrap",
                 opacity: 1 - q, filter: shadow(k), transform: `translateY(${(q * 0.12).toFixed(4)}em)` }}>{l}</div>
             </div>
           );
