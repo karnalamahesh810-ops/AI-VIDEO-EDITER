@@ -43,6 +43,7 @@ import requests
 
 from . import ytdlp
 from . import config, media, storage, costs, events, r2
+from . import brandkit
 from . import render as renderer
 
 
@@ -563,7 +564,13 @@ def chunk_hash(doc: dict, a: int, b: int) -> str:
     does the renderer itself (render.renderer_fingerprint): a chunk drawn by
     older renderer code (before the grade, say) must not be joined to new ones.
     Two renders whose chunk hashes match can share the chunk file.
+    `a`..`b` are frames of the whole video: a brand intro plays before the
+    narration's timeline (brandkit.layout), so scenes and overlays are
+    matched `intro` frames later, and the brand block itself is in the hash.
     """
+    intro, body, _outro, _total = brandkit.layout(doc)
+    a, b = a - intro, b - intro
+
     def overlaps(item: dict, extra: int = 0) -> bool:
         s0 = int(item.get("startFrame") or 0)
         s1 = s0 + int(item.get("durationInFrames") or 0) - 1 + extra
@@ -586,6 +593,9 @@ def chunk_hash(doc: dict, a: int, b: int) -> str:
     payload = {"fps": doc.get("fps"), "width": doc.get("width"), "height": doc.get("height"),
                "captions": doc.get("captions"), "brand": doc.get("brand"), "overlaysEnabled": doc.get("overlaysEnabled"),
                "scenes": scenes, "overlays": overlays, "grade": doc.get("grade"), "renderer": _renderer_id()}
+    if intro or _outro:
+        # Where the range sits against the intro, the narration and the outro.
+        payload["layout"] = [intro, body, _outro, a, b]
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
 
 
@@ -634,7 +644,8 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
     left in media.LAST_STATS["render_manifest"].
     """
     fps = int(doc.get("fps") or 30)
-    total_frames = int(doc["durationInFrames"])
+    # Every frame of the video: the brand intro and outro around the narration.
+    total_frames = brandkit.total_frames(doc)
     ranges = chunks(total_frames, fps, config.FANOUT_PARTS)
     units = [{"i": i, "frames": fr, "weight": fr[1] - fr[0] + 1,
               "path": os.path.join(work, f"chunk_{i:03d}.mp4")} for i, fr in enumerate(ranges)]
@@ -667,7 +678,7 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
         accept=accept,
         progress=lambda u, o: u["weight"] * float(o.get("frac") or 0),
         report=show,
-        deadline=time.time() + config.FANOUT_TIMEOUT_SECONDS + 3 * doc["durationInFrames"] / fps)
+        deadline=time.time() + config.FANOUT_TIMEOUT_SECONDS + 3 * total_frames / fps)
     failed = runner.run("render") if units else []
     for unit in failed:                         # anything lost is rendered here
         print(f"[fanout] rendering chunk {unit['i']} here", flush=True)
@@ -865,23 +876,27 @@ def _sfx_spans(doc: dict) -> List[tuple]:
 
 def chunk_cuts(doc: dict) -> Tuple[List[int], List[int], List[int]]:
     """
-    Scene starts where a chunk may begin, in three tiers, best first:
+    Frames of the whole video where a chunk may begin, in three tiers, best first:
       clean  - no crossfade or cut transition across the cut, no sound effect
                playing across it, no overlay making its entrance;
       visual - no crossfade or cut transition across the cut;
       every  - every scene start.
+    With a brand intro and outro (brandkit.layout) the scene starts come
+    `intro` frames later, the end of the intro and the start of the outro are
+    the cleanest cuts of all, and no cut falls inside either: each is one
+    clip (or one card) with its own sound.
     """
-    total = int(doc.get("durationInFrames") or 0)
+    intro, body, outro, total = brandkit.layout(doc)
     scenes = sorted(doc.get("scenes") or [], key=lambda s: int(s.get("startFrame") or 0))
-    sfx = _sfx_spans(doc)
+    sfx = [(a + intro, b + intro) for a, b in _sfx_spans(doc)]
     entries = []
     for o in doc.get("overlays") or []:
-        s0 = int(o.get("startFrame") or 0)
+        s0 = int(o.get("startFrame") or 0) + intro
         entries.append((s0, s0 + min(OVERLAY_ENTRY_FRAMES, int(o.get("durationInFrames") or 0))))
     clean, visual, every = [], [], []
     for sc in scenes:
-        f = int(sc.get("startFrame") or 0)
-        if f <= 0 or f >= total or (every and every[-1] == f):
+        f = int(sc.get("startFrame") or 0) + intro
+        if f <= intro or f >= intro + body or (every and every[-1] == f):
             continue
         every.append(f)
         t = str(sc.get("transition") or "none")
@@ -892,6 +907,11 @@ def chunk_cuts(doc: dict) -> Tuple[List[int], List[int], List[int]]:
         if any(a < f < b for a, b in sfx) or any(a < f < b for a, b in entries):
             continue
         clean.append(f)
+    # The seams between the brand clips and the narration's timeline.
+    seams = [f for f in (intro if intro else 0, intro + body if outro else 0) if 0 < f < total]
+    for tier in (clean, visual, every):
+        tier.extend(seams)
+        tier.sort()
     return clean, visual, every
 
 
@@ -902,16 +922,20 @@ def plan_chunks(doc: dict, n: int, min_frames: int = 1) -> List[tuple]:
     range starting on the cleanest scene cut near its ideal start (chunk_cuts;
     within half a chunk). With no scene start near, an exact frame is used:
     every frame is drawn on its own, so the picture is still identical.
+    The ranges cover the whole video, a brand intro and outro included
+    (brandkit.layout); an exact frame never lands inside either while a
+    frame outside them is in reach.
     """
-    total = int(doc.get("durationInFrames") or 0)
-    if total <= 0:
+    if int(doc.get("durationInFrames") or 0) <= 0:
         return []
+    intro, body, outro, total = brandkit.layout(doc)
     min_frames = max(1, int(min_frames or 1))
     n = max(1, min(int(n or 1), total // min_frames))
     if n == 1:
         return [(0, total - 1)]
     tiers = chunk_cuts(doc)
     size = total / n
+    inside = [(0, intro), (intro + body, total)]          # (a, b): a < f < b is inside a brand clip
     bounds = [0]
     for i in range(1, n):
         target = int(round(i * size))
@@ -925,7 +949,16 @@ def plan_chunks(doc: dict, n: int, min_frames: int = 1) -> List[tuple]:
             if near:
                 pick = min(near, key=lambda f: (abs(f - target), f))
                 break
-        bounds.append(pick if pick is not None else min(max(target, lo), hi))
+        if pick is None:
+            pick = min(max(target, lo), hi)
+            for a, b in inside:
+                if a < pick < b:
+                    # Out of the brand clip, to its nearer edge when that edge is in reach.
+                    for edge in sorted((a, b), key=lambda e: abs(e - pick)):
+                        if lo <= edge <= hi and edge > 0:
+                            pick = edge
+                            break
+        bounds.append(pick)
     return [(a, b - 1) for a, b in zip(bounds, bounds[1:] + [total])]
 
 
@@ -1026,6 +1059,9 @@ def _media_dicts(doc: dict) -> List[dict]:
     for key in ("audio", "bgm"):
         if isinstance(doc.get(key), dict):
             out.append(doc[key])
+    # The brand kit's logo, intro and outro (their links; a local copy goes up too).
+    brand = doc.get("brand") if isinstance(doc.get("brand"), dict) else {}
+    out += [brand[k] for k in ("watermark", "intro", "outro") if isinstance(brand.get(k), dict)]
     return out
 
 
@@ -1093,6 +1129,19 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
     """
     started = time.time()
     scenes = doc.get("scenes") or []
+    # a..b are frames of the whole video; the narration's timeline starts
+    # after the brand intro, and the brand's own files go when on screen.
+    intro, body, outro, _total = brandkit.layout(doc)
+    brand_files: List[Tuple[dict, str]] = []
+    brand = doc.get("brand") if isinstance(doc.get("brand"), dict) else {}
+    if intro and a < intro and isinstance(brand.get("intro"), dict):
+        brand_files.append((brand["intro"], "url"))
+    if outro and b >= intro + body and isinstance(brand.get("outro"), dict):
+        # (A card's logo stays a link: only url fields are served from this disk, assetserver.MEDIA_FIELDS.)
+        brand_files.append((brand["outro"], "url"))
+    if isinstance(brand.get("watermark"), dict) and a < intro + body and b >= intro:
+        brand_files.append((brand["watermark"], "url"))
+    a, b = a - intro, b - intro
     on: List[int] = []
     for i, sc in enumerate(scenes):
         s0 = int(sc.get("startFrame") or 0)
@@ -1122,6 +1171,7 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
             wanted += [(m, "url") for m in o.get("media") or [] if isinstance(m, dict)]
     if isinstance(doc.get("audio"), dict):
         wanted.append((doc["audio"], "url"))
+    wanted += brand_files
     targets: Dict[str, str] = {}
     for m, field in wanted:
         url = str(m.get(field) or "")
@@ -1682,7 +1732,8 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     if not pod_render_enabled(doc):
         return False
     fps = max(1, int(doc.get("fps") or 30))
-    total = int(doc.get("durationInFrames") or 0)
+    # Every frame of the video: the brand intro and outro around the narration.
+    total = brandkit.total_frames(doc)
     ranges = plan_chunks(doc, config.POD_RENDER_CHUNKS, config.POD_RENDER_MIN_CHUNK_FRAMES)
     if len(ranges) < 2:
         return False

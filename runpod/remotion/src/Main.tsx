@@ -15,6 +15,8 @@ import { PackTransitions } from "./transitions/PackTransition";
 import { GradeContext, gradeStateFor } from "./components/Grade";
 import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve, type Ambience, type Bed }
   from "./components/ambienceMix";
+import { BrandVideo, EndCard, Watermark } from "./components/brand/BrandLayers";
+import { brandFrames, brandOf } from "./components/brand/brandLayout";
 
 // The music beds were replaced by the owner's own tracks (2026-10-01); a
 // document planned before names the old bed, which no longer ships (its 404
@@ -132,7 +134,8 @@ const planLookSounds = (props: TimelineProps, fps: number): Record<string, LookS
   return out;
 };
 
-const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scenes"], sound?: LookSound | null) => {
+const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scenes"], sound?: LookSound | null,
+  accent2?: string) => {
   // An overlay that names a template gets its unset fields from the
   // registry, so the editor's pick and the planner's draw the same way.
   let ov = resolveOverlay(raw);
@@ -156,7 +159,7 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
       <MotionWrap motion="fade" exit="fade" speed={1.6}>
         <BlurBackdrop still={still} frames={ov.durationInFrames} />
         <KScale.Provider value={scale}>
-          <Component overlay={{ ...ov, fullFrame: true }} accent={accentFor(ov, accent)} />
+          <Component overlay={{ ...ov, fullFrame: true }} accent={accentFor(ov, accent, accent2)} />
         </KScale.Provider>
       </MotionWrap>, sound);
   }
@@ -164,7 +167,7 @@ const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scen
     <MotionWrap motion={ov.motion} exit={ov.exit} speed={ov.speed}
       placement={{ position: ov.position, scale: ov.scale, opacity: ov.opacity }}>
       <KScale.Provider value={scale}>
-        <Component overlay={ov} accent={accentFor(ov, accent)} />
+        <Component overlay={ov} accent={accentFor(ov, accent, accent2)} />
       </KScale.Provider>
     </MotionWrap>, sound);
 };
@@ -342,8 +345,50 @@ const CrossfadeIn: React.FC<{ active: boolean; children: React.ReactNode }> = ({
   return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
 };
 
+/**
+ * The video. Without a brand kit, exactly the narration's timeline (Body).
+ * With one (props.brand, src/brandkit.py): the customer's intro sting first,
+ * the timeline after it with their logo in its corner, their outro last
+ * (an end card or their own video). The timeline keeps its own frame
+ * numbers inside its Sequence, so every scene, caption, graphic, sound and
+ * the narration stay exactly aligned; Root.tsx makes the composition
+ * intro + body + outro frames long (brandFrames).
+ */
 export const Main: React.FC<TimelineProps> = (props) => {
+  const brand = React.useMemo(() => brandOf(props), [props.brand]);   // eslint-disable-line react-hooks/exhaustive-deps
+  if (!brand || !(brand.watermark || brand.intro?.frames || brand.outro?.frames)) return <Body {...props} />;
+  const { intro, body, outro } = brandFrames(props);
+  const accent = brand.accent || props.captions?.accent || "#d6a83c";
+  const last = props.scenes[props.scenes.length - 1]?.media;
+  const lastStill = last ? (last.type === "image" ? last.url : last.thumbnail || "") : "";
+  return (
+    <AbsoluteFill style={{ backgroundColor: "#000" }}>
+      {intro > 0 && brand.intro ? (
+        <Sequence from={0} durationInFrames={intro} name="Brand intro">
+          <BrandVideo clip={brand.intro} />
+        </Sequence>
+      ) : null}
+      <Sequence from={intro} durationInFrames={body} name="Video">
+        <Body {...props} />
+        {brand.watermark ? <Watermark mark={brand.watermark} /> : null}
+      </Sequence>
+      {outro > 0 && brand.outro ? (
+        <Sequence from={intro + body} durationInFrames={outro} name="Brand outro">
+          {brand.outro.kind === "card" ? (
+            <EndCard card={brand.outro} accent={accent} accent2={brand.accent2} fontFamily={brand.fontFamily}
+              logo={brand.outro.logo || brand.watermark?.url} still={lastStill} />
+          ) : <BrandVideo clip={brand.outro} />}
+        </Sequence>
+      ) : null}
+    </AbsoluteFill>
+  );
+};
+
+/** The narration's timeline: scenes, transitions, captions, graphics, narration, music, sounds. */
+const Body: React.FC<TimelineProps> = (props) => {
   const { scenes, overlays, audio, bgm, captions } = props;
+  // The brand kit's second colour: its figures and charts (overlay theme "accent2").
+  const accent2 = props.brand && typeof props.brand.accent2 === "string" ? props.brand.accent2 : undefined;
   // Track toggles from the editor. Absent means on, so older timelines
   // render exactly as before.
   const showOverlays = props.overlaysEnabled !== false;
@@ -379,8 +424,8 @@ export const Main: React.FC<TimelineProps> = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [overlays, scenes, props.lookSounds, props.meta, props.sfxEnabled, props.sfxVolume, fps]);
   const overlayNodes = React.useMemo(
-    () => (overlays || []).map((ov, i) => renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`])),
-    [overlays, captions.accent, scenes, lookSounds]);
+    () => (overlays || []).map((ov, i) => renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`], accent2)),
+    [overlays, captions.accent, scenes, lookSounds, accent2]);
   // Built once per sfx list: each sound plays for its planned span (a typing
   // run lasts exactly as long as the letters appear) or, unplanned, for the
   // file's own length - never the old fixed 3 s that cut risers and typing.
@@ -425,7 +470,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
           {/* The next scene's transition starts over this scene's last frames. */}
           <CrossfadeIn active={scene.transition === "crossfade" && i > 0}>
             {/* A full-screen animation scene plays its look's own sound too. */}
-            {withSound(<SceneClip scene={scene} accent={captions.accent} backdrop={backdrops[scene.id]}
+            {withSound(<SceneClip scene={scene} accent={captions.accent} accent2={accent2} backdrop={backdrops[scene.id]}
               nextTransition={scenes[i + 1]?.transition} />, lookSounds[`s${i}`])}
           </CrossfadeIn>
         </Sequence>

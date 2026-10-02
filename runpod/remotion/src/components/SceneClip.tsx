@@ -26,8 +26,8 @@ import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
  * next scene's transition over its own last few frames.
  */
 export const SceneClip: React.FC<{
-  scene: Scene; accent?: string; backdrop?: SceneMedia | null; nextTransition?: SceneTransition;
-}> = ({ scene, accent, backdrop, nextTransition }) => {
+  scene: Scene; accent?: string; accent2?: string; backdrop?: SceneMedia | null; nextTransition?: SceneTransition;
+}> = ({ scene, accent, accent2, backdrop, nextTransition }) => {
   const frame = useCurrentFrame();
   const { durationInFrames, fps, width, height } = useVideoConfig();
   const { media, motion, treatment, transition, effect } = scene;
@@ -56,7 +56,7 @@ export const SceneClip: React.FC<{
     // The beat is a motion graphic, not a clip (VidRush's purple blocks).
     return (
       <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
-        <AnimationScene scene={scene} accent={accent || "#d6a83c"} backdrop={backdrop} />
+        <AnimationScene scene={scene} accent={accent || "#d6a83c"} accent2={accent2} backdrop={backdrop} />
       </TransitionFrame>
     );
   }

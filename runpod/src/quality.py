@@ -544,7 +544,17 @@ def text_scene(doc: dict, s: dict) -> None:
     """The scene's own line as a full-screen text graphic: what shows when nothing could be found for it."""
     text = " ".join(str(s.get("text") or "").split())[:160]
     try:
-        tid = next((x for x in TEXT_LOOKS if templates.get(x)), "")
+        tid = ""
+        if templates.allowed() is not None:
+            # A brand kit: a full-screen text look it allows, when it allows one.
+            for cue in ("headline", "statement", "fact", "key-phrase"):
+                tid = next((t["id"] for t in templates.for_cue(cue) if t.get("kind") == "card"
+                            and "text" in (t.get("props") or {})
+                            and not ({"still", "stills"} & set(t.get("tags") or []))), "")
+                if tid:
+                    break
+        # (Else the renderer's own text look: a line is never left empty.)
+        tid = tid or next((x for x in TEXT_LOOKS if templates.get(x)), "")
         anim = templates.resolve(tid, props={"text": text}) if tid else {}
     except Exception:  # noqa: BLE001 - an unreadable registry: the renderer's own default text look
         anim = {}
@@ -702,6 +712,11 @@ def classify(doc: dict, res: dict) -> Tuple[List[dict], List[dict]]:
     """
     fps = max(1, int(doc.get("fps") or 30))
     scenes = doc.get("scenes") or []
+    # A brand intro and outro are the customer's own clips around the
+    # narration: the scan is read in the narration's own seconds, their
+    # stretches left out (brandkit.body_scan).
+    from . import brandkit
+    res = brandkit.body_scan(doc, res)
     dur = float(res.get("duration") or 0.0) or int(doc.get("durationInFrames") or 0) / fps
     defects: List[dict] = []
     intended: List[dict] = []
@@ -1155,7 +1170,9 @@ class Gate:
         media = ov.get("media") or []
         if ov.get("type") == "split" and len(media) < 2:
             ov["type"] = "label-boxes"
-            if templates.get("TEXT_DUAL_LABELS_V1"):
+            if templates.allowed() is not None and templates.banned("TEXT_DUAL_LABELS_V1"):
+                ov.pop("template", None)         # the plain label pills: the look is outside the brand kit
+            elif templates.get("TEXT_DUAL_LABELS_V1"):
                 ov["template"] = "TEXT_DUAL_LABELS_V1"
             ov.pop("variant", None)
             ov.pop("media", None)

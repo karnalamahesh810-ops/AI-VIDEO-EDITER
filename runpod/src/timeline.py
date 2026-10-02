@@ -453,8 +453,18 @@ def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict],
         genre = track
     if genre not in BGM_GENRES:
         genre = "investigative"
+    seed = str(inp.get("project_id") or inp.get("title") or "")
     if track not in names:
-        track = _bgm_track(genre, seconds, str(inp.get("project_id") or inp.get("title") or ""))
+        track = _bgm_track(genre, seconds, seed)
+    # The brand kit's music (only when the job chose none itself): its tracks
+    # and genres only - the story's mood picks among them, the nearest genre
+    # when its own is not liked; "none" is no music at all.
+    from . import brandkit
+    liked = brandkit.music_limit(inp)
+    if liked == brandkit.NONE:
+        return None
+    if liked:
+        genre, track = brandkit.pick_music(genre, track, seconds, liked, seed)
     length = next((n for tracks in BGM_TRACKS.values() for name, n in tracks if name == track), 0)
     return {"url": f"bgm://{track}", "volume": float(inp.get("bgm_volume", 0.12)), "genre": genre,
             "track": track, "trackSeconds": length,
@@ -922,7 +932,8 @@ def _pack_moments(segments: List[Segment], shots: List[dict], bounds: List[int],
 
 
 def plan_pack_transitions(segments: List[Segment], shots: List[dict], bounds: List[int], fps: int,
-                          rhythm: dict, brief: Optional[dict] = None, busy: Optional[List[dict]] = None) -> Dict[int, str]:
+                          rhythm: dict, brief: Optional[dict] = None, busy: Optional[List[dict]] = None,
+                          allowed: Optional[Any] = None) -> Dict[int, str]:
     """
     {scene index: pack clip name} - where the owner's overlay transitions go.
 
@@ -935,8 +946,11 @@ def plan_pack_transitions(segments: List[Segment], shots: List[dict], bounds: Li
     whose look (rhythm["characters"] plus the line's own words) fits best,
     never one of the last PACK_RECENT, and never one that would overrun its
     scenes. `busy` is every other planned sound ({startFrame, durationFrames}).
+    `allowed` (the brand kit's clips, brandkit.pack_clips): only those; None = every clip.
     """
     meta = pack_meta()
+    if allowed is not None:
+        meta = {k: v for k, v in meta.items() if k in set(allowed)}
     n = len(segments)
     if not meta or n < 2 or len(bounds) < n + 1:
         return {}
@@ -1278,12 +1292,32 @@ def build(segments: List[Segment], shots: List[dict],
     levelled against its measured loudness (voice_loudness). `library` is
     the clip library the job loaded (src/library.py): its pictures of a
     subject fill an image look's slots the story's own pictures cannot.
+    The job's brand kit (inp["brand_kit"]) is in force throughout: only its
+    looks, transitions and music, its colours and font (src/brandkit.py).
     """
+    from . import brandkit
+    with brandkit.scope(brandkit.from_input(inp)):
+        return _build(segments, shots, assets, audio_url=audio_url, audio_duration=audio_duration, inp=inp,
+                      planner=planner, warnings=warnings, narration_path=narration_path, library=library)
+
+
+def _build(segments: List[Segment], shots: List[dict],
+           assets: List[Optional[MediaAsset]], *,
+           audio_url: str, audio_duration: float, inp: Dict[str, Any],
+           planner: str = "rules", warnings: List[str] = None, narration_path: str = "",
+           library=None) -> Dict[str, Any]:
     warnings = list(warnings or [])
     fps = int(inp.get("fps") or config.DEFAULT_FPS)
     width = int(inp.get("width") or config.DEFAULT_WIDTH)
     height = int(inp.get("height") or config.DEFAULT_HEIGHT)
-    brand = inp.get("brand") or {}
+    brand = dict(inp.get("brand") or {})
+    from . import brandkit
+    _kit = brandkit.from_input(inp)
+    if _kit:
+        # The kit's colour and font win over the project's own (brandkit.prepare_input does the same).
+        brand.update({k: v for k, v in (("accent", _kit.get("accent")), ("fontFamily", _kit.get("font"))) if v})
+        if _kit.get("caption_style") and not inp.get("caption_style"):
+            inp["caption_style"] = _kit["caption_style"]
     total = max(1, int(round(audio_duration * fps)))
     bounds = _scene_bounds(segments, fps, total)
     # Measured once: every sound effect and the music are set against the voice.
@@ -1299,9 +1333,15 @@ def build(segments: List[Segment], shots: List[dict],
 
     # The visual treatment planner (src/treatments.py): the style pack decides
     # the looks, the narration decides where a treatment goes.
-    from . import director, treatments as vt
+    from . import brandkit, director, treatments as vt
     brief = inp.get("brief") if isinstance(inp.get("brief"), dict) else dict(director.LAST_STORY)
     pack = vt.pack_for(brief, str(inp.get("style_pack") or config.STYLE_PACK or "")) if config.TREATMENTS else None
+    # The customer's brand kit (src/brandkit.py): its colour replaces the
+    # style pack's, so every look draws in the brand accent (captions.accent);
+    # its picks limit the looks, transitions and music below.
+    kit = brandkit.from_input(inp)
+    if pack and kit and kit.get("accent"):
+        pack = dict(pack, theme="accent")
     # Transitions follow the cutting style (a documentary mostly hard-cuts, a
     # news edit punctuates); a job can still pin the allowed set.
     style = transition_style(inp, pack, brief)
@@ -1309,6 +1349,9 @@ def build(segments: List[Segment], shots: List[dict],
                                  durations=[bounds[i + 1] - bounds[i] for i in range(len(segments))])
     if isinstance(inp.get("transitions"), list) and inp["transitions"]:
         entrances = _pack_transitions(entrances, {"transitions": inp["transitions"]})
+    # Only the kit's transitions: each other one becomes the nearest the kit
+    # allows, or a hard cut.
+    entrances = brandkit.limit_transitions(entrances, kit)
     if pack:
         image_look = templates.image_treatment(pack.get("imageTreatment", "")) or {}
     else:
@@ -1463,6 +1506,8 @@ def build(segments: List[Segment], shots: List[dict],
     # then nearby ones of the same subject, then the clip library), or a look
     # that needs fewer, or none (the owner's Lake Powell video: empty slots).
     pictures = vt.bind_look_pictures(overlays, scenes, library=library, story=brief)
+    # The kit's second colour on its figures and charts (overlays.tsx accentFor "accent2").
+    brandkit.second_colour(overlays, scenes, kit)
     if pictures["swapped"] or pictures["dropped"]:
         print(f"[timeline] image looks: {pictures['bound']} bound, {pictures['swapped']} became one-picture looks, "
               f"{pictures['dropped']} left out (no picture)", flush=True)
@@ -1473,11 +1518,14 @@ def build(segments: List[Segment], shots: List[dict],
     # own "transitions" list gets them only when it names "pack").
     want_pack = inp.get("transition_pack")
     pinned = inp.get("transitions") if isinstance(inp.get("transitions"), list) else []
+    # The brand kit's pack clips only (none allowed: no pack transitions).
+    clips = brandkit.pack_clips(kit)
     if (want_pack if isinstance(want_pack, bool) else config.TRANSITION_PACK) and (
-            not pinned or any(str(t).startswith("pack") for t in pinned)):
+            not pinned or any(str(t).startswith("pack") for t in pinned)) and (clips is None or clips):
         from . import styles as video_styles
         rhythm = video_styles.pack_rhythm(str(inp.get("video_style") or ""), style)
-        apply_pack_transitions(scenes, plan_pack_transitions(segments, shots, bounds, fps, rhythm, brief, busy),
+        apply_pack_transitions(scenes, plan_pack_transitions(segments, shots, bounds, fps, rhythm, brief, busy,
+                                                             allowed=clips),
                                fps, float(rhythm.get("clear", 3.0)), voice_lufs=voice_lufs)
     # Each transition's own sound, peaking on its cut, unless a graphic's
     # sound is already there (a row, or the sound built into a look); then
@@ -1532,7 +1580,13 @@ def build(segments: List[Segment], shots: List[dict],
         # Present: every look plays the sound built into it (at this intensity,
         # against meta.voiceLufs); the sfx rows are transitions and the editor's own.
         **({"lookSounds": look_sounds} if look_sounds is not None else {}),
+        # The brand kit's identity for the renderer: colours, font, watermark,
+        # intro and outro (their frames are written at render: brandkit.prepare_render).
+        **({"brand": brandkit.doc_brand(kit)} if kit else {}),
         "meta": {
+            # The kit and the picks this video was planned with (render-time
+            # repairs and Replace Clip keep to them).
+            **({"brandKit": brandkit.meta(kit)} if kit else {}),
             "schemaVersion": SCHEMA_VERSION,
             "sceneCount": len(scenes),
             "overlayCount": len(overlays),

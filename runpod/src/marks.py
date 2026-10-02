@@ -161,13 +161,19 @@ def _sfx_cue(template_id: str, start: int, frames: int, fps: int, voice_lufs) ->
 
 
 def _pick_mark(anchor: dict, n: int) -> str:
-    """Circle a small round thing, box a wide one, else the arrow; alternate for variety."""
+    """
+    Circle a small round thing, box a wide one, else the arrow; alternate for
+    variety. Only the marks the brand kit allows (the next best of the three
+    when the first is left out); "" when it allows none.
+    """
     w, h = float(anchor.get("w") or 0), float(anchor.get("h") or 0)
     if w and h and w / max(h, 1e-3) > 2.2:
-        return "LIB_VM_BOX"
-    if float(anchor.get("r") or 1) < 0.12:
-        return "LIB_VM_CIRCLE" if n % 2 == 0 else "LIB_VM_ARROW"
-    return "LIB_VM_ARROW" if n % 2 == 0 else "LIB_VM_CIRCLE"
+        order = ["LIB_VM_BOX", "LIB_VM_ARROW", "LIB_VM_CIRCLE"]
+    elif float(anchor.get("r") or 1) < 0.12:
+        order = ["LIB_VM_CIRCLE", "LIB_VM_ARROW"] if n % 2 == 0 else ["LIB_VM_ARROW", "LIB_VM_CIRCLE"]
+    else:
+        order = ["LIB_VM_ARROW", "LIB_VM_CIRCLE"] if n % 2 == 0 else ["LIB_VM_CIRCLE", "LIB_VM_ARROW"]
+    return next((t for t in order if not templates.banned(t)), "")
 
 
 def _label(what: str) -> str:
@@ -192,6 +198,7 @@ def place_photo_anchors(doc: dict, find) -> Dict[str, int]:
             ov["anchor"] = anchor
             stats["photoAnchored"] += 1
         elif tid in POINTING_PHOTO:
+            # (A fallback outside the brand kit's looks: brandkit.enforce finds the closest allowed one.)
             new = templates.resolve(PHOTO_FALLBACK, props={"text": ov.get("text") or "",
                                                             "subtitle": ov.get("subtitle") or ""})
             if new:
@@ -248,6 +255,8 @@ def place_video_marks(doc: dict, find, frame_at) -> Dict[str, int]:
         if not anchor:
             continue
         tid = _pick_mark(anchor, len(placed))
+        if not tid:
+            break                       # the brand kit allows no mark
         ov = templates.resolve(tid, props={"text": _label(what)})
         if not ov:
             continue
