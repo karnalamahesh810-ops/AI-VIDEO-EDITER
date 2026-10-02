@@ -171,6 +171,40 @@ const prefix = (l: [number, number][], upTo: number): [number, number][] => {
   return out;
 };
 
+/** A polyline resampled at an even `step` (px). */
+const resample = (pts: Pt[], step: number): Pt[] => {
+  const out: Pt[] = [pts[0]];
+  let carry = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    let d = step - carry;
+    while (d <= seg) {
+      out.push([lerp(a[0], b[0], d / seg), lerp(a[1], b[1], d / seg)]);
+      d += step;
+    }
+    carry = seg - (d - step);
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+};
+/** Moving average over +-r points, `passes` times; the ends stay where they are. */
+const smoothPts = (pts: Pt[], r: number, passes: number): Pt[] => {
+  let cur = pts;
+  for (let n = 0; n < passes; n++) {
+    const prev = cur;
+    cur = prev.map((_p, i) => {
+      const rr = Math.min(r, i, prev.length - 1 - i);
+      let x = 0;
+      let y = 0;
+      for (let j = i - rr; j <= i + rr; j++) { x += prev[j][0]; y += prev[j][1]; }
+      return [x / (2 * rr + 1), y / (2 * rr + 1)] as Pt;
+    });
+  }
+  return cur;
+};
+
 /** The state outlines, as faint context when the frame is wide. */
 const States: React.FC<{ project: (lon: number, lat: number) => Pt; opacity: number }> = ({ project, opacity }) => {
   const { k } = useBase();
@@ -249,57 +283,61 @@ const RiverTrace: Look = ({ overlay, accent }) => {
   });
   const paths = drawn.map((l) => smoothPath(l.map(([lon, lat]) => project(lon, lat))));
 
-  // The label sits on the straightest stretch of the main line, chosen on the final camera so it never hops.
-  const main = lines.reduce((a, b, i, all) => (total[all.indexOf(a)] >= total[i] ? a : b), lines[0]);
-  const labelSize = 34 * k;
+  // The label sits on the straightest stretch of the main line. The camera only zooms about the screen centre,
+  // so the stretch is chosen once on the final camera and scaled with the zoom: it never hops.
   const label = (g.label || g.name || "").toUpperCase();
-  const lw = textWidth(label, SUBLINE, labelSize, 700, 0.3) * 1.08;
-  const pxs = main.map(([lon, lat]) => finalProject(lon, lat));
-  const cum: number[] = [0];
-  for (let i = 1; i < pxs.length; i++) cum.push(cum[i - 1] + Math.hypot(pxs[i][0] - pxs[i - 1][0], pxs[i][1] - pxs[i - 1][1]));
-  let best = { i0: 0, i1: Math.min(1, pxs.length - 1), score: 1e18 };
+  const labelSize = (label.length > 20 ? 28 : 34) * k;
+  const lw = label.length * labelSize * 0.9;
+  const mainIdx = lines.reduce((best, _l, i) => (total[i] > total[best] ? i : best), 0);
+  const main = lines[mainIdx];
+  const STEP = 8 * k;
+  const rs = smoothPts(resample(main.map(([lon, lat]) => finalProject(lon, lat)), STEP), 5, 2);
+  const need = Math.ceil(lw / STEP);
   const onScreen = (p: Pt) => p[0] > width * 0.1 && p[0] < width * 0.9 && p[1] > height * 0.14 && p[1] < height * 0.86;
-  for (let i0 = 0; i0 < pxs.length - 1; i0++) {
-    let i1 = i0 + 1;
-    while (i1 < pxs.length - 1 && cum[i1] - cum[i0] < lw) i1++;
-    if (cum[i1] - cum[i0] < lw * 0.9) break;
-    const a = pxs[i0];
-    const b = pxs[i1];
-    if (![a, b, pxs[(i0 + i1) >> 1]].every(onScreen)) continue;
+  const pinPx = (g.pins || []).map((pn) => finalProject(pn.lon, pn.lat));
+  let best = { i0: -1, score: 1e18 };
+  for (let i0 = 0; i0 + need < rs.length; i0 += 2) {
+    const win = rs.slice(i0, i0 + need + 1);
+    if (![win[0], win[win.length >> 1], win[win.length - 1]].every(onScreen)) continue;
+    if (pinPx.some((q) => win.some((v) => Math.hypot(v[0] - q[0], v[1] - q[1]) < 190 * k))) continue;
     let turn = 0;
-    for (let i = i0 + 1; i < i1; i++) {
-      const a1 = Math.atan2(pxs[i][1] - pxs[i - 1][1], pxs[i][0] - pxs[i - 1][0]);
-      const a2 = Math.atan2(pxs[i + 1][1] - pxs[i][1], pxs[i + 1][0] - pxs[i][0]);
-      let d = Math.abs(a2 - a1);
+    for (let i = 3; i < win.length; i += 3) {
+      const h1 = Math.atan2(win[i - 1][1] - win[i - 3][1], win[i - 1][0] - win[i - 3][0]);
+      const h2 = Math.atan2(win[i][1] - win[i - 1][1], win[i][0] - win[i - 1][0]);
+      let d = Math.abs(h2 - h1);
       if (d > Math.PI) d = 2 * Math.PI - d;
       turn += d;
     }
-    const slope = Math.abs(Math.atan2(b[1] - a[1], b[0] - a[0]));
+    const dx = win[win.length - 1][0] - win[0][0];
+    const dy = win[win.length - 1][1] - win[0][1];
+    const slope = Math.abs(Math.atan2(dy, dx));
     const steep = Math.min(slope, Math.PI - slope);
-    const score = turn + steep * 1.2 - (cum[i1] - cum[i0]) / (lw * 40);
-    if (score < best.score) best = { i0, i1, score };
+    const score = turn * 4 + steep * 1.5;
+    if (score < best.score) best = { i0, score };
   }
-  const haveLabel = best.score < 1e17 && label.length > 0;
+  const haveLabel = best.i0 >= 0 && label.length > 0;
   let labelPath = "";
   let labelAt = 40;
   if (haveLabel) {
-    const win = main.slice(best.i0, best.i1 + 1).map(([lon, lat]) => project(lon, lat));
-    // smooth the window (a moving average) and read it left to right
-    const sm = win.map((p, i) => {
-      const a = win[Math.max(0, i - 2)];
-      const b = win[Math.min(win.length - 1, i + 2)];
-      return [(a[0] + p[0] + b[0]) / 3, (a[1] + p[1] + b[1]) / 3] as Pt;
+    let win = rs.slice(best.i0, best.i0 + need + 1);
+    if (win[win.length - 1][0] < win[0][0]) win = [...win].reverse();
+    const scale = 2 ** (z - end.z);
+    const cxs = width / 2;
+    const cys = height / 2;
+    const lifted = win.map((p, i) => {
+      const a = win[Math.max(0, i - 1)];
+      const c = win[Math.min(win.length - 1, i + 1)];
+      const dx = c[0] - a[0];
+      const dy = c[1] - a[1];
+      const m = Math.hypot(dx, dy) || 1;
+      const q: Pt = [p[0] + (dy / m) * 26 * k, p[1] - (dx / m) * 26 * k];
+      return [cxs + (q[0] - cxs) * scale, cys + (q[1] - cys) * scale] as Pt;
     });
-    if (sm[sm.length - 1][0] < sm[0][0]) sm.reverse();
-    labelPath = smoothPath(sm);
+    labelPath = smoothPath(lifted);
     // the label appears once the drawing has passed the middle of its stretch
     let along = 0;
-    for (let i = 0; i < lines.length && lines[i] !== main; i++) along += total[i];
-    const midIdx = (best.i0 + best.i1) >> 1;
-    let t = 0;
-    for (let i = 1; i <= midIdx; i++) t += Math.hypot(mercX(main[i][0]) - mercX(main[i - 1][0]), mercY(main[i][1]) - mercY(main[i - 1][1]));
-    const reached = (along + t) / sum;
-    // the frame at which the eased draw has covered that share of the line
+    for (let i = 0; i < mainIdx; i++) along += total[i];
+    const reached = (along + (total[mainIdx] * (best.i0 + need / 2)) / Math.max(1, rs.length - 1)) / sum;
     let lo = 0;
     let hi = 1;
     for (let n = 0; n < 24; n++) {
@@ -344,10 +382,10 @@ const RiverTrace: Look = ({ overlay, accent }) => {
           {head && !settled && draw > 0 ? <circle cx={(head as Pt)[0]} cy={(head as Pt)[1]} r={9 * k} fill="#fff"
             style={{ filter: `drop-shadow(0 0 ${12 * k}px ${hot})` }} /> : null}
           {haveLabel ? (
-            <text fontFamily={SUBLINE} fontWeight={700} fontSize={labelSize} letterSpacing={`${0.3 * labelSize}px`} fill="#fff"
+            <text fontFamily={SUBLINE} fontWeight={700} fontSize={labelSize} letterSpacing={`${0.22 * labelSize}px`} fill="#fff"
               stroke="rgba(0,0,0,.8)" strokeWidth={6 * k} paintOrder="stroke" strokeLinejoin="round" opacity={labelP}>
               <textPath href={`#${id}lp`} startOffset="50%" textAnchor="middle">
-                <tspan dy={-16 * k}>{label}</tspan>
+                {label}
               </textPath>
             </text>
           ) : null}

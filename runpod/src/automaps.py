@@ -340,8 +340,9 @@ def river_doc(rec: dict, places: List[dict], kind: str = "river") -> dict:
             "flow": bool(rec.get("flow")), "approx": bool(rec.get("approx")), "pins": pins[:3], "stretch": stretch}
 
 
-def reservoir_doc(g: Geodata, lake: Optional[dict], dams: List[dict]) -> Optional[dict]:
-    """A lake or reservoir (its outline) with the dam(s) named; a dam alone is framed round its pin."""
+def reservoir_doc(g: Geodata, lake: Optional[dict], dams: List[dict], say_lake: bool = True) -> Optional[dict]:
+    """A lake or reservoir (its outline) with the dam(s) named; a dam alone is framed round its pin.
+    `say_lake`: the line named the lake (its name is drawn on the water); a dam's reservoir is outlined unnamed."""
     rings = [decode(t) for t in lake["rings"]] if lake else []
     pins = [{"label": d["name"], "lat": d["lat"], "lon": d["lon"], "kind": "dam"} for d in dams]
     if rings and pins:
@@ -364,7 +365,8 @@ def reservoir_doc(g: Geodata, lake: Optional[dict], dams: List[dict]) -> Optiona
         for part in clip_line(main, box, 0.3)[:2]:
             context.append(_round(thin(part, 160)))
     name = lake["name"] if lake else dams[0]["name"]
-    return {"kind": "reservoir" if rings else "dam", "name": name, "label": name.upper(), "bbox": box,
+    label = name.upper() if (rings and say_lake) or not rings else ""
+    return {"kind": "reservoir" if rings else "dam", "name": name, "label": label, "bbox": box,
             "rings": [_round(thin(r, MAX_RING_POINTS)) for r in rings], "context": context, "pins": pins[:3],
             "river": river_rec["name"] if river_rec else ""}
 
@@ -407,11 +409,12 @@ def plan_for_line(text: str, context: str = "", places: Optional[List[dict]] = N
         fid = "lake:" + (lake_rec["id"] if lake_rec else "dam:" + dam_recs[0]["id"])
         if fid in used:
             return None
-        doc = reservoir_doc(g, lake_rec, dam_recs)
+        doc = reservoir_doc(g, lake_rec, dam_recs, say_lake=bool(lakes))
         if not doc:
             return None
         word = trigger_word(text, first["start"], first["end"], first["rec"])
-        return {"id": fid, "kind": doc["kind"], "look": LOOK_RESERVOIR, "key": word, "label": doc["label"], "geo": doc}
+        return {"id": fid, "kind": doc["kind"], "look": LOOK_RESERVOIR, "key": word,
+                "label": doc["label"] or (dam_recs[0]["name"].upper() if dam_recs else ""), "geo": doc}
     rec = first["rec"]
     fid = first["kind"] + ":" + rec["id"]
     if fid in used:

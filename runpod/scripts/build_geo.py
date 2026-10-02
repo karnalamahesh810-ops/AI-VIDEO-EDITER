@@ -676,7 +676,7 @@ def build_lakes(ne: Dict[str, List[dict]]) -> List[dict]:
     for key in ("ne_10m_lakes", "ne_10m_lakes_north_america"):
         for f in ne[key]:
             p = f["properties"]
-            label = str(p.get("label") or p.get("name_en") or p.get("name") or "").strip()
+            label = str(p.get("name") or p.get("label") or p.get("name_en") or "").strip()
             if not label or p.get("ne_id") in seen_ne:
                 continue
             rings = sorted(outer_rings(f["geometry"]), key=ring_area, reverse=True)
@@ -692,7 +692,7 @@ def build_lakes(ne: Dict[str, List[dict]]) -> List[dict]:
             bb = bbox_of(rings)
             if max(bb[2] - bb[0], bb[3] - bb[1]) < LAKE_MIN_DEG:
                 continue
-            aliases = {norm(label)}
+            aliases = {norm(label), norm(p.get("label") or "")}
             for alt in re.split(r"[;|]", str(p.get("name_alt") or "")):
                 if norm(alt) and len(norm(alt).split()) >= 2:
                     aliases.add(norm(alt))
