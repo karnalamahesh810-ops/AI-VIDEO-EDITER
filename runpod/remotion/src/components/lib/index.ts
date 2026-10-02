@@ -41,6 +41,8 @@ import { LOOKS as L_LibPackNumbers } from "./LibPackNumbers";
 import { LOOKS as L_LibPackVR } from "./LibPackVR";
 import { LOOKS as L_LibPhotosPro } from "./LibPhotosPro";
 import { LOOKS as L_LibPhotosPro2 } from "./LibPhotosPro2";
+import { LOOKS as L_LibNumbersPro } from "./LibNumbersPro";
+import { LOOKS as L_LibTextPro } from "./LibTextPro";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -110,4 +112,14 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibPhotosPro2, ["px-contact-sheet", "px-negative-flip", "px-darkroom", "px-slide-projector", "px-flatbed-scan",
     "px-shutter-burst", "px-album-page", "px-archive-stamp", "px-book-plate", "px-archive-envelope", "px-drying-line",
     "px-dated-cascade", "px-then-now"]),
+  // Numbers pro (LibNumbersPro): figures in digits with their unit as said, a soft tick on the landing;
+  // "autoPick": false until the owner approves them from their contact sheets.
+  ...pick(L_LibNumbersPro, ["nx-stat-context", "nx-frame-share", "nx-ring-label", "nx-delta-arrow", "nx-money-roll",
+    "nx-dimension", "nx-callout-box", "nx-callout-pair", "nx-number-line", "nx-record-floor", "nx-rate-fraction",
+    "nx-rank-rows", "nx-inline-count"]),
+  // Text pro (LibTextPro): the narration's own words, one device and one place each, no bar under a long line;
+  // "autoPick": false until the owner approves them.
+  ...pick(L_LibTextPro, ["tx-sentence-highlight", "tx-typewriter-lower", "tx-kicker-headline", "tx-word-kinetic",
+    "tx-quote-serif", "tx-pull-quote", "tx-statement-card", "tx-name-card", "tx-question", "tx-contrast", "tx-ink-reveal",
+    "tx-notice"]),
 };
