@@ -23,8 +23,10 @@ PATH = os.path.join(ROOT, "remotion", "src", "templates", "editor_only.json")
 
 
 def editor_only() -> list:
+    # (A look flagged "autoPick": false is left to the registry's own flag, so
+    # this file does not change when such looks are added or switched on.)
     return sorted(t["id"] for t in templates.all_templates()
-                  if templates.banned_always(t["id"]) or not treatments.auto_ok(t["id"]))
+                  if templates.auto_pick(t) and (templates.banned_always(t["id"]) or not treatments.auto_ok(t["id"])))
 
 
 if __name__ == "__main__":

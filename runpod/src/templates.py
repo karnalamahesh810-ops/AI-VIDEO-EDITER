@@ -97,9 +97,20 @@ def only(ids):
         _ALLOWED.reset(token)
 
 
-def auto_pick(t: Optional[dict]) -> bool:
-    """False for a look the registry marks editor-only ("autoPick": false): the planner never places it."""
-    return bool(t) and t.get("autoPick", (t.get("defaults") or {}).get("autoPick", True)) is not False
+def auto_pick(t) -> bool:
+    """
+    False for a look registered with "autoPick": false (library_looks.json):
+    built, rendered and offered in the editor, but never chosen by the
+    planner on its own until the owner switches it on (the new pro looks
+    wait for his approval of their contact sheets). Takes a template or its
+    id; an id that is not in the registry is False. A template without the
+    flag is picked as before. (The same check as the pro-looks branch.)
+    """
+    if isinstance(t, str):
+        t = get(t)
+    if not isinstance(t, dict):
+        return False
+    return t.get("autoPick", True) is not False
 
 
 # The planner's cue vocabulary for the built-in looks. The library looks carry
