@@ -2080,7 +2080,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "AMBIENCE", "AMBIENCE_UNDER_VOICE_DB", "RISERS",
                       # Smart reframing (src/reframe.py); the news styles keep clips as shot.
                       "REFRAME_ENABLED", "REFRAME_CLIPS", "REFRAME_STILLS", "REFRAME_MAX_SCALE",
-                      "REFRAME_SHARE", "REFRAME_SECONDS", "REFRAME_MIN_SECONDS")
+                      "REFRAME_SHARE", "REFRAME_SECONDS", "REFRAME_MIN_SECONDS",
+                      # Auto maps (src/automaps.py): named rivers, reservoirs, dams and canals on real geography.
+                      "AUTO_MAPS", "AUTO_MAP_GAP")
 
 
 def _apply_config(overrides) -> dict:

@@ -736,6 +736,13 @@ MIN_IMAGE_LONG_SIDE_UPSCALED = int(os.getenv("MIN_IMAGE_LONG_SIDE_UPSCALED", "64
 # not yet "clearly better" (scratchpad reframe_eval/evidence). A job turns it
 # on with config {"REFRAME_ENABLED": true}.
 REFRAME_ENABLED = _flag("REFRAME_ENABLED", False)
+# Auto maps (src/automaps.py): a river, lake, reservoir, dam or canal the narration names is drawn on real
+# geography (the river along its true course, the reservoir's outline, the dam where it stands), from the
+# geodata bundled in src/geodata. Off by default until the owner has seen the stills; a job turns it on with
+# config {"AUTO_MAPS": true}.
+AUTO_MAPS = _flag("AUTO_MAPS", False)
+# Seconds an auto map keeps from any other map before it, so maps never crowd the cut.
+AUTO_MAP_GAP = float(os.getenv("AUTO_MAP_GAP", "15"))
 # Footage moves and still aiming separately (the news styles keep their
 # clips as shot: src/styles.py).
 REFRAME_CLIPS = _flag("REFRAME_CLIPS", True)

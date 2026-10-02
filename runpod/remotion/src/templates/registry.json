@@ -80839,6 +80839,327 @@
    "autoPick": false
   },
   {
+   "id": "LIB_GEO_RIVER_TRACE",
+   "name": "River Trace",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "A named river (or canal) drawn on real geography: graded imagery under a dark veil, the camera eases onto the feature, the line draws from its source with a soft glow and the water streaming down it, then its name settles along the line. Geometry comes only from the plan (overlay.geo, src/automaps.py): never from a language model. Canals are dashed, an approximate route.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "geo-river-trace",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 36,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "swoosh-text",
+       "whoosh-soft"
+      ],
+      "at": 6,
+      "gain_db": -10
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 36,
+      "gain_db": -9
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place",
+    "route"
+   ],
+   "tags": [
+    "lib",
+    "geo",
+    "own-backdrop"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "LIB_GEO_RESERVOIR",
+   "name": "Reservoir Fill",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "A lake or reservoir on real geography: graded imagery under a dark veil, the camera eases onto the water, its real outline fills with a soft glow and the dam named in the line is pinned where it stands with a small label; the river that feeds it runs faintly through. Geometry comes only from the plan (overlay.geo, src/automaps.py).",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "geo-reservoir",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 40,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "swoosh-text",
+       "whoosh-soft"
+      ],
+      "at": 6,
+      "gain_db": -10
+     },
+     {
+      "name": "pin-drop",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "at": 40,
+      "gain_db": -8
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "geo",
+    "own-backdrop"
+   ],
+   "autoPick": false
+  },
+  {
    "id": "LIB_PX_APERTURE_IRIS",
    "name": "Aperture Open",
    "category": "IMAGES",

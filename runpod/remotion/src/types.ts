@@ -265,8 +265,32 @@ export interface MapLocation {
   kind?: string;
 }
 
+/**
+ * The geometry of an auto map (src/automaps.py): a river or canal as lines, a lake or
+ * reservoir as outlines, the dam as a pin - all in lon/lat, from the bundled geodata.
+ */
+export interface GeoDoc {
+  kind: "river" | "canal" | "reservoir" | "dam" | "lake";
+  name: string;
+  label: string;
+  /** [west, south, east, north]: the frame the camera settles on. */
+  bbox: [number, number, number, number];
+  lines?: [number, number][][];
+  rings?: [number, number][][];
+  /** Faint lines for context (the river that feeds a reservoir). */
+  context?: [number, number][][];
+  pins?: { label: string; lat: number; lon: number; kind?: string }[];
+  /** The lines run source to mouth: the water may stream along them. */
+  flow?: boolean;
+  /** A hand-traced route (a canal): drawn dashed. */
+  approx?: boolean;
+  river?: string;
+}
+
 export interface Overlay {
   type: OverlayType;
+  /** An auto map's geometry (src/automaps.py). */
+  geo?: GeoDoc;
   text: string;
   subtitle?: string;
   label?: string;
