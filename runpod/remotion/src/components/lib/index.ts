@@ -44,6 +44,8 @@ import { LOOKS as L_LibPhotosPro2 } from "./LibPhotosPro2";
 import { LOOKS as L_LibDataPro } from "./LibDataPro";
 import { LOOKS as L_LibMapsPro } from "./LibMapsPro";
 import { LOOKS as L_LibDocsPro } from "./LibDocsPro";
+import { LOOKS as L_LibNumbersPro } from "./LibNumbersPro";
+import { LOOKS as L_LibTextPro } from "./LibTextPro";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -123,4 +125,14 @@ export const LIBRARY: Record<string, Look> = {
   // Pro documents and kinetic text (LibDocsPro): real type on real-looking paper, a camera that finds the line.
   ...pick(L_LibDocsPro, ["kx-article-zoom", "kx-official-memo", "kx-report-cover", "kx-handwritten-note", "kx-keyword-stack",
     "kx-quote-portrait", "kx-alert-strip", "kx-definition", "kx-letter-signature", "kx-social-post"]),
+  // Numbers pro (LibNumbersPro): figures in digits with their unit as said, a soft tick on the landing;
+  // "autoPick": false until the owner approves them from their contact sheets.
+  ...pick(L_LibNumbersPro, ["nx-stat-context", "nx-frame-share", "nx-ring-label", "nx-delta-arrow", "nx-money-roll",
+    "nx-dimension", "nx-callout-box", "nx-callout-pair", "nx-number-line", "nx-record-floor", "nx-rate-fraction",
+    "nx-rank-rows", "nx-inline-count"]),
+  // Text pro (LibTextPro): the narration's own words, one device and one place each, no bar under a long line;
+  // "autoPick": false until the owner approves them.
+  ...pick(L_LibTextPro, ["tx-sentence-highlight", "tx-typewriter-lower", "tx-kicker-headline", "tx-word-kinetic",
+    "tx-quote-serif", "tx-pull-quote", "tx-statement-card", "tx-name-card", "tx-question", "tx-contrast", "tx-ink-reveal",
+    "tx-notice"]),
 };

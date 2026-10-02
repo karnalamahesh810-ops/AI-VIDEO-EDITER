@@ -1,0 +1,948 @@
+[
+ {
+  "id": "nx-stat-context",
+  "name": "Figure in Context",
+  "category": "NUMBERS",
+  "description": "LOWER LEFT. The figure big in Anton (caps ~104 px at 1080p), its unit beside it on the baseline ('40 MILLION'), the digits rolling on odometer columns with a vertical motion blur and landing left to right (frame 25); then the rest of its sentence as said rises under it in Playfair Display italic, word by word ('people depend on this one river'; subtitle, else what it counts). A corner shade lifts it off any picture; the glyphs drop back into their masks at the end. A soft tick per digit change, a soft click on the landing.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "figure-context",
+   "big-number",
+   "count",
+   "percent",
+   "money"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 25,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 4,
+    "every": 2,
+    "count": 9,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 25,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 40,
+   "suffix": "MILLION",
+   "text": "PEOPLE",
+   "subtitle": "people depend on this one river"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-frame-share",
+  "name": "The Frame Is the Gauge",
+  "category": "NUMBERS",
+  "description": "FULL FRAME. The picture itself is the gauge: a white hairline the height of the frame sweeps in from the left to the share (22 % of the width for 22 %), the rest of the frame drains to grey, a scale of unlabelled ticks along the top, an accent dot on the line; the count rides beside the line on the bright side, what it is under it (frame 29). For a share of a whole: '22 percent full', '85 percent of Arizona's water'.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "figure-share",
+   "percent"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 29,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 6,
+    "every": 2,
+    "count": 10,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 29,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "text": "FULL",
+   "subtitle": "LAKE POWELL"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-ring-label",
+  "name": "Ring and Label",
+  "category": "NUMBERS",
+  "description": "LOWER LEFT. A precise ring (a tick bezel, a gradient arc with a bright head) fills round the percent while it counts (4 -> 28); what it is in Anton caps beside it on up to two balanced lines, a small line under them.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "percent"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 28,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 10,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 28,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "text": "LAKE POWELL CAPACITY",
+   "subtitle": "FEBRUARY 2023"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-delta-arrow",
+  "name": "Then to Now",
+  "category": "NUMBERS",
+  "description": "CENTRE. Two figures of one thing: the earlier one smaller, ghosting back as the later one lands; an accent arrow draws from one to the other, both count up, the title over them, the change under them only when it was said (subtitle: 'DOWN 181 FEET'). items [{label, value}, {label, value}], the unit on the overlay or each item.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "then-now",
+   "money-compare"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 36,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 14,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 36,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "LAKE POWELL WATER LEVEL",
+   "suffix": "FT",
+   "subtitle": "DOWN 181 FEET",
+   "items": [
+    {
+     "label": "1980",
+     "value": 3700
+    },
+    {
+     "label": "2023",
+     "value": 3519
+    }
+   ]
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-money-roll",
+  "name": "Money Slot Reels",
+  "category": "NUMBERS",
+  "description": "LOWER LEFT. Money on slot-machine reels: the digits spin with a heavy motion blur and stop one by one with a small bounce, the $ small and amber at the cap top, the scale word (BILLION) rising into its own slot as the last reel stops (frame 27); a raw 4,200,000,000 is written 4.2 BILLION. What it pays for under it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "money"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 27,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 4,
+    "every": 2,
+    "count": 10,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 27,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 4.2,
+   "prefix": "$",
+   "suffix": "BILLION",
+   "text": "TO REBUILD THE DAM'S OUTLETS"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-dimension",
+  "name": "Dimension Line",
+  "category": "NUMBERS",
+  "description": "LOWER LEFT. An engineer's dimension line: extension ticks grow, the line draws out from the middle and its arrowheads land, the measurement counts in its gap with its unit in the accent ('186 MILES'); upright beside the figure for a height, a depth or a level said ('3,517 FT' above sea level). What it measures under it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "measurement",
+   "change-length"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 26,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 5,
+    "every": 2,
+    "count": 9,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 26,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 3517,
+   "suffix": "FT",
+   "text": "LAKE POWELL",
+   "subtitle": "ABOVE SEA LEVEL"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-callout-box",
+  "name": "Framed Callout",
+  "category": "NUMBERS",
+  "description": "LEFT THIRD (the box's left edge at 12 % of the width, its middle at 44 % of the height). VidRush's framed glass box: its accent edge draws round from the top left over a smoky fill that softens the picture, the figure counts inside, what it is under it in Anton caps; with overlay.anchor a dashed accent leader runs to that point in the picture and a ring settles on it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "measurement",
+   "big-number",
+   "count"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 24,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 7,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 24,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 33,
+   "suffix": "FT",
+   "text": "ABOVE MINIMUM POWER POOL"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-callout-pair",
+  "name": "Two Framed Callouts",
+  "category": "NUMBERS",
+  "description": "CENTRE. Two framed glass boxes at a quarter and three quarters of the width: the first (white edge) counts, a dashed accent line with an arrowhead draws to the second (accent edge), which counts; each label over its figure, the change on the line when it was said. Before and after, two estimates, two sums.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "money-compare",
+   "then-now",
+   "compare-values"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 40,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 15,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 40,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "THE REPAIR BILL",
+   "prefix": "$",
+   "suffix": "BILLION",
+   "items": [
+    {
+     "label": "First estimate",
+     "value": 1.2
+    },
+    {
+     "label": "Final cost",
+     "value": 4.2
+    }
+   ]
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-number-line",
+  "name": "Two Figures on One Scale",
+  "category": "NUMBERS",
+  "description": "CENTRE. A scale draws across the frame; two pins rise from it at the two figures (the first white, the second in the accent), each figure counting over its pin with its label; the gap between them is bracketed and named when it was said ('33 FEET TO SPARE'). For two levels, two thresholds, a figure against a limit.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "then-now"
+  ],
+  "duration": 4.5,
+  "sfx": "none",
+  "sfx_at": 36,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 11,
+    "every": 2,
+    "count": 11,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 36,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "LAKE POWELL ELEVATION",
+   "suffix": "FT",
+   "subtitle": "33 FEET TO SPARE",
+   "items": [
+    {
+     "label": "Minimum power pool",
+     "value": 3490
+    },
+    {
+     "label": "Today",
+     "value": 3523
+    }
+   ]
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-record-floor",
+  "name": "Record Line",
+  "category": "NUMBERS",
+  "description": "LOWER LEFT. A dashed record line draws across, the record as said over it in the accent ('LOWEST SINCE THE DAM WAS FILLED'); the figure breaks down through it from above (a record low) or up through it (a high), the line dipping where it passes, and lands under it with a small settle (frame 26), an accent arrow beside it, what it is under it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "figure-record"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 26,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 7,
+    "every": 2,
+    "count": 8,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 26,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 3519,
+   "suffix": "FT",
+   "text": "LAKE POWELL",
+   "label": "LOWEST SINCE THE DAM WAS FILLED"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-rate-fraction",
+  "name": "Rate as a Fraction",
+  "category": "NUMBERS",
+  "description": "LOWER LEFT. A rate written as a fraction: the figure counts over a white hairline that draws under it, the rate as said beneath in the accent ('PER PERSON', 'A DAY') with a small line icon drawing itself (a person, a home, a calendar, a clock, a field); what it is in small caps under it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "figure-rate"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 25,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 4,
+    "every": 2,
+    "count": 9,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 25,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 110,
+   "suffix": "GAL",
+   "label": "PER PERSON",
+   "text": "EVERY DAY IN LAS VEGAS"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-rank-rows",
+  "name": "Ranking Rows",
+  "category": "NUMBERS",
+  "description": "CENTRE. A ranking (GoMotion's bar ranking, quieter): up to five rows slide in by rank, each with its rank number, its name in tracked caps and a thin bar growing to scale (the first in the accent), the values counting at the right; the title over them.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items",
+   "prefix",
+   "suffix"
+  ],
+  "cues": [
+   "ranking",
+   "compare-values"
+  ],
+  "duration": 5.0,
+  "sfx": "none",
+  "sfx_at": 41,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 9,
+    "every": 2,
+    "count": 15,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 41,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "text": "Largest US reservoirs, million acre-feet",
+   "items": [
+    {
+     "label": "Lake Mead",
+     "value": 26.1
+    },
+    {
+     "label": "Lake Powell",
+     "value": 24.3
+    },
+    {
+     "label": "Lake Sakakawea",
+     "value": 23.8
+    },
+    {
+     "label": "Lake Oahe",
+     "value": 23.1
+    }
+   ]
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ },
+ {
+  "id": "nx-inline-count",
+  "name": "Sentence With Its Figure",
+  "category": "NUMBERS",
+  "description": "LOWER LEFT. The sentence as said in clean Anton caps on up to two balanced lines, word by word; its figure sits in place in the accent and counts as it arrives ('LAKE MEAD SUPPLIES WATER TO 25 MILLION PEOPLE'), a soft glow as it lands. highlight (the sentence) else text.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "prefix",
+   "value",
+   "suffix",
+   "text",
+   "highlight"
+  ],
+  "cues": [
+   "figure-context",
+   "big-number",
+   "count",
+   "percent"
+  ],
+  "duration": 4.0,
+  "sfx": "none",
+  "sfx_at": 28,
+  "types": false,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "letter-tick",
+     "tick"
+    ],
+    "at": 8,
+    "every": 2,
+    "count": 9,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-click",
+     "tick"
+    ],
+    "at": 28,
+    "gain_db": -3,
+    "when": "value"
+   },
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 3,
+    "gain_db": -6,
+    "when": "no-value"
+   }
+  ],
+  "sound_timing": "look",
+  "sample": {
+   "value": 25,
+   "suffix": "MILLION",
+   "text": "Lake Mead supplies water to 25 million people"
+  },
+  "family": "nx",
+  "file": "LibNumbersPro",
+  "exit": "none",
+  "auto_pick": false
+ }
+]

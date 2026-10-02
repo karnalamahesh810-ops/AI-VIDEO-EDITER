@@ -105,6 +105,11 @@ DATE_CUES = ("datetime", "date", "time-of-day")
 # One figure is a compact overlay in a corner; several values (or a timeline)
 # are full screen for their moment; text rides on the picture (see layout_class).
 SINGLE_FIGURE_CUES = {"percent", "change", "change-length", "big-number", "money", "measurement", "ratio", "count"}
+# What a figure's line says beyond its number (figure_line_cues): a record, a rate, a share of a whole, a
+# sentence that frames it. Only the number looks drawn for that carry these (LibNumbersPro, "nx-"); a line
+# asks for them first when one of them may be picked, and they sit on the clip like any one figure.
+NX_FIGURE_CUES = {"figure-record", "figure-rate", "figure-share", "figure-context"}
+SINGLE_FIGURE_CUES |= NX_FIGURE_CUES
 FULL_DATA_CUES = {"series", "shares", "compare-values", "ranking", "then-now", "money-compare", "sequence", "years",
                   "span", "steps"}
 TEXT_CUES = {"headline", "key-phrase", "statement", "fact", "term", "typewriter", "caption", "question", "quote",
@@ -129,7 +134,7 @@ EXIT_FRAMES = 12
 SETTLE = 0.5
 # Cues whose looks are words on screen: two of them in a row never share a family.
 TEXT_BEAT_CUES = {"headline", "key-phrase", "statement", "fact", "term", "question", "warning", "quote",
-                  "typewriter", "caption", "chapter"}
+                  "typewriter", "caption", "chapter", "contrast-line", "quote-official"}
 # When a cue's own looks are all used up, these stand in (a count is a big number, a caption a key phrase).
 CUE_FALLBACK = {"count": ["big-number"], "key-phrase": ["caption"], "caption": ["key-phrase"],
                 "statement": ["fact", "key-phrase"], "fact": ["statement", "key-phrase"], "term": ["key-phrase"],
@@ -840,6 +845,12 @@ def _text_cues(text: str, seg, shot: dict, have: set) -> List[dict]:
         return out
     words = _words(t)
     phrase = _key_phrase(t, shot)
+    turn = contrast_line(t)
+    if turn:
+        # "This is not a drought - it's the new normal": the two sides, as said (the contrast look, tx-contrast).
+        out.append({"cue": "contrast-line", "emphasis": "medium",
+                    "props": {"text": turn[0], "subtitle": turn[1], "items": [{"label": turn[0]}, {"label": turn[1]}],
+                              "_key": (_words(turn[0]) or [""])[0]}})
     if _RHETORICAL.match(t) or _RECORD.search(t) or (t.endswith("?") and "question" in have):
         typed = _clause(t, 12, 64)
         if typed:
@@ -1782,6 +1793,16 @@ _LOOK_NEEDS = {
     "LIB_KX_LETTER_SIGNATURE": r"\b(wrote|writes|written|letter|signed|penned)\b",
     "LIB_KX_SOCIAL_POST": r"\b(posted|tweeted|retweeted|wrote on (?:x|twitter|facebook|instagram)|on social media|"
                           r"in a post|on (?:x|twitter|facebook|instagram))\b",
+    # The number looks drawn for one kind of figure (LibNumbersPro): the frame as a gauge is a share of a
+    # whole, the record line a record, the fraction a rate; the sentence with its figure a short line.
+    "LIB_NX_FRAME_SHARE": r"\b(?:percent|per cent)\s+(?:of|full|empty|capacity|left|remaining|gone)\b|%\s*(?:of|full)\b|"
+                          r"\b(?:full|capacity|of (?:its|the|their) (?:capacity|water|supply|share))\b",
+    "LIB_NX_RECORD_FLOOR": r"\b(?:record[- ](?:low|high)s?|all[- ]time (?:low|high)|on record|lowest|highest|"
+                           r"never (?:been|seen) (?:it )?(?:this|so) (?:low|high))\b",
+    "LIB_NX_RATE_FRACTION": r"\b(?:per|a|an|each|every)\s+(?:person|people|resident|household|home|family|capita|year|"
+                            r"day|month|week|hour|minute|second|acre|customer)\b",
+    "LIB_NX_INLINE_COUNT": r"^[^\n]{8,96}$",
+    "LIB_TX_CONTRAST": r"\b(?:not|isn't|wasn't|aren't|weren't|no longer|never)\b",
 }
 _LOOK_NEEDS_RX ={k: re.compile(v, re.I) for k, v in _LOOK_NEEDS.items()}
 # The letter drop (LibBoldText): every date, date-and-time and time of day
@@ -1926,6 +1947,185 @@ def photo_line_props(text: str) -> dict:
     if m:
         props["subtitle"] = f"{m.group(1)} FT"
     return props
+
+
+# ------------------------------------------------ the number and text looks' hooks (LibNumbersPro "nx-", LibTextPro "tx-")
+# What a line says about its figure or its words, as the specific cues those
+# looks carry (NX_FIGURE_CUES, "quote-official", "contrast-line"): a record, a
+# rate, a share of a whole, a sentence that frames the figure, an official
+# statement, a line that turns on itself. Only the line's own words reach the
+# look (figure_line_props, quote_line_props, contrast_line). Every one of these
+# looks is "autoPick": false until the owner approves it from its contact
+# sheet: while none of them may be picked, a line's request is exactly what it
+# was (_Planner._specific asks for them only when one of them may be picked).
+_FIG_RECORD = re.compile(
+    r"\b(?:the\s+)?((?:record[- ](?:low|high)s?|all[- ]time (?:low|high)s?|"
+    r"(?:lowest|highest)(?:\s+[a-z]+){0,3}?\s+(?:since|ever|on record|in (?:recorded )?history|in \d+ years)\b[^.;,:!?]*|"
+    r"(?:lowest|highest) (?:level|point|ever)\b|never (?:been|seen) (?:it )?(?:this|so) (?:low|high)))", re.I)
+_FIG_RATE = re.compile(r"\b(per|a|an|each|every)\s+(person|people|resident|household|home|family|capita|year|day|month|"
+                       r"week|hour|minute|second|acre|customer)\b", re.I)
+_FIG_SHARE = re.compile(_LOOK_NEEDS["LIB_NX_FRAME_SHARE"], re.I)
+_FIG_NUMBER = re.compile(r"\$?\s?\d[\d,]*(?:\.\d+)?")
+_FIG_UNIT = re.compile(r"\s*(?:%|percent\b|per cent\b|million\b|billion\b|thousand\b|trillion\b|acre[- ]feet\b|acre[- ]foot\b|"
+                       r"feet\b|foot\b|ft\b|miles?\b|inches\b|inch\b|gallons?\b|degrees\b|dollars\b|meters?\b|metres?\b|km\b)", re.I)
+_CLAUSE_END = re.compile(r"[.;:!?]|\s[-–—]\s|,\s+(?:but|and|while|which|as|so)\b", re.I)
+
+
+def _figure_span(text: str, props: dict) -> Optional[Tuple[int, int]]:
+    """Where the figure of `props` (its value) is said in `text` (digits), its unit words included; None if not."""
+    try:
+        value = float(props.get("value"))
+    except (TypeError, ValueError):
+        return None
+    for m in _FIG_NUMBER.finditer(text):
+        raw = m.group(0).replace("$", "").replace(",", "").strip()
+        try:
+            n = float(raw)
+        except ValueError:
+            continue
+        if abs(n - value) > 1e-6 * max(1.0, abs(value)):
+            continue
+        end = m.end()
+        for _ in range(2):
+            u = _FIG_UNIT.match(text, end)
+            if not u:
+                break
+            end = u.end()
+        return m.start(), end
+    return None
+
+
+def _clause_around(text: str, a: int, b: int) -> str:
+    """The clause of `text` holding [a, b): from the previous stop to the next."""
+    starts = [m.end() for m in _CLAUSE_END.finditer(text[:a])]
+    start = starts[-1] if starts else 0
+    m = _CLAUSE_END.search(text, b)
+    return text[start:m.start() if m else len(text)].strip(" ,")
+
+
+def figure_line_cues(text: str, cue: str, props: Optional[dict] = None) -> List[str]:
+    """
+    The number-look cues a figure's line asks for, most specific first: a
+    record ("the lowest level since the dam was filled"), a rate ("per
+    person", "a day"), a share of a whole ("22 percent full", "percent of
+    the water"), a sentence that frames the figure (three or more words
+    said right after it: "22 percent / of the lake is gone").
+    """
+    text = numwords.normalize(text or "")
+    props = props or {}
+    if cue not in SINGLE_FIGURE_CUES or cue in NX_FIGURE_CUES:
+        return []
+    out = []
+    if _FIG_RECORD.search(text):
+        out.append("figure-record")
+    if cue in ("big-number", "count", "measurement", "money") and _FIG_RATE.search(text):
+        out.append("figure-rate")
+    if cue == "percent" and _FIG_SHARE.search(text):
+        out.append("figure-share")
+    if len(_words(_after_figure(text, props))) >= 3:
+        out.append("figure-context")
+    return out
+
+
+def _after_figure(text: str, props: dict) -> str:
+    """The words said right after the figure, to the end of its clause ("of the lake is gone"); '' if not found."""
+    span = _figure_span(text, props)
+    if not span:
+        return ""
+    tail = text[span[1]:]
+    m = _CLAUSE_END.search(tail)
+    return (tail[:m.start()] if m else tail).strip(" ,")
+
+
+def figure_line_props(text: str, props: Optional[dict], cue: str) -> dict:
+    """What a number look shows from its line, all of it said (spoken numbers in digits): the record as said
+    (label), the rate (label; a second rate as subtitle), the words after the figure (subtitle) and its clause
+    (highlight) for the looks that set the figure in its sentence."""
+    text = numwords.normalize(re.sub(r"\s+", " ", text or "").strip())
+    props = props or {}
+    out: Dict[str, Any] = {}
+    if cue == "figure-record":
+        m = _FIG_RECORD.search(text)
+        if m:
+            phrase = re.sub(r"^(?:the|a|an)\s+", "", m.group(1).strip(" ,"), flags=re.I)
+            out["label"] = phrase.upper()[:44].rsplit(" ", 1)[0] if len(phrase) > 44 else phrase.upper()
+    elif cue == "figure-rate":
+        rates = [f"{m.group(1)} {m.group(2)}".upper() for m in _FIG_RATE.finditer(text)]
+        if rates:
+            out["label"] = rates[0]
+            if len(rates) > 1:
+                out["subtitle"] = rates[1]
+    elif cue == "figure-share":
+        # What the share is of, as said ("OF THE LAKE IS GONE"), when the line says more than a word of it.
+        tail = _after_figure(text, props)
+        if len(_words(tail)) >= 3:
+            out["text"] = (tail[:44].rsplit(" ", 1)[0] if len(tail) > 44 else tail).upper()
+    elif cue == "figure-context":
+        span = _figure_span(text, props)
+        if span:
+            tail = _after_figure(text, props)
+            if len(_words(tail)) >= 3:
+                out["subtitle"] = tail[:64].rsplit(" ", 1)[0] if len(tail) > 64 else tail
+            clause = _clause_around(text, span[0], span[1])
+            if clause and len(clause) <= 84:
+                out["highlight"] = clause
+    return out
+
+
+# An official statement: an agency, an official, a spokesperson, "in a statement".
+_QUOTE_OFFICIAL = re.compile(r"\b(?:in a (?:written |joint )?statement|statement|spokes(?:person|man|woman)|press release|"
+                             r"officials? (?:said|say|says|warned|told)|(?:Bureau|Department|Agency|Authority|Commission|Service|"
+                             r"District|Administration) of\b|Reclamation\b|Geological Survey)", re.I)
+_SPEAKER_RX = (
+    re.compile(r"\baccording to (?:the |a |an )?((?:[A-Z][\w.'’-]*)(?:\s+(?:of|the|and|for|[A-Z][\w.'’-]*)){0,6})"),
+    re.compile(r"\b(?:a|an|one)\s+((?:[A-Z][\w.'’-]*\s+(?:of\s+(?:the\s+)?)?){1,5}(?:official|spokes(?:person|man|woman)|"
+               r"engineer|hydrologist|scientist|manager|director|ranger|researcher|commissioner))\b"),
+    re.compile(r"((?:[A-Z][\w.'’-]*\s+(?:of\s+(?:the\s+)?)?){1,5}(?:officials?|spokes(?:person|man|woman)|engineers?|"
+               r"hydrologists?|scientists?|managers?|researchers?))\s+(?:said|say|says|warned|told)\b"),
+    re.compile(r"((?:[A-Z][\w.'’-]*)(?:\s+(?:of|the|[A-Z][\w.'’-]*)){0,5})\s+(?:said|says|warned|told|wrote)\b"),
+    re.compile(r"\b(?:said|says|warned)\s+((?:[A-Z][\w.'’-]*)(?:\s+[A-Z][\w.'’-]*){0,4})"),
+)
+
+
+def quote_line_props(text: str) -> dict:
+    """Who said a quote and how, as the line says it ("Bureau of Reclamation official", "IN A STATEMENT"):
+    label and subtitle, or nothing - never the story's subject put in a speaker's place."""
+    text = re.sub(r"\s+", " ", text or "").strip()
+    out: Dict[str, Any] = {}
+    for rx in _SPEAKER_RX:
+        m = rx.search(text)
+        if not m:
+            continue
+        words = m.group(1).split()
+        while words and (words[0].strip(".,") in _CAP_STOP or words[0].lower() in ("of", "the", "and", "for")):
+            words = words[1:]
+        while words and words[-1].lower() in ("of", "the", "and", "for"):
+            words = words[:-1]
+        name = " ".join(words).strip(" ,.")
+        if 3 <= len(name) <= 48:
+            out["label"] = name
+            break
+    if re.search(r"\bin a (?:written |joint )?statement\b", text, re.I):
+        out["subtitle"] = "In a statement"
+    return out
+
+
+_TURN = re.compile(r"^\s*(?P<a>[^.;:!?]*?\b(?:not|isn't|wasn't|aren't|weren't|no longer|never)\b[^.;:!?—–]*?)"
+                   r"\s*(?:[,;:.—–]|\s-\s)\s*(?P<b>(?:but|it's|it is|it was|they're|they are|this is|that's|instead|now)\b"
+                   r"[^.;!?]*)", re.I)
+
+
+def contrast_line(text: str) -> Optional[Tuple[str, str]]:
+    """A line that turns on itself ("This is not a drought - it's the new normal"): its two sides as said
+    (a leading "but" dropped), each two to twelve words; None otherwise."""
+    m = _TURN.match(re.sub(r"\s+", " ", text or ""))
+    if not m:
+        return None
+    a = m.group("a").strip(" ,-–—")
+    b = re.sub(r"^(?:but|instead)[,]?\s+", "", m.group("b").strip(" ,-–—"), flags=re.I)
+    if not (2 <= len(_words(a)) <= 12 and 2 <= len(_words(b)) <= 12):
+        return None
+    return a, b[:1].upper() + b[1:]
 
 
 NOT_FOR_A_DATE = {"LIB_TL_CALENDAR_FLIP", "LIB_TL_DATE_STAMP_CIRCLE", "LIB_LT_DATE_PLACE", "LIB_FX_LIGHT_STREAK",
@@ -2415,7 +2615,7 @@ FIGURE_CUES = SINGLE_FIGURE_CUES | FULL_DATA_CUES | {"count", "time-span"}
 # The cues whose looks show numbers: written in digits however they were said (numwords).
 DIGIT_CUES = FIGURE_CUES | set(DATE_CUES) | {"age"}
 # What a line asks for in words, strongest first; each still needs the rhythm.
-STRONG_LINE_CUES = ("recording", "document", "quote", "question", "warning", "route")
+STRONG_LINE_CUES = ("recording", "document", "quote", "question", "warning", "route", "contrast-line")
 SOFT_LINE_CUES = ("typewriter", "term")
 _NUMERIC_HINTS = {"ring-stat", "stat", "donut", "counter", "number-roll", "stat-tag"}
 _SFX_PROPS = ("text", "value", "suffix", "prefix", "label", "subtitle", "highlight", "items", "locations", "total")
@@ -2966,7 +3166,47 @@ class _Planner:
             req.update(ids=[self.pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"] + _pro(MX_ROUTE), cues=[],
                        cue="route", group="map", mode="seq")
         # (A span of time - "3 days later", "48 hours" - is a relative time: _musts gives it no graphic.)
+        self._specific(req, c, seg)
         return req
+
+    def _specific(self, req: dict, c: dict, seg) -> None:
+        """
+        The number and text looks drawn for what this line says (LibNumbersPro / LibTextPro): its specific
+        cues tried first (a record, a rate, a share, a framing sentence; an official statement), the bold
+        count no longer leading when one of them fits, and the line's own words for those looks (props by
+        cue and by look). Only looks the planner may pick count: while every one of them waits for the
+        owner's approval ("autoPick": false), the request is left exactly as it was.
+        """
+        text = seg.text or ""
+        props = dict(c.get("props") or {})
+        want: List[str] = []
+        if c["cue"] in SINGLE_FIGURE_CUES:
+            want = figure_line_cues(text, c["cue"], props)
+        elif c["cue"] == "quote" and _QUOTE_OFFICIAL.search(text):
+            want = ["quote-official"]
+        want = [w for w in want if any(auto_ok(t["id"]) for t in templates.for_cue(w))]
+        # A quote's speaker is who the line says spoke (never the story's subject in a speaker's place).
+        unsaid = {k: v for k, v in props.items() if k not in ("label", "subtitle")}
+        by_cue: Dict[str, dict] = {}
+        for w in want:
+            by_cue[w] = ({**unsaid, **quote_line_props(text)} if w == "quote-official"
+                         else {**props, **figure_line_props(text, props, w)})
+        # The new looks of the line's own cue get its words too (a figure's sentence, a quote's real speaker).
+        by_id: Dict[str, dict] = {}
+        for t in templates.for_cue(c["cue"]):
+            tid = t["id"]
+            if not (tid.startswith(("LIB_NX_", "LIB_TX_")) and auto_ok(tid)):
+                continue
+            if c["cue"] == "quote":
+                by_id[tid] = {**unsaid, **quote_line_props(text)}
+            elif c["cue"] in SINGLE_FIGURE_CUES and "figure-context" in templates.cues_of(t):
+                by_id[tid] = {**props, **figure_line_props(text, props, "figure-context")}
+        if want:
+            req["cues"] = want + [x for x in req["cues"] if x not in want]
+            req["props_by_cue"] = {**req.get("props_by_cue", {}), **by_cue}
+            req.pop("lead", None)
+        if by_id:
+            req["props_by_id"] = {**req.get("props_by_id", {}), **by_id}
 
     def _fact_request(self, seg, repeated: dict) -> Optional[dict]:
         sentence = (seg.text or "").strip()
@@ -3156,9 +3396,11 @@ class _Planner:
 
     # ------------------------------------------------------------ candidates
     def _pool(self, cue: str, text: str, scene: dict) -> List[dict]:
-        """Every look that carries the cue and fits this line and this scene."""
+        """Every look that carries the cue and fits this line and this scene (a look waiting for the owner's
+        approval only once it may be picked: it never takes another's place in the rotation's family turn)."""
         pool = date_looks(cue, self.style) if cue in DATE_CUES else templates.for_cue(cue, self.style)
-        pool = [t for t in pool if look_fits(t["id"], text) and t.get("kind") != "map"]
+        pool = [t for t in pool if look_fits(t["id"], text) and t.get("kind") != "map"
+                and (t.get("autoPick") is not False or auto_ok(t["id"]))]
         if cue == "typewriter":
             pool = [t for t in pool if templates.types(t)]
         if cue in TEXT_CUES and cue not in DATE_CUES and cue != "chapter":
