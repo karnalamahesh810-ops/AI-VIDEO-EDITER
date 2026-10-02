@@ -51,6 +51,25 @@ from . import config, ytdlp
 # Pictures tried per search in the ladder's picture rung (it was 6; most of the
 # Mount Rainier video's first six came from sites that refuse downloads).
 STILL_TRIES = 10
+# Picture links a scene's rung found but could not download (scene index ->
+# [{url, title, page}]): kept on the scene (media.wantedPictures) so the
+# editor can show them and the owner can fetch one himself (the owner,
+# 2026-10-02: "add links of that image to our tool if this fails").
+_WANTED: Dict[int, List[dict]] = {}
+_WANTED_LOCK = threading.Lock()
+
+
+def _note_wanted(i: int, cand) -> None:
+    with _WANTED_LOCK:
+        rows = _WANTED.setdefault(i, [])
+        if len(rows) < 3 and all(r["url"] != cand.url for r in rows):
+            rows.append({"url": cand.url, "title": (cand.attribution or "")[:120],
+                         "page": getattr(cand, "page_url", "") or ""})
+
+
+def wanted_pictures(i: int) -> List[dict]:
+    with _WANTED_LOCK:
+        return list(_WANTED.get(i, []))
 
 _YT_ID = re.compile(r"yt:([\w-]{11})")
 _WATCH = re.compile(r"[?&]v=([\w-]{11})")
@@ -66,6 +85,8 @@ CONTEXT: Dict[str, Any] = {}
 
 
 def reset() -> None:
+    with _WANTED_LOCK:
+        _WANTED.clear()
     LAST.clear()
     CONTEXT.clear()
 
@@ -405,6 +426,8 @@ def _still_for(job: dict, i: int, query: str, intent: str, used: Used, work: str
         if not used.claim(i, s):
             continue
         got = media._download(dataclasses.replace(cand), query, work)
+        if got is None or not got.local_path:
+            _note_wanted(i, cand)                       # the link stays with the scene for the editor
         ok = bool(got and got.local_path and media._asset_ok(got)[0]
                   and not media._photo_seen_before(got.local_path))
         verdict = None
@@ -656,8 +679,15 @@ def hold_or_animate(doc: dict, *, label: str = "") -> Dict[str, int]:
             s["reviewReason"] = "No footage found — a motion graphic fills this beat (keep it or replace the clip)"
             out["graphic"] += 1
             continue
+        links = wanted_pictures(i)
+        if links:
+            s.setdefault("media", {})
+            s["wantedPictures"] = links
         if _hold(doc, i, config.HOLD_MIN_RATE) or _hold(doc, i, 0.6):
             out["held"] += 1
+            if links:
+                s["reviewReason"] = (str(s.get("reviewReason") or "") +
+                                     " Pictures were found but their sites refused the download: links kept.").strip()
             continue
         cards.append(s)
     for s in reversed(cards):                   # story order

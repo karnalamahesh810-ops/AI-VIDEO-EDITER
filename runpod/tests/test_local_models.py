@@ -66,7 +66,7 @@ class Fetch(unittest.TestCase):
     def test_a_hotlink_block_is_retried_as_a_browser(self):
         calls = []
 
-        def fake_download(url, dest, timeout=180, headers=None):
+        def fake_download(url, dest, timeout=180, headers=None, proxy="", attempts=3):
             calls.append(headers)
             if headers is None:
                 raise storage.StorageError("download failed after 1 attempt(s): 403 Forbidden")

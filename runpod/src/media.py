@@ -97,6 +97,12 @@ class MediaAsset:
     # Runner-up clips that also passed the judge (id, url, scores and
     # description, never the files), for Replace Clip.
     alternatives: List[dict] = field(default_factory=list)
+    # A web picture's page (its Referer when the host blocks hotlinks) and the
+    # search engine's own smaller copy of it (the last resort when the host
+    # refuses every download: the Mount Rainier video lost 166 pictures to
+    # 403s and HTML pages, 2026-10-02).
+    page_url: str = ""
+    thumbnail: str = ""
     # The combined score that chose this clip over the others that passed
     # (src/candidates.py), its parts, and a summary of the pool it came from.
     final_score: Optional[float] = None
@@ -304,7 +310,7 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
             for it in (body.get("images") or [])[:limit * 3]:
                 rows.append((it.get("original_image"), 0, 0,
                              it.get("image_alt") or it.get("source") or "",
-                             it.get("title") or ""))
+                             it.get("title") or "", it.get("thumbnail") or ""))
         except (requests.RequestException, ValueError) as e:
             _source_error("web_images_brightdata", e)
             rows = []
@@ -318,7 +324,7 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
             for it in r.json().get("images", []):
                 rows.append((it.get("imageUrl"), it.get("imageWidth") or 0,
                              it.get("imageHeight") or 0, it.get("title") or "",
-                             it.get("link") or ""))
+                             it.get("link") or "", it.get("thumbnailUrl") or ""))
         except (requests.RequestException, ValueError):
             rows = []
     if not rows:
@@ -334,7 +340,7 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
                     for it in ddg.images(query, max_results=limit * 2):
                         rows.append((it.get("image"), it.get("width") or 0,
                                      it.get("height") or 0, it.get("title") or "",
-                                     it.get("url") or ""))
+                                     it.get("url") or "", it.get("thumbnail") or ""))
             except Exception as e:  # noqa: BLE001 — optional dependency / network
                 _source_error("web_images_ddg", e)
                 rows = []
@@ -348,7 +354,9 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
             return []
 
     out = []
-    for url, w, h, title, page in rows:
+    for row in rows:
+        url, w, h, title, page = row[:5]
+        thumb = row[5] if len(row) > 5 else ""
         if not url or not url.startswith("http"):
             continue
         # DuckDuckGo reports sizes as strings, Serper as ints.
@@ -365,7 +373,9 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
             attribution=(f"{title} — {page}" if page else title)[:300],
             license="unverified — web image, confirm you hold the rights",
             query=query, review_required=True,
-            review_reason="Web image: licence unverified"))
+            review_reason="Web image: licence unverified",
+            page_url=page if str(page).startswith("http") else "",
+            thumbnail=thumb if str(thumb).startswith("http") else ""))
         if len(out) >= limit:
             break
     return out
@@ -402,7 +412,8 @@ def _serpapi_images(engine: str, query: str) -> List[tuple]:
             if not url.startswith("http") or any(h in url for h in _SERPAPI_SKIP_HOSTS):
                 continue
             rows.append((url, it.get("original_width") or 0, it.get("original_height") or 0,
-                         it.get("title") or "", it.get("link") or it.get("source") or ""))
+                         it.get("title") or "", it.get("link") or it.get("source") or "",
+                         it.get("thumbnail") or ""))
         costs.record("serpapi.search")
         return rows
     except (requests.RequestException, ValueError) as e:
@@ -3227,7 +3238,8 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
             # Browser-style retries for hotlink blocks, and whatever format
             # arrived (WebP, AVIF, HEIC, CMYK...) rewritten as a clean JPEG.
             candidate.local_path = _imagefix.fetch(candidate.url, dest,
-                                                   getattr(candidate, "page_url", "") or "")
+                                                   getattr(candidate, "page_url", "") or "",
+                                                   thumbnail=getattr(candidate, "thumbnail", "") or "")
         else:
             candidate.local_path = download(candidate.url, dest)
         return candidate

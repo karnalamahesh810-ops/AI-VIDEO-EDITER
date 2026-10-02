@@ -28,7 +28,7 @@ class SerpApi(unittest.TestCase):
                 "title": "Flooding", "link": "https://pix11.com/story"}]
         with mock.patch.object(media.requests, "get", return_value=_resp(res)) as get:
             rows = media._serpapi_images("google_images", "Long Beach Island flooding")
-        self.assertEqual(rows, [("https://pix11.com/a.jpg", 1920, 1080, "Flooding", "https://pix11.com/story")])
+        self.assertEqual(rows, [("https://pix11.com/a.jpg", 1920, 1080, "Flooding", "https://pix11.com/story", "")])
         self.assertEqual(get.call_args.kwargs["params"]["engine"], "google_images")
 
     def test_the_per_job_budget_is_kept(self):

@@ -14,7 +14,8 @@ class StorageError(RuntimeError):
     pass
 
 
-def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None) -> str:
+def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None, proxy: str = "",
+             attempts: int = 3) -> str:
     """
     Stream any http(s) URL to disk. Returns the local path.
 
@@ -37,10 +38,11 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None)
     # they must never truncate one another's partial bytes.
     temp_path = f"{dest_path}.{uuid.uuid4().hex}.part"
     last_error = None
-    for attempt in range(1, 4):
+    for attempt in range(1, max(1, attempts) + 1):
         try:
             with requests.get(url, stream=True, timeout=(20, timeout),
-                              headers=headers or {"User-Agent": config.USER_AGENT}) as r:
+                              headers=headers or {"User-Agent": config.USER_AGENT},
+                              proxies={"http": proxy, "https": proxy} if proxy else None) as r:
                 r.raise_for_status()
                 expected = int(r.headers.get("Content-Length") or 0)
                 content_type = (r.headers.get("Content-Type") or "").lower()

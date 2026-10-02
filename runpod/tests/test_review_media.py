@@ -235,7 +235,7 @@ class PictureDownloads(unittest.TestCase):
     def test_two_scenes_fetching_one_picture_download_it_once(self):
         calls = []
 
-        def slow_download(url, dest, timeout=180, headers=None):
+        def slow_download(url, dest, timeout=180, headers=None, proxy="", attempts=3):
             calls.append(dest)
             time.sleep(0.3)
             return _webp(dest)
@@ -260,26 +260,30 @@ class PictureDownloads(unittest.TestCase):
             self.assertEqual(len(calls), 1)
             self.assertEqual(imagefix.sniff(dest), "jpeg")
 
-    def test_a_host_that_never_answers_is_not_retried_as_a_browser(self):
+    def test_a_host_that_never_answers_gets_one_browser_try_and_one_residential_route(self):
         calls = []
 
-        def timeout_download(url, dest, timeout=180, headers=None):
+        def timeout_download(url, dest, timeout=180, headers=None, proxy="", attempts=3):
             calls.append(headers)
             try:
                 raise requests.ConnectTimeout("connect timed out")
             except requests.ConnectTimeout as e:
                 raise storage.StorageError(f"download failed after 3 attempt(s): {e}") from e
 
+        # 2026-10-02: a host that never answers gets the browser try and one residential route too
+        # (each a single 20 s attempt now, not 3 x 60 s) - a slow home route sometimes answers.
         with tempfile.TemporaryDirectory() as d, \
                 mock.patch.object(imagefix, "download", side_effect=timeout_download), \
-                mock.patch.object(imagefix, "_curl_cffi_get") as cffi:
+                mock.patch.object(imagefix, "_residential_route", return_value="http://proxy.example:1"), \
+                mock.patch.object(imagefix, "_curl_cffi_get", side_effect=RuntimeError("refused")):
             with self.assertRaises(storage.StorageError):
                 imagefix.fetch("https://dead.example.com/a.jpg", os.path.join(d, "p.jpg"))
-        self.assertEqual(calls, [None])
-        cffi.assert_not_called()
+        self.assertEqual(len(calls), 3)
+        self.assertIsNone(calls[0])
+        self.assertIn("Mozilla", calls[2]["User-Agent"])
 
     def test_a_tls_block_still_reaches_curl_cffi(self):
-        def ssl_download(url, dest, timeout=180, headers=None):
+        def ssl_download(url, dest, timeout=180, headers=None, proxy="", attempts=3):
             try:
                 raise requests.exceptions.SSLError("handshake")
             except requests.exceptions.SSLError as e:

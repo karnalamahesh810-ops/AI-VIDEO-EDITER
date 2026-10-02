@@ -79,6 +79,12 @@ ALLOW_ARCHIVE_ORG = _flag("ALLOW_ARCHIVE_ORG", True)
 # Format: http://user:pass@host:port (or socks5://...).
 YTDLP_PROXY = os.getenv("YTDLP_PROXY", "").strip()
 YTDLP_PROXIES = [p.strip() for p in YTDLP_PROXY.split(",") if p.strip()]
+# Routes for picture downloads only (news sites and CDNs refuse datacenter
+# addresses). A proxy YouTube bot-blocks is still fine here (the owner,
+# 2026-10-02: "use those non-working proxies of YouTube for something"), so
+# this list may hold more than YTDLP_PROXY. Empty = the YouTube pool.
+IMAGE_PROXY = os.getenv("IMAGE_PROXY", "").strip()
+IMAGE_PROXIES = [p.strip() for p in IMAGE_PROXY.split(",") if p.strip()] or YTDLP_PROXIES
 # Residential sticky sessions from one login: "{n}" in the template is the
 # session number (Webshare: http://USER-us-{n}:PASS@p.webshare.io:80). Each
 # session keeps one US home IP for a whole download - YouTube locks a
