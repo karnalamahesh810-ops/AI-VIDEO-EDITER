@@ -848,6 +848,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # beat numbers follow the new beats.
     from src import mentions
     segments, mention_focus = mentions.prepare(segments, brief)
+    # The hook booster (src/hookboost.py, HOOK_BOOST): the opening's long beats cut
+    # into 2-3 shots on word boundaries, so every shot is planned, sourced and
+    # judged like any beat. Off: the beats as they are.
+    from src import hookboost
+    segments, mention_focus, boost_info = hookboost.prepare(segments, brief, mention_focus)
 
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
@@ -1142,6 +1147,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # Its pictures of a subject fill an image look's slots the story cannot.
         library=LAST_LIBRARY.get("lib"),
     )
+    # What the hook booster changed (src/hookboost.py): the cuts made before the
+    # shots were planned, and the opening as it was built.
+    if doc.get("meta", {}).get("hookBoost") or boost_info:
+        doc.setdefault("meta", {})["hookBoost"] = hookboost.merge_report(doc["meta"].get("hookBoost"), boost_info)
     # Arrows / circles that point at the thing the line talks about, only
     # where vision finds it (src/marks.py) - while the clips are still local.
     doc.setdefault("meta", {})["marks"] = marks.place(doc)
@@ -1162,6 +1171,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Never an empty scene, never another scene's clip.
     last = gapfill.hold_or_animate(doc, label="after the fallback fill")
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
+    if boost_info and doc["meta"].get("hookBoost") is not None:
+        # A shot of a cut beat that missed the relevance gate gives way to the good shot beside it.
+        doc["meta"]["hookBoost"]["settled"] = hookboost.settle(doc, boost_info)
     if fallback or any(last.values()):
         print(f"[worker] {gapfill.summary(fallback, last)}", flush=True)
     # One grade for the whole video (src/grade.py): its settings, and each
@@ -1228,6 +1240,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # The air under the scenes (wind, water, rain, city...) and a soft swell
     # into the biggest reveals, against the measured voice (src/ambience.py).
     doc["meta"]["ambience"] = ambience.apply(doc)
+    if doc["meta"].get("hookBoost"):
+        # The opening as it ended up (a shot the ladder could not fill was held over by its neighbour).
+        doc["meta"]["hookBoost"]["opening"] = hookboost.opening_stats(doc["scenes"], doc["fps"])
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).
@@ -2099,7 +2114,11 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # Niche footage packs (src/packs.py): PACKS_FIRST (pack clips before any search)
                       # is the one to A/B; the rest tune what a pack may supply.
                       "PACKS_FILL", "PACKS_FIRST", "PACKS_NICHES", "PACKS_MIN_SIMILARITY",
-                      "PACKS_FIRST_MIN_SIMILARITY", "PACKS_FIRST_MAX_SHARE", "PACKS_LICENSES")
+                      "PACKS_FIRST_MIN_SIMILARITY", "PACKS_FIRST_MAX_SHARE", "PACKS_LICENSES",
+                      # The hook booster (src/hookboost.py): A/B one job without a redeploy.
+                      "HOOK_BOOST", "HOOK_BOOST_SECONDS", "HOOK_BOOST_SPLIT_OVER", "HOOK_BOOST_MIN_SHOT",
+                      "HOOK_BOOST_MAX_SHOT", "HOOK_BOOST_MOTION", "HOOK_BOOST_DRAMA", "HOOK_BOOST_QUIET_SECONDS",
+                      "HOOK_BOOST_SFX_CUTS", "HOOK_TEASER", "HOOK_TEASER_SHOTS", "HOOK_TEASER_SECONDS")
 
 
 def _apply_config(overrides) -> dict:

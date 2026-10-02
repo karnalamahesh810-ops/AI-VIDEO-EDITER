@@ -19,7 +19,7 @@ import subprocess
 import zlib
 from typing import Any, Dict, List, Optional
 
-from . import config, sfxplan, templates
+from . import config, hookboost, sfxplan, templates
 from .director import TEMPLATES
 from .transcribe import Segment
 from .media import MediaAsset
@@ -1047,7 +1047,8 @@ def apply_pack_transitions(scenes: List[dict], picks: Dict[int, str], fps: int, 
 
 
 def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
-                        intensity: float = 1.0, voice_lufs: Optional[float] = None) -> List[dict]:
+                        intensity: float = 1.0, voice_lufs: Optional[float] = None,
+                        soft: Optional[Dict[int, str]] = None) -> List[dict]:
     """
     A sound for each transition, placed so its loudest point lands on the
     cut, set against the voice (`voice_lufs`, see _TRANSITION_SFX) at the
@@ -1055,7 +1056,10 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
     ceiling (sfxplan.cap: 6 dB under the voice, a glitch 9). Skipped when
     another sound starts within a second of it or is still playing across
     it (a typing run, a count, a riser): a graphic's own sound on that beat
-    wins, and two sounds never stack.
+    wins, and two sounds never stack. `soft` ({scene index: transition key},
+    the hook booster's first cuts, src/hookboost.py) gives a cut the sound of
+    that transition although the scene itself enters with a hard cut; it goes
+    through every rule above, so it is never louder than any transition sound.
     """
     meta = sfx_meta()
     have = templates.sfx_files()
@@ -1075,8 +1079,10 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
         d = int(math.ceil(d)) - int(o.get("trimFrames") or 0)
         busy.append((s, s + max(1, d)))
     picks = []
-    for sc in scenes:
+    for idx, sc in enumerate(scenes):
         t = sc.get("transition") or "none"
+        if t not in _TRANSITION_SFX and soft and idx in soft and not pack_name(t):
+            t = soft[idx]
         if t not in _TRANSITION_SFX:
             continue
         name, under = _TRANSITION_SFX[t]
@@ -1319,6 +1325,11 @@ def _build(segments: List[Segment], shots: List[dict],
         if _kit.get("caption_style") and not inp.get("caption_style"):
             inp["caption_style"] = _kit["caption_style"]
     total = max(1, int(round(audio_duration * fps)))
+    # The hook booster's cold open (HOOK_TEASER, src/hookboost.py): flashes of the
+    # video's most striking later shots under a hook first line. Off: untouched.
+    teaser_info = None
+    if config.HOOK_TEASER:
+        segments, shots, assets, teaser_info = hookboost.add_teaser(segments, shots, assets, fps)
     bounds = _scene_bounds(segments, fps, total)
     # Measured once: every sound effect and the music are set against the voice.
     voice_lufs, voice_how = voice_loudness(audio_url, inp, narration_path)
@@ -1352,6 +1363,12 @@ def _build(segments: List[Segment], shots: List[dict],
     # Only the kit's transitions: each other one becomes the nearest the kit
     # allows, or a hard cut.
     entrances = brandkit.limit_transitions(entrances, kit)
+    if teaser_info and teaser_info.get("flashes"):
+        # A flash and the shot after the last one are hard cuts.
+        for i in range(len(entrances)):
+            if bool((shots[i] if i < len(shots) else {}).get("teaser")) or (
+                    i > 0 and bool((shots[i - 1] if i - 1 < len(shots) else {}).get("teaser"))):
+                entrances[i] = "none"
     if pack:
         image_look = templates.image_treatment(pack.get("imageTreatment", "")) or {}
     else:
@@ -1409,6 +1426,7 @@ def _build(segments: List[Segment], shots: List[dict],
             "startFrame": start,
             "durationInFrames": duration,
             "text": seg.text,
+            **({"teaser": True} if shot.get("teaser") else {}),
             "query": shot.get("query", ""),
             "visualType": "animation" if animation else shot.get("visualType", "footage"),
             "media": media,
@@ -1473,6 +1491,11 @@ def _build(segments: List[Segment], shots: List[dict],
                              "startFrame": start,
                              "durationInFrames": min(max(duration, want), total - start)})
 
+    # The hook booster: a slow push on the opening's stills and static clips.
+    push_stats = hookboost.push_in(scenes, assets, fps) if hookboost.enabled() else None
+    if hookboost.enabled():
+        hookboost.LAST["quietedKeys"] = set()      # counted by the planner (treatments._place)
+
     if inp.get("title_overlay"):
         overlays.insert(0, {
             "type": "title", "text": str(inp["title_overlay"])[:240],
@@ -1530,8 +1553,10 @@ def _build(segments: List[Segment], shots: List[dict],
     # Each transition's own sound, peaking on its cut, unless a graphic's
     # sound is already there (a row, or the sound built into a look); then
     # every sound under its ceiling. A pack transition plays its own: none here.
+    soft_cuts = hookboost.cut_sounds(scenes, fps) if hookboost.enabled() else {}
     sfx_list = sorted(list(sfx_list) + plan_transition_sfx(
-                          scenes, fps, busy, (pack or {}).get("sfxIntensity", 1.0), voice_lufs=voice_lufs),
+                          scenes, fps, busy, (pack or {}).get("sfxIntensity", 1.0), voice_lufs=voice_lufs,
+                          soft=soft_cuts or None),
                       key=lambda s: int(s.get("startFrame", 0)))
     for fx in sfx_list:
         top = sfxplan.cap(voice_lufs, str(fx.get("name") or ""))
@@ -1555,6 +1580,19 @@ def _build(segments: List[Segment], shots: List[dict],
     missing = sum(1 for a in assets if a is None)
     if missing:
         warnings.append(f"{missing} scene(s) have no media and will render black.")
+
+    hook_boost = None
+    if hookboost.enabled() or teaser_info:
+        hook_boost = {"enabled": hookboost.enabled(), "seconds": hookboost.window(),
+                      "opening": hookboost.opening_stats(scenes, fps)}
+        if hookboost.enabled():
+            hook_boost.update(
+                pushIns=push_stats, cutSounds=len(soft_cuts),
+                quietedGraphics=len(hookboost.LAST.get("quietedKeys") or ()),
+                strongestFirst={"motionWeight": hookboost.motion_weight(),
+                                "dramaBonus": float(getattr(config, "HOOK_BOOST_DRAMA", 0.0) or 0.0)})
+        if teaser_info:
+            hook_boost["teaser"] = teaser_info
 
     return {
         "schemaVersion": SCHEMA_VERSION,
@@ -1605,6 +1643,7 @@ def _build(segments: List[Segment], shots: List[dict],
             "voiceLufs": round(float(voice_lufs), 1),
             "voiceLufsSource": voice_how,
             "warnings": warnings,
+            **({"hookBoost": hook_boost} if hook_boost else {}),
         },
     }
 

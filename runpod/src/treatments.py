@@ -43,7 +43,7 @@ import re
 import zlib
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import config, numwords, templates
+from . import config, hookboost, numwords, templates
 from .transcribe import Segment
 
 # Read off VidRush's own timelines (an animation block every 8-10 s through
@@ -3558,6 +3558,11 @@ class _Planner:
         if window is None:
             return None                    # its word is never said here: none rather than one before its word
         t_in, t_out = window
+        if hookboost.quiet(t_in, mode, cue or "", t, TEXT_BEAT_CUES):
+            # The hook booster: the first seconds are footage and voice, no words
+            # on screen (a date or number the planner must show is "must" mode).
+            hookboost.LAST.setdefault("quietedKeys", set()).add((cue or "", round(t_in, 1)))
+            return None
         if any(a <= t_in < b for a, b in self.blocks):
             return None                    # a full-screen graphic is on screen: nothing lands on it
         # (A year look the date pass chose - YEAR_LOOKS - keeps the same room as the four date looks.)
