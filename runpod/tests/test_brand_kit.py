@@ -238,6 +238,18 @@ class PicksHonoured(unittest.TestCase):
         self.assertEqual(doc["overlays"][1]["type"], "title")    # not a library look: kept
         self.assertEqual(doc["sfx"], [])                          # the dropped map's own sound went with it
 
+    def test_a_side_paths_graphic_takes_the_brand_colours(self):
+        # The last resort resolves a graphic with the style pack's colour (gold): the kit's accent wins.
+        kit = brandkit.parse(_kit())
+        doc = {"fps": 30, "durationInFrames": 300, "meta": {"stylePack": "documentary"}, "overlays": [
+            {"template": "TEXT_QUESTION_V1", "type": "typewriter", "theme": "gold", "startFrame": 0, "durationInFrames": 60}],
+            "scenes": [{"id": "s0", "startFrame": 0, "durationInFrames": 300, "media": {"type": "animation"},
+                        "animation": {"template": "NUM_PERCENT_V1", "type": "stat", "value": 26.0, "theme": "gold"}}]}
+        out = brandkit.enforce(doc, kit)
+        self.assertEqual(doc["scenes"][0]["animation"]["theme"], "accent2")     # a figure: the second colour
+        self.assertEqual(doc["overlays"][0]["theme"], "gold")    # a look with a colour of its own keeps it (white question)
+        self.assertGreaterEqual(out["recoloured"], 1)
+
     def test_closest_look_needs_a_shared_cue_and_the_overlays_data(self):
         self.assertIsNone(brandkit.closest_look("MAP_LOCATION_ZOOM_V1", {"NUM_PERCENT_V1"},
                                                 needs=("locations",)))

@@ -632,8 +632,11 @@ def enforce(doc: dict, kit: Optional[dict]) -> Dict[str, int]:
     library look (the job's title card) stay. Returns what it changed.
     """
     out = {"swapped": 0, "dropped": 0, "scenesSwapped": 0, "scenesFilled": 0}
+    if not isinstance(doc, dict) or kit is None:
+        return out
     allowed = allowed_looks(kit)
-    if allowed is None or not isinstance(doc, dict):
+    if allowed is None:
+        out["recoloured"] = _brand_colours(doc, kit)
         return out
     with scope(kit):
         keep, gone = [], []
@@ -679,9 +682,34 @@ def enforce(doc: dict, kit: Optional[dict]) -> Dict[str, int]:
             filled = gapfill.hold_or_animate(doc, label="brand kit looks")
             out["scenesFilled"] = emptied
             out["fill"] = filled
+    out["recoloured"] = _brand_colours(doc, kit)
     if any(v for k, v in out.items() if k != "fill"):
         print(f"[brand] looks outside the kit: {out}", flush=True)
     return out
+
+
+def _brand_colours(doc: dict, kit: Optional[dict]) -> int:
+    """
+    The kit's colours on what a side path drew after the planner (a graphic
+    the last resort made for an empty line resolves with the style pack's own
+    colour): the pack's theme comes off any look that has no colour of its
+    own, so it draws in the brand accent, and the figures and charts take the
+    second colour. Returns how many looks changed.
+    """
+    if not (kit or {}).get("accent"):
+        return 0
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    pack_theme = str((templates.style_packs().get(str(meta.get("stylePack") or "")) or {}).get("theme") or "")
+    looks = [ov for ov in doc.get("overlays") or [] if isinstance(ov, dict)] + [
+        sc["animation"] for sc in doc.get("scenes") or [] if isinstance(sc, dict) and isinstance(sc.get("animation"), dict)]
+    n = 0
+    if pack_theme and pack_theme != "accent":
+        for ov in looks:
+            own = ((templates.get(ov.get("template") or "") or {}).get("defaults") or {}).get("theme")
+            if ov.get("theme") == pack_theme and not own:
+                ov.pop("theme", None)
+                n += 1
+    return n + second_colour(doc.get("overlays") or [], doc.get("scenes") or [], kit)
 
 
 def second_colour(overlays: Iterable[dict], scenes: Iterable[dict], kit: Optional[dict]) -> int:
