@@ -1445,18 +1445,24 @@ def vr_moment(text: str, shot: Optional[dict] = None, brief: Optional[dict] = No
                  "key": _word_at(text, date["start"]), "strength": 2 if date["year"] else 1, "full_date": True}, now)
     jump = None if data else _YEAR_JUMP.search(text)
     target = None
+    how = ""
     if span and a != b and b <= NOW_YEAR:
-        target = (b, a, span.start(1) if span.group(1) else span.start(3), "")
+        target, how = (b, a, span.start(1) if span.group(1) else span.start(3), ""), "range"
     elif years and jump:
         y, at = next(((y, at) for y, at in years if at >= jump.start()), years[0])
         said = re.sub(r"\s+", " ", jump.group(0)).upper()
-        target = (y, was, at, said if not said.startswith("FAST") and len(said) <= 18 else "")
+        target, how = (y, was, at, said if not said.startswith("FAST") and len(said) <= 18 else ""), "jump"
     elif years and abs(years[0][0] - was) >= YEAR_JUMP:
         target = (years[0][0], was, years[0][1], "")
     if target and target[0] != target[1]:
         y, frm, at, label = target
+        # What the year looks (YEAR_LOOKS) may show besides the year: the range as said, a counted
+        # jump ("thirty years later"), "today" or "now" said on the line.
+        info = {"to": y, "from": frm, "range": how == "range",
+                "count": _jump_count(jump.group(0)) if how == "jump" else None,
+                "now": bool(_NOW_SAID.search(text))}
         return ({"look": VR_YEAR, "cue": "years", "props": {"value": y, "total": frm, "label": label},
-                 "key": _word_at(text, at), "strength": 3, "full_date": False}, now)
+                 "key": _word_at(text, at), "strength": 3, "full_date": False, "years": info}, now)
     if date and date["year"]:
         return ({"look": VR_HERO, "cue": "date", "props": {"text": date["month"], "subtitle": str(date["year"])},
                  "key": _word_at(text, date["start"]), "strength": 1, "full_date": False}, now)
@@ -1470,6 +1476,88 @@ def vr_moment(text: str, shot: Optional[dict] = None, brief: Optional[dict] = No
                 return ({"look": VR_CAPTION, "cue": "date", "props": {"text": caption},
                          "key": _word_at(text, first), "strength": 2, "full_date": False}, now)
     return None, now
+
+
+# A jump in years takes one of these looks, the least used first (the owner,
+# 2026-10-02: every year showed the one year line; earlier videos had "a lot of
+# different ones", the timeline ruler among them - the year scroller is the
+# ruler now: TL_RULER_V1 failed the 2026-09-30 audit). The year line opens the
+# rotation; a counted jump ("thirty years later") prefers the years-later
+# cards, a range as said or a year against today the then / now card. Each
+# look shows only what the line said (year_look_props), or is left out.
+YEAR_LOOKS = (VR_YEAR, "LIB_TL_YEAR_SCROLLER", "TL_YEAR_ROLL_V1", "LIB_TL_DECADE_GRID",
+              "LIB_TL_YEARS_LATER", "LIB_TL_TIME_PASSING", "LIB_TL_THEN_NOW_YEARS")
+YEAR_COUNT_LOOKS = ("LIB_TL_YEARS_LATER", "LIB_TL_TIME_PASSING")
+_NOW_SAID = re.compile(r"\b(today|now|nowadays|these days|this year)\b", re.I)
+_JUMP_PARTS = re.compile(r"^(?:(?P<n>.+?)\s+)?(?P<unit>half\s+a\s+century|years?|decades?|centur(?:y|ies))\s+"
+                         r"(?P<word>later|earlier|on|passed|went\s+by)$", re.I)
+_JUMP_UNITS = {"year": ("YEAR", "YEARS"), "decade": ("DECADE", "DECADES"), "century": ("CENTURY", "CENTURIES")}
+
+
+def _jump_count(said: str) -> Optional[tuple]:
+    """(value, unit, word) of a jump in years said with its number - "thirty years later" -> (30, "YEARS",
+    "LATER"), "a century later" -> (1, "CENTURY", "LATER"), "half a century later" -> (50, "YEARS", "LATER") -
+    or None ("years later", "a few decades later", "fast forward")."""
+    said = re.sub(r"\s+", " ", (said or "").strip())
+    m = _JUMP_PARTS.match(said)
+    if not m:
+        return None
+    word = m.group("word").upper()
+    if re.match(r"half a century\b", said, re.I):
+        return 50, "YEARS", word
+    unit = m.group("unit").lower()
+    raw = (m.group("n") or "").lower().replace("-", " ").strip()
+    if not raw:
+        return None
+    value = float(raw) if raw.isdigit() else (1.0 if raw in ("a", "an", "one") else _spelled_value(raw))
+    if not value or value <= 0 or not float(value).is_integer():
+        return None
+    one, many = _JUMP_UNITS["century" if unit.startswith("centur") else unit.rstrip("s")]
+    return int(value), one if value == 1 else many, word
+
+
+def year_look_props(tid: str, years: dict, label: str = "") -> Optional[dict]:
+    """
+    The props a year look shows for a jump in years (vr_moment's "years": the
+    year said, the year the story was in or the range's first year, a range
+    as said, a counted jump, "now" said), or None when the look would need
+    something the line did not say. `label` is the jump as said ("YEARS LATER").
+    """
+    y, frm = years.get("to"), years.get("from")
+    if not isinstance(y, int) or not isinstance(frm, int) or y == frm:
+        return None
+    lo, hi = min(y, frm), max(y, frm)
+    if tid == VR_YEAR:
+        return {"value": y, "total": frm, "label": label}
+    if tid == "LIB_TL_YEAR_SCROLLER":
+        return {"value": y, "subtitle": label}
+    if tid == "TL_YEAR_ROLL_V1":
+        # (It rolls from the first item's year to the second's; the value is the year it lands on, for its sounds.)
+        return {"items": [{"label": str(frm)}, {"label": str(y)}], "value": y, "text": label}
+    if tid == "LIB_TL_DECADE_GRID":
+        return {"value": y} if 100 <= y <= 2500 else None
+    if tid in YEAR_COUNT_LOOKS:
+        count = years.get("count")
+        if not count:
+            return None
+        value, unit, word = count
+        return {"value": value, "suffix": unit, "label": word, "text": str(y)}
+    if tid == "LIB_TL_THEN_NOW_YEARS":
+        if years.get("range"):
+            return {"items": [{"label": "FROM", "value": frm}, {"label": "TO", "value": y}]}
+        if hi == NOW_YEAR and years.get("now"):
+            return {"items": [{"label": "THEN", "value": lo}, {"label": "NOW", "value": hi}]}
+        return None
+    return None
+
+
+def year_look_order(years: dict, uses: Optional[Dict[str, int]] = None) -> List[str]:
+    """YEAR_LOOKS that can show this jump, in the order to try them: the least used first; between equals the
+    look made for the line (a counted jump's cards, a range's or a now's then / now card), then YEAR_LOOKS order."""
+    uses = uses or {}
+    fit = [tid for tid in YEAR_LOOKS if year_look_props(tid, years) is not None]
+    made_for = set(YEAR_COUNT_LOOKS) | {"LIB_TL_THEN_NOW_YEARS"}
+    return sorted(fit, key=lambda tid: (uses.get(tid, 0), 0 if tid in made_for else 1, YEAR_LOOKS.index(tid)))
 
 
 def _vr_fits(m: dict, others: List[dict], margin: float = 0.0) -> bool:
@@ -2556,8 +2644,17 @@ class _Planner:
             if not (_vr_fits(m, self.vr_placed) and _vr_fits(m, ahead, SLIDE_SLACK)):
                 return None
         props = dict(m["props"], theme=self.vr_theme, _key=m["key"])
-        return {"ids": [m["look"]], "cues": [], "cue": m["cue"], "props": props, "mode": "must", "group": "",
-                "emphasis": "high", "layout": "text", "offset": _offset(seg.text or "", m["key"]), "vr": True}
+        req = {"ids": [m["look"]], "cues": [], "cue": m["cue"], "props": props, "mode": "must", "group": "",
+               "emphasis": "high", "layout": "text", "offset": _offset(seg.text or "", m["key"]), "vr": True}
+        if m["cue"] == "years" and m.get("years"):
+            # A jump in years: the least used of the year looks that can show it (YEAR_LOOKS). The year line
+            # keeps its text layout; the cards take the full-screen one their cue gives them.
+            ids = [tid for tid in year_look_order(m["years"], self.use_count) if templates.get(tid) and auto_ok(tid)]
+            if ids:
+                by_id = {tid: dict(year_look_props(tid, m["years"], m["props"].get("label", "")), _key=m["key"],
+                                   **({"theme": self.vr_theme} if tid in VR_LOOKS else {})) for tid in ids}
+                req.update(ids=ids, first=ids[0], props_by_id=by_id, layout=None, layout_by_id={VR_YEAR: "text"})
+        return req
 
     def _sync_duration(self, j: int, frames: int) -> None:
         """A treatment entry that shows overlay j follows its new length."""
@@ -3169,7 +3266,7 @@ class _Planner:
         resolved = templates.resolve(t["id"], style=self.style, entrance=motion, props=props, pack=self.pack)
         if not resolved:
             return None
-        klass = req.get("layout") or layout_class(t, cue or "")
+        klass = (req.get("layout_by_id") or {}).get(t["id"]) or req.get("layout") or layout_class(t, cue or "")
         if klass == "persist" and at < self.persist_until:
             return None
         lo, hi = layout_window(t, klass)
@@ -3201,7 +3298,9 @@ class _Planner:
         t_in, t_out = window
         if any(a <= t_in < b for a, b in self.blocks):
             return None                    # a full-screen graphic is on screen: nothing lands on it
-        if t["id"] in VR_LOOKS and not _vr_fits({"at": t_in, "look": t["id"]}, self.vr_placed):
+        # (A year look the date pass chose - YEAR_LOOKS - keeps the same room as the four date looks.)
+        dated = t["id"] in VR_LOOKS or bool(req.get("vr"))
+        if dated and not _vr_fits({"at": t_in, "look": t["id"]}, self.vr_placed):
             return None                    # one date or time graphic per VR_GAP, on screen (it may only slide later)
         prev = max(self.spans, key=lambda s: s["end"]) if self.spans else None
         busy = prev is not None and prev["end"] + BREATH > t_in
@@ -3216,7 +3315,7 @@ class _Planner:
             if trim_ok:
                 # On its word: the graphic still up has been read, it gives way
                 # (only when this one really lands - nothing is cut for nothing).
-                if min(t_out, self._clear_until(t_in)) - t_in < least:
+                if min(t_out, self._clear_until(t_in)) - t_in < least - SHORT_BY:
                     return None
                 self._trim(prev, cut)
             elif slide_to - t_in <= SLIDE_SLACK and slide_to * fps < self.total - 1:
@@ -3229,7 +3328,7 @@ class _Planner:
             return None
         # Never into a full-screen scene or a span already taken ahead (the job's title card).
         t_out = min(t_out, self._clear_until(t_in))
-        if t_out - t_in < least:
+        if t_out - t_in < least - SHORT_BY:
             return None
         o_start = max(0, min(int(round(t_in * fps)), self.total - 1))
         frames = max(1, min(int(round((t_out - t_in) * fps)), self.total - o_start))
@@ -3239,6 +3338,7 @@ class _Planner:
         if t["id"] in VR_LOOKS:
             # One theme for every date and time look of the video, whatever the pack's colour.
             overlay["theme"] = self.vr_theme
+        if dated:
             self.vr_placed.append({"at": o_start / fps, "look": t["id"]})
         apply_layout(overlay, t, klass)
         if t["id"] in TEXT_LOOK_ALIGNS and overlay.get("align") in (None, "auto"):
@@ -3775,18 +3875,30 @@ def _voice_window(seg, props: dict, lo: float, hi: float, fps: int = 30, until: 
     return t_in, t_in + dur
 
 
+# How far short of its least time a window may fall and still count as that time: half a frame of
+# float error (a window of exactly `least` came out 2.76666 < 2.76667 and every look whose
+# animation sets its least time was left out at its minimum).
+SHORT_BY = 0.5 / 30
+
+
 def animation_seconds(template: dict) -> float:
     """
     The least time a look needs on screen: its entrance up to its visual hit
     (the registry's sfxAt, else ENTRANCE_FRAMES), SETTLE seconds landed, and
-    its exit (EXIT_FRAMES), all at 30 fps.
+    its exit (EXIT_FRAMES), all at 30 fps - or the registry's leastSeconds
+    when its animation needs longer.
     """
     d = (template or {}).get("defaults") or {}
     try:
         hit = float(d.get("sfxAt")) if d.get("sfxAt") is not None else float(ENTRANCE_FRAMES)
     except (TypeError, ValueError):
         hit = float(ENTRANCE_FRAMES)
-    return (max(0.0, hit) + EXIT_FRAMES) / 30.0 + SETTLE
+    try:
+        # (A look whose animation runs past its hit says how long it needs: the registry's leastSeconds.)
+        own = float(d.get("leastSeconds") or 0.0)
+    except (TypeError, ValueError):
+        own = 0.0
+    return max((max(0.0, hit) + EXIT_FRAMES) / 30.0 + SETTLE, own)
 
 
 def layout_window(template: dict, klass: str) -> tuple:

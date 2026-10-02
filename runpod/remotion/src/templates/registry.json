@@ -6505,6 +6505,14 @@
      "type": "number",
      "label": "Value"
     },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
     "position": {
      "type": "enum",
      "label": "Position",
@@ -6586,6 +6594,7 @@
      "name": "count-final",
      "volume": 0.3
     },
+    "leastSeconds": 3.0,
     "sfxAt": 44,
     "sounds": [
      {
@@ -31617,6 +31626,7 @@
      "volume": 0.3
     },
     "types": false,
+    "leastSeconds": 4.0,
     "sfxAt": 71,
     "sounds": [
      {
@@ -31969,6 +31979,7 @@
      "volume": 0.3
     },
     "types": false,
+    "leastSeconds": 3.2,
     "sfxAt": 5,
     "sounds": [
      {
@@ -32302,6 +32313,7 @@
      "volume": 0.3
     },
     "types": false,
+    "leastSeconds": 4.0,
     "sfxAt": 14,
     "sounds": [
      {

@@ -74,9 +74,10 @@ COMMON = ["position", "scale", "opacity", "duration", "speed", "theme", "sfx", "
 
 def T(id_, name, category, component, description, *, props, duration, sfx=None,
       variant=None, theme=None, entrance="fade", exit_="fade", cues=(), styles=None,
-      kind="card", emphasis="medium", tags=()):
-    """One template. `kind`: card (replaces the picture), tag (rides on footage), map, transition."""
-    return {
+      kind="card", emphasis="medium", tags=(), least=None):
+    """One template. `kind`: card (replaces the picture), tag (rides on footage), map, transition.
+    `least`: the seconds its animation needs on screen when more than its hit and exit (leastSeconds)."""
+    t = {
         "id": id_, "name": name, "category": category, "component": component,
         "description": description, "kind": kind, "emphasis": emphasis,
         "props": {k: P[k] for k in list(props) + COMMON if k in P},
@@ -86,6 +87,9 @@ def T(id_, name, category, component, description, *, props, duration, sfx=None,
         "variants": {"style": styles or STYLES, "entrance": ENTRANCES, "exit": EXITS},
         "cues": list(cues), "tags": list(tags),
     }
+    if least:
+        t["defaults"]["leastSeconds"] = float(least)
+    return t
 
 
 def _typing(t: dict) -> dict:
@@ -381,8 +385,8 @@ TEMPLATES = [
       "A ruler-style timeline.", props=["text", "items"], duration=6.0, variant="ruler", entrance="fade",
       sfx={"name": "pop", "volume": 0.35}, cues=["sequence"]),
     T("TL_YEAR_ROLL_V1", "Year Roll", "TIMELINES", "year-roll",
-      "Years rolling to the one named.", props=["text", "value"], duration=5.0, entrance="fade",
-      cues=["years"]),
+      "Years rolling to the one named.", props=["text", "value", "items"], duration=5.0, entrance="fade",
+      cues=["years"], least=3.0),
     T("TL_SPAN_V1", "Span", "TIMELINES", "span",
       "A span between two dates.", props=["text", "items"], duration=4.5, entrance="fade",
       sfx={"name": "pop", "volume": 0.35}, cues=["span"]),
@@ -833,6 +837,10 @@ def _library() -> list:
         if isinstance(look.get("sfx_at"), (int, float)) and not isinstance(look.get("sfx_at"), bool):
             t["defaults"]["sfxAt"] = int(round(look["sfx_at"]))
         t["defaults"]["types"] = bool(look.get("types"))
+        # A look whose animation needs longer than its hit and exit (the then / now card's second year
+        # still rolled when it flipped away at 2.5 s): the planner's least time for it (animation_seconds).
+        if isinstance(look.get("least"), (int, float)) and not isinstance(look.get("least"), bool):
+            t["defaults"]["leastSeconds"] = float(look["least"])
         # "autoPick": false (library_looks*.json "autoPick" / "auto_pick") - built and in the editor, but the
         # planner never chooses it on its own until the owner switches it on (templates.auto_pick); absent or
         # true means the planner may pick it as before (only false is written to the registry).
