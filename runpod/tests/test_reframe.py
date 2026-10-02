@@ -314,6 +314,26 @@ class Pass(unittest.TestCase):
         self.assertEqual(r["source"], "web_image")
         self.assertEqual(still.call_count, 1)               # parallax shows the whole print; "none" holds still
 
+    def test_stills_are_aimed_only_where_the_subject_is_sure(self):
+        compact = {"x": 0.55, "y": 0.3, "w": 0.2, "h": 0.3}
+        self.assertIsNotNone(reframe.aim_still(focus("face", box=compact, confidence=0.7), FA))
+        self.assertIsNotNone(reframe.aim_still(focus("object", box=compact, confidence=0.9), FA))
+        # A medium-sure "object" (the Lake Powell ruin's rock streak scored 0.65) keeps the old motion.
+        self.assertIsNone(reframe.aim_still(focus("object", box=compact, confidence=0.7), FA))
+        wide = {"x": 0.0, "y": 0.1, "w": 1.0, "h": 0.45}
+        self.assertIsNone(reframe.aim_still(focus("object", box=wide, confidence=0.95), FA))
+        self.assertIsNone(reframe.aim_still(focus("action", box=compact, confidence=0.95), FA))
+
+    def test_one_dark_band_is_not_a_letterbox(self):
+        frame = (np.random.default_rng(6).random((360, 640, 3)) * 255).astype(np.uint8)
+        canopy = frame.copy()
+        canopy[:60] = 0                                      # a black boat canopy across the top only
+        self.assertEqual(reframe.black_bars([canopy])["top"], 0.0)
+        letterbox = frame.copy()
+        letterbox[:45] = 0
+        letterbox[-45:] = 0
+        self.assertGreater(reframe.black_bars([letterbox])["top"], 0.1)
+
     def test_a_still_whose_subject_fills_it_is_not_aimed(self):
         d = self.doc([scene(0, 5, kind="image", url=self.photo, motion="zoom-in", source="web_image")])
         big = focus(box={"x": 0.0, "y": 0.0, "w": 0.95, "h": 0.9})

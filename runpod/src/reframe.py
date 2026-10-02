@@ -9,17 +9,20 @@ through long ones read as zooming, and news clips must never be cropped to
 hide their logo or chyron. So a move here is rare, slow and safe:
 
 * only on a shot whose camera is still (a pan, a drone flight, a push or a
-  shaky phone already moves - a second move would fight it);
-* only when something clearly is the subject: faces, else what stands out
-  (saliency) or what moves in a locked-off frame (the action);
-* never past ~1.15x (REFRAME_MAX_SCALE), less on a soft or low-resolution
-  picture, never into blur;
+  shaky phone already moves - a second move would fight it; measured by
+  block phase correlation over the stretch the scene shows, cuts included);
+* only when something clearly is the subject: faces (YuNet), else the main
+  object (U2-Net-p salient-object maps; pixel saliency picked the sky in
+  red-rock country), or what moves in a locked-off frame (the action);
+* never past ~1.15x (REFRAME_MAX_SCALE), less on a soft, upscaled or SD
+  picture (effective_lines, upscale.original_lines), never into blur;
 * the subject (head and shoulders for a face) stays inside the frame on
   EVERY frame of the move - guaranteed by construction (both end boxes hold
-  it, so every box between them does);
-* not on short shots (the cut rhythm), not on news footage, a burned-in
-  station logo or chyron, a vertical clip framed on its blurred copy, or a
-  scene a graphic points into; and not every shot that could move does.
+  it, so every box between them does) - and so does a corner logo;
+* not on short shots (the cut rhythm), not on news footage, burned-in
+  lettering (chyrons, tickers, captions, at two sizes), letterbox bars or a
+  clip framed on its blurred copy, nor a scene a graphic points into; never
+  two moves side by side, and not every shot that could move does.
 
 Two halves:
 
@@ -31,8 +34,15 @@ Two halves:
    machine of a split render draws the same frames.
 
 Stills keep their own motion (timeline._IMAGE_MOTIONS); media.reframe on a
-still only carries the subject box, and the renderer aims the push, pull or
-pan at it instead of the centre (transitions/stillMotion.tsx).
+still only carries the subject box, and the renderer aims the push, pull,
+reveal or glide at it instead of the centre (transitions/stillMotion.tsx) -
+for faces and for objects the model is sure of (aim_still).
+
+The editor's say per scene is scene.reframe: "off" (no move whatever the
+plan), "auto" or absent (the plan), or {from, to} (its own move). The plan
+lives in media.reframe so a replaced clip drops it; the renderer also checks
+media.reframe.source against the media's own source (a merge that swapped
+the file keeps old fields) and the frame aspect it was planned for.
 
 Coordinates: media.focus.box is a fraction of the SOURCE picture; every box
 in media.reframe is a fraction of the FRAME as the scene shows it (the
@@ -458,6 +468,11 @@ def black_bars(frames: list) -> Dict[str, float]:
     out["right"] = run(dark_c[::-1]) / w
     out["top"] = run(dark_r) / h
     out["bottom"] = run(dark_r[::-1]) / h
+    # Bars come in pairs around centred content; one dark band on one side
+    # is the picture itself (a boat's canopy, a night sky).
+    for a, b in (("left", "right"), ("top", "bottom")):
+        if min(out[a], out[b]) < 0.01 or abs(out[a] - out[b]) > 0.03:
+            out[a] = out[b] = 0.0
     # A picture framed on a blurred copy of itself (a phone clip or a 4:3
     # loop pillarboxed by its uploader, or upscale.frame_vertical): the side
     # panels have almost no fine detail next to the sharp band.
@@ -1322,14 +1337,26 @@ def box_at(move: dict, progress: float) -> dict:
     return {k: a[k] + (b[k] - a[k]) * e for k in ("x", "y", "w", "h")}
 
 
+STILL_FACE_CONFIDENCE = 0.6
+STILL_OBJECT_CONFIDENCE = 0.8
+STILL_OBJECT_AREA = 0.35
+
+
 def aim_still(focus: dict, frame_aspect: float) -> Optional[dict]:
-    """The subject box (frame coordinates, with a little room) a still's own motion is aimed at, or None."""
+    """
+    The subject box (frame coordinates, with a little room) a still's own
+    motion is aimed at, or None. Faces, and objects only when the model is
+    sure and the object is compact: on the Lake Powell sheets a 0.65 "object"
+    was a rock streak beside the ruin the line was about, and a pull-back
+    that starts tight on the wrong thing is worse than the old hashed point.
+    """
     if not focus or focus.get("kind") not in ("face", "object") or not focus.get("box"):
         return None
-    if float(focus.get("confidence") or 0) < 0.5:
+    conf = float(focus.get("confidence") or 0)
+    if conf < (STILL_FACE_CONFIDENCE if focus["kind"] == "face" else STILL_OBJECT_CONFIDENCE):
         return None
     s = cover_box(focus["box"], float(focus.get("aspect") or frame_aspect), frame_aspect)
-    if s is None or s["w"] * s["h"] > 0.6:
+    if s is None or s["w"] * s["h"] > (0.6 if focus["kind"] == "face" else STILL_OBJECT_AREA):
         return None                     # a "subject" filling the picture is no aim at all
     pad = 0.02
     x0, y0 = max(0.0, s["x"] - pad), max(0.0, s["y"] - pad)

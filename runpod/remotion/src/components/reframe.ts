@@ -28,12 +28,12 @@ export const REFRAME_EASE = Easing.bezier(0.45, 0.05, 0.55, 0.95);
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** A usable box: finite, positive size, (almost) inside the frame. */
-export const validBox = (b: unknown): b is Box => {
+/** A usable box: finite, at least `min` of the frame each way (a viewport: no 20x zooms), inside the frame. */
+export const validBox = (b: unknown, min = 0.05): b is Box => {
   if (!b || typeof b !== "object") return false;
   const { x, y, w, h } = b as Box;
   if (![x, y, w, h].every(finite)) return false;
-  return w > 0.05 && h > 0.05 && w <= 1.0001 && h <= 1.0001 && x >= -0.0001 && y >= -0.0001
+  return w > min && h > min && w <= 1.0001 && h <= 1.0001 && x >= -0.0001 && y >= -0.0001
     && x + w <= 1.0001 && y + h <= 1.0001;
 };
 
@@ -63,7 +63,7 @@ export const resolveAim = (scene: Scene, aspect: number): Box | undefined => {
   const own = scene.reframe;
   if (own === "off" || own === false) return undefined;
   const plan = scene.media?.reframe;
-  if (!plan || typeof plan !== "object" || !validBox(plan.subject)) return undefined;
+  if (!plan || typeof plan !== "object" || !validBox(plan.subject, 0.01)) return undefined;
   if (plan.source !== undefined && plan.source !== (scene.media?.source ?? "")) return undefined;
   if (finite(plan.aspect) && Math.abs(plan.aspect - aspect) > 0.01) return undefined;
   return plan.subject;

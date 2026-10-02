@@ -694,13 +694,18 @@ MIN_IMAGE_LONG_SIDE_UPSCALED = int(os.getenv("MIN_IMAGE_LONG_SIDE_UPSCALED", "64
 # CPU-only and time-boxed (REFRAME_SECONDS for the whole video, REFRAME_PARALLEL
 # scenes at once); no move above REFRAME_MAX_SCALE, none on a shot shorter than
 # REFRAME_MIN_SECONDS, and about REFRAME_SHARE of the shots that could move do.
+# Off by default: on the owner-approved Lake Powell video it found no footage
+# that may move (80 of 87 clips already move, the rest are news, burned-in
+# text, too soft or all subject) and aimed 6 of 65 stills - better on most,
+# not yet "clearly better" (scratchpad reframe_eval/evidence). A job turns it
+# on with config {"REFRAME_ENABLED": true}.
 REFRAME_ENABLED = _flag("REFRAME_ENABLED", False)
 # Footage moves and still aiming separately (the news styles keep their
 # clips as shot: src/styles.py).
 REFRAME_CLIPS = _flag("REFRAME_CLIPS", True)
 REFRAME_STILLS = _flag("REFRAME_STILLS", True)
 REFRAME_SECONDS = float(os.getenv("REFRAME_SECONDS", "75"))
-REFRAME_PARALLEL = int(os.getenv("REFRAME_PARALLEL", "6"))
+REFRAME_PARALLEL = int(os.getenv("REFRAME_PARALLEL", "8"))
 REFRAME_MAX_SCALE = float(os.getenv("REFRAME_MAX_SCALE", "1.15"))
 REFRAME_MIN_SECONDS = float(os.getenv("REFRAME_MIN_SECONDS", "3.0"))
 REFRAME_SHARE = float(os.getenv("REFRAME_SHARE", "0.6"))

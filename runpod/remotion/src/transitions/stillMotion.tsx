@@ -81,11 +81,21 @@ export const stillTransform = (
     case "reveal-left":
     case "reveal-right": {
       // Aimed, it slides in from the side the subject is on, so the subject
-      // is in the first frame instead of arriving last.
+      // is in the first frame instead of arriving last, and it settles with
+      // the subject held in frame. The pivot leans toward the subject only as
+      // far as the 12% slide allows without a strip of background at the
+      // start: a slide in from the left needs the pivot at 37.5% or right of it.
       const c = subject ? subject.x + subject.w / 2 : 0.5;
       const side = c > 0.55 ? -1 : c < 0.45 ? 1 : motion === "reveal-left" ? -1 : 1;
       const e = interpolate(frame, [0, Math.round(fps * 1.0)], [0, 1], { ...clamp, easing: settle });
-      return { transform: `translateX(${((1 - e) * side * 12).toFixed(3)}%) scale(${(1.32 - 0.22 * e + sp * 0.06).toFixed(4)})` };
+      let pivot: string | undefined;
+      if (subject) {
+        const [ox, oy] = aimOrigin(subject, 1.16);
+        const x = side > 0 ? Math.max(0.375, ox) : Math.min(0.625, ox);
+        pivot = `${(x * 100).toFixed(2)}% ${(oy * 100).toFixed(2)}%`;
+      }
+      return { transform: `translateX(${((1 - e) * side * 12).toFixed(3)}%) scale(${(1.32 - 0.22 * e + sp * 0.06).toFixed(4)})`,
+        transformOrigin: pivot };
     }
     case "push-rotate":
       return { transform: `scale(${(1.08 + sp * 0.1).toFixed(4)}) rotate(${interpolate(sp, [0, 1], [-1.4, 0.6]).toFixed(3)}deg)`,
