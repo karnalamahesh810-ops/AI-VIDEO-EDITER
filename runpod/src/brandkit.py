@@ -735,11 +735,17 @@ def meta(kit: Optional[dict]) -> Optional[dict]:
             **({"warnings": list(kit["warnings"])} if kit.get("warnings") else {})}
 
 
+def _drawable(url: Any) -> bool:
+    """A clip the renderer will play: a web link, or a file on this disk (the asset server serves it as one)."""
+    u = str(url or "").strip() if isinstance(url, str) else ""
+    return u.lower().startswith(("http://", "https://")) or (bool(u) and os.path.isfile(u))
+
+
 def _frames_of(block: Optional[dict], fps: int, most: float) -> int:
     """A brand clip's or card's frames as the renderer reads them (0: not drawn)."""
     if not isinstance(block, dict):
         return 0
-    if block.get("kind") != "card" and not safe_url(block.get("url")):
+    if block.get("kind") != "card" and not _drawable(block.get("url")):
         return 0
     f = block.get("frames")
     if isinstance(f, bool) or not isinstance(f, (int, float)) or not math.isfinite(f) or f <= 0:

@@ -451,6 +451,21 @@ class SplitRender(unittest.TestCase):
         self.assertEqual(fanout.chunk_hash(plain, 0, 299),
                          fanout.chunk_hash(json.loads(json.dumps(plain)), 0, 299))
 
+    def test_layout_counts_what_the_renderer_draws(self):
+        # A local copy (a chunk's prefetch) plays like its link; a clip with no file or link does not.
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fh:
+            local = fh.name
+        try:
+            doc = _render_doc(300)
+            doc["brand"] = {"intro": {"url": local, "frames": 60}, "outro": {"kind": "video", "url": "/no/such.mp4",
+                                                                          "frames": 90}}
+            self.assertEqual(brandkit.layout(doc), (60, 300, 0, 360))
+            doc["brand"]["intro"]["frames"] = 10_000          # never past the limit
+            self.assertEqual(brandkit.layout(doc)[0], int(brandkit.INTRO_MAX_SECONDS * FPS))
+        finally:
+            os.remove(local)
+
     def test_the_scan_is_read_in_the_narrations_seconds(self):
         doc = self._doc()
         res = {"ok": True, "duration": 71.0, "black": [(0.0, 4.0), (10.0, 12.0), (65.5, 71.0)],
