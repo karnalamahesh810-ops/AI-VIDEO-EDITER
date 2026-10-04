@@ -68,6 +68,7 @@ import re
 import string
 import threading
 import time
+from concurrent.futures import FIRST_COMPLETED, wait
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -78,6 +79,12 @@ SLACK = 0.5                # a scene is cut when it runs longer than CAP + SLACK
 MIN_PIECE = 2.5            # the shortest piece a cut leaves (s)
 MOMENTS_PER_SCENE = 1      # other moments of a scene's own source video, per scene
 SECONDS = 2400.0           # the time box (s)
+# A piece still running this long after its own share of the box is not waited
+# for once every other piece is in: whatever it still holds (a stalled download,
+# a model call) would only come back late. The Yellowstone re-cut (9c467873,
+# 2026-10-04, pass 2) had 51 of 52 pieces in at 925 s and then waited 1,100 s
+# more, with no event at all, for the last one - over half the job.
+STRAGGLER_GRACE = 120.0
 WRITE_WAIT = 900.0         # how long an apply waits for the project to be handed to it (s)
 POLL = 30.0                # seconds between two asks while it waits
 PAD = media.SEQ_SHOT_PAD   # a new clip runs this much past its piece
@@ -677,6 +684,10 @@ class Finder:
         self.notes: Dict[Tuple[int, int], List[str]] = {}
         self.late: set = set()
         self.done: set = set()
+        self.began: Dict[Tuple[int, int], float] = {}       # piece -> when its thread took it
+        self.step: Dict[Tuple[int, int], str] = {}          # piece -> the rung it is on (or was last on)
+        self.took: Dict[Tuple[int, int], Dict[str, float]] = {}   # piece -> seconds spent on each rung
+        self.stuck: Dict[Tuple[int, int], Tuple[float, str]] = {}  # piece not waited for -> (seconds, its rung)
         self.box: Optional[ytdlp.Box] = None
         self.share = 0.0
         self._build()
@@ -1069,7 +1080,10 @@ class Finder:
     def one(self, i: int, c: Piece) -> Optional[Found]:
         """One piece's rungs in order, on its own thread, under the box and its own share of it."""
         key = (i, c.k)
-        own = time.time() + self.share if self.share else 0.0
+        began = time.time()
+        with self.lock:
+            self.began[key] = began
+        own = began + self.share if self.share else 0.0
         stop = ytdlp.STOP.set((self.box, own))
         tokens: list = []
         try:
@@ -1078,11 +1092,18 @@ class Finder:
             for name, step in (("runner-up", self.runner_up), ("moment", self.moment), ("search", self.search)):
                 if ytdlp.stopped():
                     break
+                t0 = time.time()
+                with self.lock:
+                    self.step[key] = name
                 try:
                     got = step(i, c, job)
                 except Exception as e:  # noqa: BLE001 - the next rung
                     self.note(key, f"{name}: {type(e).__name__}: {str(e)[:100]}")
                     got = None
+                finally:
+                    with self.lock:
+                        spent = self.took.setdefault(key, {})
+                        spent[name] = round(spent.get(name, 0.0) + time.time() - t0, 1)
                 if got is not None:
                     return got
             if ytdlp.stopped():
@@ -1109,34 +1130,67 @@ class Finder:
         pool = media._new_pool(min(self.workers, len(todo)))
         futures = {pool.submit(contextvars.copy_context().run, self.one, i, c): (i, c.k) for i, c in order}
         count, last = 0, None
+        pending = set(futures)
         try:
-            for fut in media._until(futures, self.deadline):
-                key = futures[fut]
-                try:
-                    got = fut.result()
-                except Exception as e:  # noqa: BLE001 - one piece never stops the rest
-                    self.note(key, f"{type(e).__name__}: {str(e)[:100]}")
-                    got = None
-                if time.time() > self.deadline:
-                    with self.lock:
-                        self.late.add(key)          # in by the end of the box but past it: not used
-                elif got is not None:
-                    self.found[key] = got
-                self.done.add(key)
-                count += 1
-                pct = 8 + int(70 * count / len(todo))
-                if pct != last:
-                    last = pct
-                    self.say(f"Re-sourcing long shots {count}/{len(todo)}", pct, done=count, total=len(todo))
+            while pending:
+                now = time.time()
+                if now >= self.deadline:
+                    break
+                if self._all_stuck([futures[f] for f in pending], now):
+                    break                       # only stragglers left: their results would come back late
+                finished, pending = wait(pending, timeout=min(self.deadline - now, 5.0), return_when=FIRST_COMPLETED)
+                for fut in finished:
+                    key = futures[fut]
+                    try:
+                        got = fut.result()
+                    except Exception as e:  # noqa: BLE001 - one piece never stops the rest
+                        self.note(key, f"{type(e).__name__}: {str(e)[:100]}")
+                        got = None
+                    if time.time() > self.deadline:
+                        with self.lock:
+                            self.late.add(key)          # in by the end of the box but past it: not used
+                    elif got is not None:
+                        self.found[key] = got
+                    self.done.add(key)
+                    count += 1
+                    pct = 8 + int(70 * count / len(todo))
+                    if pct != last:
+                        last = pct
+                        self.say(f"Re-sourcing long shots {count}/{len(todo)}", pct, done=count, total=len(todo))
         finally:
             self.box.end()                  # whatever still runs stops at its next network call
             pool.shutdown(wait=False, cancel_futures=True)
             ytdlp.set_deadline(old)
+        now = time.time()
         for i, c in todo:
-            if (i, c.k) not in self.done:
-                self.late.add((i, c.k))
-                self.note((i, c.k), "the time box ran out")
+            key = (i, c.k)
+            if key in self.done:
+                continue
+            with self.lock:
+                began, step = self.began.get(key), self.step.get(key, "")
+            if began is not None and self.share and now > began + self.share:
+                self.stuck[key] = (round(now - began, 1), step)
+                self.note(key, f"not waited for: still in its {step or 'first'} step {now - began:.0f} s after "
+                               f"it started (its share {self.share:.0f} s)")
+                print(f"[recut] piece {self.scenes[i].get('id') if isinstance(self.scenes[i], dict) else i}"
+                      f"/{c.k + 1} not waited for: still in its {step or 'first'} step {now - began:.0f} s "
+                      f"after it started", flush=True)
+            self.late.add(key)
+            self.note(key, "the time box ran out")
         return self.found
+
+    def _all_stuck(self, keys: List[Tuple[int, int]], now: float) -> bool:
+        """
+        Every piece still out has been running past its own share and
+        STRAGGLER_GRACE after it - stopped at its next search or download, but
+        held inside one that does not return. A piece not started yet, or one
+        without a share of its own (fewer pieces than threads), is waited for.
+        """
+        if not keys or not self.share:
+            return False
+        with self.lock:
+            began = [self.began.get(k) for k in keys]
+        return all(b is not None and now > b + self.share + STRAGGLER_GRACE for b in began)
 
 
 # --------------------------------------------------------------------------- #
@@ -1558,6 +1612,7 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
     events.phase("recut-source")
     found = dict(finder.run())
     events.phase("recut")
+    out["stageSeconds"] = media.stage_seconds()     # searches, downloads, checks and gates: thread-seconds
 
     # The same polish as a plan (upscale.upscale_assets: a vertical clip framed, a soft one sharpened, a
     # small photo upscaled), time-boxed; then each file's real length and tone, while it is on this disk.
@@ -1792,6 +1847,9 @@ def _summarise(out: dict, doc: dict, new_doc: dict, plans: List[Plan], finder: F
             tried = finder.notes.get(key) or []
             if tried and result != "new":
                 row["tried"] = tried[:4]
+            spent = finder.took.get(key)
+            if spent:
+                row["spent"] = dict(spent)          # seconds on each rung: where the piece's time went
             rows.append(row)
     stay: List[dict] = []
     for r in out.get("left") or []:
@@ -1808,12 +1866,17 @@ def _summarise(out: dict, doc: dict, new_doc: dict, plans: List[Plan], finder: F
                          "why": (f"no new shot for {len(missing)} of its piece(s): " + "; ".join(reasons))[:300]
                          if missing else "a piece stays over the cap (its words left no other cut)"})
     over_after = _shots_over(new_doc, cap, SLACK)
+    rung_seconds: Dict[str, float] = {}
+    for spent in finder.took.values():
+        for rung, secs in spent.items():
+            rung_seconds[rung] = round(rung_seconds.get(rung, 0.0) + secs, 1)
     out["totals"] = {
         "scenesBefore": len(doc.get("scenes") or []), "scenesAfter": len(scenes),
         "longBefore": len(_shots_over(doc, cap, SLACK)), "longAfter": len(over_after),
         "longestAfter": max(over_after, default=0.0), "cut": sum(1 for s in settled.values() if len(s) > 1),
         "newShots": sum(by.values()), "by": by, "mergedBack": merged,
-        "emptyFilled": _filled_empties(doc, scenes), "lateByTimeBox": len(finder.late)}
+        "emptyFilled": _filled_empties(doc, scenes), "lateByTimeBox": len(finder.late),
+        "notWaitedFor": len(finder.stuck), "rungSeconds": rung_seconds}
     out["stayLong"] = {"count": len(stay), "why": _why_counts([{"why": r["why"].split(":")[0]} for r in stay])}
     out["left"] = stay[:200]
     out["rows"] = rows[:ROWS]

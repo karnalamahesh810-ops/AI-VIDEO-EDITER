@@ -354,6 +354,21 @@ MOMENT_PARALLEL = int(os.getenv("MOMENT_PARALLEL", "5"))
 # Real photographs of named people, places and events. Serper (Google Images)
 # when SERPER_API_KEY is set; otherwise the keyless DuckDuckGo image search.
 ALLOW_WEB_IMAGES = _flag("ALLOW_WEB_IMAGES", True)
+# One try of a picture download (src/imagefix.py): how long the host may take
+# to accept the connection, and how long the whole transfer may run. A host
+# that took no connection used to cost ~20 s on each of the plain, browser and
+# Chrome-fingerprint tries plus 25 s through the residential route (~85 s a
+# picture, measured 62 s off RunPod 2026-10-04), and a host trickling bytes had
+# no limit at all: each 20 s read timeout restarts with every byte.
+PICTURE_CONNECT_SECONDS = float(os.getenv("PICTURE_CONNECT_SECONDS", "10"))
+PICTURE_FETCH_SECONDS = float(os.getenv("PICTURE_FETCH_SECONDS", "60"))
+# Candidate pictures of one search downloaded at once (media._pick_unused): the
+# next ones arrive while one is checked and judged, in the same order and with
+# the same checks. Downloads were ~70% of a picture search's thread time
+# (eight of the Yellowstone re-cut's still pieces, run off RunPod 2026-10-04:
+# 55 downloads, 2.9 s each, 32 of them then too soft or too small). At most
+# PICTURE_PREFETCH - 1 downloads a search did not need; 0 or 1 = one at a time.
+PICTURE_PREFETCH = int(os.getenv("PICTURE_PREFETCH", "3"))
 # Non-YouTube videos from Google's video search (TikTok, Facebook, Vimeo,
 # news sites), downloaded by yt-dlp. Only when the job is not youtube_only.
 ALLOW_WEB_VIDEO = _flag("ALLOW_WEB_VIDEO", True)

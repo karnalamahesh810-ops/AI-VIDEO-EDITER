@@ -620,6 +620,9 @@ class Ladder(Bench):
         self.assertEqual(piece["media"]["type"], "image")
         self.assertNotEqual(piece["motion"], scenes[0]["motion"])                # consecutive stills never match
         self.assertEqual(out["totals"]["by"], {"picture": 1})
+        self.assertIsInstance(out["stageSeconds"], dict)                        # where the sourcing time went
+        self.assertIn("search", out["totals"]["rungSeconds"])
+        self.assertIn("search", next(r for r in out["rows"] if r["result"] == "new")["spent"])
 
     def test_two_pieces_never_take_one_shot_and_nothing_repeats(self):
         fps = 30
@@ -755,6 +758,71 @@ class Ladder(Bench):
         self.assertNotIn((0, 1), got)
         self.assertIn((0, 1), finder.late)
         self.assertEqual(len(got), len(plans[0].pieces) - 2)
+
+    def test_a_piece_stuck_past_its_own_share_is_not_waited_for(self):
+        # The Yellowstone re-cut's pass 2 (2026-10-04): 51 of 52 pieces in at 925 s, then 1,100 s more
+        # waiting for one piece held inside a call that never looked at its stop.
+        fps = 30
+        text = " ".join([LINE] * 2)
+        scenes = lay_out([(clip_scene, 24.0, {"text": text, "semanticMetadata": {}})], fps)
+        doc = doc_of(scenes, fps)
+        plans, _, _ = recut.plan_doc(doc)
+        self.assertGreaterEqual(len(plans[0].needs()), 3)          # more pieces than threads: each has a share
+        slow = plans[0].pieces[1].text
+        release = threading.Event()
+
+        def found(context, vt, n, seconds, used):
+            if context == slow:
+                release.wait(30)                                     # deaf to the stop, like a stalled download
+            return self.fresh(vt, n, seconds, used)
+        self.found_for = found
+        for name, value in (("SCENE_SECONDS_MIN", 0.4), ("SCENE_SECONDS_MAX", 0.4)):
+            p = mock.patch.object(config, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        p = mock.patch.object(recut, "STRAGGLER_GRACE", 0.4)
+        p.start()
+        self.addCleanup(p.stop)
+        finder = recut.Finder(doc, plans, self.work, workers=2, deadline=time.time() + 60.0)
+        t0 = time.time()
+        try:
+            got = finder.run()
+            took = time.time() - t0
+        finally:
+            release.set()
+            media.drain_pools(5.0)
+        self.assertLess(took, 8.0)                                   # not the 60 s box
+        self.assertNotIn((0, 1), got)
+        self.assertIn((0, 1), finder.late)
+        self.assertEqual(set(finder.stuck), {(0, 1)})
+        self.assertEqual(finder.stuck[(0, 1)][1], "search")         # the rung it was held in
+        self.assertTrue(any("not waited for" in n for n in finder.notes[(0, 1)]), finder.notes[(0, 1)])
+        self.assertEqual(len(got), len(plans[0].needs()) - 1)       # every other piece kept its shot
+        for key in got:
+            self.assertIn("search", finder.took[key])                # seconds per rung, for the job result
+
+    def test_pieces_without_a_share_of_their_own_are_waited_for_until_the_box(self):
+        fps = 30
+        text = " ".join([LINE] * 2)
+        scenes = lay_out([(clip_scene, 24.0, {"text": text, "semanticMetadata": {}})], fps)
+        doc = doc_of(scenes, fps)
+        plans, _, _ = recut.plan_doc(doc)
+        slow = plans[0].pieces[1].text
+        release = threading.Event()
+
+        def found(context, vt, n, seconds, used):
+            if context == slow:
+                release.wait(1.5)                                    # slow, but in by the end of the box
+            return self.fresh(vt, n, seconds, used)
+        self.found_for = found
+        p = mock.patch.object(recut, "STRAGGLER_GRACE", 0.1)
+        p.start()
+        self.addCleanup(p.stop)
+        finder = recut.Finder(doc, plans, self.work, workers=8, deadline=time.time() + 30.0)
+        got = finder.run()
+        self.assertEqual(finder.share, 0.0)                          # fewer pieces than threads
+        self.assertIn((0, 1), got)
+        self.assertEqual(finder.stuck, {})
 
     def test_the_sound_the_graphics_and_the_music_never_change(self):
         fps = 60

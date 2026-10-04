@@ -14,8 +14,18 @@ class StorageError(RuntimeError):
     pass
 
 
+# The words a download cut short by its caller's stop carries (not the host's
+# fault: a picture's site is not marked as refusing for it).
+STOPPED = "download stopped"
+
+
+class _Cut(StorageError):
+    """A transfer ended by its own limit (the caller's stop, its time cap): never retried."""
+
+
 def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None, proxy: str = "",
-             attempts: int = 3) -> str:
+             attempts: int = 3, connect_timeout: float = 20.0, max_seconds: float = 0.0,
+             stop=None) -> str:
     """
     Stream any http(s) URL to disk. Returns the local path.
 
@@ -27,6 +37,12 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
     python-requests agent, so without it every Commons download failed
     silently and the best source of real named subjects never contributed a
     single image. Their terms require an identifying agent; this sends one.
+
+    `timeout` bounds each wait for bytes, not the transfer: a host that keeps
+    sending a trickle never trips it. `max_seconds` (0 = none) bounds one
+    attempt's whole transfer, and `stop` (a callable) ends it when the caller's
+    time is up - a picture download used to hold a sourcing thread for as long
+    as its host kept the connection alive. Both are read every 64 KB.
     """
     if os.path.isfile(url):
         return url
@@ -38,9 +54,13 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
     # they must never truncate one another's partial bytes.
     temp_path = f"{dest_path}.{uuid.uuid4().hex}.part"
     last_error = None
+    bounded = bool(max_seconds and max_seconds > 0) or stop is not None
     for attempt in range(1, max(1, attempts) + 1):
         try:
-            with requests.get(url, stream=True, timeout=(20, timeout),
+            if stop is not None and stop():
+                raise _Cut(f"{STOPPED}: the time for it is up")
+            started = time.time()
+            with requests.get(url, stream=True, timeout=(connect_timeout, timeout),
                               headers=headers or {"User-Agent": config.USER_AGENT},
                               proxies={"http": proxy, "https": proxy} if proxy else None) as r:
                 r.raise_for_status()
@@ -50,10 +70,14 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
                     raise StorageError(f"download returned an HTML error page ({r.status_code})")
                 written = 0
                 with open(temp_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1 << 20):
+                    for chunk in r.iter_content(chunk_size=(1 << 16) if bounded else (1 << 20)):
                         if chunk:
                             f.write(chunk)
                             written += len(chunk)
+                        if stop is not None and stop():
+                            raise _Cut(f"{STOPPED}: the time for it is up")
+                        if bounded and max_seconds and time.time() - started > max_seconds:
+                            raise _Cut(f"download took longer than {max_seconds:.0f} s ({written} bytes so far)")
                 if written <= 0:
                     raise StorageError("download returned an empty file")
                 if expected and not r.headers.get("Content-Encoding") and written != expected:
@@ -73,6 +97,8 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
             retryable = code is None or code in (408, 425, 429) or code >= 500
             if isinstance(e, StorageError) and "HTML" in str(e):
                 retryable = False      # a web page where an image was expected
+            if isinstance(e, _Cut):
+                retryable = False      # its own time is up: asking again cannot help
             if attempt == 3 or not retryable:
                 break
             wait = 0.5 * attempt

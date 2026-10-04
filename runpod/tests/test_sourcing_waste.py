@@ -85,8 +85,10 @@ class UnusableOnceUnusableForAll(SceneScope):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         p = os.path.join(d, "a.jpg")
-        with open(p, "wb") as fh:
-            fh.write(b"x" * 100)
+        # A real photo-sized picture: the checks every caller asks of it (_asset_ok) now run before the
+        # judge, and a few bytes of nothing would be turned down there as unreadable.
+        from PIL import Image
+        Image.effect_noise((1200, 800), 60).convert("RGB").save(p, "JPEG", quality=85)
         downloads = []
 
         def download(candidate, query, work_dir):
