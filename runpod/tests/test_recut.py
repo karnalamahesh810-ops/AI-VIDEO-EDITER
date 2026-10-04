@@ -379,6 +379,41 @@ class Cutting(unittest.TestCase):
                 self.assertGreaterEqual(int(round(w["start"] * fps)), c.start)
                 self.assertLess(int(round(w["start"] * fps)), c.end)
 
+    def test_a_line_whose_words_split_a_number_keeps_its_own_text(self):
+        # The transcript writes "7" ".3" where the line says "7.3" (Yellowstone s0120, s0182; Lake Powell
+        # s0091, 2026-10-04): the pieces share the line itself, cut where each one's first word begins in it -
+        # never "7 .3" or "13 ,800" in the saved text.
+        fps = 60
+        text = ("Then the earth tore open. A magnitude 7.3 earthquake ripped through the region, one of the "
+                "most powerful ever recorded in the Rocky Mountains, about 13,800 feet up.")
+        spoken_as = text.replace("7.3", "7 .3").replace("13,800", "13 ,800")
+        for secs in (14.0, 22.0):
+            s = clip_scene(0, 0, int(secs * fps), fps, text=text)
+            s["words"] = spoken(spoken_as, 0.05, secs - 0.05)
+            (p,), _, _ = self.plan_one(s, fps)
+            self.assertGreaterEqual(len(p.pieces), 2)
+            self.assertEqual(" ".join(c.text for c in p.pieces), text)
+            for c in p.pieces:
+                first = c.words[0]["text"].strip(recut._EDGE).lower()
+                self.assertTrue(c.text.lower().lstrip(recut._EDGE).startswith(first), (c.text, first))
+
+    def test_a_line_the_owner_rewrote_keeps_his_words_not_the_transcript(self):
+        # The editor changes a scene's text without its words: the pieces share his line, nothing of it lost.
+        fps = 60
+        s = clip_scene(0, 0, 16 * fps, fps)
+        s["text"] = "My own rewrite of this line, shorter than what was said."
+        (p,), _, _ = self.plan_one(s, fps)
+        self.assertGreaterEqual(len(p.pieces), 2)
+        self.assertEqual(" ".join(t for t in (c.text for c in p.pieces) if t), s["text"])
+        # A scene with no line at all gets its words (a number the transcript split joined again).
+        s = clip_scene(0, 0, 16 * fps, fps, text=LINE + " It fell 13,800 feet.")
+        s["words"] = spoken((LINE + " It fell 13,800 feet.").replace("13,800", "13 ,800"), 0.05, 15.95)
+        s["text"] = ""
+        (p,), _, _ = self.plan_one(s, fps)
+        joined = " ".join(c.text for c in p.pieces)
+        self.assertIn("13,800", joined)
+        self.assertEqual(joined, LINE + " It fell 13,800 feet.")
+
     def test_a_sentence_end_beats_a_comma_and_a_comma_beats_a_plain_word(self):
         fps = 30
         # 10 s, cut once: "... calm. Then ..." (a sentence end) sits as near the middle as a comma.

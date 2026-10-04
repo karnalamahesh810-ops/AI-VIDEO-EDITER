@@ -343,13 +343,75 @@ def choose_cuts(words: List[dict], start: int, end: int, fps: int, cap: float = 
     return [(nodes[c][1], nodes[c][0]) for c in sorted(path)]
 
 
+_EDGE = string.punctuation + "‘’“”–—…"
+
+
+def _text_marks(text: str, words: List[dict], firsts: List[int]) -> Optional[List[int]]:
+    """
+    Where in the scene's `text` each word at `firsts` begins, every word found
+    in order (its letters and digits, case aside, never inside another word),
+    or None when one is not there - the transcript writes "7" ".3" where the
+    line says "7.3", so the words and the line's tokens need not line up.
+    """
+    low = text.lower()
+    want = set(firsts)
+    at, marks = 0, []
+    for k, w in enumerate(words):
+        raw = str(w.get("text") or "").strip().lower()
+        core = raw.strip(_EDGE)
+        if not core:
+            if k in want:
+                return None
+            continue
+        pos = low.find(core, at)
+        while pos >= 0 and ((pos > at and low[pos - 1].isalnum())
+                            or (pos + len(core) < len(low) and low[pos + len(core)].isalnum())):
+            pos = low.find(core, pos + 1)
+        if pos < 0:
+            return None
+        if k in want:
+            lead = raw[:len(raw) - len(raw.lstrip(_EDGE))]      # its own leading marks: ",708", ".3"
+            start = pos - len(lead) if lead and low[max(0, pos - len(lead)):pos] == lead else pos
+            marks.append(max(at, start))
+        at = pos + len(core)
+    return marks
+
+
+def _join_words(words: List[dict]) -> str:
+    """The words as a line: "13" ",800" -> "13,800" (a number the transcript split), the rest spaced."""
+    out = ""
+    for w in words:
+        t = str(w.get("text") or "").strip()
+        if not t:
+            continue
+        out += ("" if not out or (re.match(r"[.,]\d", t) and out[-1].isdigit()) else " ") + t
+    return out
+
+
 def _texts(scene: dict, words: List[dict], bounds: List[int]) -> List[str]:
-    """Each piece's text: the scene's own tokens when they line up with its words, else the words."""
+    """
+    Each piece's text, always the scene's own line when it has one (the
+    editor lets the owner rewrite a line without its words): its tokens
+    when they line up with the words; else cut where each piece's first word
+    begins in it; else (a rewritten line) its tokens shared out like the
+    words. Only a scene without a line gets its words.
+    """
     spans = list(zip(bounds, bounds[1:]))
-    tokens = str(scene.get("text") or "").split()
+    text = str(scene.get("text") or "")
+    tokens = text.split()
     if len(tokens) == len(words):
         return [" ".join(tokens[a:b]) for a, b in spans]
-    return [" ".join(str(w.get("text") or "").strip() for w in words[a:b]).strip() for a, b in spans]
+    marks = _text_marks(text, words, [a for a, _b in spans[1:]])
+    if marks is not None:
+        edges = [0] + marks + [len(text)]
+        out = [" ".join(text[x:y].split()) for x, y in zip(edges, edges[1:])]
+        if all(out) and all(x < y for x, y in zip(edges, edges[1:])):
+            return out
+    if tokens:
+        edges = [0] + [min(len(tokens), int(round(a * len(tokens) / float(max(1, len(words))))))
+                       for a, _b in spans[1:]] + [len(tokens)]
+        return [" ".join(tokens[x:y]) for x, y in zip(edges, edges[1:])]
+    return [_join_words(words[a:b]) for a, b in spans]
 
 
 def _left(scene: dict, i: int, fps: int, why: str) -> dict:
