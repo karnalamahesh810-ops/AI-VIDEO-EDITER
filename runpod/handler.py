@@ -31,6 +31,14 @@ pack_build: build or refresh one niche's footage pack on R2 (NASA, Wikimedia
           Commons, Internet Archive, the owner's unused library clips):
           {"niche": "water", "max_clips": 40, "dry_run": false}. See
           src/packbuild.py and scripts/build_pack.py. No project is touched.
+restore_media: put back the scene media of a project whose stored files
+          vanished, under the links its timeline already has (src/restore.py):
+          {"project_id", "timeline" | "timeline_url" | "timeline_key",
+          "dry_run", "parts", "plan_jobs"}. The copy a plan's part sourced
+          first, else the shot fetched again from its source, then the
+          editor's thumbnail and preview; what cannot be restored is listed.
+          The timeline and the project row are never changed, nothing is
+          deleted or overwritten.
 
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
@@ -58,6 +66,7 @@ from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, voicepolish
 from src import brandkit
+from src import restore
 
 
 def _work_dir(job_id: str) -> str:
@@ -2209,6 +2218,27 @@ def _restore_config(previous: dict) -> None:
         setattr(config, key, value)
 
 
+def do_restore(inp: dict, work: str, report: Reporter) -> dict:
+    """
+    Put back the stored files of a project that vanished (src/restore.py):
+    the Cloudflare R2 folders of two projects were deleted by hand on
+    2026-10-04 and their timelines pointed at nothing. The timeline is read
+    (from the input or through storage) and never changed; the video style
+    it was planned with is in force, so a restored clip is framed and
+    upscaled the way its plan did it.
+    """
+    doc = restore.load_timeline(inp, work)
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    style_inp = {"video_style": inp.get("video_style") or meta.get("videoStyle") or "",
+                 "config": dict(inp["config"]) if isinstance(inp.get("config"), dict) else None}
+    styles.apply(style_inp)
+    previous = _apply_config(style_inp.get("config"))
+    try:
+        return restore.run(inp, doc, work, report, thumbnail=_thumbnail, preview=_preview_proxy)
+    finally:
+        _restore_config(previous)
+
+
 def handler(job):
     started = time.time()
     job_id = job.get("id") or uuid.uuid4().hex
@@ -2247,10 +2277,14 @@ def handler(job):
     # Every job keeps its own ledger and event log; a fan-out child returns
     # both in its result and the parent absorbs them.
     costs.reset(inp.get("prices") if isinstance(inp.get("prices"), dict) else None)
-    events.start_job(job_id, project_id, part=("part" if action in ("source_part", "render_chunk") else ""))
+    # A restore (src/restore.py) is not the project's job: its progress and its
+    # events stay with this job's own status and result, so nothing of it is
+    # ever written to the app's database.
+    reports_to = "" if action == "restore_media" else project_id
+    events.start_job(job_id, reports_to, part=("part" if action in ("source_part", "render_chunk") else ""))
     if action in ("plan", "build", "render", "resource"):
         costs.measure_start()
-    report = Reporter(project_id, job=job)
+    report = Reporter(reports_to, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
     packs.reset()                       # and the niches its footage packs are read for
@@ -2370,6 +2404,20 @@ def handler(job):
                 resolve=bool(inp.get("resolve")), seconds=float(inp.get("seconds") or 1500),
                 library=lib, parallel=int(inp.get("parallel") or 2), work=work, report=report)
             return {**out, "ok": bool(out.get("ok", True)), "action": "pack_build",
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action == "restore_media":
+            # A project's stored media put back under the links its timeline
+            # already has (src/restore.py). It reads the timeline and writes
+            # files only: the project row is never written, and a failure
+            # here never marks the project failed (the except below would).
+            events.phase("restore")
+            try:
+                out = do_restore(inp, work, report)
+            except Exception as e:  # noqa: BLE001 - reported in the result, the project is not touched
+                traceback.print_exc()
+                out = {"ok": False, "error": str(e)[:800]}
+            return {**out, "action": "restore_media", "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "health":
