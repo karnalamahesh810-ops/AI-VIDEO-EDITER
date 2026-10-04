@@ -1,0 +1,4 @@
+# Only installed when the image is built with --build-arg WITH_CHATTERBOX=1.
+# Chatterbox (MIT, Resemble AI) pins its own torch==2.6.0 / torchaudio==2.6.0,
+# which is the base image's version - keep the two in step when either moves.
+chatterbox-tts==0.1.7

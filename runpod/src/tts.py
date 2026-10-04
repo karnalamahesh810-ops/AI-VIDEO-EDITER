@@ -158,7 +158,7 @@ def options(inp: Optional[dict] = None) -> Dict[str, Any]:
 
 _LINK = re.compile(r"\[([^\[\]\n]+)\]\(\s*https?://[^)\s]+\s*\)")          # [text](link) -> text
 _DIRECTION = re.compile(r"\[[^\[\]\n]{0,200}\]")                           # [MUSIC], [B-ROLL: the dam]
-_LABEL = re.compile(r"^(?:narrator|narration|voice[ -]?over|v\.?o\.?|host)\s*[:\-–—]\s*", re.I)
+_LABEL = re.compile(r"^(?:narrator|narration|voice[ -]?over|v\.?o\.?)\s*:\s*", re.I)       # NARRATOR: ...
 _HEADING = re.compile(r"^#{1,6}\s*")
 _BULLET = re.compile(r"^(?:[-*•]\s+)")
 _RULE = re.compile(r"^[-*_=~\s]{3,}$")                                     # --- and friends
@@ -173,7 +173,7 @@ def clean_script(script: str) -> str:
     """
     lines = []
     for raw in str(script or "").replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-        line = raw.replace(" ", " ").replace("\t", " ").strip()
+        line = raw.replace(chr(0xA0), " ").replace("\t", " ").strip()
         if not line or _RULE.match(line):
             continue
         line = _HEADING.sub("", line)

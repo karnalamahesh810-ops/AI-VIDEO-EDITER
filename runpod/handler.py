@@ -815,7 +815,7 @@ def _store_narration(local: str, ext: str, inp: dict) -> str:
     obj = f"{folder}/audio/narration{ext or '.mp3'}"
     if r2.enabled():
         try:
-            return r2.upload(local, r2.tokened(obj), content_type=r2.content_type(local, "audio/mpeg"),
+            return r2.upload(local, r2.tokened(obj), content_type=r2.content_type(obj, "audio/mpeg"),
                              deadline=time.time() + 2 * config.R2_MEDIA_UPLOAD_SECONDS,
                              cache_control=r2.IMMUTABLE)
         except Exception as e:  # noqa: BLE001 - the app's storage below, unless Cloudflare only
