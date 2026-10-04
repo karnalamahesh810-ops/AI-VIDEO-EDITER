@@ -147,6 +147,13 @@ class CloudflareHealthCheck(unittest.TestCase):
         self.assertFalse(out["ok"])
         self.assertIn("R2_PUBLIC_BASE", out["detail"])
 
+    def test_an_endpoint_without_r2_keys_is_not_reported_ready(self):
+        with mock.patch.multiple(config, **{n: "" for n in self.VALS if n != "R2_ONLY"}, R2_ONLY=True), \
+                mock.patch.object(storage, "_broker", side_effect=AssertionError("Supabase checked instead")):
+            out = storage.check()
+        self.assertFalse(out["ok"])
+        self.assertEqual(len(out["missing"]), 5)
+
     def test_missing_settings_are_listed_by_name_without_values(self):
         with mock.patch.multiple(config, **{**self.VALS, "R2_SECRET_ACCESS_KEY": "", "R2_PUBLIC_BASE": ""}):
             out = storage.check()

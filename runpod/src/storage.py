@@ -95,6 +95,21 @@ def r2_only() -> bool:
 _R2_MAX_TTL = 7 * 24 * 60 * 60          # the longest an S3 presigned link may live
 
 
+_WARNED = []
+
+
+def _warn_not_r2() -> None:
+    """Once per worker: R2_ONLY is on but R2 is not configured, so files are
+    going to the app's Supabase storage. Says which settings are missing."""
+    if _WARNED or not config.R2_ONLY:
+        return
+    _WARNED.append(True)
+    from . import r2
+    missing = [n for n in r2._NEEDED if not getattr(config, n, "")]
+    print("[storage] WARNING: Cloudflare R2 is not configured on this endpoint "
+          f"(missing {', '.join(missing)}); files are going to Supabase storage", flush=True)
+
+
 def broker_enabled() -> bool:
     """Upload through the app's worker-storage function (no service key here)."""
     return bool(config.STORAGE_BROKER_URL and not config.SUPABASE_SERVICE_KEY)
@@ -207,6 +222,7 @@ def broker_upload(local_path: str, bucket: str, object_path: str, project_id: st
         r2.upload(local_path, ref["path"], content_type=r2.content_type(local_path),
                   deadline=deadline or time.time() + 600)
         return r2.presign(ref["path"], expires=max(60, min(int(read_ttl), _R2_MAX_TTL)))
+    _warn_not_r2()
     if not broker_enabled():
         if not (config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY):
             raise StorageError("parallel uploads need worker-storage or Supabase service credentials")
@@ -232,9 +248,11 @@ def check(bucket: str = None) -> dict:
     nothing.
     """
     from . import r2
-    if config.R2_ONLY and any(getattr(config, n, "") for n in r2._NEEDED):
+    if config.R2_ONLY:
         # Cloudflare only: R2 is the storage that has to work - a real round
-        # trip, and with R2 half-configured the missing settings by name.
+        # trip, and with R2 not (fully) configured the missing settings by
+        # name, so an endpoint without its R2 keys is not reported ready
+        # while it quietly stores everything in the app's Supabase storage.
         return r2.check()
     if broker_enabled():
         # No key to test; ask the broker whether it is deployed and reachable.
