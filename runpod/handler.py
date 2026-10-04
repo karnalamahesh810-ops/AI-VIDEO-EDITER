@@ -58,6 +58,7 @@ from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, voicepolish
 from src import brandkit
+from src import sources
 
 
 def _work_dir(job_id: str) -> str:
@@ -1191,6 +1192,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if config.REFRAME_ENABLED:
         report("Framing shots on their subjects")
         doc["meta"]["reframe"] = reframe.place(doc)
+    # The source tags (src/sources.py) with the pictures final: one whose corner has a face under it
+    # takes the other low corner or is left out, and none stays on a scene that became a full-screen
+    # graphic. A no-op for a video with no source tag (every video while SOURCE_TAGS is off).
+    if config.SOURCE_TAGS:
+        settled = sources.settle(doc)
+        if settled:
+            doc["meta"].setdefault("sourceTags", {})["settled"] = settled
     # A signed URL expires; keep the original reference so render can re-sign.
     unsupported = [k for k in ("own_clips", "channels")
                    if inp.get(k) and inp.get("source") in ("clips", "channels")]
@@ -2168,7 +2176,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "HOOK_BOOST_MAX_SHOT", "HOOK_BOOST_MOTION", "HOOK_BOOST_DRAMA", "HOOK_BOOST_QUIET_SECONDS",
                       "HOOK_BOOST_SFX_CUTS", "HOOK_TEASER", "HOOK_TEASER_SHOTS", "HOOK_TEASER_SECONDS",
                       # Auto maps (src/automaps.py): named rivers, reservoirs, dams and canals on real geography.
-                      "AUTO_MAPS", "AUTO_MAP_GAP")
+                      "AUTO_MAPS", "AUTO_MAP_GAP",
+                      # On-screen sources (src/sources.py): "SOURCE: USBR, 2024" where the narration names its source.
+                      "SOURCE_TAGS", "SOURCE_TAG_GAP", "SOURCE_TAG_FIRST_SECONDS", "SOURCE_TAG_SECONDS")
 
 
 def _apply_config(overrides) -> dict:

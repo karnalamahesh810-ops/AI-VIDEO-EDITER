@@ -760,6 +760,17 @@ REFRAME_ENABLED = _flag("REFRAME_ENABLED", False)
 AUTO_MAPS = _flag("AUTO_MAPS", False)
 # Seconds an auto map keeps from any other map before it, so maps never crowd the cut.
 AUTO_MAP_GAP = float(os.getenv("AUTO_MAP_GAP", "15"))
+# On-screen sources (src/sources.py): a line that states a fact and NAMES where it comes from ("according to the
+# Bureau of Reclamation", "USGS data shows", "a 2024 NOAA report found") gets a small citation tag in a low corner
+# for about three seconds: "SOURCE: USBR, 2024". Only what the narration itself says (or the brief's own sources
+# list) - never a guessed source, never a guessed year; a figure with no named source gets no tag. Off by default
+# until the owner has approved the look from its stills; a job turns it on with config {"SOURCE_TAGS": true}.
+SOURCE_TAGS = _flag("SOURCE_TAGS", False)
+# At most one source tag per SOURCE_TAG_GAP seconds, none in the first SOURCE_TAG_FIRST_SECONDS of the video,
+# each on screen about SOURCE_TAG_SECONDS.
+SOURCE_TAG_GAP = float(os.getenv("SOURCE_TAG_GAP", "30"))
+SOURCE_TAG_FIRST_SECONDS = float(os.getenv("SOURCE_TAG_FIRST_SECONDS", "5"))
+SOURCE_TAG_SECONDS = float(os.getenv("SOURCE_TAG_SECONDS", "3"))
 # Footage moves and still aiming separately (the news styles keep their
 # clips as shot: src/styles.py).
 REFRAME_CLIPS = _flag("REFRAME_CLIPS", True)

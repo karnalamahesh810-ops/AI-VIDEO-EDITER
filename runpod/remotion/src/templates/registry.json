@@ -87753,6 +87753,166 @@
    ]
   },
   {
+   "id": "LIB_SRC_TAG",
+   "name": "Source Tag",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "LOW CORNER. The citation for a fact whose source the narration names: one thin rule draws out from the corner, then 'SOURCE: USBR, 2024' rises under it in small tracked caps (label = 'Source'; text = the source as said, or the short form viewers know; subtitle = the year, only when the narration says it). No box, no band: white on the picture with a soft shadow. It holds still and leaves in its last 9 frames. align left / right picks the corner; with captions on it sits clear above them. Silent. Placed only by the planner's source pass (src/sources.py, config.SOURCE_TAGS): a source is never invented, a figure with no named source gets no tag.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "src-tag",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    },
+    "sfxAt": 12,
+    "types": false,
+    "sounds": []
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "source"
+   ],
+   "tags": [
+    "lib",
+    "src"
+   ],
+   "autoPick": false
+  },
+  {
    "id": "LIB_TX_SENTENCE_HIGHLIGHT",
    "name": "Sentence Highlight",
    "category": "TEXT",

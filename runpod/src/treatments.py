@@ -45,6 +45,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, hookboost, numwords, templates
 from . import automaps, config, numwords, templates
+from . import sources
 from .transcribe import Segment
 
 # Read off VidRush's own timelines (an animation block every 8-10 s through
@@ -88,6 +89,7 @@ TEXT_GAP = 10.0         # two text looks (headline, phrase, quote, question...) 
 SOFT_TEXT_GAP = 20.0    # a line's own typed / term / headline look waits this long after the last text look
 PERSON_FULL_GAP = 45.0  # at most one full-screen person introduction per this
 BREATH = 0.3            # a must-show graphic lands this long after the previous one leaves
+SOURCE_TAG_LEAST = 2.0  # a source tag (src/sources.py) that cannot stay this long is left out: nobody could read it
 SLIDE_SLACK = 0.4       # ... and may wait at most this long after its word for it (else it cuts the other short)
 PHOTO_WINDOW = 300.0    # a photo look is used at most PHOTO_MAX times per this
 PHOTO_MAX = 2
@@ -2746,6 +2748,9 @@ class _Planner:
         # One graphic at a time, never over a full-screen scene (a safety net
         # behind the placement rules; the sounds are planned after it).
         self._one_at_a_time()
+        # A line that names where its fact comes from: a small citation tag in a low corner
+        # (src/sources.py), laid only where the screen is free - no other graphic moves for it.
+        cited = self._source_tags() if config.SOURCE_TAGS else []
         sfx = self._sfx()
         music = _plan_music(self.segments, self.brief, self.fps, self.total, self.hooks)
         for i, entry in enumerate(self.treatments):
@@ -2757,7 +2762,77 @@ class _Planner:
                 "counts": counts(self.scenes, self.overlays, sfx, music, self.treatments),
                 # Every look plays the sound built into it (LookSounds.tsx), at the
                 # pack's intensity against the voice; `sfx` holds no row for them.
-                "lookSounds": {"intensity": round(max(0.0, float(self.pack.get("sfxIntensity", 1.0))), 3)}}
+                "lookSounds": {"intensity": round(max(0.0, float(self.pack.get("sfxIntensity", 1.0))), 3)},
+                # The source tags shown, each with the words that named its source (for the audit).
+                **({"sources": cited} if cited else {})}
+
+    def _source_tags(self) -> List[dict]:
+        """
+        The on-screen sources (src/sources.py, behind config.SOURCE_TAGS): a line that NAMES where its
+        fact comes from gets "SOURCE: USBR, 2024" in a low corner, in on the name as it is said and
+        gone about SOURCE_TAG_SECONDS later. The tag is the last thing laid and the first to give
+        way: only where no other graphic is up (one graphic at a time - so never with another text
+        look), cut short where the next one lands (left out under SOURCE_TAG_LEAST), never on a
+        full-screen graphic, never in the first SOURCE_TAG_FIRST_SECONDS (nor in the hook booster's
+        quiet opening), at most one per SOURCE_TAG_GAP seconds, none in a news compilation. It makes
+        no sound and takes no line's treatment. Returns what was placed.
+        """
+        t = templates.get(sources.LOOK)
+        # The owner's bans and a brand kit's picks stop it, as they stop every look the planner lays: a kit
+        # that lists its looks and leaves the tag out gets none (brandkit.enforce would otherwise turn it
+        # into some other allowed look after the plan, with that look's sound, or drop it).
+        if not t or templates.banned(sources.LOOK) or self.density == "minimal":
+            return []
+        fps = self.fps
+        listed = sources.brief_sources(self.brief)
+        seconds = max(SOURCE_TAG_LEAST, float(config.SOURCE_TAG_SECONDS))
+        taken = [(int(o["startFrame"]) / fps, (int(o["startFrame"]) + int(o["durationInFrames"])) / fps)
+                 for o in self.overlays]
+        # (Animation scenes and the job's title card: spans with no overlay of the plan's own.)
+        taken += [(s["start"], s["end"]) for s in self.spans if s.get("idx") is None] + list(self.blocks)
+        # The corner: low left, or low right when the brand kit's watermark sits low left (keep_clear).
+        side = "right" if _corners()[0] == "bottom-right" else "left"
+        placed: List[dict] = []
+        last = -1e9
+        for i, seg in enumerate(self.segments):
+            scene = self.scenes[i] if i < len(self.scenes) else {}
+            if (scene.get("media") or {}).get("type") == "animation":
+                continue
+            after = getattr(self.segments[i + 1], "text", "") if i + 1 < len(self.segments) else ""
+            found = sources.find(seg.text or "", after or "", listed)
+            if not found:
+                continue
+            said = _said_at(seg, found["start"], found["key"])
+            if said is None:
+                continue                    # its name is not in the line's timed words: no tag rather than an early one
+            t_in = max(float(seg.start), said - PRE_ROLL_FRAMES / float(fps or 30))
+            if t_in < float(config.SOURCE_TAG_FIRST_SECONDS) or t_in - last < float(config.SOURCE_TAG_GAP):
+                continue
+            if hookboost.quiet(t_in, "normal", "caption", t, TEXT_BEAT_CUES):
+                continue
+            if any(a - BREATH <= t_in < b + BREATH for a, b in taken):
+                continue                    # another graphic is up, just left or about to land
+            t_out = min([t_in + seconds, self.total / float(fps)] + [a - BREATH for a, _b in taken if a > t_in])
+            if t_out - t_in < SOURCE_TAG_LEAST - SHORT_BY:
+                continue
+            props = {"text": found["name"], "label": "Source",
+                     **({"subtitle": str(found["year"])} if found.get("year") else {})}
+            resolved = templates.resolve(sources.LOOK, style=self.style, props=props, pack=self.pack)
+            if not resolved:
+                return placed
+            resolved.pop("seconds", None)
+            resolved.pop("sfx", None)
+            start = max(0, min(int(round(t_in * fps)), self.total - 1))
+            frames = max(1, min(int(round((t_out - t_in) * fps)), self.total - start))
+            self.silent.add(len(self.overlays))
+            self.overlays.append({**resolved, "startFrame": start, "durationInFrames": frames, "align": side,
+                                  "emphasis": "low"})
+            taken.append((start / fps, (start + frames) / fps))
+            last = t_in
+            placed.append({"line": i, "at": round(start / fps, 2), "seconds": round(frames / fps, 2),
+                           "text": sources.label(found), "said": found["said"], "how": found["how"],
+                           **({"fromBrief": True} if found.get("listed") else {})})
+        return placed
 
     def _sfx(self) -> List[dict]:
         """The sound pass (src/sfxplan.py) when it is there, else one sound per graphic moment."""
@@ -4178,6 +4253,27 @@ def _said(segs: list, props: dict) -> Optional[Tuple[float, float]]:
 def _word_time(seg, props: dict) -> Optional[float]:
     """When the word that triggers a graphic is said in its line (seconds), or None."""
     got = _said([seg], props)
+    return got[0] if got else None
+
+
+def _said_at(seg, char_at: int, key: str) -> Optional[float]:
+    """
+    When the word standing at `char_at` in the line's text is said (seconds): the timed word at
+    that place when it is `key` (a name said twice in a line is timed where it is cited), else the
+    key's first saying in the line; None when it is not among the timed words. A line with no
+    word timings at all places it by its share of the letters.
+    """
+    words = list(getattr(seg, "words", None) or [])
+    text = getattr(seg, "text", "") or ""
+    if not words:
+        share = max(0.0, min(1.0, char_at / float(max(1, len(text)))))
+        return float(seg.start) + share * max(0.0, float(seg.end) - float(seg.start))
+    target = _norm_word(key)
+    n = len(re.findall(r"\S+", text[:max(0, char_at)]))
+    if target and n < len(words) and _attr(words[n], "start") is not None \
+            and _norm_word(_attr(words[n], "text") or "").startswith(target):
+        return float(_attr(words[n], "start"))
+    got = _key_span(words, key)
     return got[0] if got else None
 
 
