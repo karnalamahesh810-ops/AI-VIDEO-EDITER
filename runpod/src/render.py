@@ -4,8 +4,10 @@ import hashlib
 import json
 import math
 import os
+import queue
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -566,68 +568,109 @@ def _run_streaming(cmd, timeout, on_progress, cancel=None, stall: float = 0.0) -
     `cancel` (a threading.Event): once set, the render is killed (a chunk
     another machine finished first). Past `timeout` seconds, or after `stall`
     seconds without a single line of output (0 = not watched), the render is
-    stopped and _Stopped raised - checked by a watcher, not as lines arrive:
-    a render that hangs prints nothing, and used to sit until the job was killed.
+    stopped and _Stopped raised. The output is read on its own thread and this
+    one looks at the clock every second: the limit used to be checked only
+    when a line arrived, so a render that hung - and printed nothing - sat
+    until the job itself was killed; and a stop never waits on the pipe, which
+    a browser the renderer left behind can hold open.
     """
     proc = subprocess.Popen(
         cmd, cwd=config.REMOTION_DIR, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
         bufsize=1,
+        # Its own process group (Linux): a render that will not stop is killed
+        # with the browsers and encoders it started.
+        **({"start_new_session": True} if os.name == "posix" else {}),
     )
-    lines, deadline = [], time.time() + timeout
-    best = [0.0]   # progress only ever moves forward
-    heard = [time.time()]
-    stopped = [""]
-    done = threading.Event()
+    out: "queue.Queue" = queue.Queue()
 
-    def stop():
-        # SIGTERM first: Remotion then closes its browser ("Received
-        # SIGTERM signal. Killing browser process"); a hard kill would
-        # leave Chrome running on the pod. Killed if it lingers.
+    def pump():
         try:
-            proc.terminate()
-        except OSError:
+            for line in proc.stdout:
+                out.put(line)
+        except (OSError, ValueError):
             pass
-        if not done.wait(10.0):
-            try:
-                proc.kill()
-            except OSError:
-                pass
-
-    def watch():
-        # A quiet render prints nothing for a while: the stop must not wait for a line.
-        while not done.wait(1.0):
-            now = time.time()
-            if cancel is not None and cancel.is_set():
-                return stop()
-            if now > deadline:
-                stopped[0] = "timeout"
-                return stop()
-            if stall and now - heard[0] > stall:
-                stopped[0] = "stall"
-                return stop()
-    threading.Thread(target=watch, daemon=True, name="render-watch").start()
-    try:
-        for line in proc.stdout:
-            heard[0] = time.time()
+        finally:
+            out.put(None)
+    reader = threading.Thread(target=pump, daemon=True, name="render-output")
+    reader.start()
+    lines, deadline = [], time.time() + timeout
+    best = 0.0     # progress only ever moves forward
+    heard = time.time()
+    why = ""
+    while True:
+        try:
+            line = out.get(timeout=1.0)
+        except queue.Empty:
+            line = ""
+        if line is None:
+            break                         # the renderer closed its output: it is done
+        now = time.time()
+        if line:
+            heard = now
             lines.append(line)
             if len(lines) > 400:          # keep the tail, not the whole log
                 del lines[:200]
             frac = _render_progress(line)
-            if frac is not None and frac > best[0]:
-                best[0] = frac
+            if frac is not None and frac > best:
+                best = frac
                 if on_progress is not None:
                     try:
                         on_progress(frac)
                     except Exception:
                         pass
-    finally:
-        done.set()
-        proc.stdout.close()
+        if cancel is not None and cancel.is_set():
+            why = "cancel"
+        elif now > deadline:
+            why = "timeout"
+        elif stall and now - heard > stall:
+            why = "stall"
+        if why:
+            break
+    if why:
+        _stop(proc)
+        reader.join(2.0)
+    else:
         proc.wait()
-    if stopped[0]:
-        raise _Stopped(stopped[0], best[0])
-    return _Completed(proc.returncode, "".join(lines), "")
+    if not reader.is_alive():             # (never closed under a blocked read: that can hang)
+        proc.stdout.close()
+    if why in ("timeout", "stall"):
+        raise _Stopped(why, best)
+    code = proc.returncode
+    return _Completed(code if code is not None else -9, "".join(lines), "")
+
+
+def _stop(proc) -> None:
+    """
+    Stop a render. SIGTERM first: Remotion then closes its browser ("Received
+    SIGTERM signal. Killing browser process"); a hard kill would leave Chrome
+    running on the machine. One that lingers is killed with everything it
+    started. (Its output pipe is left to the reader thread: closing it under a
+    blocked read can hang.)
+    """
+    try:
+        proc.terminate()
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=10.0)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        if os.name == "posix":
+            os.killpg(proc.pid, signal.SIGKILL)
+        else:
+            proc.kill()
+    except OSError:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    try:
+        proc.wait(timeout=10.0)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def _measure_loudness(path: str, target: float) -> dict:
