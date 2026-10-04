@@ -648,8 +648,12 @@ RISERS = _flag("RISERS", False)
 # Picture quality of h264 renders (x264 CRF). Remotion's own default, 18, made
 # ~13 Mbit/s at 1080p: a 22-minute render passed 2 GB and the app's storage
 # (Lovable Cloud: 2 GB a file by default) refused it after the whole render.
-# 21 is ~8 Mbit/s, YouTube's own 1080p upload recommendation. 0 = Remotion's.
-RENDER_CRF = int(os.getenv("RENDER_CRF", "21"))
+# 21 was ~8 Mbit/s at 30 fps - but the owner renders at 60 fps, where 21 made
+# 6.6 Mbit/s (Lake Powell, 2026-10-04), half of YouTube's 12 Mbit/s for
+# 1080p60. Final videos go to Cloudflare R2, which has no per-file cap (the
+# app-storage fallback still re-encodes to fit, render.fit_size), so 18 again:
+# the owner, 2026-10-04: "we needed to make quality". 0 = Remotion's.
+RENDER_CRF = int(os.getenv("RENDER_CRF", "18"))
 # The largest file the app's storage takes. A render over it is re-encoded to
 # fit before the upload (render.fit_size). 0 turns the check off.
 UPLOAD_MAX_MB = float(os.getenv("UPLOAD_MAX_MB", "1900"))
