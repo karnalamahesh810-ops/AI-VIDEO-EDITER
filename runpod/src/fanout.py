@@ -388,6 +388,8 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
         assets = out.get("assets")
         if not isinstance(assets, dict):
             return False
+        from . import stockblock
+        stockblock.merge(out.get("stockBlocked"))       # the part's stock-agency pictures kept out
         for key, d in assets.items():
             i = int(key)
             if d.get("refetch") or not d.get("remote_url"):

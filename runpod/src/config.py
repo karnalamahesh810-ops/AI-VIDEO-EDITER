@@ -1104,6 +1104,34 @@ CUT_LEAD_SECONDS = float(os.getenv("CUT_LEAD_SECONDS", "0"))
 # creator's burned-in captions, a TV studio, presenter, streamer or TV weather
 # map. 0 = off (A/B only).
 AI_SLOP_FILTER = _flag("AI_SLOP_FILTER", True)
+
+# --- stock-agency and watermarked pictures (src/stockblock.py, the owner 2026-10-04) ---
+# "the images it is using are sometimes watermarked images, like Getty ...
+# Alamy ... fix that". STOCK_BLOCK: a picture whose address, page, thumbnail
+# or title names a stock agency (Alamy, Getty, iStock, Shutterstock,
+# Dreamstime, Depositphotos, 123RF, Adobe Stock...) is skipped before any
+# download, on every path. STOCK_BLOCK_FILE_NAMES: so is an agency's picture
+# re-published elsewhere under its file name ("GettyImages-1325430438.jpg" on
+# a news site: licensed to them, not to this channel). STOCK_BLOCK_WORDS: and
+# a listing by its title words ("... Stock Photo - Alamy", "Editorial use only").
+STOCK_BLOCK = _flag("STOCK_BLOCK", True)
+STOCK_BLOCK_FILE_NAMES = _flag("STOCK_BLOCK_FILE_NAMES", True)
+STOCK_BLOCK_WORDS = _flag("STOCK_BLOCK_WORDS", True)
+# WATERMARK_CHECK: every downloaded picture's own pixels are read before it may
+# be placed, judged by the vision model or not: an agency's credit bar along
+# the bottom edge (free; no clean picture of 267 measured had one), and, on a
+# picture about to be kept, its name stamped on the picture or a tile of it,
+# read by the local CLIP model at WATERMARK_CLIP_SHARE or more (0 = the stamp
+# check off). Measured 2026-10-04 on 102 stamped agency previews and 267 clean
+# pictures (the Lake Mead video's own, Wikimedia, and a held-out set heavy in
+# documents and newspapers): bar + stamp at 0.75 turn down 74 of the 102 and 5
+# of the 267 (1.9 %); the first prompts at 0.8 turned down 17 (6.4 %).
+WATERMARK_CHECK = _flag("WATERMARK_CHECK", True)
+WATERMARK_CLIP_SHARE = float(os.getenv("WATERMARK_CLIP_SHARE", "0.75"))
+# STOCK_GATE_REPAIR: the quality gate also replaces a stock-agency picture it
+# finds on a timeline built BEFORE this block (a render of an older project).
+# Off: those renders keep their pictures; the owner rebuilds to replace them.
+STOCK_GATE_REPAIR = _flag("STOCK_GATE_REPAIR", False)
 # A subject pool's moment is rated on storyboard tiles only; on = each pooled
 # clip also goes through the vision judge against its own line (the news and
 # weather styles: a chyron naming another town is only readable full size).

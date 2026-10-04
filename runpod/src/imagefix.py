@@ -177,6 +177,12 @@ def fetch(url: str, dest: str, page_url: str = "", thumbnail: str = "") -> str:
         with _dest_lock(url):
             _note_provenance(url)
             return normalize(url)
+    # A stock agency's picture is never fetched, whoever asks (src/stockblock.py).
+    from . import stockblock
+    why = stockblock.reason(url, page_url, thumbnail)
+    if why:
+        stockblock.note(why, "fetch", key=url)
+        raise StorageError(f"picture not fetched: {why}")
     with _dest_lock(dest):
         if os.path.isfile(dest) and sniff(dest) in ("jpeg", "png"):
             return normalize(dest)          # a parallel scene already fetched this picture
@@ -230,6 +236,10 @@ def _fetch_raw(url: str, dest: str, page_url: str) -> str:
         errors.append(str(e))
     if any("HTML" in e for e in errors):
         og = _og_image(url, page_url)
+        from . import stockblock
+        if og and og != url and stockblock.reason(og):
+            stockblock.note(stockblock.reason(og), "fetch", key=og)
+            og = ""                     # the page stands for an agency's preview
         if og and og != url:
             try:
                 return download(og, dest, timeout=20, attempts=1, headers=_browser_headers(og, url))

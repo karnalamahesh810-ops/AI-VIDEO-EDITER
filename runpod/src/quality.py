@@ -1076,6 +1076,19 @@ class Gate:
                     problems[i] = p
         for i, why in gapfill.find_repeats(self.doc):
             problems.setdefault(i, ("repeat", f"it repeats an earlier scene ({why})"))
+        if config.STOCK_GATE_REPAIR:
+            # A stock agency's picture on a timeline built before the block
+            # (src/stockblock.py) is replaced like a broken one.
+            from . import stockblock
+            for i, s in enumerate(scenes):
+                m = s.get("media") or {}
+                if i in problems or m.get("type") != "image":
+                    continue
+                sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
+                why = stockblock.asset_reason({"sourceUrl": sem.get("sourceUrl") or "", "source": m.get("source") or "",
+                                               "attribution": m.get("attribution") or ""})
+                if why:
+                    problems[i] = ("stock", why)
         for i, (code, why) in sorted(problems.items()):
             self.found[code] += 1
             self._event("problem", f"scene {i + 1} ({_clock(int(scenes[i].get('startFrame') or 0) / self.fps)}): "

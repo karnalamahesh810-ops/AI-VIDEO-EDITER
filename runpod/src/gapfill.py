@@ -469,6 +469,11 @@ def _still_for(job: dict, i: int, query: str, intent: str, used: Used, work: str
             continue                                    # its site refused the last downloads
         if ledger.photo_used(cand.url):
             continue                                    # shown in an earlier video
+        from . import stockblock
+        if stockblock.blocked(cand, "ladder"):
+            continue                                    # a stock agency's preview (src/stockblock.py)
+        if media._is_bad(cand.identity):
+            continue                                    # another scene found it unusable (a watermark...)
         if slop.enabled() and (slop.ai_host(cand.url, getattr(cand, "page_url", "") or "")
                                or slop.metadata_reason(cand.attribution)):
             continue
@@ -482,7 +487,10 @@ def _still_for(job: dict, i: int, query: str, intent: str, used: Used, work: str
                   and not media._photo_seen_before(got.local_path))
         verdict = None
         if ok:
+            media._GATE_SLOP.set("")
             ok, verdict = media.judge_clip(got.local_path, job, media._image_label(got), source_url=got.url)
+            if not ok:
+                media._mark_bad(cand.identity, "", media._GATE_SLOP.get())  # line-free reasons only
         if not ok:
             used.release(i, s)
             continue
