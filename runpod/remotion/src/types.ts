@@ -421,6 +421,8 @@ export interface MusicSection {
   endFrame: number;
   mood: string;
   volume: number;
+  /** What the worker's plan made it: fade-in, voice, pause, fade-out. Absent = a level set in the editor. */
+  kind?: string;
 }
 
 export interface TimelineProps {
@@ -430,13 +432,15 @@ export interface TimelineProps {
   height: number;
   durationInFrames: number;
   audio: { url: string; volume: number };
-  bgm?: { url: string; volume: number } | null;
+  /** track / trackSeconds: the bundled track's name, or an own file's measured length (musicMix.ts trackSeconds). */
+  bgm?: { url: string; volume: number; track?: string; trackSeconds?: number } | null;
   /**
    * Music automation over the bgm: sections with a mood and a level, ramped
    * between; `duck` is the share of the section level kept under speech.
    */
   /** gain: the editor's music level, a multiplier on the automatic sections (1 = default);
-   *  from / to: the editor's trim in frames (music silent outside, 1.5 s fades). */
+   *  from / to: the editor's trim in frames (music silent outside, 1.5 s fades), absent = the
+   *  whole video. components/musicMix.ts is the one reading of all of it. */
   music?: { sections: MusicSection[]; duck?: number; gain?: number; from?: number; to?: number } | null;
   captions: {
     enabled: boolean;
