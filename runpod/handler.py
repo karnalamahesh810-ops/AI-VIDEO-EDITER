@@ -2567,7 +2567,7 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # The routine planning calls on a cheaper model (src/director.py _routes; 2026-10-05).
                       "DIRECTOR_ROUTINE_MODEL",
                       # The cost plan (2026-10-05): each lever is off until a job turns it on for an A/B.
-                      "DIRECTOR_REASONING_EFFORT", "DIRECTOR_ROUTINE_REASONING_EFFORT")
+                      "DIRECTOR_REASONING_EFFORT", "DIRECTOR_ROUTINE_REASONING_EFFORT", "VISION_TILE_MODEL")
 
 
 def _apply_config(overrides) -> dict:

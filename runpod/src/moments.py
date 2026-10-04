@@ -185,7 +185,9 @@ def pick(info: dict, intent: str, context: str, seconds: float,
     if not made:
         return None
     sheet_b64, times = made
-    verdict = vision.pick_tile(sheet_b64, len(times), intent, context)
+    # Every caller downloads the clip at this pick and has the judge look at it
+    # (media._plan_grabs), so the cheaper storyboard model may pick (VISION_TILE_MODEL).
+    verdict = vision.pick_tile(sheet_b64, len(times), intent, context, checked=True)
     if not verdict:
         return None
     idx = verdict["tile"] - 1
@@ -222,7 +224,9 @@ def refine(info: dict, coarse: dict, intent: str, context: str, seconds: float,
     sheet, times = made
     if len(times) < 3:
         return None
-    rated = vision.rate_tiles(sheet, len(times), subject="", context=context, intent=intent) or []
+    # The clip cut from the stretch this picks is judged afterwards (media._youtube_pool).
+    rated = vision.rate_tiles(sheet, len(times), subject="", context=context, intent=intent,
+                              checked=True) or []
     score = {r["tile"]: r for r in rated if r["score"] >= config.VISION_MIN_SCORE}
     if not score:
         return None

@@ -200,6 +200,16 @@ VISION_MODEL = os.getenv("VISION_MODEL", "gemini-3-8-flash-openai")
 VISION_FALLBACK_MODELS = [m.strip() for m in
                           os.getenv("VISION_FALLBACK_MODELS", "gpt-5-2,gemini-3-pro").split(",")
                           if m.strip()]
+# The storyboard calls whose answer the judge checks afterwards - the scout's
+# tile pick (moments.pick) and the fine pass (moments.refine), about half of
+# a video's vision spend - asked of this model first, the vision models above
+# backing it up (the cost plan, 2026-10-05). A wrong pick costs one download
+# the judge then turns down, never a wrong shot on the timeline; the judge
+# itself, and a subject pool's rating whose moments go to the timeline
+# unjudged (unless POOL_JUDGE_CLIPS), stay on VISION_MODEL. "" = VISION_MODEL
+# for everything, exactly as before. OpenRouter: google/gemini-2.5-flash-lite
+# ($0.10/$0.40 per M against gemini-2.5-flash's $0.30/$2.50).
+VISION_TILE_MODEL = os.getenv("VISION_TILE_MODEL", "").strip()
 VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
 # Footage quality floor (sharpness, stability, light, framing), judged in the
 # same call. Low on purpose: it only removes clips that are plainly unwatchable,

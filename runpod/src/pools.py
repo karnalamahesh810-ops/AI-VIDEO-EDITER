@@ -439,7 +439,10 @@ def rate_video(cand: dict, subject: str, context: str, seconds: float,
     if not made:
         return []
     sheet, times = made
-    rated = vision.rate_tiles(sheet, len(times), subject, context, intent=intent) or []
+    # A pool's approved moments go to the timeline without the judge unless POOL_JUDGE_CLIPS:
+    # only then may the cheaper storyboard model (VISION_TILE_MODEL) rate them.
+    rated = vision.rate_tiles(sheet, len(times), subject, context, intent=intent,
+                              checked=bool(config.POOL_JUDGE_CLIPS)) or []
     duration = float(info.get("duration") or 0)
     out = []
     for r in rated:
