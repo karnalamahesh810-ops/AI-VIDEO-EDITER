@@ -158,6 +158,16 @@ DIRECTOR_FALLBACK_MODELS = [m.strip() for m in
 # DIRECTOR_MODEL, as before. The owner (2026-10-05): "make this video using
 # cost cut method" - ~13 of a video's ~15 planning calls are routine.
 DIRECTOR_ROUTINE_MODEL = os.getenv("DIRECTOR_ROUTINE_MODEL", "").strip()
+# How hard the planning models think (the cost plan, 2026-10-05). Nothing was
+# ever sent, so every call ran at the provider's default effort and its hidden
+# reasoning was billed as output ($14/M on openai/gpt-5.2). Sent on OpenRouter
+# as reasoning.effort (and as reasoning_effort to a gpt-* model on Kie) only
+# when set: "" = the provider's default, exactly as before. One of none,
+# minimal, low, medium, high; anything else is ignored. The routine calls (the
+# shot batches, rescue, sequences, assign) may take their own, lower effort;
+# "" = DIRECTOR_REASONING_EFFORT.
+DIRECTOR_REASONING_EFFORT = os.getenv("DIRECTOR_REASONING_EFFORT", "").strip().lower()
+DIRECTOR_ROUTINE_REASONING_EFFORT = os.getenv("DIRECTOR_ROUTINE_REASONING_EFFORT", "").strip().lower()
 
 # --- vision verification -----------------------------------------------------
 # Every candidate clip/image is shown to a multimodal model, which describes
