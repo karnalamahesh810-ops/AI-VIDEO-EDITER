@@ -336,9 +336,11 @@ class Holds(unittest.TestCase):
         a, b = doc["scenes"]
         self.assertEqual(a["startFrame"] + a["durationInFrames"], b["startFrame"])     # still tiles the narration
 
-    def test_a_hold_that_would_break_the_cap_is_refused(self):
-        def make():
-            return doc_of((photo("/w/a.jpg"), 5.0), (EMPTY, 6.0), (photo("/w/b.jpg"), 5.0))
+    def test_a_hold_past_the_cap_beats_a_text_card_but_never_past_twelve_seconds(self):
+        # The owner would rather see a real picture a little longer than a text card: when nothing
+        # fresh is found, the shot beside the line is held past the cap - each shot at most 12 s.
+        def make(gap=6.0):
+            return doc_of((photo("/w/a.jpg"), 5.0), (EMPTY, gap), (photo("/w/b.jpg"), 5.0))
         old = make()
         with cap(0), quiet():
             self.assertEqual(gapfill.hold_or_animate(old)["held"], 1)
@@ -346,23 +348,58 @@ class Holds(unittest.TestCase):
         doc = make()
         with cap(), quiet():
             got = gapfill.hold_or_animate(doc)
-        self.assertEqual((got["held"], got["card"]), (0, 1))                # nothing else to show: its line as text
-        self.assertEqual(seconds_of(doc), [5.0, 6.0, 5.0])
-        self.assertEqual(shotcap.over_cap(doc), [])
-        self.assertEqual([o["type"] for o in doc["overlays"]], ["highlight"])
+        self.assertEqual((got["held"], got["long"], got["card"]), (1, 1, 0))   # no text card
+        self.assertEqual(seconds_of(doc), [8.0, 8.0])                       # split between both: neither past 12 s
+        self.assertEqual([o["seconds"] for o in shotcap.over_cap(doc)], [8.0, 8.0])
+        self.assertTrue(all(o["held"] for o in shotcap.over_cap(doc)))
+        self.assertIn("past 7 s", doc["scenes"][0]["reviewReason"])
+        self.assertEqual(doc["overlays"], [])
+        self.assertEqual((shotcap.SWAPS.get("refused"), shotcap.SWAPS.get("long"), shotcap.SWAPS.get("card")),
+                         (1, 1, None))
+        # 15 s of narration between two 5 s photos: they can take 14 s of it at most without a shot past
+        # 12 s - its line as text.
+        shotcap.reset()
+        far = make(15.0)
+        with cap(), quiet():
+            got = gapfill.hold_or_animate(far)
+        self.assertEqual((got["held"], got["card"]), (0, 1))
+        self.assertEqual(seconds_of(far), [5.0, 15.0, 5.0])
+        self.assertEqual([o["type"] for o in far["overlays"]], ["highlight"])
         self.assertEqual((shotcap.SWAPS.get("refused"), shotcap.SWAPS.get("card")), (1, 1))
 
-    def test_a_run_of_empty_lines_is_held_only_as_far_as_the_cap_allows(self):
+    def test_a_clip_held_past_the_cap_plays_at_real_speed_only(self):
+        # A clip may run past the cap only on footage it really has; a clip without it is never slowed.
+        doc = doc_of((clip("/w/a.mp4", 9.0), 5.0), (EMPTY, 4.0), (clip("/w/b.mp4", 3.5), 3.0))
+        with cap(), quiet():
+            got = gapfill.hold_or_animate(doc)
+        self.assertEqual((got["held"], got.get("long"), got["card"]), (1, 1, 0))
+        self.assertEqual(seconds_of(doc), [8.5, 3.5])                       # 9 s of footage, 0.5 s of footage
+        for sc in doc["scenes"]:
+            self.assertGreaterEqual(sc["media"]["clipSeconds"], sc["durationInFrames"] / FPS)
+        bare = doc_of((clip("/w/a.mp4", 5.5), 5.0), (EMPTY, 4.0), (clip("/w/b.mp4", 3.5), 3.0))
+        with cap(), quiet():
+            got = gapfill.hold_or_animate(bare)
+        self.assertEqual((got["held"], got["card"]), (0, 1))                # 1 s of footage for a 4 s line: text
+        self.assertEqual(seconds_of(bare), [5.0, 4.0, 3.0])
+
+    def test_a_run_of_empty_lines_is_held_only_as_far_as_twelve_seconds_allow(self):
         doc = doc_of((photo("/w/a.jpg"), 4.0), (EMPTY, 4.0), (EMPTY, 4.0), (EMPTY, 4.0), (photo("/w/b.jpg"), 4.0))
         with cap(), quiet():
             got = gapfill.hold_or_animate(doc)
-        self.assertLessEqual(max(s for s, sc in zip(seconds_of(doc), doc["scenes"]) if shotcap.is_shot(sc)), 7.0)
+        self.assertLessEqual(max(s for s, sc in zip(seconds_of(doc), doc["scenes"]) if shotcap.is_shot(sc)), 12.0)
         self.assertEqual(got["held"] + got["card"], 3)
-        self.assertGreaterEqual(got["card"], 1)
+        self.assertEqual(got["card"], 0)                                    # every line on a real picture
+        self.assertEqual(sum(seconds_of(doc)), 20.0)                        # the narration is still tiled
         with cap(0), quiet():
             old = doc_of((photo("/w/a.jpg"), 4.0), (EMPTY, 4.0), (EMPTY, 4.0), (EMPTY, 4.0), (photo("/w/b.jpg"), 4.0))
             gapfill.hold_or_animate(old)
         self.assertEqual(max(seconds_of(old)), 14.0)                        # before: one photo for 14 s
+        # Six empty lines between two photos: 24 s cannot be covered by two shots of 12 s at most.
+        many = doc_of((photo("/w/a.jpg"), 4.0), *[(EMPTY, 4.0)] * 6, (photo("/w/b.jpg"), 4.0))
+        with cap(), quiet():
+            got = gapfill.hold_or_animate(many)
+        self.assertLessEqual(max(seconds_of(many)), 12.0)
+        self.assertEqual((got["held"], got["card"]), (4, 2))
 
     def test_a_clip_is_never_slowed_to_stretch_over_a_line(self):
         def make():
@@ -415,8 +452,9 @@ class Holds(unittest.TestCase):
         same_file = runner_up("ALT00000001", 30, shown)                                  # scene 3 shows this file
         same_video = runner_up("NEXT0000001", 200, self.file("m.mp4"))                   # scene 2's source video
         near_moment = runner_up("FAR00000001", 20, self.file("n.mp4"))                   # 10 s from scene 3's moment
-        doc = doc_of((photo("/w/a.jpg"), 6.0, {"assetId": "wikimedia:a",
-                                               "alternatives": [same_file, same_video, near_moment]}),
+        # (Clips with no footage to spare on either side: no hold past the cap either - the card is what is left.)
+        doc = doc_of((clip("/w/a.mp4", 6.0), 6.0, {"assetId": "yt:AAAAAAAAAAA@1", "moment": {"start": 10.0},
+                                                   "alternatives": [same_file, same_video, near_moment]}),
                      (EMPTY, 5.0),
                      (clip("/w/next.mp4", 6.5), 6.0, {"assetId": "yt:NEXT0000001@1", "moment": {"start": 10.0},
                                                       "sourceUrl": "https://www.youtube.com/watch?v=NEXT0000001&t=10"}),
@@ -460,7 +498,8 @@ class Holds(unittest.TestCase):
         gone = make()
         with cap(), quiet(), mock.patch.object(shotcap, "_reach", return_value=False):
             got = gapfill.hold_or_animate(gone, laddered=True)
-        self.assertEqual((got.get("alternative", 0), got["card"]), (0, 1))
+        self.assertEqual((got.get("alternative", 0), got.get("long", 0), got["card"]), (0, 1, 0))  # the photos held instead
+        self.assertNotIn("https://r2.example/alts/s0000_alt1.mp4", [s["media"]["url"] for s in gone["scenes"]])
 
     def test_a_runner_up_comes_from_at_most_two_scenes_away(self):
         far = runner_up("ALT00000001", 30, self.file("far.mp4"))
@@ -468,7 +507,8 @@ class Holds(unittest.TestCase):
                      (photo("/w/c.jpg"), 6.5), (EMPTY, 5.0), (photo("/w/d.jpg"), 6.5))
         with cap(), quiet():
             got = gapfill.hold_or_animate(doc)
-        self.assertEqual((got.get("alternative", 0), got["card"]), (0, 1))
+        self.assertEqual((got.get("alternative", 0), got.get("long", 0), got["card"]), (0, 1, 0))  # held instead
+        self.assertNotIn(far["localPath"], [s["media"]["url"] for s in doc["scenes"]])
 
     def _moment_mocks(self, fetch, clip_seconds=None):
         from src import ledger, media
@@ -497,7 +537,7 @@ class Holds(unittest.TestCase):
                                                  "sourceUrl": "https://www.youtube.com/watch?v=RIGHT000001&t=10"}))
         doc["scenes"][0]["media"]["attribution"] = "YouTube: the dry lake"
         patches = self._moment_mocks(fetch)
-        with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", side_effect=AssertionError("laddered")):
+        with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", return_value={}) as ladder:
             for p in patches:
                 p.start()
             try:
@@ -505,6 +545,7 @@ class Holds(unittest.TestCase):
             finally:
                 for p in patches:
                     p.stop()
+        ladder.assert_not_called()
         self.assertEqual((got["held"], got["card"], got["moment"]), (0, 0, 1))
         # 40 s + the 6 s shown + the 30 s gap, as long as the line plus the usual pad, the clip's own title.
         self.assertEqual(calls, [("LEFT0000001", 76.0, 5.5, "YouTube: the dry lake")])
@@ -549,14 +590,15 @@ class Holds(unittest.TestCase):
             finally:
                 for p in patches:
                     p.stop()
-        # Not 76 s (shown), not 4.5 s before (an earlier video used it): the text card.
+        # Not 76 s (shown), not 4.5 s before (an earlier video used it): the photo beside it is held instead.
         self.assertEqual(calls, [])
-        self.assertEqual((got.get("moment", 0), got["card"]), (0, 1))
+        self.assertEqual((got.get("moment", 0), got.get("long", 0), got["card"]), (0, 1, 0))
 
     def test_another_moment_is_fetched_only_where_the_job_may_search(self):
         def make():
+            # (A clip with no footage to spare after the line: not held past the cap either.)
             return doc_of((clip("/w/a.mp4", 6.5), 6.0, {"assetId": "yt:LEFT0000001@5", "moment": {"start": 40.0}}),
-                          (EMPTY, 5.0), (photo("/w/b.jpg"), 6.0))
+                          (EMPTY, 5.0), (clip("/w/b.mp4", 6.0), 6.0))
         fetch = mock.Mock(side_effect=AssertionError("fetched"))
         patches = self._moment_mocks(fetch)
         for p in patches:
@@ -586,19 +628,23 @@ class Holds(unittest.TestCase):
         with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", side_effect=ladder):
             got = gapfill.hold_or_animate(doc)
         self.assertEqual(calls, [[1]])
-        self.assertEqual((got["ladder"], got["card"]), (1, 0))
+        self.assertEqual((got["ladder"], got.get("long", 0), got["card"]), (1, 0, 0))   # a fresh picture first
         self.assertEqual(doc["scenes"][1]["media"]["type"], "image")
+        self.assertEqual(seconds_of(doc), [6.0, 5.0, 6.0])
         self.assertIn("filled 1 scenes from ladder", gapfill.summary(got))
-        # The caller has just run the ladder for these lines: not again.
+        # The caller has just run the ladder for these lines: not again (the photos are held instead).
+        # (A Mock, not an exception: _instead_of_hold catches whatever the ladder raises.)
         doc = make()
-        with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", side_effect=AssertionError("ran twice")):
+        with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", return_value={}) as again:
             got = gapfill.hold_or_animate(doc, laddered=True)
-        self.assertEqual(got["card"], 1)
+        again.assert_not_called()
+        self.assertEqual((got.get("long", 0), got["card"]), (1, 0))
         # A job with no plan of its own (a render of the editor's timeline) never searches.
         gapfill.reset()
         doc = make()
-        with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", side_effect=AssertionError("searched")):
-            self.assertEqual(gapfill.hold_or_animate(doc)["card"], 1)
+        with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", return_value={}) as searched:
+            self.assertEqual(gapfill.hold_or_animate(doc).get("long", 0), 1)
+        searched.assert_not_called()
 
     def test_the_quality_gates_repair_keeps_the_cap_and_says_what_it_did(self):
         # Before the render a scene's picture turns out broken: a render-only job may not search,
@@ -608,9 +654,10 @@ class Holds(unittest.TestCase):
         alt["media"] = {"type": "video", "url": "https://r2.example/alts/s0000_alt1.mp4"}
         doc = doc_of((photo("https://r2.example/a.jpg"), 6.0, {"alternatives": [alt]}),
                      (clip("https://r2.example/broken.mp4", 5.5), 5.0, {"assetId": "yt:BROKEN00001@1"}),
-                     (photo("https://r2.example/b.jpg"), 6.0),
+                     # (Clips with no footage to spare around the second line: nothing to hold there at all.)
+                     (clip("https://r2.example/b.mp4", 6.0), 6.0, {"assetId": "yt:BBBBBBBBBBB@1"}),
                      (clip("https://r2.example/gone.mp4", 5.5), 5.0, {"assetId": "yt:GONE0000001@1"}),
-                     (photo("https://r2.example/c.jpg"), 6.0))
+                     (clip("https://r2.example/c.mp4", 6.0), 6.0, {"assetId": "yt:CCCCCCCCCCC@1"}))
         quality.reset()
         self.addCleanup(quality.reset)
         with cap(), quiet(), mock.patch.object(shotcap, "_reach", return_value=True), \
@@ -627,6 +674,21 @@ class Holds(unittest.TestCase):
         self.assertEqual((gate.fixed["replaced"], gate.fixed["text"], gate.unresolved), (1, 1, []))
         self.assertEqual(doc["scenes"][1]["media"]["url"], "https://r2.example/alts/s0000_alt1.mp4")
         self.assertEqual(doc["scenes"][3]["media"]["type"], "animation")    # the line as text, never an empty scene
+
+    def test_the_quality_gates_repair_holds_a_picture_past_the_cap_before_a_text_graphic(self):
+        from src import quality
+        doc = doc_of((photo("https://r2.example/a.jpg"), 6.0),
+                     (clip("https://r2.example/gone.mp4", 5.5), 5.0, {"assetId": "yt:GONE0000001@1"}),
+                     (photo("https://r2.example/b.jpg"), 6.0))
+        quality.reset()
+        self.addCleanup(quality.reset)
+        with cap(), quiet(), mock.patch.object(quality.events, "emit"):
+            gate = quality.Gate(doc, self.work)
+            gate._replace({1: ("unreachable", "404")}, "before the render")
+        self.assertEqual([r["how"] for r in gate.repairs], ["held over by its neighbouring shots"])
+        self.assertEqual((gate.fixed["held"], gate.fixed["text"]), (1, 0))
+        self.assertEqual(seconds_of(doc), [8.5, 8.5])                       # past 7 s, never past 12 s
+        self.assertEqual(doc["overlays"], [])
 
     def test_a_render_that_may_search_fetches_another_moment_into_its_own_work_dir(self):
         from src import quality
@@ -659,10 +721,11 @@ class Holds(unittest.TestCase):
         self.assertEqual([r["how"] for r in gate.repairs], ["another moment of the clip beside it"])
         self.assertEqual(gate.fixed["replaced"], 1)
         self.assertEqual(shotcap.over_cap(doc), [])
-        # A render that may not search gets the text card instead - and never calls YouTube.
+        # A render that may not search gets the text card instead - and never calls YouTube. (A clip with no
+        # footage to spare after the line: no hold past the cap either.)
         again = doc_of((clip("https://r2.example/a.mp4", 6.5), 6.0,
                         {"assetId": "yt:LEFT0000001@5", "moment": {"start": 40.0}}),
-                       (clip("https://r2.example/broken.mp4", 5.5), 5.0), (photo("https://r2.example/b.jpg"), 6.0))
+                       (clip("https://r2.example/broken.mp4", 5.5), 5.0), (clip("https://r2.example/b.mp4", 6.0), 6.0))
         with cap(), quiet(), mock.patch.object(quality.events, "emit"), mock.patch.object(quality, "CONTEXT", {}):
             gate = quality.Gate(again, self.work)
             gate._replace({1: ("broken", "the clip cannot be decoded")}, "before the render")
@@ -784,6 +847,63 @@ class Holds(unittest.TestCase):
             else:
                 framed.assert_not_called()
 
+    def test_a_render_chunk_draws_only_what_every_machine_would(self):
+        # fresh=False (handler: a render chunk): no runner-up and no other moment - their checks go over the
+        # network, and one machine could take one where another could not. The hold past the cap stays.
+        alt = runner_up("PUB00000001", 40, seconds=6.0)
+        alt["media"] = {"type": "video", "url": "https://r2.example/alts/s0000_alt1.mp4"}
+        doc = doc_of((clip("https://r2.example/a.mp4", 6.0), 6.0, {"alternatives": [alt]}), (EMPTY, 5.0),
+                     (photo("https://r2.example/b.jpg"), 6.0))
+        gapfill.remember([{"index": i, "query": f"q{i}", "start": 6.0 * i} for i in range(3)], self.work)
+        with cap(), quiet(), mock.patch.object(shotcap, "_reach", return_value=True) as reach, \
+                mock.patch.object(shotcap, "other_moments", return_value={}) as moments, \
+                mock.patch.object(gapfill, "fill_empty", return_value={}) as ladder:
+            got = handler._fill_missing_media(doc, fresh=False)
+        for m in (reach, moments, ladder):
+            m.assert_not_called()
+        self.assertEqual(got, 1)
+        self.assertEqual(seconds_of(doc), [6.0, 11.0])                      # the photo, held past the cap
+        self.assertEqual(doc["scenes"][0]["semanticMetadata"]["alternatives"], [alt])
+
+    def test_the_fill_before_the_render_never_runs_the_ladder_again(self):
+        # The plan's ladder has run for every line still empty (do_plan, then the check before publishing):
+        # handler._fill_missing_media never searches a third time - as before the shot cap.
+        doc = doc_of((clip("/w/a.mp4", 6.0), 6.0), (EMPTY, 5.0), (clip("/w/b.mp4", 6.0), 6.0))
+        gapfill.remember([{"index": i, "query": f"q{i}", "start": 6.0 * i} for i in range(3)], self.work)
+        with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", return_value={}) as ladder, \
+                mock.patch.object(shotcap, "other_moments", return_value={}) as moments:
+            self.assertEqual(handler._fill_missing_media(doc), 1)
+        ladder.assert_not_called()
+        moments.assert_called_once()                                        # (free: another moment is still tried)
+        self.assertEqual(doc["overlays"][0]["type"], "highlight")           # no footage to spare: its line as text
+
+    def test_a_moment_that_failed_is_never_fetched_again_in_the_same_job(self):
+        # The last resort runs several times a job (the plan, the check before publishing, the build's
+        # render copy): a moment whose download failed is not asked for again.
+        calls = []
+
+        def fetch(vid, work, at, need, title=""):
+            calls.append(round(at, 1))
+            return "", True, 0                                              # the download fails
+
+        def make():
+            return doc_of((clip("/w/a.mp4", 6.5), 6.0, {"assetId": "yt:LEFT0000001@5", "moment": {"start": 40.0},
+                                                     "sourceUrl": "https://www.youtube.com/watch?v=LEFT0000001&t=40"}),
+                          (EMPTY, 5.0), (clip("/w/b.mp4", 6.0), 6.0))
+        gapfill.remember([{"index": i, "query": f"q{i}", "start": 6.0 * i} for i in range(3)], self.work)
+        patches = self._moment_mocks(fetch)
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        with cap(), quiet():
+            gapfill.hold_or_animate(make(), laddered=True)
+            gapfill.hold_or_animate(make(), laddered=True)
+        self.assertEqual(calls, [76.0, 4.5])                                # each moment asked for once
+        shotcap.reset()                                                     # a new job asks again
+        with cap(), quiet():
+            gapfill.hold_or_animate(make(), laddered=True)
+        self.assertEqual(calls, [76.0, 4.5, 76.0, 4.5])
+
     def test_a_fresh_shot_clears_what_the_cap_put_on_its_scene(self):
         s = scene(0, EMPTY, 0.0, 5.0, shotCap={"from": "s0001", "how": "alternative"})
         gapfill.apply_asset(s, MediaAsset(kind="image", source="wikimedia", url="https://x/p.jpg",
@@ -837,6 +957,149 @@ class Holds(unittest.TestCase):
             self.assertEqual(hookboost.settle(built(4.0), info)["held"], 0)     # ...but never past the cap
 
 
+# --------------------------------------------------------------------------- C2. a runner-up of the same sentence first
+class RunnerUpsFirst(unittest.TestCase):
+    """shotcap.runner_ups_first: after the footage search, before the ladder (handler.do_plan)."""
+
+    def setUp(self):
+        gapfill.reset()
+        shotcap.reset()
+        self.work = tempfile.mkdtemp()
+        self.addCleanup(gapfill.reset)
+        self.addCleanup(shotcap.reset)
+        p = mock.patch.object(shotcap, "_probe", return_value=0.0)          # never ffprobe in a test
+        p.start()
+        self.addCleanup(p.stop)
+
+    def file(self, name):
+        path = os.path.join(self.work, name)
+        with open(path, "wb") as fh:
+            fh.write(b"x")
+        return path
+
+    @staticmethod
+    def jobs(*seconds):
+        out, t = [], 0.0
+        for i, s in enumerate(seconds):
+            out.append({"index": i, "query": f"q{i}", "intent": f"line {i}", "start": t, "seconds": s})
+            t += s
+        return out
+
+    def clip_asset(self, vid, start, alts=(), license="Creative Commons Attribution (CC BY)"):
+        return MediaAsset(kind="video", source="youtube", url=f"https://www.youtube.com/watch?v={vid}&t={int(start)}",
+                          local_path=self.file(f"{vid}.mp4"), duration=7.0, license=license,
+                          moment={"start": float(start)}, alternatives=list(alts))
+
+    def test_a_piece_that_found_nothing_takes_its_siblings_runner_up(self):
+        # Beat 1 was cut into pieces 1 and 2; piece 2 found nothing. A clip the judge approved for
+        # piece 1 - the other half of the same sentence - goes on it before any ladder picture.
+        alt = runner_up("SIBLING0001", 120, self.file("sib.mp4"), seconds=6.0, score=0.8)
+        jobs = self.jobs(4.0, 5.0, 5.0, 4.0)
+        results = [self.clip_asset("AAAAAAAAAAA", 10), self.clip_asset("BBBBBBBBBBB", 40, [alt]), None,
+                   self.clip_asset("CCCCCCCCCCC", 10)]
+        with cap():
+            got = shotcap.runner_ups_first(jobs, results, {"parents": [0, 1, 1, 2]})
+        self.assertEqual(got, {"own": 0, "sibling": 1})
+        a = results[2]
+        self.assertEqual((a.kind, a.local_path, a.url, a.identity),
+                         ("video", alt["localPath"], alt["url"], alt["assetId"]))     # the id it was judged as
+        self.assertEqual((a.duration, a.relevance_score, a.moment), (6.0, 0.8, {"start": 120.0}))
+        self.assertEqual(a.license, "Creative Commons Attribution (CC BY)")    # the donor's own search terms
+        self.assertTrue(a.review_required)
+        self.assertIn("other part of this sentence", a.review_reason)
+        self.assertEqual(results[1].alternatives, [])                       # no longer a choice there
+        self.assertEqual(shotcap.SWAPS.get("first"), 1)
+
+    def test_its_own_runner_up_comes_before_a_siblings(self):
+        # Its own clip broke a variety rule (media.hold_violations): the runner-ups its search judged
+        # for this very line come first, ahead of a better-scored one of the other piece.
+        own = runner_up("OWN00000001", 60, self.file("own.mp4"), seconds=6.0, score=0.6)
+        sib = runner_up("SIBLING0001", 120, self.file("sib.mp4"), seconds=6.0, score=0.9)
+        held = {1: (self.clip_asset("HELD0000001", 10, [own]), "a repeated video", "soft")}
+        results = [self.clip_asset("BBBBBBBBBBB", 40, [sib]), None]
+        with cap():
+            got = shotcap.runner_ups_first(self.jobs(5.0, 5.0), results, {"parents": [0, 0]}, held=held)
+        self.assertEqual(got, {"own": 1, "sibling": 0})
+        self.assertEqual(results[1].local_path, own["localPath"])
+        self.assertIn("for this line", results[1].review_reason)
+        self.assertEqual(results[0].alternatives, [sib])
+
+    def test_a_runner_up_of_another_sentence_is_left_for_later(self):
+        # Only the line's own sentence goes before the ladder; the shot beside it from another beat is
+        # one of the last resort's choices (gapfill.hold_or_animate, alternative_for).
+        alt = runner_up("OTHER000001", 120, self.file("o.mp4"), seconds=6.0)
+        results = [self.clip_asset("AAAAAAAAAAA", 10, [alt]), None, self.clip_asset("CCCCCCCCCCC", 10)]
+        with cap():
+            got = shotcap.runner_ups_first(self.jobs(4.0, 5.0, 4.0), results, {"parents": [0, 1, 2]})
+        self.assertEqual(got, {"own": 0, "sibling": 0})
+        self.assertIsNone(results[1])
+        self.assertEqual(results[0].alternatives, [alt])
+
+    def test_never_too_short_never_a_file_this_machine_lacks_never_a_repeat(self):
+        short = runner_up("SHORT000001", 60, self.file("short.mp4"), seconds=3.0)            # 3 s for a 5 s line
+        remote = runner_up("REMOTE00001", 60, "/part-worker/work/alt_1.mp4", seconds=8.0)    # a fan-out part's disk
+        next_video = runner_up("CCCCCCCCCCC", 200, self.file("c2.mp4"), seconds=8.0)          # the next line's video
+        results = [self.clip_asset("AAAAAAAAAAA", 10),
+                   self.clip_asset("BBBBBBBBBBB", 40, [short, remote, next_video]), None,
+                   self.clip_asset("CCCCCCCCCCC", 10)]
+        with cap():
+            got = shotcap.runner_ups_first(self.jobs(4.0, 5.0, 5.0, 4.0), results, {"parents": [0, 1, 1, 2]})
+        self.assertEqual(got, {"own": 0, "sibling": 0})
+        self.assertIsNone(results[2])
+        self.assertEqual(len(results[1].alternatives), 3)                   # all still the editor's choices
+
+    def test_a_video_already_at_its_limit_is_passed_over(self):
+        # media.may_place: at most MAX_MOMENTS_PER_VIDEO scenes of one video.
+        alt = runner_up("AAAAAAAAAAA", 300, self.file("a2.mp4"), seconds=6.0)
+        results = [self.clip_asset("AAAAAAAAAAA", 10), self.clip_asset("BBBBBBBBBBB", 40, [alt]), None]
+        with cap(MAX_MOMENTS_PER_VIDEO=1):
+            got = shotcap.runner_ups_first(self.jobs(30.0, 5.0, 5.0), results, {"parents": [0, 1, 1]})
+        self.assertEqual(got["sibling"], 0)
+        with cap(MAX_MOMENTS_PER_VIDEO=4, SAME_VIDEO_GAP_SECONDS=0.0):
+            got = shotcap.runner_ups_first(self.jobs(30.0, 5.0, 5.0), results, {"parents": [0, 1, 1]})
+        self.assertEqual(got["sibling"], 1)
+
+    def test_off_nothing_changes(self):
+        alt = runner_up("SIBLING0001", 120, self.file("sib.mp4"), seconds=6.0)
+        results = [self.clip_asset("BBBBBBBBBBB", 40, [alt]), None]
+        with cap(0):
+            self.assertEqual(shotcap.runner_ups_first(self.jobs(5.0, 5.0), results, {"parents": [0, 0]}),
+                             {"own": 0, "sibling": 0})
+        self.assertIsNone(results[1])
+        self.assertEqual(results[0].alternatives, [alt])
+
+
+class LadderSpeed(unittest.TestCase):
+    """With the cap on, the fallback ladder never puts a clip on a line it would have to be slowed to fill."""
+
+    def setUp(self):
+        gapfill.reset()
+        self.addCleanup(gapfill.reset)
+        self.work = tempfile.mkdtemp()
+
+    def run_ladder(self, seconds):
+        lib_clip = MediaAsset(kind="video", source="youtube", url="https://www.youtube.com/watch?v=LIB00000001&t=5",
+                              local_path=os.path.join(self.work, "lib.mp4"), duration=3.0)
+        still = MediaAsset(kind="image", source="web_image", url="https://x/p.jpg",
+                           local_path=os.path.join(self.work, "p.jpg"))
+        results = {}
+        jobs = [{"index": 0, "query": "the dry lake", "start": 0.0, "seconds": 5.0, "visual_type": "footage"}]
+        from src import packs
+        with cap(seconds), mock.patch.object(packs, "usable", return_value=False), \
+                mock.patch.object(gapfill, "_from_library", return_value=lib_clip), \
+                mock.patch.object(gapfill, "_from_reserve", return_value=None), \
+                mock.patch.object(gapfill, "_from_still", return_value=still), \
+                mock.patch.object(timeline, "_clip_seconds", side_effect=lambda a: float(a.duration or 0)):
+            got = gapfill.fill_empty(jobs, results, self.work, library=object(), indices=[0], label="test")
+        return results[0], got
+
+    def test_a_clip_too_short_for_its_line_goes_to_the_next_step(self):
+        asset, got = self.run_ladder(7.0)
+        self.assertEqual((asset.kind, got["library"], got["still"]), ("image", 0, 1))   # 3 s for 5 s: never slowed
+        asset, got = self.run_ladder(0.0)
+        self.assertEqual((asset.kind, got["library"]), ("video", 1))                    # off: as before (0.6x)
+
+
 # --------------------------------------------------------------------------- D. graphics keep their length; the report
 class GraphicsAndTheReport(unittest.TestCase):
     def setUp(self):
@@ -855,11 +1118,18 @@ class GraphicsAndTheReport(unittest.TestCase):
 
     def test_an_animation_is_never_held_over_a_line(self):
         doc = doc_of(({"type": "animation", "url": "", "source": "template"}, 4.0), (EMPTY, 3.0),
-                     (photo("/w/b.jpg"), 6.5))
+                     (clip("/w/b.mp4", 6.5), 6.5))
         with cap(), quiet():
             got = gapfill.hold_or_animate(doc)
         self.assertEqual((got["held"], got["card"]), (0, 1))
         self.assertEqual(seconds_of(doc), [4.0, 3.0, 6.5])
+        # Beside a photo the line goes to the photo (held past the cap, up to 12 s), never to the graphic.
+        doc = doc_of(({"type": "animation", "url": "", "source": "template"}, 4.0), (EMPTY, 3.0),
+                     (photo("/w/b.jpg"), 6.5))
+        with cap(), quiet():
+            got = gapfill.hold_or_animate(doc)
+        self.assertEqual((got["held"], got["long"], got["card"]), (1, 1, 0))
+        self.assertEqual(seconds_of(doc), [4.0, 9.5])
 
     def test_a_frame_or_two_of_rounding_is_not_a_long_shot(self):
         doc = doc_of((photo("/w/a.jpg"), 7.0), (photo("/w/b.jpg"), 7.0))
@@ -872,17 +1142,23 @@ class GraphicsAndTheReport(unittest.TestCase):
         segs = story([SHORT, SENTENCE, SHORT, COMMA])
         with cap():
             _, _, info = shotcap.prepare(segs, {}, {}, until=segs[-1].end)
-            doc = doc_of((photo("/w/a.jpg"), 5.0), (EMPTY, 6.0), (photo("/w/b.jpg"), 5.0))
+            doc = doc_of((photo("/w/a.jpg"), 5.0), (EMPTY, 6.0), (photo("/w/b.jpg"), 5.0),
+                         (clip("/w/c.mp4", 5.0), 5.0), (EMPTY, 4.0), (clip("/w/d.mp4", 5.0), 5.0))
             with quiet():
                 gapfill.hold_or_animate(doc)
             rep = shotcap.report(doc, info)
         self.assertEqual((rep["seconds"], rep["enabled"]), (7.0, True))
         self.assertEqual((rep["before"]["over"], rep["planned"]["over"], rep["cut"], rep["shotsAdded"]), (2, 0, 2, 2))
         self.assertEqual(rep["before"]["share"], 0.5)
-        self.assertEqual((rep["after"]["shots"], rep["after"]["over"], rep["after"]["longest"]), (2, 0, 5.0))
-        self.assertEqual(rep["holds"], {"held": 0, "refused": 1, "alternative": 0, "moment": 0, "ladder": 0, "card": 1})
-        self.assertEqual(rep["left"], [])
+        # The photos are held past the cap (8 s each) instead of a text card; the clips have no footage to spare.
+        self.assertEqual((rep["after"]["shots"], rep["after"]["over"], rep["after"]["longest"]), (4, 2, 8.0))
+        self.assertEqual(rep["holds"], {"held": 0, "refused": 2, "alternative": 0, "moment": 0, "ladder": 0,
+                                        "long": 1, "card": 1})
+        self.assertEqual(rep["runnerUpsFirst"], 0)
+        self.assertEqual(rep["left"], [{"scene": "s0000", "seconds": 8.0, "held": True},
+                                       {"scene": "s0002", "seconds": 8.0, "held": True}])
         self.assertEqual(len(rep["examples"]), 2)
+        self.assertNotIn("parents", rep)
         json.dumps(rep)                                                     # goes into the saved timeline
         with cap(0):
             self.assertEqual(shotcap.report(doc, info), {"seconds": 0.0, "enabled": False})
@@ -914,8 +1190,11 @@ class AWholePlan(unittest.TestCase):
         self.segs = story(self.LINES)
         self.total = self.segs[-1].end
 
-    def plan(self, seconds, empty=()):
-        """handler.do_plan up to the timeline, offline: (beats planned, the footage search's lines, assets)."""
+    def plan(self, seconds, empty=(), alts=None):
+        """
+        handler.do_plan up to the timeline, offline: (beats planned, the footage search's lines, assets).
+        `alts`: {line: runner-ups} - that line's search found a clip with these pick-a-shot runner-ups.
+        """
         seen = {}
 
         def director_plan(segments, **kw):
@@ -923,15 +1202,20 @@ class AWholePlan(unittest.TestCase):
             return ([{"query": f"q{i}", "visualType": "footage", "overlay": None} for i in range(len(segments))],
                     "ai", [])
 
+        def found(i):
+            if i in (alts or {}):
+                return MediaAsset(kind="video", source="youtube", url=f"https://www.youtube.com/watch?v=WIN{i:08d}&t=10",
+                                  local_path=f"/w/c{i}.mp4", duration=9.0, moment={"start": 10.0},
+                                  alternatives=list(alts[i]))
+            return MediaAsset(kind="image", source="wikimedia", url=f"https://x/p{i}.jpg", local_path=f"/w/p{i}.jpg")
+
         def source_many(jobs_, work, **kw):
             seen["jobs"] = sorted(jobs_, key=lambda j: j["index"])
-            return [None if j["index"] in empty else
-                    MediaAsset(kind="image", source="wikimedia", url=f"https://x/p{j['index']}.jpg",
-                               local_path=f"/w/p{j['index']}.jpg")
-                    for j in seen["jobs"]]
+            return [None if j["index"] in empty else found(j["index"]) for j in seen["jobs"]]
 
         def ladder(jobs_, results, work, **kw):
-            return {"asked": len(empty), "left": len(empty)}
+            seen["ladder"] = [k for k, a in enumerate(results) if a is None]      # the lines it was asked for
+            return {"asked": len(seen["ladder"]), "left": len(seen["ladder"])}
 
         def build(segments, shots_, assets, **kw):
             seen["shots"], seen["assets"] = shots_, list(assets)
@@ -1021,14 +1305,40 @@ class AWholePlan(unittest.TestCase):
         k = next(n for n, s in enumerate(seen["segments"]) if s.text == "Silence.")
         self.assertAlmostEqual(seen["jobs"][k]["seconds"], 10.0, places=6)
 
-    def test_lines_nothing_was_found_for_never_make_a_long_shot(self):
+    def test_a_piece_that_found_nothing_takes_a_runner_up_of_its_sentence_before_the_ladder(self):
+        # SENTENCE (line 1, 8.9 s) is cut into pieces 1 and 2. Piece 1's search found a clip with a
+        # pick-a-shot runner-up on this disk (media._best_of: localPath); piece 2 found nothing.
+        work = tempfile.mkdtemp()
+        path = os.path.join(work, "yt_SIBLING0001_120000_9000.mp4")
+        with open(path, "wb") as fh:
+            fh.write(b"x")
+        alt = runner_up("SIBLING0001", 120, path, seconds=9.0)
+        with mock.patch.object(shotcap, "_probe", return_value=0.0):
+            seen = self.plan(7, empty={2}, alts={1: [alt]})
+        segs = seen["segments"]
+        self.assertIs(segs[1].words[0], self.segs[1].words[0])              # pieces 1 and 2: one sentence
+        self.assertIs(segs[2].words[-1], self.segs[1].words[-1])
+        got = seen["assets"][2]
+        self.assertEqual((got.local_path, got.identity), (path, alt["assetId"]))
+        self.assertEqual(seen["assets"][1].alternatives, [])               # taken off piece 1's choices
+        self.assertNotIn(2, seen.get("ladder", []))                         # the ladder was never asked for it
+        # Off: the line goes to the ladder as before.
+        shotcap.reset()
+        old = self.plan(0, empty={1}, alts={0: [dict(alt)]})
+        self.assertEqual(old["ladder"], [1])
+        self.assertIsNone(old["assets"][1])
+
+    def test_lines_nothing_was_found_for_never_make_a_shot_past_twelve_seconds(self):
         empty = {2, 6, 7, 11}
         seen = self.plan(7, empty=empty)
         doc, last, rep = self.finish(seen, 7)
-        self.assertEqual(shotcap.over_cap(doc), [])
-        self.assertEqual(last["held"] + last["card"], len(empty))
-        self.assertEqual(rep["after"]["over"], 0)
-        self.assertEqual(rep["holds"]["held"], last["held"])
+        self.assertLessEqual(max(seconds_of(doc)), 12.0 + 2 / FPS)
+        # Every shot over the cap is one held over a line nothing was found for - and no text card,
+        # with a photo beside every empty line.
+        self.assertTrue(all(o["held"] for o in shotcap.over_cap(doc)))
+        self.assertEqual((last["held"], last["card"]), (len(empty), 0))
+        self.assertEqual(rep["after"]["over"], len(shotcap.over_cap(doc)))
+        self.assertEqual(rep["holds"]["held"] + rep["holds"]["long"], last["held"])
         # Before: the same empty lines, held however long it took.
         shotcap.reset()
         old_seen = self.plan(0, empty={1, 3, 6})

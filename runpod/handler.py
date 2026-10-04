@@ -804,7 +804,7 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
     return made
 
 
-def _fill_missing_media(doc: dict) -> int:
+def _fill_missing_media(doc: dict, fresh: bool = True) -> int:
     """
     Give every scene something to render, never another scene's clip.
 
@@ -822,8 +822,15 @@ def _fill_missing_media(doc: dict) -> int:
     neighbouring shot held over it while its clip still covers the longer
     scene (the scenes merge, src/gapfill.hold_or_animate), else its line as a
     text card on the quiet background. Returns how many scenes were patched.
+
+    Never the fallback ladder here (as before the shot cap): the plan's ladder
+    has already run for every line still empty (do_plan, then the check
+    before publishing), and a third search would only spend time and model
+    calls on the same lines. `fresh` off - a render chunk, which must draw
+    exactly what the other machines draw - also leaves out the runner-ups and
+    other moments (src/shotcap.py), whose checks go over the network.
     """
-    got = gapfill.hold_or_animate(doc, label="before the render")
+    got = gapfill.hold_or_animate(doc, label="before the render", laddered=True, fresh=fresh)
     # ("alternative", "moment" and "ladder": the fresh shots a line gets when holding
     # the shot beside it would run past SHOT_MAX_SECONDS, src/shotcap.py.)
     return sum(int(got.get(k, 0)) for k in ("graphic", "held", "card", "alternative", "moment", "ladder"))
@@ -1143,6 +1150,17 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         pool_stats["variety"] = dict(media.restore_held(jobs, results_by_index, held), held=len(held),
                                      reasons=dict(collections.Counter(r for _a, r, _k in held.values())))
         print(f"[worker] variety: {pool_stats['variety']}", flush=True)
+    # Still empty, with the shot cap on: a clip the judge approved for this very line (a runner-up of
+    # the clip the variety rules took off it) or for another piece of the same cut beat comes before
+    # the ladder's pictures - real footage of the same sentence (src/shotcap.py runner_ups_first).
+    if shotcap.enabled() and any(results_by_index[j["index"]] is None for j in jobs):
+        try:
+            first = shotcap.runner_ups_first(jobs, results_by_index, cap_info, held=held)
+        except Exception as e:  # noqa: BLE001 - the ladder below
+            print(f"[worker] runner-ups skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
+            first = {}
+        if any(first.values()):
+            pool_stats["runnerUpsFirst"] = first
     # Still empty: never a reused shot (the owner, 2026-10-01: the Lake Powell
     # video reused 47 clips here and left its last 23 scenes empty). The fast
     # fallback ladder instead - the library's unused clips of the line's
@@ -1222,7 +1240,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Never an empty scene, never another scene's clip.
     # (The ladder has just run for these lines: a hold the shot cap refuses goes
     # to a pick-a-shot runner-up, another moment of the clip beside the line,
-    # then to the text card.)
+    # then the shot beside it held past the cap - never past 12 s, never
+    # slowed - and only then to the text card.)
     last = gapfill.hold_or_animate(doc, label="after the fallback fill", laddered=True)
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
     if boost_info and doc["meta"].get("hookBoost") is not None:
@@ -1700,7 +1719,7 @@ def _no_repeats(doc: dict, report: Reporter = None) -> dict:
     return got
 
 
-def _sanitize_stills(doc: dict, work: str, fetched: dict = None) -> int:
+def _sanitize_stills(doc: dict, work: str, fetched: dict = None, fresh: bool = True) -> int:
     """
     Re-encode every still to a real JPEG before Chrome sees it.
 
@@ -1711,7 +1730,8 @@ def _sanitize_stills(doc: dict, work: str, fetched: dict = None) -> int:
     clean JPEG (remote ones are fetched first, or taken from `fetched`: the
     copies the quality check downloaded to decode them); one that cannot be
     decoded is turned into an empty scene, which _fill_missing_media then
-    covers with a matching shot. Returns how many stills were dropped.
+    covers with a matching shot (`fresh` as there). Returns how many stills
+    were dropped.
     """
     from src.assetserver import is_local
     dropped = 0
@@ -1756,7 +1776,7 @@ def _sanitize_stills(doc: dict, work: str, fetched: dict = None) -> int:
     if dropped:
         print(f"[worker] {dropped} still(s) could not be decoded; covered by other shots",
               flush=True)
-        _fill_missing_media(doc)
+        _fill_missing_media(doc, fresh=fresh)
     return dropped
 
 
@@ -2532,8 +2552,10 @@ def handler(job):
         if action == "render_chunk":
             # One frame range of a split render, queued by its parent (src/fanout.py).
             doc = inp.get("timeline") or {}
-            _sanitize_stills(doc, work)
-            _fill_missing_media(doc)
+            # (No runner-up or other moment here: every chunk must draw the same document, and those
+            # are checked over the network - one machine could take one where another could not.)
+            _sanitize_stills(doc, work, fresh=False)
+            _fill_missing_media(doc, fresh=False)
 
             def chunk_progress(frac):
                 try:

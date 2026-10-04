@@ -682,7 +682,9 @@ def enforce(doc: dict, kit: Optional[dict]) -> Dict[str, int]:
             emptied += 1
         if emptied:
             from . import gapfill
-            filled = gapfill.hold_or_animate(doc, label="brand kit looks")
+            # (No ladder here, as before the shot cap: the check before publishing runs it for every
+            # line still empty - src/gapfill.final_check.)
+            filled = gapfill.hold_or_animate(doc, label="brand kit looks", laddered=True)
             out["scenesFilled"] = emptied
             out["fill"] = filled
     out["recoloured"] = _brand_colours(doc, kit)
