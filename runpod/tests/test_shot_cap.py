@@ -624,6 +624,47 @@ class Holds(unittest.TestCase):
         self.assertEqual(doc["scenes"][1]["media"]["url"], "https://r2.example/alts/s0000_alt1.mp4")
         self.assertEqual(doc["scenes"][3]["media"]["type"], "animation")    # the line as text, never an empty scene
 
+    def test_a_render_that_may_search_fetches_another_moment_into_its_own_work_dir(self):
+        from src import quality
+        calls = []
+
+        def fetch(vid, work, at, need, title=""):
+            calls.append((vid, work, round(at, 1)))
+            p = os.path.join(work, "m.mp4")
+            with open(p, "wb") as fh:
+                fh.write(b"x")
+            return p, True, 0
+        doc = doc_of((clip("https://r2.example/a.mp4", 6.5), 6.0,
+                      {"assetId": "yt:LEFT0000001@5", "moment": {"start": 40.0},
+                       "sourceUrl": "https://www.youtube.com/watch?v=LEFT0000001&t=40"}),
+                     (clip("https://r2.example/broken.mp4", 5.5), 5.0, {"assetId": "yt:BROKEN00001@1"}),
+                     (photo("https://r2.example/b.jpg"), 6.0))
+        quality.reset()
+        self.addCleanup(quality.reset)
+        gapfill.reset()                                                     # no plan of its own
+        patches = self._moment_mocks(fetch)
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        with cap(), quiet(), mock.patch.object(quality.events, "emit"), \
+                mock.patch.object(quality, "CONTEXT", {"ladder": True}), \
+                mock.patch.object(gapfill, "fill_empty", return_value={}):  # the gate's own ladder finds nothing
+            gate = quality.Gate(doc, self.work)
+            gate._replace({1: ("broken", "the clip cannot be decoded")}, "before the render")
+        self.assertEqual(calls, [("LEFT0000001", self.work, 76.0)])
+        self.assertEqual([r["how"] for r in gate.repairs], ["a later moment of the clip beside it"])
+        self.assertEqual(gate.fixed["replaced"], 1)
+        self.assertEqual(shotcap.over_cap(doc), [])
+        # A render that may not search gets the text card instead - and never calls YouTube.
+        again = doc_of((clip("https://r2.example/a.mp4", 6.5), 6.0,
+                        {"assetId": "yt:LEFT0000001@5", "moment": {"start": 40.0}}),
+                       (clip("https://r2.example/broken.mp4", 5.5), 5.0), (photo("https://r2.example/b.jpg"), 6.0))
+        with cap(), quiet(), mock.patch.object(quality.events, "emit"), mock.patch.object(quality, "CONTEXT", {}):
+            gate = quality.Gate(again, self.work)
+            gate._replace({1: ("broken", "the clip cannot be decoded")}, "before the render")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual([r["how"] for r in gate.repairs], ["its line as a full-screen text graphic"])
+
     def test_zero_leaves_every_hold_exactly_as_before(self):
         alt = runner_up("ALT00000001", 30, self.file("alt.mp4"))
         doc = doc_of((photo("/w/a.jpg"), 6.0, {"alternatives": [alt]}), (EMPTY, 6.0),

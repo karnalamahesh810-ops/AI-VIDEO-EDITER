@@ -1339,7 +1339,8 @@ class Gate:
                 info[str(scenes[i]["id"])]["how"] = how
         empties = [str(s.get("id")) for s in scenes if gapfill._empty(s)]
         # (The ladder above is this repair's own search; whether it may fetch at all is CONTEXT["ladder"].)
-        gapfill.hold_or_animate(self.doc, label=f"quality gate, {stage}", laddered=True, search=self._ladder_ok())
+        gapfill.hold_or_animate(self.doc, label=f"quality gate, {stage}", laddered=True, search=self._ladder_ok(),
+                                work=self.work)
         now = {str(s.get("id")): s for s in self.doc.get("scenes") or []}
         for sid in empties:
             s = now.get(sid)
