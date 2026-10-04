@@ -458,6 +458,21 @@ def probe_video(src: str, timeout: float = 30) -> Check:
     return Check(ok=True, seconds=secs, width=int(_num(video.get("width"))), height=int(_num(video.get("height"))))
 
 
+def track_seconds(src: str, timeout: float = 15) -> float:
+    """A music file's length by ffprobe (a file on disk or a link), 0 when it cannot be read in time."""
+    cmd = ["ffprobe", "-v", "error"]
+    if src.startswith(("http://", "https://")):
+        cmd += ["-rw_timeout", str(int(timeout * 1_000_000))]
+    cmd += ["-show_entries", "format=duration", "-of", "csv=p=0", src]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout + 5)
+    except (subprocess.TimeoutExpired, OSError):
+        return 0.0
+    seconds = _num((p.stdout or "").strip().splitlines()[0] if (p.stdout or "").strip() else 0)
+    return seconds if p.returncode == 0 and seconds > 0 else 0.0
+
+
 def _probe_source(url: str) -> str:
     """What ffprobe reads: a file, a signed S3 link for our own objects, or the link itself."""
     path = local_path(url)
@@ -932,6 +947,7 @@ class Gate:
         self._thumbnails(checks)
         self._overlay_media(checks)
         self._music(checks)
+        self._music_span(checks)
         self._sounds()
         repaired = 0
         if problems:
@@ -1216,6 +1232,43 @@ class Gate:
             self.doc["bgm"] = None
             how = "the video plays without music"
         self._fixed(None, "music", why, how)
+
+    def _music_span(self, checks: Dict[str, Check]) -> None:
+        """
+        The music must run under the whole narration (the owner, 2026-10-04:
+        "the music didn't match the full length of the narration"). Sections
+        the editor's 60 fps export left at 30 fps frame numbers faded the music
+        out halfway through the video: they are put back on the video's own
+        clock (timeline.music_fit, the renderer's rule). And the length of a
+        track that is not one of ours is measured, so the renderer can repeat
+        it with a crossfade instead of a hard cut (musicMix.ts trackSeconds).
+        """
+        from . import timeline
+        bgm = self.doc.get("bgm")
+        if not isinstance(bgm, dict) or not bgm.get("url"):
+            return
+        total = int(_num(self.doc.get("durationInFrames")))
+        music = self.doc.get("music")
+        if total > 0 and isinstance(music, dict):
+            fitted, why = timeline.music_fit(music, total, self.fps)
+            if fitted is not music:
+                self.doc["music"] = fitted
+            if why:
+                self.found["music-length"] += 1
+                self._fixed(None, "music-length", why, "it now plays to the end of the video")
+        url = str(bgm["url"])
+        if url.startswith("bgm://"):
+            return
+        if bgm.get("track"):
+            # An uploaded file next to the bundled track it replaced: that length is not this file's.
+            bgm.pop("track", None)
+            bgm.pop("trackSeconds", None)
+        got = checks.get(url)
+        if _num(bgm.get("trackSeconds")) > 0 or got is None or not got.ok or got.unverified:
+            return
+        seconds = track_seconds(_probe_source(url))
+        if seconds > 0:
+            bgm["trackSeconds"] = round(seconds, 2)
 
     def _sounds(self) -> None:
         """Sound effects with no file are left out (the renderer would 404 on them)."""
@@ -1690,6 +1743,8 @@ class Gate:
             parts.append(_n(f["overlay"], "graphic") + " fixed")
         if f["music"]:
             parts.append("music replaced")
+        if f["music-length"]:
+            parts.append("music stretched to the end")
         if f["sound"]:
             parts.append(_n(f["sound"], "missing sound") + " left out")
         if self.render.get("fixed"):
@@ -1741,7 +1796,7 @@ def mark_for_review(doc: dict, checked: Optional[dict]) -> int:
     n = 0
     for r in (checked or {}).get("repairs") or []:
         s = by_id.get(r.get("scene"))
-        if s is None or r.get("problem") in ("timing", "thumbnail", "overlay", "music", "sound"):
+        if s is None or r.get("problem") in ("timing", "thumbnail", "overlay", "music", "music-length", "sound"):
             continue
         s["reviewRequired"] = True
         s["reviewReason"] = (f"The quality check replaced this scene in the finished video ({r.get('detail')}): "

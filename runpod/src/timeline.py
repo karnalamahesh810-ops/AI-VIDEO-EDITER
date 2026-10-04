@@ -17,7 +17,7 @@ import os
 import re
 import subprocess
 import zlib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, hookboost, sfxplan, templates
 from .director import TEMPLATES
@@ -617,6 +617,83 @@ def music_automation(music: Optional[dict], bgm: Optional[dict], segments: List[
     return {**music, "sections": out, "duck": 1.0,
             "levels": {"voiceLufs": round(float(voice_lufs), 1), "trackLufs": track_lufs,
                        "underVoiceDb": MUSIC_UNDER_VOICE_DB, "speech": round(speech_gain(moods[0]), 4)}}
+
+
+def music_fit(music: Optional[dict], total: int, fps: int) -> Tuple[Optional[dict], str]:
+    """
+    The music on the video's own clock, and what was wrong ("" = nothing).
+    The owner (2026-10-04): "the music didn't match the full length of the
+    narration". Measured that day: the editor's 60 fps export doubled every
+    frame number of the document except the music's, so the plan's fade-out
+    (3 s before the end at 30 fps) sat in the middle of the 60 fps video - the
+    music faded out halfway and the second half was silent (Yellowstone:
+    sections ending at frame 52,810 of 105,620).
+
+    The same rule as the renderer's fitMusic (remotion/src/components/
+    musicMix.ts, which a test keeps equal): sections that end where the video
+    ends are left alone; a lone level set in the editor covers the whole
+    video; sections that end at exactly half or twice the video's length are
+    scaled to its clock (with the editor's trim); a plan whose video was made
+    longer or shorter keeps its levels and gets its fade-out at the new end.
+    """
+    if not isinstance(music, dict):
+        return music, ""
+    sections = [s for s in (music.get("sections") or []) if isinstance(s, dict)]
+    if not sections:
+        return music, ""
+    fps = max(1, int(fps or 30))
+    n = max(1, int(round(float(total or 1))))
+
+    def num(v) -> float:
+        try:
+            f = float(v)
+            return f if math.isfinite(f) else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    planned = any(s.get("kind") for s in sections)
+    if not planned and len(sections) == 1:
+        only = sections[0]
+        if num(only.get("startFrame")) == 0 and num(only.get("endFrame")) == n:
+            return music, ""
+        return {**music, "sections": [{**only, "startFrame": 0, "endFrame": n}]}, ""   # the renderer never read them
+    end = max(num(s.get("endFrame")) for s in sections)
+    if not end > 0 or abs(end - n) <= 1:
+        return music, ""
+    scale = 2.0 if abs(end * 2 - n) <= 2 else 0.5 if abs(end - n * 2) <= 2 else 1.0
+
+    def at(v) -> int:
+        return max(0, int(math.floor(num(v) * scale + 0.5)))
+
+    out = [{**s, "startFrame": at(s.get("startFrame")), "endFrame": at(s.get("endFrame"))} for s in sections]
+    why = (f"the music was timed for a {_mmss(end / fps)} video, this one is {_mmss(n / fps)}"
+           if scale == 1.0 else
+           f"the music was left at {'30' if scale == 2.0 else '60'} fps frame numbers by a "
+           f"{'60' if scale == 2.0 else '30'} fps export: it "
+           + (f"faded out at {_mmss(end / fps)} of {_mmss(n / fps)}" if scale == 2.0 else "ran past the video's end"))
+    if planned and abs(at(end) - n) > 1:
+        fade_out = max(2, n - int(math.floor(MUSIC_FADE_OUT * fps + 0.5)))
+        fade_half = max(fade_out + 1, n - int(math.floor(MUSIC_RAMP * fps + 0.5)))
+        body = [s for s in out if s.get("kind") != "fade-out" and s["startFrame"] < fade_out]
+        voice = next((s for s in reversed(body) if s.get("kind") == "voice"), body[-1] if body else None)
+        level = num(voice.get("volume")) if voice else 0.0
+        mood = (voice or {}).get("mood", "")
+        out = body + [{"startFrame": fade_out, "volume": round(level / 2, 4), "mood": mood, "kind": "fade-out"},
+                      {"startFrame": fade_half, "volume": 0.0, "mood": mood, "kind": "fade-out"}]
+    out.sort(key=lambda s: s["startFrame"])            # stable, as the plan was written
+    for k, s in enumerate(out):
+        s["endFrame"] = max(s["startFrame"] + 1, out[k + 1]["startFrame"] if k + 1 < len(out) else n)
+    fitted = {**music, "sections": out}
+    if scale != 1.0:
+        for key in ("from", "to"):
+            if isinstance(music.get(key), (int, float)) and not isinstance(music.get(key), bool):
+                fitted[key] = at(music[key])
+    return fitted, why
+
+
+def _mmss(seconds: float) -> str:
+    s = max(0, int(round(seconds)))
+    return f"{s // 60}:{s % 60:02d}"
 
 
 def _pack_transitions(entrances: List[str], pack: dict) -> List[str]:
