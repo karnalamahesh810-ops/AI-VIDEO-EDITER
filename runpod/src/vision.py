@@ -629,14 +629,19 @@ def judge_width(path: str) -> int:
 _FRAMES_CACHE: dict = {}
 
 
-def sample_frames(path: str, count: int = 3, width: int = 512) -> List[str]:
-    """`count` evenly spaced JPEG frames as base64 strings. [] when unreadable."""
-    key = (_fingerprint(path), count, width)
+def sample_frames(path: str, count: int = 3, width: int = 512,
+                  span: Optional[float] = None) -> List[str]:
+    """
+    `count` evenly spaced JPEG frames as base64 strings. [] when unreadable.
+    With `span` (the seconds of the clip a scene shows): the opening check's
+    three frames instead - its first moment, middle and end (opening_times).
+    """
+    key = (_fingerprint(path), count, width, round(span, 2) if span else None)
     with _LOCK:
         hit = _FRAMES_CACHE.get(key)
     if hit is not None:
         return list(hit)
-    frames = _sample_frames(path, count, width)
+    frames = _sample_frames(path, count, width, span=span)
     if frames:
         with _LOCK:
             if len(_FRAMES_CACHE) > 96:
@@ -645,7 +650,29 @@ def sample_frames(path: str, count: int = 3, width: int = 512) -> List[str]:
     return frames
 
 
-def _sample_frames(path: str, count: int = 3, width: int = 512) -> List[str]:
+# The opening check's first frame: this far into the clip, the picture the
+# viewer sees as the line begins (the owner, 2026-10-05: "the first second or
+# two didn't match" - the judge's frames at a quarter, half and three quarters
+# of a clip never looked at its first second).
+OPENING_AT = 0.3
+
+
+def opening_times(span: float, duration: float = 0.0) -> List[float]:
+    """
+    Where the opening check looks in a clip a scene shows for `span` seconds:
+    OPENING_AT in, the middle and just before the end of what is shown - never
+    past the file's own end (`duration`, when known).
+    """
+    span = max(0.1, float(span or 0.0))
+    if duration and duration > 0:
+        span = min(span, float(duration))
+    first = min(OPENING_AT, span * 0.25)
+    last = max(first, span - OPENING_AT)
+    end = float(duration) - 0.05 if duration and duration > 0 else None
+    return [round(min(t, end) if end is not None else t, 3) for t in (first, span / 2.0, last)]
+
+
+def _sample_frames(path: str, count: int = 3, width: int = 512, span: Optional[float] = None) -> List[str]:
     ext = os.path.splitext(path)[1].lower()
     if ext in {".jpg", ".jpeg", ".png", ".webp"}:
         # A still: one downscaled copy is enough.
@@ -660,9 +687,11 @@ def _sample_frames(path: str, count: int = 3, width: int = 512) -> List[str]:
     dur = _duration(path)
     if not dur:
         return []
+    times = (opening_times(span, dur) if span
+             else [dur * (i + 1) / (count + 1) for i in range(count)])
     frames = []
-    for frac in [(i + 1) / (count + 1) for i in range(count)]:
-        cmd = ["ffmpeg", "-v", "error", "-ss", f"{dur * frac:.2f}", "-i", path,
+    for at in times:
+        cmd = ["ffmpeg", "-v", "error", "-ss", f"{max(0.0, at):.2f}", "-i", path,
                "-frames:v", "1", "-vf", f"scale={width}:-2",
                "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
         try:
@@ -671,6 +700,8 @@ def _sample_frames(path: str, count: int = 3, width: int = 512) -> List[str]:
             continue
         if p.stdout:
             frames.append(base64.b64encode(p.stdout).decode())
+    if span and len(frames) < len(times):
+        return []           # the opening check names its frames by place: all three or none
     return frames
 
 
@@ -762,6 +793,9 @@ def _parse(text: str) -> Optional[dict]:
         "studio": _truthy(data.get("studio")),
         "specificity": (data.get("specificity")
                         if data.get("specificity") in scene_intent.SPECIFICITY else ""),
+        # Only the opening check asks it (judge with `span`): whether the clip's
+        # first frame itself fits the line. None = not asked, or no answer.
+        "opening": _maybe(data.get("opening")),
     }
 
 
@@ -769,6 +803,31 @@ def _truthy(value) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in ("true", "yes", "1")
     return bool(value)
+
+
+def _maybe(value) -> Optional[bool]:
+    """True / False for a yes-or-no answer, None when there is none."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "yes", "1"):
+            return True
+        if v in ("false", "no", "0"):
+            return False
+        return None
+    return bool(value)
+
+
+# The opening check (judge with `span`, the hook's scenes): its three frames are
+# the clip's first moment, middle and end, and the model answers for the first
+# on its own. In the user message, not the cached instructions.
+_OPENING_RULE = (
+    "OPENING CHECK: frame 1 is the clip's first moment ({first:.1f} s in) - what the viewer sees as the line "
+    "begins; frame 2 its middle and frame 3 its end. Score the clip as usual, and also answer \"opening\": true "
+    "when frame 1 itself shows what the INTENT describes, false when it shows something else - the end of "
+    "another shot, a title card, a graphic or text slide, black, or another subject than frames 2 and 3. Add "
+    "\"opening\" to the JSON object.\n")
 
 
 # One line describing the whole video (who, what, when, where), set once per
@@ -810,7 +869,7 @@ def _wanted_line(wants: str) -> str:
 
 
 def judge(path: str, intent: str, context: str = "", event: bool = False,
-          scene: Optional[dict] = None, wants: str = "") -> Optional[dict]:
+          scene: Optional[dict] = None, wants: str = "", span: Optional[float] = None) -> Optional[dict]:
     """
     Verdict for one candidate file, or None when no model could be reached.
 
@@ -819,16 +878,27 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     belongs to a news/weather/disaster story, so the footage must be of that
     specific event and place, not the same kind of thing elsewhere. `wants`:
     "map" or "chart" when the line asks for a map or a diagram (_wanted_line).
+
+    `span` (a clip in the hook: the seconds of it the scene shows): the opening
+    check - the three frames are its first moment, middle and end
+    (opening_times) and the verdict says whether the first frame itself fits
+    ("opening"); verdict["frames"] holds where it looked. Same one call.
     """
     if not enabled() or not path or not os.path.exists(path):
         return None
+    still = os.path.splitext(path)[1].lower() in _STILL_EXT
+    span = float(span) if span and not still and float(span) > 0 else None
     key = (f"{_fingerprint(path)}|{int(event)}|{intent}|{_STORY['line'][:80]}"
-           f"|{_scene_lines(scene)[:160]}|{wants if wants in ('map', 'chart') else ''}")
+           f"|{_scene_lines(scene)[:160]}|{wants if wants in ('map', 'chart') else ''}"
+           + (f"|open{span:.2f}" if span else ""))
     with _LOCK:
         if key in _CACHE:
             return _CACHE[key]
 
-    frames = sample_frames(path, config.VISION_FRAMES, judge_width(path))
+    frames = sample_frames(path, config.VISION_FRAMES, judge_width(path), span=span) if span else []
+    times = opening_times(span, _duration(path)) if span and frames else None
+    if not frames:
+        frames = sample_frames(path, config.VISION_FRAMES, judge_width(path))
     if not frames:
         _fail("ffmpeg", f"no frames from {os.path.basename(path)}")
         with _LOCK:
@@ -838,7 +908,8 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     content = [{"type": "text", "text":
                 (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
                 + f"INTENT: {intent}\n" + _scene_lines(scene) + _wanted_line(wants) + f"NARRATION: {context}\n"
-                f"These are {len(frames)} frames from the candidate. "
+                + (_OPENING_RULE.format(first=times[0]) if times else "")
+                + f"These are {len(frames)} frames from the candidate. "
                 "Answer with ONLY the JSON object described in your instructions - no prose."}]
     content += [{"type": "image_url",
                  "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames]
@@ -849,6 +920,11 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     verdict = _parse(text) if text else None
     if verdict:
         verdict["model"] = model
+        if times:
+            verdict["frames"] = times        # the opening check: where it looked (first, middle, end)
+            verdict["span"] = round(span, 2)
+        else:
+            verdict["opening"] = None        # not asked: never read as an answer
     elif text:
         _fail(model, f"unparseable verdict: {text[:120]!r}")
 
@@ -862,6 +938,22 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
         else:
             _UNJUDGED["n"] += 1
     return verdict
+
+
+def cut_record(verdict: Optional[dict]) -> dict:
+    """
+    What the opening check said about one cut, kept with the scene
+    (semanticMetadata.cutCheck, src/hookcheck.py): where it looked, the
+    clip's span, whether the first frame fits, the score and whether the gate
+    kept the clip. {} for a verdict without the opening check.
+    """
+    if not verdict or not verdict.get("frames"):
+        return {}
+    out = {"frames": list(verdict["frames"]), "span": verdict.get("span"), "opening": verdict.get("opening"),
+           "score": verdict.get("score"), "model": verdict.get("model", "")}
+    if verdict.get("accepted") is not None:
+        out["ok"] = bool(verdict["accepted"])
+    return out
 
 
 def acceptable(verdict: Optional[dict], allow_people: bool = False) -> bool:
@@ -880,6 +972,11 @@ def acceptable(verdict: Optional[dict], allow_people: bool = False) -> bool:
         # no verdict now means every model failed: reject.
         return bool(config.ACCEPT_UNJUDGED)
     if verdict["has_text_or_watermark"]:
+        return False
+    # The opening check (a hook clip): a first frame that shows something else -
+    # the end of the shot before, a title, a graphic - is the owner's "the
+    # first second or two didn't match" (2026-10-05), whatever the rest scores.
+    if verdict.get("opening") is False:
         return False
     # AI slop never passes, whatever the line (the owner, 2026-09-30: "this is
     # AI slop clip"); a studio, presenter, streamer or TV map only for a line

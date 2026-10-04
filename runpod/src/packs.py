@@ -851,7 +851,8 @@ def fetch(entry: Entry, work: str, job: Optional[dict] = None, similarity: Optio
         review_required=bool(note), review_reason=note,
         content_description=(f"{entry.title} ({topics})" if entry.title else topics)[:300],
         relevance_score=score_for(similarity) if similarity is not None else None,
-        moment_key=entry.asset_id, moment={"start": float(entry.start), "pack": entry.niche})
+        moment_key=entry.asset_id, moment={"start": float(entry.start), "pack": entry.niche},
+        judged_by="pack")                       # the pack's own picture-to-line similarity, no vision call
     return asset
 
 

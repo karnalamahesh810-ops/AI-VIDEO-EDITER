@@ -338,7 +338,12 @@ def _runner_up_asset(i: int, job: dict, donor, how: str, used, starts: Dict[int,
             quality=alt.get("quality") if _number(alt.get("quality")) else None,
             specificity=str(alt.get("specificity") or ""),
             final_score=alt.get("finalScore") if _number(alt.get("finalScore")) else None,
-            moment=moment, moment_key=ident if "@" in ident else "")
+            moment=moment, moment_key=ident if "@" in ident else "",
+            # The judge approved it for its own line (media._best_of keeps only clips that passed) - for
+            # a hook line with the opening check on this very cut (src/hookcheck.py).
+            judged_by=(("opening" if how == "own" and alt.get("cutCheck") else "frames")
+                       if _number(alt.get("score")) else ""),
+            cut_check=dict(alt["cutCheck"]) if how == "own" and isinstance(alt.get("cutCheck"), dict) else {})
         shot = gapfill.Shot.of_asset(asset, at)
         if shot.video and not media.may_place(used.placed(shot.video), at):
             continue                            # its video already plays too often or too near
@@ -615,12 +620,18 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
         sem = s.setdefault("semanticMetadata", {})
         src = str(alt.get("sourceUrl") or alt.get("url") or "")
         own = [a for a in sem.get("alternatives") or [] if a is not alt]
+        sem.pop("cutCheck", None)              # the shot before's check is not this one's
         sem.update({"assetId": str(alt.get("assetId") or ""), "provider": str(alt.get("source") or ""),
                     "sourceUrl": src if src.startswith("http") else "",
                     "contentDescription": str(alt.get("description") or ""),
                     "relevanceScore": alt.get("score"), "qualityScore": alt.get("quality"),
                     "moment": dict(alt.get("moment") or {}), "alternatives": own,
+                    "judgedBy": "frames" if _number(alt.get("score")) else "",
                     "shotCap": {"from": str(donor.get("id") or ""), "how": "alternative"}})
+        if k == i and isinstance(alt.get("cutCheck"), dict) and alt["cutCheck"]:
+            # Its own line's runner-up, judged with the opening check on this very cut (src/hookcheck.py).
+            sem["cutCheck"] = dict(alt["cutCheck"])
+            sem["judgedBy"] = "opening"
         if media["type"] == "image":
             s["motion"] = s.get("motion") or "none"
         s["reviewRequired"] = True
@@ -703,13 +714,17 @@ def find_moment(doc: dict, i: int, used, work: str, stop: float) -> Optional[Tup
                     attribution=title, license=str((donor.get("media") or {}).get("license") or UNVERIFIED),
                     moment_key=f"yt:{vid}@{int(at // max(1.0, float(config.POOL_MIN_GAP_SECONDS)))}",
                     moment={"start": round(at, 1), "chain": True, "clean": clean, "cuts": cuts,
-                            "chain_of": str((donor.get("semanticMetadata") or {}).get("assetId") or "")})
+                            "chain_of": str((donor.get("semanticMetadata") or {}).get("assetId") or "")},
+                    judged_by="none")
                 if not media._asset_ok(asset)[0] or media.motion_rejects(path) or media.slop_reason(path, title):
                     asset = None
                     FAILED_MOMENTS.add(failed)
                 elif 0 < timeline._clip_seconds(asset) < seconds - TOLERANCE_FRAMES / fps:
                     print(f"[shotcap] scene {i + 1}: moment {at:.0f}s of {vid} too short for its scene", flush=True)
                     asset = None                # it would be slowed (or freeze) to fill the scene
+                elif _opening_turned_down(doc, i, asset, seconds):
+                    asset = None                # a hook line: its first frame (or the clip) does not fit the line
+                    FAILED_MOMENTS.add(failed)
             elif time.time() <= stop:
                 FAILED_MOMENTS.add(failed)          # not a download cut off by the time box: never asked again
             if asset is None:
@@ -718,6 +733,36 @@ def find_moment(doc: dict, i: int, used, work: str, stop: float) -> Optional[Tup
             _frame(path)
             return asset, donor
     return None
+
+
+def _opening_turned_down(doc: dict, i: int, asset, seconds: float) -> bool:
+    """
+    Another moment for a line of the hook (src/hookcheck.py): the judge's
+    opening check on this very cut - its first moment, middle and end - before
+    it goes on the line; the verdict stays with the asset. True when it was
+    turned down (its file is gone). The owner's Glen Canyon test (2026-10-05)
+    opened on a moment taken here by arithmetic alone, 1.47 s before a cut in
+    its source.
+    """
+    from . import gapfill, hookcheck
+    scenes = doc.get("scenes") or []
+    fps = max(1, int(doc.get("fps") or 30))
+    s = scenes[i]
+    if not hookcheck.in_hook(int(s.get("startFrame") or 0) / fps):
+        return False
+    job = dict(gapfill.job_for(s, i, fps, gapfill.CONTEXT.get("jobs")), hook=True, seconds=seconds)
+    keep, verdict = hookcheck.judge(asset.local_path, job, seconds)
+    if keep is False:
+        print(f"[shotcap] scene {i + 1}: another moment turned down by the opening check "
+              f"({hookcheck.why(verdict)})", flush=True)
+        try:
+            os.remove(asset.local_path)
+        except OSError:
+            pass
+        return True
+    if verdict:
+        asset.apply_verdict(verdict, str(job.get("intent") or ""))
+    return False
 
 
 def put_moment(doc: dict, i: int, asset, donor: dict) -> dict:

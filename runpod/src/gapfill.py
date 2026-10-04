@@ -1008,11 +1008,17 @@ def apply_asset(scene: dict, asset, why: str = "") -> None:
     scene["media"] = media
     sem = scene.setdefault("semanticMetadata", {})
     sem.pop("shotCap", None)            # what the shot cap put here before (src/shotcap.py) is gone
+    for key in ("judgedBy", "cutCheck"):
+        sem.pop(key, None)              # the shot before's check is not this one's
     sem.update({"assetId": asset.identity, "provider": asset.source,
                 "sourceUrl": asset.url if str(asset.url or "").startswith("http") else "",
                 "contentDescription": asset.content_description or "",
                 "relevanceScore": asset.relevance_score, "qualityScore": asset.quality,
                 "moment": dict(asset.moment or {}), "alternatives": []})
+    if getattr(asset, "judged_by", ""):
+        sem["judgedBy"] = asset.judged_by
+    if getattr(asset, "cut_check", None):
+        sem["cutCheck"] = dict(asset.cut_check)
     if asset.kind == "image":
         scene["motion"] = scene.get("motion") or "none"
     scene["reviewRequired"] = True
