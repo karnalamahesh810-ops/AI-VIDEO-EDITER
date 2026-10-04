@@ -3431,8 +3431,10 @@ def _note_detail(asset: Optional["MediaAsset"]) -> None:
 def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
                  query: str, work_dir: str, intent: str = "",
                  context: str = "") -> Optional[MediaAsset]:
-    """First unused candidate that downloads, is sharp enough to fill the frame
-    (src/sharpness.py, before any vision call) and passes the vision gate."""
+    """First unused candidate that downloads, passes the checks every caller asks
+    of a picture afterwards (_asset_ok: not a page of text, big enough, sharp
+    enough to fill the frame - src/sharpness.py) before any vision call, and
+    passes the vision gate."""
     judged = 0
     for candidate in _bigger_first(candidates):
         if used is not None and candidate.identity in used:
@@ -3454,11 +3456,18 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
         if got.kind == "image" and _photo_seen_before(got.local_path):
             continue
         # Too soft to fill the frame (src/sharpness.py): no vision call is spent on it,
-        # and no other scene downloads it again.
-        why = (picture_blur_reason(got.local_path) if got.kind == "image"
-               else clip_detail_reason(got.local_path, got.attribution, got.source))
+        # and no other scene downloads it again. A picture gets the whole verdict its
+        # caller asks of it afterwards (_asset_ok), here, before the judge: a page of
+        # text used to pass the judge, come back and be thrown out - and the scene
+        # then searched again from the start (the Yellowstone re-cut, 2026-10-04: 6 of
+        # its 39 empty pieces ended on "a page of text, not a photo").
+        if got.kind == "image":
+            ok, why = _asset_ok(got)
+            why = "" if ok else (why or "not usable")
+        else:
+            why = clip_detail_reason(got.local_path, got.attribution, got.source)
         if why:
-            print(f"[sharpness] REJECT {why}: {_image_label(got)[:60]!r}", flush=True)
+            print(f"[media] REJECT before judging: {why}: {_image_label(got)[:60]!r}", flush=True)
             _mark_bad(candidate.identity, "", why)
             continue
         judged += 1
