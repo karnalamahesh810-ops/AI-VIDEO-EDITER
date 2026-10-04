@@ -1814,6 +1814,28 @@ def _keep_render(out_path: str) -> None:
         print(f"[worker] could not keep a copy of the render: {e}", flush=True)
 
 
+def _raise_explained(err: BaseException, gate) -> None:
+    """
+    Raise a failed render's error as the job's error. When files the video
+    needs are gone from storage now (the gate asks every one once more), that
+    is the error, in plain words - how many scenes, which, what storage
+    answered - instead of what the renderer printed: on 2026-10-04 a project's
+    media was deleted mid-render and its error message was a raw 404 page.
+    """
+    why = ""
+    if not isinstance(err, quality.MediaMissing):
+        try:
+            why = gate.explain(err) if gate is not None else ""
+        except Exception:  # noqa: BLE001 - the render's own error stands
+            why = ""
+    if why:
+        raise renderer.RenderError(why) from err
+    if renderer.has_markup(str(err)):
+        # A chunk worker's error, or an older image's: still never a raw web page.
+        raise renderer.RenderError(renderer.plain_error(str(err))) from err
+    raise err
+
+
 def do_render(doc: dict, inp: dict, work: str, report: Reporter,
               split: bool = False) -> dict:
     # The document may have come back from a browser, so validate before
@@ -1877,11 +1899,15 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     try:
         _draw(doc, inp, work, report, split, out_path, gate)
     except Exception as e:  # noqa: BLE001 - drawn once more when the error names files that can be replaced
+        # (Too much of the media gone to repair: gate.recover raises that, in plain words.)
         if not gate.recover(e):
-            raise
+            _raise_explained(e, gate)
         print(f"[worker] the render failed on files it named; repaired them, rendering once more: "
               f"{type(e).__name__}: {str(e)[:200]}", flush=True)
-        _draw(doc, inp, work, quality.floor(report, 70, "Second render: "), split, out_path, gate)
+        try:
+            _draw(doc, inp, work, quality.floor(report, 70, "Second render: "), split, out_path, gate)
+        except Exception as e2:  # noqa: BLE001 - the one second render is spent
+            _raise_explained(e2, gate)
     # The finished file is scanned (black, frozen, silent): a real defect is
     # repaired and the video drawn once more - never twice - and the better
     # of the two files is kept.
@@ -2576,7 +2602,12 @@ def handler(job):
 
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
-        msg = str(e)[:800]
+        msg = str(e)
+        if renderer.has_markup(msg):
+            # Whatever failed, the project's error message is never a raw web
+            # page (a storage 404 page was one, 2026-10-04).
+            msg = renderer.plain_error(msg)
+        msg = msg[:800]
         # A render that failed still says what its quality check found and did.
         gate = quality.LAST.get("gate")
         checked = gate.finish() if gate is not None else None

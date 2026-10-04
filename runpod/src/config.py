@@ -1163,6 +1163,14 @@ QUALITY_REPAIR_SCENE_SECONDS = float(os.getenv("QUALITY_REPAIR_SCENE_SECONDS", "
 QUALITY_REPAIR_GENERATED = _flag("QUALITY_REPAIR_GENERATED", False)
 # A still whose long side is under this many pixels is too small to show.
 QUALITY_MIN_IMAGE_SIDE = int(os.getenv("QUALITY_MIN_IMAGE_SIDE", "320"))
+# When more than this share of the scenes' own clips and pictures cannot be read
+# from storage (and at least QUALITY_MISSING_MIN of them), the render stops
+# before a frame is drawn with an error that says so - the project's files were
+# deleted, or storage is down - instead of "repairing" most of the video into
+# text cards (2026-10-04: a project's media was deleted from R2 mid-render).
+# 0 = always repair.
+QUALITY_MISSING_SHARE = float(os.getenv("QUALITY_MISSING_SHARE", "0.3"))
+QUALITY_MISSING_MIN = int(os.getenv("QUALITY_MISSING_MIN", "3"))
 # The scan: black for QUALITY_BLACK_SECONDS or more, a picture frozen for
 # QUALITY_FREEZE_SECONDS or more, silence of QUALITY_SILENCE_SECONDS or more.
 QUALITY_BLACK_SECONDS = float(os.getenv("QUALITY_BLACK_SECONDS", "0.5"))

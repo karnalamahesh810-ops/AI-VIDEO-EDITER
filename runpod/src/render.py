@@ -175,6 +175,11 @@ def _storage_trouble(text: str) -> str:
     return "; ".join(parts)
 
 
+def has_markup(text: str) -> bool:
+    """The text carries (part of) a web page: an error message must never show it."""
+    return bool(re.search(r"<!doctype\s+html|</?(?:html|body|head|svg|path|style|script)[\s>/]", text or "", re.I))
+
+
 def plain_error(raw: str, limit: int = 2000) -> str:
     """
     What a failed render printed, as an error a person can read: any web page

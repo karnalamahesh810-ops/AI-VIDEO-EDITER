@@ -47,8 +47,16 @@ What it answers for (each has a test in tests/test_quality.py):
                       still, a title card). A real defect: those scenes are
                       repaired the same way and the video is drawn ONCE more;
                       the better file is kept and what is left is reported.
-  Gate.recover        a render that failed on a file its error names: those
-                      scenes are repaired and the video drawn once more.
+                      When more than QUALITY_MISSING_SHARE of the scenes' own
+                      files cannot be read from storage (deleted, refused, or
+                      storage down) nothing is repaired or drawn: MediaMissing
+                      says how many, which and what storage answered.
+  Gate.recover        a render that failed on a file its error names, or on
+                      files that are gone from storage now (every file is
+                      asked once more): those scenes are repaired and the
+                      video drawn once more - or MediaMissing, as above.
+  Gate.explain        a failed render's reason in plain words when files the
+                      video needs are gone (never the renderer's raw output).
   Gate.finish         the report: doc.meta.quality, the job's "quality", an
                       events row per finding and repair, and a one-liner for
                       the app ("Quality check: 159/159 scenes OK, 2 clips
@@ -233,6 +241,7 @@ class Check:
     width: int = 0
     height: int = 0
     local: str = ""             # a copy on this disk (a still fetched to decode it)
+    status: int = 0             # the storage's HTTP answer when it said no (404, 403, 429...)
 
 
 def _verdict(size: int, ctype, head: bytes, want: str) -> Check:
@@ -286,7 +295,7 @@ def _r2_head(loc: Tuple[str, str], want: str, timeout: float) -> Optional[Check]
             time.sleep(0.5 * (attempt + 1))
             continue
         if code == 404:
-            return Check(ok=False, reached=False, why="it is not in storage (R2 answered 404)")
+            return Check(ok=False, reached=False, why="it is not in storage (R2 answered 404)", status=404)
         if code == 200:
             length = _header(resp, "Content-Length")
             return _verdict(int(length) if length.isdigit() else -1, _header(resp, "Content-Type"), b"", want)
@@ -297,7 +306,7 @@ def _r2_head(loc: Tuple[str, str], want: str, timeout: float) -> Optional[Check]
 
 
 def _range_get(url: str, want: str, timeout: float, tries: int) -> Check:
-    last = ""
+    last, status = "", 0
     for attempt in range(max(1, tries)):
         r = None
         try:
@@ -306,11 +315,11 @@ def _range_get(url: str, want: str, timeout: float, tries: int) -> Check:
             code = int(getattr(r, "status_code", 0) or 0)
             if code in (200, 206):
                 return _verdict(_total_size(r, code), _header(r, "Content-Type"), _first_bytes(r, 4096), want)
-            last = f"HTTP {code}"
+            last, status = f"HTTP {code}", code
             if code in (400, 401, 403, 404, 410):
-                return Check(ok=False, reached=False, why=f"the link answers {last}")
+                return Check(ok=False, reached=False, why=f"the link answers {last}", status=code)
         except requests.RequestException as e:
-            last = type(e).__name__
+            last, status = type(e).__name__, 0
         finally:
             if r is not None:
                 try:
@@ -319,7 +328,7 @@ def _range_get(url: str, want: str, timeout: float, tries: int) -> Check:
                     pass
         if attempt + 1 < tries:
             time.sleep(0.4 * (attempt + 1))
-    return Check(ok=False, reached=False, why=f"the link cannot be read ({last or 'no answer'})")
+    return Check(ok=False, reached=False, why=f"the link cannot be read ({last or 'no answer'})", status=status)
 
 
 def reach(url: str, want: str = "file", timeout: Optional[float] = None, tries: int = 3) -> Check:
@@ -826,6 +835,66 @@ def _score(defects: List[dict]) -> float:
 # The gate
 # --------------------------------------------------------------------------- #
 
+class MediaMissing(RuntimeError):
+    """
+    Too many of the video's own clips and pictures cannot be read from storage
+    to repair: nothing is drawn. On 2026-10-04 a project's scene media was
+    deleted from storage; the choice then is this error, in plain words, or
+    200 scenes "repaired" into text cards and a video of nothing.
+    """
+
+
+def _gone_kind(c: "Check") -> str:
+    """
+    Why a file cannot be read: "missing" (storage says it is not there),
+    "refused", "unsaved" (never a storage link: a file of the machine that
+    built the video, a link only the editor's browser had) or "unreadable"
+    (no clear answer: a timeout, a 5xx, a rate limit).
+    """
+    if c.status in (404, 410) or "not in storage" in c.why:
+        return "missing"
+    if c.status in (400, 401, 403):
+        return "refused"
+    if "not on this machine" in c.why or "editor's browser" in c.why or "not a link" in c.why:
+        return "unsaved"
+    return "unreadable"
+
+
+def gone_message(gone: List[Tuple[int, str, "Check"]], total: int, others: int = 0, failed: bool = False) -> str:
+    """
+    The error for files that cannot be read, in plain words: how many of the
+    video's scenes, the storage's answer, a few of them by name, and what to
+    do. `gone` is [(scene index, link, its check)], `total` the scenes that
+    have a file, `others` other files gone too (pictures of graphics, sound),
+    `failed` True when a render already failed over them.
+    """
+    kinds = Counter(_gone_kind(c) for _i, _u, c in gone)
+    kind = kinds.most_common(1)[0][0] if kinds else "missing"
+    why = Counter(c.why for _i, _u, c in gone if _gone_kind(c) == kind).most_common(1)
+    why = why[0][0] if why else ""
+    n = len(gone)
+    files = f"{n} of {total} scenes' clips and pictures"
+    if kind == "missing":
+        said = f"{files} are missing from storage ({why}) - were the project's files deleted from storage?"
+    elif kind == "refused":
+        said = f"{files} were refused by storage ({why}) - expired or private links?"
+    elif kind == "unsaved":
+        said = f"{files} were never saved to storage ({why}): their upload failed when the video was built."
+    else:
+        said = (f"{files} could not be read from storage right now ({why}) - storage may be down or "
+                "limiting requests")
+    names = ", ".join(f"scene {i + 1} ({short(u)})" for i, u, _c in gone[:3])
+    if names:
+        said += f" For example {names}" + (f" and {n - 3} more." if n > 3 else ".")
+    if others:
+        said += f" {_n(others, 'other file')} (pictures of graphics, sound) cannot be read either."
+    head = "The render failed: " if failed else ""
+    if kind == "unreadable":
+        return f"{head}{said} Nothing was rendered: try again in a few minutes."
+    return (f"{head}{said} Nothing was rendered: build the video again, or use Find footage on those scenes, "
+            "then render once more.")
+
+
 class NarrationMissing(RuntimeError):
     """The narration cannot be read: nothing can be drawn over it."""
 
@@ -870,6 +939,7 @@ class Gate:
         self.audited = False
         self.rerendered = False
         self._first: Optional[Tuple[List[dict], List[dict]]] = None
+        self._gone: Optional[Tuple[float, Dict[str, Check]]] = None    # the last re-check after a failed render
         self._report: Optional[dict] = None
         self._rows = 0
         self._lock = threading.Lock()
@@ -907,14 +977,15 @@ class Gate:
     def before_render(self) -> int:
         """
         Check the document and repair it. Returns how many scenes were
-        repaired. Raises only NarrationMissing; a step that breaks is logged
+        repaired. Raises only NarrationMissing and MediaMissing (too much of
+        the video's own media is gone to repair); a step that breaks is logged
         and the render goes on as before (no scene left without a picture).
         """
         if not config.QUALITY_GATE:
             return 0
         try:
             return self._before_render()
-        except NarrationMissing:
+        except (NarrationMissing, MediaMissing):
             raise
         except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
             self._broke("the check before the render", e)
@@ -929,6 +1000,9 @@ class Gate:
         self._narration(checks)
         t1 = time.time()
         problems = self._scene_problems(checks)
+        self._stop_if_gone([(i, str((self.doc["scenes"][i].get("media") or {}).get("url") or ""),
+                             checks[str(self.doc["scenes"][i]["media"]["url"])])
+                            for i, (code, _why) in sorted(problems.items()) if code == "unreachable"])
         self._thumbnails(checks)
         self._overlay_media(checks)
         self._music(checks)
@@ -1610,22 +1684,157 @@ class Gate:
             return False
         try:
             return self._recover(err)
+        except MediaMissing:
+            raise                           # too much is gone to repair: that is the error to report
         except Exception as e:  # noqa: BLE001 - the render's own error is the one to report
             self._broke("the repair after a failed render", e)
             return False
 
+    # ---- files that are gone --------------------------------------------------
+    def _stop_if_gone(self, gone: List[Tuple[int, str, Check]], failed: bool = False) -> None:
+        """
+        Raise MediaMissing when more than QUALITY_MISSING_SHARE of the scenes
+        that have a file cannot be read from their storage links (`gone`:
+        scene index, link, check) - or more than twice that share counting
+        the files that were never saved (a dead machine's paths; fewer of
+        those are re-sourced by the ladder as before). A few broken scenes are
+        repaired; most of a video's media gone means its files were deleted,
+        or storage is down - repairing would turn the video into text cards,
+        so nothing is drawn and the error says why.
+        """
+        share = float(getattr(config, "QUALITY_MISSING_SHARE", 0) or 0)
+        if share <= 0 or not gone:
+            return
+        have = sum(1 for s in self.doc.get("scenes") or []
+                   if (s.get("media") or {}).get("type") in ("video", "image") and (s.get("media") or {}).get("url"))
+        have = max(have, len(gone))
+        least = int(getattr(config, "QUALITY_MISSING_MIN", 3))
+        links = [g for g in gone if str(g[1]).lower().startswith(("http://", "https://"))]
+        if len(links) >= least and len(links) > share * have:
+            gone = links                    # storage will not give them: deleted, refused, or storage is down
+        elif len(gone) >= least and len(gone) > min(0.9, 2 * share) * have:
+            pass                            # with the files that were never saved, most of the video is gone
+        else:
+            return                          # a few broken scenes: repaired (the fallback ladder), as before
+        text = gone_message(gone, have, failed=failed)
+        self.found["unreachable"] = max(self.found["unreachable"], len(gone))
+        self.unresolved.append({"kind": "missing", "scene": "", "at": "", "what": text[:300]})
+        self._event("media_missing", text, level="error", always=True,
+                    data={"missing": len(gone), "scenes": have, "examples": [short(u) for _i, u, _c in gone[:8]]})
+        print(f"[quality] {text}", flush=True)
+        raise MediaMissing(text)
+
+    def _gone_now(self, seconds: float = 60.0) -> Dict[str, Check]:
+        """
+        After a failed render: every file the document names asked once more
+        (reach only - nothing is decoded or measured), QUALITY_PARALLEL at a
+        time inside `seconds`. Returns {link: check} of the ones that cannot
+        be read now; a file not asked in time is not counted.
+        """
+        if self._gone is not None and time.time() - self._gone[0] < 120:
+            return self._gone[1]
+        want: Dict[str, str] = {}
+
+        def add(url, kind: str) -> None:
+            url = str(url or "")
+            if url and not url.startswith(("data:", "bgm://")):
+                want.setdefault(url, kind)
+        for s in self.doc.get("scenes") or []:
+            m = s.get("media") or {}
+            if m.get("type") in ("video", "image") and m.get("url"):
+                add(m["url"], m["type"])
+            anim = s.get("animation")
+            for x in (anim.get("media") or []) if isinstance(anim, dict) else []:
+                if isinstance(x, dict):
+                    add(x.get("url"), "file")
+        for ov in self.doc.get("overlays") or []:
+            for x in (ov.get("media") or []) if isinstance(ov, dict) else []:
+                if isinstance(x, dict):
+                    add(x.get("url"), "file")
+        for key in ("audio", "bgm"):
+            m = self.doc.get(key)
+            if isinstance(m, dict):
+                add(m.get("url"), "file")
+        out: Dict[str, Check] = {}
+        if want:
+            pool = ThreadPoolExecutor(max_workers=max(1, min(config.QUALITY_PARALLEL, len(want))))
+            futures = {pool.submit(reach, url, kind): url for url, kind in want.items()}
+            done, _late = _wait(futures, timeout=max(1.0, seconds))
+            pool.shutdown(wait=False, cancel_futures=True)
+            for f in done:
+                try:
+                    got = f.result()
+                except Exception:  # noqa: BLE001 - a check that broke says nothing
+                    continue
+                if not got.ok and not got.reached:
+                    out[futures[f]] = got
+        self._gone = (time.time(), out)
+        return out
+
+    def _gone_scenes(self, gone: Dict[str, Check]) -> List[Tuple[int, str, Check]]:
+        out = []
+        for i, s in enumerate(self.doc.get("scenes") or []):
+            m = s.get("media") or {}
+            url = str(m.get("url") or "")
+            if m.get("type") in ("video", "image") and url in gone:
+                out.append((i, url, gone[url]))
+        return out
+
+    def explain(self, err: BaseException = None) -> str:
+        """
+        Why a render failed, when the reason is files that are gone: the
+        document's files are asked once more and the answer is the error in
+        plain words - how many scenes, which, what storage said - instead of
+        whatever the renderer printed (a storage 404 page's raw HTML was a
+        project's whole error message, 2026-10-04). "" when every file still
+        answers: the render's own error stands. Never raises.
+        """
+        if not config.QUALITY_GATE:
+            return ""
+        try:
+            gone = self._gone_now()
+            if not gone:
+                return ""
+            scenes = self._gone_scenes(gone)
+            others = len(gone) - len({u for _i, u, _c in scenes})
+            have = sum(1 for s in self.doc.get("scenes") or []
+                       if (s.get("media") or {}).get("type") in ("video", "image")
+                       and (s.get("media") or {}).get("url"))
+            if scenes:
+                text = gone_message(scenes, max(have, len(scenes)), others=others, failed=True)
+            else:
+                names = ", ".join(short(u) for u in list(gone)[:3])
+                why = Counter(c.why for c in gone.values()).most_common(1)[0][0]
+                text = (f"The render failed: {_n(len(gone), 'file')} the video needs cannot be read from storage "
+                        f"({why}): {names}. Nothing was rendered: upload or replace them in the editor, then "
+                        "render once more.")
+            self._event("media_missing", text, level="error", always=True,
+                        data={"missing": len(gone), "scenes": len(scenes)})
+            return text
+        except Exception as e:  # noqa: BLE001 - the render's own error is the one to report
+            self._broke("the check after a failed render", e)
+            return ""
+
     def _recover(self, err: BaseException) -> bool:
-        named = set(_URLS.findall(str(err)))
-        if not named:
+        named = set(_URLS.findall(str(err))) | {str(u) for u in (getattr(err, "missing", None) or []) if u}
+        # What is gone from storage now, whatever the error names: one named
+        # file of 150 deleted ones must not be "repaired" and rendered again.
+        gone = self._gone_now()
+        self._stop_if_gone(self._gone_scenes(gone), failed=True)
+        if not named and not gone:
             return False
-        hit = _NamedFiles(named, self.work)
+        named_hit = _NamedFiles(named, self.work) if named else None
+
+        def hit(url) -> bool:
+            return str(url or "") in gone or bool(named_hit is not None and named_hit(url))
         scenes = self.doc.get("scenes") or []
         problems: Dict[int, Tuple[str, str]] = {}
         changed = 0
         for i, s in enumerate(scenes):
             m = s.get("media") or {}
             if m.get("type") in ("video", "image") and hit(m.get("url")):
-                problems[i] = ("render", "the renderer could not load it")
+                why = gone.get(str(m.get("url") or ""))
+                problems[i] = ("render", why.why if why is not None else "the renderer could not load it")
             if isinstance(m.get("thumbnail"), str) and hit(m["thumbnail"]):
                 m.pop("thumbnail", None)
                 changed += 1
@@ -1665,6 +1874,7 @@ class Gate:
         timeline.drop_invalid_overlays(self.doc)
         self.render["rerendered"] = True
         self.render["afterFailure"] = True
+        self._gone = None                   # the document changed: a later failure is checked afresh
         return True
 
     # ---- the report ---------------------------------------------------------
