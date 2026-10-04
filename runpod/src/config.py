@@ -580,10 +580,11 @@ HOLD_MIN_RATE = float(os.getenv("HOLD_MIN_RATE", "0.85"))
 # shots held over an empty line averaged 11.3 s, up to 16.8 s. Before the
 # shots are planned a longer beat is cut into 2+ shots on word boundaries, each
 # sourced and judged like any beat; afterwards a neighbouring shot is held over
-# an empty line only within the cap and never slowed to stretch (a pick-a-shot
-# runner-up, the ladder or a text card instead). Graphics, maps and animation
-# scenes keep their own lengths. A video style may set its own (src/styles.py);
-# never above 12 s (shotcap.CEILING). 0 = off: every plan exactly as before.
+# an empty line only within the cap and never slowed to stretch (instead: a
+# pick-a-shot runner-up, another moment of the clip beside it, the ladder, and
+# only then a text card). Graphics, maps and animation scenes keep their own
+# lengths. A video style may set its own (src/styles.py); never above 12 s
+# (shotcap.CEILING). 0 = off: every plan exactly as before.
 SHOT_MAX_SECONDS = float(os.getenv("SHOT_MAX_SECONDS", "7.0"))
 # Saving good clips to the library: parallel uploads under one time box.
 LIBRARY_SAVE_SECONDS = float(os.getenv("LIBRARY_SAVE_SECONDS", "90"))

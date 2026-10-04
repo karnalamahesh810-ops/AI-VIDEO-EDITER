@@ -593,7 +593,7 @@ def _how(asset) -> str:
 
 def _kind_of(how: str) -> str:
     """The report's bucket for a repair: replaced / held / graphic / text / none."""
-    if how.startswith(("a library", "a niche", "a spare", "a picture", "an AI", "a runner-up", "a later moment")):
+    if how.startswith(("a library", "a niche", "a spare", "a picture", "an AI", "a runner-up", "another moment")):
         return "replaced"
     if how.startswith("held"):
         return "held"
@@ -1338,9 +1338,10 @@ class Gate:
             for i, how in self._ladder(order, banned, problems).items():
                 info[str(scenes[i]["id"])]["how"] = how
         empties = [str(s.get("id")) for s in scenes if gapfill._empty(s)]
-        # (The ladder above is this repair's own search; whether it may fetch at all is CONTEXT["ladder"].)
+        # (The ladder above is this repair's own search; whether it may fetch at all is CONTEXT["ladder"];
+        # what failed is never taken again there either.)
         gapfill.hold_or_animate(self.doc, label=f"quality gate, {stage}", laddered=True, search=self._ladder_ok(),
-                                work=self.work)
+                                work=self.work, banned=banned)
         now = {str(s.get("id")): s for s in self.doc.get("scenes") or []}
         for sid in empties:
             s = now.get(sid)
@@ -1352,9 +1353,11 @@ class Gate:
                 info[sid]["how"] = "a motion graphic of its line"
             elif not gapfill._empty(s) and "how" not in info[sid]:
                 # A hold would have run past SHOT_MAX_SECONDS (src/shotcap.py): a fresh shot instead.
-                took = ((s.get("semanticMetadata") or {}).get("shotCap") or {}).get("how")
-                info[sid]["how"] = ("a runner-up clip of the line beside it" if took == "alternative"
-                                    else "a later moment of the clip beside it" if took == "moment"
+                cap = (s.get("semanticMetadata") or {}).get("shotCap") or {}
+                took = "own" if cap.get("how") == "alternative" and cap.get("from") == sid else cap.get("how")
+                info[sid]["how"] = ("a runner-up clip of its own line" if took == "own"
+                                    else "a runner-up clip of the line beside it" if took == "alternative"
+                                    else "another moment of the clip beside it" if took == "moment"
                                     else "a spare clip from the footage pools")
         for sid in self.no_empty_scenes():
             if sid in info:

@@ -31,12 +31,17 @@ never above CEILING, 12 s; 0 = off, every plan exactly as before).
              here): a neighbouring shot is held over an empty line only while
              it stays within the cap and its clip covers the longer scene at
              real speed - a clip is never slowed to stretch. When a hold would
-             break the cap the line gets, in order: a pick-a-shot runner-up of
-             a shot beside it (an approved clip nobody shows yet), another
-             moment of a neighbouring YouTube clip FALLBACK_MOMENT_GAP_SECONDS
-             from the one shown (fetched and checked like a chain shot), the
-             fallback ladder where it has not just run (the pools' spare
+             break the cap the line gets, in order: a pick-a-shot runner-up -
+             its own first (a scene whose clip broke or repeated keeps the
+             choices its search made), then one of a shot beside it (an
+             approved clip nobody shows yet) - another moment of a
+             neighbouring YouTube clip FALLBACK_MOMENT_GAP_SECONDS from the
+             one shown (fetched and checked like a chain shot, a few at once),
+             the fallback ladder where it has not just run (the pools' spare
              moments), and only then its line as a full-screen text card.
+             Each fresh clip covers its scene at real speed, and with a style
+             that allows vertical clips one is framed on its blurred copy as
+             the plan frames its own (upscale.frame_vertical).
   report     doc.meta.shotCap: shots over the cap before and after, the cuts
              made, what replaced a hold.
 
@@ -69,6 +74,9 @@ FEW = 30.0                 # a one-word piece
 TOLERANCE_FRAMES = 2       # a scene this many frames over the cap is rounding, not a long shot
 DONOR_REACH = 2            # a runner-up comes from a shot at most this many scenes away
 EXAMPLES = 12              # cuts kept in the report (a 30-minute video makes over a hundred)
+MOMENT_PARALLEL = 6        # other moments fetched at once (as media.fill_chains: a few proxies, not sixteen)
+# A runner-up's licence is not kept with the choice: the plan's own words for a clip it cannot vouch for.
+UNVERIFIED = "unverified — you must hold the rights"
 
 
 def limit() -> float:
@@ -336,12 +344,21 @@ def _alt_media(alt: dict) -> Optional[dict]:
     """
     A runner-up's picture as scene media: its file on this disk while the job
     that found it runs (the plan), else its published copy (the editor's
-    pick-a-shot choice, handler._publish_choices) when that still loads.
+    pick-a-shot choice, handler._publish_choices) when that still loads. With
+    the fields a found clip's media carries (MediaAsset.to_scene_media): its
+    licence - unverified, as the choice does not keep one - and its scores.
     """
+    extra: Dict[str, Any] = {"license": str(alt.get("license") or UNVERIFIED)}
+    for key, field in (("score", "relevanceScore"), ("quality", "qualityScore")):
+        v = alt.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            extra[field] = round(float(v), 3)
+    if alt.get("description"):
+        extra["contentDescription"] = str(alt["description"])
     path = str(alt.get("localPath") or "")
     if path and os.path.isfile(path):
         return {"type": _kind(path), "url": path, "source": str(alt.get("source") or ""),
-                "attribution": str(alt.get("title") or "")}
+                "attribution": str(alt.get("title") or ""), **extra}
     m = alt.get("media") if isinstance(alt.get("media"), dict) else {}
     url = str(m.get("url") or "")
     if not url:
@@ -349,7 +366,27 @@ def _alt_media(alt: dict) -> Optional[dict]:
     kind = _kind(url, str(m.get("type") or "video"))
     if url.startswith(("http://", "https://")) and not _reach(url, kind):
         return None
-    return {**m, "type": kind}
+    return {"source": str(alt.get("source") or ""), "attribution": str(alt.get("title") or ""),
+            **extra, **m, "type": kind}
+
+
+def _frame(path: str) -> None:
+    """
+    A vertical clip on this disk framed on its blurred copy, the way the plan
+    frames its own before the timeline is built (upscale.frame_vertical) - only
+    where the video's style allows vertical clips (ALLOW_VERTICAL); without
+    it object-fit would crop a phone clip to a strip. Landscape clips are left
+    alone; a failure keeps the clip as it is.
+    """
+    if not getattr(config, "ALLOW_VERTICAL", False) or not path or not os.path.isfile(path):
+        return
+    if _kind(path) != "video":
+        return
+    try:
+        from . import upscale
+        upscale.frame_vertical(path)
+    except Exception as e:  # noqa: BLE001 - shown as it is
+        print(f"[shotcap] framing skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
 
 
 def _alt_seconds(alt: dict, media: dict) -> float:
@@ -380,13 +417,16 @@ def _alt_shot(alt: dict, media: dict, at: float):
 
 def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
     """
-    A pick-a-shot runner-up of a shot beside empty scene i (at most DONOR_REACH
-    scenes away), put on the scene: a clip the judge approved for the line
+    A pick-a-shot runner-up for empty scene i, put on the scene: its own first
+    (a scene whose clip broke or repeated keeps the choices its search made:
+    clips the judge approved for this very line), then one of a shot beside it
+    (at most DONOR_REACH scenes away): a clip the judge approved for the line
     next to it that no scene shows, the nearest and best-scored first. Never
     one the video already shows (`used`, gapfill.Used: the same file, asset or
     moment, the same source video on the next scene), never a clip too short
-    to cover the scene at real speed. The runner-up leaves its own scene's
-    choices. Returns what was taken ({"from", "assetId"}) or None.
+    to cover the scene at real speed. The runner-up leaves its scene's
+    choices; the scene's own other choices stay. Returns what was taken
+    ({"from", "assetId"}) or None.
     """
     scenes = doc.get("scenes") or []
     fps = max(1, int(doc.get("fps") or 30))
@@ -394,9 +434,10 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
     need = int(s.get("durationInFrames") or 0) / fps
     at = int(s.get("startFrame") or 0) / fps
     options = []
-    for reach in range(1, DONOR_REACH + 1):
-        for k in (i - reach, i + reach):
-            if not 0 <= k < len(scenes) or not is_shot(scenes[k]):
+    for reach in range(0, DONOR_REACH + 1):
+        for k in ((i,) if reach == 0 else (i - reach, i + reach)):
+            # (A cold-open flash of a later shot is not a shot of this part of the story.)
+            if not 0 <= k < len(scenes) or scenes[k].get("teaser") or (reach and not is_shot(scenes[k])):
                 continue
             sem = scenes[k].get("semanticMetadata") or {}
             for alt in sem.get("alternatives") or []:
@@ -420,22 +461,25 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
         donor = scenes[k]
         donor["semanticMetadata"]["alternatives"] = [a for a in donor["semanticMetadata"]["alternatives"]
                                                      if a is not alt]
+        _frame(str(media.get("url") or ""))
         s["media"] = media
         s.pop("animation", None)
         sem = s.setdefault("semanticMetadata", {})
         src = str(alt.get("sourceUrl") or alt.get("url") or "")
+        own = [a for a in sem.get("alternatives") or [] if a is not alt]
         sem.update({"assetId": str(alt.get("assetId") or ""), "provider": str(alt.get("source") or ""),
                     "sourceUrl": src if src.startswith("http") else "",
                     "contentDescription": str(alt.get("description") or ""),
                     "relevanceScore": alt.get("score"), "qualityScore": alt.get("quality"),
-                    "moment": dict(alt.get("moment") or {}), "alternatives": [],
+                    "moment": dict(alt.get("moment") or {}), "alternatives": own,
                     "shotCap": {"from": str(donor.get("id") or ""), "how": "alternative"}})
         if media["type"] == "image":
             s["motion"] = s.get("motion") or "none"
         s["reviewRequired"] = True
-        s["reviewReason"] = ("Another approved shot of the line beside it: nothing new was found for this line "
-                             "in time, and holding the shot beside it would have run past "
-                             f"{limit():g} s - replace or keep")
+        s["reviewReason"] = (("Another approved shot for this line: its first choice could not be used"
+                              if k == i else "Another approved shot of the line beside it: nothing new was "
+                              "found for this line in time")
+                             + f", and holding the shot beside it would have run past {limit():g} s - replace or keep")
         return {"from": str(donor.get("id") or ""), "assetId": str(alt.get("assetId") or "")}
     return None
 
@@ -455,77 +499,144 @@ def _yt_of(scene: dict) -> Tuple[str, Optional[float]]:
     return video[3:], gapfill._start_from(moment, src, str(m.get("url") or ""))
 
 
-def same_video_moment(doc: dict, i: int, used, work: str, seconds: Optional[float] = None) -> Optional[dict]:
+def find_moment(doc: dict, i: int, used, work: str, stop: float) -> Optional[Tuple[Any, dict]]:
     """
     Another moment of a neighbouring YouTube clip for empty scene i, at least
     FALLBACK_MOMENT_GAP_SECONDS from the one shown (after it first, before it
     when the video has no room after): fetched and checked the way a planned
     chain shot is (media.fill_chains - the clip's quality, the AI-slop and
     still filters, the cross-video ledger), never a moment the video shows or
-    one within the gap of it. The scene then plays on with the clip beside it
-    as a chain, which the repeat rules allow on the next scene. Takes at most
-    `seconds` (FALLBACK_SCENE_SECONDS). Returns {"from", "assetId"} or None.
+    one within the gap of it, never a clip too short to cover the scene at
+    real speed (a moment near the end of its video comes out short). The scene
+    then plays on with the clip beside it as a chain, which the repeat rules
+    allow on the next scene. Nothing is tried after `stop`. Returns (the
+    asset, the scene beside it) - claimed in `used`, not yet on the timeline
+    (put_moment) - or None.
     """
     import time
 
-    from . import gapfill, ledger, media, ytdlp
+    from . import gapfill, ledger, media, timeline
     scenes = doc.get("scenes") or []
     fps = max(1, int(doc.get("fps") or 30))
     s = scenes[i]
-    need = round(int(s.get("durationInFrames") or 0) / fps + media.SEQ_SHOT_PAD, 2)
+    seconds = int(s.get("durationInFrames") or 0) / fps
+    need = round(seconds + media.SEQ_SHOT_PAD, 2)
     at_line = int(s.get("startFrame") or 0) / fps
     gap = float(getattr(config, "FALLBACK_MOMENT_GAP_SECONDS", 30.0) or 30.0)
-    window = float(seconds if seconds is not None else getattr(config, "FALLBACK_SCENE_SECONDS", 45.0))
-    stop = time.time() + max(5.0, window)
+    for k in (i - 1, i + 1):
+        if not 0 <= k < len(scenes) or scenes[k].get("teaser") or not is_shot(scenes[k]):
+            continue
+        vid, start = _yt_of(scenes[k])
+        if not vid or start is None:
+            continue
+        donor = scenes[k]
+        shown = int(donor.get("durationInFrames") or 0) / fps
+        for at in (start + shown + gap, start - gap - need):
+            if time.time() > stop:
+                return None
+            if at < 0 or ledger.moment_used(vid, at, at + need):
+                continue
+            shot = gapfill.Shot(video=f"yt:{vid}", start=at, at=at_line, chain=True)
+            if not used.claim(i, shot):
+                continue
+            title = str((donor.get("media") or {}).get("attribution") or "")
+            try:
+                path, clean, cuts = media.fetch_clean_clip(vid, work, at, need, title)
+            except Exception as e:  # noqa: BLE001 - the next moment, or the next step
+                print(f"[shotcap] scene {i + 1}: moment {at:.0f}s of {vid} not fetched: {type(e).__name__}",
+                      flush=True)
+                path = ""
+            asset = None
+            if path:
+                asset = media.MediaAsset(
+                    kind="video", source="youtube", local_path=path, duration=need,
+                    url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
+                    attribution=title, license=str((donor.get("media") or {}).get("license") or UNVERIFIED),
+                    moment_key=f"yt:{vid}@{int(at // max(1.0, float(config.POOL_MIN_GAP_SECONDS)))}",
+                    moment={"start": round(at, 1), "chain": True, "clean": clean, "cuts": cuts,
+                            "chain_of": str((donor.get("semanticMetadata") or {}).get("assetId") or "")})
+                if not media._asset_ok(asset)[0] or media.motion_rejects(path) or media.slop_reason(path, title):
+                    asset = None
+                elif 0 < timeline._clip_seconds(asset) < seconds - TOLERANCE_FRAMES / fps:
+                    print(f"[shotcap] scene {i + 1}: moment {at:.0f}s of {vid} too short for its scene", flush=True)
+                    asset = None                # it would be slowed (or freeze) to fill the scene
+            if asset is None:
+                used.release(i, shot)
+                continue
+            _frame(path)
+            return asset, donor
+    return None
+
+
+def put_moment(doc: dict, i: int, asset, donor: dict) -> dict:
+    """The moment find_moment fetched, on scene i. Returns {"from", "assetId"}."""
+    from . import gapfill
+    s = doc["scenes"][i]
+    gapfill.apply_asset(s, asset, "")
+    s["reviewRequired"] = True
+    s["reviewReason"] = ("Another moment of the clip beside it: nothing new was found for this line in "
+                         f"time, and holding that clip would have run past {limit():g} s - replace or keep")
+    s["semanticMetadata"]["shotCap"] = {"from": str(donor.get("id") or ""), "how": "moment"}
+    return {"from": str(donor.get("id") or ""), "assetId": asset.identity}
+
+
+def other_moments(doc: dict, todo: List[int], used, work: str, stop: float) -> Dict[int, dict]:
+    """
+    find_moment for several empty scenes, MOMENT_PARALLEL at once, all under
+    one time box (`stop`, epoch seconds): only what is found by then goes on
+    the timeline, here on this thread, so a fetch that finishes late never
+    lands on a scene that has had its text card since. The downloads keep to
+    the box on their own threads (ytdlp.STOP) and the job's deadline is set to
+    it for the while (as the fallback ladder does). Returns {scene index:
+    what was taken}.
+    """
+    import contextvars
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import gapfill, media, ytdlp
+    scenes = doc.get("scenes") or []
+    todo = [k for k in todo if 0 <= k < len(scenes) and gapfill._empty(scenes[k])]
+    if not todo or not work or time.time() >= stop:
+        return {}
+
+    def one(k: int):
+        token = ytdlp.STOP.set((None, stop))
+        try:
+            return find_moment(doc, k, used, work, stop)
+        finally:
+            ytdlp.STOP.reset(token)
+
+    out: Dict[int, dict] = {}
     old = ytdlp.DEADLINE[0]
     ytdlp.set_deadline(stop)
+    pool = ThreadPoolExecutor(max_workers=max(1, min(MOMENT_PARALLEL, len(todo))), thread_name_prefix="shotcap")
+    futures = {pool.submit(contextvars.copy_context().run, one, k): k for k in todo}
     try:
-        for k in (i - 1, i + 1):
-            if not 0 <= k < len(scenes) or not is_shot(scenes[k]):
-                continue
-            vid, start = _yt_of(scenes[k])
-            if not vid or start is None:
-                continue
-            donor = scenes[k]
-            shown = int(donor.get("durationInFrames") or 0) / fps
-            for at in (start + shown + gap, start - gap - need):
-                if time.time() > stop:
-                    return None
-                if at < 0 or ledger.moment_used(vid, at, at + need):
-                    continue
-                shot = gapfill.Shot(video=f"yt:{vid}", start=at, at=at_line, chain=True)
-                if not used.claim(i, shot):
-                    continue
-                title = str((donor.get("media") or {}).get("attribution") or "")
-                try:
-                    path, clean, cuts = media.fetch_clean_clip(vid, work, at, need, title)
-                except Exception as e:  # noqa: BLE001 - the next moment, or the next step
-                    print(f"[shotcap] scene {i + 1}: moment {at:.0f}s of {vid} not fetched: {type(e).__name__}",
-                          flush=True)
-                    path = ""
-                asset = None
-                if path:
-                    asset = media.MediaAsset(
-                        kind="video", source="youtube", local_path=path, duration=need,
-                        url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
-                        attribution=title, license=str((donor.get("media") or {}).get("license") or ""),
-                        moment_key=f"yt:{vid}@{int(at // max(1.0, float(config.POOL_MIN_GAP_SECONDS)))}",
-                        moment={"start": round(at, 1), "chain": True, "clean": clean, "cuts": cuts,
-                                "chain_of": str((donor.get("semanticMetadata") or {}).get("assetId") or "")})
-                    if not media._asset_ok(asset)[0] or media.motion_rejects(path) or media.slop_reason(path, title):
-                        asset = None
-                if asset is None:
-                    used.release(i, shot)
-                    continue
-                gapfill.apply_asset(s, asset, "")
-                s["reviewRequired"] = True
-                s["reviewReason"] = ("Another moment of the clip beside it: nothing new was found for this line in "
-                                     f"time, and holding that clip would have run past {limit():g} s - replace or keep")
-                s["semanticMetadata"]["shotCap"] = {"from": str(donor.get("id") or ""), "how": "moment"}
-                return {"from": str(donor.get("id") or ""), "assetId": asset.identity}
-        return None
+        for fut in media._until(futures, stop + 5):
+            k = futures[fut]
+            try:
+                got = fut.result()
+            except Exception as e:  # noqa: BLE001 - its text card
+                print(f"[shotcap] scene {k + 1}: another moment skipped: {type(e).__name__}: {str(e)[:80]}",
+                      flush=True)
+                got = None
+            if got and gapfill._empty(scenes[k]):
+                out[k] = put_moment(doc, k, *got)
     finally:
+        pool.shutdown(wait=False, cancel_futures=True)
         ytdlp.set_deadline(old)
+    return out
+
+
+def same_video_moment(doc: dict, i: int, used, work: str, seconds: Optional[float] = None) -> Optional[dict]:
+    """
+    other_moments for one empty scene, put on it: at most `seconds`
+    (FALLBACK_SCENE_SECONDS). Returns {"from", "assetId"} or None.
+    """
+    import time
+    window = float(seconds if seconds is not None else getattr(config, "FALLBACK_SCENE_SECONDS", 45.0))
+    return other_moments(doc, [i], used, work, time.time() + max(5.0, window)).get(i)
 
 
 # --------------------------------------------------------------------------- #
@@ -533,7 +644,7 @@ def same_video_moment(doc: dict, i: int, used, work: str, seconds: Optional[floa
 # --------------------------------------------------------------------------- #
 
 def over_cap(doc: dict) -> List[dict]:
-    """Every shot of footage or still on screen longer than the cap (graphics, maps and animations keep their length)."""
+    """Every shot of footage or still on screen longer than the cap (graphics, maps, animations keep their length)."""
     fps = max(1, int(doc.get("fps") or 30))
     cap = cap_frames(fps)
     if not cap:

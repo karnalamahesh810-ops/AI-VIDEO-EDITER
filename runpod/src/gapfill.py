@@ -46,7 +46,7 @@ import threading
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import config, ytdlp
 
@@ -711,19 +711,21 @@ def _card(doc: dict, s: dict) -> bool:
     return bool(text)
 
 
-def _instead_of_hold(doc: dict, left: List[dict], out: Dict[str, int], laddered: bool, search: Optional[bool],
-                     label: str, work: str = "") -> List[dict]:
+def _instead_of_hold(doc: dict, refused: List[dict], out: Dict[str, int], laddered: bool, search: Optional[bool],
+                     label: str, work: str = "", banned: Sequence[Shot] = ()) -> List[dict]:
     """
     The lines no neighbour could be held over without breaking the cap
     (src/shotcap.py: the owner, 2026-10-04, "clips are playing more than seven
-    seconds"), in story order: a pick-a-shot runner-up of a shot beside the
-    line - an approved clip no scene shows; then, where this job may fetch
-    (`search`: its plan's work directory, or the caller's say), another moment
-    of a neighbouring YouTube clip FALLBACK_MOMENT_GAP_SECONDS from the one
-    shown, checked like a chain shot; then, where the ladder has not just run
+    seconds"), in story order: a pick-a-shot runner-up - the line's own, then
+    one of a shot beside it - an approved clip no scene shows; then, where
+    this job may fetch (`search`: its plan's work directory, or the caller's
+    say), another moment of a neighbouring YouTube clip
+    FALLBACK_MOMENT_GAP_SECONDS from the one shown, checked like a chain shot,
+    a few at once under one time box; then, where the ladder has not just run
     for them (`laddered`), the fallback ladder with this job's plan (the pools'
-    spare moments included). Never anything another scene shows. Returns the
-    scenes still without a picture (they get the text card).
+    spare moments included). Never anything another scene shows, never a shot
+    in `banned` (the quality check's failed ones). Returns the scenes still
+    without a picture (they get the text card).
     """
     from . import media, shotcap
     scenes = doc.get("scenes") or []
@@ -733,7 +735,9 @@ def _instead_of_hold(doc: dict, left: List[dict], out: Dict[str, int], laddered:
         shot = Shot.of_scene(sc, fps)
         if shot is not None:
             used.add(k, shot)
-    todo = sorted((k for k, sc in enumerate(scenes) if any(sc is x for x in left)))
+    for n, shot in enumerate(banned or ()):
+        used.add(-1 - n, shot)                  # what failed is never taken again (quality.Gate._ladder)
+    todo = sorted((k for k, sc in enumerate(scenes) if any(sc is x for x in refused)))
     for k in todo:
         try:
             got = shotcap.alternative_for(doc, k, used)
@@ -745,21 +749,19 @@ def _instead_of_hold(doc: dict, left: List[dict], out: Dict[str, int], laddered:
             shotcap.note("alternative")
     work = work or CONTEXT.get("work") or media._WORK.get("dir") or ""
     may_fetch = bool(work) and (bool(search) if search is not None else bool(CONTEXT.get("jobs")))
-    # One time box for all the fetches (a render's repair must not wait on YouTube for minutes).
-    per_scene = float(config.FALLBACK_SCENE_SECONDS)
-    stop = time.time() + min(float(config.FALLBACK_SECONDS), per_scene * max(1, len(todo)))
-    for k in todo:
-        left = stop - time.time()
-        if not may_fetch or not _empty(scenes[k]) or left <= 1.0:
-            continue
+    fetch = [k for k in todo if _empty(scenes[k])]
+    if may_fetch and fetch:
+        # One time box for all the fetches, a few at once (a render's repair must not wait on YouTube for minutes).
+        rounds = -(-len(fetch) // max(1, shotcap.MOMENT_PARALLEL))
+        window = min(float(config.FALLBACK_SECONDS), float(config.FALLBACK_SCENE_SECONDS) * rounds)
         try:
-            got = shotcap.same_video_moment(doc, k, used, work, seconds=min(per_scene, left))
+            got = shotcap.other_moments(doc, fetch, used, work, time.time() + window)
         except Exception as e:  # noqa: BLE001 - the next step
-            print(f"[fill] scene {k + 1}: another moment skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
-            got = None
+            print(f"[fill] other moments skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
+            got = {}
         if got:
-            out["moment"] = out.get("moment", 0) + 1
-            shotcap.note("moment")
+            out["moment"] = out.get("moment", 0) + len(got)
+            shotcap.note("moment", len(got))
     todo = [k for k in todo if _empty(scenes[k])]
     work = CONTEXT.get("work") or ""
     if todo and not laddered and CONTEXT.get("jobs") and work and config.FALLBACK_FILL and config.NO_REUSE:
@@ -773,14 +775,16 @@ def _instead_of_hold(doc: dict, left: List[dict], out: Dict[str, int], laddered:
             print(f"[fill] the ladder failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
         for k, a in results.items():
             if a is not None and 0 <= k < len(scenes) and _empty(scenes[k]):
-                apply_asset(scenes[k], a, "Found when holding the shot beside it would have run too long - check it fits")
+                apply_asset(scenes[k], a, "Found when holding the shot beside it would have run too long - "
+                                          "check it fits")
                 out["ladder"] = out.get("ladder", 0) + 1
                 shotcap.note("ladder")
     return [scenes[k] for k in todo if _empty(scenes[k])]
 
 
 def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
-                    search: Optional[bool] = None, work: str = "") -> Dict[str, int]:
+                    search: Optional[bool] = None, work: str = "",
+                    banned: Sequence[Shot] = ()) -> Dict[str, int]:
     """
     (d) Every empty scene: the planner's own graphic for its line (numbers,
     money, maps), else the neighbouring shot held over it while the clip
@@ -796,7 +800,7 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     else when it planned the video; into `work`, else the plan's directory),
     then the ladder (unless the caller has just run it: `laddered`), and only
     then the text card ("alternative", "moment" and "ladder" are added to the
-    counts).
+    counts); never a shot in `banned` (the quality check's failed ones).
     """
     from . import shotcap
     scenes = doc.get("scenes") or []
@@ -836,7 +840,7 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     if capped and cards:
         # No shot past the cap: a fresh approved shot before a text card.
         shotcap.note("refused", len(cards))
-        cards = list(reversed(_instead_of_hold(doc, cards, out, laddered, search, label, work)))
+        cards = list(reversed(_instead_of_hold(doc, cards, out, laddered, search, label, work, banned)))
     for s in reversed(cards):                   # story order
         if _card(doc, s):
             out["card"] += 1
@@ -910,6 +914,7 @@ def apply_asset(scene: dict, asset, why: str = "") -> None:
             pass
     scene["media"] = media
     sem = scene.setdefault("semanticMetadata", {})
+    sem.pop("shotCap", None)            # what the shot cap put here before (src/shotcap.py) is gone
     sem.update({"assetId": asset.identity, "provider": asset.source,
                 "sourceUrl": asset.url if str(asset.url or "").startswith("http") else "",
                 "contentDescription": asset.content_description or "",

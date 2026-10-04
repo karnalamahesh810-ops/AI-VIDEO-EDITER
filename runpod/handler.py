@@ -899,12 +899,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # "place" and "recency" carry the line's own place and "last month first"
     # into the pools and the searches (the owner's review, 2026-09-30).
     # With the shot cap on, each line asks for a clip as long as its shot is ON
-    # SCREEN (to the next line's first word, at most the cap) instead of as long
-    # as it is spoken: a clip is never slowed to fill its scene (src/shotcap.py).
+    # SCREEN (to the next line's first word) instead of as long as it is spoken:
+    # a clip is never slowed to fill its scene (src/shotcap.py) - not even on a
+    # beat whose words left no cut (a long pause), which stays longer than the cap.
     on_screen = shotcap.screen_seconds(segments, audio_duration) if shotcap.enabled() else None
     jobs = [{"index": i, "query": shot["query"],
-             "seconds": seg.duration if on_screen is None
-             else max(seg.duration, min(on_screen[i], shotcap.limit())),
+             "seconds": seg.duration if on_screen is None else max(seg.duration, on_screen[i]),
              "start": round(float(seg.start), 2),
              "visual_type": shot.get("visualType", "footage"),
              "fallbacks": shot.get("fallbacks") or [],
@@ -2278,7 +2278,7 @@ def handler(job):
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
     shotcap.reset()                     # and what the shot cap cut and swapped
-    packs.reset()                      # and the niches its footage packs are read for
+    packs.reset()                       # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's
     kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
     kit_scope.__enter__()
