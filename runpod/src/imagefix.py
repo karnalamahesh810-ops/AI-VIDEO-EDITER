@@ -68,23 +68,69 @@ def _slot(url: str) -> threading.BoundedSemaphore:
 # Wikimedia only rate-limits (its slots above), so it is never skipped.
 HOST_FAILS_MAX = 2
 HOST_FAILS_SECONDS = 1800.0
-_HOST_FAILS: dict = {}           # host -> (failures, time of the last one)
+_HOST_FAILS: dict = {}           # host (or a shared host's part) -> (failures, time of the last one)
 _NEVER_SKIPPED = set(_HOST_LIMIT)
+
+# Hosts that serve many unrelated sites' or people's pictures. A refusal there is
+# about one site's part of the host - or one picture - never the whole host: two
+# 403s for one WordPress site behind Jetpack's i0.wp.com used to skip every
+# WordPress site's pictures for half an hour, two for one Pinterest pin every pin.
+# The number is how many leading path segments name that part (the site behind
+# i0.wp.com/<site>/..., a Squarespace site id, a Shopify store, a path-style S3
+# bucket, a YouTube video's thumbnails); 0 = each picture is its own part.
+_SHARED_HOSTS = {
+    "i0.wp.com": 1, "i1.wp.com": 1, "i2.wp.com": 1, "i3.wp.com": 1,
+    "images.squarespace-cdn.com": 3, "cdn.shopify.com": 4, "s3.amazonaws.com": 1, "i.ytimg.com": 2,
+    "i.pinimg.com": 0, "live.staticflickr.com": 0, "pbs.twimg.com": 0, "i.redd.it": 0, "preview.redd.it": 0,
+    "i.imgur.com": 0, "static.wixstatic.com": 0, "media.licdn.com": 0, "cdn.discordapp.com": 0,
+}
+# Families of such hosts by the end of their name: each picture its own part.
+_SHARED_SUFFIXES = (".staticflickr.com", ".googleusercontent.com", ".bp.blogspot.com", ".wixmp.com",
+                    ".fbcdn.net", ".cdninstagram.com", ".pinimg.com", ".twimg.com")
+# A shared host as a whole is still skipped when its parts refused this often in
+# HOST_FAILS_SECONDS: a CDN that refuses this worker's address everywhere.
+SHARED_FAILS_MAX = 6
 
 
 def _host(url: str) -> str:
     return urllib.parse.urlparse(url or "").netloc.lower()
 
 
+def _shared_depth(host: str) -> Optional[int]:
+    """How many leading path segments name one site on a shared host (0: each picture),
+    or None for an ordinary site."""
+    if host in _SHARED_HOSTS:
+        return _SHARED_HOSTS[host]
+    return 0 if host.endswith(_SHARED_SUFFIXES) else None
+
+
+def _refusal_keys(url: str) -> list:
+    """[(key, limit)] a picture's refusals are counted under: its host - or, on a shared host,
+    the part of it the picture belongs to (HOST_FAILS_MAX) and the whole host (SHARED_FAILS_MAX)."""
+    parts = urllib.parse.urlparse(url or "")
+    host = parts.netloc.lower()
+    depth = _shared_depth(host)
+    if depth is None:
+        return [(host, HOST_FAILS_MAX)]
+    segs = [s for s in parts.path.split("/") if s]
+    part = host + "/" + "/".join(segs if depth == 0 else segs[:depth])
+    return [(part, HOST_FAILS_MAX), (host, SHARED_FAILS_MAX)]
+
+
 def host_refused(url: str) -> bool:
-    """True when this picture's site refused or ignored enough downloads lately that asking again only wastes a
-    scene's time."""
+    """True when this picture's site (on a shared host: its part of it, or the whole host
+    when every part refuses) refused or ignored enough downloads lately that asking again
+    only wastes a scene's time."""
     host = _host(url)
     if not host or host in _NEVER_SKIPPED:
         return False
+    now = time.time()
     with _HOST_LOCK:
-        n, last = _HOST_FAILS.get(host, (0, 0.0))
-    return n >= HOST_FAILS_MAX and time.time() - last < HOST_FAILS_SECONDS
+        for key, limit in _refusal_keys(url):
+            n, last = _HOST_FAILS.get(key, (0, 0.0))
+            if n >= limit and now - last < HOST_FAILS_SECONDS:
+                return True
+    return False
 
 
 def _note_refusal(url: str, why: str = "") -> None:
@@ -99,11 +145,16 @@ def _note_refusal(url: str, why: str = "") -> None:
         return
     if STOPPED in (why or ""):
         return                     # the asking scene's time ran out, not the site's fault
+    now = time.time()
     with _HOST_LOCK:
-        n, last = _HOST_FAILS.get(host, (0, 0.0))
-        if time.time() - last >= HOST_FAILS_SECONDS:
-            n = 0
-        _HOST_FAILS[host] = (n + 1, time.time())
+        if len(_HOST_FAILS) > 5000:            # a long-lived worker: one key a refused picture
+            for key in [k for k, (_n, t) in _HOST_FAILS.items() if now - t >= HOST_FAILS_SECONDS]:
+                del _HOST_FAILS[key]
+        for key, _limit in _refusal_keys(url):
+            n, last = _HOST_FAILS.get(key, (0, 0.0))
+            if now - last >= HOST_FAILS_SECONDS:
+                n = 0
+            _HOST_FAILS[key] = (n + 1, now)
 
 
 def _dest_lock(path: str) -> threading.Lock:
