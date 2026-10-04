@@ -177,6 +177,25 @@ class Names(unittest.TestCase):
         self.assertEqual(config.WATERMARK_CLIP_SHARE, 0.75)
 
 
+class JudgeWording(unittest.TestCase):
+    """The vision judge turns down an agency's mark - and only an agency's: a caption, catalogue number or
+    library stamp on an archive print, or a credit that names no agency, is not one (a "credit bar under the
+    picture" on its own would also describe a museum print's label, and the verdict is a hard reject)."""
+
+    def test_the_strict_and_the_news_judge_name_the_agency_cues_and_what_is_not_one(self):
+        from src import vision
+        for news in (False, True):
+            with mock.patch.object(config, "NEWS_FOOTAGE", news):
+                text = vision._system()
+            self.assertIn("the agency's credit bar under the", text.replace("\n", " "))
+            self.assertIn("Not an agency's mark: a caption, date, catalogue number or library stamp on an archive "
+                          "print", text)
+            self.assertIn("credit that names no agency", text)
+            self.assertNotIn("or a credit bar under the picture", text)          # never any credit bar
+            self.assertEqual("TV NEWS FOOTAGE IS WELCOME" in text, news)
+            self.assertEqual(vision._STRICT_TEXT_RULE in text, not news)       # the news swap still matches
+
+
 class EveryPath(unittest.TestCase):
     def setUp(self):
         stockblock.reset()

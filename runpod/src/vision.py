@@ -83,9 +83,11 @@ _SYSTEM = (
     "dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
     "repeated across the picture, a translucent box with the agency's name and a "
     "photographer credit, the agency's image ID or web address along an edge "
-    "(\"Image ID: 2J7W6N8 www.alamy.com\"), or a credit bar under the picture - "
-    "each of these sets has_text_or_watermark true. Small incidental real-world text "
-    "(a street sign) is fine.\n"
+    "(\"Image ID: 2J7W6N8 www.alamy.com\"), or the agency's credit bar under the "
+    "picture - each of these sets has_text_or_watermark true. Not an agency's mark: "
+    "a caption, date, catalogue number or library stamp on an archive print, or a "
+    "photographer's or newspaper's credit that names no agency. Small incidental "
+    "real-world text (a street sign) is fine.\n"
     "STORY is the whole video's subject. A shot that contradicts it (another "
     "person, another event, another era) is wrong even if it fits the line's "
     "words. For an abstract line (a feeling, a decision, a record), era-accurate "
@@ -136,15 +138,19 @@ _STRICT_TEXT_RULE = (
     "dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
     "repeated across the picture, a translucent box with the agency's name and a "
     "photographer credit, the agency's image ID or web address along an edge "
-    "(\"Image ID: 2J7W6N8 www.alamy.com\"), or a credit bar under the picture - "
-    "each of these sets has_text_or_watermark true. Small incidental real-world text "
-    "(a street sign) is fine.\n")
+    "(\"Image ID: 2J7W6N8 www.alamy.com\"), or the agency's credit bar under the "
+    "picture - each of these sets has_text_or_watermark true. Not an agency's mark: "
+    "a caption, date, catalogue number or library stamp on an archive print, or a "
+    "photographer's or newspaper's credit that names no agency. Small incidental "
+    "real-world text (a street sign) is fine.\n")
 _STAMP_RULE = (
     " A stock agency's mark counts even when faint: its name (alamy, gettyimages, iStock, "
     "shutterstock, dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
     "repeated across the picture, a translucent box with the agency's name and a photographer "
     "credit, the agency's image ID or web address along an edge (\"Image ID: 2J7W6N8 "
-    "www.alamy.com\"), or a credit bar under the picture.")
+    "www.alamy.com\"), or the agency's credit bar under the picture. Not an agency's mark: a "
+    "caption, date, catalogue number or library stamp on an archive print, or a photographer's "
+    "or newspaper's credit that names no agency.")
 _NEWS_TEXT_RULE = (
     "TV NEWS FOOTAGE IS WELCOME: field video, aerials, interviews and press "
     "conferences from a news report are exactly what this documentary uses, WITH "
