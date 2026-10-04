@@ -1258,13 +1258,17 @@ SLOP_REJECTED: Dict[str, int] = {}
 # not read it any time. A studio or a TV map is not here: a line about a named
 # person or one asking for a map may use it.
 _BAD: Dict[str, str] = {}
+# A paid verdict that turns a candidate down for every line (JUDGE_MEMORY): remembered for
+# that moment of a clip, or that picture - never the whole video on one verdict.
+_JUDGED_LINE_FREE = "judged unusable for any line"
 _LINE_FREE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a still with a slow pan or zoom",
               "a slideshow of stills", "a frozen", "another creator's burned-in captions", "burned-in text or UI",
               "a download that will not play",
               # A stock agency's credit bar or stamp (src/stockblock.py) is on the picture whatever the line.
               "an agency credit bar", "an agency watermark",
               # Too soft for the frame (src/sharpness.py): a property of the file, whatever the line.
-              "a blurry picture", "low detail")
+              "a blurry picture", "low detail",
+              _JUDGED_LINE_FREE)
 # An upscaled upload is soft in every moment of it.
 _VIDEO_WIDE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a download that will not play",
                "low detail")
@@ -1372,6 +1376,27 @@ def watermark_reason(path: str, where: str = "", bar: bool = True, stamp: bool =
     return why
 
 
+def judged_line_free(verdict: Optional[dict]) -> str:
+    """
+    Why a paid verdict turns its candidate down for EVERY line ("" = for this line
+    only, or kept): what vision.acceptable rejects whatever the line and whoever it
+    names - other people's text or a watermark, an AI-made picture, footage too poor
+    to show (the judge rates quality "whatever the subject"). A studio or talking head
+    is not here: a line about a named person may use it; nor a low score, which is
+    about this line's intent.
+    """
+    if not verdict:
+        return ""
+    if verdict.get("has_text_or_watermark"):
+        return f"{_JUDGED_LINE_FREE}: text or watermark"
+    if verdict.get("ai_generated"):
+        return f"{_JUDGED_LINE_FREE}: AI-made"
+    quality = verdict.get("quality")
+    if quality is not None and quality < config.VISION_MIN_QUALITY:
+        return f"{_JUDGED_LINE_FREE}: too poor to show"
+    return ""
+
+
 def _vision_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
     """
     (keep, verdict) for a downloaded candidate.
@@ -1450,6 +1475,12 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
               flush=True)
         return keep, None
     keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person")
+    if not keep and verdict is not None and config.JUDGE_MEMORY:
+        # Turned down for a reason no other line can change: every caller remembers it
+        # (_mark_bad with the gate's reason), so no other scene pays for this answer again.
+        why = judged_line_free(verdict)
+        if why:
+            _GATE_SLOP.set(why)
     if verdict is not None:
         mark = "keep" if keep else "REJECT"
         flags = []
@@ -2895,6 +2926,11 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         if not _claim_inflight(c.id, used):
             continue                        # another scene is downloading it right now
         claimed.append(c.id)
+        if config.JUDGE_MEMORY and _is_bad(f"yt:{c.id}@{int(point // 10)}"):
+            # Another scene's judge turned this moment down for every line: not
+            # refined (a paid call) only to be skipped after it.
+            _release_inflight(c.id)
+            continue
         # The fine pass (one more model call) goes to the best-ranked
         # download only; the others keep their coarse pick.
         if not fine_done and _vision_budget_left() >= 2:
@@ -3042,17 +3078,37 @@ def fetch_clean_clip(video_id: str, out_dir: str, start: float, need: float,
     return tidy_clip(path, need, prefer=start - fetch_start)
 
 
+# Fine passes already paid for in this job (JUDGE_MEMORY): video, coarse moment, clip
+# length and intent -> the refined moment, as _SCOUT_MEMO keeps the coarse pick.
+_FINE_MEMO: Dict[str, dict] = {}
+
+
+def _fine_memo_key(video_id: str, moment: dict, grab: float, intent: str) -> str:
+    return f"{video_id}|{round(float(moment.get('start') or 0.0), 1)}|{round(grab)}|{(intent or '')[:120]}"
+
+
 def _refine_moment(candidate: dict, moment: Optional[dict], grab: float,
                    intent_text: str, context: str) -> Optional[dict]:
-    """The fine storyboard pass around a coarse pick (moments.refine), or the pick."""
+    """The fine storyboard pass around a coarse pick (moments.refine), or the pick.
+    With JUDGE_MEMORY a refined moment is remembered (only one that came back: a
+    pass that found nothing, or failed, is asked again next time, as before)."""
     if not moment or not config.MOMENT_FINE_PASS or not intent_text:
         return moment
+    key = _fine_memo_key(candidate["id"], moment, grab, intent_text) if config.JUDGE_MEMORY else ""
+    if key:
+        with _SCENE_LOCK:
+            known = _FINE_MEMO.get(key)
+        if known:
+            return dict(known)
     try:
         info, proxy = _yt_info(candidate["id"])
         fine = moments.refine(info, moment, intent_text, context, grab, proxy) if info else None
     except Exception as e:  # noqa: BLE001 - the coarse pick stands
         print(f"[moment] fine pass failed: {type(e).__name__}", flush=True)
         fine = None
+    if key and fine:
+        with _SCENE_LOCK:
+            _FINE_MEMO[key] = dict(fine)
     if fine:
         print(f"[moment] fine {fine['score']:.2f} @ {fine['start']:.1f}s over {fine['span']:.0f}s "
               f"(coarse {moment.get('score', 0):.2f} @ {moment.get('start', 0):.1f}s)", flush=True)
@@ -3244,6 +3300,7 @@ def reset_cache():
     """Call between jobs — serverless worker processes are reused across renders."""
     with _SCENE_LOCK:
         _SCOUT_MEMO.clear()
+        _FINE_MEMO.clear()
         _INFLIGHT.clear()
     with _CACHE_LOCK:
         _SEARCH_CACHE.clear()

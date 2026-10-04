@@ -287,6 +287,18 @@ EXCELLENT_SCORE = float(os.getenv("EXCELLENT_SCORE", "0.85"))
 # Every model call a scene makes (scouting, the fine pass, judging) across
 # all its searches. The old-style search used about 10 per scene.
 JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "12"))
+# Never pay twice for the same answer (the cost plan, 2026-10-05). On:
+#  - a paid verdict that turns a candidate down for EVERY line - other
+#    people's text or a watermark, AI-made, unwatchable quality - is
+#    remembered like the free filters' rejections (media._BAD): no other scene
+#    downloads and judges that moment of that clip, or that picture, again.
+#    Before, only the free checks were remembered, and another scene's judge
+#    call missed the verdict cache because its intent differed.
+#  - the fine pass (moments.refine) is remembered per video, coarse moment,
+#    clip length and intent, as the scout already is: a scene searched again
+#    (pass 2, the stronger hook, a re-cut) paid it again on the same video.
+# Off ("0", the default): exactly as before.
+JUDGE_MEMORY = _flag("JUDGE_MEMORY", False)
 # Searches a typed scene intent expands to (src/intent.py), specific first.
 INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # The candidate pool (src/candidates.py): every search variant plus
