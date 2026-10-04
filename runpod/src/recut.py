@@ -1612,6 +1612,7 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
     events.phase("recut-source")
     found = dict(finder.run())
     events.phase("recut")
+    out["stageSeconds"] = media.stage_seconds()     # searches, downloads, checks and gates: thread-seconds
 
     # The same polish as a plan (upscale.upscale_assets: a vertical clip framed, a soft one sharpened, a
     # small photo upscaled), time-boxed; then each file's real length and tone, while it is on this disk.

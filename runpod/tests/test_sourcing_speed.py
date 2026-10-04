@@ -85,5 +85,46 @@ class ChecksBeforeTheJudge(unittest.TestCase):
         self.assertEqual(self.judged, ["slide.jpg"])
 
 
+class WhereTheTimeGoes(unittest.TestCase):
+    """media.stage_seconds(): thread-seconds per stage, in the job result (meta.sourcing, a re-cut's result)."""
+
+    def setUp(self):
+        with media._CACHE_LOCK:
+            media._STAGES.clear()
+        self.work = tempfile.mkdtemp(prefix="stages_")
+        self.addCleanup(shutil.rmtree, self.work, True)
+
+    def test_searches_downloads_checks_and_gates_are_timed(self):
+        from src.storage import StorageError
+        cands = [MediaAsset(kind="image", source="web_image", url=f"https://img.example/{n}.jpg", query="q")
+                 for n in ("gone", "photo")]
+        good = photo(os.path.join(self.work, "p.jpg"))
+
+        def fetch(url, dest, page_url="", thumbnail=""):
+            if "gone" in url:
+                raise StorageError("picture download failed: 404 Client Error")
+            return good
+        with mock.patch.object(media, "search_web_images", return_value=cands), \
+                mock.patch.object(media._imagefix, "fetch", side_effect=fetch), \
+                mock.patch.object(media, "_photo_seen_before", return_value=False), \
+                mock.patch.object(media, "_judge_gate", return_value=(True, None)), \
+                mock.patch.object(media, "watermark_reason", return_value=""):
+            found = media._cached_search(media.search_web_images, "lake shore q1", key="search_web_images")
+            got = media._pick_unused(found, set(), "q", self.work, "the lake shore")
+        self.assertEqual(got.url, "https://img.example/photo.jpg")
+        stages = media.stage_seconds()
+        for name in ("search:search_web_images", "download:picture_failed", "download:picture",
+                     "checks:picture", "gate:picture"):
+            self.assertEqual(stages[name]["n"], 1, (name, stages))
+            self.assertGreaterEqual(stages[name]["seconds"], 0.0)
+
+    def test_a_new_job_starts_from_nothing(self):
+        media._stage("download:picture", 1.5)
+        media._stage("download:picture", 0.5)
+        self.assertEqual(media.stage_seconds()["download:picture"], {"n": 2, "seconds": 2.0, "mean": 1.0})
+        media.reset_cache()
+        self.assertEqual(media.stage_seconds(), {})
+
+
 if __name__ == "__main__":
     unittest.main()

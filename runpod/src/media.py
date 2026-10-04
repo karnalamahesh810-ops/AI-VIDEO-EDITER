@@ -1392,19 +1392,23 @@ def _vision_gate(path: str, intent: str, context: str, label: str, source_url: s
     ~0.7 s) only on a picture about to be kept - the judge sees a still 384 px
     wide, where a faint stamp is nearly invisible.
     """
-    why = watermark_reason(path, "gate", stamp=False)
-    if why:
-        _GATE_SLOP.set(why)
-        print(f"[stockblock] REJECT {why}: {label[:60]!r}", flush=True)
-        return False, None
-    keep, verdict = _judge_gate(path, intent, context, label, source_url)
-    if keep:
-        why = watermark_reason(path, "gate", bar=False)
+    t0 = time.time()
+    try:
+        why = watermark_reason(path, "gate", stamp=False)
         if why:
             _GATE_SLOP.set(why)
             print(f"[stockblock] REJECT {why}: {label[:60]!r}", flush=True)
             return False, None
-    return keep, verdict
+        keep, verdict = _judge_gate(path, intent, context, label, source_url)
+        if keep:
+            why = watermark_reason(path, "gate", bar=False)
+            if why:
+                _GATE_SLOP.set(why)
+                print(f"[stockblock] REJECT {why}: {label[:60]!r}", flush=True)
+                return False, None
+        return keep, verdict
+    finally:
+        _stage(f"gate:{'picture' if _is_still(path) else 'clip'}", time.time() - t0)
 
 
 def _judge_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
@@ -2148,7 +2152,9 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
     while True:
         if _ytdlp.stopped():
             return ""
+        t0 = time.time()
         path = _yt_fetch(video_id, out_dir, start_at, seconds)
+        _stage("download:youtube" if path else "download:youtube_failed", time.time() - t0)
         if path:
             return path
         cls, _proxy = _LAST_FAILURE.get() or (FailureClass.UNKNOWN, "")
@@ -3211,6 +3217,29 @@ def source_stats() -> Dict[str, Any]:
         return {k: dict(v, recentErrors=list(v["recentErrors"])) for k, v in _SOURCE_STATS.items()}
 
 
+# Where sourcing's time goes, per stage, for the job result (meta.sourcing.stageSeconds,
+# a re-cut's stageSeconds): each search by source, each picture download (arrived or
+# failed), a picture's checks before the judge, each gate (the AI filters, the local
+# model, the vision judge, the stamp) for a picture or a clip, each YouTube section.
+# Thread-seconds: sixteen scenes at once add up to sixteen seconds a second. The
+# Yellowstone re-cut (2026-10-04) said only that 39 pieces ran out of time.
+_STAGES: Dict[str, List[float]] = {}
+
+
+def _stage(name: str, seconds: float) -> None:
+    with _CACHE_LOCK:
+        row = _STAGES.setdefault(name, [0, 0.0])
+        row[0] += 1
+        row[1] += max(0.0, float(seconds))
+
+
+def stage_seconds() -> Dict[str, Dict[str, float]]:
+    """{stage: {"n": calls, "seconds": thread-seconds, "mean": seconds a call}} of this job so far."""
+    with _CACHE_LOCK:
+        return {k: {"n": int(n), "seconds": round(s, 1), "mean": round(s / n, 2) if n else 0.0}
+                for k, (n, s) in sorted(_STAGES.items())}
+
+
 def reset_cache():
     """Call between jobs — serverless worker processes are reused across renders."""
     with _SCENE_LOCK:
@@ -3221,6 +3250,7 @@ def reset_cache():
         _YT_CANDIDATES_CACHE.clear()
         _GOOGLE_VIDEO_CACHE.clear()
         _SOURCE_STATS.clear()
+        _STAGES.clear()
         _USED_CHANNELS.clear()
         _GENERATED[0] = 0
         _PHOTOS.update(cap=None, used=0)
@@ -3307,12 +3337,14 @@ def _cached_search(fn, query: str, cache_key: str = "", key: str = "") -> List[M
             return _SEARCH_CACHE[key]
     if _ytdlp.stopped():
         return []
+    t0 = time.time()
     try:
         found = fn(query)
     except Exception as e:  # noqa: BLE001
         print(f"[media] {name} '{query}' failed: {e}", flush=True)
         _source_error(name, e)
         found = []
+    _stage(f"search:{name}", time.time() - t0)
     with _CACHE_LOCK:
         st = _source_stat(name)
         st["searches"] += 1
@@ -3334,6 +3366,8 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
     safe = "".join(ch for ch in query if ch.isalnum())[:24] or "asset"
     dest = os.path.join(
         work_dir, f"{candidate.source}_{safe}_{abs(hash(candidate.url)) % 999999}{ext}")
+    kind = "picture" if candidate.kind == "image" else "file"
+    t0 = time.time()
     try:
         if candidate.kind == "image":
             # Browser-style retries for hotlink blocks, and whatever format
@@ -3346,8 +3380,10 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
                                                    thumbnail=thumb)
         else:
             candidate.local_path = download(candidate.url, dest)
+        _stage(f"download:{kind}", time.time() - t0)
         return candidate
     except Exception as e:  # noqa: BLE001
+        _stage(f"download:{kind}_failed", time.time() - t0)
         _source_error(f"download_{candidate.source}", e)
         return None
 
@@ -3461,11 +3497,13 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
         # text used to pass the judge, come back and be thrown out - and the scene
         # then searched again from the start (the Yellowstone re-cut, 2026-10-04: 6 of
         # its 39 empty pieces ended on "a page of text, not a photo").
+        t0 = time.time()
         if got.kind == "image":
             ok, why = _asset_ok(got)
             why = "" if ok else (why or "not usable")
         else:
             why = clip_detail_reason(got.local_path, got.attribution, got.source)
+        _stage(f"checks:{'picture' if got.kind == 'image' else 'file'}", time.time() - t0)
         if why:
             print(f"[media] REJECT before judging: {why}: {_image_label(got)[:60]!r}", flush=True)
             _mark_bad(candidate.identity, "", why)
@@ -4240,6 +4278,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     LAST_STATS["stockBlocked"] = _stockblock.stats()        # the handler refreshes it after the rescue pass
     # Pictures and clips measured for real detail, how many were too soft, the seconds spent.
     LAST_STATS["sharpness"] = _sharpness.stats()
+    LAST_STATS["stageSeconds"] = stage_seconds()           # where the sourcing threads' time went
     LAST_STATS.update(total_seconds=round(time.time() - t_start, 1),
                       reused_to_fill=reused,
                       still_empty=sum(1 for r in results if r is None),

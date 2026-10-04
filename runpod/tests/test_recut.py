@@ -620,6 +620,9 @@ class Ladder(Bench):
         self.assertEqual(piece["media"]["type"], "image")
         self.assertNotEqual(piece["motion"], scenes[0]["motion"])                # consecutive stills never match
         self.assertEqual(out["totals"]["by"], {"picture": 1})
+        self.assertIsInstance(out["stageSeconds"], dict)                        # where the sourcing time went
+        self.assertIn("search", out["totals"]["rungSeconds"])
+        self.assertIn("search", next(r for r in out["rows"] if r["result"] == "new")["spent"])
 
     def test_two_pieces_never_take_one_shot_and_nothing_repeats(self):
         fps = 30
