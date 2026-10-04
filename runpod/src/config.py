@@ -826,6 +826,29 @@ RENDER_VIDEO_THREADS = int(os.getenv("RENDER_VIDEO_THREADS", "1"))
 # a retried fetch, short enough that a dead tile server still fails the job.
 RENDER_DELAY_TIMEOUT_MS = int(os.getenv("RENDER_DELAY_TIMEOUT_MS", "120000"))
 
+# --- how long one render may run (src/render.py render_timeout) ------------------
+# A render's time limit follows its frames and this machine. It was a flat 90
+# minutes: a 29-minute video (52,000 frames) rendered whole on one 16-vCPU
+# worker drew ~7 frames a second and was killed at 55% after 5400 s with
+# nothing saved (2026-10-03). The speed is estimated as RENDER_FPS_PER_TAB
+# frames a second for every browser tab the render runs (its concurrency, never
+# more than the CPUs this container may use; measured 0.58 on that worker, kept
+# lower here so a slow machine is not cut short). The limit is the estimate x
+# RENDER_TIMEOUT_FACTOR + RENDER_TIMEOUT_BASE_SECONDS, never under ..._MIN and
+# never over ..._MAX (the upper bound: no render runs longer than that).
+RENDER_FPS_PER_TAB = float(os.getenv("RENDER_FPS_PER_TAB", "0.45"))
+RENDER_TIMEOUT_FACTOR = float(os.getenv("RENDER_TIMEOUT_FACTOR", "1.5"))
+RENDER_TIMEOUT_BASE_SECONDS = float(os.getenv("RENDER_TIMEOUT_BASE_SECONDS", "600"))
+RENDER_TIMEOUT_MIN_SECONDS = float(os.getenv("RENDER_TIMEOUT_MIN_SECONDS", "1800"))
+RENDER_TIMEOUT_MAX_SECONDS = float(os.getenv("RENDER_TIMEOUT_MAX_SECONDS", "14400"))
+# CPUs this container may use; 0 = read the container's own limit (render.cpus).
+RENDER_CPUS = int(os.getenv("RENDER_CPUS", "0"))
+# A render that says nothing at all for this long while its frames are being
+# drawn is hung: it is stopped with a clear error instead of sitting until its
+# time limit. (Not once every frame is drawn: a long video's sound is mixed
+# without a line of output.) 0 = off.
+RENDER_STALL_SECONDS = float(os.getenv("RENDER_STALL_SECONDS", "900"))
+
 # --- render speed (src/render.py; measured 2026-10-01) ---------------------------
 # x264 preset of every h264 render. Remotion's default, medium, encodes beside
 # the browser tabs and took ~16% of the machine: veryfast is 2.3x faster at the
@@ -951,7 +974,9 @@ R2_LIBRARY_PUBLIC_BASE = os.getenv("R2_LIBRARY_PUBLIC_BASE", "").strip()
 R2_LIBRARY_PREFIX = os.getenv("R2_LIBRARY_PREFIX", "").strip()
 # Each scene's clip, preview and thumbnail go to R2_BUCKET under a public,
 # link-only name (no storage reference, so nothing re-signs them) instead of
-# the app's video-media bucket. On whenever R2 is configured; 0 = app storage.
+# the app's video-media bucket. On whenever R2 is configured; 0 = app storage
+# (only with R2_ONLY off too: Cloudflare-only keeps them in R2 either way, under
+# the same public link - a saved timeline never carries a link that expires).
 R2_SCENE_MEDIA = _flag("R2_SCENE_MEDIA", True)
 # Every file this worker stores goes to Cloudflare R2 (R2_BUCKET) once R2 is
 # configured: scene media, render chunks, parts' clips, the library and the
@@ -1133,6 +1158,18 @@ QUALITY_REPAIR_SCENE_SECONDS = float(os.getenv("QUALITY_REPAIR_SCENE_SECONDS", "
 QUALITY_REPAIR_GENERATED = _flag("QUALITY_REPAIR_GENERATED", False)
 # A still whose long side is under this many pixels is too small to show.
 QUALITY_MIN_IMAGE_SIDE = int(os.getenv("QUALITY_MIN_IMAGE_SIDE", "320"))
+# When more than this share of the scenes' own clips and pictures cannot be read
+# from storage (and at least QUALITY_MISSING_MIN of them), the render stops
+# before a frame is drawn with an error that says so - the project's files were
+# deleted, or storage is down - instead of "repairing" most of the video into
+# text cards (2026-10-04: a project's media was deleted from R2 mid-render).
+# 0 = always repair.
+QUALITY_MISSING_SHARE = float(os.getenv("QUALITY_MISSING_SHARE", "0.3"))
+QUALITY_MISSING_MIN = int(os.getenv("QUALITY_MISSING_MIN", "3"))
+# Many files with no clear answer from storage (timeouts, 5xx, rate limits -
+# never a plain 404) are asked once more after this pause before anything is
+# repaired or the render is stopped: a short outage is waited out. 0 = off.
+QUALITY_RETRY_PAUSE_SECONDS = float(os.getenv("QUALITY_RETRY_PAUSE_SECONDS", "15"))
 # The scan: black for QUALITY_BLACK_SECONDS or more, a picture frozen for
 # QUALITY_FREEZE_SECONDS or more, silence of QUALITY_SILENCE_SECONDS or more.
 QUALITY_BLACK_SECONDS = float(os.getenv("QUALITY_BLACK_SECONDS", "0.5"))

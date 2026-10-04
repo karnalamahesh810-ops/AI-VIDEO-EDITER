@@ -402,6 +402,12 @@ def _require_youtube() -> None:
 _STORAGE_REFS = ("storage", "thumbStorage", "previewStorage")
 
 
+def _scene_media_on_r2() -> bool:
+    """Scene files go to Cloudflare R2 under a public, link-only name: R2_SCENE_MEDIA, and always when
+    the worker stores in Cloudflare only (R2_ONLY) - with R2 configured."""
+    return bool((config.R2_SCENE_MEDIA or storage.r2_only()) and r2.enabled())
+
+
 def _put_scene_file(local: str, obj: str, bucket: str, project_id: str, job_id: str) -> tuple:
     """
     (url, storage ref or None) for one scene file. Cloudflare R2 first
@@ -410,8 +416,15 @@ def _put_scene_file(local: str, obj: str, bucket: str, project_id: str, job_id: 
     neither the app nor the render re-signs it - and the app's storage stays
     small. The app's storage (a signed link plus the reference it is
     re-signed from) when R2 is off or refuses.
+
+    What this returns is SAVED in the timeline (scene_data) and the library,
+    so with no storage reference it must be a link that never expires: the
+    public R2 link (r2.upload), never a presigned one. Cloudflare-only
+    (R2_ONLY) with R2_SCENE_MEDIA off used to return storage.broker_upload's
+    presigned R2 link here - it dies after 7 days at most and nothing could
+    re-sign it, so every scene of a saved video would have gone dark.
     """
-    if config.R2_SCENE_MEDIA and r2.enabled():
+    if _scene_media_on_r2():
         try:
             return r2.upload(local, r2.tokened(obj), content_type=r2.content_type(local),
                              deadline=time.time() + config.R2_MEDIA_UPLOAD_SECONDS,
@@ -421,8 +434,6 @@ def _put_scene_file(local: str, obj: str, bucket: str, project_id: str, job_id: 
                 raise           # Cloudflare only: never fall back to the app's storage
             print(f"[worker] R2 upload of {os.path.basename(obj)} failed, using app storage: "
                   f"{type(e).__name__}: {str(e)[:120]}", flush=True)
-    if storage.r2_only():       # R2_SCENE_MEDIA off: still Cloudflare, by path
-        return storage.broker_upload(local, bucket, obj, project_id, job_id, read_ttl=_MEDIA_LINK_TTL), None
     ref = {"bucket": bucket, "path": obj}
     if storage.broker_enabled():
         return storage.broker_upload(local, bucket, obj, project_id, job_id, read_ttl=_MEDIA_LINK_TTL), ref
@@ -1161,7 +1172,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     try:
         def _put_split(local: str, name: str) -> str:
             obj = f"projects/{project_id}/{name}"
-            if project_id and ((config.R2_SCENE_MEDIA and r2.enabled()) or storage.broker_enabled()):
+            if project_id and (_scene_media_on_r2() or storage.broker_enabled()):
                 # R2 first: a public link that never expires (the signed one lapsed after 30 days).
                 return _put_scene_file(local, obj, inp.get("media_bucket") or config.MEDIA_BUCKET, project_id,
                                        (report.job or {}).get("id", ""))[0]
@@ -1814,6 +1825,28 @@ def _keep_render(out_path: str) -> None:
         print(f"[worker] could not keep a copy of the render: {e}", flush=True)
 
 
+def _raise_explained(err: BaseException, gate) -> None:
+    """
+    Raise a failed render's error as the job's error. When files the video
+    needs are gone from storage now (the gate asks every one once more), that
+    is the error, in plain words - how many scenes, which, what storage
+    answered - instead of what the renderer printed: on 2026-10-04 a project's
+    media was deleted mid-render and its error message was a raw 404 page.
+    """
+    why = ""
+    if not isinstance(err, quality.MediaMissing):
+        try:
+            why = gate.explain(err) if gate is not None else ""
+        except Exception:  # noqa: BLE001 - the render's own error stands
+            why = ""
+    if why:
+        raise renderer.RenderError(why) from err
+    if renderer.has_markup(str(err)):
+        # A chunk worker's error, or an older image's: still never a raw web page.
+        raise renderer.RenderError(renderer.plain_error(str(err))) from err
+    raise err
+
+
 def do_render(doc: dict, inp: dict, work: str, report: Reporter,
               split: bool = False) -> dict:
     # The document may have come back from a browser, so validate before
@@ -1877,11 +1910,15 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     try:
         _draw(doc, inp, work, report, split, out_path, gate)
     except Exception as e:  # noqa: BLE001 - drawn once more when the error names files that can be replaced
+        # (Too much of the media gone to repair: gate.recover raises that, in plain words.)
         if not gate.recover(e):
-            raise
+            _raise_explained(e, gate)
         print(f"[worker] the render failed on files it named; repaired them, rendering once more: "
               f"{type(e).__name__}: {str(e)[:200]}", flush=True)
-        _draw(doc, inp, work, quality.floor(report, 70, "Second render: "), split, out_path, gate)
+        try:
+            _draw(doc, inp, work, quality.floor(report, 70, "Second render: "), split, out_path, gate)
+        except Exception as e2:  # noqa: BLE001 - the one second render is spent
+            _raise_explained(e2, gate)
     # The finished file is scanned (black, frozen, silent): a real defect is
     # repaired and the video drawn once more - never twice - and the better
     # of the two files is kept.
@@ -2023,6 +2060,85 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     }
 
 
+def _links_for_chunks(remote_doc: dict, inp: dict) -> bool:
+    """
+    The chunk render without R2 (fanout.render) sends the document itself to
+    its workers, so every picture in it must be a link. What is still a file
+    on this disk - a scene the quality check repaired a moment ago, a still it
+    cut from a clip - is uploaded to the job's parts folder (temporary, like
+    the chunks) and linked in the workers' copy only; the saved timeline is
+    never touched. True when every visual is then a link. It used to be
+    all-or-nothing: on 2026-10-03 one repaired scene's local file sent a
+    29-minute video to one worker, which ran out of time at 55%.
+    """
+    # (Chunks render silent: the narration and the music stay on this machine.)
+    sounds = {id(remote_doc.get(k)) for k in ("audio", "bgm") if isinstance(remote_doc.get(k), dict)}
+    refs = [(m, field, path) for m, field, path in fanout.local_refs(remote_doc) if id(m) not in sounds]
+    if not refs:
+        return _all_remote(remote_doc)
+    project_id, job_id = inp.get("project_id") or "", inp.get("_job_id") or ""
+    if not (project_id and job_id):
+        return False
+    bucket = inp.get("media_bucket") or config.MEDIA_BUCKET
+    links: Dict[str, str] = {}
+    until = time.time() + 180
+
+    def put(path: str) -> tuple:
+        import hashlib
+        name = hashlib.sha1(os.path.abspath(path).encode("utf-8")).hexdigest()[:16]
+        obj = f"projects/{project_id}/parts/{job_id}/local_{name}{os.path.splitext(path)[1].lower() or '.bin'}"
+        return path, storage.broker_upload(path, bucket, obj, project_id, job_id, read_ttl=60 * 60 * 6,
+                                           deadline=until)
+    try:
+        files = sorted({path for _m, _f, path in refs})
+        if files:
+            with ThreadPoolExecutor(max_workers=min(8, len(files))) as pool:
+                links.update(pool.map(put, files))
+    except Exception as e:  # noqa: BLE001 - the whole video renders here, as before
+        print(f"[worker] local files could not be published for the chunk render: {type(e).__name__}: "
+              f"{str(e)[:160]}", flush=True)
+        return False
+    for m, field, path in refs:
+        m[field] = links[path]
+    print(f"[worker] published {len(links)} local file(s) for the chunk render", flush=True)
+    return _all_remote(remote_doc)
+
+
+def _on_one_machine(doc: dict, concurrency, spread: bool) -> None:
+    """
+    Before the whole video is rendered on this one machine (the last resort):
+    a long video says so, with the reason the workers were not used, in the
+    log and the job's events - a 29-minute video once rendered whole on one
+    16-vCPU worker and nobody knew why until it timed out (2026-10-03). A
+    video that could not finish inside the longest a render may run
+    (RENDER_TIMEOUT_MAX_SECONDS) is refused now, with the reason, instead of
+    running for hours and timing out with nothing saved.
+    """
+    frames = brandkit.total_frames(doc)
+    fps = max(1, int(doc.get("fps") or 30))
+    minutes = frames / fps / 60.0
+    if minutes < 3:
+        return
+    seconds = renderer.estimate_seconds(frames, concurrency)
+    if spread:
+        why = str((media.LAST_STATS.get("pod_render") or {}).get("error") or "the spread render could not run")
+    else:
+        why = "; ".join(fanout.pod_render_ready(doc)["missing"]) or "the spread render is off"
+    limit = float(config.RENDER_TIMEOUT_MAX_SECONDS)
+    line = (f"the whole {minutes:.0f}-minute video on this one machine ({renderer.cpus()} CPUs, about "
+            f"{renderer._minutes(seconds)}); the workers were not used: {why[:300]}")
+    if seconds > limit:
+        text = (f"This {minutes:.0f}-minute video cannot be rendered on one machine: it would take about "
+                f"{renderer._minutes(seconds)} and no render may run longer than {renderer._minutes(limit)}. "
+                f"Rendering across the workers was not possible ({why[:300]}). Nothing was rendered.")
+        events.emit("render", "whole_render_refused", level="error", message=text,
+                    data={"frames": frames, "estimateSeconds": int(seconds), "limitSeconds": int(limit)})
+        raise renderer.RenderError(text)
+    print(f"[worker] rendering {line}", flush=True)
+    events.emit("render", "whole_render", level="warning", message="Rendering " + line,
+                data={"frames": frames, "estimateSeconds": int(seconds), "cpus": renderer.cpus()})
+
+
 def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, gate=None) -> None:
     """
     Draw `doc` to `out_path`, picture and balanced sound, whichever way this
@@ -2043,28 +2159,37 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
 
     def on_render(frac: float):
         # 70 -> 90%: Remotion's own progress, instead of a bar that sits at 70.
+        # "on one machine": the whole video is being drawn here, not spread
+        # over the workers (their line reads "... on 10 machines").
         pct = 70 + int(20 * max(0.0, min(1.0, frac)))
         if pct != last_pct[0]:
             last_pct[0] = pct
-            report(f"Rendering video {int(frac * 100)}%", pct)
+            report(f"Rendering video {int(frac * 100)}% on one machine", pct)
 
+    concurrency = inp.get("concurrency") or config.RENDER_CONCURRENCY
     # True once the sound has been balanced and joined to the picture in one
     # pass (render.finalize): the chunked renders and the separate-audio render.
     finished = False
-    # A pod spreads its render over the serverless workers (POD_RENDER_FANOUT):
-    # this finished document - stills cleaned, gaps filled - is what every
-    # machine draws. When it cannot run or breaks, the whole video renders here.
+    # The render is spread over the serverless workers (POD_RENDER_FANOUT),
+    # whether this machine is a pod or itself one of those workers: this
+    # finished document - stills cleaned, gaps filled, repaired scenes and all -
+    # is what every machine draws, and whatever in it is a file on this disk is
+    # published for them first (fanout.local_refs). When it cannot run or the
+    # machines fail, the whole video renders here; only when storage says files
+    # it draws are gone does it raise (fanout.SpreadFailed) - do_render then
+    # repairs what is named or fails.
     spread = fanout.pod_render_enabled(doc)
     if spread:
         finished = fanout.render_pod(doc, out_path,
                                      job_id=inp.get("_job_id") or (getattr(report, "job", None) or {}).get("id", ""),
                                      work=work, report=report, composition=inp.get("composition", "Main"),
-                                     concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY)
+                                     concurrency=concurrency)
     if finished:
         pass
     # The Supabase-broker chunk render only when Cloudflare R2 is not set up:
     # with R2, chunks travel through R2 alone (render_pod above).
-    elif split and not spread and not r2.enabled() and remote_doc is not None and _all_remote(remote_doc):
+    elif split and not spread and not r2.enabled() and remote_doc is not None \
+            and _links_for_chunks(remote_doc, inp):
         fanout.render(remote_doc, out_path, parent_job_id=(report.job or {}).get("id", ""),
                       project_id=inp.get("project_id") or "",
                       bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,
@@ -2072,45 +2197,50 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
                       # The previous render's manifest: unchanged chunks are reused.
                       previous=inp.get("render_manifest") if isinstance(inp.get("render_manifest"), dict) else None)
         finished = True
-    elif config.RENDER_SEPARATE_AUDIO:
-        # The picture alone, the sound as lossless WAV beside it, joined with
-        # the loudness set and AAC encoded once: the sound starts on frame 0
-        # (Remotion's own AAC ran 42.7 ms late) and the file is written once.
-        picture = os.path.join(work, "final.picture.mp4")
-        mix = os.path.join(work, "final.mix.wav")
-        rendered = renderer.render(doc, picture, composition=inp.get("composition", "Main"),
-                                   concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY,
-                                   on_progress=on_render, serve_dir=work, audio_to=mix) or picture
-        report("Balancing the sound", 90)
-        if os.path.isfile(rendered) and os.path.isfile(mix):
-            renderer.finalize(rendered, mix, out_path)
-            finished = True
-            for leftover in (rendered, mix):
-                try:
-                    os.remove(leftover)
-                except OSError:
-                    pass
-        elif rendered != out_path and os.path.isfile(rendered):
-            # A renderer that kept the sound in its own file: the old path below.
-            os.replace(rendered, out_path)
     else:
-        renderer.render(
-            doc, out_path,
-            composition=inp.get("composition", "Main"),
-            # Left unset, Remotion auto-detects concurrency from the host's CPU
-            # count, which is a GPU pod's real vCPU count - not what a Docker
-            # container is actually allowed to spawn threads for. A real render
-            # crashed at 4% ("thread::unix::Thread::new::thread_start", a Rust
-            # panic in the compositor failing to spawn a new OS thread) right
-            # after the heaviest-possible run of the memory/thread-heavy parallel
-            # sourcing phase. RENDER_CONCURRENCY caps it to a value verified safe
-            # in this container instead.
-            concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY,
-            on_progress=on_render,
-            # Everything sourced for this job lives here; the renderer serves it
-            # over loopback so headless Chrome can actually fetch it.
-            serve_dir=work,
-        )
+        # The last resort: the whole video on this one machine. Said in the
+        # log and the job's events with the reason, and refused when it could
+        # not finish inside the longest a render may run (_on_one_machine).
+        _on_one_machine(doc, concurrency, spread)
+        if config.RENDER_SEPARATE_AUDIO:
+            # The picture alone, the sound as lossless WAV beside it, joined with
+            # the loudness set and AAC encoded once: the sound starts on frame 0
+            # (Remotion's own AAC ran 42.7 ms late) and the file is written once.
+            picture = os.path.join(work, "final.picture.mp4")
+            mix = os.path.join(work, "final.mix.wav")
+            rendered = renderer.render(doc, picture, composition=inp.get("composition", "Main"),
+                                       concurrency=concurrency,
+                                       on_progress=on_render, serve_dir=work, audio_to=mix) or picture
+            report("Balancing the sound", 90)
+            if os.path.isfile(rendered) and os.path.isfile(mix):
+                renderer.finalize(rendered, mix, out_path)
+                finished = True
+                for leftover in (rendered, mix):
+                    try:
+                        os.remove(leftover)
+                    except OSError:
+                        pass
+            elif rendered != out_path and os.path.isfile(rendered):
+                # A renderer that kept the sound in its own file: the old path below.
+                os.replace(rendered, out_path)
+        else:
+            renderer.render(
+                doc, out_path,
+                composition=inp.get("composition", "Main"),
+                # Left unset, Remotion auto-detects concurrency from the host's CPU
+                # count, which is a GPU pod's real vCPU count - not what a Docker
+                # container is actually allowed to spawn threads for. A real render
+                # crashed at 4% ("thread::unix::Thread::new::thread_start", a Rust
+                # panic in the compositor failing to spawn a new OS thread) right
+                # after the heaviest-possible run of the memory/thread-heavy parallel
+                # sourcing phase. RENDER_CONCURRENCY caps it to a value verified safe
+                # in this container instead.
+                concurrency=concurrency,
+                on_progress=on_render,
+                # Everything sourced for this job lives here; the renderer serves it
+                # over loopback so headless Chrome can actually fetch it.
+                serve_dir=work,
+            )
 
     # YouTube loudness (-14 LUFS): the raw narration sat ~10 dB under
     # every competitor's render. Never fails the job.
@@ -2400,7 +2530,12 @@ def handler(job):
                     "r2": r2.enabled(),
                     # The footage library's own bucket (src/libstore.py) and scene media on R2.
                     "r2Library": r2.library_enabled(),
-                    "r2SceneMedia": bool(config.R2_SCENE_MEDIA and r2.enabled()),
+                    "r2SceneMedia": _scene_media_on_r2(),
+                    # How a long render runs from this machine: whether it is one of the endpoint's
+                    # own workers, the chunks a spread render is cut into, and the CPUs a render gets.
+                    "spread": {"parentIsWorker": fanout.parent_is_worker(), "chunks": fanout.spread_chunks(),
+                               "cpus": renderer.cpus(),
+                               "wholeRenderLimitSeconds": int(config.RENDER_TIMEOUT_MAX_SECONDS)},
                     # Real download check per route: {"probe_youtube": true}.
                     "proxies": media.proxy_snapshot(),
                     **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),
@@ -2576,7 +2711,12 @@ def handler(job):
 
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
-        msg = str(e)[:800]
+        msg = str(e)
+        if renderer.has_markup(msg):
+            # Whatever failed, the project's error message is never a raw web
+            # page (a storage 404 page was one, 2026-10-04).
+            msg = renderer.plain_error(msg)
+        msg = msg[:800]
         # A render that failed still says what its quality check found and did.
         gate = quality.LAST.get("gate")
         checked = gate.finish() if gate is not None else None
@@ -2606,6 +2746,13 @@ def handler(job):
         try:
             events.flush(storage.broker_events)
         except Exception:  # noqa: BLE001
+            pass
+        # A spread render's chunk files are deleted from R2 in the background;
+        # a serverless worker is frozen once its job returns, so wait a moment
+        # for that (a failed render got here seconds after it started them).
+        try:
+            fanout.finish_cleanup(20.0)
+        except Exception:  # noqa: BLE001 - leftover chunks are only storage
             pass
         report.finish()
         # Serverless workers are reused; a 17-minute render leaves GBs behind.
