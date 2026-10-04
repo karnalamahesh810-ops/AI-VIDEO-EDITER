@@ -22,7 +22,8 @@ class CleanWindow(unittest.TestCase):
 
     def test_falls_back_to_the_longest_stretch_then_flags_rapid_cutting(self):
         off, clean, n = media.clean_window(11.0, [3.5], 7.0, 2.0)   # first stretch too short
-        self.assertEqual((off, clean, n), (3.5, True, 1))
+        # A stretch that opens on a cut starts CUT_SNAP_PAD past it: no frame of the shot before shows.
+        self.assertEqual((round(off, 3), clean, n), (round(3.5 + config.CUT_SNAP_PAD, 3), True, 1))
         off, clean, n = media.clean_window(11.0, [2.0, 4.0, 6.0, 8.0, 10.0], 7.0, 2.0)
         self.assertFalse(clean)
         self.assertEqual(n, 5)

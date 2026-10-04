@@ -349,6 +349,27 @@ MOMENT_FINE_TILES = int(os.getenv("MOMENT_FINE_TILES", "20"))
 CLEAN_CUTS = _flag("CLEAN_CUTS", True)
 CUT_MARGIN_SECONDS = float(os.getenv("CUT_MARGIN_SECONDS", "2.0"))
 SHOT_CUT_THRESHOLD = float(os.getenv("SHOT_CUT_THRESHOLD", "0.4"))
+# A softer jump is a shot change too when it stands out from the frames around
+# it (filters.shot_changes). The owner's Glen Canyon test (2026-10-05) opened on
+# 1.43 s of the shot before its clip: a cut between two grey shots ffmpeg scored
+# 0.36, under SHOT_CUT_THRESHOLD, so the cut window never saw it. Such a frame
+# counts when its score is at least SHOT_CUT_SOFT_THRESHOLD and SHOT_CUT_RATIO
+# times the median of the frames within half a second of it, and the two frames
+# either side of it do not show the same picture (a normalised correlation of
+# their small grey copies under SHOT_CUT_SAME_PICTURE: an exposure flicker or a
+# flash of old film stays one shot - measured 0.87-0.91 there, 0.09-0.33 at real
+# cuts). SHOT_CUT_SOFT_THRESHOLD 0 = the fixed threshold only, as before.
+SHOT_CUT_SOFT_THRESHOLD = float(os.getenv("SHOT_CUT_SOFT_THRESHOLD", "0.2"))
+SHOT_CUT_RATIO = float(os.getenv("SHOT_CUT_RATIO", "4.0"))
+SHOT_CUT_SAME_PICTURE = float(os.getenv("SHOT_CUT_SAME_PICTURE", "0.75"))
+# Every footage cut starts after a shot change, never on the last second of the
+# shot before it: a planned in-point under CUT_GUARD_SECONDS before a shot
+# change moves forward past it - CUT_SNAP_PAD past it, so no frame of the shot
+# before shows - and the clip keeps its length from later in the section; a
+# remainder too short to cover the line is not used (the caller's next
+# candidate or the fallback ladder takes the line - a clip is never slowed).
+CUT_GUARD_SECONDS = float(os.getenv("CUT_GUARD_SECONDS", "1.0"))
+CUT_SNAP_PAD = float(os.getenv("CUT_SNAP_PAD", "0.1"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp
 # metadata call plus one vision call; the beat then costs about the slowest.
 # This is also the ONLY candidates a query ever gets: _plan_grabs slices the

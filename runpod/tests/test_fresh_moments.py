@@ -40,7 +40,10 @@ class FreshMoments(unittest.TestCase):
         self.assertEqual(got.moment_key, "yt:EWQT3VwOgvA@7")
         self.assertNotEqual(got.identity, results[0].identity)
         self.assertTrue(got.review_required)
-        self.assertEqual(fetched, [("EWQT3VwOgvA", 70.0)])
+        # The section comes with a margin and is cut clean (filters.tidy_clip: never opening on the end
+        # of the shot before - the owner's Glen Canyon test, 2026-10-05); the moment is still 70 s.
+        self.assertEqual(fetched, [("EWQT3VwOgvA", 70.0 - config.CUT_MARGIN_SECONDS)])
+        self.assertEqual(got.moment["start"], 70.0)
 
     def test_a_failed_or_rejected_moment_tries_the_next_offset(self):
         work = tempfile.mkdtemp()

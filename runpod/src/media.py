@@ -2424,8 +2424,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             tried.add(candidate["id"])
             if ledger.moment_used(candidate["id"], point, point + grab):
                 continue                            # an earlier video showed this moment
-            path = _yt_fetch_retry(candidate["id"], out_dir, point, grab,
-                                   candidate["title"])
+            # With a margin, cut clean: never opening on the end of the shot before (filters.tidy_clip).
+            path, clean, cuts = fetch_clean_clip(candidate["id"], out_dir, point, grab, candidate["title"])
             if not path:
                 continue
             # Burned-in subtitles only become visible after the download, and a
@@ -2462,7 +2462,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                 continue
             asset = _asset_for(path, query_or_url, grab, require_cc,
                                title=candidate["title"])
-            asset.moment = {"start": round(float(point), 1), "score": (moment or {}).get("score")}
+            asset.moment = {"start": round(float(point), 1), "score": (moment or {}).get("score"),
+                            "clean": clean, "cuts": cuts}
             # Not returned yet: the first clip to clear the floor is rarely the
             # best one available. Up to JUDGE_BEST_OF passing clips are compared.
             passed.append(asset.apply_verdict(verdict, intent))
@@ -4841,7 +4842,8 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                     used.add(key)
                 if ledger.moment_used(vid, at, at + need):
                     continue                        # shown in an earlier video
-                path = _yt_fetch_retry(vid, work_dir, at, need, title=job.get("subject") or "")
+                # With a margin, cut clean: never opening on the end of the shot before (filters.tidy_clip).
+                path, clean, cuts = fetch_clean_clip(vid, work_dir, at, need, job.get("subject") or "")
                 if not path:
                     continue
                 if motion_rejects(path):
@@ -4849,7 +4851,8 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                 asset = MediaAsset(kind="video", source="youtube", url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
                                    local_path=path, license=donor.license, attribution=donor.attribution,
                                    query=job.get("query", ""), moment_key=key,
-                                   moment={"start": round(at, 1), "fresh_from": donor.identity},
+                                   moment={"start": round(at, 1), "fresh_from": donor.identity,
+                                           "clean": clean, "cuts": cuts},
                                    relevance_score=(donor.relevance_score * 0.95 if donor.relevance_score is not None else None),
                                    review_required=True,
                                    review_reason=f"Another moment of a video used for {job.get('subject') or 'this subject'}")

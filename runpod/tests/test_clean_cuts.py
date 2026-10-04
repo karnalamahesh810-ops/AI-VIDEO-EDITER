@@ -1,0 +1,162 @@
+"""
+No footage cut opens on the end of a shot (the owner's 5-minute Glen Canyon test, 2026-10-05: "the
+first second or two didn't match").
+
+The test video's first clip was cut from a 7.5 s section of its source (184.6-192.1 s) for the moment
+at 186.6 s. A hard cut 1.467 s after that moment - from another creator's "CAVITATION" explainer
+graphic to 1983 footage of the spillway gates - scored 0.36 in ffmpeg's scene detector, under the 0.4
+the clean-cut trimming looked for: the job recorded "cuts": 0, kept the planned in-point, and the
+video opened on 1.43 s of the shot before.
+
+  A. shot changes the fixed threshold missed (filters.shot_changes)
+  B. no in-point under CUT_GUARD_SECONDS before a shot change (filters.clean_window, snap_past_cut)
+  C. the same on real files (filters.scene_cuts, tidy_clip)
+"""
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from unittest import mock
+
+from src import config, filters
+
+HAVE_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+
+
+def rows_of(scores, fps=30.0):
+    """(frame, seconds, score) rows as filters._scan returns them."""
+    return [(n, round(n / fps, 4), s) for n, s in enumerate(scores)]
+
+
+def _video(path, parts, fps=25):
+    """A test section from [(seconds, lum expression)] - static grey stripes, so the only
+    change between frames is where one part meets the next."""
+    args, chains = [], []
+    for k, (secs, lum) in enumerate(parts):
+        args += ["-f", "lavfi", "-i", f"nullsrc=s=320x180:r={fps}:d={secs},geq=lum='{lum}':cb=128:cr=128"]
+        chains.append(f"[{k}:v]")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *args, "-filter_complex",
+                    f"{''.join(chains)}concat=n={len(parts)}:v=1:a=0,format=yuv420p[v]", "-map", "[v]",
+                    "-c:v", "libx264", "-preset", "ultrafast", path], check=True, timeout=120)
+    return path
+
+
+ACROSS = "128+40*sin(X/6)"           # the shot before: stripes across
+DOWN = "128+40*sin(Y/6)"             # the shot after: stripes down, the same grey (a cut ffmpeg scores ~0.32)
+
+
+def _first_frame_like(path, other, at_other):
+    """How alike `path`'s first frame is to `other`'s frame at `at_other` s (filters.same_picture)."""
+    import numpy as np
+
+    def grab(p, t):
+        out = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.2f}", "-i", p, "-frames:v", "1",
+                              "-vf", "scale=48:27,format=gray", "-f", "rawvideo", "-"],
+                             capture_output=True, timeout=60).stdout
+        return np.frombuffer(out, dtype=np.uint8).reshape(27, 48)
+    return filters.same_picture(grab(path, 0.04), grab(other, at_other))
+
+
+# --------------------------------------------------------------------------- A. shot changes
+class ShotChanges(unittest.TestCase):
+    def test_the_glen_canyon_cut_scored_under_the_old_threshold_is_found(self):
+        # Measured on the published video: 0.365 at 1.467 s against ~0.02-0.08 around it.
+        scores = [0.0] + [0.02, 0.06, 0.01, 0.05] * 10 + [0.06, 0.02, 0.365, 0.03, 0.05] + [0.02, 0.06] * 15
+        rows = rows_of(scores)
+        cut = rows[scores.index(0.365)][1]
+        self.assertEqual(filters.shot_changes(rows), [cut])
+        with mock.patch.object(config, "SHOT_CUT_SOFT_THRESHOLD", 0.0):
+            self.assertEqual(filters.shot_changes(rows), [])          # the fixed threshold alone: missed
+
+    def test_the_same_picture_brighter_is_a_flicker_not_a_cut(self):
+        import numpy as np
+        scores = [0.0] + [0.01] * 30 + [0.23] + [0.01] * 30
+        rows = rows_of(scores)
+        base = (np.arange(27 * 48).reshape(27, 48) % 37).astype("uint8") * 4
+        same = np.stack([base] * 31 + [np.clip(base.astype(int) + 40, 0, 255).astype("uint8")] * 31)
+        other = np.stack([base] * 31 + [base.T.copy().reshape(27, 48)[::-1]] * 31)
+        self.assertEqual(filters.shot_changes(rows, same), [])        # an old film's exposure jump (0.87 there)
+        self.assertEqual(len(filters.shot_changes(rows, other)), 1)   # a different picture: a cut
+
+    def test_steady_motion_never_reads_as_a_cut(self):
+        rows = rows_of([0.0] + [0.25, 0.3, 0.27, 0.22] * 20)          # a fast pan: every frame changes alike
+        self.assertEqual(filters.shot_changes(rows), [])
+
+    def test_hard_cuts_count_as_before(self):
+        rows = rows_of([0.0] + [0.01] * 20 + [0.62] + [0.3] * 20)
+        self.assertEqual(filters.shot_changes(rows), [rows[21][1]])
+
+
+# --------------------------------------------------------------------------- B. clean in-points
+class CleanInPoints(unittest.TestCase):
+    def test_the_glen_canyon_section_now_opens_after_its_cut_and_keeps_its_length(self):
+        # The job's section: 184.6-192.1 s (7.5 s), the moment at 186.6 s (prefer 2.0), 3.5 s wanted,
+        # the cut 1.467 s after the moment. Unseen, the clip opened 1.47 s before it.
+        self.assertEqual(filters.clean_window(7.5, [], 3.5, 2.0), (2.0, True, 0))
+        off, clean, n = filters.clean_window(7.5, [2.0 + 1.467], 3.5, 2.0)
+        self.assertAlmostEqual(off, 3.467 + config.CUT_SNAP_PAD, places=3)
+        self.assertTrue(clean)
+        self.assertEqual(n, 1)
+        self.assertGreaterEqual(7.5 - off, 3.5)                       # its length kept, from later in the section
+
+    def test_rapid_cutting_never_opens_just_before_a_cut(self):
+        off, clean, n = filters.clean_window(11.0, [2.5, 4.0, 6.0, 8.0, 10.0], 7.0, 2.0)
+        self.assertFalse(clean)                                       # no stretch long enough: as before
+        self.assertAlmostEqual(off, 2.5 + config.CUT_SNAP_PAD)        # but never 0.5 s before a cut
+
+    def test_a_remainder_too_short_is_not_used(self):
+        self.assertEqual(filters.clean_window(6.0, [2.6, 3.3, 4.0], 3.5, 2.0), (None, False, 3))
+
+    def test_snapping_past_cuts(self):
+        self.assertAlmostEqual(filters.snap_past_cut(2.0, [2.4, 2.9, 5.0]), 3.0)   # one after the other
+        self.assertAlmostEqual(filters.snap_past_cut(2.0, [1.95]), 2.05)           # its frames still on screen
+        self.assertEqual(filters.snap_past_cut(2.0, [1.5, 3.2]), 2.0)              # none within the guard
+
+
+# --------------------------------------------------------------------------- C. on real files
+@unittest.skipUnless(HAVE_FFMPEG, "ffmpeg needed")
+class CleanInPointsOnRealFiles(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, True)
+
+    def test_a_cut_the_old_threshold_missed_is_found_and_the_clip_opens_after_it(self):
+        # The Glen Canyon geometry: the section opens 2 s before the moment, the cut 1.47 s after it.
+        src = _video(os.path.join(self.d, "yt_R_z4cbZu3Ok_184600_7500_abcdef0123.mp4"),
+                     [(3.48, ACROSS), (4.04, DOWN)])
+        ref = os.path.join(self.d, "ref.mp4")
+        shutil.copy(src, ref)
+        self.assertEqual(filters.scene_cuts(src, threshold=0.4), [])          # what the job saw: no cut
+        cuts = filters.scene_cuts(src)
+        self.assertEqual(len(cuts), 1)
+        self.assertAlmostEqual(cuts[0], 3.48, delta=0.05)
+        with mock.patch.object(config, "CLEAN_CUTS", True):
+            out, clean, n = filters.tidy_clip(src, 3.5, prefer=2.0)
+        self.assertTrue(out and os.path.exists(out) and not os.path.exists(src))
+        self.assertTrue(clean)
+        self.assertEqual(n, 1)
+        self.assertGreaterEqual(filters._video_seconds(out), 3.4)
+        self.assertEqual(filters.scene_cuts(out), [])                         # no cut inside the clip
+        self.assertGreater(_first_frame_like(out, ref, 5.0), 0.9)             # it opens on the shot after
+        self.assertLess(_first_frame_like(out, ref, 1.0), 0.5)                # not on the shot before
+
+    def test_an_exposure_flicker_is_not_a_cut(self):
+        src = _video(os.path.join(self.d, "flicker.mp4"), [(1.4, "118+40*sin(X/6)"), (3.0, "148+40*sin(X/6)")])
+        self.assertEqual(filters.scene_cuts(src), [])
+
+    def test_a_short_section_opening_on_a_cut_starts_after_it_or_is_not_used(self):
+        ok = _video(os.path.join(self.d, "short_ok.mp4"), [(0.5, ACROSS), (3.6, DOWN)])
+        with mock.patch.object(config, "CLEAN_CUTS", True):
+            out, clean, _n = filters.tidy_clip(ok, 3.5, prefer=0.0)
+        self.assertTrue(out and out != ok and os.path.exists(out))            # moved past the cut: 3.5 s left
+        self.assertEqual(filters.scene_cuts(out), [])
+        short = _video(os.path.join(self.d, "short_bad.mp4"), [(0.5, ACROSS), (3.0, DOWN)])
+        with mock.patch.object(config, "CLEAN_CUTS", True):
+            out, clean, _n = filters.tidy_clip(short, 3.5, prefer=0.0)
+        self.assertEqual((out, clean), ("", False))                           # never slowed: the next candidate
+        self.assertFalse(os.path.exists(short))
+
+
+if __name__ == "__main__":
+    unittest.main()

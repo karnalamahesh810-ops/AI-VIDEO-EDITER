@@ -317,41 +317,166 @@ def _corner_watermark(frames, np) -> bool:
 
 
 _PTS_RE = re.compile(r"pts_time:\s*([0-9.]+)")
+# ffmpeg's metadata filter (print mode): "frame:44   pts:132132  pts_time:1.46667", then one line per key.
+_FRAME_RE = re.compile(r"frame:\s*(\d+)\s+pts:\s*\S+\s+pts_time:\s*([0-9.]+)")
+_SCORE_RE = re.compile(r"lavfi\.scene_score=([0-9.]+)")
+# The frames either side of a softer jump are compared this small, in grey (shot_changes).
+_CMP_W, _CMP_H = 48, 27
+# The frames around a softer jump it must stand out from (seconds either side).
+_AROUND_SECONDS = 0.5
+
+
+def _scan(path: str, timeout: int = 120, frames: bool = False) -> tuple:
+    """
+    ([(frame number, seconds, scene score)] for every frame in order - the
+    first scores 0 - and, with `frames`, every frame as a small grey array
+    (None without numpy, or when the decode and the scores disagree). One
+    decode of the file either way.
+    """
+    np = None
+    if frames:
+        try:
+            import numpy as np  # noqa: F811
+        except ImportError:
+            np = None
+    vf = "select='gte(scene,0)',metadata=print:key=lavfi.scene_score"
+    if np is not None:
+        vf += f",scale={_CMP_W}:{_CMP_H},format=gray"
+    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-an", "-vf", vf]
+    cmd += ["-f", "rawvideo", "-"] if np is not None else ["-f", "null", "-"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return [], None
+    rows, current = [], None
+    for line in (p.stderr or b"").decode("utf-8", "replace").splitlines():
+        m = _FRAME_RE.search(line)
+        if m:
+            current = (int(m.group(1)), float(m.group(2)))
+            continue
+        s = _SCORE_RE.search(line)
+        if s and current is not None:
+            rows.append((current[0], current[1], float(s.group(1))))
+            current = None
+    pictures = None
+    if np is not None and rows and p.stdout:
+        size = _CMP_W * _CMP_H
+        n = len(p.stdout) // size
+        if n and max(r[0] for r in rows) < n:
+            pictures = np.frombuffer(p.stdout[:n * size], dtype=np.uint8).reshape(n, _CMP_H, _CMP_W)
+    return rows, pictures
+
+
+def scene_scores(path: str, timeout: int = 120) -> List[Tuple[float, float]]:
+    """[(seconds, ffmpeg scene score)] for every frame of `path`, in order ([] when unreadable)."""
+    return [(t, s) for _n, t, s in _scan(path, timeout)[0]]
+
+
+def same_picture(a, b) -> float:
+    """
+    How alike two small grey frames are in structure: the normalised
+    correlation of their pixels, 1.0 the same picture (whatever its
+    brightness), near 0 two different shots.
+    """
+    x = a.astype("float32") - float(a.mean())
+    y = b.astype("float32") - float(b.mean())
+    d = float(((x * x).sum() * (y * y).sum()) ** 0.5)
+    return float((x * y).sum() / d) if d > 0 else 1.0
+
+
+def shot_changes(rows: List[tuple], pictures=None, hard: Optional[float] = None) -> List[float]:
+    """
+    Seconds of every shot change in `rows` ((frame, seconds, score) from _scan):
+    a score above SHOT_CUT_THRESHOLD (`hard`), as before; and a softer jump - at
+    least SHOT_CUT_SOFT_THRESHOLD and SHOT_CUT_RATIO times the median of the
+    frames within half a second - whose two frames do not show the same picture
+    (same_picture under SHOT_CUT_SAME_PICTURE, when the frames are there): the
+    Glen Canyon opening's cut between two grey shots scored 0.36 against
+    ~0.02 around it, an old film's exposure flicker 0.23 with the picture
+    unchanged (0.87).
+    """
+    import statistics
+    hard = config.SHOT_CUT_THRESHOLD if hard is None else hard
+    soft = float(getattr(config, "SHOT_CUT_SOFT_THRESHOLD", 0.0) or 0.0)
+    ratio = float(getattr(config, "SHOT_CUT_RATIO", 4.0) or 4.0)
+    alike = float(getattr(config, "SHOT_CUT_SAME_PICTURE", 0.75) or 0.75)
+    out = []
+    for k, (n, t, s) in enumerate(rows):
+        if s > hard:
+            out.append(t)
+            continue
+        if soft <= 0 or s < soft or k == 0:
+            continue
+        around = [x for (_m, u, x) in rows[max(0, k - 60):k + 61] if 0 < abs(u - t) <= _AROUND_SECONDS]
+        if not around or s < ratio * max(statistics.median(around), 0.005):
+            continue
+        if pictures is not None and 0 < n < len(pictures) and same_picture(pictures[n - 1], pictures[n]) >= alike:
+            continue                    # the same picture brighter or darker: a flicker or a flash, not a cut
+        out.append(t)
+    return sorted(out)
 
 
 def scene_cuts(path: str, threshold: Optional[float] = None, timeout: int = 120) -> List[float]:
-    """Seconds at which ffmpeg's scene detector sees a shot change."""
-    thr = config.SHOT_CUT_THRESHOLD if threshold is None else threshold
-    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-an",
-           "-vf", f"select='gt(scene,{thr})',showinfo", "-f", "null", "-"]
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=timeout)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
-    return sorted(float(m) for m in _PTS_RE.findall(p.stderr or ""))
+    """
+    Seconds at which a shot changes: ffmpeg's scene score above `threshold`
+    when one is given; otherwise shot_changes - above SHOT_CUT_THRESHOLD, or a
+    softer jump that stands out from the frames around it and changes the
+    picture.
+    """
+    if threshold is not None:
+        return sorted(t for _n, t, s in _scan(path, timeout)[0] if s > threshold)
+    rows, pictures = _scan(path, timeout, frames=True)
+    return shot_changes(rows, pictures)
+
+
+def snap_past_cut(start: float, cuts: List[float], guard: Optional[float] = None,
+                  pad: Optional[float] = None) -> float:
+    """
+    An in-point never on the end of a shot: while a shot change lies under
+    `guard` (CUT_GUARD_SECONDS) after `start` - or within `pad` before it, its
+    frames still the change itself - the start moves to `pad` (CUT_SNAP_PAD)
+    past that change.
+    """
+    guard = config.CUT_GUARD_SECONDS if guard is None else guard
+    pad = config.CUT_SNAP_PAD if pad is None else pad
+    for _ in range(len(cuts) + 1):
+        near = [c for c in cuts if start - pad < c <= start + guard]
+        if not near:
+            break
+        start = max(near) + pad
+    return start
 
 
 def clean_window(total: float, cuts: List[float], need: float, prefer: float) -> tuple:
     """
     (offset, clean, cuts_inside): where to cut `need` seconds out of a file
     `total` seconds long whose shot changes are at `cuts`, preferring the
-    stretch that holds the intended moment at `prefer`. `clean` is False when
-    no stretch is long enough (rapid cutting): the caller keeps the moment
-    and scores the timing down.
+    stretch that holds the intended moment at `prefer`. A stretch that opens
+    on a shot change starts CUT_SNAP_PAD past it, so no frame of the shot
+    before shows. `clean` is False when no stretch is long enough (rapid
+    cutting): the caller keeps the moment and scores the timing down - but
+    never opens on the last second of a shot (snap_past_cut: the start moves
+    past the change and the clip keeps its length from later in the file).
+    offset None: the moment sits just before a shot change and what follows
+    the change is too short for `need` - nothing usable here.
     """
     inner = sorted(c for c in cuts if 0.2 < c < total - 0.2)
     if total <= 0:
         return 0.0, True, 0
+    pad = config.CUT_SNAP_PAD
     edges = [0.0] + inner + [total]
-    windows = list(zip(edges, edges[1:]))
-    for a, b in windows:
-        if a <= prefer < b and b - a >= need:
-            return max(a, min(prefer, b - need)), True, len(inner)
-    a, b = max(windows, key=lambda w: w[1] - w[0])
-    if b - a >= need:
-        return a, True, len(inner)
-    return max(0.0, min(prefer, total - need)), False, len(inner)
+    # (first usable second, end, where the stretch really starts) - a cut's own frames padded off.
+    windows = [(a + (pad if k else 0.0), b, a) for k, (a, b) in enumerate(zip(edges, edges[1:]))]
+    for lo, b, a in windows:
+        if a <= prefer < b and b - lo >= need:
+            return max(lo, min(prefer, b - need)), True, len(inner)
+    lo, b, _a = max(windows, key=lambda w: w[1] - w[0])
+    if b - lo >= need:
+        return lo, True, len(inner)
+    start = snap_past_cut(max(0.0, min(prefer, total - need)), inner)
+    if total - start < need - 0.01:
+        return None, False, len(inner)
+    return start, False, len(inner)
 
 
 def trim_clip(path: str, offset: float, seconds: float, timeout: int = 180) -> str:
@@ -368,17 +493,53 @@ def trim_clip(path: str, offset: float, seconds: float, timeout: int = 180) -> s
     return out if playable_video(out, min_seconds=min(1.0, seconds * 0.5)) else ""
 
 
+def _drop(path: str, why: str, inner: int) -> tuple:
+    print(f"[cut] {os.path.basename(path)}: {why} - not used", flush=True)
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return "", False, inner
+
+
 def tidy_clip(path: str, need: float, prefer: float) -> tuple:
     """
     (path, clean, cuts) for a downloaded section: the `need` seconds cut from
-    its cleanest stretch around `prefer`. The original file is replaced.
+    its cleanest stretch around `prefer`, never opening on the end of a shot
+    (clean_window). The original file is replaced. ("", False, cuts) when the
+    moment opens just before a shot change and what follows it is too short
+    to cover `need`: the file is gone and the caller tries its next candidate
+    or leaves the line to the fallback ladder - a clip is never slowed.
     """
     if not path or not config.CLEAN_CUTS:
         return path, True, 0
     total = _video_seconds(path)
+    if total <= 0:
+        return path, True, 0             # unreadable here: kept as it came
+    cuts = scene_cuts(path)
     if total <= need + 0.6:
-        return path, True, 0             # nothing to choose from
-    offset, clean, inner = clean_window(total, scene_cuts(path), need, prefer)
+        # Nothing to choose a stretch from - but no clip opens on the last second of a shot.
+        inner = sum(1 for c in cuts if 0.2 < c < total - 0.2)
+        start = snap_past_cut(0.0, cuts)
+        clean = not any(start < c < min(total, start + need) - 0.2 for c in cuts)
+        if not start:
+            return path, clean, inner
+        if total - start < need - 0.01:
+            return _drop(path, f"opens {start - config.CUT_SNAP_PAD:.2f}s before a shot change and the rest "
+                               f"is too short for {need:.1f}s", inner)
+        out = trim_clip(path, start, need + 0.5)
+        if not out:
+            return path, False, inner
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        print(f"[cut] {os.path.basename(out)}: clip from {start:.2f}s, past a shot change at its start", flush=True)
+        return out, clean, inner
+    offset, clean, inner = clean_window(total, cuts, need, prefer)
+    if offset is None:
+        return _drop(path, f"the moment opens just before a shot change and what follows it is too short for "
+                           f"{need:.1f}s", inner)
     out = trim_clip(path, offset, need + 0.5)
     if not out:
         return path, clean, inner

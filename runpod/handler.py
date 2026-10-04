@@ -2565,7 +2565,11 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "PICTURE_SHARPNESS_CHECK", "MAX_PICTURE_MAGNIFICATION", "CLIP_SHARPNESS_CHECK",
                       "MIN_CLIP_REAL_HEIGHT", "MIN_CLIP_HEIGHT",
                       # The routine planning calls on a cheaper model (src/director.py _routes; 2026-10-05).
-                      "DIRECTOR_ROUTINE_MODEL")
+                      "DIRECTOR_ROUTINE_MODEL",
+                      # Clean in-points (src/filters.py; the owner's Glen Canyon test, 2026-10-05: "the first
+                      # second or two didn't match"). A/B one job.
+                      "SHOT_CUT_THRESHOLD", "SHOT_CUT_SOFT_THRESHOLD", "SHOT_CUT_RATIO", "SHOT_CUT_SAME_PICTURE",
+                      "CUT_GUARD_SECONDS", "CUT_SNAP_PAD")
 
 
 def _apply_config(overrides) -> dict:
