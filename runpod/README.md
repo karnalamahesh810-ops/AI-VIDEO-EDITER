@@ -208,7 +208,7 @@ the same job.
     "project_id": "uuid",
     "title": "The Vanishing Reservoir",      // context for every search query
     "script": "optional authored script (keeps your spelling, uses whisper timing)",
-    "audio_url": "https://.../narration.mp3", // required: TTS output or uploaded VO
+    "audio_url": "https://.../narration.mp3", // TTS output or uploaded VO; may be left out with a script, see below
     "bgm_url": "https://.../suspense.mp3",
     "captions": true,
     "maps": true,                             // false to disable map overlays
@@ -219,6 +219,22 @@ the same job.
   }
 }
 ```
+
+### Script -> video (the free voice)
+
+A `plan` or `build` job with a `script` and **no** `audio_url` has its narration made first, by
+our own voice endpoint (`tts_server/`: Kokoro, or Chatterbox with a cloned voice), when
+`TTS_API_BASE` is set on this worker. The script is cut at sentence ends into parts of at most
+1,500 characters, four are voiced at once, the parts are joined in order and brought to the
+worker's narration loudness (-20 LUFS); the file goes to Cloudflare R2 and the job continues as if
+that link had been its `audio_url` - whisper still measures the real word timings. Progress shows
+"Making the narration (free voice)". The result carries `audio_url` and `narration` (voice,
+seconds, loudness), and `timeline.meta.narration` says the same. Per-job voice: `tts_voice`,
+`tts_model`, `tts_speed`, `tts_reference_audio` (a link to a 10-30 s sample, Chatterbox only).
+The whole narration has `TTS_TOTAL_SECONDS` (30 min): a slower endpoint stops the job with a plain
+message. Without `TTS_API_BASE` nothing of this runs: such a job fails exactly as before
+("audio_url is required"). Settings, deploy steps, licences and the cost estimate:
+`tts_server/README.md`.
 
 ### Response
 
@@ -259,6 +275,8 @@ UI show where every clip came from — so you can see Content ID exposure before
 | `SERPER_API_KEY` | no | Google Images via Serper; keyless DuckDuckGo image search is used without it |
 | `ALLOW_STOCK` | no | default off; also relaxes `timeline.validate()` |
 | `WHISPER_MODEL` | no | `base` on CPU, `small`/`medium` on GPU |
+| `TTS_API_BASE` / `TTS_API_KEY` | no | the free voice endpoint for script-only jobs (`tts_server/README.md`); empty = off |
+| `TTS_MODEL` / `TTS_VOICE` / `TTS_SPEED` / `TTS_REFERENCE_AUDIO` | no | default `kokoro` / `af_heart` / `1.0` / none (a voice sample for Chatterbox cloning) |
 | `CONTACT_EMAIL` | no | sent in the User-Agent Wikimedia and Nominatim require |
 
 ## How the app calls this worker

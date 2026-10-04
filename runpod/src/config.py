@@ -1268,3 +1268,57 @@ PACKS_SEGMENT_MAX = float(os.getenv("PACKS_SEGMENT_MAX", "10"))
 PACKS_MAX_PER_SOURCE = int(os.getenv("PACKS_MAX_PER_SOURCE", "6"))
 PACKS_TOPIC_QUOTA = int(os.getenv("PACKS_TOPIC_QUOTA", "40"))
 PACKS_TOPIC_MIN_SIMILARITY = float(os.getenv("PACKS_TOPIC_MIN_SIMILARITY", "0.23"))
+
+# --- script -> narration with a free, self-hosted voice (src/tts.py) -----------
+# The owner's flow (2026-08-14): "just paste script, select voice over or
+# directly upload audio, and make video". A job that carries a script and no
+# audio_url has its narration made here, by a voice endpoint of our own
+# (runpod/tts_server: Kokoro, Apache-2.0; Chatterbox, MIT, which clones a voice
+# from a 10-30 s sample) - no per-character bill, only the GPU seconds it runs.
+# Premium voices stay in the app and still arrive as audio_url.
+# TTS_API_BASE empty = off: a script-only job is refused with a clear message.
+#   an OpenAI-compatible server : https://<host>        (POST /v1/audio/speech)
+#   a RunPod queue endpoint     : https://api.runpod.ai/v2/<endpoint id>  (/runsync)
+# TTS_API_MODE "auto" tells the two apart by the address; "openai" / "runpod" force one.
+TTS_API_BASE = os.getenv("TTS_API_BASE", "").strip().rstrip("/")
+TTS_API_KEY = os.getenv("TTS_API_KEY", "").strip()
+TTS_API_MODE = os.getenv("TTS_API_MODE", "auto").strip().lower()
+# The engine and the voice when the job names none (a job may send tts_model,
+# tts_voice, tts_speed, tts_reference_audio). af_heart is Kokoro's best-graded
+# voice; am_michael and bm_george are its documentary men.
+TTS_MODEL = os.getenv("TTS_MODEL", "kokoro").strip()
+TTS_VOICE = os.getenv("TTS_VOICE", "af_heart").strip()
+TTS_SPEED = float(os.getenv("TTS_SPEED", "1.0"))
+# Voice cloning (Chatterbox): a 10-30 s sample of the voice - a link, or a file
+# on this worker. Only ever a voice the owner has the right to use.
+TTS_REFERENCE_AUDIO = os.getenv("TTS_REFERENCE_AUDIO", "").strip()
+# Another server may call a field something else: TTS_FIELDS renames ours
+# ({"reference_audio": "speaker_wav", "input": "text"}) and TTS_EXTRA adds
+# fields to every request ({"exaggeration": 0.4, "cfg_weight": 0.5}). Both JSON.
+TTS_FIELDS = os.getenv("TTS_FIELDS", "").strip()
+TTS_EXTRA = os.getenv("TTS_EXTRA", "").strip()
+# What each part comes back as (lossless and small: a 100 s part is ~2.5 MB,
+# far under RunPod's 20 MB answer limit) and what the narration is stored as.
+TTS_FORMAT = os.getenv("TTS_FORMAT", "flac").strip().lower()
+TTS_OUTPUT_FORMAT = os.getenv("TTS_OUTPUT_FORMAT", "mp3").strip().lower()
+# A long script is cut at sentence ends into parts of at most this many
+# characters (~100 s of speech), TTS_WORKERS of them voiced at once.
+TTS_CHUNK_CHARS = int(os.getenv("TTS_CHUNK_CHARS", "1500"))
+TTS_WORKERS = int(os.getenv("TTS_WORKERS", "4"))
+# One part: seconds before it is given up (a cold GPU worker loads its model
+# first) and how many times it is asked again after a failure.
+TTS_TIMEOUT = float(os.getenv("TTS_TIMEOUT", "600"))
+TTS_RETRIES = int(os.getenv("TTS_RETRIES", "3"))
+# The whole narration - every part, retry and cold start - within this many
+# seconds (0 = no limit). Kokoro voices a 30-minute script in a few minutes
+# even from cold workers; Chatterbox needs ~10-15 minutes on 4 GPUs. Past it
+# the job stops with a plain message instead of running into its own time
+# limit (3 h on the serverless endpoint, POD_MAX_SECONDS on a pod).
+TTS_TOTAL_SECONDS = float(os.getenv("TTS_TOTAL_SECONDS", "1800"))
+# The breath between two parts (they always meet at a sentence end).
+TTS_GAP_SECONDS = float(os.getenv("TTS_GAP_SECONDS", "0.3"))
+# The narration's loudness (integrated LUFS). 0 = where the worker's measured
+# narrations sit and its sounds are planned against (sfxplan.VOICE_LUFS_DEFAULT, -20).
+TTS_LUFS = float(os.getenv("TTS_LUFS", "0"))
+# A script longer than this is refused (about two hours of speech).
+TTS_MAX_CHARS = int(os.getenv("TTS_MAX_CHARS", "120000"))

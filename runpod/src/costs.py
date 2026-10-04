@@ -3,7 +3,8 @@ What one video cost, by category, from counted units and a price table.
 
 Every paid thing a job does is counted as a unit here - a vision judgement,
 a storyboard rating, a planning call, a generated image, a SERP call, a
-byte through a proxy, a worker-second - and priced at the end from a table
+byte through a proxy, a worker-second, a second of narration made by the
+free voice (src/tts.py) - and priced at the end from a table
 that comes from configuration (PRICES in the environment, or the app's
 provider_prices table passed in the job input), never from code. Fan-out
 children return their own counts and the parent absorbs them, so a video's
@@ -42,6 +43,15 @@ DEFAULT_PRICES: Dict[str, float] = {
     "serp.call": 0.0015,                 # USD: one paid SERP request (old documents; no provider uses it now)
     "storage.gb": 0.021,                 # USD per GB-month kept
     "tts.char": 0.0,                     # the app pays for TTS; kept for the total
+    # USD per second of narration made by the free voice (src/tts.py). An
+    # ESTIMATE, not a measurement: Kokoro on a 24 GB serverless GPU ($0.69/h,
+    # A5000 / L4 / 3090, 2026-10) voices ~50x faster than it is spoken, and up
+    # to four cold workers each bill their start - about 3 cents per 20-minute
+    # narration. Chatterbox is roughly real time: set this to ~0.0002 with it.
+    "tts.seconds": 0.000025,
+    # The GPU seconds the voice endpoint itself reported: counted, not priced
+    # (they are inside tts.seconds); they are what the estimate is checked against.
+    "tts.gpu_seconds": 0.0,
 }
 _CREDIT_KEYS = ("vision.judge", "vision.rate_tiles", "vision.pick_tile", "vision.hedge", "vision.anchor",
                 "llm.director_call",
@@ -50,7 +60,7 @@ _CATEGORY = {"vision.judge": "vision", "vision.rate_tiles": "vision", "vision.pi
              "vision.hedge": "vision", "vision.anchor": "vision",
              "llm.director_call": "llm", "llm.brief_call": "llm", "image.generate": "image",
              "runpod.worker_second": "runpod", "proxy.bytes": "proxy", "serp.call": "serp",
-             "storage.bytes": "storage", "tts.char": "tts"}
+             "storage.bytes": "storage", "tts.char": "tts", "tts.seconds": "tts", "tts.gpu_seconds": "tts"}
 
 
 def _env_prices() -> Dict[str, float]:
