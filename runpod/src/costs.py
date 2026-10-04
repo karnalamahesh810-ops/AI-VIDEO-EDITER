@@ -35,6 +35,7 @@ DEFAULT_PRICES: Dict[str, float] = {
     "vision.pick_tile": 0.4,             # credits: one 20-tile sheet, one pick
     "vision.hedge": 0.5,                 # credits: a backup request sent while the first model was slow
     "vision.anchor": 0.3,                # credits: one frame, "where is X" (src/anchors.py)
+    "vision.review": 1.0,                # credits: the AI review's call, 4-6 scenes' frames (src/review.py)
     "llm.director_call": 1.0,            # credits: one planning batch
     "llm.brief_call": 1.0,               # credits: the story brief
     "image.generate": 4.0,               # credits: one generated image
@@ -54,10 +55,10 @@ DEFAULT_PRICES: Dict[str, float] = {
     "tts.gpu_seconds": 0.0,
 }
 _CREDIT_KEYS = ("vision.judge", "vision.rate_tiles", "vision.pick_tile", "vision.hedge", "vision.anchor",
-                "llm.director_call",
+                "vision.review", "llm.director_call",
                 "llm.brief_call", "image.generate")
 _CATEGORY = {"vision.judge": "vision", "vision.rate_tiles": "vision", "vision.pick_tile": "vision",
-             "vision.hedge": "vision", "vision.anchor": "vision",
+             "vision.hedge": "vision", "vision.anchor": "vision", "vision.review": "vision",
              "llm.director_call": "llm", "llm.brief_call": "llm", "image.generate": "image",
              "runpod.worker_second": "runpod", "proxy.bytes": "proxy", "serp.call": "serp",
              "storage.bytes": "storage", "tts.char": "tts", "tts.seconds": "tts", "tts.gpu_seconds": "tts"}

@@ -64,6 +64,7 @@ What it answers for (each has a test in tests/test_quality.py):
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -954,6 +955,10 @@ class Gate:
         self.audited = False
         self.rerendered = False
         self._first: Optional[Tuple[List[dict], List[dict]]] = None
+        # What the first scan found and left unrepaired (no scene to repair), and those rows
+        # taken back to be judged again when another check asks for the second render.
+        self._first_left: List[dict] = []
+        self._rejudge: List[dict] = []
         self._gone: Optional[Tuple[float, Dict[str, Check]]] = None    # the last re-check after a failed render
         self._report: Optional[dict] = None
         self._rows = 0
@@ -1411,8 +1416,9 @@ class Gate:
         return None
 
     def _ladder(self, order: List[int], banned: List[gapfill.Shot],
-                problems: Dict[int, Tuple[str, str]]) -> Dict[int, str]:
-        """The fallback ladder for the cleared scenes (never a shot another scene shows, never a banned one)."""
+                problems: Dict[int, Tuple[str, str]], seconds: Optional[float] = None) -> Dict[int, str]:
+        """The fallback ladder for the cleared scenes (never a shot another scene shows, never a banned one),
+        inside `seconds` (QUALITY_REPAIR_SECONDS when not given)."""
         scenes = self.doc["scenes"]
         plan = gapfill.CONTEXT if CONTEXT.get("plan") and gapfill.CONTEXT.get("jobs") else {}
         jobs = [gapfill.job_for(s, k, self.fps, plan.get("jobs")) for k, s in enumerate(scenes)]
@@ -1439,7 +1445,8 @@ class Gate:
                                require_cc=bool(plan.get("require_cc", CONTEXT.get("require_cc", False))),
                                # fill_empty asks the image model only when this is False
                                youtube_only=bool(plan.get("youtube_only")) or not allow_generated,
-                               indices=order, used=used, seconds=config.QUALITY_REPAIR_SECONDS,
+                               indices=order, used=used,
+                               seconds=config.QUALITY_REPAIR_SECONDS if seconds is None else seconds,
                                scene_seconds=config.QUALITY_REPAIR_SCENE_SECONDS, label="quality gate")
         except Exception as e:  # noqa: BLE001 - the last resort below
             print(f"[quality] the ladder failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
@@ -1678,7 +1685,7 @@ class Gate:
         # Silence has no scene to repair, and drawing the same narration again
         # gives the same sound: it is reported, never re-rendered for.
         if self.rerendered or not config.QUALITY_RERENDER or not problems:
-            self._leave(defects)
+            self._first_left = self._leave(defects)
             return False
         self.rerendered = True
         self._say(f"Repairing {_n(len(problems), 'scene')} the finished video showed wrong", 90)
@@ -1701,6 +1708,8 @@ class Gate:
             return self._after_rerender(path, first)
         except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
             self._broke("the scan of the second render", e)
+            self.unresolved.extend(self._rejudge)       # never judged again: still left
+            self._rejudge = []
             if not os.path.isfile(path) and os.path.isfile(first):
                 os.replace(first, path)
                 self.render["kept"] = "first"
@@ -1711,12 +1720,23 @@ class Gate:
 
     def _after_rerender(self, path: str, first: str) -> str:
         res = scan(path)
+        if self._first is None and res["ok"]:
+            # The first render was never judged (the scan is switched off, or it
+            # could not be read) and another check asked for the second one
+            # (the AI review): scan it now, so the two are compared like for like.
+            was = scan(first)
+            if was["ok"]:
+                self._first = classify(self.doc, was)
+                self.seconds["scan"] = round(self.seconds.get("scan", 0.0) + was.get("seconds", 0.0), 1)
         before = self._first[0] if self._first else []
         if not res["ok"]:
             # Nothing to judge it by: the repaired render stands (its scenes were the ones at fault).
+            # What the first scan had left unrepaired was not judged again: it stays left.
             self.notes.append(f"the second render was not scanned: {res['why']}")
             self.render["kept"] = "repaired"
-            self.render["fixed"] = len(before)
+            self.render["fixed"] = max(0, len(before) - len(self._rejudge))
+            self.unresolved.extend(self._rejudge)
+            self._rejudge = []
             _remove(first)
             return "repaired"
         after, intended = classify(self.doc, res)
@@ -1729,6 +1749,7 @@ class Gate:
             os.replace(first, path)
         self.render.update(kept=kept, fixed=max(0, len(before) - len(left)),
                            defectsAfter=[_brief(d) for d in after][:20])
+        self._rejudge = []                  # judged again just now: `left` holds what stays
         if left:
             self._leave(left)
         self._event("rerendered", f"kept the {kept} render: {len(before)} defect(s) before, {len(after)} after",
@@ -1739,6 +1760,7 @@ class Gate:
         """The second render broke: the first file stands, with its problems reported."""
         self.render["kept"] = "first"
         self.notes.append(f"the second render failed ({type(err).__name__}: {str(err)[:120]}); the first one is kept")
+        self._rejudge = []                  # the first render's findings are all listed again below
         try:
             self._event("rerender_failed", f"{type(err).__name__}: {str(err)[:200]}", level="error", always=True)
             if self._first:
@@ -1746,14 +1768,87 @@ class Gate:
         except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
             self._broke("the report of the second render", e)
 
-    def _leave(self, defects: List[dict]) -> None:
+    def _leave(self, defects: List[dict]) -> List[dict]:
+        """The defects listed as unresolved; returns the rows added."""
         scenes = self.doc.get("scenes") or []
+        rows = []
         for d in defects:
             ids = [str(scenes[k].get("id")) for k in d.get("scenes") or [] if 0 <= k < len(scenes)]
-            self.unresolved.append({"kind": d["kind"], "scene": ids[0] if ids else "", "at": d["at"],
-                                    "what": f"{d['kind']} at {d['at']}: {d['why']}"})
+            row = {"kind": d["kind"], "scene": ids[0] if ids else "", "at": d["at"],
+                   "what": f"{d['kind']} at {d['at']}: {d['why']}"}
+            self.unresolved.append(row)
+            rows.append(row)
             self._event("unresolved", f"{d['kind']} at {d['at']}: {d['why']}", level="error", always=True,
                         data=_brief(d))
+        return rows
+
+    # ---- another check's fixes (the AI review, src/review.py) -----------------
+    def another_shot(self, problems: Dict[int, Tuple[str, str]], seconds: Optional[float] = None) -> Dict[int, str]:
+        """
+        A different shot for scenes whose picture is usable but unwanted (the
+        AI review: it feels like a repeat of another scene), through the
+        fallback ladder ONLY, inside `seconds` (the caller's own time box;
+        QUALITY_REPAIR_SECONDS when not given). A scene the ladder finds
+        nothing for keeps the shot it has: a text card in place of a picture
+        that plays would be a worse video, not a better one. {scene index:
+        what it got}; never raises.
+        """
+        scenes = self.doc.get("scenes") or []
+        order = sorted(i for i in problems if 0 <= i < len(scenes))
+        if not order or not self._ladder_ok():
+            return {}
+        before = {i: copy.deepcopy(scenes[i]) for i in order}
+        banned = []
+        for i in order:
+            old = gapfill.Shot.of_scene(scenes[i], self.fps)
+            if old is not None:
+                old.start, old.chain = None, False             # no other moment of the same source either
+                banned.append(old)
+        try:
+            got = self._ladder(order, banned, problems, seconds=seconds)
+        except Exception as e:  # noqa: BLE001 - every scene keeps what it had
+            self._broke("the ladder for another check", e)
+            got = {}
+        for i in order:
+            if i not in got:
+                scenes[i].clear()
+                scenes[i].update(before[i])
+        return got
+
+    def join_second_render(self, scenes: List[int], why: str) -> bool:
+        """
+        The one second render, asked for by a check that changed the document
+        after the first render (the AI review's swapped clips and moved
+        titles). The document is left the way a repair leaves it - a still for
+        every clip on this disk, every look with a picture it can load, no
+        empty scene - and True says draw it once more. The caller asks only
+        while that render is still to be had (never a third draw); a second
+        draw that already happened after a failed render is refused here too.
+        False when the second render is switched off, already drawn, or the
+        preparation broke. What the first scan found and left unrepaired is
+        judged again on the second render (listed once, never twice).
+        """
+        if not config.QUALITY_RERENDER or self.render.get("afterFailure"):
+            return False
+        try:
+            self._local_stills()
+            self._look_sources()
+            self.no_empty_scenes()
+            from . import timeline
+            timeline.drop_invalid_overlays(self.doc)
+        except Exception as e:  # noqa: BLE001 - the first render stands
+            self._broke("the preparation of the second render", e)
+            return False
+        self._rejudge = [r for r in self._first_left if r in self.unresolved]
+        for r in self._rejudge:
+            self.unresolved.remove(r)
+        self._first_left = []
+        self.rerendered = True
+        self.render["rerendered"] = True
+        self.render.setdefault("askedBy", why)
+        self._event("rerender", f"drawing the video once more: {why}", always=True,
+                    data={"scenes": sorted(scenes)[:40], "askedBy": why})
+        return True
 
     # ---- a render that failed -----------------------------------------------
     def recover(self, err: BaseException) -> bool:
