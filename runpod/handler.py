@@ -31,6 +31,11 @@ pack_build: build or refresh one niche's footage pack on R2 (NASA, Wikimedia
           Commons, Internet Archive, the owner's unused library clips):
           {"niche": "water", "max_clips": 40, "dry_run": false}. See
           src/packbuild.py and scripts/build_pack.py. No project is touched.
+batch   : several videos as one job, built one after another on this machine:
+          {"jobs": [<build inputs>], "max_parallel": 1}. Each is a normal build
+          through this handler (its own config, costs, events and project row);
+          a failed one does not stop the rest. Returns {done, failed,
+          total_cost, seconds}. See src/batch.py.
 
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
@@ -58,7 +63,7 @@ from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, voicepolish
 from src import brandkit
-from src import sources
+from src import batch, sources
 
 
 def _work_dir(job_id: str) -> str:
@@ -2223,6 +2228,15 @@ def handler(job):
     started = time.time()
     job_id = job.get("id") or uuid.uuid4().hex
     inp = job.get("input") or {}
+    if str(inp.get("action") or "").lower() == "batch":
+        # Several videos as one job (src/batch.py): each is a normal build through this same
+        # handler, one after another, with its own config, costs, events and project row.
+        try:
+            return batch.run({**job, "id": job_id, "input": inp}, handler)
+        except Exception as e:  # noqa: BLE001 - errors never raise out of the handler
+            traceback.print_exc()
+            return {"ok": False, "action": "batch", "error": f"{type(e).__name__}: {e}"[:800],
+                    "elapsed": round(time.time() - started, 1)}
     # The storage broker authorises uploads by the running job's id.
     inp["_job_id"] = job_id
     # The video style (news compilation, documentary...) becomes per-job
@@ -2268,11 +2282,16 @@ def handler(job):
     kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
     kit_scope.__enter__()
 
+    # This video's own name in the cross-video ledger: the job id, or - for a video of a batch, which
+    # shares the batch's job id with the others (src/batch.py) - one of its own, so no video's record
+    # overwrites another's.
+    ledger_job = str(inp.get("_ledger_job") or job_id)
+
     try:
         if action in ("plan", "build", "resource", "source_part"):
             # What earlier videos showed (src/ledger.py), read in the background
             # while the narration is transcribed; sourcing never repeats it.
-            ledger.start_loading(job_id, project_id)
+            ledger.start_loading(ledger_job, project_id)
         if action == "source_part":
             # One part of a long video, queued by its parent job (src/fanout.py).
             def set_story(brief):
@@ -2458,7 +2477,7 @@ def handler(job):
                     "scene_data": doc, "status": "editing",
                     "current_step": "Timeline ready", "progress": 68,
                 })
-                ledger.save(job_id, project_id)     # later videos never show these moments again
+                ledger.save(ledger_job, project_id)     # later videos never show these moments again
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "plan", "timeline": doc, "costs": summary,
                     "events": doc["meta"]["events"],
@@ -2516,7 +2535,7 @@ def handler(job):
             if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
             if project_id:
-                ledger.save(job_id, project_id, doc=doc)    # the edited, rendered video's own shots
+                ledger.save(ledger_job, project_id, doc=doc)    # the edited, rendered video's own shots
             costs.measure_end()
             return {"ok": True, "action": "render", **out,
                     "render_manifest": media.LAST_STATS.get("render_manifest"),
@@ -2574,7 +2593,7 @@ def handler(job):
             if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
             if project_id:
-                ledger.save(job_id, project_id)     # later videos never show these moments again
+                ledger.save(ledger_job, project_id)     # later videos never show these moments again
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "build", "timeline": doc, **out, "costs": summary,
                     "events": doc["meta"]["events"],

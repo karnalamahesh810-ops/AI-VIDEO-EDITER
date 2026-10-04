@@ -429,6 +429,12 @@ PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
 # turn. With 300 s a scene every one of them starts within the box. 0 = off.
 SCENE_SECONDS_MIN = float(os.getenv("SCENE_SECONDS_MIN", "120"))
 SCENE_SECONDS_MAX = float(os.getenv("SCENE_SECONDS_MAX", "300"))
+# Batch mode (src/batch.py, the handler's action "batch"): several videos queued as one job run one after
+# another on the same machine. This is the most a batch may run side by side; a job's "max_parallel" can only
+# ask for fewer. 1 = strictly one at a time - and the only value this worker honours today: a build keeps its
+# state module-wide (config overrides, the cost ledger, the event log, the storage job id), so two builds in
+# one process would write into each other's project.
+BATCH_MAX_PARALLEL = int(os.getenv("BATCH_MAX_PARALLEL", "1"))
 # Split one long video's sourcing across workers (src/fanout.py). RunPod
 # injects RUNPOD_ENDPOINT_ID into its workers; the API key is set on the
 # template (FANOUT_API_KEY) so a worker can queue parts on its own endpoint.
