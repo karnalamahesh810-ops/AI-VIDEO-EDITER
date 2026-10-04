@@ -41,7 +41,7 @@ class HedgedDirectorCalls(unittest.TestCase):
             self.assertEqual(director._chat_json("sys", {}), {"from": "fast"})
         self.assertLess(time.time() - t, 1.5)
 
-    def test_a_timeout_is_retried_once_then_the_next_model_answers(self):
+    def test_a_timeout_is_retried_with_backoff_then_the_next_model_answers(self):
         seen = []
 
         def post(url, json=None, **kw):
@@ -50,11 +50,13 @@ class HedgedDirectorCalls(unittest.TestCase):
                 raise director.requests.Timeout("read timed out")
             return self._reply('{"ok": 1}')
 
+        # DIRECTOR_RETRIES (2, since 2026-10-05; it was one retry): three tries on the slow model.
         with mock.patch.object(config, "DIRECTOR_HEDGE_SECONDS", 30), \
+                mock.patch.object(config, "DIRECTOR_RETRIES", 2), \
                 mock.patch.object(director.time, "sleep"), \
                 mock.patch.object(director.requests, "post", side_effect=post):
             self.assertEqual(director._chat_json("sys", {}), {"ok": 1})
-        self.assertEqual(seen, ["slow", "slow", "fast"])
+        self.assertEqual(seen, ["slow", "slow", "slow", "fast"])
 
     def test_the_story_brief_gets_the_long_timeout(self):
         timeouts = []

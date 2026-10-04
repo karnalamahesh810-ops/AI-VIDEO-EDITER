@@ -422,6 +422,14 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 # 120 s timeouts and retries on 2026-09-28).
 DIRECTOR_HEDGE_SECONDS = float(os.getenv("DIRECTOR_HEDGE_SECONDS", "75"))
 DIRECTOR_BUDGET_FACTOR = float(os.getenv("DIRECTOR_BUDGET_FACTOR", "2.2"))
+# A planning call that failed for a reason worth waiting out - a timeout or a
+# dropped connection, HTTP 408/409/425/429, any 5xx, from Kie's wrapped answer
+# or OpenRouter's {"error": ...} - is asked again on the same model this many
+# times, after DIRECTOR_RETRY_WAIT seconds, doubling; then the next model (the
+# fallbacks, then the backup provider) takes it. Until 2026-10-05 an OpenRouter
+# error was not even recognised: no retry, no circuit breaker, no out-of-credits.
+DIRECTOR_RETRIES = int(os.getenv("DIRECTOR_RETRIES", "2"))
+DIRECTOR_RETRY_WAIT = float(os.getenv("DIRECTOR_RETRY_WAIT", "3"))
 BRIEF_TIMEOUT = int(os.getenv("BRIEF_TIMEOUT", "240"))
 
 # Story-planning batches (director._ai_pass) run this many at a time. At 4 the

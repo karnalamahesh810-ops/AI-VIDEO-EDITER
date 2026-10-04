@@ -1119,6 +1119,47 @@ def _note_usage(body) -> None:
             costs.record(k, n)
 
 
+# Answers worth another try on the same model after a pause: a timeout, a conflict, "too
+# early", rate limited - and any 5xx (_retryable).
+_RETRY_STATUS = (408, 409, 425, 429)
+
+
+def _retryable(status: int) -> bool:
+    return status in _RETRY_STATUS or status >= 500
+
+
+def _failure(r, body) -> Tuple[int, str]:
+    """
+    (status, message) of a failed answer, (0, "") for one to read.
+
+    Kie wraps a failure in an HTTP 200 as {"code": 4xx/5xx, "msg": ...}; OpenRouter and
+    the other OpenAI-compatible gateways answer {"error": {"code", "message"}} with the
+    HTTP status (402 out of credits, 429 rate limited, 5xx the upstream model in
+    trouble), or put the error on the choice. Only Kie's shape used to be read: an
+    OpenRouter error became a KeyError on body["choices"] - no retry, no circuit
+    breaker, no out-of-credits flag.
+    """
+    status = getattr(r, "status_code", 200)
+    status = status if isinstance(status, int) and not isinstance(status, bool) else 200
+    if isinstance(body, dict):
+        if isinstance(body.get("code"), int) and body["code"] >= 400:
+            return body["code"], str(body.get("msg") or "")
+        err = body.get("error")
+        choices = body.get("choices")
+        if not err and isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            err = choices[0].get("error")
+        if err:
+            code, msg = (err.get("code"), err.get("message")) if isinstance(err, dict) else (None, err)
+            try:
+                code = int(code)
+            except (TypeError, ValueError):
+                code = 0                    # "rate_limit_exceeded": the HTTP status says it
+            if code < 400:
+                code = status if status >= 400 else 500
+            return code, str(msg or "")[:200]
+    return (status, "") if status >= 400 else (0, "")
+
+
 def _chat_try(base: str, key: str, model: str, main: bool, attempt: int, system: str,
               payload: dict, timeout: int, errors: Optional[List[str]],
               routine: bool = False) -> Tuple[Optional[dict], bool]:
@@ -1136,16 +1177,20 @@ def _chat_try(base: str, key: str, model: str, main: bool, attempt: int, system:
                   **_request_extra(model, url, routine)},
             timeout=timeout,
         )
-        body = r.json()
+        try:
+            body = r.json()
+        except ValueError:
+            body = None                     # a gateway's HTML error page: its status says what happened
         _note_usage(body)
-        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-            if main and vision.is_credit_error(body["code"], body.get("msg")):
+        status, msg = _failure(r, body)
+        if status:
+            if main and vision.is_credit_error(status, msg):
                 vision.note_out_of_credits()
-            if body["code"] >= 500:
-                vision.model_result(model, False)
             if errors is not None:
-                errors.append(f"{model}#{attempt}: ValueError")
-            return None, body["code"] >= 500
+                errors.append(f"{model}#{attempt}: HTTP {status}")
+            return None, _retryable(status)
+        if body is None:
+            raise ValueError("not JSON")
         data = _json_reply(body["choices"][0]["message"]["content"])
         if isinstance(data, dict):
             CHAT_CALLS["n"] += 1
@@ -1165,17 +1210,25 @@ def _chat_try(base: str, key: str, model: str, main: bool, attempt: int, system:
 def _chat_route(route: tuple, system: str, payload: dict, timeout: int,
                 errors: Optional[List[str]], deadline: float, routine: bool = False) -> Optional[dict]:
     """
-    One model with one retry on a transient failure (Kie answers "internal
-    error, please try again later" to Gemini Flash on long requests); a flaky
+    One model, asked again on a transient failure (a timeout, 429, 5xx - Kie
+    answers "internal error, please try again later" to Gemini Flash on long
+    requests, OpenRouter 429s and 503s) up to DIRECTOR_RETRIES times after
+    DIRECTOR_RETRY_WAIT seconds, doubling, while the call's time lasts; a flaky
     first call used to drop the whole batch to rule shots, i.e. searches built
-    from the subtitle words.
+    from the subtitle words. A call every try of which failed counts once on the
+    circuit breaker shared with vision (as vision._route_call: counting each try
+    benched a model on its first burst of 503s), and the caller hands it to the
+    next model.
     """
     base, key, model, main = route
-    for attempt in (1, 2):
-        if attempt == 2:
-            if time.time() + 3 >= deadline or not vision.model_available(model):
-                return None
-            time.sleep(3)
+    tries = 1 + max(0, int(config.DIRECTOR_RETRIES))
+    failed = False
+    for attempt in range(1, tries + 1):
+        if attempt > 1:
+            pause = max(0.0, config.DIRECTOR_RETRY_WAIT) * (2 ** (attempt - 2))
+            if time.time() + pause >= deadline or not vision.model_available(model):
+                break
+            time.sleep(pause)
         if main and vision.out_of_credits():
             return None
         data, transient = _chat_try(base, key, model, main, attempt, system, payload,
@@ -1183,8 +1236,11 @@ def _chat_route(route: tuple, system: str, payload: dict, timeout: int,
                                     routine=routine)
         if data is not None:
             return data
+        failed = transient
         if not transient:
-            return None
+            break
+    if failed:
+        vision.model_result(model, False)
     return None
 
 
