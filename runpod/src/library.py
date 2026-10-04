@@ -794,6 +794,18 @@ class Library:
         def keep_supabase(item):
             _s, _m, _sem, ident, url, _kind = item
             obj = f"library/clips/{_safe_id(ident)}.mp4"
+            if storage.r2_only():
+                # Cloudflare only, the library's own bucket not set up: the clip
+                # goes to the videos bucket under a link-only name and the row
+                # says where it really is ("r2:<bucket>": readers build its
+                # public link, which never expires). broker_upload would put it
+                # in R2 while the row still named the app's bucket - a row the
+                # app could neither sign nor play.
+                from . import r2
+                key = r2.tokened(obj)
+                r2.upload(url, key, content_type=r2.content_type(url), deadline=time.time() + 300,
+                          cache_control=r2.IMMUTABLE)
+                return None, {"storage_bucket": f"r2:{config.R2_BUCKET}", "storage_path": key}
             storage.broker_upload(url, self.bucket, obj, self.project_id, self.job_id, read_ttl=60)
             return None, {"storage_bucket": self.bucket, "storage_path": obj}
 
@@ -855,6 +867,9 @@ class Library:
                 entry.update({"width": v.width or None, "height": v.height or None,
                               "thumb": fields.get("thumbnail_path") or "", "phash": v.hashes,
                               "read_url": extra.get("publicUrl") or "", "extra": extra, "analysis": extra})
+            elif libstore.is_r2_ref(fields["storage_bucket"]):
+                # (Cloudflare only without the library's bucket: its public link, which never expires.)
+                entry["read_url"] = libstore.url_for(fields["storage_bucket"], fields["storage_path"])
             self.entries.append(entry)
             added += 1
         self.added = added

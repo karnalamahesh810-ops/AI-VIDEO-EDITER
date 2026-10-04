@@ -2,13 +2,17 @@
 import copy
 import hashlib
 import json
+import math
 import os
+import queue
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
 import time
+import urllib.parse
 
 from . import config
 from . import templates
@@ -21,6 +25,190 @@ class RenderError(RuntimeError):
 
 class RenderCancelled(RenderError):
     """render(cancel=...) was told to stop (another machine finished the same frames first)."""
+
+
+class RenderTimeout(RenderError):
+    """The render was stopped: it passed its time limit, or it stopped making progress."""
+
+
+# --------------------------------------------------------------------------- #
+# How long a render may take on this machine
+# --------------------------------------------------------------------------- #
+
+def _cgroup_cpus() -> float:
+    """The container's CPU limit (cgroup v2, then v1), 0 when it has none or cannot be read."""
+    try:
+        with open("/sys/fs/cgroup/cpu.max", encoding="ascii") as fh:
+            quota, period = (fh.read().split() + ["100000"])[:2]
+        if quota != "max" and float(period) > 0:
+            return float(quota) / float(period)
+    except (OSError, ValueError):
+        pass
+    try:
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", encoding="ascii") as fh:
+            quota = float(fh.read().strip())
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us", encoding="ascii") as fh:
+            period = float(fh.read().strip())
+        if quota > 0 and period > 0:
+            return quota / period
+    except (OSError, ValueError):
+        pass
+    return 0.0
+
+
+def cpus() -> int:
+    """
+    The CPUs this machine gives a render: RENDER_CPUS when set, else the
+    smallest of the container's limit, the cores the scheduler allows and the
+    host's count (a container sees the HOST's cores in os.cpu_count()).
+    """
+    if getattr(config, "RENDER_CPUS", 0) > 0:
+        return int(config.RENDER_CPUS)
+    found = [os.cpu_count() or 1]
+    try:
+        found.append(len(os.sched_getaffinity(0)))
+    except (AttributeError, OSError):
+        pass
+    limit = _cgroup_cpus()
+    if limit > 0:
+        found.append(int(math.ceil(limit)))
+    return max(1, min(found))
+
+
+def frames_per_second(concurrency: int = None) -> float:
+    """The frames a second a picture render is expected to draw here (see RENDER_FPS_PER_TAB)."""
+    n = cpus()
+    tabs = min(int(concurrency), n) if concurrency else max(1, n // 2)
+    return max(0.05, max(1, tabs) * float(config.RENDER_FPS_PER_TAB))
+
+
+def estimate_seconds(frames: int, concurrency: int = None) -> float:
+    """About how long `frames` frames take to render on this machine."""
+    return max(0, int(frames)) / frames_per_second(concurrency)
+
+
+def render_timeout(frames: int, concurrency: int = None) -> int:
+    """
+    The time limit of a render of `frames` frames on this machine: the
+    estimate with room to spare, never under RENDER_TIMEOUT_MIN_SECONDS and
+    never over RENDER_TIMEOUT_MAX_SECONDS. A long video on a small machine gets
+    the time it needs (it was a flat 5400 s); nothing runs past the upper bound.
+    """
+    want = estimate_seconds(frames, concurrency) * float(config.RENDER_TIMEOUT_FACTOR) \
+        + float(config.RENDER_TIMEOUT_BASE_SECONDS)
+    low = float(config.RENDER_TIMEOUT_MIN_SECONDS)
+    high = max(low, float(config.RENDER_TIMEOUT_MAX_SECONDS))
+    return int(min(high, max(low, want)))
+
+
+def frame_count(props: dict, frames: tuple = None) -> int:
+    """The frames one render draws: its range, else the whole document (brand intro and outro included)."""
+    if frames:
+        return max(1, int(frames[1]) - int(frames[0]) + 1)
+    try:
+        from . import brandkit
+        return max(1, int(brandkit.total_frames(props)))
+    except Exception:  # noqa: BLE001 - an odd document: its own length
+        return max(1, int((props or {}).get("durationInFrames") or 1))
+
+
+def _minutes(seconds: float) -> str:
+    m = int(round(float(seconds) / 60.0))
+    return f"{m // 60} h {m % 60:02d} min" if m >= 90 else f"{max(1, m)} min"
+
+
+# --------------------------------------------------------------------------- #
+# A failed render in plain words
+# --------------------------------------------------------------------------- #
+
+_URL = re.compile(r"https?://[^\s'\"<>()\[\]{},]+")
+# Remotion prints a failed download's body between two "---" lines, cut short:
+# a page ends at its </html>, else at that closing line, else with the text.
+_PAGE_END = r"(?:</html\s*>|\n-{3,}[ \t]*(?=\n|\Z)|\Z)"
+_HTML_PAGE = re.compile(r"<!doctype\s+html.*?" + _PAGE_END + r"|<html[\s>].*?" + _PAGE_END, re.I | re.S)
+_HTML_REST = re.compile(r"\A.*</(?:html|body)\s*>", re.I | re.S)       # a page whose start was cut off
+_HTML_BLOCK = re.compile(r"<(svg|style|script|head)[\s>].*?(?:</\1\s*>|\Z)", re.I | re.S)
+_TAG = re.compile(r"<!--.*?-->|</?[A-Za-z][^<>\n]{0,800}>", re.S)
+_TITLE = re.compile(r"<title[^>]*>\s*(.{1,120}?)\s*</title>", re.I | re.S)
+# An HTTP status in words that say it is one (never a frame number beside a link).
+_STATUS = re.compile(r"(?:status(?:\s+code)?(?:\s+of)?|HTTP(?:/\d\.\d)?|answer(?:s|ed)|returned|responded(?:\s+with)?)"
+                     r"\D{0,12}(40[0134]|410|429|50[0234])\b", re.I)
+# status -> (what happened, what it usually means)
+_STATUS_WORDS = {
+    "404": ("not found in storage (404)", "deleted from storage?"),
+    "410": ("not found in storage (410)", "deleted from storage?"),
+    "403": ("refused by storage (403)", "an expired or private link?"),
+    "401": ("refused by storage (401)", "an expired or private link?"),
+    "400": ("refused by storage (400)", "an expired link?"),
+    "429": ("refused for too many requests (429)", "storage is rate limiting"),
+}
+
+
+def _name_of(url: str) -> str:
+    """A link for a message: host and file name, never the query (signed links carry tokens)."""
+    p = urllib.parse.urlparse(url)
+    return f"{p.netloc}/.../{os.path.basename(p.path)}" if p.path.count("/") > 1 else f"{p.netloc}{p.path}"
+
+
+def _storage_trouble(text: str) -> str:
+    """One plain sentence when the output shows files that could not be loaded over HTTP, else ""."""
+    by_code: dict = {}
+    for line in text.splitlines():
+        urls = _URL.findall(line)
+        if not urls:
+            continue
+        m = _STATUS.search(_URL.sub(" ", line))          # a status beside the link, not a number inside it
+        if not m:
+            continue
+        got = by_code.setdefault(m.group(1), [])
+        for u in urls:
+            u = u.rstrip(".;:")
+            if u not in got:
+                got.append(u)
+    if not by_code:
+        return ""
+    parts = []
+    for code, urls in sorted(by_code.items()):
+        what, hint = _STATUS_WORDS.get(code, (f"unreadable (storage answered {code})", ""))
+        names = ", ".join(_name_of(u) for u in urls[:3]) + (f" and {len(urls) - 3} more" if len(urls) > 3 else "")
+        one = len(urls) == 1
+        parts.append(f"{len(urls)} file{'' if one else 's'} the video needs {'was' if one else 'were'} {what}: "
+                     f"{names}" + (f" - {hint}" if hint else ""))
+    return "; ".join(parts)
+
+
+def has_markup(text: str) -> bool:
+    """The text carries (part of) a web page: an error message must never show it."""
+    return bool(re.search(r"<!doctype\s+html|</?(?:html|body|head|svg|path|style|script)[\s>/]", text or "", re.I))
+
+
+def plain_error(raw: str, limit: int = 2000) -> str:
+    """
+    What a failed render printed, as an error a person can read: any web page
+    in it (a storage 404 or rate-limit page came back as raw HTML and became
+    the project's whole error message, 2026-10-04) is taken out, and when the
+    output shows files that could not be loaded, that is said first - how
+    many, which, and the storage's answer. The links themselves stay in the
+    text: the quality check repairs the scenes a render error names.
+    """
+    raw = raw or ""
+    title = _TITLE.search(raw)
+    had_page = bool(re.search(r"<!doctype\s+html|<html[\s>]|</html\s*>|</body\s*>", raw, re.I))
+    text = _HTML_PAGE.sub(" [a web error page] ", raw)
+    if re.search(r"</(?:html|body)\s*>", text, re.I):
+        text = _HTML_REST.sub(" [a web error page] ", text)
+    text = _HTML_BLOCK.sub(" ", text)
+    text = _TAG.sub(" ", text)
+    lines = [re.sub(r"[ \t]{2,}", " ", l).rstrip() for l in text.splitlines()]
+    text = "\n".join(l for l in lines if l.strip())
+    lead = _storage_trouble(text)
+    if not lead and had_page:
+        page = f' ("{" ".join(title.group(1).split())}")' if title else ""
+        lead = f"a storage link answered with an error page{page} instead of the file - is the file still in storage?"
+    body = text[-limit:]
+    if not lead:
+        return body
+    return f"{lead}{' ' if lead.endswith('?') else '. '}{body}"
 
 
 # x264's speed/size trade-offs. Measured on our own 1080p renders (2026-10-01,
@@ -195,12 +383,17 @@ def _render_progress(line: str):
 
 
 def render(props: dict, out_path: str, composition: str = "Main",
-           concurrency: int = None, timeout: int = 5400,
+           concurrency: int = None, timeout: int = None,
            serve_dir: str = None, on_progress=None, frames: tuple = None,
            muted: bool = False, codec: str = None, audio_to: str = None,
            cancel: threading.Event = None) -> str:
     """
     Render `props` to `out_path` with Remotion.
+
+    `timeout` (seconds): left unset, the limit follows the frames this render
+    draws and this machine (render_timeout). A render past its limit, or one
+    that stops printing progress for RENDER_STALL_SECONDS, is stopped with a
+    RenderTimeout that says how far it got.
 
     `audio_to` (a .wav path): the sound is written there as lossless PCM and
     `out_path` holds the picture only; finalize() then encodes the sound once
@@ -297,13 +490,27 @@ def render(props: dict, out_path: str, composition: str = "Main",
         if gl_backend or os.path.exists("/dev/nvidia0"):
             cmd.append(f"--gl={gl_backend or 'angle'}")
 
+        n_frames = frame_count(props, frames)
+        limit = int(timeout) if timeout else render_timeout(n_frames, concurrency)
+        # Progress lines are printed only when somebody listens (--log=info):
+        # silence then means a hung render, not a quiet one.
+        stall = float(getattr(config, "RENDER_STALL_SECONDS", 0) or 0) if on_progress is not None else 0.0
+
         def run(argv):
-            if on_progress is None and cancel is None:
-                return subprocess.run(
-                    argv, cwd=config.REMOTION_DIR, capture_output=True, text=True,
-                    encoding="utf-8", errors="replace", timeout=timeout,
-                )
-            return _run_streaming(argv, timeout, on_progress, cancel)
+            started = time.time()
+            try:
+                if on_progress is None and cancel is None:
+                    return subprocess.run(
+                        argv, cwd=config.REMOTION_DIR, capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=limit,
+                    )
+                return _run_streaming(argv, limit, on_progress, cancel, stall=stall)
+            except subprocess.TimeoutExpired:
+                # (Never the command line: it was the whole error of a failed job.)
+                raise RenderTimeout(_out_of_time(n_frames, limit, time.time() - started, None)) from None
+            except _Stopped as e:
+                raise RenderTimeout(_out_of_time(n_frames, limit, time.time() - started, e.frac,
+                                                 stalled=e.why == "stall", quiet=stall)) from None
 
         p = run(cmd + ([f"--concurrency={concurrency}"] if concurrency else []))
         if cancel is not None and cancel.is_set():
@@ -321,8 +528,9 @@ def render(props: dict, out_path: str, composition: str = "Main",
         lines = [l for l in (p.stderr or p.stdout or "").splitlines()
                  if l.strip() and not l.lstrip().startswith(("Rendered ", "Encoded ", "Stitched "))
                  and "time remaining" not in l]
-        tail = "\n".join(lines)[-2000:]
-        raise RenderError(f"remotion render failed (exit {p.returncode}): {tail}")
+        # Never a raw web page: a storage 404 page was a project's whole error.
+        said = plain_error("\n".join(lines))
+        raise RenderError(f"remotion render failed (exit {p.returncode}): {said}")
     if audio_to and picture and not muted and not os.path.isfile(audio_to):
         raise RenderError("remotion rendered the picture but wrote no sound track")
     return out_path
@@ -335,60 +543,137 @@ class _Completed:
         self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
 
 
-def _run_streaming(cmd, timeout, on_progress, cancel=None) -> "_Completed":
+class _Stopped(Exception):
+    """_run_streaming stopped the render itself: `why` is "timeout" or "stall", `frac` how far it got."""
+
+    def __init__(self, why: str, frac: float):
+        super().__init__(why)
+        self.why, self.frac = why, frac
+
+
+def _out_of_time(frames: int, limit: float, ran: float, frac, stalled: bool = False, quiet: float = 0.0) -> str:
+    """The error of a render that was stopped, in plain words (never the command line)."""
+    done = f"{int(frac * 100)}% done" if isinstance(frac, (int, float)) else "not finished"
+    where = f"{frames} frames on this one machine, {cpus()} CPUs"
+    if stalled:
+        return (f"The render stopped making progress: nothing was drawn for {_minutes(quiet)}, so it was "
+                f"stopped ({done} after {_minutes(ran)}; {where}).")
+    return (f"The render ran out of time: {done} after {_minutes(ran)} ({where}; "
+            f"the limit was {_minutes(limit)}).")
+
+
+def _run_streaming(cmd, timeout, on_progress, cancel=None, stall: float = 0.0) -> "_Completed":
     """
     Run Remotion, forwarding progress while keeping the output for errors.
     `cancel` (a threading.Event): once set, the render is killed (a chunk
-    another machine finished first).
+    another machine finished first). Past `timeout` seconds, or after `stall`
+    seconds without a single line of output (0 = not watched), the render is
+    stopped and _Stopped raised. The output is read on its own thread and this
+    one looks at the clock every second: the limit used to be checked only
+    when a line arrived, so a render that hung - and printed nothing - sat
+    until the job itself was killed; and a stop never waits on the pipe, which
+    a browser the renderer left behind can hold open.
     """
     proc = subprocess.Popen(
         cmd, cwd=config.REMOTION_DIR, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
         bufsize=1,
+        # Its own process group (Linux): a render that will not stop is killed
+        # with the browsers and encoders it started.
+        **({"start_new_session": True} if os.name == "posix" else {}),
     )
-    lines, deadline = [], time.time() + timeout
-    best = [0.0]   # progress only ever moves forward
-    done = threading.Event()
+    out: "queue.Queue" = queue.Queue()
 
-    def watch():
-        # A quiet render prints nothing for a while: the stop must not wait for a line.
-        while not done.wait(1.0):
-            if cancel.is_set():
-                # SIGTERM first: Remotion then closes its browser ("Received
-                # SIGTERM signal. Killing browser process"); a hard kill would
-                # leave Chrome running on the pod. Killed if it lingers.
-                try:
-                    proc.terminate()
-                except OSError:
-                    pass
-                if not done.wait(10.0):
-                    try:
-                        proc.kill()
-                    except OSError:
-                        pass
-                return
-    if cancel is not None:
-        threading.Thread(target=watch, daemon=True, name="render-cancel").start()
-    try:
-        for line in proc.stdout:
+    def pump():
+        try:
+            for line in proc.stdout:
+                out.put(line)
+        except (OSError, ValueError):
+            pass
+        finally:
+            out.put(None)
+    reader = threading.Thread(target=pump, daemon=True, name="render-output")
+    reader.start()
+    lines, deadline = [], time.time() + timeout
+    best = 0.0     # progress only ever moves forward
+    heard = time.time()
+    why = ""
+    while True:
+        try:
+            line = out.get(timeout=1.0)
+        except queue.Empty:
+            line = ""
+        if line is None:
+            break                         # the renderer closed its output: it is done
+        now = time.time()
+        if line:
+            heard = now
             lines.append(line)
             if len(lines) > 400:          # keep the tail, not the whole log
                 del lines[:200]
             frac = _render_progress(line)
-            if frac is not None and frac > best[0] and on_progress is not None:
-                best[0] = frac
-                try:
-                    on_progress(frac)
-                except Exception:
-                    pass
-            if time.time() > deadline:
-                proc.kill()
-                raise subprocess.TimeoutExpired(cmd, timeout)
-    finally:
-        done.set()
-        proc.stdout.close()
+            if frac is not None and frac > best:
+                best = frac
+                if on_progress is not None:
+                    try:
+                        on_progress(frac)
+                    except Exception:
+                        pass
+        if cancel is not None and cancel.is_set():
+            why = "cancel"
+        elif now > deadline:
+            why = "timeout"
+        elif stall and best < 0.8 and now - heard > stall:
+            # (Only while frames are being drawn: once they all are, the sound
+            # of a long video is mixed without a line of output, and a render
+            # that far along is left to its time limit.)
+            why = "stall"
+        if why:
+            break
+    if why:
+        _stop(proc)
+        reader.join(2.0)
+    else:
         proc.wait()
-    return _Completed(proc.returncode, "".join(lines), "")
+    if not reader.is_alive():             # (never closed under a blocked read: that can hang)
+        proc.stdout.close()
+    if why in ("timeout", "stall"):
+        raise _Stopped(why, best)
+    code = proc.returncode
+    return _Completed(code if code is not None else -9, "".join(lines), "")
+
+
+def _stop(proc) -> None:
+    """
+    Stop a render. SIGTERM first: Remotion then closes its browser ("Received
+    SIGTERM signal. Killing browser process"); a hard kill would leave Chrome
+    running on the machine. One that lingers is killed with everything it
+    started. (Its output pipe is left to the reader thread: closing it under a
+    blocked read can hang.)
+    """
+    try:
+        proc.terminate()
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=10.0)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        if os.name == "posix":
+            os.killpg(proc.pid, signal.SIGKILL)
+        else:
+            proc.kill()
+    except OSError:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    try:
+        proc.wait(timeout=10.0)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def _measure_loudness(path: str, target: float) -> dict:

@@ -1646,12 +1646,15 @@ class PresignedUpload(unittest.TestCase):
         storage.upload_to_signed_url = lambda p, u, **k: calls.__setitem__("signed", 1) or 64
         storage.upload_to_supabase = lambda *a, **k: calls.__setitem__("service", 1) or ""
         try:
-            res = handler.do_render(
-                doc,
-                {"upload_url": "https://sb/upload?token=x",
-                 "public_url": "https://sb/public/videos/a.mp4",
-                 "video_path": "a.mp4"},
-                out_dir, handler.Reporter(""))
+            # (The document's clips are names, not files: this test is about
+            # the upload, so the "most of the media is gone" stop is off.)
+            with mock.patch.object(config, "QUALITY_MISSING_SHARE", 0):
+                res = handler.do_render(
+                    doc,
+                    {"upload_url": "https://sb/upload?token=x",
+                     "public_url": "https://sb/public/videos/a.mp4",
+                     "video_path": "a.mp4"},
+                    out_dir, handler.Reporter(""))
         finally:
             (handler.renderer.render, storage.upload_to_signed_url,
              storage.upload_to_supabase) = originals
