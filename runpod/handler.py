@@ -916,8 +916,10 @@ def _narration_fields(doc: dict) -> dict:
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     raw_audio = inp.get("audio_url") or inp.get("audio_path")
     made = None
-    if not raw_audio and tts.wanted(inp):
+    if not raw_audio and tts.configured() and tts.wanted(inp):
         # A script and no voice-over: the free voice makes the narration first.
+        # Without TTS_API_BASE nothing here runs: such a job fails exactly as
+        # it always did ("audio_url is required" below).
         made = _narration_from_script(inp, work, report)
         raw_audio = made["url"]
     if not raw_audio:

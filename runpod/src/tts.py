@@ -18,6 +18,10 @@ character, and comes back as one narration file:
     network error, a 5xx, a 429 or a worker that died, and also when its
     audio is far too short for its text (a model that stopped early): the
     narration is refused rather than shipped with words missing;
+  * the whole narration - every part, every retry, every wait for a cold
+    GPU - has TTS_TOTAL_SECONDS: past it the parts still running are
+    cancelled and the job stops with a plain message, never running on
+    into the job's own time limit;
   * the parts are joined in script order with ffmpeg, a short breath
     between them, and the whole file is brought to the loudness the
     worker's narrations sit at and its sounds are planned against
@@ -46,6 +50,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as _WaitedTooLong
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
@@ -89,6 +94,15 @@ class NotConfigured(TtsError):
 
 class _Again(Exception):
     """A failure worth asking again: the network, a 5xx, a cold or dead worker, cut-off audio."""
+
+
+class _TimeUp(TtsError):
+    """The narration's own time (TTS_TOTAL_SECONDS) ran out while a part was still being asked for."""
+
+
+def _left(deadline: float) -> float:
+    """Seconds until `deadline` (epoch seconds); unlimited without one."""
+    return deadline - time.time() if deadline else float("inf")
 
 
 # --------------------------------------------------------------------------- #
@@ -149,7 +163,8 @@ def options(inp: Optional[dict] = None) -> Dict[str, Any]:
             "voice": text("tts_voice", config.TTS_VOICE or "af_heart"),
             "speed": round(max(0.5, min(2.0, speed)), 3),
             "reference": str(ref or "").strip(),
-            "format": config.TTS_FORMAT if config.TTS_FORMAT in _EXT else "flac"}
+            # Raw pcm has no header: its length could never be measured (every part would "fail").
+            "format": config.TTS_FORMAT if config.TTS_FORMAT in _EXT and config.TTS_FORMAT != "pcm" else "flac"}
 
 
 # --------------------------------------------------------------------------- #
@@ -474,11 +489,13 @@ def least_seconds(text: str, speed: float = 1.0) -> float:
 
 
 def voice_part(index: int, total: int, text: str, stem: str, opts: Dict[str, Any],
-               stop: Optional[threading.Event] = None) -> Dict[str, Any]:
+               stop: Optional[threading.Event] = None, deadline: float = 0.0) -> Dict[str, Any]:
     """
     One part voiced and on disk: {"path", "seconds", "gpu_seconds", "attempts"};
     TtsError when it cannot be. `stop` is the narration's own "given up" flag:
-    once another part has failed for good, this one stops asking.
+    once another part has failed for good, this one stops asking. `deadline`
+    (epoch seconds, 0 = none) is the whole narration's: no attempt starts
+    after it and none waits longer than what is left of it.
     """
     body = request_body(text, opts)
     ask = _request_runpod if mode() == "runpod" else _request_openai
@@ -487,8 +504,12 @@ def voice_part(index: int, total: int, text: str, stem: str, opts: Dict[str, Any
     for attempt in range(1, retries + 2):
         if _stopped(stop):
             raise TtsError("stopped: another part of the narration failed")
+        left = _left(deadline)
+        if left <= 1.0:
+            raise _TimeUp(f"part {index + 1} of {total} was not voiced in time"
+                          + (f" ({last[:160]})" if last else ""))
         try:
-            audio, info = ask(body, float(config.TTS_TIMEOUT), stop)
+            audio, info = ask(body, min(float(config.TTS_TIMEOUT), left), stop)
             with open(path, "wb") as f:
                 f.write(audio)
             seconds = _seconds(path)
@@ -502,7 +523,7 @@ def voice_part(index: int, total: int, text: str, stem: str, opts: Dict[str, Any
             last = str(e)
             print(f"[tts] part {index + 1}/{total}, attempt {attempt}: {last[:180]}", flush=True)
             if attempt <= retries and not _stopped(stop):
-                _sleep(min(20.0, 2.0 * attempt * attempt), stop)
+                _sleep(max(0.0, min(20.0, 2.0 * attempt * attempt, _left(deadline) - 1.0)), stop)
     raise TtsError(f"part {index + 1} of {total} could not be voiced after {retries + 1} attempts: {last[:240]}")
 
 
@@ -632,16 +653,21 @@ def synthesize(script: str, work: str, *, opts: Optional[Dict[str, Any]] = None,
     total = len(chunks)
     os.makedirs(work, exist_ok=True)
     started = time.time()
+    # The whole narration's time: a slow or GPU-starved endpoint ends the job
+    # here with a plain message instead of in the job's own time limit.
+    budget = max(0.0, float(config.TTS_TOTAL_SECONDS or 0.0))
+    deadline = started + budget if budget else 0.0
     print(f"[tts] {len(text)} characters in {total} part(s), {opts['model']}/{opts['voice']}"
           f"{' (cloned voice)' if opts['reference'] else ''}, {mode()} endpoint", flush=True)
     results: List[Optional[Dict[str, Any]]] = [None] * total
     stop = threading.Event()        # this narration's own: set once a part has failed for good
     pool = ThreadPoolExecutor(max_workers=max(1, min(int(config.TTS_WORKERS), total)), thread_name_prefix="tts")
+    done = 0
     try:
-        futures = {pool.submit(voice_part, i, total, chunk, os.path.join(work, f"part-{i:03d}"), opts, stop): i
+        futures = {pool.submit(voice_part, i, total, chunk, os.path.join(work, f"part-{i:03d}"), opts, stop,
+                               deadline): i
                    for i, chunk in enumerate(chunks)}
-        done = 0
-        for fut in as_completed(futures):
+        for fut in as_completed(futures, timeout=max(0.0, _left(deadline)) if deadline else None):
             results[futures[fut]] = fut.result()        # the first failure ends the narration
             done += 1
             if on_progress:
@@ -649,6 +675,15 @@ def synthesize(script: str, work: str, *, opts: Optional[Dict[str, Any]] = None,
                     on_progress(done, total)
                 except Exception:  # noqa: BLE001 - progress must never cost the narration
                     pass
+    except (_WaitedTooLong, _TimeUp) as e:
+        stop.set()                                      # running parts cancel their jobs, queued ones never start
+        took = f"{budget / 60:.0f} minutes" if budget >= 120 else f"{budget:.0f} seconds"
+        print(f"[tts] out of time after {took}: {done} of {total} part(s) made"
+              f"{f' ({e})' if str(e) else ''}", flush=True)
+        raise TtsError(
+            f"The free voice did not finish the narration in time: {done} of {total} parts were made in "
+            f"{took} (TTS_TOTAL_SECONDS). The voice endpoint is too slow or has no free GPU; try again "
+            "later, or add a voiceover in the app.") from None
     except BaseException:
         stop.set()                                      # running parts stop asking, queued ones never start
         raise

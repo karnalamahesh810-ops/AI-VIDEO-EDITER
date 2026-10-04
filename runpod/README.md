@@ -231,8 +231,10 @@ that link had been its `audio_url` - whisper still measures the real word timing
 "Making the narration (free voice)". The result carries `audio_url` and `narration` (voice,
 seconds, loudness), and `timeline.meta.narration` says the same. Per-job voice: `tts_voice`,
 `tts_model`, `tts_speed`, `tts_reference_audio` (a link to a 10-30 s sample, Chatterbox only).
-Without `TTS_API_BASE` such a job fails at once with a plain message. Settings, deploy steps,
-licences and the cost estimate: `tts_server/README.md`.
+The whole narration has `TTS_TOTAL_SECONDS` (30 min): a slower endpoint stops the job with a plain
+message. Without `TTS_API_BASE` nothing of this runs: such a job fails exactly as before
+("audio_url is required"). Settings, deploy steps, licences and the cost estimate:
+`tts_server/README.md`.
 
 ### Response
 

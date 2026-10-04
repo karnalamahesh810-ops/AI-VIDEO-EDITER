@@ -1280,6 +1280,12 @@ TTS_WORKERS = int(os.getenv("TTS_WORKERS", "4"))
 # first) and how many times it is asked again after a failure.
 TTS_TIMEOUT = float(os.getenv("TTS_TIMEOUT", "600"))
 TTS_RETRIES = int(os.getenv("TTS_RETRIES", "3"))
+# The whole narration - every part, retry and cold start - within this many
+# seconds (0 = no limit). Kokoro voices a 30-minute script in a few minutes
+# even from cold workers; Chatterbox needs ~10-15 minutes on 4 GPUs. Past it
+# the job stops with a plain message instead of running into its own time
+# limit (3 h on the serverless endpoint, POD_MAX_SECONDS on a pod).
+TTS_TOTAL_SECONDS = float(os.getenv("TTS_TOTAL_SECONDS", "1800"))
 # The breath between two parts (they always meet at a sentence end).
 TTS_GAP_SECONDS = float(os.getenv("TTS_GAP_SECONDS", "0.3"))
 # The narration's loudness (integrated LUFS). 0 = where the worker's measured

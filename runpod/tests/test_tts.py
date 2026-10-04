@@ -280,6 +280,37 @@ class Requests(unittest.TestCase):
         self.assertEqual([c.args[0] for c in post.call_args_list],
                          ["https://api.runpod.ai/v2/abc123/runsync", "https://api.runpod.ai/v2/abc123/cancel/slow-1"])
 
+    def test_no_attempt_waits_longer_than_the_narration_has_left(self):
+        with configured(TTS_TIMEOUT=600.0), mock.patch.object(tts.requests, "post", return_value=Answer(
+                content=AUDIO)) as post:
+            tts.voice_part(0, 1, "A short line.", os.path.join(self.dir, "part-000"), tts.options(),
+                           deadline=time.time() + 100.0)
+        read_timeout = post.call_args.kwargs["timeout"][1]
+        self.assertLessEqual(read_timeout, 100.0)                     # what is left, not TTS_TIMEOUT
+        self.assertGreater(read_timeout, 90.0)
+        # Backing off never sleeps past the narration's end.
+        with configured(TTS_RETRIES=2), mock.patch.object(tts.requests, "post", return_value=Answer(
+                status=503, data={"error": "loading"})):
+            with self.assertRaises(tts.TtsError):
+                tts.voice_part(0, 1, "A short line.", os.path.join(self.dir, "part-000"), tts.options(),
+                               deadline=time.time() + 6.0)
+        self.assertEqual(self.sleeps[0], 2.0)
+        self.assertLessEqual(self.sleeps[1], 5.0)                     # not the 8 s of the second back-off
+        self.assertGreater(self.sleeps[1], 4.0)
+        # Nothing left: the part is not even asked for.
+        with configured(), mock.patch.object(tts.requests, "post") as post:
+            with self.assertRaises(tts.TtsError) as ctx:
+                tts.voice_part(2, 9, "A short line.", os.path.join(self.dir, "part-002"), tts.options(),
+                               deadline=time.time() + 0.5)
+        post.assert_not_called()
+        self.assertIn("part 3 of 9 was not voiced in time", str(ctx.exception))
+
+    def test_a_raw_pcm_answer_is_never_asked_for(self):
+        with configured(TTS_FORMAT="pcm"):
+            self.assertEqual(tts.options()["format"], "flac")      # pcm has no header: its length cannot be measured
+        with configured(TTS_FORMAT="mp3"):
+            self.assertEqual(tts.options()["format"], "mp3")
+
 
 class WholeNarration(unittest.TestCase):
     def setUp(self):
@@ -381,6 +412,52 @@ class WholeNarration(unittest.TestCase):
         post.assert_not_called()
         self.assertIn("no words", str(empty.exception))
         self.assertIn("TTS_MAX_CHARS", str(endless.exception))
+
+    def test_a_narration_that_outlives_its_time_stops_in_plain_words_and_cancels_its_jobs(self):
+        """No GPU ever takes the jobs: the whole narration stops at TTS_TOTAL_SECONDS, not 4 x 600 s per part."""
+        lock, asked, cancelled = threading.Lock(), [], []
+
+        def post(url, json=None, **kw):
+            with lock:
+                if "/cancel/" in url:
+                    cancelled.append(url.rsplit("/", 1)[1])
+                    return Answer(data={"status": "CANCELLED"})
+                asked.append(f"job-{len(asked)}")
+                return Answer(data={"id": asked[-1], "status": "IN_QUEUE"})
+
+        def get(url, **kw):
+            return Answer(data={"id": url.rsplit("/", 1)[1], "status": "IN_QUEUE"})
+
+        def tts_threads():
+            return [t for t in threading.enumerate() if t.name.startswith("tts")]
+        progress = []
+        with configured(TTS_API_BASE="https://api.runpod.ai/v2/abc123", TTS_CHUNK_CHARS=300,
+                        TTS_TOTAL_SECONDS=1.5), \
+                mock.patch.object(tts, "POLL_SECONDS", 0.05), \
+                mock.patch.object(tts.requests, "post", side_effect=post), \
+                mock.patch.object(tts.requests, "get", side_effect=get), \
+                mock.patch.object(tts, "join") as join:
+            started = time.time()
+            with self.assertRaises(tts.TtsError) as ctx:
+                tts.synthesize(SCRIPT, self.dir, on_progress=lambda d, t: progress.append(d))
+            took = time.time() - started
+            # The parts still running see the narration given up and cancel their jobs;
+            # none may outlive the stubs.
+            until = time.time() + 10
+            while time.time() < until and (tts_threads() or sorted(cancelled) != sorted(asked)):
+                time.sleep(0.02)
+        self.assertEqual(tts_threads(), [])
+        join.assert_not_called()
+        self.assertLess(took, 5.0)
+        self.assertIn("did not finish the narration in time", str(ctx.exception))
+        self.assertIn(f"0 of {len(tts.chunk_script(SCRIPT, 300))} parts", str(ctx.exception))
+        self.assertIn("TTS_TOTAL_SECONDS", str(ctx.exception))
+        self.assertNotIn("abc123", str(ctx.exception))
+        self.assertEqual(progress, [])
+        self.assertTrue(asked)
+        self.assertLessEqual(len(asked), 4)                           # TTS_WORKERS at once, nothing queued after
+        self.assertEqual(sorted(cancelled), sorted(asked))            # no GPU job is left behind
+        self.assertNotIn("tts.seconds", costs.summary(0)["units"])
 
     def test_the_health_check_says_what_voice_is_ready_but_not_where_or_the_key(self):
         with configured(TTS_API_BASE="https://api.runpod.ai/v2/abc123"):
@@ -619,14 +696,24 @@ class PipelineSwitch(unittest.TestCase):
         self.assertEqual(h._narration_fields(doc), {"narration": doc["meta"]["narration"], "audio_url": url})
         self.assertEqual(h._narration_fields({"meta": {"audioSource": url}}), {})    # an uploaded voice-over
 
-    def test_a_script_only_job_without_the_free_voice_fails_with_a_clear_message(self):
+    def test_without_the_free_voice_a_script_only_job_fails_exactly_as_before(self):
         h = self.handler
-        with configured(TTS_API_BASE=""), mock.patch.object(h.tts.requests, "post") as post:
-            with self.assertRaises(h.tts.NotConfigured) as ctx:
-                h.do_plan({"script": "Lake Mead is falling.", "project_id": ""}, self.work, self.report)
+        inp = {"script": "Lake Mead is falling.", "project_id": "proj-1", "_job_id": "job-1"}
+        with configured(TTS_API_BASE=""), mock.patch.object(h.tts.requests, "post") as post, \
+                mock.patch.object(h.tts, "synthesize", side_effect=AssertionError("the free voice is off")), \
+                mock.patch.object(h.tts, "options", side_effect=AssertionError("the free voice is off")), \
+                mock.patch.object(h.storage, "patch_project") as patch, \
+                mock.patch.object(h.events, "phase") as phase:
+            with self.assertRaises(ValueError) as ctx:
+                h.do_plan(dict(inp), self.work, self.report)
+        # The base worker's own error, type and words, before anything else happened.
+        self.assertEqual(type(ctx.exception), ValueError)
+        self.assertEqual(str(ctx.exception), "audio_url is required (upload a voiceover or generate TTS first)")
         post.assert_not_called()
-        self.assertIn("free voice is not set up", str(ctx.exception))
-        self.assertIn("Add a voiceover", str(ctx.exception))
+        patch.assert_not_called()
+        phase.assert_not_called()
+        self.assertEqual(self.steps, [])                                             # no "Making the narration"
+        self.assertEqual(os.listdir(self.work), [])
         with configured():
             with self.assertRaises(ValueError) as ctx:                               # no script either: as before
                 h.do_plan({"project_id": ""}, self.work, self.report)
