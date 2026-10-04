@@ -2,8 +2,8 @@
 
 The storyboard calls whose answer the judge checks afterwards (the scout's pick,
 the fine pass) ask a cheaper model first; the judge, and a subject pool's rating
-whose moments reach the timeline unjudged, stay on VISION_MODEL. Unset, every
-call is asked exactly as before.
+(its moments can reach a timeline, and its spares the clip library, unjudged),
+stay on VISION_MODEL. Unset, every call is asked exactly as before.
 """
 import os
 import shutil
@@ -95,12 +95,13 @@ class TileModelRoutes(_Vision):
                 mock.patch.object(media, "_yt_info", return_value=({"id": "v", "duration": 600.0}, "")):
             moments.pick({"id": "v", "duration": 600}, "Lake Powell", "", 7.0)          # the scout
             moments.refine({"id": "v", "duration": 600}, {"start": 50.0, "score": 0.8}, "Lake Powell", "", 7.0)
-            with mock.patch.object(config, "POOL_JUDGE_CLIPS", False):
-                pools.rate_video({"id": "v"}, "Lake Powell", "", 7.0)                  # unjudged moments
-            with mock.patch.object(config, "POOL_JUDGE_CLIPS", True):
-                pools.rate_video({"id": "v"}, "Lake Powell", "", 7.0)                  # judged afterwards
+            for judged in (False, True):
+                # A pool's rating is never "checked", even when POOL_JUDGE_CLIPS judges the lines' moments:
+                # its spare moments go into the clip library with the rating as their score.
+                with mock.patch.object(config, "POOL_JUDGE_CLIPS", judged):
+                    pools.rate_video({"id": "v"}, "Lake Powell", "", 7.0)
         self.assertEqual(got["pick"], {"checked": True})
-        self.assertEqual([r.get("checked") for r in got["rate"]], [True, False, True])
+        self.assertEqual([bool(r.get("checked")) for r in got["rate"]], [True, False, False])
 
 
 class TileModelFallsBack(_Vision):
