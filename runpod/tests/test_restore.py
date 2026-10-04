@@ -32,6 +32,7 @@ from src import config, events, grade, imagefix, ledger, media, r2, restore, sto
 from src.errors import FailureClass  # noqa: E402
 
 FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+REAL_IMAGEFIX_FETCH = imagefix.fetch         # before any test fakes it (StockAgencyPictures runs the real one)
 PID = "15eb0bc3-0031-424e-a731-48b68cbe7eed"
 OTHER = "99999999-0000-4000-8000-000000000000"
 BASE = "https://pub-test.r2.dev"
@@ -221,8 +222,9 @@ class Bench(unittest.TestCase):
         self.calls.append(("web", link, start, round(seconds, 2)))
         return "" if link in self.dead else self._write(os.path.join(out_dir, "web.mp4"), clip_file(link, seconds))
 
-    def _picture(self, link, dest, page_url="", thumbnail=""):
+    def _picture(self, link, dest, page_url="", thumbnail="", allow_agency=False):
         self.calls.append(("picture", link, page_url, thumbnail))
+        self.allowed_agency = getattr(self, "allowed_agency", []) + [allow_agency]
         if link in self.dead:
             raise storage.StorageError("picture download failed: 404 Client Error")
         return self._write(dest, photo_file(link))
@@ -551,7 +553,7 @@ class Resume(Bench):
         doc = timeline(photo_scene(1))
         real_fetch = self._picture
 
-        def slow_fetch(link, dest, page_url="", thumbnail=""):
+        def slow_fetch(link, dest, page_url="", thumbnail="", allow_agency=False):
             self.r2.put(key("media", "s0001-bbbbbbbbbbbb.jpg"), b"restored by another run")
             return real_fetch(link, dest, page_url, thumbnail)
         with mock.patch.object(imagefix, "fetch", slow_fetch):
@@ -877,6 +879,62 @@ class WhatPlansRecordForALaterRestore(Bench):
         self.run_restore(timeline(scene))
         self.assertEqual(self.fetches(), [("picture", "https://host.example/a.jpg", "https://host.example/page",
                                            "https://duckduckgo.example/small.jpg")])
+
+
+class StockAgencyPictures(Bench):
+    """
+    The stock-agency block (src/stockblock.py) keeps agency pictures out of
+    NEW choices. A restore makes no choice: the timeline's own picture goes
+    back as it was - never a scene left missing over it - and its row says it
+    came from an agency (STOCK_GATE_REPAIR replaces it at the render). The
+    real picture fetch runs here, only its network is faked.
+    """
+    ALAMY = "https://c8.alamy.com/comp/2J7W6N8/cracked-earth-lake-mead-2J7W6N8.jpg"
+    GETTY_NAMED = "https://grist.org/wp-content/uploads/2022/03/GettyImages-1325430438-1.jpg"
+
+    def setUp(self):
+        super().setUp()
+        from src import stockblock
+        stockblock.reset()
+        self.addCleanup(stockblock.reset)
+        for obj, name, value in ((imagefix, "fetch", REAL_IMAGEFIX_FETCH), (imagefix, "_fetch_raw", self._raw),
+                                 (imagefix, "normalize", lambda path: path),
+                                 (imagefix, "host_refused", lambda link: False)):
+            p = mock.patch.object(obj, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _raw(self, link, dest, page_url, allow_agency=False):
+        self.calls.append(("picture", link, page_url, ""))
+        return self._write(dest, photo_file(link))
+
+    def doc(self):
+        return timeline(photo_scene(1, token="aaaaaaaaaaa1", src=self.ALAMY),
+                        photo_scene(2, token="aaaaaaaaaaa2", src=self.GETTY_NAMED),
+                        photo_scene(3, token="aaaaaaaaaaa3", src="https://example.org/dam.jpg"))
+
+    def test_an_agency_picture_the_timeline_shows_is_put_back_and_said(self):
+        out = self.run_restore(self.doc())
+        self.assertEqual((out["refetched"], out["failed"]), (3, 0))
+        self.assertEqual(sorted(c[1] for c in self.fetches()), sorted([self.ALAMY, self.GETTY_NAMED,
+                                                                        "https://example.org/dam.jpg"]))
+        for name in ("s0001-aaaaaaaaaaa1.jpg", "s0002-aaaaaaaaaaa2.jpg", "s0003-aaaaaaaaaaa3.jpg"):
+            self.assertIn(key("media", name), self.r2.keys_put())                # the SAME keys, none dropped
+        rows = {r["scene"]: r for r in out["rows"]}
+        self.assertEqual(rows["s0001"]["agency"], "a stock-agency picture (alamy)")
+        self.assertEqual(rows["s0002"]["agency"], "a stock-agency picture (getty)")
+        self.assertNotIn("agency", rows["s0003"])
+        self.assertEqual(out["agency_pictures"], 2)
+        # ... while a new choice of the same picture is still never fetched
+        with self.assertRaises(storage.StorageError):
+            imagefix.fetch(self.ALAMY, os.path.join(self.work, "new.jpg"))
+
+    def test_a_dry_run_names_the_agency_pictures_it_would_put_back(self):
+        out = self.run_restore(self.doc(), dry_run=True)
+        self.assertEqual(out["would"]["refetch"], 3)
+        self.assertEqual([r.get("agency", "") for r in out["rows"]],
+                         ["a stock-agency picture (alamy)", "a stock-agency picture (getty)", ""])
+        self.assertEqual(self.r2.puts, [])
 
 
 # --------------------------------------------------------------------------- #

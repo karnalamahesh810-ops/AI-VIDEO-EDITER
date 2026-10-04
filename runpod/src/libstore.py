@@ -537,6 +537,12 @@ def check(path: str, kind: str = "video", subject: str = "", event: str = "",
         from . import filters
         if filters.text_page_still(path):
             v.bad("a page of text or a slide")
+        # A stock agency's credit bar under the picture (src/stockblock.py; the
+        # free check - pictures saved before 2026-10-04 leave on their next check).
+        from . import stockblock
+        mark = stockblock.watermark_reason(path, stamp=False)
+        if mark:
+            v.bad(mark)
     else:
         moves = motion(grays)
         v.measures["motion"] = round(max(moves), 2) if moves else 0.0

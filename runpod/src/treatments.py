@@ -4486,6 +4486,10 @@ def _library_pictures(library, subject: str, n: int, story: Optional[dict] = Non
         return []
     try:
         found = library.find(subject, n=n, kind="image", story=story) or []
+        # Each one's own pixels read for a stock agency's bar or stamp first
+        # (src/stockblock.py): nothing else checks a picture a look places.
+        if found and hasattr(library, "unstamped"):
+            found = library.unstamped(found)
     except Exception:  # noqa: BLE001 - the library is a bonus, never a failure
         return []
     out = []

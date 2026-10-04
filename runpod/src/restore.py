@@ -573,6 +573,19 @@ def origin(link: Link) -> Tuple[str, str]:
     return "", "where the clip came from was not recorded"
 
 
+def agency_of(link: Link) -> str:
+    """
+    "a stock-agency picture (alamy)" when the picture a link puts back came
+    from a stock agency by its recorded address, page, small copy or title,
+    else "". A restore puts it back all the same (it is the timeline's own
+    shot) and says so in its row; a render with STOCK_GATE_REPAIR replaces it.
+    """
+    if link.kind != "image" or not link.source_url:
+        return ""
+    from . import stockblock
+    return stockblock.reason(link.source_url, link.page_url, link.source_thumb, title=link.title)
+
+
 def _download(url: str, dest: str) -> str:
     loc = r2.locate(url) if r2.enabled() else None
     if loc:
@@ -605,7 +618,11 @@ def refetch(link: Link, how: str, work: str) -> str:
     if how == "picture":
         dest = os.path.join(work, f"re_{link.tag}{link.ext or '.jpg'}")
         try:
-            return imagefix.fetch(link.source_url, dest, link.page_url, thumbnail=link.source_thumb)
+            # The timeline's own picture, even a stock agency's: the block
+            # (src/stockblock.py) keeps those out of new choices, and a restore
+            # makes no choice - it puts the owner's timeline back as it was.
+            return imagefix.fetch(link.source_url, dest, link.page_url, thumbnail=link.source_thumb,
+                                  allow_agency=True)
         except storage.StorageError as e:
             raise RestoreError(f"its site no longer gives the picture ({str(e)[:140]})") from e
     start, want = float(link.start or 0.0), link.want
@@ -762,7 +779,7 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None,
            "missing": missing, "unchecked": len(unknown), "other_links": stats["other_links"],
            "choices_missing": choices_missing,
            "restored_from_copy": 0, "refetched": 0, "failed": 0, "thumbnails": 0, "previews": 0,
-           "failures": [], "rows": []}
+           "agency_pictures": 0, "failures": [], "rows": []}
     print(f"[restore] {project_id}: {out['links']} file(s) in the timeline, {out['present']} in storage, "
           f"{missing} missing; {sum(len(v) for v in parts.by_name.values())} part cop(ies) known, "
           f"{len(parts.jobs)} plan job(s) to ask the app's storage about"
@@ -785,10 +802,11 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None,
                 would["copy"] += 1
                 out["rows"].append(_row(l, "copy", cands[0]["label"],
                                         note="used if it is the timeline's shot"
-                                             + (f", else fetched again from {text}" if how and allow_refetch else "")))
+                                             + (f", else fetched again from {text}" if how and allow_refetch else ""),
+                                        agency=agency_of(l)))
             elif how and allow_refetch:
                 would["refetch"] += 1
-                out["rows"].append(_row(l, "refetch", text))
+                out["rows"].append(_row(l, "refetch", text, agency=agency_of(l)))
             else:
                 would["none"] += 1
                 out["rows"].append(_row(l, "none", reason=text if not how else "re-fetching is switched off"))
@@ -889,7 +907,9 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None,
                 except Exception as e:  # noqa: BLE001 - a small copy never undoes the file itself
                     notes.append(f"its {name} was not stored ({type(e).__name__}: {str(e)[:80]})")
             return _row(l, did, how, thumbnail=made["thumbnail"], preview=made["preview"],
-                        note="; ".join(notes)[:300])
+                        note="; ".join(notes)[:300],
+                        # said, never dropped: the timeline's own picture goes back as it was
+                        agency=agency_of(l) if did in ("copy", "refetch") else "")
         finally:
             _remove(*files)
 
@@ -916,6 +936,7 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None,
                                 message=f"{l.label}: {row.get('reason') or ''}"[:300])
                 out["thumbnails"] += bool(row.get("thumbnail"))
                 out["previews"] += bool(row.get("preview"))
+                out["agency_pictures"] += bool(row.get("agency"))
                 pct = 5 + int(93 * n / max(total, 1))
                 if pct != last_pct:
                     last_pct = pct
@@ -936,6 +957,8 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None,
                         f"{out['failed']} not restored")
     print(f"[restore] {project_id}: {out['restored_from_copy']} copied back, {out['refetched']} fetched again, "
           f"{out['failed']} not restored; {out['thumbnails']} thumbnail(s) and {out['previews']} preview(s) "
-          f"made again in {out['seconds']:.0f} s", flush=True)
+          f"made again in {out['seconds']:.0f} s"
+          + (f"; {out['agency_pictures']} stock-agency picture(s) put back as the timeline had them "
+             "(STOCK_GATE_REPAIR replaces them at the render)" if out["agency_pictures"] else ""), flush=True)
     say(f"Restored {out['restored_from_copy'] + out['refetched']} of {missing} missing files", 100)
     return out

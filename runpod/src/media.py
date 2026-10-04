@@ -42,6 +42,7 @@ from . import candidates, config, costs, events, intent, ledger, moments, provid
 from . import imagefix as _imagefix
 from . import localvision as _localvision
 from . import sharpness as _sharpness
+from . import stockblock as _stockblock
 from .errors import RETRY, FailureClass, classify_exception, classify_ytdlp, from_reason
 from .storage import download
 
@@ -266,22 +267,30 @@ def search_web_images(query: str, limit: int = 6, full_screen: bool = True) -> L
         # A picture route when there is one (every Decodo IP: config.IMAGE_PROXIES), else a YouTube one.
         from_proxy = _imagefix._residential_route() or _next_proxy()
         routes = [from_proxy, None] if from_proxy else [None]
+        # The whole first page (~35 rows, the same one request as 12): stock
+        # agencies fill most of the top rows for some lines ("Lake Mead bathtub
+        # ring": 10 of the first 12, 1 usable picture left of 18; 6 of 35) and
+        # are never used (src/stockblock.py, 2026-10-04).
+        page_rows = max(limit * 2, 40)
         if big_first:
             for proxy in routes:
                 try:
-                    rows = _sized_image_rows(query, max(35, limit * 2), proxy)
+                    rows = _sized_image_rows(query, page_rows, proxy)
                 except Exception as e:  # noqa: BLE001 — optional dependency / network
                     _source_error("web_images_sized", e)
                     rows = []
                 if rows:
                     break
-        if len(rows) < limit:
+        # Too few big pictures that are not an agency's: the plain search adds to them.
+        usable = [r for r in rows if str(r[0] or "").startswith("http")
+                  and not _stockblock.reason(r[0], str(r[4] or ""), str(r[5] or ""), str(r[3] or ""))]
+        if len(usable) < limit:
             plain: List[tuple] = []
             for proxy in routes:
                 try:
                     from ddgs import DDGS
                     with DDGS(proxy=proxy, timeout=15) as ddg:
-                        for it in ddg.images(query, max_results=limit * 2):
+                        for it in ddg.images(query, max_results=page_rows):
                             plain.append((it.get("image"), it.get("width") or 0,
                                           it.get("height") or 0, it.get("title") or "",
                                           it.get("url") or "", it.get("thumbnail") or ""))
@@ -304,6 +313,12 @@ def search_web_images(query: str, limit: int = 6, full_screen: bool = True) -> L
         url, w, h, title, page = row[:5]
         thumb = row[5] if len(row) > 5 else ""
         if not url or not url.startswith("http"):
+            continue
+        # A stock agency's preview (Alamy, Getty, iStock, Shutterstock...): its
+        # stamp and credit bar, and its licence, never on a timeline (src/stockblock.py).
+        why = _stockblock.reason(url, str(page or ""), str(thumb or ""), str(title or ""))
+        if why:
+            _stockblock.note(why, "search", key=url)
             continue
         # DuckDuckGo reports sizes as strings, Serper as ints.
         try:
@@ -429,10 +444,11 @@ def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
         if url in seen or not url.startswith("http"):
             continue
         seen.add(url)
-        # Stock sellers' watermarked comps never make a cut.
+        # Stock sellers' watermarked comps never make a cut (src/stockblock.py).
         host = urllib.parse.urlparse(url).netloc.lower()
-        if any(s in host for s in ("alamy", "gettyimages", "shutterstock", "istockphoto", "dreamstime",
-                                   "depositphotos", "123rf", "adobe")):
+        why = _stockblock.reason(url)
+        if why:
+            _stockblock.note(why, "search", key=url)
             continue
         out.append(MediaAsset(
             kind="image", source="yandex_image", url=url,
@@ -1245,6 +1261,8 @@ _BAD: Dict[str, str] = {}
 _LINE_FREE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a still with a slow pan or zoom",
               "a slideshow of stills", "a frozen", "another creator's burned-in captions", "burned-in text or UI",
               "a download that will not play",
+              # A stock agency's credit bar or stamp (src/stockblock.py) is on the picture whatever the line.
+              "an agency credit bar", "an agency watermark",
               # Too soft for the frame (src/sharpness.py): a property of the file, whatever the line.
               "a blurry picture", "low detail")
 # An upscaled upload is soft in every moment of it.
@@ -1339,6 +1357,21 @@ def slop_reason(path: str, label: str = "", source_url: str = "") -> str:
     return why
 
 
+def watermark_reason(path: str, where: str = "", bar: bool = True, stamp: bool = True) -> str:
+    """Why a downloaded picture's pixels say it is a stock agency's preview ("" = keep; "" for a clip), counted.
+    `bar` (free) / `stamp` (the local CLIP model, ~0.7 s): which checks run (src/stockblock.py)."""
+    if not path or not _stockblock.is_still(path):
+        return ""
+    try:
+        why = _stockblock.watermark_reason(path, bar=bar, stamp=stamp)
+    except Exception as e:  # noqa: BLE001 - a check error never drops a picture
+        print(f"[stockblock] check failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
+        return ""
+    if why:
+        _stockblock.note_watermark(why, where)
+    return why
+
+
 def _vision_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
     """
     (keep, verdict) for a downloaded candidate.
@@ -1351,7 +1384,31 @@ def _vision_gate(path: str, intent: str, context: str, label: str, source_url: s
     AI-made or painted picture, a still or slideshow posing as footage,
     another creator's captions, a TV studio, presenter, stream or TV map is
     turned down on the spot, intent or not (the owner, 2026-09-30).
+
+    A picture's own pixels are read for a stock agency's mark whether or not
+    any model judges it (src/stockblock.py; the owner, 2026-10-04: "the images
+    it is using are sometimes watermarked images, like Getty ... Alamy"): the
+    free credit-bar check first, the slower stamp check (the local CLIP model,
+    ~0.7 s) only on a picture about to be kept - the judge sees a still 384 px
+    wide, where a faint stamp is nearly invisible.
     """
+    why = watermark_reason(path, "gate", stamp=False)
+    if why:
+        _GATE_SLOP.set(why)
+        print(f"[stockblock] REJECT {why}: {label[:60]!r}", flush=True)
+        return False, None
+    keep, verdict = _judge_gate(path, intent, context, label, source_url)
+    if keep:
+        why = watermark_reason(path, "gate", bar=False)
+        if why:
+            _GATE_SLOP.set(why)
+            print(f"[stockblock] REJECT {why}: {label[:60]!r}", flush=True)
+            return False, None
+    return keep, verdict
+
+
+def _judge_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
+    """_vision_gate after the credit bar: the AI-slop filters, the local model, the vision judge."""
     why = slop_reason(path, label, source_url)
     _GATE_SLOP.set(why)
     if why:
@@ -2153,6 +2210,8 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
     winner, losers = ranked[0], ranked[1:]
     keep_files = bool(_KEEP_ALT_FILES.get())
     for a in losers:
+        if a.kind == "image" and _stockblock.blocked(a, "alternatives"):
+            continue                    # never offered as an editor's choice either
         entry = {
             "assetId": a.identity, "url": a.url, "title": (a.attribution or "")[:120],
             "score": a.relevance_score, "quality": a.quality, "finalScore": a.final_score,
@@ -3171,6 +3230,7 @@ def reset_cache():
     official.reset()                    # each satellite sector once per video
     LOCAL_REJECTED["n"] = 0
     _sharpness.reset()                  # the job's measures and its count of blurry candidates
+    _stockblock.reset()                 # the job's count of stock-agency pictures kept out
     _SERPAPI_USED["n"] = 0              # SerpApi's per-job budget starts again
     _SERPAPI_VIDEO_USED["n"] = 0
     _IMAGE_NO_CREDIT["hit"] = False
@@ -3262,6 +3322,9 @@ def _cached_search(fn, query: str, cache_key: str = "", key: str = "") -> List[M
 
 def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[MediaAsset]:
     if _ytdlp.stopped():
+        return None
+    # A stock agency's picture never downloads, whichever search found it (src/stockblock.py).
+    if candidate.kind == "image" and _stockblock.blocked(candidate, "download"):
         return None
     ext = ".mp4" if candidate.kind == "video" else ".jpg"
     safe = "".join(ch for ch in query if ch.isalnum())[:24] or "asset"
@@ -4161,6 +4224,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     with _CACHE_LOCK:
         LAST_STATS["photos"] = {"cap": _PHOTOS["cap"], "used": _PHOTOS["used"]}
         LAST_STATS["slop_rejected"] = dict(SLOP_REJECTED)
+    LAST_STATS["stockBlocked"] = _stockblock.stats()        # the handler refreshes it after the rescue pass
     # Pictures and clips measured for real detail, how many were too soft, the seconds spent.
     LAST_STATS["sharpness"] = _sharpness.stats()
     LAST_STATS.update(total_seconds=round(time.time() - t_start, 1),
@@ -4763,16 +4827,34 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                     return None
                 if ledger.photo_used(cand.url):
                     continue                        # shown in an earlier video
+                if _stockblock.blocked(cand, "rescue"):
+                    continue                        # a stock agency's preview (src/stockblock.py)
+                if _is_bad(cand.identity):
+                    continue                        # another scene found this picture unusable
                 if not claim(cand.identity, used_images):
                     continue
                 from . import slop
                 if slop.ai_host(cand.url, getattr(cand, "page_url", "") or "") or slop.metadata_reason(cand.attribution):
                     continue
                 got = _download(_dc_replace(cand), q, work_dir)
-                if got and (not _asset_ok(got)[0] or not _rescue_local_ok(got.local_path, intent_text)
+                fine, why = _asset_ok(got) if got else (True, "")
+                if not fine:
+                    _mark_bad(cand.identity, "", why)     # too blurry for any line (src/sharpness.py)...
+                    got = None
+                # No vision judge here, so the picture's own pixels are read for an
+                # agency's credit bar (free, first) and stamp (the slow one, last,
+                # once everything else has passed).
+                mark = watermark_reason(got.local_path, "rescue", stamp=False) if got else ""
+                if got and (mark or not _rescue_local_ok(got.local_path, intent_text)
                             or _photo_seen_before(got.local_path)
                             or slop_reason(got.local_path, _image_label(got), source_url=got.url)):
                     got = None
+                if got:
+                    mark = watermark_reason(got.local_path, "rescue", bar=False)
+                    if mark:
+                        got = None
+                if mark:
+                    _mark_bad(cand.identity, "", mark)  # every other scene skips it
                 if got:
                     with lock:
                         if room[0] is not None:
