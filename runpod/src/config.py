@@ -829,6 +829,33 @@ RENDER_VIDEO_THREADS = int(os.getenv("RENDER_VIDEO_THREADS", "1"))
 # a retried fetch, short enough that a dead tile server still fails the job.
 RENDER_DELAY_TIMEOUT_MS = int(os.getenv("RENDER_DELAY_TIMEOUT_MS", "120000"))
 
+# --- how long one render may run (src/render.py render_timeout) ------------------
+# A render's time limit follows its frames and this machine. It was a flat 90
+# minutes: a 29-minute video (52,000 frames) rendered whole on one 16-vCPU
+# worker drew ~7 frames a second and was killed at 55% after 5400 s with
+# nothing saved (2026-10-03). The speed is estimated as RENDER_FPS_PER_TAB
+# frames a second for every browser tab the render runs (its concurrency, never
+# more than the CPUs this container may use; measured 0.58 on that worker, kept
+# lower here so a slow machine is not cut short). The limit is the estimate x
+# RENDER_TIMEOUT_FACTOR + RENDER_TIMEOUT_BASE_SECONDS, never under ..._MIN and
+# never over ..._MAX (the upper bound: no render runs longer than that).
+RENDER_FPS_PER_TAB = float(os.getenv("RENDER_FPS_PER_TAB", "0.45"))
+RENDER_TIMEOUT_FACTOR = float(os.getenv("RENDER_TIMEOUT_FACTOR", "1.5"))
+RENDER_TIMEOUT_BASE_SECONDS = float(os.getenv("RENDER_TIMEOUT_BASE_SECONDS", "600"))
+RENDER_TIMEOUT_MIN_SECONDS = float(os.getenv("RENDER_TIMEOUT_MIN_SECONDS", "1800"))
+RENDER_TIMEOUT_MAX_SECONDS = float(os.getenv("RENDER_TIMEOUT_MAX_SECONDS", "14400"))
+# CPUs this container may use; 0 = read the container's own limit (render.cpus).
+RENDER_CPUS = int(os.getenv("RENDER_CPUS", "0"))
+# A render that prints progress and then says nothing at all for this long is
+# hung: it is stopped with a clear error instead of sitting until its time
+# limit. 0 = off.
+RENDER_STALL_SECONDS = float(os.getenv("RENDER_STALL_SECONDS", "900"))
+# After a spread render broke on a chunk that no machine could draw, the whole
+# video is rendered on this one machine only when that is estimated to take no
+# longer than this: the same frames would fail again, so a long video stops
+# with the reason instead of running for hours first.
+RENDER_WHOLE_RETRY_SECONDS = float(os.getenv("RENDER_WHOLE_RETRY_SECONDS", "900"))
+
 # --- render speed (src/render.py; measured 2026-10-01) ---------------------------
 # x264 preset of every h264 render. Remotion's default, medium, encodes beside
 # the browser tabs and took ~16% of the machine: veryfast is 2.3x faster at the
