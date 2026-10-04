@@ -549,6 +549,19 @@ REUSE_MIN_GAP_SECONDS = float(os.getenv("REUSE_MIN_GAP_SECONDS", "60"))
 # of from a subject pool, retried for footage after sourcing if it ended on a
 # still, and never given a generated image unless GENERATED_IMAGES_IN_HOOK.
 HOOK_SECONDS = float(os.getenv("HOOK_SECONDS", "45"))
+# The hook's own check (src/hookcheck.py; the owner, 2026-10-05: in a 5-minute
+# Glen Canyon test "the first second or two didn't match"): every clip of the
+# first HOOK_SECONDS is judged on its actual cut - frames at its first moment,
+# middle and end, the first frame on its own (vision.judge `span`) - the hook
+# search's own candidates in the same call they always had, a clip any other
+# pass placed (the rescue pass, another moment of the clip beside it, a chain,
+# a spare pool moment, the ladder) once more. A clip turned down has its start
+# moved (inside its file, else cut again from its source's middle) or up to
+# HOOK_CUT_TRIES pick-a-shot runner-ups tried before the last resort covers
+# its line; the check makes at most HOOK_CUT_MAX_CALLS vision calls a video.
+HOOK_CUT_CHECK = _flag("HOOK_CUT_CHECK", True)
+HOOK_CUT_TRIES = int(os.getenv("HOOK_CUT_TRIES", "2"))
+HOOK_CUT_MAX_CALLS = int(os.getenv("HOOK_CUT_MAX_CALLS", "30"))
 GENERATED_IMAGES_IN_HOOK = _flag("GENERATED_IMAGES_IN_HOOK", False)
 HOOK_JUDGE_BEST_OF = int(os.getenv("HOOK_JUDGE_BEST_OF", "3"))
 HOOK_POOL_SCOUT = int(os.getenv("HOOK_POOL_SCOUT", "4"))

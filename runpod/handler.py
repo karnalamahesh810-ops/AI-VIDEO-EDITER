@@ -84,6 +84,7 @@ from src import recut, restore
 from src import batch, sources
 from src import tts
 from src import sharpness
+from src import hookcheck
 
 
 def _work_dir(job_id: str) -> str:
@@ -1857,6 +1858,31 @@ def _no_repeats(doc: dict, report: Reporter = None) -> dict:
     return got
 
 
+def _hook_check(doc: dict, work: str, report: Reporter = None) -> dict:
+    """
+    The hook's own check (src/hookcheck.py; the owner's Glen Canyon test,
+    2026-10-05: "the first second or two didn't match"), on the timeline as it
+    will be published: every clip and picture of the first HOOK_SECONDS judged
+    on its own cut - its first moment, middle and end - and one turned down
+    moved, swapped for a runner-up or covered by the last resort. Its report is
+    doc.meta.hookCheck. Never fails the job.
+    """
+    if not hookcheck.enabled():
+        return {}
+    try:
+        if report is not None:
+            report("Checking the opening shots", 66)
+        got = hookcheck.check(doc, work=work)
+    except Exception as e:  # noqa: BLE001 - the timeline as it is beats a failed job
+        print(f"[worker] hook check skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        return {}
+    doc.setdefault("meta", {})["hookCheck"] = got
+    if (got.get("moved") or got.get("swapped") or got.get("cleared")) and shotcap.enabled() \
+            and isinstance(doc["meta"].get("shotCap"), dict):
+        doc["meta"]["shotCap"] = shotcap.report(doc, doc["meta"]["shotCap"])     # as the timeline now stands
+    return got
+
+
 def _sanitize_stills(doc: dict, work: str, fetched: dict = None, fresh: bool = True) -> int:
     """
     Re-encode every still to a real JPEG before Chrome sees it.
@@ -2569,7 +2595,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # Clean in-points (src/filters.py; the owner's Glen Canyon test, 2026-10-05: "the first
                       # second or two didn't match"). A/B one job.
                       "SHOT_CUT_THRESHOLD", "SHOT_CUT_SOFT_THRESHOLD", "SHOT_CUT_RATIO", "SHOT_CUT_SAME_PICTURE",
-                      "CUT_GUARD_SECONDS", "CUT_SNAP_PAD")
+                      "CUT_GUARD_SECONDS", "CUT_SNAP_PAD",
+                      # The hook's own check (src/hookcheck.py, the same test).
+                      "HOOK_CUT_CHECK", "HOOK_CUT_TRIES", "HOOK_CUT_MAX_CALLS")
 
 
 def _apply_config(overrides) -> dict:
@@ -2741,6 +2769,7 @@ def handler(job):
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
     shotcap.reset()                     # and what the shot cap cut and swapped
+    hookcheck.reset()                   # and the hook check's vision calls
     packs.reset()                       # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's
     kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
@@ -2963,6 +2992,7 @@ def handler(job):
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
             _no_repeats(doc, report)            # the last look before the editor gets it
+            _hook_check(doc, work, report)      # the opening's clips judged on their own cuts
             _keep_in_library(doc, report)
             ledger.note(doc)                    # while the photos are still here to hash
             # Without this the timeline points at files this job is about to
@@ -3055,6 +3085,7 @@ def handler(job):
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
             _no_repeats(doc, report)            # the last look before the render and the editor
+            _hook_check(doc, work, report)      # the opening's clips judged on their own cuts
             _keep_in_library(doc, report)
             ledger.note(doc)                    # while the photos are still here to hash
             if project_id:

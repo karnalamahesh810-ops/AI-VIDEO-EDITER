@@ -771,6 +771,10 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
         except OSError:
             pass
         return None
+    # The verdict on record (the editor and the later checks read it): the judge's on the clip's frames
+    # with POOL_JUDGE_CLIPS, else the storyboard tile's rating that approved the moment - its score and
+    # what it showed - marked as a tile's (judgedBy "tile"): a hook line's clip gets the judge's own
+    # look at its cut on top (src/hookcheck.py).
     return media.MediaAsset(
         kind="video", source="youtube",
         url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(m['start'])}",
@@ -786,7 +790,10 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
         quality=(verdict or {}).get("quality"),
         moment_key=moment_key(cand["id"], m["start"]),
         moment={"start": round(float(m["start"]), 1), "score": m.get("score"), "fine": False,
-                "clean": clean, "cuts": cuts})
+                "clean": clean, "cuts": cuts},
+        judged_by=(("opening" if verdict.get("frames") else "frames") if verdict
+                   else ("tile" if m.get("score") is not None else "none")),
+        cut_check=vision.cut_record(verdict) if verdict else {})
 
 
 def retry_failed(got: List[tuple], plan: List[tuple], spare: List[tuple], slots: "_Slots", work: str,
