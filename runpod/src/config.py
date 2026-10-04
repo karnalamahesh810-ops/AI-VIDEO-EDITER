@@ -158,6 +158,16 @@ DIRECTOR_FALLBACK_MODELS = [m.strip() for m in
 # DIRECTOR_MODEL, as before. The owner (2026-10-05): "make this video using
 # cost cut method" - ~13 of a video's ~15 planning calls are routine.
 DIRECTOR_ROUTINE_MODEL = os.getenv("DIRECTOR_ROUTINE_MODEL", "").strip()
+# How hard the planning models think (the cost plan, 2026-10-05). Nothing was
+# ever sent, so every call ran at the provider's default effort and its hidden
+# reasoning was billed as output ($14/M on openai/gpt-5.2). Sent on OpenRouter
+# as reasoning.effort (and as reasoning_effort to a gpt-* model on Kie) only
+# when set: "" = the provider's default, exactly as before. One of none,
+# minimal, low, medium, high; anything else is ignored. The routine calls (the
+# shot batches, rescue, sequences, assign) may take their own, lower effort;
+# "" = DIRECTOR_REASONING_EFFORT.
+DIRECTOR_REASONING_EFFORT = os.getenv("DIRECTOR_REASONING_EFFORT", "").strip().lower()
+DIRECTOR_ROUTINE_REASONING_EFFORT = os.getenv("DIRECTOR_ROUTINE_REASONING_EFFORT", "").strip().lower()
 
 # --- vision verification -----------------------------------------------------
 # Every candidate clip/image is shown to a multimodal model, which describes
@@ -190,6 +200,16 @@ VISION_MODEL = os.getenv("VISION_MODEL", "gemini-3-8-flash-openai")
 VISION_FALLBACK_MODELS = [m.strip() for m in
                           os.getenv("VISION_FALLBACK_MODELS", "gpt-5-2,gemini-3-pro").split(",")
                           if m.strip()]
+# The storyboard calls whose answer the judge checks afterwards - the scout's
+# tile pick (moments.pick) and the fine pass (moments.refine), about half of
+# a video's vision spend - asked of this model first, the vision models above
+# backing it up (the cost plan, 2026-10-05). A wrong pick costs one download
+# the judge then turns down, never a wrong shot on the timeline; the judge
+# itself, and a subject pool's rating (its moments can reach a timeline, and
+# its spares the clip library, without the judge), stay on VISION_MODEL.
+# "" = VISION_MODEL for everything, exactly as before. OpenRouter: google/gemini-2.5-flash-lite
+# ($0.10/$0.40 per M against gemini-2.5-flash's $0.30/$2.50).
+VISION_TILE_MODEL = os.getenv("VISION_TILE_MODEL", "").strip()
 VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
 # Footage quality floor (sharpness, stability, light, framing), judged in the
 # same call. Low on purpose: it only removes clips that are plainly unwatchable,
@@ -267,6 +287,20 @@ EXCELLENT_SCORE = float(os.getenv("EXCELLENT_SCORE", "0.85"))
 # Every model call a scene makes (scouting, the fine pass, judging) across
 # all its searches. The old-style search used about 10 per scene.
 JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "12"))
+# Never pay twice for the same answer (the cost plan, 2026-10-05). On:
+#  - a paid verdict that turns a candidate down for EVERY line - other
+#    people's text or a watermark, AI-made, unwatchable quality - is
+#    remembered like the free filters' rejections (media._BAD): no other scene
+#    downloads and judges that moment of that clip, or that picture, again.
+#    Before, only the free checks were remembered, and another scene's judge
+#    call missed the verdict cache because its intent differed.
+#  - the fine pass (moments.refine) is remembered per video, coarse moment,
+#    clip length and intent, as the scout already is: a scene searched again
+#    (pass 2, the stronger hook, a re-cut) paid it again on the same video.
+# On by default since 2026-10-05 (the owner: no quality risk - the scene-set
+# simulation picked the same shots with 21% fewer paid calls and 32% fewer
+# downloads). "0" = exactly as before.
+JUDGE_MEMORY = _flag("JUDGE_MEMORY", True)
 # Searches a typed scene intent expands to (src/intent.py), specific first.
 INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # The candidate pool (src/candidates.py): every search variant plus
@@ -388,6 +422,14 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 # 120 s timeouts and retries on 2026-09-28).
 DIRECTOR_HEDGE_SECONDS = float(os.getenv("DIRECTOR_HEDGE_SECONDS", "75"))
 DIRECTOR_BUDGET_FACTOR = float(os.getenv("DIRECTOR_BUDGET_FACTOR", "2.2"))
+# A planning call that failed for a reason worth waiting out - a timeout or a
+# dropped connection, HTTP 408/409/425/429, any 5xx, from Kie's wrapped answer
+# or OpenRouter's {"error": ...} - is asked again on the same model this many
+# times, after DIRECTOR_RETRY_WAIT seconds, doubling; then the next model (the
+# fallbacks, then the backup provider) takes it. Until 2026-10-05 an OpenRouter
+# error was not even recognised: no retry, no circuit breaker, no out-of-credits.
+DIRECTOR_RETRIES = int(os.getenv("DIRECTOR_RETRIES", "2"))
+DIRECTOR_RETRY_WAIT = float(os.getenv("DIRECTOR_RETRY_WAIT", "3"))
 BRIEF_TIMEOUT = int(os.getenv("BRIEF_TIMEOUT", "240"))
 
 # Story-planning batches (director._ai_pass) run this many at a time. At 4 the

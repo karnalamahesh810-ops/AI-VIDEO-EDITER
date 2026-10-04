@@ -406,16 +406,21 @@ class DirectorFallback(unittest.TestCase):
         return r
 
     def setUp(self):
+        from src import vision
+        vision.reset()          # the circuit breaker is shared: a failed call here must not bench the next test's
         self.patches = [mock.patch.object(config, "DIRECTOR_API_KEY", "k"),
                         mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"),
                         mock.patch.object(config, "DIRECTOR_MODEL", "gpt-5-2"),
-                        mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", ["gemini-3-pro"])]
+                        mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", ["gemini-3-pro"]),
+                        mock.patch.object(config, "DIRECTOR_RETRY_WAIT", 0.0)]    # retries, without the waits
         for p in self.patches:
             p.start()
 
     def tearDown(self):
+        from src import vision
         for p in self.patches:
             p.stop()
+        vision.reset()
 
     def _segments(self):
         from src.transcribe import Word
@@ -438,8 +443,8 @@ class DirectorFallback(unittest.TestCase):
             enriched, warnings = director._ai_pass(self._segments(), "Lake Mead",
                                                     [director._rule_shot(s, i, "Lake Mead")
                                                      for i, s in enumerate(self._segments())])
-        # A connection error is transient: one retry, then the next model.
-        self.assertEqual(calls, ["gpt-5-2", "gpt-5-2", "gemini-3-pro"])
+        # A connection error is transient: DIRECTOR_RETRIES (2) more tries, then the next model.
+        self.assertEqual(calls, ["gpt-5-2"] * (1 + config.DIRECTOR_RETRIES) + ["gemini-3-pro"])
         self.assertEqual(enriched, 1)
         self.assertEqual(warnings, [])
 

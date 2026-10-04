@@ -1061,30 +1061,136 @@ def _json_reply(content):
 # Model calls this job made (successful ones), for the job's AI cost line.
 CHAT_CALLS = {"n": 0}
 
+_EFFORTS = ("none", "minimal", "low", "medium", "high")
+
+
+def _reasoning_effort(routine: bool) -> str:
+    """The effort a planning call asks for ("" = none sent, the provider's default)."""
+    effort = ((config.DIRECTOR_ROUTINE_REASONING_EFFORT if routine else "")
+              or config.DIRECTOR_REASONING_EFFORT or "").strip().lower()
+    return effort if effort in _EFFORTS else ""
+
+
+def _request_extra(model: str, url: str, routine: bool = False) -> dict:
+    """
+    The fields a planning request carries beyond the model, the messages and
+    the JSON switch. On OpenRouter it asks for its own price back (usage.include,
+    read by _note_usage into the cost ledger's llm.usd): until 2026-10-05 every
+    call was priced at one flat Kie credit ($0.005) while openai/gpt-5.2 cost
+    ~$0.04 a call (a 5-minute test: 7 calls, ~$0.26). The reasoning effort only
+    when DIRECTOR_REASONING_EFFORT / DIRECTOR_ROUTINE_REASONING_EFFORT set one:
+    OpenRouter's reasoning.effort, Kie's reasoning_effort for its gpt-* models;
+    never to another provider, which may refuse a field it does not know.
+    """
+    extra: dict = {}
+    openrouter = "openrouter.ai" in (url or "")
+    if openrouter:
+        extra["usage"] = {"include": True}
+    effort = _reasoning_effort(routine)
+    if effort and openrouter:
+        extra["reasoning"] = {"effort": effort}
+    elif effort and "kie.ai" in (url or "") and model.startswith("gpt-") and effort != "none":
+        extra["reasoning_effort"] = effort
+    return extra
+
+
+def _note_usage(body) -> None:
+    """What a planning call really cost and used, when the provider says (OpenRouter's
+    usage): llm.usd, llm.prompt_tokens, llm.cached_tokens, llm.completion_tokens,
+    llm.reasoning_tokens. Recorded for every answer, a failed one too: it is billed."""
+    usage = body.get("usage") if isinstance(body, dict) else None
+    if not isinstance(usage, dict):
+        return
+    try:
+        usd = float(usage.get("cost") or 0.0)
+        details = usage.get("prompt_tokens_details") or {}
+        out_details = usage.get("completion_tokens_details") or {}
+        counts = {"llm.prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                  "llm.cached_tokens": int(details.get("cached_tokens") or 0) if isinstance(details, dict) else 0,
+                  "llm.completion_tokens": int(usage.get("completion_tokens") or 0),
+                  "llm.reasoning_tokens": (int(out_details.get("reasoning_tokens") or 0)
+                                           if isinstance(out_details, dict) else 0)}
+    except (TypeError, ValueError):
+        return
+    if usd > 0:
+        costs.record("llm.usd", usd)
+    for k, n in counts.items():
+        if n:
+            costs.record(k, n)
+
+
+# Answers worth another try on the same model after a pause: a timeout, a conflict, "too
+# early", rate limited - and any 5xx (_retryable).
+_RETRY_STATUS = (408, 409, 425, 429)
+
+
+def _retryable(status: int) -> bool:
+    return status in _RETRY_STATUS or status >= 500
+
+
+def _failure(r, body) -> Tuple[int, str]:
+    """
+    (status, message) of a failed answer, (0, "") for one to read.
+
+    Kie wraps a failure in an HTTP 200 as {"code": 4xx/5xx, "msg": ...}; OpenRouter and
+    the other OpenAI-compatible gateways answer {"error": {"code", "message"}} with the
+    HTTP status (402 out of credits, 429 rate limited, 5xx the upstream model in
+    trouble), or put the error on the choice. Only Kie's shape used to be read: an
+    OpenRouter error became a KeyError on body["choices"] - no retry, no circuit
+    breaker, no out-of-credits flag.
+    """
+    status = getattr(r, "status_code", 200)
+    status = status if isinstance(status, int) and not isinstance(status, bool) else 200
+    if isinstance(body, dict):
+        if isinstance(body.get("code"), int) and body["code"] >= 400:
+            return body["code"], str(body.get("msg") or "")
+        err = body.get("error")
+        choices = body.get("choices")
+        if not err and isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            err = choices[0].get("error")
+        if err:
+            code, msg = (err.get("code"), err.get("message")) if isinstance(err, dict) else (None, err)
+            try:
+                code = int(code)
+            except (TypeError, ValueError):
+                code = 0                    # "rate_limit_exceeded": the HTTP status says it
+            if code < 400:
+                code = status if status >= 400 else 500
+            return code, str(msg or "")[:200]
+    return (status, "") if status >= 400 else (0, "")
+
 
 def _chat_try(base: str, key: str, model: str, main: bool, attempt: int, system: str,
-              payload: dict, timeout: int, errors: Optional[List[str]]) -> Tuple[Optional[dict], bool]:
+              payload: dict, timeout: int, errors: Optional[List[str]],
+              routine: bool = False) -> Tuple[Optional[dict], bool]:
     """One request to one model: (answer, transient) - transient when a retry may help."""
     try:
+        url = _chat_url(model, base)
         r = requests.post(
-                _chat_url(model, base),
+                url,
                 headers={"Authorization": f"Bearer {key}",
                          "Content-Type": "application/json"},
             json={"model": model,
                   "messages": [{"role": "system", "content": system},
                                {"role": "user", "content": json.dumps(payload)}],
-                  "response_format": {"type": "json_object"}},
+                  "response_format": {"type": "json_object"},
+                  **_request_extra(model, url, routine)},
             timeout=timeout,
         )
-        body = r.json()
-        if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-            if main and vision.is_credit_error(body["code"], body.get("msg")):
+        try:
+            body = r.json()
+        except ValueError:
+            body = None                     # a gateway's HTML error page: its status says what happened
+        _note_usage(body)
+        status, msg = _failure(r, body)
+        if status:
+            if main and vision.is_credit_error(status, msg):
                 vision.note_out_of_credits()
-            if body["code"] >= 500:
-                vision.model_result(model, False)
             if errors is not None:
-                errors.append(f"{model}#{attempt}: ValueError")
-            return None, body["code"] >= 500
+                errors.append(f"{model}#{attempt}: HTTP {status}")
+            return None, _retryable(status)
+        if body is None:
+            raise ValueError("not JSON")
         data = _json_reply(body["choices"][0]["message"]["content"])
         if isinstance(data, dict):
             CHAT_CALLS["n"] += 1
@@ -1102,27 +1208,39 @@ def _chat_try(base: str, key: str, model: str, main: bool, attempt: int, system:
 
 
 def _chat_route(route: tuple, system: str, payload: dict, timeout: int,
-                errors: Optional[List[str]], deadline: float) -> Optional[dict]:
+                errors: Optional[List[str]], deadline: float, routine: bool = False) -> Optional[dict]:
     """
-    One model with one retry on a transient failure (Kie answers "internal
-    error, please try again later" to Gemini Flash on long requests); a flaky
+    One model, asked again on a transient failure (a timeout, 429, 5xx - Kie
+    answers "internal error, please try again later" to Gemini Flash on long
+    requests, OpenRouter 429s and 503s) up to DIRECTOR_RETRIES times after
+    DIRECTOR_RETRY_WAIT seconds, doubling, while the call's time lasts; a flaky
     first call used to drop the whole batch to rule shots, i.e. searches built
-    from the subtitle words.
+    from the subtitle words. A call every try of which failed counts once on the
+    circuit breaker shared with vision (as vision._route_call: counting each try
+    benched a model on its first burst of 503s), and the caller hands it to the
+    next model.
     """
     base, key, model, main = route
-    for attempt in (1, 2):
-        if attempt == 2:
-            if time.time() + 3 >= deadline or not vision.model_available(model):
-                return None
-            time.sleep(3)
+    tries = 1 + max(0, int(config.DIRECTOR_RETRIES))
+    failed = False
+    for attempt in range(1, tries + 1):
+        if attempt > 1:
+            pause = max(0.0, config.DIRECTOR_RETRY_WAIT) * (2 ** (attempt - 2))
+            if time.time() + pause >= deadline or not vision.model_available(model):
+                break
+            time.sleep(pause)
         if main and vision.out_of_credits():
             return None
         data, transient = _chat_try(base, key, model, main, attempt, system, payload,
-                                    int(max(5, min(timeout, deadline - time.time()))), errors)
+                                    int(max(5, min(timeout, deadline - time.time()))), errors,
+                                    routine=routine)
         if data is not None:
             return data
+        failed = transient
         if not transient:
-            return None
+            break
+    if failed:
+        vision.model_result(model, False)
     return None
 
 
@@ -1153,7 +1271,7 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
         for route in queue:
             if time.time() >= deadline:
                 break
-            data = _chat_route(route, system, payload, timeout, errors, deadline)
+            data = _chat_route(route, system, payload, timeout, errors, deadline, routine=routine)
             if data is not None:
                 return data
         return None
@@ -1164,7 +1282,8 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
         nonlocal nxt
         route = queue[nxt]
         nxt += 1
-        running[_CHAT_POOL.submit(_chat_route, route, system, payload, timeout, errors, deadline)] = route
+        running[_CHAT_POOL.submit(_chat_route, route, system, payload, timeout, errors, deadline,
+                                  routine)] = route
 
     launch()
     while running:

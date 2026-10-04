@@ -62,6 +62,15 @@ _CATEGORY = {"vision.judge": "vision", "vision.rate_tiles": "vision", "vision.pi
              "llm.director_call": "llm", "llm.brief_call": "llm", "image.generate": "image",
              "runpod.worker_second": "runpod", "proxy.bytes": "proxy", "serp.call": "serp",
              "storage.bytes": "storage", "tts.char": "tts", "tts.seconds": "tts", "tts.gpu_seconds": "tts"}
+# Categories whose provider reports each call's own price ("<category>.usd"): when it
+# did, that replaces the category's credit estimate (OpenRouter's usage.cost - the
+# vision judge since 2026-10-01, the planning calls since 2026-10-05).
+_MEASURED = ("vision", "llm")
+
+
+def _counts_only(key: str) -> bool:
+    """A measured price or a token count: never priced as a unit of its own."""
+    return key.endswith(".usd") or (key.startswith(tuple(f"{c}." for c in _MEASURED)) and key.endswith("_tokens"))
 
 
 def _env_prices() -> Dict[str, float]:
@@ -124,16 +133,17 @@ class Ledger:
             total_seconds = own + self.child_seconds
             credit = self.prices.get("kie.credit", 0.005)
             by = defaultdict(float)
-            # The vision provider's own price per call (OpenRouter's usage.cost,
-            # src/vision.py) replaces the Kie-credit estimate when it is there:
-            # the estimate priced the Lake Powell job's vision at $2.83.
-            measured_vision = float(self.units.get("vision.usd", 0.0) or 0.0)
+            # The provider's own price per call (OpenRouter's usage.cost: src/vision.py,
+            # src/director.py) replaces the Kie-credit estimate when it is there: the
+            # estimate priced the Lake Powell job's vision at $2.83, and every planning
+            # call at $0.005 (openai/gpt-5.2 cost ~$0.04 a call).
+            provider_usd = {c: float(self.units.get(f"{c}.usd", 0.0) or 0.0) for c in _MEASURED}
             for k, n in self.units.items():
                 cat = _CATEGORY.get(k, "other")
-                if k == "vision.usd" or k.startswith("vision.") and k.endswith("_tokens"):
+                if _counts_only(k):
                     continue
                 if k in _CREDIT_KEYS:
-                    if cat == "vision" and measured_vision > 0:
+                    if provider_usd.get(cat, 0.0) > 0:
                         continue
                     by[cat] += n * self.prices.get(k, 0.0) * credit
                 elif k == "proxy.bytes":
@@ -143,7 +153,8 @@ class Ledger:
                 else:
                     by[cat] += n * self.prices.get(k, 0.0)
             by["runpod"] += total_seconds * self.prices.get("runpod.worker_second", 0.0)
-            by["vision"] += measured_vision
+            for c, usd in provider_usd.items():
+                by[c] += usd
             measured = None
             if self.balance_before is not None and self.balance_after is not None:
                 measured = round(self.balance_before - self.balance_after, 2)
@@ -155,7 +166,8 @@ class Ledger:
             out["credits_measured"] = measured
             if measured is not None:
                 out["measured_ai_usd"] = round(measured * credit, 4)
-            out["vision_measured"] = measured_vision > 0
+            out["vision_measured"] = provider_usd["vision"] > 0
+            out["llm_measured"] = provider_usd["llm"] > 0
             out["worker_seconds"] = round(total_seconds, 1)
             out["own_seconds"] = round(own, 1)
             out["children"] = self.children

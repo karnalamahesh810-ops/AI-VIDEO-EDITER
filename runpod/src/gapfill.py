@@ -483,7 +483,8 @@ def _still_for(job: dict, i: int, query: str, intent: str, used: Used, work: str
         got = media._download(dataclasses.replace(cand), query, work)
         if got is None or not got.local_path:
             _note_wanted(i, cand)                       # the link stays with the scene for the editor
-        fine, why = media._asset_ok(got) if got and got.local_path else (False, "")
+        # In the line's own context: a document line's scan is its right shot (media._asset_ok_for).
+        fine, why = media._asset_ok_for(job, got) if got and got.local_path else (False, "")
         if not fine:
             media._mark_bad(cand.identity, "", why)     # too blurry for any line (src/sharpness.py)...
         ok = bool(got and got.local_path and fine and not media._photo_seen_before(got.local_path))

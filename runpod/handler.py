@@ -2565,7 +2565,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "PICTURE_SHARPNESS_CHECK", "MAX_PICTURE_MAGNIFICATION", "CLIP_SHARPNESS_CHECK",
                       "MIN_CLIP_REAL_HEIGHT", "MIN_CLIP_HEIGHT",
                       # The routine planning calls on a cheaper model (src/director.py _routes; 2026-10-05).
-                      "DIRECTOR_ROUTINE_MODEL")
+                      "DIRECTOR_ROUTINE_MODEL",
+                      # The cost plan (2026-10-05): each lever is off until a job turns it on for an A/B.
+                      "DIRECTOR_REASONING_EFFORT", "DIRECTOR_ROUTINE_REASONING_EFFORT", "VISION_TILE_MODEL",
+                      "JUDGE_MEMORY")
 
 
 def _apply_config(overrides) -> dict:
@@ -2736,6 +2739,7 @@ def handler(job):
     report = Reporter(reports_to, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
+    pools.reset()                       # and the spare pool moments it may draw on
     shotcap.reset()                     # and what the shot cap cut and swapped
     packs.reset()                       # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's

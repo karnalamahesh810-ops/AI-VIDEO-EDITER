@@ -439,6 +439,10 @@ def rate_video(cand: dict, subject: str, context: str, seconds: float,
     if not made:
         return []
     sheet, times = made
+    # Always the main vision model, never VISION_TILE_MODEL: a pool's approved moments reach
+    # the timeline unjudged unless POOL_JUDGE_CLIPS, and its spare moments go into the clip
+    # library with this rating as their score (library.record_from_doc), where later
+    # videos reuse them without a judge.
     rated = vision.rate_tiles(sheet, len(times), subject, context, intent=intent) or []
     duration = float(info.get("duration") or 0)
     out = []
@@ -623,6 +627,19 @@ _RESERVE_LOCK = threading.Lock()
 # What each pool was about (subject key -> {"name", "scene_intent", "event_window",
 # "seconds"}), so the clip library can keep the spares no line took.
 _RESERVE_META: Dict[str, dict] = {}
+
+
+def reset() -> None:
+    """
+    Forget the reserve: the handler calls this as every job starts. It used to be emptied
+    only when a job pooled its own subjects (source_by_subject), so on a reused serverless
+    worker a job that did not - a render's quality gate, a fan-out parent whose parts pool
+    for it - drew the previous video's spare moments, and a line naming no place could get
+    another video's footage, unjudged (verified 2026-10-05).
+    """
+    with _RESERVE_LOCK:
+        _RESERVE.clear()
+        _RESERVE_META.clear()
 
 
 def spare_moments(limit: int = 0) -> List[dict]:

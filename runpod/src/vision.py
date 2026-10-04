@@ -261,6 +261,7 @@ def reset() -> None:
         _UNJUDGED["n"] = 0
         _OUT_OF_CREDITS["hit"] = False
         _ERRORS.clear()
+        _TILE_MODEL.update(model="", asked=0, answered=0)
 
 
 def _fail(model: str, why: str) -> None:
@@ -274,11 +275,15 @@ def _fail(model: str, why: str) -> None:
 def stats() -> dict:
     """Calls, failures and the latest failure reasons, for the job result."""
     with _LOCK:
-        return {"enabled": enabled(), "model": config.VISION_MODEL,
-                "calls": _CALLS["n"], "failures": _FAILS["n"],
-                "unjudged": _UNJUDGED["n"],
-                "outOfCredits": _OUT_OF_CREDITS["hit"],
-                "recentErrors": list(_ERRORS)}
+        out = {"enabled": enabled(), "model": config.VISION_MODEL,
+               "calls": _CALLS["n"], "failures": _FAILS["n"],
+               "unjudged": _UNJUDGED["n"],
+               "outOfCredits": _OUT_OF_CREDITS["hit"],
+               "recentErrors": list(_ERRORS)}
+        if _TILE_MODEL["asked"]:
+            # The cheaper storyboard model (VISION_TILE_MODEL): how many of its calls it answered.
+            out["tileModel"] = dict(_TILE_MODEL)
+        return out
 
 
 # At most VISION_CONCURRENCY requests in flight per worker (see config), and
@@ -446,9 +451,14 @@ def model_result(model: str, ok: bool) -> None:
             print(f"[ai] {model} failing - skipped for {cooldown:.0f} s", flush=True)
 
 
-def _routes() -> list:
-    routes = [(m, "", "", True) for m in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS)
-              if m and config.VISION_API_KEY]
+def _routes(first: str = "") -> list:
+    """(model, url, key, is_main) to ask in order. `first`: a model asked before
+    VISION_MODEL (VISION_TILE_MODEL for a checked storyboard call), the usual
+    models backing it up."""
+    models = [m for m in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS) if m]
+    if first:
+        models = [first] + [m for m in models if m != first]
+    routes = [(m, "", "", True) for m in models if config.VISION_API_KEY]
     if fallback_configured():
         routes.append((config.AI_FALLBACK_VISION_MODEL,
                        f"{config.AI_FALLBACK_API_BASE}/chat/completions",
@@ -488,9 +498,10 @@ def _route_call(route: tuple, messages: list, max_tokens: int, deadline: float) 
 _HEDGE_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix="vision")
 
 
-def _ask(messages: list, max_tokens: int, accept=None) -> Tuple[Optional[str], str]:
+def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple[Optional[str], str]:
     """
     First model that answers: (text, model). (None, "") when none did.
+    `first`: a model to ask before VISION_MODEL (_routes).
 
     `accept`: an answer it rejects (a judge verdict that is prose, not JSON)
     counts as that model failing, and the next model is asked - an unusable
@@ -508,7 +519,7 @@ def _ask(messages: list, max_tokens: int, accept=None) -> Tuple[Optional[str], s
     On the 111-line job 16c80a8b a stalled channel cost the full 90 s timeout
     twice per model before the next was tried, and the worker sat idle.
     """
-    queue = [r for r in _routes()
+    queue = [r for r in (_routes(first) if first else _routes())
              if not (r[3] and _OUT_OF_CREDITS["hit"]) and model_available(r[0])]
     if not queue:
         return None, ""
@@ -939,8 +950,29 @@ _RATE_SYSTEM = (
 _TILE_ROW = re.compile(r'\{\s*"tile"\s*:\s*(\d+)\s*,\s*"score"\s*:\s*([\d.]+)\s*,\s*"description"\s*:\s*"((?:[^"\\]|\\.)*)"')
 
 
+# Storyboard calls the judge checks afterwards (checked=True) that VISION_TILE_MODEL
+# answered, of all such calls asked: the job result's view of the cheaper model.
+_TILE_MODEL = {"model": "", "asked": 0, "answered": 0}
+
+
+def _tile_first(checked: bool) -> str:
+    """The model a storyboard call asks first: VISION_TILE_MODEL when the judge checks the
+    result afterwards and one is set, else "" (VISION_MODEL, as before)."""
+    return config.VISION_TILE_MODEL if checked and config.VISION_TILE_MODEL else ""
+
+
+def _note_tile_model(first: str, model: str) -> None:
+    if not first:
+        return
+    with _LOCK:
+        _TILE_MODEL["model"] = first
+        _TILE_MODEL["asked"] += 1
+        if model == first:
+            _TILE_MODEL["answered"] += 1
+
+
 def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
-               intent: str = "") -> Optional[List[dict]]:
+               intent: str = "", checked: bool = False) -> Optional[List[dict]]:
     """
     Every usable tile of one storyboard sheet for a subject, in one call:
     [{"tile": 1-based, "score": 0-1, "description": str}] (None on failure).
@@ -948,6 +980,9 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
     GoMotion cut 174 clips from few long videos about 45 subjects; judging a
     video once and taking many moments from it replaces a search, scout,
     download and vision check per scene.
+
+    `checked`: the judge looks at whatever this rating picks before it can
+    reach the timeline (the fine pass), so VISION_TILE_MODEL may answer.
     """
     if not enabled():
         return None
@@ -962,7 +997,9 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},
         ]},
     ]
-    text, model = _ask(messages, 900)
+    first = _tile_first(checked)
+    text, model = _ask(messages, 900, first=first) if first else _ask(messages, 900)
+    _note_tile_model(first, model)
     with _LOCK:
         _CALLS["n"] += 1
     if not text:
@@ -999,8 +1036,11 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
     return out
 
 
-def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Optional[dict]:
-    """Best tile number (1-based) on a storyboard contact sheet, or None."""
+def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "",
+              checked: bool = False) -> Optional[dict]:
+    """Best tile number (1-based) on a storyboard contact sheet, or None.
+    `checked`: the judge looks at the clip cut at the pick before it can reach the
+    timeline (a scout), so VISION_TILE_MODEL may answer."""
     if not enabled():
         return None
     messages = [
@@ -1012,7 +1052,9 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "") -> Opt
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},
         ]},
     ]
-    text, model = _ask(messages, 400)
+    first = _tile_first(checked)
+    text, model = _ask(messages, 400, first=first) if first else _ask(messages, 400)
+    _note_tile_model(first, model)
     with _LOCK:
         _CALLS["n"] += 1
     if not text:
