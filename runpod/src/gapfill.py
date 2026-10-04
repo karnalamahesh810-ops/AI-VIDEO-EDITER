@@ -495,6 +495,27 @@ def _still_for(job: dict, i: int, query: str, intent: str, used: Used, work: str
     return None
 
 
+def _too_short(got, job: dict) -> bool:
+    """
+    With SHOT_MAX_SECONDS on (src/shotcap.py), a clip that would have to be
+    slowed - or freeze - to cover its line at real speed: the renderer
+    stretches a short clip down to 0.6x, and the cap never lets a clip be
+    slowed to fill a line. Off: never (the old rule).
+    """
+    from . import shotcap
+    if not shotcap.enabled() or getattr(got, "kind", "") != "video":
+        return False
+    need = float(job.get("seconds") or 0.0)
+    if need <= 0:
+        return False
+    try:
+        from . import timeline
+        real = float(timeline._clip_seconds(got) or 0.0)
+    except Exception:  # noqa: BLE001 - not known to be short
+        return False
+    return 0 < real < need - shotcap.TOLERANCE_FRAMES / 30.0
+
+
 def _budget(n: int) -> float:
     """The ladder's own time box for n empty scenes."""
     if n <= 0:
@@ -556,6 +577,10 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
                     print(f"[fill] scene {job['index'] + 1}: {name} failed: {type(e).__name__}: "
                           f"{str(e)[:80]}", flush=True)
                     got = None
+                if got is not None and _too_short(got, job):
+                    print(f"[fill] scene {job['index'] + 1}: the {name} clip is too short to cover the line at "
+                          "real speed - the next step", flush=True)
+                    continue
                 if got is not None:
                     if name == "still" and got.source == "generated":
                         name = "generated"
@@ -626,28 +651,33 @@ def graphic_for(doc: dict, scene: dict) -> Optional[dict]:
         return None
 
 
-def _room(scene: dict, fps: int, rate: float) -> float:
-    """Frames a scene can grow while its own picture still covers it at `rate` x speed or more."""
+def _room(scene: dict, fps: int, rate: float, ceiling: bool = False) -> float:
+    """
+    Frames a scene can grow while its own picture still covers it at `rate` x
+    speed or more - never past SHOT_MAX_SECONDS, or with `ceiling` never past
+    shotcap.CEILING (src/shotcap.py).
+    """
     from . import shotcap
     m = scene.get("media") or {}
     dur = int(scene.get("durationInFrames") or 0)
     if m.get("type") == "image" and m.get("url"):
         # A still holds as long as it is shown - but no shot past SHOT_MAX_SECONDS (src/shotcap.py).
-        return shotcap.room(scene, fps, float("inf"))
+        return shotcap.room(scene, fps, float("inf"), ceiling)
     if m.get("type") != "video" or not m.get("url"):
         return 0.0                              # never an empty scene or a graphic
     from . import media as _media
     clip = m.get("clipSeconds")
     clip_s = float(clip) if isinstance(clip, (int, float)) and clip > 0 else dur / fps + _media.SEQ_SHOT_PAD
-    return shotcap.room(scene, fps, max(0.0, clip_s * fps / max(0.05, rate) - dur))
+    return shotcap.room(scene, fps, max(0.0, clip_s * fps / max(0.05, rate) - dur), ceiling)
 
 
-def _hold(doc: dict, i: int, rate: Optional[float]) -> bool:
+def _hold(doc: dict, i: int, rate: Optional[float], ceiling: bool = False) -> bool:
     """
     Merge empty scene i into its neighbours: the previous scene runs longer
     and/or the next starts earlier, each only while its clip covers its longer
     scene at `rate` (None = no limit) and the shot stays within
-    SHOT_MAX_SECONDS (src/shotcap.py). The line's words go with the frames.
+    SHOT_MAX_SECONDS - with `ceiling`, within shotcap.CEILING (src/shotcap.py).
+    The line's words go with the frames.
     """
     scenes = doc["scenes"]
     fps = max(1, int(doc.get("fps") or 30))
@@ -661,11 +691,11 @@ def _hold(doc: dict, i: int, rate: Optional[float]) -> bool:
         return False
     if rate is None:
         from . import shotcap
-        rp = shotcap.room(prev, fps, float("inf")) if prev is not None else 0.0
-        rn = shotcap.room(nxt, fps, float("inf")) if nxt is not None else 0.0
+        rp = shotcap.room(prev, fps, float("inf"), ceiling) if prev is not None else 0.0
+        rn = shotcap.room(nxt, fps, float("inf"), ceiling) if nxt is not None else 0.0
     else:
-        rp = _room(prev, fps, rate) if prev is not None else 0.0
-        rn = _room(nxt, fps, rate) if nxt is not None else 0.0
+        rp = _room(prev, fps, rate, ceiling) if prev is not None else 0.0
+        rn = _room(nxt, fps, rate, ceiling) if nxt is not None else 0.0
     a = int(min(rp, need // 2 if nxt is not None else need))
     b = int(min(rn, need - a))
     a = int(min(rp, need - b))
@@ -782,9 +812,48 @@ def _instead_of_hold(doc: dict, refused: List[dict], out: Dict[str, int], ladder
     return [scenes[k] for k in todo if _empty(scenes[k])]
 
 
+def _hold_long(doc: dict, cards: List[dict], out: Dict[str, int]) -> List[dict]:
+    """
+    The lines nothing fresh was found for: the shot beside each is held over
+    it PAST SHOT_MAX_SECONDS - real footage or a real picture beats a text card
+    (the owner) - but every shot stays within shotcap.CEILING and a clip is
+    never slowed to stretch (it must hold the footage; a still holds any
+    length). Walks `cards` as given (from the end, as hold_or_animate does),
+    again while a walk still held one (a run of empty lines: the line next to
+    one just held may now have a shot beside it); returns the lines still
+    without a picture, in the same order.
+    """
+    from . import shotcap
+    scenes = doc.get("scenes") or []
+    left = list(cards)
+    while left:
+        rest = []
+        for s in left:
+            i = next((k for k, x in enumerate(scenes) if x is s), None)
+            if i is None or not _empty(s):
+                continue
+            sid = s.get("id") or f"scene{i}"
+            beside = [scenes[k] for k in (i - 1, i + 1) if 0 <= k < len(scenes)]
+            if not _hold(doc, i, 1.0, ceiling=True):
+                rest.append(s)
+                continue
+            out["held"] += 1
+            out["long"] = out.get("long", 0) + 1
+            shotcap.note("long")
+            for nb in beside:
+                if sid in ((nb.get("semanticMetadata") or {}).get("heldOver") or []):
+                    nb["reviewReason"] = (f"Held over the next line past {shotcap.limit():g} s (never past "
+                                          f"{shotcap.CEILING:g} s, never slowed): nothing new was found for it "
+                                          "in time - replace or keep")
+        if len(rest) == len(left):
+            break
+        left = rest
+    return left
+
+
 def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
                     search: Optional[bool] = None, work: str = "",
-                    banned: Sequence[Shot] = ()) -> Dict[str, int]:
+                    banned: Sequence[Shot] = (), fresh: bool = True) -> Dict[str, int]:
     """
     (d) Every empty scene: the planner's own graphic for its line (numbers,
     money, maps), else the neighbouring shot held over it while the clip
@@ -799,9 +868,12 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     beside it), then another moment of a neighbouring clip (where this job
     may fetch: `search`, else when it planned the video; into `work`, else
     the plan's directory), then the ladder (unless the caller has just run
-    it: `laddered`), and only then the text card ("alternative", "moment" and
-    "ladder" are added to the counts); never a shot in `banned` (the quality
-    check's failed ones).
+    it: `laddered`) - none of these three with `fresh` off (a render chunk
+    must draw what every other machine draws: no network) - then the shot
+    beside it held past the cap up to shotcap.CEILING at real speed, and
+    only then the text card ("alternative", "moment", "ladder" and "long" are
+    added to the counts; a long hold also counts as "held"); never a shot in
+    `banned` (the quality check's failed ones).
     """
     from . import shotcap
     scenes = doc.get("scenes") or []
@@ -841,7 +913,11 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     if capped and cards:
         # No shot past the cap: a fresh approved shot before a text card.
         shotcap.note("refused", len(cards))
-        cards = list(reversed(_instead_of_hold(doc, cards, out, laddered, search, label, work, banned)))
+        if fresh:
+            cards = list(reversed(_instead_of_hold(doc, cards, out, laddered, search, label, work, banned)))
+        # Nothing fresh: real footage beats a text card - the shot beside it held past the cap, never
+        # past shotcap.CEILING and never slowed.
+        cards = _hold_long(doc, cards, out)
     for s in reversed(cards):                   # story order
         if _card(doc, s):
             out["card"] += 1
@@ -853,6 +929,8 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
               + (f", {out.get('alternative', 0)} runner-up shot(s), {out.get('moment', 0)} other moment(s) of the "
                  f"clip beside and {out.get('ladder', 0)} ladder shot(s) instead of a hold past {shotcap.limit():g} s"
                  if out.get("alternative") or out.get("moment") or out.get("ladder") else "")
+              + (f"; {out['long']} of the holds run past {shotcap.limit():g} s (at most {shotcap.CEILING:g} s) "
+                 "instead of a text card" if out.get("long") else "")
               + (f"; {out['hook']} in the hook (nothing else was left)" if out["hook"] else ""), flush=True)
     return out
 

@@ -317,11 +317,22 @@ class Find(unittest.TestCase):
     def test_a_clip_must_be_long_enough_for_its_scene(self):
         short = entry(7, unit((0, 1.0)), seconds=2.0)
         longer = entry(8, unit((0, 1.0), (4, 0.1)), seconds=8.0)
-        with Shelves(water=shelf([short, longer])):
+        with Shelves(water=shelf([short, longer])), mock.patch.object(config, "SHOT_MAX_SECONDS", 0.0):
             hits = packs.find("a drought", ["water"], seconds=6.0, min_similarity=0.5)
             self.assertEqual([h.entry.id for h in hits], [longer.id])             # 2 s / 0.6 < 6 s: it would freeze
             hits = packs.find("a drought", ["water"], seconds=3.0, min_similarity=0.5)
-            self.assertEqual({h.entry.id for h in hits}, {short.id, longer.id})
+            self.assertEqual({h.entry.id for h in hits}, {short.id, longer.id})   # (slowed to 0.67x)
+
+    def test_with_the_shot_cap_a_clip_is_never_slowed_to_fill_its_line(self):
+        # SHOT_MAX_SECONDS on (src/shotcap.py): the clip holds the line at real speed. `seconds` carries
+        # the usual pad (media.SEQ_SHOT_PAD, 0.5 s) on top of the line, as packs.pick asks.
+        short = entry(7, unit((0, 1.0)), seconds=2.0)
+        longer = entry(8, unit((0, 1.0), (4, 0.1)), seconds=8.0)
+        with Shelves(water=shelf([short, longer])), mock.patch.object(config, "SHOT_MAX_SECONDS", 7.0):
+            hits = packs.find("a drought", ["water"], seconds=3.0, min_similarity=0.5)
+            self.assertEqual([h.entry.id for h in hits], [longer.id])             # a 2.5 s line: 2 s would be slowed
+            hits = packs.find("a drought", ["water"], seconds=2.5, min_similarity=0.5)
+            self.assertEqual({h.entry.id for h in hits}, {short.id, longer.id})   # a 2 s line: real speed
 
     def test_licences_are_kept_apart_and_a_claim_free_job_takes_no_unverified_clip(self):
         pd = entry(1, unit((0, 1.0)), klass="pd")

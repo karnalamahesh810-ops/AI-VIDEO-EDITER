@@ -26,6 +26,13 @@ never above CEILING, 12 s; 0 = off, every plan exactly as before).
              (Lowering the cutter's own ceiling instead moved its good cuts:
              on the two benchmark narrations the share of cuts that close a
              sentence or clause fell from 100% to 44-75%.)
+  runner-ups AFTER the footage search and BEFORE the fallback ladder
+  first      (handler.do_plan, runner_ups_first): a piece of a cut beat that
+             found nothing takes a clip the judge approved for this very line
+             (the pick-a-shot runner-ups of a clip the variety rules took off
+             it) or for another piece of the same beat (its sibling's
+             runner-ups, on this disk in media._best_of's localPath) - real
+             footage of the same sentence before the ladder's pictures.
   holds      AFTER the footage is found and after every repair
              (gapfill.hold_or_animate reads room/hold_rates/alternative_for
              here): a neighbouring shot is held over an empty line only while
@@ -38,10 +45,12 @@ never above CEILING, 12 s; 0 = off, every plan exactly as before).
              neighbouring YouTube clip FALLBACK_MOMENT_GAP_SECONDS from the
              one shown (fetched and checked like a chain shot, a few at once),
              the fallback ladder where it has not just run (the pools' spare
-             moments), and only then its line as a full-screen text card.
-             Each fresh clip covers its scene at real speed, and with a style
-             that allows vertical clips one is framed on its blurred copy as
-             the plan frames its own (upscale.frame_vertical).
+             moments), then the shot beside it held PAST the cap - real
+             footage beats a text card (the owner) - but never past CEILING
+             and never slowed, and only then its line as a full-screen text
+             card. Each fresh clip covers its scene at real speed, and with a
+             style that allows vertical clips one is framed on its blurred
+             copy as the plan frames its own (upscale.frame_vertical).
   report     doc.meta.shotCap: shots over the cap before and after, the cuts
              made, what replaced a hold.
 
@@ -60,6 +69,10 @@ from . import config
 LAST: Dict[str, Any] = {}
 # What the cap changed about the holds of this job (gapfill.hold_or_animate adds to it).
 SWAPS: Dict[str, int] = {}
+# Moments of a source video this job fetched for an empty line and could not use (the download
+# failed, or the clip failed a check): the last resort runs several times a job (the plan, the
+# check before publishing, the build's render copy) and never downloads one of these again.
+FAILED_MOMENTS: set = set()
 
 CEILING = 12.0             # "nothing above 12 s anywhere": the longest cap any job or style may set
 FLOOR = 3.0                # a cap under this would cut every sentence to flashes
@@ -98,6 +111,7 @@ def reset() -> None:
     """A new job: nothing cut, nothing swapped yet (the handler, with gapfill.reset)."""
     LAST.clear()
     SWAPS.clear()
+    FAILED_MOMENTS.clear()
 
 
 def note(what: str, n: int = 1) -> None:
@@ -261,6 +275,8 @@ def prepare(segments: list, brief: Optional[dict], focus: Optional[Dict[int, dic
         if out is not segments:
             mentions.remap_brief(brief, parents)
             focus = hookboost.remap_focus(focus, parents)
+            # Which beat each new one was cut from (runner_ups_first: a piece's siblings); not in the report.
+            info["parents"] = list(parents)
     except Exception as e:  # noqa: BLE001 - a longer shot, never a failed video
         print(f"[shotcap] skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
         return segments, focus, {}
@@ -275,6 +291,123 @@ def screen_seconds(segments: list, until: Optional[float] = None) -> List[float]
     """Each beat's time on screen, for the footage search: the clip found for it covers it at real speed."""
     starts, ends = _screen(segments, until)
     return [b - a for a, b in zip(starts, ends)]
+
+
+# --------------------------------------------------------------------------- #
+# After the footage search, before the fallback ladder: a runner-up of the same sentence
+# --------------------------------------------------------------------------- #
+
+def _number(v) -> float:
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else 0.0
+
+
+def _runner_up_asset(i: int, job: dict, donor, how: str, used, starts: Dict[int, float]):
+    """The first of `donor`'s runner-ups that may go on line i, as an asset (claimed in `used`), or None."""
+    from . import gapfill, media
+    need = float(job.get("seconds") or 0.0)
+    at = starts.get(i)
+    for alt in list(getattr(donor, "alternatives", None) or []):
+        if not isinstance(alt, dict):
+            continue
+        path = str(alt.get("localPath") or "")
+        if not path or not os.path.isfile(path):
+            continue                            # not kept, or on a fan-out part's own machine
+        kind = _kind(path)
+        seconds = 0.0
+        if kind == "video":
+            seconds = _probe(path) or _number(alt.get("seconds"))
+            if seconds < need - TOLERANCE_FRAMES / 30.0:
+                continue                        # it would have to be slowed (or freeze) to fill the line
+        src = str(alt.get("url") or "")
+        ident = str(alt.get("assetId") or "")
+        moment = dict(alt.get("moment") or {}) if isinstance(alt.get("moment"), dict) else {}
+        asset = media.MediaAsset(
+            kind=kind, source=str(alt.get("source") or getattr(donor, "source", "") or "youtube"), url=src,
+            local_path=path, duration=round(seconds, 2) if seconds else 0.0,
+            attribution=str(alt.get("title") or ""),
+            # The donor's own search found it: the same licence terms (require_cc or not).
+            license=str(getattr(donor, "license", "") or UNVERIFIED),
+            query=str(job.get("query") or ""), intent=str(job.get("intent") or ""),
+            review_required=True,
+            review_reason=("Another clip the judge approved for this line (its first choice broke a variety rule)"
+                           if how == "own" else
+                           "A clip the judge approved for the other part of this sentence: nothing was found for "
+                           "this part in time") + " - check it fits",
+            content_description=str(alt.get("description") or ""),
+            relevance_score=alt.get("score") if _number(alt.get("score")) else None,
+            quality=alt.get("quality") if _number(alt.get("quality")) else None,
+            specificity=str(alt.get("specificity") or ""),
+            final_score=alt.get("finalScore") if _number(alt.get("finalScore")) else None,
+            moment=moment, moment_key=ident if "@" in ident else "")
+        shot = gapfill.Shot.of_asset(asset, at)
+        if shot.video and not media.may_place(used.placed(shot.video), at):
+            continue                            # its video already plays too often or too near
+        if not used.claim(i, shot):
+            continue                            # the video shows it already, or its video on the next line
+        donor.alternatives = [a for a in donor.alternatives if a is not alt]
+        return asset
+    return None
+
+
+def runner_ups_first(jobs: List[dict], results: list, info: Optional[dict] = None,
+                     held: Optional[Dict[int, tuple]] = None) -> Dict[str, int]:
+    """
+    Every line the footage search left empty gets, before the fallback
+    ladder's pictures (handler.do_plan), a runner-up of its own sentence when
+    one is on this disk: first one of its own (a clip the variety rules took
+    off it - media.hold_violations, `held` - kept the pick-a-shot runner-ups
+    its search judged for this very line), then one of another piece of the
+    same beat the cap cut (`info["parents"]` from prepare; the nearest piece
+    first). The runner-ups' files stay on the disk of the machine that found
+    them (media._best_of, PICK_A_SHOT_CHOICES): a fan-out part's are passed
+    over. Never a shot the video already shows or one its variety rules forbid
+    (gapfill.Used, media.may_place), never a clip too short to cover the
+    line's time on screen at real speed; a runner-up taken leaves its donor's
+    choices. Off (SHOT_MAX_SECONDS 0): nothing. Returns {"own", "sibling"}.
+    """
+    out = {"own": 0, "sibling": 0}
+    if not enabled() or not jobs or not results:
+        return out
+    from . import gapfill, media
+    by_index = {j["index"]: j for j in jobs}
+    parents = list((info or {}).get("parents") or [])
+
+    def at(k: int):
+        return results[k] if 0 <= k < len(results) else None
+
+    empty = [i for i in sorted(by_index) if at(i) is None]
+    if not empty:
+        return out
+    starts = media.scene_starts(jobs)
+    used = gapfill.Used.of_results(results, starts)
+    for i in empty:
+        donors = []
+        mine = (held or {}).get(i)
+        if mine and mine[0] is not None:
+            donors.append(("own", mine[0]))
+        if 0 <= i < len(parents):
+            reach = 1
+            while True:
+                sides = [k for k in (i - reach, i + reach) if 0 <= k < len(parents) and parents[k] == parents[i]]
+                if not sides:
+                    break                       # a beat's pieces are next to each other
+                donors += [("sibling", at(k)) for k in sides if at(k) is not None]
+                reach += 1
+        for how, donor in donors:
+            try:
+                got = _runner_up_asset(i, by_index[i], donor, how, used, starts)
+            except Exception as e:  # noqa: BLE001 - the ladder below
+                print(f"[shotcap] line {i + 1}: runner-up skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
+                got = None
+            if got is not None:
+                results[i] = got
+                out[how] += 1
+                break
+    if any(out.values()):
+        note("first", sum(out.values()))
+        print(f"[shotcap] {sum(out.values())} of {len(empty)} empty line(s) took a runner-up of their own "
+              f"sentence before the ladder ({out['own']} their own, {out['sibling']} another piece's)", flush=True)
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -305,11 +438,22 @@ def hold_rates() -> Tuple[float, ...]:
     return (float(getattr(config, "HOLD_MIN_RATE", 0.85)), 0.6)
 
 
-def room(scene: dict, fps: int, free: float) -> float:
-    """Frames a shot may still grow: `free` (what its picture covers), and never past the cap."""
+def ceiling_frames(fps: int) -> int:
+    """CEILING in frames: no shot is ever longer, not even one held past the cap instead of a text card."""
+    return int(round(CEILING * max(1, fps)))
+
+
+def room(scene: dict, fps: int, free: float, ceiling: bool = False) -> float:
+    """
+    Frames a shot may still grow: `free` (what its picture covers), and never
+    past the cap - or, with `ceiling` (a hold that is all that stands between
+    a line and its text card, gapfill.hold_or_animate), never past CEILING.
+    """
     cap = cap_frames(fps)
     if not cap:
         return free
+    if ceiling:
+        cap = max(cap, ceiling_frames(fps))
     return max(0.0, min(free, cap - int(scene.get("durationInFrames") or 0)))
 
 
@@ -423,11 +567,13 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
     (at most DONOR_REACH scenes away): a clip the judge approved for the line
     next to it that no scene shows, the nearest and best-scored first. Never
     one the video already shows (`used`, gapfill.Used: the same file, asset or
-    moment, the same source video on the next scene), never a clip too short
-    to cover the scene at real speed. The runner-up leaves its scene's
-    choices; the scene's own other choices stay. Returns what was taken
-    ({"from", "assetId"}) or None.
+    moment, the same source video on the next scene), never one whose video
+    the variety rules forbid here (media.may_place: MAX_MOMENTS_PER_VIDEO,
+    SAME_VIDEO_GAP_SECONDS), never a clip too short to cover the scene at
+    real speed. The runner-up leaves its scene's choices; the scene's own
+    other choices stay. Returns what was taken ({"from", "assetId"}) or None.
     """
+    from . import media as _media
     scenes = doc.get("scenes") or []
     fps = max(1, int(doc.get("fps") or 30))
     s = scenes[i]
@@ -456,6 +602,8 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
                 continue                        # it would have to be slowed (or freeze) to fill the scene
             media["clipSeconds"] = round(seconds, 2)
         shot = _alt_shot(alt, media, at)
+        if shot.video and not _media.may_place(used.placed(shot.video), at):
+            continue                            # its video already plays too often or too near (variety rules)
         if not used.claim(i, shot):
             continue
         donor = scenes[k]
@@ -534,7 +682,8 @@ def find_moment(doc: dict, i: int, used, work: str, stop: float) -> Optional[Tup
         for at in (start + shown + gap, start - gap - need):
             if time.time() > stop:
                 return None
-            if at < 0 or ledger.moment_used(vid, at, at + need):
+            failed = (vid, int(at // 10))           # (a 10 s bucket: the donor's own length may have changed since)
+            if at < 0 or failed in FAILED_MOMENTS or ledger.moment_used(vid, at, at + need):
                 continue
             shot = gapfill.Shot(video=f"yt:{vid}", start=at, at=at_line, chain=True)
             if not used.claim(i, shot):
@@ -557,9 +706,12 @@ def find_moment(doc: dict, i: int, used, work: str, stop: float) -> Optional[Tup
                             "chain_of": str((donor.get("semanticMetadata") or {}).get("assetId") or "")})
                 if not media._asset_ok(asset)[0] or media.motion_rejects(path) or media.slop_reason(path, title):
                     asset = None
+                    FAILED_MOMENTS.add(failed)
                 elif 0 < timeline._clip_seconds(asset) < seconds - TOLERANCE_FRAMES / fps:
                     print(f"[shotcap] scene {i + 1}: moment {at:.0f}s of {vid} too short for its scene", flush=True)
                     asset = None                # it would be slowed (or freeze) to fill the scene
+            elif time.time() <= stop:
+                FAILED_MOMENTS.add(failed)          # not a download cut off by the time box: never asked again
             if asset is None:
                 used.release(i, shot)
                 continue
@@ -662,8 +814,10 @@ def report(doc: dict, info: Optional[dict] = None) -> dict:
     """
     doc.meta.shotCap: the beats over the cap before, the cuts made on word
     boundaries, the shots over it in the timeline as built (0 unless the words
-    left no cut, e.g. a silence longer than the cap), and what the cap did to
-    the holds (kept within it, a runner-up or a ladder shot instead, a card).
+    left no cut, e.g. a silence longer than the cap, or a shot was held past
+    it - up to CEILING - where the only other choice was a text card), and
+    what the cap did to the holds (kept within it, a runner-up or a ladder
+    shot instead, held long, a card).
     """
     cap = limit()
     info = info if info is not None else dict(LAST)
@@ -680,5 +834,9 @@ def report(doc: dict, info: Optional[dict] = None) -> dict:
                      "longest": round(max(shots), 2) if shots else 0.0,
                      "average": round(sum(shots) / len(shots), 2) if shots else 0.0},
            "left": over[:EXAMPLES],
-           "holds": {k: int(SWAPS.get(k, 0)) for k in ("held", "refused", "alternative", "moment", "ladder", "card")}}
+           # "long": a shot held past the cap (never past CEILING, never slowed) instead of a text card.
+           "holds": {k: int(SWAPS.get(k, 0)) for k in ("held", "refused", "alternative", "moment", "ladder", "long",
+                                                         "card")},
+           # Empty lines that took a runner-up of their own sentence before the ladder (runner_ups_first).
+           "runnerUpsFirst": int(SWAPS.get("first", 0))}
     return out
