@@ -406,13 +406,16 @@ BGM_LUFS_UNKNOWN = -14.0
 def _bgm_track(genre: str, seconds: float, seed: str) -> str:
     """
     A track of the genre long enough to play under the whole narration without
-    looping (else the longest ones, which loop), varied between projects by a
-    stable seed. (The list used to end with a 12-minute bed that was skipped
-    here; those were removed with the owner's new tracks, 2026-10-01.)
+    looping (else the longest ones, which repeat with a crossfade the fewest
+    times - a 40-minute narration could draw the 20-minute track and hear it
+    start over twice), varied between projects by a stable seed. (The list
+    used to end with a 12-minute bed that was skipped here; those were removed
+    with the owner's new tracks, 2026-10-01.)
     """
     tracks = BGM_TRACKS[genre]
-    fresh = [name for name, length in tracks] or [tracks[0][0]]
-    long_enough = [name for name, length in tracks if length >= seconds] or fresh
+    longest = max(length for _, length in tracks)
+    long_enough = ([name for name, length in tracks if length >= seconds]
+                   or [name for name, length in tracks if length == longest])
     return long_enough[zlib.crc32(seed.encode("utf-8")) % len(long_enough)]
 
 

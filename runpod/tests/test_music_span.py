@@ -387,6 +387,22 @@ class Tracks(unittest.TestCase):
         for name in ("investigative-v5", "investigative-20m", "suspense-v2"):
             self.assertGreater(tail_db(name, 3, 3), -35.0, name)               # these end at full level
 
+    def test_a_narration_longer_than_every_track_gets_the_longest_one(self):
+        """It starts over the fewest times: a 40-minute narration drew the 20-minute track for about half the projects."""
+        from src import brandkit
+        on = {"bgm": True}
+        picks = {timeline._bgm_for({**on, "project_id": str(i)}, {"id": "x"}, {"kind": "history"}, 40 * 60.0)["track"]
+                 for i in range(40)}
+        self.assertEqual(picks, {"investigative-v5"})
+        # Shorter narrations still vary between the tracks long enough for them.
+        picks = {timeline._bgm_for({**on, "project_id": str(i)}, {"id": "x"}, {"kind": "history"}, 600.0)["track"]
+                 for i in range(40)}
+        self.assertEqual(picks, {"investigative-v5", "investigative-20m"})
+        # A brand kit's music picks follow the same rule among the tracks it allows.
+        kit = {"investigative-v5", "investigative-20m"}
+        picks = {brandkit.pick_music("investigative", "none-of-these", 40 * 60.0, kit, str(i))[1] for i in range(40)}
+        self.assertEqual(picks, {"investigative-v5"})
+
 
 if __name__ == "__main__":
     unittest.main()
