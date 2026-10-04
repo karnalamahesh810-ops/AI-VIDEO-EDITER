@@ -985,6 +985,19 @@ R2_SCENE_MEDIA = _flag("R2_SCENE_MEDIA", True)
 # Supabase can still be read. Without R2 credentials this has no effect.
 R2_ONLY = _flag("R2_ONLY", True)
 R2_MEDIA_UPLOAD_SECONDS = float(os.getenv("R2_MEDIA_UPLOAD_SECONDS", "120"))
+# --- restore / repair missing media (src/restore.py, action "restore_media") --
+# A project whose stored files vanished is put back under the same links,
+# without planning again (two R2 project folders were deleted by hand on
+# 2026-10-04 and their timelines pointed at nothing). The time box of one
+# restore job and how many files it works on at once; a job's own "seconds"
+# and "parallel" win. What is not restored in time is restored by the next run.
+RESTORE_SECONDS = float(os.getenv("RESTORE_SECONDS", "1500"))
+RESTORE_PARALLEL = int(os.getenv("RESTORE_PARALLEL", "8"))
+# A part's copy that cannot be checked against the timeline (no tone, no
+# ledger hash, no clip length) may be an earlier pick the plan replaced - a
+# duplicate or a shot that failed a check. Off: it is not used, the shot is
+# fetched again from its source or left to the render's quality check.
+RESTORE_UNVERIFIED = _flag("RESTORE_UNVERIFIED", False)
 # Approved photos are kept too (never a generated image), when their long
 # side is at least LIBRARY_IMAGE_MIN_SIDE.
 LIBRARY_IMAGES = _flag("LIBRARY_IMAGES", True)

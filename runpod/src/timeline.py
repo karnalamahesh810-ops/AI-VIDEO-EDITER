@@ -1457,6 +1457,13 @@ def _build(segments: List[Segment], shots: List[dict],
                 "assetId": getattr(asset, "identity", "") if asset is not None else "",
                 "sourceUrl": (getattr(asset, "url", "") or "") if asset is not None
                 and str(getattr(asset, "url", "") or "").startswith("http") else "",
+                # A web picture's page and the search engine's small copy of it:
+                # what fetching it again falls back to when its host refuses
+                # (imagefix.fetch), so a restore (src/restore.py) can ask the
+                # same way the plan did. Left out when the shot has none.
+                **({"pageUrl": asset.page_url} if asset is not None and getattr(asset, "page_url", "") else {}),
+                **({"sourceThumbnail": asset.thumbnail} if asset is not None
+                   and getattr(asset, "thumbnail", "") else {}),
                 # The typed intent the scene was sourced against, the judge's
                 # class of the frames, and the runner-up clips for Replace Clip.
                 "sceneIntent": shot.get("sceneIntent") or None,
