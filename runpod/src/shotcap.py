@@ -32,10 +32,11 @@ never above CEILING, 12 s; 0 = off, every plan exactly as before).
              it stays within the cap and its clip covers the longer scene at
              real speed - a clip is never slowed to stretch. When a hold would
              break the cap the line gets, in order: a pick-a-shot runner-up of
-             a shot beside it (an approved clip nobody shows yet), the fallback
-             ladder where it has not just run (the pools' spare moments, never
-             within FALLBACK_MOMENT_GAP_SECONDS of a moment shown), and only
-             then its line as a full-screen text card.
+             a shot beside it (an approved clip nobody shows yet), another
+             moment of a neighbouring YouTube clip FALLBACK_MOMENT_GAP_SECONDS
+             from the one shown (fetched and checked like a chain shot), the
+             fallback ladder where it has not just run (the pools' spare
+             moments), and only then its line as a full-screen text card.
   report     doc.meta.shotCap: shots over the cap before and after, the cuts
              made, what replaced a hold.
 
@@ -387,7 +388,6 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
     to cover the scene at real speed. The runner-up leaves its own scene's
     choices. Returns what was taken ({"from", "assetId"}) or None.
     """
-    from . import gapfill
     scenes = doc.get("scenes") or []
     fps = max(1, int(doc.get("fps") or 30))
     s = scenes[i]
@@ -440,6 +440,94 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
     return None
 
 
+def _yt_of(scene: dict) -> Tuple[str, Optional[float]]:
+    """(YouTube id, where in it) of a scene's clip, ("", None) for anything else."""
+    from . import gapfill
+    m = scene.get("media") or {}
+    if m.get("type") != "video" or not m.get("url"):
+        return "", None
+    sem = scene.get("semanticMetadata") or {}
+    src = str(sem.get("sourceUrl") or "")
+    video = gapfill._video_of(str(sem.get("assetId") or ""), src)
+    if not video.startswith("yt:"):
+        return "", None
+    moment = sem.get("moment") if isinstance(sem.get("moment"), dict) else {}
+    return video[3:], gapfill._start_from(moment, src, str(m.get("url") or ""))
+
+
+def same_video_moment(doc: dict, i: int, used, work: str, seconds: Optional[float] = None) -> Optional[dict]:
+    """
+    Another moment of a neighbouring YouTube clip for empty scene i, at least
+    FALLBACK_MOMENT_GAP_SECONDS from the one shown (after it first, before it
+    when the video has no room after): fetched and checked the way a planned
+    chain shot is (media.fill_chains - the clip's quality, the AI-slop and
+    still filters, the cross-video ledger), never a moment the video shows or
+    one within the gap of it. The scene then plays on with the clip beside it
+    as a chain, which the repeat rules allow on the next scene. Takes at most
+    `seconds` (FALLBACK_SCENE_SECONDS). Returns {"from", "assetId"} or None.
+    """
+    import time
+
+    from . import gapfill, ledger, media, ytdlp
+    scenes = doc.get("scenes") or []
+    fps = max(1, int(doc.get("fps") or 30))
+    s = scenes[i]
+    need = round(int(s.get("durationInFrames") or 0) / fps + media.SEQ_SHOT_PAD, 2)
+    at_line = int(s.get("startFrame") or 0) / fps
+    gap = float(getattr(config, "FALLBACK_MOMENT_GAP_SECONDS", 30.0) or 30.0)
+    window = float(seconds if seconds is not None else getattr(config, "FALLBACK_SCENE_SECONDS", 45.0))
+    stop = time.time() + max(5.0, window)
+    old = ytdlp.DEADLINE[0]
+    ytdlp.set_deadline(stop)
+    try:
+        for k in (i - 1, i + 1):
+            if not 0 <= k < len(scenes) or not is_shot(scenes[k]):
+                continue
+            vid, start = _yt_of(scenes[k])
+            if not vid or start is None:
+                continue
+            donor = scenes[k]
+            shown = int(donor.get("durationInFrames") or 0) / fps
+            for at in (start + shown + gap, start - gap - need):
+                if time.time() > stop:
+                    return None
+                if at < 0 or ledger.moment_used(vid, at, at + need):
+                    continue
+                shot = gapfill.Shot(video=f"yt:{vid}", start=at, at=at_line, chain=True)
+                if not used.claim(i, shot):
+                    continue
+                title = str((donor.get("media") or {}).get("attribution") or "")
+                try:
+                    path, clean, cuts = media.fetch_clean_clip(vid, work, at, need, title)
+                except Exception as e:  # noqa: BLE001 - the next moment, or the next step
+                    print(f"[shotcap] scene {i + 1}: moment {at:.0f}s of {vid} not fetched: {type(e).__name__}",
+                          flush=True)
+                    path = ""
+                asset = None
+                if path:
+                    asset = media.MediaAsset(
+                        kind="video", source="youtube", local_path=path, duration=need,
+                        url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
+                        attribution=title, license=str((donor.get("media") or {}).get("license") or ""),
+                        moment_key=f"yt:{vid}@{int(at // max(1.0, float(config.POOL_MIN_GAP_SECONDS)))}",
+                        moment={"start": round(at, 1), "chain": True, "clean": clean, "cuts": cuts,
+                                "chain_of": str((donor.get("semanticMetadata") or {}).get("assetId") or "")})
+                    if not media._asset_ok(asset)[0] or media.motion_rejects(path) or media.slop_reason(path, title):
+                        asset = None
+                if asset is None:
+                    used.release(i, shot)
+                    continue
+                gapfill.apply_asset(s, asset, "")
+                s["reviewRequired"] = True
+                s["reviewReason"] = ("Another moment of the clip beside it: nothing new was found for this line in "
+                                     f"time, and holding that clip would have run past {limit():g} s - replace or keep")
+                s["semanticMetadata"]["shotCap"] = {"from": str(donor.get("id") or ""), "how": "moment"}
+                return {"from": str(donor.get("id") or ""), "assetId": asset.identity}
+        return None
+    finally:
+        ytdlp.set_deadline(old)
+
+
 # --------------------------------------------------------------------------- #
 # The report
 # --------------------------------------------------------------------------- #
@@ -481,5 +569,5 @@ def report(doc: dict, info: Optional[dict] = None) -> dict:
                      "longest": round(max(shots), 2) if shots else 0.0,
                      "average": round(sum(shots) / len(shots), 2) if shots else 0.0},
            "left": over[:EXAMPLES],
-           "holds": {k: int(SWAPS.get(k, 0)) for k in ("held", "refused", "alternative", "ladder", "card")}}
+           "holds": {k: int(SWAPS.get(k, 0)) for k in ("held", "refused", "alternative", "moment", "ladder", "card")}}
     return out

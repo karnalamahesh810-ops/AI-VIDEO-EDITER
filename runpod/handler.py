@@ -792,7 +792,7 @@ def _fill_missing_media(doc: dict) -> int:
     got = gapfill.hold_or_animate(doc, label="before the render")
     # ("alternative" and "ladder": the fresh shots a line gets when holding the shot
     # beside it would run past SHOT_MAX_SECONDS, src/shotcap.py.)
-    return sum(int(got.get(k, 0)) for k in ("graphic", "held", "card", "alternative", "ladder"))
+    return sum(int(got.get(k, 0)) for k in ("graphic", "held", "card", "alternative", "moment", "ladder"))
 
 
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:

@@ -24,7 +24,7 @@ import unittest
 from unittest import mock
 
 import handler
-from src import config, gapfill, hookboost, shotcap, styles, timeline, transcribe
+from src import config, gapfill, hookboost, shotcap, styles, timeline
 from src.media import MediaAsset
 from src.transcribe import Segment, Word, screen_lengths, segment_words
 
@@ -467,6 +467,104 @@ class Holds(unittest.TestCase):
             got = gapfill.hold_or_animate(doc)
         self.assertEqual((got.get("alternative", 0), got["card"]), (0, 1))
 
+    def _moment_mocks(self, fetch):
+        from src import ledger, media
+        return [mock.patch.object(media, "fetch_clean_clip", side_effect=fetch),
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")),
+                mock.patch.object(media, "motion_rejects", return_value=""),
+                mock.patch.object(media, "slop_reason", return_value=""),
+                mock.patch.object(ledger, "moment_used", return_value=False),
+                mock.patch.object(timeline, "_clip_seconds", side_effect=lambda a: float(a.duration or 0))]
+
+    def test_another_moment_of_the_clip_beside_it_thirty_seconds_on(self):
+        calls = []
+
+        def fetch(vid, work, at, need, title=""):
+            calls.append((vid, round(at, 1), round(need, 2), title))
+            p = os.path.join(work, f"m{len(calls)}.mp4")
+            with open(p, "wb") as fh:
+                fh.write(b"x")
+            return p, True, 0
+        gapfill.remember([{"index": i, "query": f"q{i}", "start": 6.0 * i} for i in range(3)], self.work)
+        doc = doc_of((clip("/w/a.mp4", 6.5), 6.0, {"assetId": "yt:LEFT0000001@5", "moment": {"start": 40.0},
+                                                 "sourceUrl": "https://www.youtube.com/watch?v=LEFT0000001&t=40"}),
+                     (EMPTY, 5.0),
+                     (clip("/w/b.mp4", 6.5), 6.0, {"assetId": "yt:RIGHT000001@1", "moment": {"start": 10.0},
+                                                 "sourceUrl": "https://www.youtube.com/watch?v=RIGHT000001&t=10"}))
+        doc["scenes"][0]["media"]["attribution"] = "YouTube: the dry lake"
+        patches = self._moment_mocks(fetch)
+        with cap(), quiet(), mock.patch.object(gapfill, "fill_empty", side_effect=AssertionError("laddered")):
+            for p in patches:
+                p.start()
+            try:
+                got = gapfill.hold_or_animate(doc, laddered=True)
+            finally:
+                for p in patches:
+                    p.stop()
+        self.assertEqual((got["held"], got["card"], got["moment"]), (0, 0, 1))
+        # 40 s + the 6 s shown + the 30 s gap, as long as the line plus the usual pad, the clip's own title.
+        self.assertEqual(calls, [("LEFT0000001", 76.0, 5.5, "YouTube: the dry lake")])
+        s = doc["scenes"][1]
+        self.assertEqual((s["media"]["type"], s["media"]["url"], s["media"]["clipSeconds"]), ("video", calls and
+                         os.path.join(self.work, "m1.mp4"), 5.5))
+        sem = s["semanticMetadata"]
+        self.assertEqual(sem["assetId"], "yt:LEFT0000001@9")
+        self.assertEqual(sem["moment"]["start"], 76.0)
+        self.assertTrue(sem["moment"]["chain"])                             # the clip before plays on: allowed next to it
+        self.assertEqual(sem["shotCap"], {"from": "s0000", "how": "moment"})
+        self.assertIn("Another moment", s["reviewReason"])
+        self.assertEqual(gapfill.find_repeats(doc), [])
+        self.assertEqual(seconds_of(doc), [6.0, 5.0, 6.0])
+        self.assertIn("filled 1 scenes from other moments", gapfill.summary(got))
+
+    def test_a_moment_the_video_shows_or_an_earlier_video_used_is_passed_over(self):
+        from src import ledger
+        calls = []
+
+        def fetch(vid, work, at, need, title=""):
+            calls.append((vid, round(at, 1)))
+            p = os.path.join(work, f"m{len(calls)}.mp4")
+            with open(p, "wb") as fh:
+                fh.write(b"x")
+            return p, True, 0
+        gapfill.remember([{"index": i, "query": f"q{i}", "start": 6.0 * i} for i in range(4)], self.work)
+        # The left clip's video shows again two scenes on, exactly where "30 s on" would land.
+        doc = doc_of((clip("/w/a.mp4", 6.5), 6.0, {"assetId": "yt:LEFT0000001@5", "moment": {"start": 40.0},
+                                                 "sourceUrl": "https://www.youtube.com/watch?v=LEFT0000001&t=40"}),
+                     (EMPTY, 5.0),
+                     (photo("/w/p.jpg"), 6.0),
+                     (clip("/w/c.mp4", 6.5), 6.0, {"assetId": "yt:LEFT0000001@9", "moment": {"start": 76.0},
+                                                 "sourceUrl": "https://www.youtube.com/watch?v=LEFT0000001&t=76"}))
+        patches = self._moment_mocks(fetch)
+        with cap(), quiet():
+            for p in patches:
+                p.start()
+            try:
+                with mock.patch.object(ledger, "moment_used", side_effect=lambda vid, a, b: a < 10):
+                    got = gapfill.hold_or_animate(doc, laddered=True)
+            finally:
+                for p in patches:
+                    p.stop()
+        # Not 76 s (shown), not 4.5 s before (an earlier video used it): the text card.
+        self.assertEqual(calls, [])
+        self.assertEqual((got.get("moment", 0), got["card"]), (0, 1))
+
+    def test_another_moment_is_fetched_only_where_the_job_may_search(self):
+        def make():
+            return doc_of((clip("/w/a.mp4", 6.5), 6.0, {"assetId": "yt:LEFT0000001@5", "moment": {"start": 40.0}}),
+                          (EMPTY, 5.0), (photo("/w/b.jpg"), 6.0))
+        fetch = mock.Mock(side_effect=AssertionError("fetched"))
+        patches = self._moment_mocks(fetch)
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        with cap(), quiet():
+            gapfill.reset()                                                 # no plan of its own: a render job
+            self.assertEqual(gapfill.hold_or_animate(make(), laddered=True)["card"], 1)
+            gapfill.remember([{"index": i, "start": 6.0 * i} for i in range(3)], self.work)
+            self.assertEqual(gapfill.hold_or_animate(make(), laddered=True, search=False)["card"], 1)
+        fetch.assert_not_called()
+
     def test_the_ladder_runs_where_it_has_not_just_run_and_before_the_card(self):
         def make():
             return doc_of((photo("/w/a.jpg"), 6.0), (EMPTY, 5.0), (photo("/w/b.jpg"), 6.0))
@@ -616,7 +714,7 @@ class GraphicsAndTheReport(unittest.TestCase):
         self.assertEqual((rep["before"]["over"], rep["planned"]["over"], rep["cut"], rep["shotsAdded"]), (2, 0, 2, 2))
         self.assertEqual(rep["before"]["share"], 0.5)
         self.assertEqual((rep["after"]["shots"], rep["after"]["over"], rep["after"]["longest"]), (2, 0, 5.0))
-        self.assertEqual(rep["holds"], {"held": 0, "refused": 1, "alternative": 0, "ladder": 0, "card": 1})
+        self.assertEqual(rep["holds"], {"held": 0, "refused": 1, "alternative": 0, "moment": 0, "ladder": 0, "card": 1})
         self.assertEqual(rep["left"], [])
         self.assertEqual(len(rep["examples"]), 2)
         json.dumps(rep)                                                     # goes into the saved timeline
