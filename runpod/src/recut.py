@@ -1568,12 +1568,12 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
             _summarise(out, doc, new_doc, plans, finder, shots, dropped, gave, settled, cap)
             out["seconds"] = round(time.time() - started, 1)
             return out
-    if choices is not None:
+    if choices is not None and time.time() < deadline:
         try:
-            choices(new_doc)
+            choices(new_doc)                # the new shots' pick-a-shot runner-ups, while the box has time
         except Exception as e:  # noqa: BLE001 - the choices are a nicety
             print(f"[recut] runner-ups not saved: {type(e).__name__}: {str(e)[:100]}", flush=True)
-    _strip_local_alternatives(new_doc)
+    _strip_local_alternatives(new_doc)      # a choice not saved keeps its scores, never a file path
     leftovers = _local_refs(new_doc)
     if leftovers:
         raise RecutError(f"{len(leftovers)} link(s) would point at files on this worker ({leftovers[:3]}): "
