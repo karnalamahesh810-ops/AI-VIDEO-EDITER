@@ -782,7 +782,8 @@ def _check_and_catalogue(cand: Candidate, b: Build, entry_id: str, seg: str, sta
     """The gate, the topic match, then the upload; the entry, or None (counted by reason)."""
     with b.lock:
         known = dict(b.known)
-    v = libstore.check(seg, kind="video", known=known)
+    v = libstore.check(seg, kind="video", known=known, title=cand.title or "",
+                       source="archive_org" if cand.source == "archive" else cand.source)
     if not v.ok:
         for r in v.reasons:
             b.rejected[_clean_reason(r)] += 1

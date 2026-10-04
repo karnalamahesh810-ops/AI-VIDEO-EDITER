@@ -490,11 +490,14 @@ class Verdict:
 
 
 def check(path: str, kind: str = "video", subject: str = "", event: str = "",
-          known: Optional[Dict[str, List[Optional[int]]]] = None, clip: bool = True) -> Verdict:
+          known: Optional[Dict[str, List[Optional[int]]]] = None, clip: bool = True,
+          title: str = "", source: str = "") -> Verdict:
     """
     Judge one file for the library. `known` = {asset id: hashes} of what the
     library already keeps, for the duplicate rule. Without ffmpeg/numpy the
     verdict is ok and unchecked (a missing tool never removes a clip).
+    `title` (its source's title or credit) and `source` tell archive film,
+    exempt from the real-detail check, apart.
     """
     v = Verdict(kind=kind)
     if not tools():
@@ -573,6 +576,8 @@ def check(path: str, kind: str = "video", subject: str = "", event: str = "",
         share = max(moving, lines)
         if share > config.LIBRARY_MAX_TEXT_SHARE:
             v.bad(f"burned-in text or graphics over {share:.0%} of the frame")
+    if v.ok:
+        _real_detail(v, path, kind, title, source)
     v.hashes = signature(grays)
     facts = clip_facts(rgbs, subject, event) if clip else None
     if facts:
@@ -607,6 +612,33 @@ def check(path: str, kind: str = "video", subject: str = "", event: str = "",
             v.bad(f"duplicate of {dup}")
             v.measures["duplicateOf"] = dup
     return v
+
+
+def _real_detail(v: Verdict, path: str, kind: str, title: str = "", source: str = "") -> None:
+    """
+    The real-detail check of sourcing (src/sharpness.py) for the library and
+    the packs: a picture whose real detail a full screen would blow up past
+    MAX_PICTURE_MAGNIFICATION, or a modern clip whose best frame holds fewer
+    real lines than MIN_CLIP_REAL_HEIGHT (an upscaled upload), is not kept for
+    a later video - its file size (LIBRARY_IMAGE_MIN_SIDE, LIBRARY_MIN_HEIGHT)
+    says nothing about that. Archive film, by its title, is exempt.
+    """
+    try:
+        from . import sharpness
+        if kind == "image":
+            got = sharpness.picture_check(path)
+            if got["magnification"] is not None:
+                v.measures["magnification"] = got["magnification"]
+        else:
+            from .media import _is_archive
+            got = sharpness.clip_check(path, archive=_is_archive(title, source))
+            if got["lines"] is not None:
+                v.measures["realLines"] = got["lines"]
+    except Exception as e:  # noqa: BLE001 - a measure that breaks never removes a clip
+        print(f"[libstore] real detail not measured: {type(e).__name__}: {str(e)[:100]}", flush=True)
+        return
+    if not got["ok"]:
+        v.bad(got["why"])
 
 
 # --------------------------------------------------------------------------- #

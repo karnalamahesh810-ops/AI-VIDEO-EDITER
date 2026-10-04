@@ -33,6 +33,19 @@ from .filters import playable_video
 _VERTICAL_FIRST = ("bv*[aspect_ratio<1.2][width<=1080][ext=mp4][protocol^=https]/"
                    "bv*[aspect_ratio<1.2][width<=1080]/")
 
+
+def best_bitrate() -> List[str]:
+    """
+    yt-dlp's sort for a download (CLIP_SHARPNESS_CHECK, the owner 2026-10-04:
+    "video clips also we needed to make quality"): the biggest picture up to
+    1080 lines first, then yt-dlp's own order (the newest codec). Not the
+    highest bitrate: that picks YouTube's H.264 stream, about twice the bytes of
+    its AV1 / VP9 one for the same picture, and the proxies are paid per GB.
+    Never above 1080p. [] with the check off.
+    """
+    return ["-S", "res:1080"] if getattr(config, "CLIP_SHARPNESS_CHECK", False) else []
+
+
 _INFO_LOCK = threading.Lock()
 _YT_INFO_CACHE: Dict[str, tuple] = {}
 
@@ -579,6 +592,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         "-f", (_VERTICAL_FIRST if config.ALLOW_VERTICAL else "")
         + ("bv*[height<=1080][ext=mp4][protocol^=https]/bv*[height<=1080][ext=mp4]"
            "/bv*[height<=1080]/b[height<=1080]"),
+        *best_bitrate(),
         "--no-playlist", "--no-warnings",
         "--merge-output-format", "mp4",
         "-o", out_tpl, "--print", "after_move:filepath",

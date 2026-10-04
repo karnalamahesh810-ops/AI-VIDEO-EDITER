@@ -960,6 +960,8 @@ class Gate:
         self._first_left: List[dict] = []
         self._rejudge: List[dict] = []
         self._gone: Optional[Tuple[float, Dict[str, Check]]] = None    # the last re-check after a failed render
+        # The real-detail pass (_sharpen): what was measured, flagged, replaced and kept.
+        self.sharp: Dict[str, Any] = {}
         self._report: Optional[dict] = None
         self._rows = 0
         self._lock = threading.Lock()
@@ -1032,6 +1034,10 @@ class Gate:
         if problems:
             self._say(f"Repairing {_n(len(problems), 'scene')} before the render")
             repaired = self._replace(problems, "before the render")
+        # Pictures and clips too soft for the frame get a sharper shot from the same
+        # ladder, in what is left of the repair time (src/sharpness.py); never a
+        # second render, never an empty scene.
+        repaired += self._sharpen(checks, spent=time.time() - t1)
         self._local_stills()
         self._look_sources()
         self.no_empty_scenes()
@@ -1429,9 +1435,11 @@ class Gate:
         return None
 
     def _ladder(self, order: List[int], banned: List[gapfill.Shot],
-                problems: Dict[int, Tuple[str, str]], seconds: Optional[float] = None) -> Dict[int, str]:
-        """The fallback ladder for the cleared scenes (never a shot another scene shows, never a banned one),
-        inside `seconds` (QUALITY_REPAIR_SECONDS when not given)."""
+                problems: Dict[int, Tuple[str, str]], seconds: Optional[float] = None,
+                keep_order: bool = False) -> Dict[int, str]:
+        """The fallback ladder for the cleared scenes (never a shot another scene shows, never a
+        banned one), within `seconds` (QUALITY_REPAIR_SECONDS when not given); keep_order: in
+        `order`, not spread over the video."""
         scenes = self.doc["scenes"]
         plan = gapfill.CONTEXT if CONTEXT.get("plan") and gapfill.CONTEXT.get("jobs") else {}
         jobs = [gapfill.job_for(s, k, self.fps, plan.get("jobs")) for k, s in enumerate(scenes)]
@@ -1458,7 +1466,7 @@ class Gate:
                                require_cc=bool(plan.get("require_cc", CONTEXT.get("require_cc", False))),
                                # fill_empty asks the image model only when this is False
                                youtube_only=bool(plan.get("youtube_only")) or not allow_generated,
-                               indices=order, used=used,
+                               indices=order, used=used, keep_order=keep_order,
                                seconds=config.QUALITY_REPAIR_SECONDS if seconds is None else seconds,
                                scene_seconds=config.QUALITY_REPAIR_SCENE_SECONDS, label="quality gate")
         except Exception as e:  # noqa: BLE001 - the last resort below
@@ -1553,6 +1561,178 @@ class Gate:
                                     f"-> {rec['how']}", scene=rec["index"],
                         data={"problem": rec["problem"], "how": rec["how"], "stage": stage})
         return len(info)
+
+    # ---- real detail (src/sharpness.py) ---------------------------------------
+    def _soft_scenes(self, checks: Dict[str, Check]) -> Dict[int, dict]:
+        """
+        {scene index: finding} for every full-screen picture whose real detail
+        the screen would blow up past MAX_PICTURE_MAGNIFICATION (with its own
+        move's zoom), and every modern clip whose best frame holds fewer real
+        lines than MIN_CLIP_REAL_HEIGHT. Measured QUALITY_PARALLEL at a time
+        within QUALITY_SHARPNESS_SECONDS: a picture from its copy the check
+        already fetched, a clip by three seeks into its file or link (never a
+        whole download). What is not measured in time is trusted.
+        """
+        from . import media, sharpness
+        scenes = self.doc.get("scenes") or []
+        todo = []
+        for i, s in enumerate(scenes):
+            m = s.get("media") or {}
+            url = str(m.get("url") or "")
+            if not url or s.get("teaser") or str(s.get("frame") or "full") != "full":
+                continue
+            sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
+            source = str(m.get("source") or sem.get("provider") or "")
+            if m.get("type") == "image" and sharpness.picture_on() and source != "generated":
+                got = checks.get(url)
+                path = ((got.local if got is not None and got.local else "") or self.fetched.get(url, "")
+                        or local_path(url))
+                if path and os.path.isfile(path):
+                    todo.append((i, "image", path, sharpness.motion_zoom(s.get("motion"))))
+            elif m.get("type") == "video" and sharpness.clip_on():
+                if media._is_archive(f"{m.get('attribution') or ''} {sem.get('searchQuery') or ''}", source):
+                    continue                # archive film only exists soft
+                got = checks.get(url)
+                if got is not None and not got.ok:
+                    continue                # broken: _replace's business
+                todo.append((i, "video", local_path(url) or _probe_source(url), None))
+        if not todo:
+            return {}
+
+        def measure(item):
+            i, kind, src, zoom = item
+            if kind == "image":
+                got = sharpness.picture_check(src, zoom=zoom)
+                return i, ({"kind": "image", "why": got["why"], "before": got["magnification"],
+                            "detail": got["detail"], "zoom": zoom} if not got["ok"] else None)
+            got = sharpness.clip_check(src)
+            return i, ({"kind": "video", "why": got["why"], "before": got["lines"], "detail": got["detail"]}
+                       if not got["ok"] else None)
+
+        found: Dict[int, dict] = {}
+        pool = ThreadPoolExecutor(max_workers=max(1, min(config.QUALITY_PARALLEL, len(todo))))
+        futures = [pool.submit(measure, item) for item in todo]
+        done, late = _wait(futures, timeout=max(1.0, config.QUALITY_SHARPNESS_SECONDS))
+        pool.shutdown(wait=False, cancel_futures=True)
+        for f in done:
+            try:
+                i, finding = f.result()
+            except Exception:  # noqa: BLE001 - a measure that broke says nothing
+                continue
+            if finding is not None:
+                found[i] = finding
+        self.sharp.update(measured=len(done), pictures=sum(1 for t in todo if t[1] == "image"),
+                          clips=sum(1 for t in todo if t[1] == "video"), late=len(late))
+        if late:
+            self.notes.append(f"{_n(len(late), 'shot')} not measured for sharpness in time - used as they are")
+        return found
+
+    def _sharpen(self, checks: Dict[str, Check], spent: float = 0.0) -> int:
+        """
+        Every picture or clip too soft for the frame (_soft_scenes) gets a
+        sharper shot from the fallback ladder - a niche pack clip, a library
+        clip, a spare pool moment, a picture search - each candidate held to the
+        same check, within what is left of QUALITY_REPAIR_SECONDS (at least
+        QUALITY_SHARPEN_MIN_SECONDS). When nothing sharper is found in time the
+        scene keeps its own shot: never an empty scene, a text card or a picture
+        inset on a backdrop. Each repair is in the report with the shot's
+        magnification (pictures) or real lines (clips) before and after.
+        Returns how many scenes got a sharper shot.
+        """
+        if not config.QUALITY_GATE:
+            return 0
+        from . import sharpness
+        if not (sharpness.picture_on() or sharpness.clip_on()):
+            return 0
+        t0 = time.time()
+        try:
+            found = self._soft_scenes(checks)
+        except Exception as e:  # noqa: BLE001 - the check must never be what fails a video
+            self._broke("the sharpness check", e)
+            return 0
+        scenes = self.doc.get("scenes") or []
+        pictures = sum(1 for f in found.values() if f["kind"] == "image")
+        if pictures:
+            self.found["blurry"] += pictures
+        if len(found) > pictures:
+            self.found["low-detail"] += len(found) - pictures
+        for i, f in sorted(found.items()):
+            self._event("problem", f"scene {i + 1} ({_clock(int(scenes[i].get('startFrame') or 0) / self.fps)}): "
+                                   f"{'blurry' if f['kind'] == 'image' else 'low-detail'} - {f['why']}",
+                        scene=i, level="warning", data={"problem": "blurry" if f["kind"] == "image" else "low-detail",
+                                                         "before": f["before"]})
+        replaced: Dict[int, str] = {}
+
+        def softness(i: int) -> float:
+            """How far the screen blows the shot's real detail up (a clip: 1080 lines over its own)."""
+            f = found[i]
+            try:
+                return float(f["before"]) if f["kind"] == "image" else 1080.0 / max(1.0, float(f["before"]))
+            except (TypeError, ValueError):
+                return 0.0
+        # The softest first: what the time box leaves undone is the least blurry.
+        order = sorted(found, key=lambda i: (-softness(i), i))
+        budget = max(config.QUALITY_SHARPEN_MIN_SECONDS, config.QUALITY_REPAIR_SECONDS - max(0.0, spent))
+        if order and self._ladder_ok():
+            self._say(f"Finding sharper shots for {_n(len(order), 'scene')} before the render")
+            keep = {i: {k: (dict(v) if isinstance(v, dict) else v) for k, v in scenes[i].items()} for i in order}
+            banned = []
+            for i in order:
+                old = gapfill.Shot.of_scene(scenes[i], self.fps)
+                if old is not None:
+                    old.start, old.chain = None, False      # every moment of a soft upload
+                    banned.append(old)
+            problems = {i: ("blurry" if found[i]["kind"] == "image" else "low-detail", found[i]["why"])
+                        for i in order}
+            try:
+                replaced = self._ladder(order, banned, problems, seconds=budget, keep_order=True)
+            except Exception as e:  # noqa: BLE001 - the shots stay as they are
+                self._broke("the sharper-shot search", e)
+                replaced = {}
+            for i in order:
+                if i not in replaced or gapfill._empty(scenes[i]):
+                    scenes[i].clear()
+                    scenes[i].update(keep[i])               # nothing sharper in time: the scene keeps its shot
+                    replaced.pop(i, None)
+        kept = []
+        for i in order:
+            f = found[i]
+            s = scenes[i]
+            problem = "blurry" if f["kind"] == "image" else "low-detail"
+            rec = {"scene": s.get("id", ""), "at": _clock(int(s.get("startFrame") or 0) / self.fps),
+                   "problem": problem, "detail": f["why"], "stage": "before the render", "before": f["before"]}
+            if i in replaced:
+                rec.update(how=replaced[i], after=self._detail_after(s, f))
+                self.fixed["sharper"] += 1
+                self.repairs.append(rec)
+                self._event("repaired", f"scene {i + 1} ({rec['at']}): {problem} - {f['why']} -> {replaced[i]}",
+                            scene=i, data={"problem": problem, "how": replaced[i], "before": f["before"],
+                                           "after": rec["after"]})
+            else:
+                kept.append(dict(rec, how="kept - nothing sharper was found in time"))
+        if kept:
+            self.notes.append(f"{_n(len(kept), 'soft shot')} kept: nothing sharper was found in time")
+        self.sharp.update(blurry=pictures, lowDetail=len(found) - pictures, replaced=len(replaced),
+                          kept=kept[:50], seconds=round(time.time() - t0, 1))
+        self.seconds["sharpness"] = round(time.time() - t0, 1)
+        if found:
+            print(f"[quality] sharpness: {pictures} blurry picture(s), {len(found) - pictures} low-detail clip(s); "
+                  f"{len(replaced)} replaced, {len(kept)} kept ({time.time() - t0:.0f} s)", flush=True)
+        return len(replaced)
+
+    def _detail_after(self, scene: dict, before: dict):
+        """The replacement's magnification (a picture, with the scene's move) or real lines (a clip)."""
+        from . import sharpness
+        m = scene.get("media") or {}
+        path = local_path(m.get("url"))
+        if not path:
+            return None
+        try:
+            if m.get("type") == "image":
+                return sharpness.picture_check(path, zoom=sharpness.motion_zoom(scene.get("motion")))["magnification"]
+            return sharpness.clip_check(path)["lines"]
+        except Exception:  # noqa: BLE001 - a number for the report only
+            return None
 
     def _local_stills(self, seconds: float = 30.0) -> int:
         """
@@ -2095,6 +2275,10 @@ class Gate:
             parts.append(_n(f["held"], "line") + " held over by the next shot")
         if f["graphic"] + f["text"]:
             parts.append(_n(f["graphic"] + f["text"], "line") + " shown as a graphic")
+        if f["sharper"]:
+            parts.append(_n(f["sharper"], "soft shot") + " replaced with a sharper one")
+        if self.sharp.get("kept"):
+            parts.append(_n(len(self.sharp["kept"]), "soft shot") + " kept (nothing sharper found)")
         if f["timing"]:
             parts.append(_n(f["timing"], "clip") + " slowed to fill its scene")
         if f["thumbnail"]:
@@ -2133,6 +2317,8 @@ class Gate:
                "render": dict(self.render), "unresolved": self.unresolved[:50], "notes": self.notes[:20],
                "checked": self.checked, "unverified": self.unverified, "seconds": dict(self.seconds),
                "audited": self.audited}
+        if self.sharp:
+            out["sharpness"] = dict(self.sharp)     # measured, blurry / low-detail, replaced, kept (src/sharpness.py)
         self._event("summary", line, level="warning" if self.unresolved else "info", always=True,
                     data={"found": dict(self.found), "fixed": dict(self.fixed),
                           "unresolved": len(self.unresolved), "rerendered": bool(self.render.get("rerendered"))})

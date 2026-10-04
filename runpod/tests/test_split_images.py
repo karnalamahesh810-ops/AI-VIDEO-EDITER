@@ -28,7 +28,8 @@ class SplitImages(unittest.TestCase):
         doc = doc_with([{"label": "Solid ground"}, {"label": "Submerged mud"}])
         queries = []
 
-        def search(q, limit=6):
+        def search(q, limit=6, full_screen=True):
+            self.assertFalse(full_screen)           # half the frame each: the plain search
             queries.append(q)
             return [MediaAsset(kind="image", source="web", url=f"https://img/{len(queries)}.jpg")]
         resp = mock.Mock(status_code=200, content=jpeg_bytes())
@@ -46,7 +47,7 @@ class SplitImages(unittest.TestCase):
     def test_one_photo_missing_keeps_the_labels(self):
         doc = doc_with([{"label": "Solid ground"}, {"label": "Submerged mud"}])
 
-        def search(q, limit=6):
+        def search(q, limit=6, full_screen=True):
             return [MediaAsset(kind="image", source="web", url="https://img/a.jpg")] if "Solid" in q else []
         resp = mock.Mock(status_code=200, content=jpeg_bytes())
         with mock.patch.object(config, "SPLIT_IMAGES", True), \

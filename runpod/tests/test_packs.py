@@ -1099,7 +1099,7 @@ class Build(unittest.TestCase):
         self.n = 0
         self.vecs = [unit((0, 1.0)), unit((0, 1.0), (4, 0.2)), unit((1, 1.0))]
 
-        def check(path, kind="video", subject="", event="", known=None, clip=True):
+        def check(path, kind="video", subject="", event="", known=None, clip=True, title="", source=""):
             v = libstore.Verdict(kind=kind)
             v.checked = True
             info = libstore.probe(path)

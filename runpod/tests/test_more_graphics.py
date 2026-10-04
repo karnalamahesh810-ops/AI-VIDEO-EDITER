@@ -160,7 +160,8 @@ class OverlayPhotos(unittest.TestCase):
         ]}
         queries = []
 
-        def search(q, limit=6):
+        def search(q, limit=6, full_screen=True):
+            self.assertFalse(full_screen)           # a photo window: the plain search
             queries.append(q)
             return [] if "Nothing" in q else [MediaAsset(kind="image", source="web", url=f"https://img/{len(queries)}.jpg")]
         with mock.patch.object(config, "SPLIT_IMAGES", True), \

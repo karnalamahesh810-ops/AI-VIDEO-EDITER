@@ -628,11 +628,26 @@ class Library:
                 self.pending[entry["id"]] = _removal_row(entry, v)
             print(f"[library] {entry['id']} removed from the library: {why}", flush=True)
             return None
+        # Real detail (src/sharpness.py): a picture too soft to fill the frame, or an upscaled
+        # upload, leaves the library too, reversibly - rows kept before the check existed are
+        # judged as they come back out. One the owner kept by hand stays.
+        soft = "" if _user_kept(entry) else (
+            media.picture_blur_reason(path) if kind == "image"
+            else media.clip_detail_reason(path, entry.get("attribution") or "", entry.get("source") or ""))
+        if soft:
+            v = libstore.Verdict(kind=kind)
+            v.bad(soft)
+            with self._lock:
+                entry["saved"] = False
+                self.pending[entry["id"]] = _removal_row(entry, v)
+            print(f"[library] {entry['id']} removed from the library: {soft}", flush=True)
+            return None
         if self._legacy(entry) and libstore.enabled() and kind in _CHECKED_KINDS and not _user_kept(entry):
             # Not checked yet (the maintenance pass has not reached it): judged
             # now, before a bad old clip lands in another video.
             v = libstore.check(path, kind=kind, subject=entry.get("subject") or "", event=entry.get("event") or "",
-                               known=self.known_hashes(kind, exclude=entry["id"]))
+                               known=self.known_hashes(kind, exclude=entry["id"]),
+                               title=entry.get("attribution") or "", source=entry.get("source") or "")
             if not v.ok:
                 with self._lock:
                     entry["saved"] = False
@@ -820,7 +835,9 @@ class Library:
                     return None
             intent = sem.get("sceneIntent") if isinstance(sem.get("sceneIntent"), dict) else {}
             v = libstore.check(url, kind=kind, subject=sem.get("subject") or "",
-                               event=intent.get("event_type") or "")
+                               event=intent.get("event_type") or "",
+                               title=(m or {}).get("attribution") or "",
+                               source=(m or {}).get("source") or sem.get("provider") or "")
             with self._lock:
                 dup = libstore.duplicate_of(v.hashes, known[kind]) if v.ok else ""
                 if dup:
@@ -1034,7 +1051,8 @@ class Library:
                 url = e.get("read_url") or storage.broker_read_url(
                     e.get("bucket") or self.bucket, e["path"], self.project_id, self.job_id)
                 storage.download(url, path, timeout=120)
-                v = libstore.check(path, kind=kind, subject=e.get("subject") or "", event=e.get("event") or "")
+                v = libstore.check(path, kind=kind, subject=e.get("subject") or "", event=e.get("event") or "",
+                                   title=e.get("attribution") or "", source=e.get("source") or "")
                 with lock:
                     dup = libstore.duplicate_of(v.hashes, known[kind]) if v.ok else ""
                     if dup:

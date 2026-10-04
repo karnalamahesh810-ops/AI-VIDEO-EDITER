@@ -83,6 +83,7 @@ from src import brandkit, stockblock
 from src import recut, restore
 from src import batch, sources
 from src import tts
+from src import sharpness
 
 
 def _work_dir(job_id: str) -> str:
@@ -654,7 +655,8 @@ def _bind_split_images(doc: dict, work: str, put) -> int:
     def fetch(query: str, dest: str) -> str:
         from PIL import Image
         try:
-            found = media.search_web_images(query, 6) or []
+            # Half the frame each, not full screen: the plain search, as before.
+            found = media.search_web_images(query, 6, full_screen=False) or []
         except Exception:  # noqa: BLE001
             return ""
         for a in found:
@@ -768,7 +770,8 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
     def fetch(query: str, dest: str) -> str:
         from PIL import Image
         try:
-            found = media.search_web_images(query, 6) or []
+            # A photo window, not full screen: the plain search, as before.
+            found = media.search_web_images(query, 6, full_screen=False) or []
         except Exception:  # noqa: BLE001
             return ""
         for a in found:
@@ -1410,6 +1413,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     media.LAST_STATS["stockBlocked"] = stockblock.stats()
     # Where the sourcing time actually went, visible from outside the worker.
     doc["meta"]["sourcing"] = dict(media.LAST_STATS)
+    # Pictures and clips measured for real detail and turned down as too soft, all
+    # passes counted (src/sharpness.py).
+    doc["meta"]["sourcing"]["sharpness"] = sharpness.stats()
     # What this video cost on the AI account (Kie credits), estimated from
     # measured per-call prices (2026-09-25, Gemini 3.8 Flash): vision ~0.08
     # per check, a planning call ~0.15, gpt-image-2 ~4 per image. A key that
@@ -2551,7 +2557,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "STOCK_BLOCK", "STOCK_BLOCK_FILE_NAMES", "STOCK_BLOCK_WORDS", "WATERMARK_CHECK",
                       "WATERMARK_CLIP_SHARE", "STOCK_GATE_REPAIR",
                       # No shot on screen longer than this (src/shotcap.py; the owner, 2026-10-04). 0 = off.
-                      "SHOT_MAX_SECONDS")
+                      "SHOT_MAX_SECONDS",
+                      # Real detail of pictures and clips (src/sharpness.py, the owner 2026-10-04).
+                      "PICTURE_SHARPNESS_CHECK", "MAX_PICTURE_MAGNIFICATION", "CLIP_SHARPNESS_CHECK",
+                      "MIN_CLIP_REAL_HEIGHT", "MIN_CLIP_HEIGHT")
 
 
 def _apply_config(overrides) -> dict:
