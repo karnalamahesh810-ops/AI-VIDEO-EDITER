@@ -433,6 +433,17 @@ def _tiles(im, cols: int = 3, rows: int = 2) -> list:
     return out
 
 
+def _model_size(im, side: int):
+    """A tile at the size localvision._prep makes of it (shortest side `side`):
+    shrunk here, before the model's few slots are taken - the same pixels,
+    less time holding one (Pillow returns a copy when the size already fits)."""
+    from PIL import Image
+    w, h = im.size
+    s = side / max(1, min(w, h))
+    size = (max(side, round(w * s)), max(side, round(h * s)))
+    return im if im.size == size else im.resize(size, Image.BICUBIC)
+
+
 def stamp_share(path: str) -> Optional[float]:
     """How much the local CLIP model reads an agency stamp on the picture or on
     any tile of it (0-1), or None when the model is not installed."""
@@ -443,7 +454,7 @@ def stamp_share(path: str) -> Optional[float]:
         import numpy as np
         from PIL import Image
         with Image.open(path) as im:
-            tiles = _tiles(im.convert("RGB"))
+            tiles = [_model_size(t, localvision._SIZE) for t in _tiles(im.convert("RGB"))]
         with localvision._RUN:
             emb = localvision.embed_images(tiles)
             txt = localvision.embed_texts(STAMP_PROMPTS + PLAIN_PROMPTS)

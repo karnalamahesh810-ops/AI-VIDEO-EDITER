@@ -691,10 +691,17 @@ class Pixels(unittest.TestCase):
             share = stockblock.stamp_share(p)
             with mock.patch.object(config, "WATERMARK_CLIP_SHARE", 0.75):
                 why = stockblock.watermark_reason(p)
+        # Six square tiles cut from the FULL-size picture (450 px of it each, twice the
+        # detail the whole picture gets at the model's 224 px), and the whole picture.
+        with Image.open(p) as im:
+            cut = [t.size for t in stockblock._tiles(im.convert("RGB"))]
+        self.assertEqual(cut[0], (1300, 900))
+        self.assertTrue(all(abs(w - 450) <= 1 and abs(h - 450) <= 1 for w, h in cut[1:]))
+        # ... handed to the model already at its input size (the slow resize outside its slots)
         seen = calls[0]
-        self.assertEqual(seen[0], (1300, 900))                 # the whole picture
-        self.assertEqual(len(seen), 7)                          # and six square tiles of it
-        self.assertTrue(all(abs(a - b) <= 1 for a, b in seen[1:]))
+        self.assertEqual(len(seen), 7)
+        self.assertEqual(seen[0], (324, 224))
+        self.assertTrue(all(s == (224, 224) for s in seen[1:]))
         self.assertGreaterEqual(share, 0.99)
         self.assertTrue(why.startswith("an agency watermark stamped on the picture"))
 
