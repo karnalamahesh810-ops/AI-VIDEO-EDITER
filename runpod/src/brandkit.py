@@ -465,7 +465,10 @@ def pick_music(genre: str, track: str, seconds: float, allowed: Iterable[str], s
         options = [(name, length) for name, length in timeline.BGM_TRACKS.get(g, ()) if name in allowed]
         if not options:
             continue
-        long_enough = [name for name, length in options if length >= seconds] or [name for name, _ in options]
+        # None long enough: the longest, which starts over the fewest times (timeline._bgm_track).
+        longest = max(length for _, length in options)
+        long_enough = ([name for name, length in options if length >= seconds]
+                       or [name for name, length in options if length == longest])
         return g, long_enough[zlib.crc32(seed.encode("utf-8")) % len(long_enough)]
     return genre, track
 
