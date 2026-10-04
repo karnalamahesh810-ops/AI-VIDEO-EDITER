@@ -3464,29 +3464,89 @@ def _note_detail(asset: Optional["MediaAsset"]) -> None:
         pass
 
 
+def _worth_a_try(candidate: MediaAsset, used: Optional[set]) -> bool:
+    """The free look at a candidate before its download: not on this timeline, not shown
+    in an earlier video, not an AI picture site or name, not found unusable by another scene."""
+    if used is not None and candidate.identity in used:
+        return False
+    # Shown in an earlier video (src/ledger.py): the page, the photo URL.
+    if (candidate.kind == "image" and ledger.photo_used(candidate.url)) or \
+            (candidate.kind == "video" and ledger.url_used(candidate.url)):
+        return False
+    # An AI picture site or an AI-made picture by its name (src/slop.py).
+    from . import slop
+    if slop.enabled() and (slop.ai_host(candidate.url, getattr(candidate, "page_url", "") or "")
+                           or slop.metadata_reason(candidate.attribution)):
+        return False
+    return not _is_bad(candidate.identity)  # another scene found it unusable
+
+
+def _downloads_ahead(candidates: List[MediaAsset], used: Optional[set], query: str, work_dir: str):
+    """
+    (candidate, its download or None) in the candidates' order, for each one
+    worth a try. Up to PICTURE_PREFETCH downloads run at once, each under the
+    asking scene's own stop: while one picture is checked and judged, the next
+    PICTURE_PREFETCH - 1 are already downloading instead of each waiting for
+    the one before it. When the caller stops asking (a picture kept), the
+    downloads not started never start and those running finish on their own -
+    at most PICTURE_PREFETCH - 1 a search did not need.
+    """
+    ahead = int(getattr(config, "PICTURE_PREFETCH", 0) or 0)
+    todo = (c for c in candidates if _worth_a_try(c, used))
+    if ahead <= 1:
+        for c in todo:
+            yield c, _download(c, query, work_dir)
+        return
+    window: list = []
+    pools: list = []
+
+    def fill(limit: int) -> None:
+        while len(window) < limit:
+            c = next(todo, None)
+            if c is None:
+                return
+            if not pools:
+                pools.append(_new_pool(ahead))
+            window.append((c, pools[0].submit(contextvars.copy_context().run, _download, c, query, work_dir)))
+    try:
+        fill(ahead)
+        while window:
+            c, fut = window.pop(0)
+            try:
+                got = fut.result()
+            except Exception:  # noqa: BLE001 - a download that broke is one that failed
+                got = None
+            fill(ahead - 1)                 # the next ones download while this one is checked
+            yield c, got
+    finally:
+        for _c, fut in window:
+            fut.cancel()
+        for pool in pools:
+            pool.shutdown(wait=False, cancel_futures=True)
+            if not any(fut.running() for _c, fut in window):
+                _forget_pool(pool)          # nothing left in flight: the job's end need not wait for it
+
+
 def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
                  query: str, work_dir: str, intent: str = "",
                  context: str = "") -> Optional[MediaAsset]:
     """First unused candidate that downloads, passes the checks every caller asks
     of a picture afterwards (_asset_ok: not a page of text, big enough, sharp
     enough to fill the frame - src/sharpness.py) before any vision call, and
-    passes the vision gate."""
+    passes the vision gate. The candidates download a few at a time ahead of
+    the checks (_downloads_ahead); they are checked and judged in order."""
+    ahead = _downloads_ahead(_bigger_first(candidates), used, query, work_dir)
+    try:
+        return _first_that_passes(ahead, used, intent, context)
+    finally:
+        ahead.close()                       # the downloads not started never start
+
+
+def _first_that_passes(ahead, used: Optional[set], intent: str, context: str) -> Optional[MediaAsset]:
     judged = 0
-    for candidate in _bigger_first(candidates):
-        if used is not None and candidate.identity in used:
-            continue
-        # Shown in an earlier video (src/ledger.py): the page, the photo URL.
-        if (candidate.kind == "image" and ledger.photo_used(candidate.url)) or \
-                (candidate.kind == "video" and ledger.url_used(candidate.url)):
-            continue
-        # An AI picture site or an AI-made picture by its name (src/slop.py).
-        from . import slop
-        if slop.enabled() and (slop.ai_host(candidate.url, getattr(candidate, "page_url", "") or "")
-                               or slop.metadata_reason(candidate.attribution)):
-            continue
-        if _is_bad(candidate.identity):
-            continue                        # another scene found this picture unusable
-        got = _download(candidate, query, work_dir)
+    for candidate, got in ahead:
+        if (used is not None and candidate.identity in used) or _is_bad(candidate.identity):
+            continue                        # taken, or found unusable, while it downloaded
         if not got:
             continue
         if got.kind == "image" and _photo_seen_before(got.local_path):
@@ -3712,6 +3772,15 @@ def _new_pool(workers: int) -> ThreadPoolExecutor:
     with _POOLS_LOCK:
         _LIVE_POOLS.append(pool)
     return pool
+
+
+def _forget_pool(pool: ThreadPoolExecutor) -> None:
+    """A pool with nothing left running: no longer one the job's end waits for."""
+    with _POOLS_LOCK:
+        try:
+            _LIVE_POOLS.remove(pool)
+        except ValueError:
+            pass
 
 
 def drain_pools(timeout: float = 15.0) -> int:
