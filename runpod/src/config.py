@@ -151,6 +151,13 @@ DIRECTOR_MODEL = os.getenv("DIRECTOR_MODEL", "")
 DIRECTOR_FALLBACK_MODELS = [m.strip() for m in
                            os.getenv("DIRECTOR_FALLBACK_MODELS", "gpt-5-2,gemini-3-pro").split(",")
                            if m.strip()]
+# The routine planning calls - each batch of lines turned into shots and search
+# words, the rescue, sequence and assign passes - on a cheaper model; the story
+# brief (what the video is about, who and where) stays on DIRECTOR_MODEL, which
+# also backs the routine model up when it fails. "" = every call on
+# DIRECTOR_MODEL, as before. The owner (2026-10-05): "make this video using
+# cost cut method" - ~13 of a video's ~15 planning calls are routine.
+DIRECTOR_ROUTINE_MODEL = os.getenv("DIRECTOR_ROUTINE_MODEL", "").strip()
 
 # --- vision verification -----------------------------------------------------
 # Every candidate clip/image is shown to a multimodal model, which describes

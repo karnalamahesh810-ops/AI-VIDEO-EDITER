@@ -2563,7 +2563,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "SHOT_MAX_SECONDS",
                       # Real detail of pictures and clips (src/sharpness.py, the owner 2026-10-04).
                       "PICTURE_SHARPNESS_CHECK", "MAX_PICTURE_MAGNIFICATION", "CLIP_SHARPNESS_CHECK",
-                      "MIN_CLIP_REAL_HEIGHT", "MIN_CLIP_HEIGHT")
+                      "MIN_CLIP_REAL_HEIGHT", "MIN_CLIP_HEIGHT",
+                      # The routine planning calls on a cheaper model (src/director.py _routes; 2026-10-05).
+                      "DIRECTOR_ROUTINE_MODEL")
 
 
 def _apply_config(overrides) -> dict:

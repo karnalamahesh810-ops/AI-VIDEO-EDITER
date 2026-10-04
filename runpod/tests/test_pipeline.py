@@ -2928,7 +2928,7 @@ class MetaphorsAndMaps(unittest.TestCase):
     def test_rescue_ideas_see_the_story_and_stay_on_the_event(self):
         sent = {}
 
-        def chat(system, payload, timeout=120):
+        def chat(system, payload, timeout=120, **kw):     # kw: routine=True (DIRECTOR_ROUTINE_MODEL)
             sent.update(payload)
             return {"items": [{"index": 3, "queries": ["sandbag wall", "rescue boats downtown"]}]}
 

@@ -1020,12 +1020,18 @@ def _validate_brief(raw, fallback: dict, n_beats: int,
     return out
 
 
-def _routes() -> List[tuple]:
-    """(base, key, model, is_main) to try in order: the director, then the backup provider."""
+def _routes(routine: bool = False) -> List[tuple]:
+    """(base, key, model, is_main) to try in order: the director, then the backup provider.
+    A routine call (DIRECTOR_ROUTINE_MODEL set) asks the cheaper model first, the
+    director's own model after it."""
     out = []
     if config.DIRECTOR_API_BASE and config.DIRECTOR_API_KEY:
-        out += [(config.DIRECTOR_API_BASE, config.DIRECTOR_API_KEY, m, True)
-                for m in [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS if m]
+        first = [config.DIRECTOR_ROUTINE_MODEL] if routine and config.DIRECTOR_ROUTINE_MODEL else []
+        models = []
+        for m in first + [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS:
+            if m and m not in models:
+                models.append(m)
+        out += [(config.DIRECTOR_API_BASE, config.DIRECTOR_API_KEY, m, True) for m in models]
     if config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY and config.AI_FALLBACK_MODEL:
         out.append((config.AI_FALLBACK_API_BASE, config.AI_FALLBACK_API_KEY,
                     config.AI_FALLBACK_MODEL, False))
@@ -1125,17 +1131,18 @@ _CHAT_POOL = ThreadPoolExecutor(max_workers=32, thread_name_prefix="director")
 
 
 def _chat_json(system: str, payload: dict, timeout: int = 120,
-               errors: Optional[List[str]] = None) -> Optional[dict]:
+               errors: Optional[List[str]] = None, routine: bool = False) -> Optional[dict]:
     """
     One JSON completion from the director models, then the backup provider, or
     None. `errors`, when given, collects "model#attempt: reason" for each failed try.
+    `routine`: a planning call DIRECTOR_ROUTINE_MODEL may answer (not the story brief).
 
     Hedged: when the first model has not answered after DIRECTOR_HEDGE_SECONDS
     the next is asked in parallel, a model that fails hands over at once, and
     the first valid answer wins; the call ends after DIRECTOR_BUDGET_FACTOR x
     its timeout.
     """
-    queue = [r for r in _routes()
+    queue = [r for r in _routes(routine)
              if not (r[3] and vision.out_of_credits()) and vision.model_available(r[2])]
     if not queue:
         return None
@@ -2281,10 +2288,10 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
                       for i, s in enumerate(batch)],
         }
         tried: List[str] = []
-        data = _chat_json(_SYSTEM_PROMPT, payload, timeout=120, errors=tried)
+        data = _chat_json(_SYSTEM_PROMPT, payload, timeout=120, errors=tried, routine=True)
         if data is None and not vision.out_of_credits():
             time.sleep(10)
-            data = _chat_json(_SYSTEM_PROMPT, payload, timeout=150, errors=tried)
+            data = _chat_json(_SYSTEM_PROMPT, payload, timeout=150, errors=tried, routine=True)
         if data is None:
             warnings.append(
                 f"AI director unavailable for beats {offset + 1}-{offset + len(batch)} "
@@ -2425,7 +2432,7 @@ def rescue_queries(items: List[dict], story: Optional[dict] = None) -> dict:
         if it.get("repeat"):
             row["repeat"] = True
         payload.append(row)
-    data = _chat_json(_RESCUE_PROMPT, {
+    data = _chat_json(_RESCUE_PROMPT, routine=True, payload={
         "story": {k: v for k, v in story.items() if k != "hookBeats"},
         "items": payload}, timeout=90)
     if not data:
@@ -3275,7 +3282,7 @@ def plan_sequences(segments: List[Segment], shots: List[dict],
         hi = min(lo + _SEQ_CHUNK, len(segments))
         raw = None
         if is_configured():
-            raw = _chat_json(_SEQUENCE_PROMPT, {
+            raw = _chat_json(_SEQUENCE_PROMPT, routine=True, payload={
                 "story": story,
                 "beats": [{"index": i, "text": segments[i].text,
                            "subject": shots[i].get("subject") or ""} for i in range(lo, hi)]})
@@ -3315,7 +3322,7 @@ def assign_shots(beats: List[dict], shots: List[dict],
     ids = {s["id"] for s in shots}
     chosen: Dict[int, str] = {}
     if beats and shots and is_configured():
-        raw = _chat_json(_ASSIGN_PROMPT, {
+        raw = _chat_json(_ASSIGN_PROMPT, routine=True, payload={
             "story": {k: v for k, v in (story or {}).items() if k != "hookBeats"},
             "beats": [{"index": b["index"], "text": (b.get("text") or "")[:300],
                        "want": b.get("want") or "footage"} for b in beats],
