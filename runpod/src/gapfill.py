@@ -628,23 +628,26 @@ def graphic_for(doc: dict, scene: dict) -> Optional[dict]:
 
 def _room(scene: dict, fps: int, rate: float) -> float:
     """Frames a scene can grow while its own picture still covers it at `rate` x speed or more."""
+    from . import shotcap
     m = scene.get("media") or {}
     dur = int(scene.get("durationInFrames") or 0)
     if m.get("type") == "image" and m.get("url"):
-        return float("inf")                     # a still holds as long as it is shown
+        # A still holds as long as it is shown - but no shot past SHOT_MAX_SECONDS (src/shotcap.py).
+        return shotcap.room(scene, fps, float("inf"))
     if m.get("type") != "video" or not m.get("url"):
         return 0.0                              # never an empty scene or a graphic
     from . import media as _media
     clip = m.get("clipSeconds")
     clip_s = float(clip) if isinstance(clip, (int, float)) and clip > 0 else dur / fps + _media.SEQ_SHOT_PAD
-    return max(0.0, clip_s * fps / max(0.05, rate) - dur)
+    return shotcap.room(scene, fps, max(0.0, clip_s * fps / max(0.05, rate) - dur))
 
 
 def _hold(doc: dict, i: int, rate: Optional[float]) -> bool:
     """
     Merge empty scene i into its neighbours: the previous scene runs longer
     and/or the next starts earlier, each only while its clip covers its longer
-    scene at `rate` (None = no limit). The line's words go with the frames.
+    scene at `rate` (None = no limit) and the shot stays within
+    SHOT_MAX_SECONDS (src/shotcap.py). The line's words go with the frames.
     """
     scenes = doc["scenes"]
     fps = max(1, int(doc.get("fps") or 30))
@@ -657,8 +660,9 @@ def _hold(doc: dict, i: int, rate: Optional[float]) -> bool:
     if prev is None and nxt is None or need <= 0:
         return False
     if rate is None:
-        rp = float("inf") if prev is not None else 0.0
-        rn = float("inf") if nxt is not None else 0.0
+        from . import shotcap
+        rp = shotcap.room(prev, fps, float("inf")) if prev is not None else 0.0
+        rn = shotcap.room(nxt, fps, float("inf")) if nxt is not None else 0.0
     else:
         rp = _room(prev, fps, rate) if prev is not None else 0.0
         rn = _room(nxt, fps, rate) if nxt is not None else 0.0
@@ -707,7 +711,55 @@ def _card(doc: dict, s: dict) -> bool:
     return bool(text)
 
 
-def hold_or_animate(doc: dict, *, label: str = "") -> Dict[str, int]:
+def _instead_of_hold(doc: dict, left: List[dict], out: Dict[str, int], laddered: bool, label: str) -> List[dict]:
+    """
+    The lines no neighbour could be held over without breaking the cap
+    (src/shotcap.py: the owner, 2026-10-04, "clips are playing more than seven
+    seconds"), in story order: a pick-a-shot runner-up of a shot beside the
+    line - an approved clip no scene shows - then, where the ladder has not
+    just run for them (`laddered`), the fallback ladder with this job's plan
+    (the pools' spare moments included, never a moment within
+    FALLBACK_MOMENT_GAP_SECONDS of one shown). Never anything another scene
+    shows. Returns the scenes still without a picture (they get the text card).
+    """
+    from . import shotcap
+    scenes = doc.get("scenes") or []
+    fps = max(1, int(doc.get("fps") or 30))
+    used = Used()
+    for k, sc in enumerate(scenes):
+        shot = Shot.of_scene(sc, fps)
+        if shot is not None:
+            used.add(k, shot)
+    todo = sorted((k for k, sc in enumerate(scenes) if any(sc is x for x in left)))
+    for k in todo:
+        try:
+            got = shotcap.alternative_for(doc, k, used)
+        except Exception as e:  # noqa: BLE001 - the next step
+            print(f"[fill] scene {k + 1}: runner-up skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
+            got = None
+        if got:
+            out["alternative"] = out.get("alternative", 0) + 1
+            shotcap.note("alternative")
+    todo = [k for k in todo if _empty(scenes[k])]
+    work = CONTEXT.get("work") or ""
+    if todo and not laddered and CONTEXT.get("jobs") and work and config.FALLBACK_FILL and config.NO_REUSE:
+        jobs = [job_for(sc, k, fps, CONTEXT.get("jobs")) for k, sc in enumerate(scenes)]
+        results: Dict[int, Any] = {}
+        try:
+            fill_empty(jobs, results, work, library=CONTEXT.get("library"),
+                       require_cc=CONTEXT.get("require_cc", False), youtube_only=CONTEXT.get("youtube_only", False),
+                       indices=todo, used=used, label=label or "instead of a long hold")
+        except Exception as e:  # noqa: BLE001 - the text card below
+            print(f"[fill] the ladder failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        for k, a in results.items():
+            if a is not None and 0 <= k < len(scenes) and _empty(scenes[k]):
+                apply_asset(scenes[k], a, "Found when holding the shot beside it would have run too long - check it fits")
+                out["ladder"] = out.get("ladder", 0) + 1
+                shotcap.note("ladder")
+    return [scenes[k] for k in todo if _empty(scenes[k])]
+
+
+def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False) -> Dict[str, int]:
     """
     (d) Every empty scene: the planner's own graphic for its line (numbers,
     money, maps), else the neighbouring shot held over it while the clip
@@ -715,10 +767,19 @@ def hold_or_animate(doc: dict, *, label: str = "") -> Dict[str, int]:
     floor), else the line as a text card. In the hook only as a last resort.
     Never another scene's clip. Walks from the end, so merged scenes never
     shift an index still to be visited. Returns {"graphic", "held", "card"}.
+
+    With SHOT_MAX_SECONDS on (src/shotcap.py) a hold never makes a shot longer
+    than the cap and never slows its clip to stretch; a line that cannot be
+    held that way gets a pick-a-shot runner-up of a shot beside it, then the
+    ladder (unless the caller has just run it: `laddered`), and only then the
+    text card ("alternative" and "ladder" are added to the counts).
     """
+    from . import shotcap
     scenes = doc.get("scenes") or []
     fps = max(1, int(doc.get("fps") or 30))
     out = {"graphic": 0, "held": 0, "card": 0, "hook": 0}
+    capped = shotcap.enabled()
+    rates = shotcap.hold_rates()
     cards: List[dict] = []
     for i in range(len(scenes) - 1, -1, -1):
         s = scenes[i]
@@ -739,19 +800,29 @@ def hold_or_animate(doc: dict, *, label: str = "") -> Dict[str, int]:
         if links:
             s.setdefault("media", {})
             s["wantedPictures"] = links
-        if _hold(doc, i, config.HOLD_MIN_RATE) or _hold(doc, i, 0.6):
+        if any(_hold(doc, i, rate) for rate in rates):
             out["held"] += 1
+            if capped:
+                shotcap.note("held")
             if links:
                 s["reviewReason"] = (str(s.get("reviewReason") or "") +
                                      " Pictures were found but their sites refused the download: links kept.").strip()
             continue
         cards.append(s)
+    if capped and cards:
+        # No shot past the cap: a fresh approved shot before a text card.
+        shotcap.note("refused", len(cards))
+        cards = list(reversed(_instead_of_hold(doc, cards, out, laddered, label)))
     for s in reversed(cards):                   # story order
         if _card(doc, s):
             out["card"] += 1
+            if capped:
+                shotcap.note("card")
     if any(out.values()):
         print(f"[fill] {label or 'last resort'}: {out['graphic']} graphic(s), {out['held']} held over from "
               f"a neighbour, {out['card']} text card(s)"
+              + (f", {out.get('alternative', 0)} runner-up shot(s) and {out.get('ladder', 0)} ladder shot(s) "
+                 f"instead of a hold past {shotcap.limit():g} s" if out.get("alternative") or out.get("ladder") else "")
               + (f"; {out['hook']} in the hook (nothing else was left)" if out["hook"] else ""), flush=True)
     return out
 
@@ -867,7 +938,7 @@ def final_check(doc: dict, *, label: str = "before publishing") -> Dict[str, int
                 apply_asset(scenes[i], a, "Replaced a repeat of another scene's shot")
         out["replaced"] = sum(1 for a in results.values() if a is not None)
         LAST.setdefault("final", {}).update(fill=got)
-    last = hold_or_animate(doc, label=label)
+    last = hold_or_animate(doc, label=label, laddered=bool(empties))    # the ladder has just run for them
     LAST.setdefault("final", {}).update(out, last=last)
     return out
 
@@ -876,11 +947,14 @@ def summary(*parts: Dict[str, int]) -> str:
     """'filled 23 scenes from library/stills/hold' style line for the job's log."""
     c = Counter()
     for p in parts:
-        for k in ("pack", "library", "reserve", "still", "generated", "graphic", "held", "card"):
+        for k in ("pack", "library", "reserve", "still", "generated", "graphic", "held", "alternative", "ladder",
+                  "card"):
             c[k] += int((p or {}).get(k) or 0)
     total = sum(c.values())
     names = {"pack": "packs", "library": "library", "reserve": "spare moments", "still": "stills",
-             "generated": "generated", "graphic": "graphics", "held": "hold", "card": "text"}
+             "generated": "generated", "graphic": "graphics", "held": "hold",
+             # Instead of a hold past SHOT_MAX_SECONDS (src/shotcap.py).
+             "alternative": "runner-ups", "ladder": "ladder", "card": "text"}
     used = "/".join(names[k] for k in names if c[k])
     detail = ", ".join(f"{c[k]} {names[k]}" for k in names if c[k])
     return f"filled {total} scenes from {used or 'nothing'}" + (f" ({detail})" if detail else "")

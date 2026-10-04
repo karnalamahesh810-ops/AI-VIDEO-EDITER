@@ -39,6 +39,12 @@ from typing import Dict
 # graphics: how busy the overlay planner is ("minimal", "normal", "rich").
 # Every style has music (the owner, 2026-09-30); only the job's own
 # "bgm": false turns it off.
+# No shot on screen longer than SHOT_MAX_SECONDS (src/shotcap.py; the owner,
+# 2026-10-04: "some of the clips are playing more than seven seconds on the
+# timeline"): every style follows the 7 s default, whatever its cutting ceiling
+# (MAX_SCENE_SECONDS: a longer beat is cut into 2+ shots on word boundaries). A
+# style may set its own "SHOT_MAX_SECONDS" in its config; none may go above
+# 12 s (shotcap.CEILING).
 STYLES: Dict[str, dict] = {
     "documentary": {
         "label": "Documentary",
@@ -57,6 +63,8 @@ STYLES: Dict[str, dict] = {
         "config": {"MIN_SCENE_SECONDS": 2.2, "TARGET_SCENE_SECONDS": 5.3, "MAX_SCENE_SECONDS": 7.0,
                    "CUT_FAST_SECONDS": 5.3, "CUT_SLOW_SECONDS": 6.5, "CUT_HOOK_FACTOR": 1.2,
                    "CUT_LEAD_SECONDS": 0.14,
+                   # Its own measured rule, kept whatever the default becomes (src/shotcap.py).
+                   "SHOT_MAX_SECONDS": 7.0,
                    "ALLOW_VERTICAL": True, "NEWS_FOOTAGE": True,
                    # News shows what happened: never an AI-generated picture.
                    "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False,
@@ -79,7 +87,7 @@ STYLES: Dict[str, dict] = {
         # ~12% of the time at 6 s each); never AI or a TV studio.
         "config": {"MIN_SCENE_SECONDS": 2.2, "TARGET_SCENE_SECONDS": 5.3, "MAX_SCENE_SECONDS": 7.0,
                    "CUT_FAST_SECONDS": 5.3, "CUT_SLOW_SECONDS": 6.5, "CUT_HOOK_FACTOR": 1.25,
-                   "CUT_LEAD_SECONDS": 0.14, "HUMAN_CUTS": True,
+                   "CUT_LEAD_SECONDS": 0.14, "HUMAN_CUTS": True, "SHOT_MAX_SECONDS": 7.0,
                    "ALLOW_VERTICAL": True, "NEWS_FOOTAGE": True, "RECENT_FOOTAGE_FIRST": True,
                    "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False,
                    "GENERATED_IMAGES_IN_HOOK": False, "PHOTO_MAX_PER_10MIN": 12.0,

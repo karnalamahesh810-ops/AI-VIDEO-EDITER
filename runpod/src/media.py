@@ -2057,6 +2057,10 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
             keep = True
         if keep:
             entry["localPath"] = a.local_path
+            if a.kind == "video" and (a.duration or 0) > 0:
+                # Its length stays with the choice: a runner-up may stand in for a hold that would run
+                # past SHOT_MAX_SECONDS, but only when it covers the scene at real speed (src/shotcap.py).
+                entry["seconds"] = round(float(a.duration), 2)
         winner.alternatives.append(entry)
         if keep:
             continue

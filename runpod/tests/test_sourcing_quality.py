@@ -647,11 +647,13 @@ class HandlerWiring(_Rules):
         # first). The owner's rules (2026-10-01) - never reuse a clip within a
         # video, never an empty scene - make it hold the neighbouring shot over
         # the empty line instead (the scenes merge); no url appears twice.
+        # (3 s lines since 2026-10-04: a hold never makes a shot longer than
+        # SHOT_MAX_SECONDS, 7 s - tests/test_shot_cap.py covers what happens then.)
         import handler
         fps = 30
 
         def scene(sec, media_, subject="Texas", asset=""):
-            return {"id": f"s{sec:04d}", "startFrame": sec * fps, "durationInFrames": 5 * fps,
+            return {"id": f"s{sec:04d}", "startFrame": sec * fps, "durationInFrames": 3 * fps,
                     "text": f"line at {sec}", "media": media_,
                     "semanticMetadata": {"subject": subject, "assetId": asset}}
 
@@ -659,22 +661,22 @@ class HandlerWiring(_Rules):
             return {"type": "color", "url": "", "source": "none"}
         only_a_photo = {"fps": fps, "meta": {}, "overlays": [], "scenes": [
             scene(0, {"type": "image", "url": "https://x/houston.jpg", "source": "web_image"}),
-            scene(5, empty())]}
+            scene(3, empty())]}
         clips = {"fps": fps, "meta": {}, "overlays": [], "scenes": [
             scene(100, {"type": "video", "url": "https://x/a.mp4", "source": "youtube", "clipSeconds": 9.0},
                   asset="yt:AAAAAAAAAAA@2"),
-            scene(105, empty()),
-            scene(110, {"type": "video", "url": "https://x/b.mp4", "source": "youtube", "clipSeconds": 9.0},
+            scene(103, empty()),
+            scene(106, {"type": "video", "url": "https://x/b.mp4", "source": "youtube", "clipSeconds": 9.0},
                   asset="yt:BBBBBBBBBBB@0")]}
         with mock.patch.object(config, "ANIMATION_FILL", False):
             self.assertEqual(handler._fill_missing_media(only_a_photo), 1)
             self.assertEqual(handler._fill_missing_media(clips), 1)
         self.assertEqual(len(only_a_photo["scenes"]), 1)                           # the photo holds over the line
-        self.assertEqual(only_a_photo["scenes"][0]["durationInFrames"], 10 * fps)
+        self.assertEqual(only_a_photo["scenes"][0]["durationInFrames"], 6 * fps)
         self.assertEqual([s["media"]["url"] for s in clips["scenes"]], ["https://x/a.mp4", "https://x/b.mp4"])
-        self.assertEqual(sum(s["durationInFrames"] for s in clips["scenes"]), 15 * fps)   # nothing lost
+        self.assertEqual(sum(s["durationInFrames"] for s in clips["scenes"]), 9 * fps)    # nothing lost
         self.assertEqual(clips["scenes"][1]["startFrame"], clips["scenes"][0]["durationInFrames"] + 100 * fps)
-        self.assertIn("line at 105", " ".join(s["text"] for s in clips["scenes"]))
+        self.assertIn("line at 103", " ".join(s["text"] for s in clips["scenes"]))
 
     def test_do_plan_clears_and_re_sources_what_breaks_a_rule(self):
         """do_plan end to end up to the timeline build, with the network mocked."""

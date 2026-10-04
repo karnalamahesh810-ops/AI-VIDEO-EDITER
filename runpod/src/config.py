@@ -573,6 +573,18 @@ FALLBACK_STILLS = _flag("FALLBACK_STILLS", True)
 # clip still covers the longer scene at HOLD_MIN_RATE of its speed or more
 # (0.6 = the renderer's own slow-down floor).
 HOLD_MIN_RATE = float(os.getenv("HOLD_MIN_RATE", "0.85"))
+# No shot of footage or still stays on screen longer than this (src/shotcap.py).
+# The owner, 2026-10-04: "some of the clips are playing more than seven seconds
+# on the timeline, fix that issue" - 132 of his Lake Mead video's 240 shots ran
+# past 7 s (the cutter's own ceiling is MAX_SCENE_SECONDS, 9 s) and the 24
+# shots held over an empty line averaged 11.3 s, up to 16.8 s. Before the
+# shots are planned a longer beat is cut into 2+ shots on word boundaries, each
+# sourced and judged like any beat; afterwards a neighbouring shot is held over
+# an empty line only within the cap and never slowed to stretch (a pick-a-shot
+# runner-up, the ladder or a text card instead). Graphics, maps and animation
+# scenes keep their own lengths. A video style may set its own (src/styles.py);
+# never above 12 s (shotcap.CEILING). 0 = off: every plan exactly as before.
+SHOT_MAX_SECONDS = float(os.getenv("SHOT_MAX_SECONDS", "7.0"))
 # Saving good clips to the library: parallel uploads under one time box.
 LIBRARY_SAVE_SECONDS = float(os.getenv("LIBRARY_SAVE_SECONDS", "90"))
 # The editor's playback copies of each clip (the render uses the originals).

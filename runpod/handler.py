@@ -56,7 +56,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
-from src import ambience, gapfill, grade, packs, quality, voicepolish
+from src import ambience, gapfill, grade, packs, quality, shotcap, voicepolish
 from src import brandkit
 
 
@@ -790,7 +790,9 @@ def _fill_missing_media(doc: dict) -> int:
     text card on the quiet background. Returns how many scenes were patched.
     """
     got = gapfill.hold_or_animate(doc, label="before the render")
-    return int(got.get("graphic", 0)) + int(got.get("held", 0)) + int(got.get("card", 0))
+    # ("alternative" and "ladder": the fresh shots a line gets when holding the shot
+    # beside it would run past SHOT_MAX_SECONDS, src/shotcap.py.)
+    return sum(int(got.get(k, 0)) for k in ("graphic", "held", "card", "alternative", "ladder"))
 
 
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
@@ -857,6 +859,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # judged like any beat. Off: the beats as they are.
     from src import hookboost
     segments, mention_focus, boost_info = hookboost.prepare(segments, brief, mention_focus)
+    # No shot on screen longer than SHOT_MAX_SECONDS (src/shotcap.py; the owner,
+    # 2026-10-04: "some of the clips are playing more than seven seconds on the
+    # timeline"): a longer beat is cut into 2+ shots on word boundaries here, so
+    # each is planned, sourced and judged like any beat. 0 = the beats as they are.
+    segments, mention_focus, cap_info = shotcap.prepare(segments, brief, mention_focus, until=audio_duration)
 
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
@@ -891,7 +898,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # within HOOK_SECONDS is a hook line (best-of search, no generated image);
     # "place" and "recency" carry the line's own place and "last month first"
     # into the pools and the searches (the owner's review, 2026-09-30).
-    jobs = [{"index": i, "query": shot["query"], "seconds": seg.duration,
+    # With the shot cap on, each line asks for a clip as long as its shot is ON
+    # SCREEN (to the next line's first word, at most the cap) instead of as long
+    # as it is spoken: a clip is never slowed to fill its scene (src/shotcap.py).
+    on_screen = shotcap.screen_seconds(segments, audio_duration) if shotcap.enabled() else None
+    jobs = [{"index": i, "query": shot["query"],
+             "seconds": seg.duration if on_screen is None
+             else max(seg.duration, min(on_screen[i], shotcap.limit())),
              "start": round(float(seg.start), 2),
              "visual_type": shot.get("visualType", "footage"),
              "fallbacks": shot.get("fallbacks") or [],
@@ -1173,7 +1186,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # (d) the last resort for a line the ladder could not fill: the planner's
     # graphic for it, else the neighbouring shot held over it (src/gapfill.py).
     # Never an empty scene, never another scene's clip.
-    last = gapfill.hold_or_animate(doc, label="after the fallback fill")
+    # (The ladder has just run for these lines: a hold the shot cap refuses goes
+    # to a pick-a-shot runner-up of the shot beside it, then to the text card.)
+    last = gapfill.hold_or_animate(doc, label="after the fallback fill", laddered=True)
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
     if boost_info and doc["meta"].get("hookBoost") is not None:
         # A shot of a cut beat that missed the relevance gate gives way to the good shot beside it.
@@ -1247,6 +1262,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if doc["meta"].get("hookBoost"):
         # The opening as it ended up (a shot the ladder could not fill was held over by its neighbour).
         doc["meta"]["hookBoost"]["opening"] = hookboost.opening_stats(doc["scenes"], doc["fps"])
+    # The shot cap's report (src/shotcap.py): beats over the cap before, the cuts
+    # made, the shots over it now, what replaced a hold that would have run long.
+    if shotcap.enabled():
+        doc["meta"]["shotCap"] = shotcap.report(doc, cap_info)
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).
@@ -1640,6 +1659,9 @@ def _no_repeats(doc: dict, report: Reporter = None) -> dict:
               f"{got.get('replaced', 0)} replaced by fresh ones; {got.get('empty', 0)} empty scene(s) filled",
               flush=True)
         doc.setdefault("meta", {}).setdefault("fallbackFill", {})["beforePublishing"] = dict(got)
+        if isinstance(doc.get("meta", {}).get("shotCap"), dict) and shotcap.enabled():
+            # The shot cap's report as the timeline now stands (a replaced repeat, a held line).
+            doc["meta"]["shotCap"] = shotcap.report(doc, doc["meta"]["shotCap"])
     return got
 
 
@@ -2168,7 +2190,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "HOOK_BOOST_MAX_SHOT", "HOOK_BOOST_MOTION", "HOOK_BOOST_DRAMA", "HOOK_BOOST_QUIET_SECONDS",
                       "HOOK_BOOST_SFX_CUTS", "HOOK_TEASER", "HOOK_TEASER_SHOTS", "HOOK_TEASER_SECONDS",
                       # Auto maps (src/automaps.py): named rivers, reservoirs, dams and canals on real geography.
-                      "AUTO_MAPS", "AUTO_MAP_GAP")
+                      "AUTO_MAPS", "AUTO_MAP_GAP",
+                      # No shot on screen longer than this (src/shotcap.py; the owner, 2026-10-04). 0 = off.
+                      "SHOT_MAX_SECONDS")
 
 
 def _apply_config(overrides) -> dict:
@@ -2253,7 +2277,8 @@ def handler(job):
     report = Reporter(project_id, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
-    packs.reset()                       # and the niches its footage packs are read for
+    shotcap.reset()                     # and what the shot cap cut and swapped
+    packs.reset()                      # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's
     kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
     kit_scope.__enter__()
