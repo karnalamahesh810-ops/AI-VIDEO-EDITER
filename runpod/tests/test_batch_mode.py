@@ -13,6 +13,7 @@ through the same handler dispatch.
   * parallel: never more than config.BATCH_MAX_PARALLEL (1) or IN_PROCESS (1), whatever is asked;
   * the dispatch: handler.handler hands a "batch" input to batch.run with the job's id.
 """
+import threading
 import unittest
 from unittest import mock
 
@@ -208,10 +209,10 @@ class Running(unittest.TestCase):
         writes, log = [], []
         real_one = batch._one
 
-        def one(job, raw, defaults, n, total, build, sleep, seen):
+        def one(job, raw, defaults, n, total, build, sleep, seen, *rest):
             if n == 2:
                 raise RuntimeError("worker state broke")
-            return real_one(job, raw, defaults, n, total, build, sleep, seen)
+            return real_one(job, raw, defaults, n, total, build, sleep, seen, *rest)
         with mock.patch.object(storage, "broker_enabled", return_value=True), \
                 mock.patch.object(storage, "_broker_patch", side_effect=lambda pid, jid, f: writes.append((pid, f)) or True), \
                 mock.patch.object(batch, "_one", side_effect=one):
@@ -246,6 +247,109 @@ class Running(unittest.TestCase):
         self.assertEqual([d["saved"] for d in out["done"]], [True, True])
         self.assertEqual([pid for pid, f in writes if f.get("status") == "done"], ["p2", "p1"])
         self.assertNotIn("_out", str(out))
+
+
+class TimeLimit(unittest.TestCase):
+    """RunPod stops a job at its execution timeout and a stopped job writes nothing more: the batch starts no
+    video that would not fit, and just before the limit writes every unfinished video as failed itself."""
+
+    def setUp(self):
+        self.writes = []
+        self.patches = [mock.patch.object(storage, "patch_project", return_value=True),
+                        mock.patch.object(storage, "broker_enabled", return_value=True),
+                        mock.patch.object(storage, "_broker_patch",
+                                          side_effect=lambda pid, jid, f: self.writes.append((pid, f)) or True)]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+
+    def final(self):
+        return {pid: f["status"] for pid, f in self.writes if "status" in f}
+
+    def test_the_limit_is_the_endpoints_or_the_jobs_own(self):
+        self.assertEqual(config.BATCH_TIME_LIMIT_SECONDS, 10800.0)        # the endpoint's 3 h execution timeout
+        self.assertEqual(batch.time_limit({}), 10800.0)
+        self.assertEqual(batch.time_limit({"time_limit_seconds": 3600}), 3600.0)
+        self.assertEqual(batch.time_limit({"time_limit_seconds": "5400"}), 5400.0)
+        self.assertEqual(batch.time_limit({"time_limit_seconds": 0}), 0.0)          # no limit (a pod)
+        for bad in ("soon", float("inf"), True, None):
+            self.assertEqual(batch.time_limit({"time_limit_seconds": bad}), 10800.0)
+
+    def test_no_video_starts_that_the_limit_would_cut_off(self):
+        clock = [1000.0]
+        log = []
+
+        def build(job):
+            clock[0] += 4000.0                      # each video takes 4000 s
+            return _build_factory(log)(job)
+        with mock.patch.object(batch.time, "time", side_effect=lambda: clock[0]):
+            out = batch.run({"id": "b", "input": {"jobs": JOBS}}, build, sleep=lambda s: None)
+        # 3 h limit: after two videos (8000 s) fewer than 4000 s are left before the watchdog
+        self.assertEqual([e["input"]["project_id"] for e in log], ["p1", "p2"])
+        self.assertEqual([d["project"] for d in out["done"]], ["p1", "p2"])
+        self.assertEqual([f["project"] for f in out["failed"]], ["p3"])
+        self.assertTrue(out["failed"][0]["error"].startswith("Not started"))
+        self.assertEqual((out["failed"][0]["cost"], out["failed"][0]["saved"]), (0.0, True))
+        self.assertEqual(self.final(), {"p1": "done", "p2": "done", "p3": "failed"})   # nothing left "rendering"
+        self.assertEqual(out["stopped"], "time_limit")
+        self.assertEqual(out["time_limit"], 10800.0)
+
+    def test_without_a_limit_every_video_runs(self):
+        clock = [1000.0]
+        log = []
+
+        def build(job):
+            clock[0] += 9000.0
+            return _build_factory(log)(job)
+        with mock.patch.object(batch.time, "time", side_effect=lambda: clock[0]):
+            out = batch.run({"id": "b", "input": {"jobs": JOBS, "time_limit_seconds": 0}}, build, sleep=lambda s: None)
+        self.assertEqual(len(log), 3)
+        self.assertTrue(out["ok"])
+        self.assertNotIn("stopped", out)
+
+    def test_the_watchdog_writes_the_unfinished_videos_failed_before_the_job_is_stopped(self):
+        fired = threading.Event()
+        gave_up = []
+        real_give_up = batch._give_up
+
+        def give_up(job_id, targets, sleep, per_write):
+            got = real_give_up(job_id, targets, sleep, per_write)
+            gave_up.append((list(targets), per_write))
+            fired.set()
+            return got
+        log = []
+
+        def build(job):
+            log.append(job["input"]["project_id"])
+            self.assertTrue(fired.wait(10.0))          # video 1 is still being made when the limit comes
+            return _build_factory([])(job)
+        with mock.patch.object(batch, "_give_up", side_effect=give_up):
+            out = batch.run({"id": "b", "input": {"jobs": JOBS, "time_limit_seconds": 0.6}}, build,
+                            sleep=lambda s: None)
+        self.assertEqual(log, ["p1"])                   # nothing else starts
+        targets, per_write = gave_up[0]
+        self.assertEqual([pid for pid, _why in targets], ["p1", "p2", "p3"])
+        self.assertIn("while this video was being made", targets[0][1])
+        self.assertTrue(all(why.startswith("Not started") for _pid, why in targets[1:]))
+        self.assertEqual(per_write, 0.0)                # one try each: the job may be stopped any moment
+        statuses = [(pid, f["status"]) for pid, f in self.writes if "status" in f]
+        self.assertEqual(sorted(statuses[:3]), [("p1", "failed"), ("p2", "failed"), ("p3", "failed")])
+        self.assertEqual(out["stopped"], "time_limit")
+        self.assertEqual([f["project"] for f in out["failed"]], ["p2", "p3"])
+        self.assertTrue(all("saved" not in f for f in out["failed"]))   # the watchdog wrote them
+        self.assertEqual(len(gave_up), 1)
+
+    def test_a_batch_that_finishes_in_time_never_hears_from_the_watchdog(self):
+        with mock.patch.object(batch, "_give_up") as give_up, mock.patch.object(config, "BATCH_VIDEO_SECONDS", 1.0):
+            out = batch.run({"id": "b", "input": {"jobs": JOBS, "time_limit_seconds": 30}}, _build_factory([]),
+                            sleep=lambda s: None)
+        self.assertTrue(out["ok"])
+        give_up.assert_not_called()
+        self.assertNotIn("stopped", out)
+        self.assertEqual(self.final(), {"p1": "done", "p2": "done", "p3": "done"})
 
 
 class Parallel(unittest.TestCase):

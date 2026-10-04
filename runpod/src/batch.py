@@ -28,6 +28,13 @@ What the batch adds around each build:
     videos never reuse what any of them showed;
   * the same project twice in one batch is built once (a second build would
     pay for the same video again and overwrite the first);
+  * a time limit (time_limit: the endpoint's execution timeout, 3 h, or the
+    job's own "time_limit_seconds"): RunPod stops a job there and a stopped
+    job writes nothing more. So no video starts that would not fit (the
+    longest of the batch so far, at least BATCH_VIDEO_SECONDS), and just
+    before the limit a watchdog writes the video still being made and every
+    one not started as failed: a batch that runs out of time leaves no
+    project "rendering" either;
   * a summary: {done: [...], failed: [{project, error}], total_cost, seconds},
     printed as the event batch/summary.
 
@@ -42,9 +49,12 @@ app writes it when it queues the batch): the storage broker authorises a
 project's updates by the job running for it.
 """
 import copy
+import math
+import threading
 import time
 import traceback
-from typing import Callable, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, wait
+from typing import Callable, Dict, List, Optional, Tuple
 
 from . import config, costs, events, storage
 
@@ -53,6 +63,7 @@ BIG_WRITE_SECONDS = 300.0       # how long the finished timeline may take to rea
 STATUS_WRITE_SECONDS = 600.0    # how long the final status may take (the app's database can be down for minutes)
 LAST_TRY_SECONDS = 60.0         # the one more try, at the end of the batch, for a final state that never got through
 RETRY_SECONDS = 15.0
+CALL_SECONDS = 200.0            # the longest one project write can take (storage._broker_patch waits up to 180 s)
 
 
 def _int(value, default: int) -> int:
@@ -60,6 +71,94 @@ def _int(value, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _pid(raw) -> str:
+    return str(raw.get("project_id") or "") if isinstance(raw, dict) else ""
+
+
+def time_limit(inp: dict) -> float:
+    """
+    The longest the batch may run, in seconds (0 = no limit): the job's own "time_limit_seconds" (a batch queued
+    with a longer RunPod execution timeout, or on a pod), else config.BATCH_TIME_LIMIT_SECONDS - the endpoint's
+    execution timeout, where RunPod stops the job.
+    """
+    raw = inp.get("time_limit_seconds") if isinstance(inp, dict) else None
+    for value in (raw, config.BATCH_TIME_LIMIT_SECONDS):
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            seconds = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(seconds):
+            return max(0.0, seconds)
+    return 0.0
+
+
+def _hours(seconds: float) -> str:
+    return f"{seconds / 3600.0:.1f} h" if seconds >= 3600 else f"{int(round(seconds / 60.0))} min"
+
+
+class _Clock:
+    """
+    The batch against its time limit (time_limit): whether another video still fits, and the watchdog that -
+    `margin` before the limit, when RunPod is about to stop the job - writes the video being made and every one
+    not started as failed (a stopped job writes nothing more).
+    """
+
+    def __init__(self, limit: float, started: Optional[float] = None):
+        self.started = time.time() if started is None else float(started)
+        self.limit = float(limit)
+        # Time for the watchdog's writes (side by side, one try each), never more than a tenth of the limit.
+        self.margin = min(float(config.BATCH_LIMIT_MARGIN_SECONDS), 0.1 * self.limit) if self.limit > 0 else 0.0
+        self.lock = threading.Lock()
+        self.running = 0            # the video being made (1-based); 0 between videos
+        self.expired = False        # the watchdog fired: it wrote the unfinished videos as failed
+        self.cut = 0                # the video the watchdog found being made (1-based), 0 = none
+        self.closed = False         # no video starts any more: the watchdog has nothing left to do
+        self.longest = 0.0          # the longest video of this batch so far (seconds)
+        self.timer: Optional[threading.Timer] = None
+
+    def left(self) -> float:
+        """Seconds until the watchdog fires."""
+        return math.inf if self.limit <= 0 else self.started + self.limit - self.margin - time.time()
+
+    def room_for_another(self) -> bool:
+        """Another video fits before the watchdog: as long as the longest so far, at least BATCH_VIDEO_SECONDS."""
+        return self.left() >= max(float(config.BATCH_VIDEO_SECONDS), self.longest)
+
+    def arm(self, on_expiry: Callable[[], None]) -> None:
+        if self.limit > 0:
+            self.timer = threading.Timer(min(threading.TIMEOUT_MAX, max(0.0, self.left())), on_expiry)
+            self.timer.daemon = True
+            self.timer.start()
+
+    def disarm(self) -> None:
+        with self.lock:
+            self.closed = True
+        if self.timer is not None:
+            self.timer.cancel()
+
+
+def _give_up(job_id: str, targets: List[Tuple[str, str]], sleep: Callable, per_write: float) -> Dict[str, bool]:
+    """
+    Each (project, why) of `targets` written as failed, side by side - each write retried up to `per_write`
+    seconds - and waited for no longer than one write can take. Returns {project: saved}. Never raises.
+    """
+    if not targets:
+        return {}
+    pool = ThreadPoolExecutor(max_workers=min(8, len(targets)), thread_name_prefix="batch-failed")
+    try:
+        futs = {pool.submit(record, pid, job_id, {"ok": False, "error": why}, sleep, (0.0, per_write)): pid
+                for pid, why in targets}
+        finished, _late = wait(futs, timeout=per_write + CALL_SECONDS)
+        return {futs[f]: bool(f.result()) for f in finished}
+    except Exception as e:  # noqa: BLE001 - the batch's own bookkeeping never raises
+        print(f"[batch] could not write the unfinished videos: {type(e).__name__}: {str(e)[:160]}", flush=True)
+        return {}
+    finally:
+        pool.shutdown(wait=False)
 
 
 def parallel_for(asked) -> int:
@@ -163,11 +262,12 @@ def _cost(out: dict, seconds: float, ran: bool) -> float:
 
 
 def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[dict], dict], sleep: Callable,
-         seen: Dict[str, int]) -> dict:
+         seen: Dict[str, int], clock: Optional[_Clock] = None) -> dict:
     """
     Run entry `n` (1-based) of the batch through the handler and record its final state in its project;
     never raises. `seen`: the projects built so far in this batch (project -> video number). Returns its row
-    for the summary (with "_out", the result, while its final state is not saved yet).
+    for the summary (with "_out", the result, while its final state is not saved yet). Once the watchdog has
+    fired (`clock`), the final state gets one try: RunPod stops the job any moment.
     """
     t0 = time.time()
     job_id = str(job.get("id") or "")
@@ -214,8 +314,9 @@ def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[di
     else:
         row.update(video_url=out.get("video_url") or "", duration=out.get("duration"))
     if pid and mine:
-        row["saved"] = record(pid, job_id, out, sleep)
-        if not row["saved"]:
+        late = clock is not None and clock.expired
+        row["saved"] = record(pid, job_id, out, sleep, (0.0, 0.0) if late else (BIG_WRITE_SECONDS, STATUS_WRITE_SECONDS))
+        if not row["saved"] and not late:
             row["_out"] = out           # tried once more at the end of the batch
     print(f"[batch] video {n} of {total}: {'failed' if failed else 'done'} in {int(seconds)}s"
           + (f" - {row['error'][:160]}" if failed else ""), flush=True)
@@ -225,11 +326,13 @@ def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[di
 def run(job: dict, build: Callable[[dict], dict], sleep: Callable = time.sleep) -> dict:
     """
     The handler's action "batch". `job` is the batch job ({"id", "input": {"jobs": [...], "max_parallel",
-    "defaults"}}); `build` runs one job dict and returns its result (handler.handler). "defaults" (optional)
-    are input fields every entry inherits unless it sets its own (a shared config, prices, bucket).
+    "defaults", "time_limit_seconds"}}); `build` runs one job dict and returns its result (handler.handler).
+    "defaults" (optional) are input fields every entry inherits unless it sets its own (a shared config, prices,
+    bucket); "time_limit_seconds" (optional) replaces config.BATCH_TIME_LIMIT_SECONDS (time_limit).
     Returns {"ok" (every video done), "action": "batch", "total", "done": [{project, index, video_url,
     duration, seconds, cost, saved}], "failed": [{project, index, error, seconds, cost, saved}],
-    "total_cost", "seconds", "parallel", "events"}.
+    "total_cost", "seconds", "parallel", "time_limit", "events"} (+ "stopped": "time_limit" when videos were
+    left unstarted for it).
     """
     started = time.time()
     job_id = str(job.get("id") or "")
@@ -258,27 +361,98 @@ def run(job: dict, build: Callable[[dict], dict], sleep: Callable = time.sleep) 
 
     rows: List[dict] = []
     seen: Dict[str, int] = {}
+    clock = _Clock(time_limit(inp), started)
+    limit_text = _hours(clock.limit) if clock.limit > 0 else ""
+
+    def unfinished(first: int) -> List[Tuple[int, str]]:
+        """(video number, project) from video `first` on whose row is this batch's to write: not built earlier in
+        the batch (that row keeps its own state), each project once."""
+        out: List[Tuple[int, str]] = []
+        for n in range(first, total + 1):
+            pid = _pid(jobs[n - 1])
+            if pid and seen.get(pid, n) == n and pid not in [p for _n, p in out]:
+                out.append((n, pid))
+        return out
+
+    def expire() -> None:
+        # The watchdog, just before RunPod stops the job: the video being made and every one not started are
+        # written as failed now, while the job can still write.
+        with clock.lock:
+            if clock.closed:
+                return
+            clock.expired = True
+            running = clock.cut = clock.running
+            first = running or len(rows) + 1
+        targets = [(pid, (f"The batch reached its time limit ({limit_text}) while this video was being made. "
+                          "Start it again." if n == running else
+                          f"Not started: the batch reached its time limit ({limit_text}) before its turn. "
+                          "Start it again."))
+                   for n, pid in unfinished(first)]
+        print(f"[batch] time limit ({limit_text}) about to be reached: {len(targets)} unfinished video(s) "
+              "written as failed", flush=True)
+        _give_up(job_id, targets, sleep, 0.0)
+
+    clock.arm(expire)
+    stopped = ""
     try:
         for n, raw in enumerate(jobs, start=1):
-            rows.append(_one(job, raw, defaults, n, total, build, sleep, seen))
+            with clock.lock:
+                if clock.expired:
+                    stopped = "expired"
+                elif n > 1 and not clock.room_for_another():
+                    stopped = "no room"
+                    clock.closed = True          # these writes are the batch's own now, not the watchdog's
+                else:
+                    clock.running = n
+            if stopped:
+                break
+            row = _one(job, raw, defaults, n, total, build, sleep, seen, clock)
+            with clock.lock:
+                rows.append(row)
+                clock.running = 0
+            clock.longest = max(clock.longest, float(row.get("seconds") or 0.0))
+        if stopped:
+            # The videos the time left could not take: each says so in its row, and nothing was spent on them.
+            why = (f"Not started: the batch's time limit ({limit_text}) would have cut it off. Start it again."
+                   if stopped == "no room" else
+                   f"Not started: the batch reached its time limit ({limit_text}) before its turn. Start it again.")
+            first = len(rows) + 1
+            print(f"[batch] time limit ({limit_text}): videos {first}-{total} not started", flush=True)
+            mine = dict(unfinished(first))
+            # (Once the watchdog fired, it wrote these already.)
+            saved = {} if stopped == "expired" else _give_up(job_id, [(pid, why) for pid in mine.values()], sleep,
+                                                              LAST_TRY_SECONDS)
+            for n in range(first, total + 1):
+                pid = _pid(jobs[n - 1])
+                row: Dict[str, object] = {"index": n - 1, "project": pid, "ok": False, "seconds": 0.0, "cost": 0.0,
+                                          "error": why}
+                if n in mine and stopped != "expired":
+                    row["saved"] = saved.get(pid, False)
+                rows.append(row)
     except Exception as e:  # noqa: BLE001 - the batch's own failure: every video it did not finish says so
         traceback.print_exc()
+        with clock.lock:
+            clock.closed = True
         why = f"the batch stopped before this video was done: {type(e).__name__}: {e}"[:800]
         for n in range(len(rows) + 1, total + 1):
             raw = jobs[n - 1]
-            pid = str(raw.get("project_id") or "") if isinstance(raw, dict) else ""
-            row: Dict[str, object] = {"index": n - 1, "project": pid, "ok": False, "seconds": 0.0, "cost": 0.0,
-                                      "error": why}
+            pid = _pid(raw)
+            row = {"index": n - 1, "project": pid, "ok": False, "seconds": 0.0, "cost": 0.0, "error": why}
             if pid and seen.get(pid, n) == n:
                 row["saved"] = record(pid, job_id, {"ok": False, "error": why}, sleep, (0.0, LAST_TRY_SECONDS))
             rows.append(row)
+    finally:
+        clock.disarm()
     # A final state that never got through (the app's database down for many minutes) gets one more try now:
     # a project left "rendering" by a batch that has moved on is the one thing it must not leave behind.
+    # (Not once the watchdog has fired: RunPod stops the job any moment, and the rows say failed already.)
     for r in rows:
         if "_out" in r:
-            r["saved"] = record(str(r["project"]), job_id, r.pop("_out"), sleep, (LAST_TRY_SECONDS, LAST_TRY_SECONDS))
-            print(f"[batch] project {r['project']}: final state {'saved' if r['saved'] else 'still not saved'} "
-                  "on the last try", flush=True)
+            out = r.pop("_out")
+            if not clock.expired:
+                r["saved"] = record(str(r["project"]), job_id, out, sleep, (LAST_TRY_SECONDS, LAST_TRY_SECONDS))
+                print(f"[batch] project {r['project']}: final state {'saved' if r['saved'] else 'still not saved'} "
+                      "on the last try", flush=True)
 
     seconds = time.time() - started
     done = [{k: r.get(k) for k in ("project", "index", "video_url", "duration", "seconds", "cost", "saved") if k in r}
@@ -293,12 +467,20 @@ def run(job: dict, build: Callable[[dict], dict], sleep: Callable = time.sleep) 
                     message=f"project {r['project'] or '-'}" + (f": {r['error']}" if not r["ok"] else ""),
                     duration_ms=float(r["seconds"]) * 1000.0,
                     data={"project": r["project"], "index": r["index"], "cost": r["cost"], "saved": r.get("saved")})
+    timed_out = bool(stopped) or clock.expired
+    if timed_out:
+        not_started = sum(1 for r in rows if str(r.get("error") or "").startswith("Not started"))
+        events.emit("batch", "time_limit", level="warning",
+                    message=f"the batch's time limit ({limit_text}): {not_started} video(s) not started"
+                            + (f", video {clock.cut} cut off while it was being made" if clock.cut else ""),
+                    data={"limitSeconds": clock.limit, "notStarted": not_started, "cutOff": clock.cut})
     events.emit("batch", "summary", level="info" if not failed else "warning",
                 message=f"{len(done)} done, {len(failed)} failed of {total} in {int(seconds)}s, ${total_cost:.2f}",
                 data={"total": total, "done": len(done), "failed": len(failed), "total_cost": total_cost,
-                      "seconds": round(seconds, 1), "parallel": parallel,
+                      "seconds": round(seconds, 1), "parallel": parallel, "time_limit": clock.limit,
                       "failed_projects": [f["project"] for f in failed]})
     return {"ok": not failed, "action": "batch", "total": total, "done": done, "failed": failed,
             "total_cost": total_cost, "seconds": round(seconds, 1), "parallel": parallel,
             **({"asked_parallel": asked} if asked != parallel else {}),
+            "time_limit": clock.limit, **({"stopped": "time_limit"} if timed_out else {}),
             "events": events.summary()}

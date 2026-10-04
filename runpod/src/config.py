@@ -435,6 +435,14 @@ SCENE_SECONDS_MAX = float(os.getenv("SCENE_SECONDS_MAX", "300"))
 # state module-wide (config overrides, the cost ledger, the event log, the storage job id), so two builds in
 # one process would write into each other's project.
 BATCH_MAX_PARALLEL = int(os.getenv("BATCH_MAX_PARALLEL", "1"))
+# The longest a batch may run: RunPod stops a job at its endpoint's execution timeout (3 h on tuxcziwby5plod) and a
+# stopped job writes nothing more, so its unfinished projects would sit at "rendering". A batch starts no video that
+# would not fit (BATCH_VIDEO_SECONDS, or the longest of the batch so far) and, BATCH_LIMIT_MARGIN_SECONDS before the
+# limit, writes the video still being made and every one not started as failed itself. A job's own
+# "time_limit_seconds" replaces it (a batch queued with a longer RunPod policy, or on a pod); 0 = no limit.
+BATCH_TIME_LIMIT_SECONDS = float(os.getenv("BATCH_TIME_LIMIT_SECONDS", "10800"))
+BATCH_VIDEO_SECONDS = float(os.getenv("BATCH_VIDEO_SECONDS", "2700"))
+BATCH_LIMIT_MARGIN_SECONDS = float(os.getenv("BATCH_LIMIT_MARGIN_SECONDS", "300"))
 # Split one long video's sourcing across workers (src/fanout.py). RunPod
 # injects RUNPOD_ENDPOINT_ID into its workers; the API key is set on the
 # template (FANOUT_API_KEY) so a worker can queue parts on its own endpoint.
