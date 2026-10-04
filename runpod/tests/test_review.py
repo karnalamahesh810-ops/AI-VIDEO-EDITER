@@ -300,6 +300,19 @@ class Verdicts(unittest.TestCase):
         got = review.parse_verdicts('{"scenes": [{"scene": 9, "match": 1}, {"match": 0.5}]}', 2)
         self.assertEqual(list(got), [1])                                     # out of range dropped, no number = its place
 
+    def test_a_model_that_counts_from_zero_or_leaves_a_row_out_never_moves_a_verdict(self):
+        # Scenes counted 0..n-1: read that way, never each verdict moved onto the scene before.
+        text = json.dumps({"scenes": [{"scene": 0, "match": 0.9}, {"scene": 1, "match": 0.9, "issues": ["watermark"]},
+                                      {"scene": 2, "match": 0.8}]})
+        got = review.parse_verdicts(text, 3)
+        self.assertEqual(sorted(got), [0, 1, 2])
+        self.assertEqual(got[1]["issues"], ["watermark"])
+        self.assertEqual(got[0]["issues"], [])
+        # Rows with no numbers and one left out: nobody can say which scene each is - none is used.
+        self.assertIsNone(review.parse_verdicts('[{"match": 0.9}, {"match": 0.1, "issues": ["mismatch"]}]', 3))
+        got = review.parse_verdicts('[{"match": 0.9}, {"match": 0.1}, {"match": 0.8}]', 3)
+        self.assertEqual(got[1]["issues"], ["mismatch"])                    # every row there: read by its place
+
     def test_a_prose_answer_leaves_the_group_unchecked(self):
         frame = _jpg("frame.jpg")
         doc = doc_of([scene(i, video(f"/x/{i}.mp4", 4.0)) for i in range(2)])

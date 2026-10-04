@@ -794,11 +794,19 @@ def parse_verdicts(text: str, n: int) -> Optional[Dict[int, dict]]:
     if not isinstance(rows, list):
         return None
     out: Dict[int, dict] = {}
-    for pos, row in enumerate(rows):
-        if not isinstance(row, dict):
-            continue
-        num = _f(row.get("scene"))
-        k = int(num) - 1 if num is not None else pos
+    rows = [row for row in rows if isinstance(row, dict)]
+    nums = [_f(row.get("scene")) for row in rows]
+    # Scenes are numbered from 1, as asked. A model that counts from 0 (its numbers all
+    # 0..n-1, a 0 among them) is read that way: never a verdict moved onto the scene before.
+    known = [x for x in nums if x is not None]
+    first = 0 if known and min(known) == 0 and max(known) <= n - 1 else 1
+    for pos, (row, num) in enumerate(zip(rows, nums)):
+        if num is not None:
+            k = int(num) - first
+        elif len(rows) == n:
+            k = pos                         # unnumbered: by its place, only when every scene has a row
+        else:
+            continue                        # a row missing before it would put it on the wrong scene
         match = _f(row.get("match"))
         if match is None or not 0 <= k < n or k in out:
             continue
