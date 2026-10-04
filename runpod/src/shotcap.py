@@ -567,11 +567,13 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
     (at most DONOR_REACH scenes away): a clip the judge approved for the line
     next to it that no scene shows, the nearest and best-scored first. Never
     one the video already shows (`used`, gapfill.Used: the same file, asset or
-    moment, the same source video on the next scene), never a clip too short
-    to cover the scene at real speed. The runner-up leaves its scene's
-    choices; the scene's own other choices stay. Returns what was taken
-    ({"from", "assetId"}) or None.
+    moment, the same source video on the next scene), never one whose video
+    the variety rules forbid here (media.may_place: MAX_MOMENTS_PER_VIDEO,
+    SAME_VIDEO_GAP_SECONDS), never a clip too short to cover the scene at
+    real speed. The runner-up leaves its scene's choices; the scene's own
+    other choices stay. Returns what was taken ({"from", "assetId"}) or None.
     """
+    from . import media as _media
     scenes = doc.get("scenes") or []
     fps = max(1, int(doc.get("fps") or 30))
     s = scenes[i]
@@ -600,6 +602,8 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
                 continue                        # it would have to be slowed (or freeze) to fill the scene
             media["clipSeconds"] = round(seconds, 2)
         shot = _alt_shot(alt, media, at)
+        if shot.video and not _media.may_place(used.placed(shot.video), at):
+            continue                            # its video already plays too often or too near (variety rules)
         if not used.claim(i, shot):
             continue
         donor = scenes[k]

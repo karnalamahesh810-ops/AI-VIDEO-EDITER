@@ -467,6 +467,23 @@ class Holds(unittest.TestCase):
         self.assertEqual(len(doc["scenes"][0]["semanticMetadata"]["alternatives"]), 3)   # all still choices there
         self.assertEqual(gapfill.find_repeats(doc), [])
 
+    def test_a_runner_up_whose_video_the_variety_rules_forbid_is_passed_over(self):
+        # media.may_place: the runner-up's video already plays MAX_MOMENTS_PER_VIDEO times in the video.
+        alt = runner_up("BUSY0000001", 300, self.file("busy.mp4"))
+        def make():
+            return doc_of((clip("/w/a.mp4", 6.0), 6.0, {"alternatives": [alt]}), (EMPTY, 5.0),
+                          (clip("/w/b.mp4", 6.0), 6.0), (clip("/w/c.mp4", 6.0), 6.0),
+                          (clip("/w/busy.mp4", 6.0), 6.0, {"assetId": "yt:BUSY0000001@1", "moment": {"start": 10.0},
+                                                           "sourceUrl": "https://www.youtube.com/watch?v=BUSY0000001&t=10"}))
+        doc = make()
+        with cap(MAX_MOMENTS_PER_VIDEO=1), quiet():
+            got = gapfill.hold_or_animate(doc)
+        self.assertEqual((got.get("alternative", 0), got["card"]), (0, 1))
+        doc = make()
+        with cap(MAX_MOMENTS_PER_VIDEO=2, SAME_VIDEO_GAP_SECONDS=0.0), quiet():
+            got = gapfill.hold_or_animate(doc)
+        self.assertEqual((got.get("alternative", 0), got["card"]), (1, 0))
+
     def test_a_runner_up_too_short_for_the_line_is_not_slowed_to_fit(self):
         short = runner_up("ALT00000001", 30, self.file("s.mp4"), seconds=3.0)
         still = runner_up("", 0, self.file("p.jpg"), seconds=0, score=0.5,
