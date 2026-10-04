@@ -56,7 +56,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
-from src import ambience, gapfill, grade, packs, quality, voicepolish
+from src import ambience, gapfill, grade, packs, quality, review, voicepolish
 from src import brandkit
 
 
@@ -1885,19 +1885,44 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # The finished file is scanned (black, frozen, silent): a real defect is
     # repaired and the video drawn once more - never twice - and the better
     # of the two files is kept.
-    if gate.after_render(out_path):
+    spent = gate.rerendered             # that one second render already drawn (a render that failed on a file)
+    # The AI review (src/review.py, AI_REVIEW; off = none of this does anything):
+    # a vision model looks at the finished video scene by scene and the sound is
+    # measured; what it can fix safely (a clip that does not fit swapped for the
+    # scene's other choice, a title moved off a face) joins the SAME second
+    # render - one more draw for the gate's repairs and the review's together,
+    # never a third. Its frames are planned on the document as it was drawn,
+    # before the gate's scan repairs anything.
+    reviewer = review.Review(doc, work, report)
+    reviewer.plan()
+    again = gate.after_render(out_path)
+    if reviewer.after_render(out_path, gate, may_fix=not spent):
+        again = True
+        try:
+            _sign_supabase_urls(doc)    # a swapped-in choice may live in the app's private storage
+        except Exception as e:  # noqa: BLE001 - a finished render is never lost to this
+            print(f"[worker] links not re-signed for the second render: {type(e).__name__}: {str(e)[:120]}",
+                  flush=True)
+    if again:
         first = os.path.join(work, "final.first.mp4")
         os.replace(out_path, first)
         try:
             _draw(doc, inp, work, quality.floor(report, 90, "Second render: "), split, out_path, gate)
         except Exception as e:  # noqa: BLE001 - the first render stands, its problems reported
             gate.rerender_failed(e)
+            reviewer.rerender_failed(e)
             os.replace(first, out_path)
         else:
-            gate.after_rerender(out_path, first)
+            reviewer.after_rerender(gate.after_rerender(out_path, first))
     checked = gate.finish()
     doc.setdefault("meta", {})["quality"] = checked
     report(checked["summary"], 90)
+    # What goes back with the video: the gate's report and, when it ran, the review's.
+    reports = {"quality": checked}
+    reviewed = reviewer.finish()
+    if reviewed:
+        doc["meta"]["review"] = reports["review"] = reviewed
+        report(reviewed["summary"], 90)
     # Over the app's per-file storage limit: re-encode to fit, not fail the
     # upload. R2 has no such cap, so the full-quality file goes there as is.
     if not r2.enabled():
@@ -1929,7 +1954,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
             payload = base64.b64encode(fh.read()).decode("ascii")
         return {"video_url": "", "public_url": "", "object_path": "", "bucket": "",
                 "uploadedVia": "inline", "size_bytes": size, "duration": duration,
-                "video_b64": payload, "quality": checked}
+                "video_b64": payload, **reports}
 
     upload_url = inp.get("upload_url")
     if upload_url and not storage.r2_only():   # Cloudflare only: R2 below instead
@@ -1943,7 +1968,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
             "uploadedVia": "signed_url",
             "size_bytes": size,
             "duration": duration,
-            "quality": checked,
+            **reports,
         }
 
     # Cloudflare R2 first: no 2 GB cap, no download fees. The object name ends
@@ -1963,7 +1988,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
                 "uploadedVia": "r2",
                 "size_bytes": os.path.getsize(out_path),
                 "duration": duration,
-                "quality": checked,
+                **reports,
             }
         except Exception as e:  # noqa: BLE001 - the app's storage is the fallback
             if storage.r2_only():
@@ -1989,7 +2014,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
             "uploadedVia": "broker",
             "size_bytes": os.path.getsize(out_path),
             "duration": duration,
-            "quality": checked,
+            **reports,
         }
 
     # Fallback: upload with our own service-role key.
@@ -2019,7 +2044,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         "uploadedVia": "service_key",
         "size_bytes": os.path.getsize(out_path),
         "duration": duration,
-        "quality": checked,
+        **reports,
     }
 
 
@@ -2168,7 +2193,11 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "HOOK_BOOST_MAX_SHOT", "HOOK_BOOST_MOTION", "HOOK_BOOST_DRAMA", "HOOK_BOOST_QUIET_SECONDS",
                       "HOOK_BOOST_SFX_CUTS", "HOOK_TEASER", "HOOK_TEASER_SHOTS", "HOOK_TEASER_SECONDS",
                       # Auto maps (src/automaps.py): named rivers, reservoirs, dams and canals on real geography.
-                      "AUTO_MAPS", "AUTO_MAP_GAP")
+                      "AUTO_MAPS", "AUTO_MAP_GAP",
+                      # The AI review of the finished video (src/review.py): one job can try it
+                      # ({"config": {"AI_REVIEW": 1}}), or review without fixing (AI_REVIEW_FIX 0).
+                      "AI_REVIEW", "AI_REVIEW_FIX", "AI_REVIEW_AUDIO", "AI_REVIEW_GROUP", "AI_REVIEW_MAX_CALLS",
+                      "AI_REVIEW_SECONDS", "AI_REVIEW_MIN_MATCH", "AI_REVIEW_MAX_FIX_SHARE")
 
 
 def _apply_config(overrides) -> dict:
@@ -2554,6 +2583,11 @@ def handler(job):
                 # and the scenes it replaced in the video flagged for the editor.
                 doc.setdefault("meta", {})["quality"] = out["quality"]
                 quality.mark_for_review(doc, out["quality"])
+            if isinstance(out.get("review"), dict):
+                # The AI review's report with the saved timeline too, and the scenes it
+                # changed or flagged in the video marked for the editor.
+                doc.setdefault("meta", {})["review"] = out["review"]
+                review.mark_for_review(doc, out["review"])
             if not split and project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))

@@ -1140,6 +1140,45 @@ QUALITY_FREEZE_SECONDS = float(os.getenv("QUALITY_FREEZE_SECONDS", "0.8"))
 QUALITY_SILENCE_SECONDS = float(os.getenv("QUALITY_SILENCE_SECONDS", "4"))
 QUALITY_SCAN_TIMEOUT = float(os.getenv("QUALITY_SCAN_TIMEOUT", "900"))
 
+# --- the AI review (src/review.py; the owner, 2026-10-02: "AI review also good
+# for me, if you can build that better") -----------------------------------------
+# AI_REVIEW: after the render a vision model looks at the FINISHED video scene
+# by scene (one frame a scene, a few scenes a call) against the narration and
+# catches what the quality gate cannot see: a clip that does not fit its line,
+# a stock agency's watermark, a blurry or AI-looking picture, one of our own
+# titles over a face, a shot that feels repeated - and the sound is measured
+# for music as loud as the voice, dead air and clipping. Off until one real
+# video has been reviewed with it and the owner has seen the report.
+AI_REVIEW = _flag("AI_REVIEW", False)
+# AI_REVIEW_FIX: what it can fix safely it fixes (a scene's own already-judged
+# other choice swapped in, a title moved off a face) and the video is drawn
+# once more - the quality gate's one second render, never a third. Off = the
+# review only lists what it found.
+AI_REVIEW_FIX = _flag("AI_REVIEW_FIX", True)
+# The sound checks need no model (ffmpeg only); they only ever list.
+AI_REVIEW_AUDIO = _flag("AI_REVIEW_AUDIO", True)
+# Scenes shown to the model per call (4-6: fewer wastes calls, more and the
+# answers get careless), the most calls one video may make and how many run at
+# once. AI_REVIEW_SECONDS is the WHOLE review - frames, model calls, sound and
+# fixes (the second render it may ask for is not part of it): what is not done
+# by then is reported as not checked or not fixed, never a failed render and
+# never a finished video held up for long. Measured on the owner's real
+# 29-minute Lake Mead video (16 cores, a stand-in model): 280 scenes, frames
+# and sound in 34 s. Prices (OpenRouter google/gemini-2.5-flash, list $0.30/M
+# in, $2.50/M out): ~2,500 tokens in (258 a frame) and ~110 out for a call of
+# 5 scenes = ~$0.001, so a 20-minute video (~200 scenes, 40 calls) ~$0.05.
+AI_REVIEW_GROUP = int(os.getenv("AI_REVIEW_GROUP", "5"))
+AI_REVIEW_MAX_CALLS = int(os.getenv("AI_REVIEW_MAX_CALLS", "60"))
+AI_REVIEW_PARALLEL = int(os.getenv("AI_REVIEW_PARALLEL", "6"))
+AI_REVIEW_SECONDS = float(os.getenv("AI_REVIEW_SECONDS", "300"))
+# A picture the model scores under this against its line does not fit it
+# (the judge's own floor for a new clip is VISION_MIN_SCORE 0.70; the review
+# sees the finished frame with our graphics on it, so it is asked for less).
+AI_REVIEW_MIN_MATCH = float(os.getenv("AI_REVIEW_MIN_MATCH", "0.45"))
+# A review that wants to replace more than this share of the scenes it saw is
+# more likely wrong than the video: nothing is swapped, everything is listed.
+AI_REVIEW_MAX_FIX_SHARE = float(os.getenv("AI_REVIEW_MAX_FIX_SHARE", "0.3"))
+
 # --- niche footage packs (src/packs.py, src/packbuild.py) ----------------------
 # A shelf of pre-checked clips per niche (water, weather, fire, earth, nature,
 # cities) kept on R2 and read by their public link: the owner's rule "no empty
