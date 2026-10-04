@@ -73,7 +73,7 @@ from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, voicepolish
-from src import brandkit
+from src import brandkit, stockblock
 from src import restore
 from src import batch, sources
 from src import tts
@@ -655,6 +655,8 @@ def _bind_split_images(doc: dict, work: str, put) -> int:
             url = getattr(a, "url", "") or ""
             if not url.startswith("http"):
                 continue
+            if stockblock.blocked(a, "overlay"):
+                continue                # a stock agency's preview (src/stockblock.py)
             try:
                 r = _rq.get(url, timeout=15, headers={"User-Agent": config.USER_AGENT})
                 if r.status_code != 200 or len(r.content) > 15_000_000:
@@ -666,6 +668,9 @@ def _bind_split_images(doc: dict, work: str, put) -> int:
                 if min(im.size) < 360:
                     continue
                 im.save(dest, "JPEG", quality=88)
+                # No vision judge sees an overlay's photo: its pixels are read for an agency's bar or stamp.
+                if media.watermark_reason(dest, "overlay"):
+                    continue
                 picked[dest] = url
                 return dest
             except Exception:  # noqa: BLE001 - try the next result
@@ -764,6 +769,8 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
             url = getattr(a, "url", "") or ""
             if not url.startswith("http"):
                 continue
+            if stockblock.blocked(a, "overlay"):
+                continue                # a stock agency's preview (src/stockblock.py)
             try:
                 r = _rq.get(url, timeout=15, headers={"User-Agent": config.USER_AGENT})
                 if r.status_code != 200 or len(r.content) > 15_000_000:
@@ -775,6 +782,9 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
                 if min(im.size) < 360:
                     continue
                 im.save(dest, "JPEG", quality=88)
+                # No vision judge sees an overlay's photo: its pixels are read for an agency's bar or stamp.
+                if media.watermark_reason(dest, "overlay"):
+                    continue
                 picked[dest] = url
                 return dest
             except Exception:  # noqa: BLE001 - try the next result
@@ -1355,6 +1365,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # The narration was made from the script by the free voice (src/tts.py):
         # which voice, how long, how loud - and that it was not an upload.
         doc["meta"]["narration"] = made["report"]
+    # Stock-agency pictures kept out, by agency and by path (src/stockblock.py).
+    media.LAST_STATS["stockBlocked"] = stockblock.stats()
     # Where the sourcing time actually went, visible from outside the worker.
     doc["meta"]["sourcing"] = dict(media.LAST_STATS)
     # What this video cost on the AI account (Kie credits), estimated from
@@ -2485,7 +2497,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # The AI review of the finished video (src/review.py): one job can try it
                       # ({"config": {"AI_REVIEW": 1}}), or review without fixing (AI_REVIEW_FIX 0).
                       "AI_REVIEW", "AI_REVIEW_FIX", "AI_REVIEW_AUDIO", "AI_REVIEW_GROUP", "AI_REVIEW_MAX_CALLS",
-                      "AI_REVIEW_SECONDS", "AI_REVIEW_MIN_MATCH", "AI_REVIEW_MAX_FIX_SHARE")
+                      "AI_REVIEW_SECONDS", "AI_REVIEW_MIN_MATCH", "AI_REVIEW_MAX_FIX_SHARE",
+                      # Stock-agency and watermarked pictures (src/stockblock.py, the owner 2026-10-04).
+                      "STOCK_BLOCK", "STOCK_BLOCK_FILE_NAMES", "STOCK_BLOCK_WORDS", "WATERMARK_CHECK",
+                      "WATERMARK_CLIP_SHARE", "STOCK_GATE_REPAIR")
 
 
 def _apply_config(overrides) -> dict:
@@ -2665,6 +2680,7 @@ def handler(job):
                 return find(jobs, exclude)
             out = fanout.run_part(inp, work, source_part, set_story)
             return {"ok": True, "action": "source_part", **out,
+                    "stockBlocked": stockblock.stats(),     # the parent adds it to the job's count
                     "costs": costs.summary(time.time() - started),
                     "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
