@@ -888,6 +888,20 @@ SERPAPI_MAX_PER_JOB = int(os.getenv("SERPAPI_MAX_PER_JOB", "30"))
 SERPAPI_VIDEO_MAX_PER_JOB = int(os.getenv("SERPAPI_VIDEO_MAX_PER_JOB", "8"))
 # Yandex Images as a picture source after Google/Bing (media.search_yandex_images).
 ALLOW_YANDEX_IMAGES = _flag("ALLOW_YANDEX_IMAGES", True)
+# The picture sources' order and reach (src/providers.py). Measured 2026-10-04 on
+# Yellowstone searches (free sources, the worker's own size, real-detail and AI
+# checks): usable - Wikimedia Commons 23 of 30, the web search 24 of 54, Yandex
+# 21 of 80, Openverse 0 of 24 (it serves Flickr's 1024 px copies, never sharp
+# full screen); Commons answers the short wordings of a line, not its long one.
+# COMMONS_BEFORE_YANDEX: Commons is asked before Yandex.
+# OPENVERSE_WHEN_SHARP: Openverse is asked while PICTURE_SHARPNESS_CHECK is on.
+# STILLS_ALL_WORDINGS_FIRST: a still line asks every wording of its search (its
+# own, its intent's, the relaxed ones) for pictures before footage stands in for
+# it (YouTube / Dailymotion for stills), and an illustration comes last of all.
+# Off: each wording walked pictures, footage and an illustration before the next.
+COMMONS_BEFORE_YANDEX = _flag("COMMONS_BEFORE_YANDEX", True)
+OPENVERSE_WHEN_SHARP = _flag("OPENVERSE_WHEN_SHARP", False)
+STILLS_ALL_WORDINGS_FIRST = _flag("STILLS_ALL_WORDINGS_FIRST", True)
 # Set per job by the video style (src/styles.py): how busy the overlay planner
 # is ("minimal" | "normal" | "rich") and the transition rhythm
 # ("documentary" | "energetic" | "crossfade"). "" = the planner's defaults.

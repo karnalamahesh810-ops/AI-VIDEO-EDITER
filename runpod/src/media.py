@@ -611,6 +611,14 @@ def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
     return out
 
 
+def openverse_on() -> bool:
+    """Openverse is asked for pictures: always while pictures need not be sharp full
+    screen, and with PICTURE_SHARPNESS_CHECK on only when OPENVERSE_WHEN_SHARP says so -
+    it serves Flickr's 1024 px copies (its listed size is the original's), and none of
+    24 passed the real-detail check on Yellowstone searches (2026-10-04)."""
+    return bool(getattr(config, "OPENVERSE_WHEN_SHARP", False)) or not _sharpness.picture_on()
+
+
 def search_openverse(query: str, limit: int = 5) -> List[MediaAsset]:
     """Openverse aggregates CC-licensed images across many providers. No key needed."""
     try:
@@ -3634,18 +3642,27 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     try:
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
-        for attempt in attempts:
-            if _ytdlp.stopped():
-                break
-            got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
-                              nth=nth, used=used, prompt=prompt,
-                              allow_youtube=allow_youtube,
-                              allow_stock=allow_stock, require_cc=require_cc,
-                              intent=intent or query, context=context,
-                              subject=subject)
-            if got:
-                _count_photo(got)
-                return got
+        # A still line (STILLS_ALL_WORDINGS_FIRST) asks every wording for pictures first, then
+        # lets footage stand in for the still on every wording, then one illustration - each
+        # wording used to walk pictures, footage and an illustration before the next wording
+        # was asked at all (the Yellowstone re-cut, 2026-10-04: 140 YouTube sections for 10
+        # clip pieces, and Wikimedia Commons answers the short wordings that come last).
+        stages: List[Optional[str]] = [None]
+        if visual_type == "image" and getattr(config, "STILLS_ALL_WORDINGS_FIRST", False) and not youtube_only():
+            stages = ["pictures", "footage"] + ([] if config.PREFER_GENERATED_IMAGES else ["generated"])
+        for stage in stages:
+            for attempt in (attempts[:1] if stage == "generated" else attempts):
+                if _ytdlp.stopped():
+                    break
+                got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
+                                  nth=nth, used=used, prompt=prompt,
+                                  allow_youtube=allow_youtube,
+                                  allow_stock=allow_stock, require_cc=require_cc,
+                                  intent=intent or query, context=context,
+                                  subject=subject, **({"stage": stage} if stage else {}))
+                if got:
+                    _count_photo(got)
+                    return got
         return None
     finally:
         if providers_token is not None:
@@ -3664,7 +3681,8 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
                 used: set = None, prompt: str = "",
                 allow_youtube: bool = None, allow_stock: bool = None,
                 require_cc: bool = None, intent: str = "",
-                context: str = "", subject: str = "") -> Optional[MediaAsset]:
+                context: str = "", subject: str = "",
+                stage: Optional[str] = None) -> Optional[MediaAsset]:
     """
     Find and download one visual for a scene, from the provider registry
     (src/providers.py) in its order: YouTube, Dailymotion, web video, the
@@ -3678,18 +3696,20 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
     wrong clip. `nth` and `used` keep a long video from repeating itself:
     the Nth scene to ask the same question reaches further down the result
     list, and `used` is every asset already placed anywhere in this video.
+    `stage` asks one part of a still line's list only (providers.still_stage).
     """
     allow_youtube = config.ALLOW_YOUTUBE if allow_youtube is None else allow_youtube
     allow_stock = config.ALLOW_STOCK if allow_stock is None else allow_stock
     require_cc = config.REQUIRE_CC if require_cc is None else require_cc
     if youtube_only():
         visual_type, allow_youtube, allow_stock = "footage", True, False
+        stage = None
     ctx = providers.SourceContext(
         query=query, seconds=seconds, work_dir=work_dir, visual_type=visual_type, nth=nth,
         used=used, prompt=prompt, allow_youtube=bool(allow_youtube), allow_stock=bool(allow_stock),
         require_cc=bool(require_cc), intent=intent, context=context, subject=subject,
         subject_type=_SUBJECT_TYPE.get() or "", youtube_only=bool(youtube_only()),
-        enabled_names=_ENABLED_PROVIDERS.get())
+        enabled_names=_ENABLED_PROVIDERS.get(), stage=stage)
     return providers.source_one(ctx)
 
 
@@ -5232,8 +5252,9 @@ def _image_pool(queries: List[str], subject: str, subject_type: str, need: int,
     found: List[MediaAsset] = []
     if subject and subject_type in ("person", "place", "event"):
         found += _cached_search(search_wikipedia_article_images, subject)
+    searches = (search_wikimedia, search_web_images) + ((search_openverse,) if openverse_on() else ())
     for q in queries:
-        for search in (search_wikimedia, search_web_images, search_openverse):
+        for search in searches:
             found += _cached_search(search, q)
     shots, seen = [], set()
     for cand in found:

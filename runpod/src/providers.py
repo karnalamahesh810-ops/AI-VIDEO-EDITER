@@ -39,6 +39,9 @@ class SourceContext:
     youtube_only: bool = False
     tried_generation: bool = False
     enabled_names: Optional[set] = None  # a job's allow-list, or None for all
+    # A still line's search in stages (media.source_for_segment, STILLS_ALL_WORDINGS_FIRST):
+    # "pictures", "footage" (standing in for a still) or "generated"; None = the whole list.
+    stage: Optional[str] = None
 
     @property
     def person(self) -> bool:
@@ -193,7 +196,8 @@ REGISTRY: List[Provider] = [
              _image_search("search_yandex_images"), "Yandex Images: full-size originals, strong on local news photos"),
     Provider("wikimedia_images", "image", "cc", lambda c: True, _image_search("search_wikimedia")),
     Provider("nasa_images", "image", "public-domain", lambda c: True, _image_search("search_nasa")),
-    Provider("openverse", "image", "cc", lambda c: True, _image_search("search_openverse")),
+    Provider("openverse", "image", "cc", lambda c: _m().openverse_on(), _image_search("search_openverse"),
+             "Flickr's 1024 px copies: off while pictures must be sharp full screen (OPENVERSE_WHEN_SHARP)"),
     Provider("pexels_images", "image", "stock", lambda c: c.allow_stock, _stock("search_pexels", "image")),
     Provider("pixabay_images", "image", "stock", lambda c: c.allow_stock, _stock("search_pixabay", "image")),
     # A still nothing was found for tries moving footage of the same thing.
@@ -207,17 +211,42 @@ REGISTRY: List[Provider] = [
 ]
 
 
+def still_stage(p: Provider) -> str:
+    """Which part of a still line's search a provider is (STILLS_ALL_WORDINGS_FIRST): its
+    "pictures", "footage" standing in for the still, or a "generated" illustration as the
+    last resort (an illustration asked for first, PREFER_GENERATED_IMAGES, is a picture)."""
+    if p.kind == "footage":
+        return "footage"
+    if p.licence == "generated" and p.name != "generated_first":
+        return "generated"
+    return "pictures"
+
+
+def walk() -> List[Provider]:
+    """The registry in the order a scene asks it: Wikimedia Commons before Yandex
+    (COMMONS_BEFORE_YANDEX; three of four Commons pictures pass the checks, one of four
+    of Yandex's)."""
+    order = list(REGISTRY)
+    if getattr(config, "COMMONS_BEFORE_YANDEX", False):
+        names = [p.name for p in order]
+        if "yandex_images" in names and "wikimedia_images" in names:
+            y, w = names.index("yandex_images"), names.index("wikimedia_images")
+            if w > y:
+                order.insert(y, order.pop(w))
+    return order
+
+
+def _skipped(p: Provider, ctx: SourceContext) -> bool:
+    if ctx.enabled_names is not None and p.name not in ctx.enabled_names:
+        return True
+    if ctx.youtube_only and p.name != "youtube":
+        return True
+    return ctx.stage is not None and still_stage(p) != ctx.stage
+
+
 def ordered(ctx: SourceContext) -> List[Provider]:
     """The providers that apply to this scene, in order."""
-    out = []
-    for p in REGISTRY:
-        if ctx.enabled_names is not None and p.name not in ctx.enabled_names:
-            continue
-        if ctx.youtube_only and p.name != "youtube":
-            continue
-        if p.applies(ctx):
-            out.append(p)
-    return out
+    return [p for p in walk() if not _skipped(p, ctx) and p.applies(ctx)]
 
 
 def source_one(ctx: SourceContext):
@@ -228,12 +257,8 @@ def source_one(ctx: SourceContext):
     not tried again at the end).
     """
     from . import ytdlp
-    for p in REGISTRY:
-        if ctx.enabled_names is not None and p.name not in ctx.enabled_names:
-            continue
-        if ctx.youtube_only and p.name != "youtube":
-            continue
-        if not p.applies(ctx):
+    for p in walk():
+        if _skipped(p, ctx) or not p.applies(ctx):
             continue
         if ytdlp.stopped():
             return None                 # the scene's time is up: no more providers
