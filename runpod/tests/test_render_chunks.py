@@ -176,7 +176,9 @@ class _pod_env:
                 "POD_RENDER_CHUNKS": 4, "POD_RENDER_MIN_CHUNK_FRAMES": 30, "POD_RENDER_MIN_SECONDS": 0,
                 "POD_RENDER_QUEUE_GRACE_SECONDS": 600, "POD_RENDER_SPECULATE": False,
                 "POD_RENDER_CHUNK_TIMEOUT_SECONDS": 1800, "POD_RENDER_TIMEOUT_SECONDS": 3600,
-                "POD_RENDER_KEEP_CHUNKS": False, "POD_RENDER_PREFIX": "chunks/"}
+                "POD_RENDER_KEEP_CHUNKS": False, "POD_RENDER_PREFIX": "chunks/",
+                # The chunk count and the time limits follow the machine: the same on every test machine.
+                "RENDER_CPUS": 16, "RENDER_FPS_PER_TAB": 0.45}
         vals.update(self.over)
         self.patches = [mock.patch.object(config, k, v) for k, v in vals.items()]
         self.patches += [mock.patch.object(fanout.r2, "enabled", return_value=True),
