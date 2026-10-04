@@ -1098,11 +1098,18 @@ def _fetch(url: str, path: str, key: str = "", bucket: str = "", tries: int = 4)
 
 
 def _delete_keys(keys: List[str]) -> None:
-    for k in keys:
+    """Delete objects from R2, eight at a time: a job only waits a moment for this (finish_cleanup)."""
+    def one(k: str) -> None:
         try:
             r2.delete(k)
         except Exception:  # noqa: BLE001 - a leftover chunk is only storage
             pass
+    if len(keys) <= 2:
+        for k in keys:
+            one(k)
+        return
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        list(ex.map(one, keys))
 
 
 def _delete_prefix(prefix: str, keys: List[str]) -> None:

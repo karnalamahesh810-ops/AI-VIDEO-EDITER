@@ -402,6 +402,12 @@ def _require_youtube() -> None:
 _STORAGE_REFS = ("storage", "thumbStorage", "previewStorage")
 
 
+def _scene_media_on_r2() -> bool:
+    """Scene files go to Cloudflare R2 under a public, link-only name: R2_SCENE_MEDIA, and always when
+    the worker stores in Cloudflare only (R2_ONLY) - with R2 configured."""
+    return bool((config.R2_SCENE_MEDIA or storage.r2_only()) and r2.enabled())
+
+
 def _put_scene_file(local: str, obj: str, bucket: str, project_id: str, job_id: str) -> tuple:
     """
     (url, storage ref or None) for one scene file. Cloudflare R2 first
@@ -410,8 +416,15 @@ def _put_scene_file(local: str, obj: str, bucket: str, project_id: str, job_id: 
     neither the app nor the render re-signs it - and the app's storage stays
     small. The app's storage (a signed link plus the reference it is
     re-signed from) when R2 is off or refuses.
+
+    What this returns is SAVED in the timeline (scene_data) and the library,
+    so with no storage reference it must be a link that never expires: the
+    public R2 link (r2.upload), never a presigned one. Cloudflare-only
+    (R2_ONLY) with R2_SCENE_MEDIA off used to return storage.broker_upload's
+    presigned R2 link here - it dies after 7 days at most and nothing could
+    re-sign it, so every scene of a saved video would have gone dark.
     """
-    if config.R2_SCENE_MEDIA and r2.enabled():
+    if _scene_media_on_r2():
         try:
             return r2.upload(local, r2.tokened(obj), content_type=r2.content_type(local),
                              deadline=time.time() + config.R2_MEDIA_UPLOAD_SECONDS,
@@ -421,8 +434,6 @@ def _put_scene_file(local: str, obj: str, bucket: str, project_id: str, job_id: 
                 raise           # Cloudflare only: never fall back to the app's storage
             print(f"[worker] R2 upload of {os.path.basename(obj)} failed, using app storage: "
                   f"{type(e).__name__}: {str(e)[:120]}", flush=True)
-    if storage.r2_only():       # R2_SCENE_MEDIA off: still Cloudflare, by path
-        return storage.broker_upload(local, bucket, obj, project_id, job_id, read_ttl=_MEDIA_LINK_TTL), None
     ref = {"bucket": bucket, "path": obj}
     if storage.broker_enabled():
         return storage.broker_upload(local, bucket, obj, project_id, job_id, read_ttl=_MEDIA_LINK_TTL), ref
@@ -1161,7 +1172,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     try:
         def _put_split(local: str, name: str) -> str:
             obj = f"projects/{project_id}/{name}"
-            if project_id and ((config.R2_SCENE_MEDIA and r2.enabled()) or storage.broker_enabled()):
+            if project_id and (_scene_media_on_r2() or storage.broker_enabled()):
                 # R2 first: a public link that never expires (the signed one lapsed after 30 days).
                 return _put_scene_file(local, obj, inp.get("media_bucket") or config.MEDIA_BUCKET, project_id,
                                        (report.job or {}).get("id", ""))[0]
@@ -2518,7 +2529,12 @@ def handler(job):
                     "r2": r2.enabled(),
                     # The footage library's own bucket (src/libstore.py) and scene media on R2.
                     "r2Library": r2.library_enabled(),
-                    "r2SceneMedia": bool(config.R2_SCENE_MEDIA and r2.enabled()),
+                    "r2SceneMedia": _scene_media_on_r2(),
+                    # How a long render runs from this machine: whether it is one of the endpoint's
+                    # own workers, the chunks a spread render is cut into, and the CPUs a render gets.
+                    "spread": {"parentIsWorker": fanout.parent_is_worker(), "chunks": fanout.spread_chunks(),
+                               "cpus": renderer.cpus(),
+                               "wholeRenderLimitSeconds": int(config.RENDER_TIMEOUT_MAX_SECONDS)},
                     # Real download check per route: {"probe_youtube": true}.
                     "proxies": media.proxy_snapshot(),
                     **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),

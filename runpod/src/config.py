@@ -981,7 +981,9 @@ R2_LIBRARY_PUBLIC_BASE = os.getenv("R2_LIBRARY_PUBLIC_BASE", "").strip()
 R2_LIBRARY_PREFIX = os.getenv("R2_LIBRARY_PREFIX", "").strip()
 # Each scene's clip, preview and thumbnail go to R2_BUCKET under a public,
 # link-only name (no storage reference, so nothing re-signs them) instead of
-# the app's video-media bucket. On whenever R2 is configured; 0 = app storage.
+# the app's video-media bucket. On whenever R2 is configured; 0 = app storage
+# (only with R2_ONLY off too: Cloudflare-only keeps them in R2 either way, under
+# the same public link - a saved timeline never carries a link that expires).
 R2_SCENE_MEDIA = _flag("R2_SCENE_MEDIA", True)
 # Every file this worker stores goes to Cloudflare R2 (R2_BUCKET) once R2 is
 # configured: scene media, render chunks, parts' clips, the library and the
