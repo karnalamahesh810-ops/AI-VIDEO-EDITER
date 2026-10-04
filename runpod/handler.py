@@ -15,6 +15,9 @@ key. The app simply watches the row.
         -> MP4                           render.py       (Remotion)
         -> Supabase Storage              storage.py
 
+A job that brings a `script` and no narration has the narration made first by
+the free, self-hosted voice (tts.py; TTS_API_BASE), then runs exactly as above.
+
 Actions
 -------
 plan    : everything up to the timeline document. Returns it WITHOUT rendering,
@@ -58,6 +61,7 @@ from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, voicepolish
 from src import brandkit
+from src import tts
 
 
 def _work_dir(job_id: str) -> str:
@@ -70,6 +74,7 @@ def _work_dir(job_id: str) -> str:
 # `phase` (not `stage`: the app already reads `stage` as the display text).
 PHASES = ("narration", "transcribe", "plan", "source", "design", "sound", "render", "upload", "save")
 _PHASE_BY_PREFIX = (
+    ("Making the narration", "narration"),
     ("Downloading narration", "narration"),
     ("Aligning narration", "transcribe"),
     ("Reading the whole story", "plan"), ("Planning", "plan"),
@@ -793,14 +798,104 @@ def _fill_missing_media(doc: dict) -> int:
     return int(got.get("graphic", 0)) + int(got.get("held", 0)) + int(got.get("card", 0))
 
 
+def _store_narration(local: str, ext: str, inp: dict) -> str:
+    """
+    The made narration where the app, the editor and every later render can
+    read it; "" when this run has no storage at all (a local run keeps the
+    file on its disk).
+
+    Cloudflare R2 first, under a link-only name that never expires - a
+    timeline can sit in the editor for weeks and its narration link must
+    still open. The app's storage (a signed link, 30 days) only where R2 is
+    not configured; with R2_ONLY an R2 failure is an error, never a quiet
+    fallback (the owner's storage is Cloudflare only since 2026-10-04).
+    """
+    project_id, job_id = inp.get("project_id") or "", inp.get("_job_id") or ""
+    folder = f"projects/{project_id}" if project_id else f"jobs/{job_id or uuid.uuid4().hex}"
+    obj = f"{folder}/audio/narration{ext or '.mp3'}"
+    if r2.enabled():
+        try:
+            return r2.upload(local, r2.tokened(obj), content_type=r2.content_type(local, "audio/mpeg"),
+                             deadline=time.time() + 2 * config.R2_MEDIA_UPLOAD_SECONDS,
+                             cache_control=r2.IMMUTABLE)
+        except Exception as e:  # noqa: BLE001 - the app's storage below, unless Cloudflare only
+            if storage.r2_only() or not project_id:
+                raise
+            print(f"[worker] R2 upload of the narration failed, using app storage: "
+                  f"{type(e).__name__}: {str(e)[:120]}", flush=True)
+    if project_id and (storage.broker_enabled() or (config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY)):
+        bucket = inp.get("media_bucket") or config.MEDIA_BUCKET
+        return storage.broker_upload(local, bucket, obj, project_id, job_id, read_ttl=_MEDIA_LINK_TTL,
+                                     deadline=time.time() + 300)
+    return ""
+
+
+def _narration_from_script(inp: dict, work: str, report: Reporter) -> dict:
+    """
+    Script -> video. The job brought a script and no voice-over (the owner's
+    flow, 2026-08-14: "just paste script, select voice over or directly
+    upload audio, and make video"), so the narration is made here by the
+    free voice (src/tts.py), stored, and put into the input as a normal
+    audio_url: everything after this runs as it always did, and whisper
+    still measures the real word timings from the audio.
+
+    The file lands where a downloaded narration would (<work>/narration.mp3,
+    the name the loudness measurement and the polish look for). The project
+    row is told its audio_url, so the app shows and re-sends it like an
+    uploaded voice-over; the captions read the words as they were voiced
+    (the script without its [directions] and markdown).
+    Returns {"url", "path", "report"}; raises tts.TtsError with the reason.
+    """
+    report("Making the narration (free voice)", 3)
+    events.phase("narration")
+
+    def progress(done: int, total: int) -> None:
+        report(f"Making the narration (free voice): part {done} of {total}", 3, done=done, total=total)
+    made = tts.synthesize(inp["script"], os.path.join(work, "tts"), opts=tts.options(inp), on_progress=progress)
+    local = os.path.join(work, "narration.mp3")
+    shutil.move(made["path"], local)
+    info = {"source": "tts", **{k: v for k, v in made.items() if k not in ("path", "text")}}
+    url = _store_narration(local, os.path.splitext(made["path"])[1], inp)
+    if url:
+        inp["audio_url"] = url
+        if inp.get("project_id"):
+            storage.patch_project(inp["project_id"], {"audio_url": url})
+    else:
+        inp["audio_path"] = local
+        print("[worker] no storage configured: the narration stays on this disk", flush=True)
+    inp["script"] = made["text"]
+    events.emit("narration", "made", provider=str(made.get("model") or ""),
+                data={k: info.get(k) for k in ("seconds", "chars", "parts", "voice", "cloned", "lufs",
+                                               "retries", "gpuSeconds", "tookSeconds")})
+    return {"url": url or local, "path": local, "report": info}
+
+
+def _narration_fields(doc: dict) -> dict:
+    """For the caller: the narration this job made from the script, and the link it is kept under."""
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    if not isinstance(meta.get("narration"), dict):
+        return {}
+    src = str(meta.get("audioSource") or "")
+    return {"narration": meta["narration"], **({"audio_url": src} if src.startswith("http") else {})}
+
+
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     raw_audio = inp.get("audio_url") or inp.get("audio_path")
+    made = None
+    if not raw_audio and tts.wanted(inp):
+        # A script and no voice-over: the free voice makes the narration first.
+        made = _narration_from_script(inp, work, report)
+        raw_audio = made["url"]
     if not raw_audio:
         raise ValueError("audio_url is required (upload a voiceover or generate TTS first)")
 
-    report("Downloading narration", 4)
-    events.phase("narration")
-    if str(raw_audio).startswith("bench://"):
+    if not made:
+        report("Downloading narration", 4)
+        events.phase("narration")
+    if made:
+        # Made on this disk a moment ago: nothing to download.
+        audio_src, audio_path = made["url"], made["path"]
+    elif str(raw_audio).startswith("bench://"):
         # A benchmark narration baked into the image (bench/audio/<case>.mp3),
         # so the seven-script benchmark needs no upload and no credentials.
         case = "".join(ch for ch in str(raw_audio)[8:] if ch.isalnum() or ch in "_-")
@@ -1207,6 +1302,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             "checks, AI rescue and AI images stopped partway. Top up Kie and "
             "re-run for full quality."))
     doc["meta"]["audioSource"] = raw_audio
+    if made:
+        # The narration was made from the script by the free voice (src/tts.py):
+        # which voice, how long, how loud - and that it was not an upload.
+        doc["meta"]["narration"] = made["report"]
     # Where the sourcing time actually went, visible from outside the worker.
     doc["meta"]["sourcing"] = dict(media.LAST_STATS)
     # What this video cost on the AI account (Kie credits), estimated from
@@ -2398,6 +2497,8 @@ def handler(job):
                     "localVision": localvision.available(),
                     "upscaler": upscale.available(),
                     "r2": r2.enabled(),
+                    # Script -> video: whether a script-only job can have its narration made here.
+                    "freeVoice": tts.status(),
                     # The footage library's own bucket (src/libstore.py) and scene media on R2.
                     "r2Library": r2.library_enabled(),
                     "r2SceneMedia": bool(config.R2_SCENE_MEDIA and r2.enabled()),
@@ -2451,6 +2552,7 @@ def handler(job):
                 ledger.save(job_id, project_id)     # later videos never show these moments again
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "plan", "timeline": doc, "costs": summary,
+                    **_narration_fields(doc),
                     "events": doc["meta"]["events"],
                     "vision": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
@@ -2567,6 +2669,7 @@ def handler(job):
                 ledger.save(job_id, project_id)     # later videos never show these moments again
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "build", "timeline": doc, **out, "costs": summary,
+                    **_narration_fields(doc),
                     "events": doc["meta"]["events"],
                     **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") else {}),
                     "vision": vision.stats(),
