@@ -1215,8 +1215,10 @@ WATERMARK_CHECK = _flag("WATERMARK_CHECK", True)
 WATERMARK_CLIP_SHARE = float(os.getenv("WATERMARK_CLIP_SHARE", "0.75"))
 # STOCK_GATE_REPAIR: the quality gate also replaces a stock-agency picture it
 # finds on a timeline built BEFORE this block (a render of an older project).
-# Off: those renders keep their pictures; the owner rebuilds to replace them.
-STOCK_GATE_REPAIR = _flag("STOCK_GATE_REPAIR", False)
+# On (the owner, 2026-10-04: no Getty / Alamy pictures in his videos - his two
+# restored videos were built before the block): replaced like a broken scene,
+# through the ladder, never left empty. Off: those renders keep their pictures.
+STOCK_GATE_REPAIR = _flag("STOCK_GATE_REPAIR", True)
 # A subject pool's moment is rated on storyboard tiles only; on = each pooled
 # clip also goes through the vision judge against its own line (the news and
 # weather styles: a chyron naming another town is only readable full size).

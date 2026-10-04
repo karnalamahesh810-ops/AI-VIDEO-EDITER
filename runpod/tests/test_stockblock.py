@@ -173,7 +173,7 @@ class Names(unittest.TestCase):
             self.assertIn(k, handler.CONFIG_OVERRIDABLE)
             self.assertTrue(hasattr(config, k), k)
         self.assertTrue(config.STOCK_BLOCK and config.WATERMARK_CHECK)
-        self.assertFalse(config.STOCK_GATE_REPAIR)
+        self.assertTrue(config.STOCK_GATE_REPAIR)          # on since 2026-10-04: older timelines too
         self.assertEqual(config.WATERMARK_CLIP_SHARE, 0.75)
 
 
