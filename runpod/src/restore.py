@@ -686,8 +686,19 @@ def put_if_absent(local: str, bucket: str, key: str) -> bool:
 
 
 def _ours(project_id: str, where: Optional[Tuple[str, str]]) -> bool:
-    """A restore only ever writes under its own project's folder of the videos bucket."""
-    return bool(where and where[0] == config.R2_BUCKET and where[1].startswith(f"projects/{project_id}/"))
+    """
+    A restore only ever writes under its own project's folder of the videos
+    bucket: a plain key there - never one with "." / ".." / empty parts or a
+    backslash, which a client could resolve to somewhere else.
+    """
+    if not (where and project_id and where[0] == config.R2_BUCKET):
+        return False
+    key = str(where[1] or "")
+    head = f"projects/{project_id}/"
+    if not key.startswith(head) or "\\" in key:
+        return False
+    rest = key[len(head):].split("/")
+    return bool(rest) and all(p not in ("", ".", "..") for p in rest)
 
 
 def _row(link: Link, did: str, how: str = "", **more) -> dict:

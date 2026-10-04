@@ -469,6 +469,24 @@ class SameKey(Bench):
         self.assertEqual((out["missing"], out["failed"], self.r2.puts, self.fetches()), (2, 2, [], []))
         self.assertTrue(all("not this project's own file" in f["reason"] for f in out["failures"]))
 
+    def test_a_key_that_could_resolve_outside_the_projects_folder_is_never_written(self):
+        # "projects/<pid>/../<other>/..." names another folder once a client
+        # resolves the dots: refused like any other foreign file.
+        for bad in (f"projects/{PID}/../{OTHER}/media/s0001-bbbbbbbbbbbb.jpg",
+                    f"projects/{PID}/./media/s0001-bbbbbbbbbbbb.jpg",
+                    f"projects/{PID}//media/s0001-bbbbbbbbbbbb.jpg",
+                    f"projects/{PID}/media\\s0001-bbbbbbbbbbbb.jpg",
+                    f"projects/{PID}/"):
+            self.assertFalse(restore._ours(PID, (config.R2_BUCKET, bad)), bad)
+        self.assertFalse(restore._ours("", (config.R2_BUCKET, "projects//media/a.jpg")))
+        self.assertTrue(restore._ours(PID, (config.R2_BUCKET, f"projects/{PID}/media/s0001-bbbbbbbbbbbb.jpg")))
+        dotted = photo_scene(1)
+        dotted["media"]["url"] = f"{BASE}/projects/{PID}/../{OTHER}/media/s0001-bbbbbbbbbbbb.jpg"
+        dotted["media"].pop("thumbnail", None)
+        out = self.run_restore(timeline(dotted))
+        self.assertEqual((out["failed"], self.r2.puts), (1, []))
+        self.assertIn("not this project's own file", out["failures"][0]["reason"])
+
     def test_a_shared_picture_is_restored_once_for_all_the_scenes_that_show_it(self):
         a, b = photo_scene(1), photo_scene(2)
         b["media"] = dict(a["media"])
@@ -786,6 +804,21 @@ class HandlerAction(Bench):
         out = handler.handler(self.job())
         self.assertEqual((out["ok"], out["action"]), (False, "restore_media"))
         self.assertIn("needs the saved timeline", out["error"])
+        handler.storage.patch_project.assert_not_called()
+
+    def test_whatever_breaks_around_a_restore_never_marks_the_project_failed(self):
+        # An error outside restore.run (here: the phase line itself) reaches the
+        # handler's catch-all, which marks a build or render failed - never a restore.
+        real_phase = handler.events.phase
+
+        def phase(name):
+            if name == "restore":
+                raise RuntimeError("broke before the restore started")
+            return real_phase(name)
+        with mock.patch.object(handler.events, "phase", side_effect=phase):
+            out = handler.handler(self.job(timeline=timeline(clip_scene(0))))
+        self.assertFalse(out["ok"])
+        self.assertIn("broke before the restore started", out["error"])
         handler.storage.patch_project.assert_not_called()
 
     def test_a_dry_run_through_the_handler(self):

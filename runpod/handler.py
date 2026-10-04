@@ -2642,7 +2642,9 @@ def handler(job):
         # A render that failed still says what its quality check found and did.
         gate = quality.LAST.get("gate")
         checked = gate.finish() if gate is not None else None
-        if project_id:
+        # A restore is not the project's job: whatever breaks in it, the
+        # project row is never written (never marked failed) - src/restore.py.
+        if project_id and action != "restore_media":
             # The broker takes events only while the project is "rendering":
             # send them before the status changes, or a failed job has no log.
             try:
