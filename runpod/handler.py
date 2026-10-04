@@ -47,6 +47,12 @@ batch   : several videos as one job, built one after another on this machine:
           through this handler (its own config, costs, events and project row);
           a failed one does not stop the rest. Returns {done, failed,
           total_cost, seconds}. See src/batch.py.
+recut   : cut every shot of a sourced timeline that runs longer than the cap
+          (7 s) on its words, the new pieces filled with new footage or
+          pictures (src/recut.py): {"project_id", "timeline" | "timeline_url"
+          | "timeline_key", "apply", "cap", "seconds", "media_bucket"}. A dry
+          run (the default) returns the plan and changes nothing; an apply
+          keeps the old timeline on R2 first and writes the project once.
 
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
@@ -74,7 +80,7 @@ from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
 from src import brandkit, stockblock
-from src import restore
+from src import recut, restore
 from src import batch, sources
 from src import tts
 
@@ -2607,6 +2613,51 @@ def do_restore(inp: dict, work: str, report: Reporter) -> dict:
         _restore_config(previous)
 
 
+def do_recut(inp: dict, work: str, report: Reporter) -> dict:
+    """
+    Re-cut the long shots of a timeline that is already sourced (src/recut.py;
+    the owner, 2026-10-04: "some of the clips run more than seven seconds").
+    The timeline is read from the input or through storage, the video style it
+    was planned with is in force (its vertical clips framed, its sources), its
+    story steers the judge. A dry run (the default) only plans; an apply saves
+    the new files like a plan (publish_media, _publish_choices) and writes the
+    project once, through recut.write_project - never anything on a failure.
+    """
+    if not any(inp.get(k) for k in ("timeline", "timeline_url", "timeline_key")):
+        raise ValueError("recut needs the saved timeline: timeline, timeline_url or timeline_key")
+    doc = restore.load_timeline(inp, work)
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    style_inp = {"video_style": inp.get("video_style") or meta.get("videoStyle") or "",
+                 "config": dict(inp["config"]) if isinstance(inp.get("config"), dict) else None}
+    styles.apply(style_inp)
+    previous = _apply_config(style_inp.get("config"))
+    story = meta.get("story") if isinstance(meta.get("story"), dict) else {}
+    project_id = str(inp.get("project_id") or "")
+    job_id = str(inp.get("_job_id") or "")
+    bucket = inp.get("media_bucket") or config.MEDIA_BUCKET
+
+    def ready() -> None:
+        # The same refusals as a plan: no AI credit (nothing would judge the new shots), no YouTube.
+        _require_ai_credit()
+        if inp.get("allow_youtube") is not False:
+            report("Checking the YouTube connection", 3)
+            _require_youtube()
+        vision.set_story(story)
+        media.set_story_kind(str(story.get("kind") or ""))
+        media.set_youtube_only(bool(inp.get("youtube_only")))
+
+    def publish(d: dict) -> int:
+        return publish_media(d, project_id, bucket, report, job_id=job_id, band=(84, 92))
+
+    def choices(d: dict) -> int:
+        return _publish_choices(d, project_id, bucket, job_id, work, quality.floor(report, 92))
+
+    try:
+        return recut.run(inp, doc, work, report, publish=publish, choices=choices, ready=ready)
+    finally:
+        _restore_config(previous)
+
+
 def handler(job):
     started = time.time()
     job_id = job.get("id") or uuid.uuid4().hex
@@ -2653,17 +2704,20 @@ def handler(job):
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
     # Project updates go through the broker as this job; parts and render
-    # chunks are not the project's job and never write the row.
-    storage.CURRENT_JOB[0] = job_id if action in ("plan", "build", "render", "resource") else ""
+    # chunks are not the project's job and never write the row. (A re-cut
+    # writes it once, at its very end, only on an apply: src/recut.py.)
+    storage.CURRENT_JOB[0] = job_id if action in ("plan", "build", "render", "resource", "recut") else ""
     # Every job keeps its own ledger and event log; a fan-out child returns
     # both in its result and the parent absorbs them.
     costs.reset(inp.get("prices") if isinstance(inp.get("prices"), dict) else None)
     # A restore (src/restore.py) is not the project's job: its progress and its
     # events stay with this job's own status and result, so nothing of it is
-    # ever written to the app's database.
-    reports_to = "" if action == "restore_media" else project_id
+    # ever written to the app's database. Nor is a re-cut's (src/recut.py),
+    # whose one write is the finished timeline.
+    reports_to = "" if action in ("restore_media", "recut") else project_id
+    applying = action == "recut" and bool(inp.get("apply"))
     events.start_job(job_id, reports_to, part=("part" if action in ("source_part", "render_chunk") else ""))
-    if action in ("plan", "build", "render", "resource"):
+    if action in ("plan", "build", "render", "resource") or applying:
         costs.measure_start()
     report = Reporter(reports_to, job=job)
     work = _work_dir(job_id)
@@ -2680,7 +2734,7 @@ def handler(job):
     ledger_job = str(inp.get("_ledger_job") or job_id)
 
     try:
-        if action in ("plan", "build", "resource", "source_part"):
+        if action in ("plan", "build", "resource", "source_part") or applying:
             # What earlier videos showed (src/ledger.py), read in the background
             # while the narration is transcribed; sourcing never repeats it.
             ledger.start_loading(ledger_job, project_id)
@@ -2808,6 +2862,23 @@ def handler(job):
                 traceback.print_exc()
                 out = {"ok": False, "error": str(e)[:800]}
             return {**out, "action": "restore_media", "events": events.summary(),
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action == "recut":
+            # Long shots of a sourced timeline cut and filled (src/recut.py).
+            # Returns before the project is marked "rendering" below: a dry
+            # run writes nothing anywhere, an apply writes the row once, at
+            # its end, and a failure never marks the project failed.
+            events.phase("recut")
+            try:
+                out = do_recut(inp, work, report)
+            except Exception as e:  # noqa: BLE001 - reported in the result, the project is not touched
+                traceback.print_exc()
+                out = {"ok": False, "error": str(e)[:800]}
+            if applying:
+                costs.measure_end()
+            return {**out, "action": "recut", "costs": costs.summary(time.time() - started),
+                    "events": events.summary(), "vision_stats": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "health":
@@ -3054,7 +3125,8 @@ def handler(job):
         checked = gate.finish() if gate is not None else None
         # A restore is not the project's job: whatever breaks in it, the
         # project row is never written (never marked failed) - src/restore.py.
-        if project_id and action != "restore_media":
+        # Nor a re-cut's: its one write is the finished timeline (src/recut.py).
+        if project_id and action not in ("restore_media", "recut"):
             # The broker takes events only while the project is "rendering":
             # send them before the status changes, or a failed job has no log.
             try:
