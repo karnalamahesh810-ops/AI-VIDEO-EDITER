@@ -67,6 +67,7 @@ from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, voicepolish
 from src import brandkit
 from src import restore
+from src import sharpness
 
 
 def _work_dir(job_id: str) -> str:
@@ -637,7 +638,8 @@ def _bind_split_images(doc: dict, work: str, put) -> int:
     def fetch(query: str, dest: str) -> str:
         from PIL import Image
         try:
-            found = media.search_web_images(query, 6) or []
+            # Half the frame each, not full screen: the plain search, as before.
+            found = media.search_web_images(query, 6, full_screen=False) or []
         except Exception:  # noqa: BLE001
             return ""
         for a in found:
@@ -746,7 +748,8 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
     def fetch(query: str, dest: str) -> str:
         from PIL import Image
         try:
-            found = media.search_web_images(query, 6) or []
+            # A photo window, not full screen: the plain search, as before.
+            found = media.search_web_images(query, 6, full_screen=False) or []
         except Exception:  # noqa: BLE001
             return ""
         for a in found:
@@ -1243,6 +1246,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     doc["meta"]["audioSource"] = raw_audio
     # Where the sourcing time actually went, visible from outside the worker.
     doc["meta"]["sourcing"] = dict(media.LAST_STATS)
+    # Pictures and clips measured for real detail and turned down as too soft, all
+    # passes counted (src/sharpness.py).
+    doc["meta"]["sourcing"]["sharpness"] = sharpness.stats()
     # What this video cost on the AI account (Kie credits), estimated from
     # measured per-call prices (2026-09-25, Gemini 3.8 Flash): vision ~0.08
     # per check, a planning call ~0.15, gpt-image-2 ~4 per image. A key that
@@ -2321,7 +2327,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "HOOK_BOOST_MAX_SHOT", "HOOK_BOOST_MOTION", "HOOK_BOOST_DRAMA", "HOOK_BOOST_QUIET_SECONDS",
                       "HOOK_BOOST_SFX_CUTS", "HOOK_TEASER", "HOOK_TEASER_SHOTS", "HOOK_TEASER_SECONDS",
                       # Auto maps (src/automaps.py): named rivers, reservoirs, dams and canals on real geography.
-                      "AUTO_MAPS", "AUTO_MAP_GAP")
+                      "AUTO_MAPS", "AUTO_MAP_GAP",
+                      # Real detail of pictures and clips (src/sharpness.py, the owner 2026-10-04).
+                      "PICTURE_SHARPNESS_CHECK", "MAX_PICTURE_MAGNIFICATION", "CLIP_SHARPNESS_CHECK",
+                      "MIN_CLIP_REAL_HEIGHT", "MIN_CLIP_HEIGHT")
 
 
 def _apply_config(overrides) -> dict:

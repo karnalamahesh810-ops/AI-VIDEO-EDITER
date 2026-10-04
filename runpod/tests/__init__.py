@@ -20,3 +20,9 @@ os.environ.setdefault("VOICE_POLISH", "0")
 # ones by their link: the suite's documents point at made-up links. No time
 # for it here; tests/test_grade.py gives its own measurements a budget.
 os.environ.setdefault("GRADE_MEASURE_SECONDS", "0")
+# The real-detail checks (src/sharpness.py) would call every synthetic still and
+# clip of the suite - 160x90 test patterns - too soft for the frame: off here,
+# so the suite also proves that with them off nothing changes. tests/test_sharpness.py
+# switches them on around its own pictures and clips.
+os.environ.setdefault("PICTURE_SHARPNESS_CHECK", "0")
+os.environ.setdefault("CLIP_SHARPNESS_CHECK", "0")

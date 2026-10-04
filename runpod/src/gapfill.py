@@ -506,7 +506,8 @@ def _budget(n: int) -> float:
 def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc: bool = False,
                youtube_only: bool = False, indices: Optional[List[int]] = None,
                used: Optional[Used] = None, seconds: Optional[float] = None,
-               scene_seconds: Optional[float] = None, label: str = "") -> Dict[str, int]:
+               scene_seconds: Optional[float] = None, label: str = "",
+               keep_order: bool = False) -> Dict[str, int]:
     """
     Fill every empty line of `results` (a list by index, or a dict) - or just
     `indices` - in place through the ladder: (pack) a niche pack clip that
@@ -514,8 +515,10 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
     (c) a picture. Nothing another scene shows is ever taken (Used). Runs
     FALLBACK_PARALLEL scenes at once under its own time box, with a download
     window of its own (the sourcing deadline may be long past) and
-    FALLBACK_SCENE_SECONDS a scene. Returns {"asked", "pack", "library",
-    "reserve", "still", "generated", "left", "seconds"}.
+    FALLBACK_SCENE_SECONDS a scene. The scenes start in coverage order, or in
+    the order of `indices` with keep_order (the quality gate: the softest shot
+    first). Returns {"asked", "pack", "library", "reserve", "still",
+    "generated", "left", "seconds"}.
     """
     from . import media, packs
     by_index = {j["index"]: j for j in jobs or []}
@@ -568,7 +571,7 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
     old = ytdlp.DEADLINE[0]
     ytdlp.set_deadline(deadline)          # a short download window of the ladder's own
     pool = ThreadPoolExecutor(max_workers=max(1, min(config.FALLBACK_PARALLEL, len(todo))))
-    order = coverage_order([by_index[i] for i in todo])
+    order = [by_index[i] for i in todo] if keep_order else coverage_order([by_index[i] for i in todo])
     futures = {pool.submit(contextvars.copy_context().run, one, j): j["index"] for j in order}
     try:
         for fut in media._until(futures, deadline + 5):

@@ -708,12 +708,37 @@ ANIMATION_OVER_FOOTAGE = _flag("ANIMATION_OVER_FOOTAGE", False)
 # The owner wants 1080p-looking clips: a modern clip below this many lines is
 # replaced (downloads already take the best format up to 1080p). Archive film
 # (a title naming a year before 1990, a newsreel, Pathe...) may go down to
-# MIN_ARCHIVE_HEIGHT - a 1936 newsreel only exists small.
-MIN_CLIP_HEIGHT = int(os.getenv("MIN_CLIP_HEIGHT", "480"))
+# MIN_ARCHIVE_HEIGHT - a 1936 newsreel only exists small. 720 since 2026-10-04
+# (the owner: "video clips also we needed to make quality"; it was 480).
+MIN_CLIP_HEIGHT = int(os.getenv("MIN_CLIP_HEIGHT", "720"))
 # A photo's long side must be at least this (a full-frame still at 1080p; a
 # Wikipedia "960px-" thumbnail passes). 0 turns the check off.
 MIN_IMAGE_LONG_SIDE = int(os.getenv("MIN_IMAGE_LONG_SIDE", "900"))
 MIN_ARCHIVE_HEIGHT = int(os.getenv("MIN_ARCHIVE_HEIGHT", "240"))
+# Real detail, not file size (src/sharpness.py; the owner, 2026-10-04: "fix blur
+# image issues", "images needed HD to 4K level"). The Lake Powell video showed
+# 40 of its 141 pictures blown up past 1.6x though most were stored 1920 px wide:
+# thumbnails, pages' upscaled copies and our own upscaler make big files of
+# small pictures. PICTURE_SHARPNESS_CHECK: every picture is measured right
+# after its download (the round trip: the smallest size it survives within 37 dB
+# is its real detail) and is not used full screen when the screen would enlarge
+# that detail more than MAX_PICTURE_MAGNIFICATION at the end of its Ken Burns
+# move - 1.45 = 1.25 at rest x the planner's typical 1.16 move, about 1536 px of
+# real detail across a landscape frame (a portrait picture needs that width:
+# it is cropped to fill the frame). Sourcing takes the next candidate, footage
+# or the fallback ladder instead; searches ask for big pictures first; the
+# quality gate replaces such a picture before the render when the ladder finds
+# a sharper shot, else the picture stays. Never an inset on a backdrop.
+PICTURE_SHARPNESS_CHECK = _flag("PICTURE_SHARPNESS_CHECK", True)
+MAX_PICTURE_MAGNIFICATION = float(os.getenv("MAX_PICTURE_MAGNIFICATION", "1.45"))
+# CLIP_SHARPNESS_CHECK: up to three frames of every downloaded clip are measured
+# the same way, before any vision call; a modern clip whose best frame holds
+# under MIN_CLIP_REAL_HEIGHT lines of real detail (an upscaled upload, whatever
+# its file says - a 480p upload re-encoded at 1080p reads ~410) is turned down,
+# in sourcing, in the ladder (packs, library, spare moments) and by the quality
+# gate. Archive film is exempt (MIN_ARCHIVE_HEIGHT).
+CLIP_SHARPNESS_CHECK = _flag("CLIP_SHARPNESS_CHECK", True)
+MIN_CLIP_REAL_HEIGHT = int(os.getenv("MIN_CLIP_REAL_HEIGHT", "720"))
 
 # --- local vision + upscaling (CPU, no API) -----------------------------------
 # CLIP (ONNX, baked into the image under /opt/models) judges every candidate
@@ -1171,6 +1196,14 @@ QUALITY_REPAIR_SCENE_SECONDS = float(os.getenv("QUALITY_REPAIR_SCENE_SECONDS", "
 QUALITY_REPAIR_GENERATED = _flag("QUALITY_REPAIR_GENERATED", False)
 # A still whose long side is under this many pixels is too small to show.
 QUALITY_MIN_IMAGE_SIDE = int(os.getenv("QUALITY_MIN_IMAGE_SIDE", "320"))
+# The real-detail check of the gate (PICTURE_SHARPNESS_CHECK, CLIP_SHARPNESS_CHECK):
+# every full-screen picture and clip of the document is measured within this
+# many seconds (QUALITY_PARALLEL at a time; a clip on storage is read by three
+# seeks, never downloaded whole). What is not measured in time is trusted. The
+# blurry ones are replaced from the ladder within what is left of
+# QUALITY_REPAIR_SECONDS after the broken scenes, at least QUALITY_SHARPEN_MIN_SECONDS.
+QUALITY_SHARPNESS_SECONDS = float(os.getenv("QUALITY_SHARPNESS_SECONDS", "45"))
+QUALITY_SHARPEN_MIN_SECONDS = float(os.getenv("QUALITY_SHARPEN_MIN_SECONDS", "60"))
 # When more than this share of the scenes' own clips and pictures cannot be read
 # from storage (and at least QUALITY_MISSING_MIN of them), the render stops
 # before a frame is drawn with an error that says so - the project's files were

@@ -320,11 +320,14 @@ def detect_niches(*texts: Any, style: str = "", limit: int = 3) -> List[str]:
 # The job's niches, read once off its story (use_job); a scene adds its own (niches_for).
 JOB: Dict[str, Any] = {}
 STATS: Dict[str, Any] = {"loaded": {}, "lookups": 0, "hits": 0}
+# Pack clips this job found too soft for the frame (src/sharpness.py): not fetched again.
+_SOFT: set = set()
 
 
 def reset() -> None:
     JOB.clear()
     STATS.update(loaded={}, lookups=0, hits=0)
+    _SOFT.clear()
 
 
 def use_job(title: str = "", brief: Optional[dict] = None, style: str = "", text: str = "") -> List[str]:
@@ -816,6 +819,16 @@ def fetch(entry: Entry, work: str, job: Optional[dict] = None, similarity: Optio
         except OSError:
             pass
         return None
+    # Held to the same real-detail check as a searched clip (src/sharpness.py; archive film exempt).
+    soft = media.clip_detail_reason(path, f"{entry.title} {entry.attribution}", entry.source or "")
+    if soft:
+        print(f"[packs] {entry.id}: {soft}; left out", flush=True)
+        _SOFT.add(entry.id)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return None
     note = _REVIEW.get(entry.license_class, "")
     topics = ", ".join(entry.topics[:3])
     asset = media.MediaAsset(
@@ -847,6 +860,8 @@ def pick(job: dict, used, work: str, stop: float, *, require_cc: bool = False, f
     for hit in hits:
         if time.time() > stop:
             return None
+        if hit.entry.id in _SOFT:
+            continue                        # found too soft for the frame earlier in this job
         shot = shot_of(hit.entry, job.get("start"))
         if not used.claim(i, shot):
             continue

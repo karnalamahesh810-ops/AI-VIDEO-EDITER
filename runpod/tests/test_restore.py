@@ -835,7 +835,7 @@ class WhatPlansRecordForALaterRestore(Bench):
         doc = doc_with([{"label": "Solid ground"}, {"label": "Submerged mud"}])
         queries = []
 
-        def search(q, limit=6):
+        def search(q, limit=6, full_screen=True):
             queries.append(q)
             return [media.MediaAsset(kind="image", source="web", url=f"https://img/{len(queries)}.jpg")]
         stored = {}

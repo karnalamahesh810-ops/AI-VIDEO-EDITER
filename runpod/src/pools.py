@@ -745,6 +745,15 @@ def _fetch(job: dict, cand: dict, m: dict, work: str, require_cc: bool,
                                                cand.get("title", ""))
     if not path or media.has_burned_captions(path) or media.motion_rejects(path):
         return None
+    # An upscaled upload (src/sharpness.py): soft in every moment, whatever its file says.
+    soft = media.clip_detail_reason(path, cand.get("title", ""))
+    if soft:
+        print(f"[pools] {subject}: dropped {cand['id']} @ {m['start']:.0f}s: {soft}", flush=True)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return None
     # A pooled moment is rated on storyboard tiles only, where a chyron naming
     # another town cannot be read: the AI-slop and not-footage filters look at
     # the real frames (src/slop.py), and with POOL_JUDGE_CLIPS (the news and

@@ -41,6 +41,7 @@ import requests
 from . import candidates, config, costs, events, intent, ledger, moments, providers, proxies, vision
 from . import imagefix as _imagefix
 from . import localvision as _localvision
+from . import sharpness as _sharpness
 from .errors import RETRY, FailureClass, classify_exception, classify_ytdlp, from_reason
 from .storage import download
 
@@ -195,7 +196,32 @@ class MediaAsset:
 # Real imagery: Wikimedia Commons + Openverse
 # --------------------------------------------------------------------------- #
 
-def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
+def _sized_image_rows(query: str, count: int, proxy: Optional[str]) -> List[tuple]:
+    """
+    (url, width, height, title, page, thumbnail) rows of Bing's image search -
+    the engine DuckDuckGo's image search runs on - with its "larger than W x H"
+    filter at the size a sharp full-screen picture needs (sharpness.min_size).
+    Measured 2026-10-04: the plain search returned 4-14 of 35 pictures big
+    enough ("Lake Powell drought bathtub ring": 5), the filtered one 32-35.
+    """
+    from ddgs.engines.bing_images import BingImages
+    w, h = _sharpness.min_size()
+
+    class _Sized(BingImages):
+        def build_payload(self, *args, **kwargs):
+            p = super().build_payload(*args, **kwargs)
+            size = f"+filterui:imagesize-custom_{w}_{h}"
+            p["qft"] = size + (f"+{p['qft']}" if p.get("qft") else "")
+            return p
+
+    found = _Sized(proxy=proxy, timeout=15).search(query, region="us-en", safesearch="moderate", timelimit=None,
+                                                    page=1, max_results=count) or []
+    return [(getattr(r, "image", "") or "", getattr(r, "width", 0) or 0, getattr(r, "height", 0) or 0,
+             getattr(r, "title", "") or "", getattr(r, "url", "") or "", getattr(r, "thumbnail", "") or "")
+            for r in found]
+
+
+def search_web_images(query: str, limit: int = 6, full_screen: bool = True) -> List[MediaAsset]:
     """
     Real photographs of the named subject from a general image search.
 
@@ -205,9 +231,16 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
     when SERPER_API_KEY is set, the keyless DuckDuckGo search otherwise.
     Web results carry stock watermarks and unknown licences, so every one is
     vision-checked for watermarks and flagged for review.
+
+    `full_screen` (PICTURE_SHARPNESS_CHECK on): pictures big enough to fill
+    the frame sharply are asked for first (_sized_image_rows; the plain
+    search adds to them only when they are too few), and a result whose own
+    size could never be sharp full screen is not offered at all. Off for a
+    graphic's small photo window.
     """
     if not config.ALLOW_WEB_IMAGES or not query.strip():
         return []
+    big_first = bool(full_screen and _sharpness.picture_on())
     rows = []
     # (Bright Data's SERP API used to be asked first; removed 2026-10-04 at the owner's
     # word: it took 44 s a search and timed out 300+ times a video. DuckDuckGo
@@ -232,19 +265,33 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
         # One direct attempt stays as the fallback for an unproxied box.
         # A picture route when there is one (every Decodo IP: config.IMAGE_PROXIES), else a YouTube one.
         from_proxy = _imagefix._residential_route() or _next_proxy()
-        for proxy in ([from_proxy, None] if from_proxy else [None]):
-            try:
-                from ddgs import DDGS
-                with DDGS(proxy=proxy, timeout=15) as ddg:
-                    for it in ddg.images(query, max_results=limit * 2):
-                        rows.append((it.get("image"), it.get("width") or 0,
-                                     it.get("height") or 0, it.get("title") or "",
-                                     it.get("url") or "", it.get("thumbnail") or ""))
-            except Exception as e:  # noqa: BLE001 — optional dependency / network
-                _source_error("web_images_ddg", e)
-                rows = []
-            if rows:
-                break
+        routes = [from_proxy, None] if from_proxy else [None]
+        if big_first:
+            for proxy in routes:
+                try:
+                    rows = _sized_image_rows(query, max(35, limit * 2), proxy)
+                except Exception as e:  # noqa: BLE001 — optional dependency / network
+                    _source_error("web_images_sized", e)
+                    rows = []
+                if rows:
+                    break
+        if len(rows) < limit:
+            plain: List[tuple] = []
+            for proxy in routes:
+                try:
+                    from ddgs import DDGS
+                    with DDGS(proxy=proxy, timeout=15) as ddg:
+                        for it in ddg.images(query, max_results=limit * 2):
+                            plain.append((it.get("image"), it.get("width") or 0,
+                                          it.get("height") or 0, it.get("title") or "",
+                                          it.get("url") or "", it.get("thumbnail") or ""))
+                except Exception as e:  # noqa: BLE001 — optional dependency / network
+                    _source_error("web_images_ddg", e)
+                    plain = []
+                if plain:
+                    break
+            have = {r[0] for r in rows}
+            rows += [r for r in plain if r[0] not in have]
         if not rows:
             # The free searches came back empty: SerpApi's Google Images
             # (quota-limited, so only here).
@@ -265,6 +312,9 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
             w, h = 0, 0
         # Thumbnails and icons are useless full-frame at 1080p.
         if w and h and (w < 800 or h < 450):
+            continue
+        # Too small to be sharp full screen even if every pixel were real (src/sharpness.py).
+        if big_first and not _sharpness.possible(w, h):
             continue
         out.append(MediaAsset(
             kind="image", source="web_image", url=url, width=int(w or 0),
@@ -340,23 +390,34 @@ def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
     if not config.ALLOW_YANDEX_IMAGES or not query.strip():
         return []
     headers = {"User-Agent": _YANDEX_UA, "Accept-Language": "en-US,en;q=0.9"}
-    params = {"text": query, "isize": "large"}
+    # Bigger than a sharp full-screen picture needs first ("isize=gt": 12 of 13
+    # results big enough, against 4 of 6 for "large", 2026-10-04), the large
+    # size class after it when that found too few (PICTURE_SHARPNESS_CHECK).
+    asks = [{"text": query, "isize": "large"}]
+    if _sharpness.picture_on():
+        w, h = _sharpness.min_size()
+        asks.insert(0, {"text": query, "isize": "gt", "iw": str(w), "ih": str(h)})
     found: List[str] = []
     proxy = _next_proxy()
-    for via in ([None, proxy] if proxy else [None]):
-        try:
-            r = requests.get("https://yandex.com/images/search", params=params, headers=headers,
-                             timeout=20, proxies={"http": via, "https": via} if via else None)
-        except requests.RequestException as e:
-            _source_error("yandex_images", e)
-            continue
-        text = r.text.replace("\\u002F", "/")
-        if "captcha" in (r.url or "") or "SmartCaptcha" in text:
-            _source_error("yandex_images", RuntimeError("captcha"))
-            continue
-        found = [urllib.parse.unquote(u) for u in re.findall(r"img_url=(https?%3A[^&\"']+)", text)]
-        found += re.findall(r'"origUrl":"(https?:[^"]+)"', text)
-        if found:
+    for params in asks:
+        got: List[str] = []
+        for via in ([None, proxy] if proxy else [None]):
+            try:
+                r = requests.get("https://yandex.com/images/search", params=params, headers=headers,
+                                 timeout=20, proxies={"http": via, "https": via} if via else None)
+            except requests.RequestException as e:
+                _source_error("yandex_images", e)
+                continue
+            text = r.text.replace("\\u002F", "/")
+            if "captcha" in (r.url or "") or "SmartCaptcha" in text:
+                _source_error("yandex_images", RuntimeError("captcha"))
+                continue
+            got = [urllib.parse.unquote(u) for u in re.findall(r"img_url=(https?%3A[^&\"']+)", text)]
+            got += re.findall(r'"origUrl":"(https?:[^"]+)"', text)
+            if got:
+                break
+        found += [u for u in got if u not in found]
+        if len(found) >= limit:
             break
     if not found:
         # Yandex answered with a captcha on every route: SerpApi's Yandex engine.
@@ -388,6 +449,33 @@ def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
 _NOT_A_PHOTO = ("logo", "icon", "flag of", "flag_of", "seal of", "seal_of", "signature",
                 "coat of arms", "coat_of_arms", "wikiquote", "wikisource", "commons-",
                 "symbol", "question_book", "edit-clear", "padlock", "ambox")
+# Wikimedia's standard thumbnail widths above the frame's (2025: other widths are rate limited).
+_COMMONS_STEPS = (1920, 3840)
+_THUMB_WIDTH = re.compile(r"/(\d+)px-")
+
+
+def _commons_full_screen(info: dict) -> Optional[tuple]:
+    """
+    (url, width, height) of a Wikimedia file at the size a sharp full-screen
+    picture needs (PICTURE_SHARPNESS_CHECK): the API's thumbnail (asked for at
+    1920 px) when that is enough, else a 3840 px thumbnail of a bigger original
+    (a panorama: a cover fit crops it to a band), else the original file itself
+    - never a smaller copy when the original holds more. None when even the
+    original could not be sharp full screen.
+    """
+    ow, oh = int(info.get("width") or 0), int(info.get("height") or 0)
+    thumb, orig = str(info.get("thumburl") or ""), str(info.get("url") or "")
+    tw, th = int(info.get("thumbwidth") or 0), int(info.get("thumbheight") or 0)
+    if not ow or not oh:
+        return (thumb or orig, tw, th) if (thumb or orig) else None
+    if not _sharpness.possible(ow, oh):
+        return None
+    if thumb and tw and th and _sharpness.possible(tw, th):
+        return thumb, tw, th
+    for step in _COMMONS_STEPS:
+        if step < ow and thumb and _THUMB_WIDTH.search(thumb) and _sharpness.possible(step, oh * step / ow):
+            return _THUMB_WIDTH.sub(f"/{step}px-", thumb, count=1), step, int(round(oh * step / ow))
+    return (orig, ow, oh) if orig else None
 
 
 def search_wikipedia_article_images(title: str, limit: int = 20) -> List[MediaAsset]:
@@ -404,6 +492,7 @@ def search_wikipedia_article_images(title: str, limit: int = 20) -> List[MediaAs
     title = (title or "").strip()
     if not title:
         return []
+    sharp = _sharpness.picture_on()
     try:
         r = requests.get(
             "https://en.wikipedia.org/w/api.php",
@@ -411,7 +500,8 @@ def search_wikipedia_article_images(title: str, limit: int = 20) -> List[MediaAs
             params={"action": "query", "format": "json", "redirects": 1,
                     "titles": title, "generator": "images", "gimlimit": 50,
                     "prop": "imageinfo", "iiprop": "url|size|mime|extmetadata",
-                    "iiurlwidth": 1280},
+                    # A copy that fills the frame, not a 1280 px one blown up (_commons_full_screen).
+                    "iiurlwidth": 1920 if sharp else 1280},
             timeout=25,
         )
         r.raise_for_status()
@@ -431,14 +521,20 @@ def search_wikipedia_article_images(title: str, limit: int = 20) -> List[MediaAs
         if (info.get("width") or 0) < 400 or (info.get("height") or 0) < 300:
             continue
         url = info.get("thumburl") or info.get("url")
+        w, h = info.get("thumbwidth") or info.get("width") or 0, info.get("thumbheight") or info.get("height") or 0
+        if sharp:
+            picked = _commons_full_screen(info)
+            if picked is None:
+                continue                    # even the original would be blurry full screen
+            url, w, h = picked
         if not url:
             continue
         meta = info.get("extmetadata") or {}
         artist = re.sub(r"<[^>]+>", "", meta.get("Artist", {}).get("value", "") or "")
         out.append(MediaAsset(
             kind="image", source="wikipedia", url=url,
-            width=info.get("thumbwidth") or info.get("width") or 0,
-            height=info.get("thumbheight") or info.get("height") or 0,
+            width=w,
+            height=h,
             attribution=artist.strip()[:200],
             license=meta.get("LicenseShortName", {}).get("value", "") or "see Wikipedia",
             query=title,
@@ -454,6 +550,7 @@ def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
     real-world subjects a documentary needs (named highways, quakes, landmarks)
     which generic stock libraries do not carry.
     """
+    sharp = _sharpness.picture_on()
     try:
         r = requests.get(
             "https://commons.wikimedia.org/w/api.php",
@@ -462,7 +559,8 @@ def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
                 "action": "query", "format": "json", "generator": "search",
                 "gsrsearch": f"{query} filetype:bitmap", "gsrlimit": limit,
                 "gsrnamespace": 6, "prop": "imageinfo",
-                "iiprop": "url|extmetadata", "iiurlwidth": 1920,
+                # The original's size too: a copy that fills the frame is picked from it.
+                "iiprop": "url|size|extmetadata" if sharp else "url|extmetadata", "iiurlwidth": 1920,
             },
             timeout=25,
         )
@@ -476,6 +574,12 @@ def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
     for page in pages.values():
         info = (page.get("imageinfo") or [{}])[0]
         url = info.get("thumburl") or info.get("url")
+        w, h = info.get("thumbwidth", 0), info.get("thumbheight", 0)
+        if sharp:
+            picked = _commons_full_screen(info)
+            if picked is None:
+                continue                    # even the original would be blurry full screen
+            url, w, h = picked
         if not url:
             continue
         meta = info.get("extmetadata") or {}
@@ -483,7 +587,7 @@ def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
         artist = re.sub(r"<[^>]+>", "", meta.get("Artist", {}).get("value", "") or "")
         out.append(MediaAsset(
             kind="image", source="wikimedia", url=url,
-            width=info.get("thumbwidth", 0), height=info.get("thumbheight", 0),
+            width=w, height=h,
             attribution=artist.strip()[:200],
             license=meta.get("LicenseShortName", {}).get("value", "") or "see Commons",
             query=query,
@@ -1140,8 +1244,12 @@ SLOP_REJECTED: Dict[str, int] = {}
 _BAD: Dict[str, str] = {}
 _LINE_FREE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a still with a slow pan or zoom",
               "a slideshow of stills", "a frozen", "another creator's burned-in captions", "burned-in text or UI",
-              "a download that will not play")
-_VIDEO_WIDE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a download that will not play")
+              "a download that will not play",
+              # Too soft for the frame (src/sharpness.py): a property of the file, whatever the line.
+              "a blurry picture", "low detail")
+# An upscaled upload is soft in every moment of it.
+_VIDEO_WIDE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a download that will not play",
+               "low detail")
 # The AI-slop filter's reason for the gate's last rejection on this thread ("" = not slop).
 _GATE_SLOP: contextvars.ContextVar = contextvars.ContextVar("gate_slop", default="")
 
@@ -2030,6 +2138,8 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
         # The combined score when the pool computed one; the judge's appeal
         # (relevance first, quality second) for clips found the old way.
         base = a.final_score if a.final_score is not None else vision.appeal(a.relevance_score, a.quality)
+        # A near tie goes to the sharper shot (its measured real detail; src/sharpness.py).
+        base += _sharpness.rank_bonus(a)
         if hook_boost:
             # The hook booster: a near-tie goes to the clip with more scale,
             # people and action (a small, bounded bonus - relevance still leads).
@@ -2218,6 +2328,16 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                 except OSError:
                     pass
                 continue
+            # An upscaled upload is soft in every moment of it (src/sharpness.py).
+            soft = clip_detail_reason(path, candidate["title"])
+            if soft:
+                print(f"[media] {soft}, skipping: {candidate['title'][:60]}", flush=True)
+                _mark_bad(f"yt:{candidate['id']}", "", soft)
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                continue
             # The storyboard picked the moment; the full-resolution frames of
             # the actual cut decide. Bounded per search so one bad query cannot
             # spend a dozen model calls.
@@ -2308,7 +2428,7 @@ def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     base = ["yt-dlp", f"https://www.dailymotion.com/video/{video_id}",
             "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
             "--force-keyframes-at-cuts",
-            "-f", "b[height<=1080]/bv*[height<=1080]+ba",
+            "-f", "b[height<=1080]/bv*[height<=1080]+ba", *_ytdlp.best_bitrate(),
             "--merge-output-format", "mp4", "--no-playlist", "--no-warnings",
             "--ignore-config", "--socket-timeout", "20", "--retries", "2",
             "-o", out_tpl, "--print", "after_move:filepath"]
@@ -2417,6 +2537,7 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
         if not path:
             continue
         why = "burned-in text or UI" if has_burned_captions(path) else motion_rejects(path)
+        why = why or clip_detail_reason(path, c["title"])      # an upscaled upload (src/sharpness.py)
         if why:
             _mark_bad(vkey, mkey, why)
             try:
@@ -2454,6 +2575,7 @@ def _web_fetch(url: str, out_dir: str, start_at: float, seconds: float, timeout:
     out_tpl = os.path.join(out_dir, f"web_%(extractor)s_%(id)s_{int(start_at)}_{uuid.uuid4().hex[:6]}.%(ext)s")
     cmd = ["yt-dlp", url, "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
            "--force-keyframes-at-cuts", "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]/b",
+           *_ytdlp.best_bitrate(),
            "--no-playlist", "--no-warnings", "--quiet", "--max-filesize", "300M",
            "--merge-output-format", "mp4", "-o", out_tpl, "--print", "after_move:filepath"]
     domain = (urllib.parse.urlparse(url).hostname or "web").removeprefix("www.")
@@ -2529,7 +2651,9 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
             continue
         w, h = _video_dims(path)
         why = "burned-in text or UI" if has_burned_captions(path) else motion_rejects(path)
-        if (w and h and w < h * 1.2 and not config.ALLOW_VERTICAL) or why:
+        vertical = bool(w and h and w < h * 1.2 and not config.ALLOW_VERTICAL)
+        why = why or ("" if vertical else clip_detail_reason(path, row["title"]))   # src/sharpness.py
+        if vertical or why:
             _mark_bad(key, "", why)
             try:
                 os.remove(path)
@@ -2725,9 +2849,14 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             _release_inflight(c.id)
             continue
         still = motion_rejects(path)
-        if has_burned_captions(path) or still:
-            print(f"[media] {still or 'hardsubs'}, skipping: {c.title[:60]}", flush=True)
-            _mark_bad(f"yt:{c.id}", mkey, still or "burned-in text or UI")
+        why = "burned-in text or UI" if has_burned_captions(path) else still
+        # An upscaled upload (src/sharpness.py: under MIN_CLIP_REAL_HEIGHT lines of real
+        # detail in its best frame) is turned down before any vision call, for every scene.
+        why = still or why or clip_detail_reason(path, c.title)
+        if why:
+            print(f"[media] {why if why != 'burned-in text or UI' else 'hardsubs'}, skipping: {c.title[:60]}",
+                  flush=True)
+            _mark_bad(f"yt:{c.id}", mkey, why)
             try:
                 os.remove(path)
             except OSError:
@@ -2776,6 +2905,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         # Footage that moves wins over a still shot of the same thing
         # (MOTION_PREFERENCE, doubled in the hook).
         apply_motion(asset)
+        _note_detail(asset)                 # its real detail breaks a near tie (_best_of)
         print(f"[pool] judged {c.id} final {asset.final_score:.2f} "
               f"(visual {asset.relevance_score or 0:.2f}, meta {c.metadata:.2f}, "
               f"{asset.specificity or 'unclassed'})", flush=True)
@@ -3040,6 +3170,7 @@ def reset_cache():
     from . import official
     official.reset()                    # each satellite sector once per video
     LOCAL_REJECTED["n"] = 0
+    _sharpness.reset()                  # the job's measures and its count of blurry candidates
     _SERPAPI_USED["n"] = 0              # SerpApi's per-job budget starts again
     _SERPAPI_VIDEO_USED["n"] = 0
     _IMAGE_NO_CREDIT["hit"] = False
@@ -3140,9 +3271,12 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
         if candidate.kind == "image":
             # Browser-style retries for hotlink blocks, and whatever format
             # arrived (WebP, AVIF, HEIC, CMYK...) rewritten as a clean JPEG.
+            # The search engine's ~300-500 px thumbnail is never asked for while
+            # pictures must be sharp full screen (src/sharpness.py): it could not pass.
+            thumb = "" if _sharpness.picture_on() else (getattr(candidate, "thumbnail", "") or "")
             candidate.local_path = _imagefix.fetch(candidate.url, dest,
                                                    getattr(candidate, "page_url", "") or "",
-                                                   thumbnail=getattr(candidate, "thumbnail", "") or "")
+                                                   thumbnail=thumb)
         else:
             candidate.local_path = download(candidate.url, dest)
         return candidate
@@ -3165,12 +3299,75 @@ def _photo_seen_before(path: str) -> bool:
     return True
 
 
+def _bigger_first(candidates: List[MediaAsset], window: int = 3) -> List[MediaAsset]:
+    """
+    Pictures in the search's order, except that among neighbours (`window`
+    results of about the same relevance) the ones whose own size can be sharp
+    full screen come first - a near tie goes to the sharper picture - and the
+    ones that never could are left out. Clips and pictures of unknown size
+    keep their place.
+    """
+    if not _sharpness.picture_on():
+        return list(candidates)
+    out = []
+    for n, c in enumerate(candidates):
+        if c.kind != "image":
+            rank = 1
+        elif not (c.width and c.height):
+            rank = 1
+        elif not _sharpness.possible(c.width, c.height):
+            continue
+        else:
+            rank = 0
+        out.append((n // max(1, window), rank, n, c))
+    return [c for *_k, c in sorted(out, key=lambda t: t[:3])]
+
+
+def picture_blur_reason(path: str, zoom: Optional[float] = None) -> str:
+    """Why a downloaded picture may not be shown full screen ("" = sharp enough, the check is
+    off, or it cannot be measured) - its real detail blown up past MAX_PICTURE_MAGNIFICATION."""
+    got = _sharpness.picture_check(path, zoom=zoom)
+    return "" if got["ok"] else got["why"]
+
+
+def _is_archive(title: str = "", source: str = "") -> bool:
+    """Archive film by its source or its title (a year before 1990, a newsreel, Pathe...)."""
+    return source == "archive_org" or bool(_ARCHIVE_TITLE_RE.search(title or ""))
+
+
+def clip_detail_reason(path: str, title: str = "", source: str = "") -> str:
+    """Why a downloaded clip is turned down on its real detail ("" = kept): a modern clip whose
+    best frame holds under MIN_CLIP_REAL_HEIGHT lines (an upscaled upload). Archive film is
+    exempt; so is anything that cannot be measured."""
+    got = _sharpness.clip_check(path, archive=_is_archive(title, source))
+    return "" if got["ok"] else got["why"]
+
+
+def _note_detail(asset: Optional["MediaAsset"]) -> None:
+    """The measured real detail on a passed asset's score parts (its rank among near ties,
+    the editor's view of the pick). Only reads what the checks already measured (cached)."""
+    if asset is None or not asset.local_path:
+        return
+    try:
+        if asset.kind == "image" and _sharpness.picture_on() and asset.source != "generated":
+            got = _sharpness.picture_check(asset.local_path)
+            if got["magnification"] is not None:
+                asset.score_parts = dict(asset.score_parts or {}, magnification=got["magnification"])
+        elif asset.kind == "video" and _sharpness.clip_on():
+            got = _sharpness.clip_check(asset.local_path)
+            if got["lines"] is not None:
+                asset.score_parts = dict(asset.score_parts or {}, lines=got["lines"])
+    except Exception:  # noqa: BLE001 - a note only
+        pass
+
+
 def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
                  query: str, work_dir: str, intent: str = "",
                  context: str = "") -> Optional[MediaAsset]:
-    """First unused candidate that downloads and passes the vision gate."""
+    """First unused candidate that downloads, is sharp enough to fill the frame
+    (src/sharpness.py, before any vision call) and passes the vision gate."""
     judged = 0
-    for candidate in candidates:
+    for candidate in _bigger_first(candidates):
         if used is not None and candidate.identity in used:
             continue
         # Shown in an earlier video (src/ledger.py): the page, the photo URL.
@@ -3189,10 +3386,19 @@ def _pick_unused(candidates: List[MediaAsset], used: Optional[set],
             continue
         if got.kind == "image" and _photo_seen_before(got.local_path):
             continue
+        # Too soft to fill the frame (src/sharpness.py): no vision call is spent on it,
+        # and no other scene downloads it again.
+        why = (picture_blur_reason(got.local_path) if got.kind == "image"
+               else clip_detail_reason(got.local_path, got.attribution, got.source))
+        if why:
+            print(f"[sharpness] REJECT {why}: {_image_label(got)[:60]!r}", flush=True)
+            _mark_bad(candidate.identity, "", why)
+            continue
         judged += 1
         _GATE_SLOP.set("")
         keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got), source_url=got.url)
         if keep:
+            _note_detail(got)
             return got.apply_verdict(verdict, intent)
         _mark_bad(candidate.identity, "", _GATE_SLOP.get())
         if judged >= config.VISION_MAX_CANDIDATES:
@@ -3336,11 +3542,39 @@ def _asset_ok(asset) -> tuple:
     # A page of text (slide, screenshot, scan) only for a beat about a document.
     if asset.kind == "image" and _SUBJECT_TYPE.get() != "document" and _filters.text_page_still(path):
         return False, "a page of text, not a photo"
-    return clip_quality(path, config.MIN_ARCHIVE_HEIGHT if archive else config.MIN_CLIP_HEIGHT)
+    ok, why = clip_quality(path, config.MIN_ARCHIVE_HEIGHT if archive else config.MIN_CLIP_HEIGHT)
+    if not ok:
+        return ok, why
+    # Real detail, not file size (src/sharpness.py): a picture the screen would blow up
+    # past MAX_PICTURE_MAGNIFICATION, a modern clip with fewer real lines than
+    # MIN_CLIP_REAL_HEIGHT (an upscaled upload). Measured once per file (cached).
+    if asset.kind == "image":
+        why = picture_blur_reason(path)
+    elif asset.kind == "video":
+        got = _sharpness.clip_check(path, archive=archive)
+        why = "" if got["ok"] else got["why"]
+    return (False, why) if why else (True, "")
 
 
 _ARCHIVE_TITLE_RE = re.compile(r"\b(newsreel|archive|archival|pathe|path\u00e9|periscope|movietone|travelogue|"
                                r"huntley|18\d\d|19[0-8]\d|1990s?)\b", re.I)
+
+
+def _verdicts(assets: Dict[int, Optional["MediaAsset"]], workers: int = 6) -> Dict[int, tuple]:
+    """_asset_ok for many assets at once, by index (each reads its own file; a check that
+    breaks is left out, for the caller to run again where it would have run)."""
+    items = [(i, a) for i, a in assets.items() if a is not None]
+    out: Dict[int, tuple] = {}
+    if len(items) < 2:
+        return out
+    with ThreadPoolExecutor(max_workers=max(1, min(int(workers or 1), len(items)))) as pool:
+        futures = {pool.submit(contextvars.copy_context().run, _asset_ok, a): i for i, a in items}
+        for fut in as_completed(futures):
+            try:
+                out[futures[fut]] = fut.result()
+            except Exception:  # noqa: BLE001 - checked again in order
+                pass
+    return out
 
 
 # What the last source_many() did, phase by phase, for the job result. The
@@ -3683,6 +3917,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     used: set = set(exclude or ())
     duplicates = rejected = empty = 0
     todo = []  # (job, nth, bad_reason, is_duplicate)
+    # Each check reads its own file (a clip's frames, a picture's real detail): they run
+    # side by side first, and the scenes are then decided in story order as before.
+    verdicts = _verdicts({job["index"]: results[job["index"]] for job, _nth in plan}, workers)
     for job, nth in plan:
         i = job["index"]
         asset = results[i]
@@ -3692,7 +3929,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             empty += 1
             todo.append((job, nth, "", False))
             continue
-        ok, why = _asset_ok(asset)
+        ok, why = verdicts[i] if i in verdicts else _asset_ok(asset)
         if not ok:
             rejected += 1
             print(f"[media] scene {i + 1}: dropping clip ({why})", flush=True)
@@ -3924,6 +4161,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     with _CACHE_LOCK:
         LAST_STATS["photos"] = {"cap": _PHOTOS["cap"], "used": _PHOTOS["used"]}
         LAST_STATS["slop_rejected"] = dict(SLOP_REJECTED)
+    # Pictures and clips measured for real detail, how many were too soft, the seconds spent.
+    LAST_STATS["sharpness"] = _sharpness.stats()
     LAST_STATS.update(total_seconds=round(time.time() - t_start, 1),
                       reused_to_fill=reused,
                       still_empty=sum(1 for r in results if r is None),
@@ -4757,12 +4996,18 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
             continue
         if has_burned_captions(path):
             continue
+        soft = clip_detail_reason(path, cand["title"])           # an upscaled upload (src/sharpness.py)
+        if soft:
+            _mark_bad(f"yt:{cand['id']}", "", soft)
+            continue
         keep, verdict = _vision_gate(path, intent, context, cand["title"])
         if not keep:
             continue
         videos += 1
-        for n, (shot_path, offset) in enumerate(
-                split_window(path, f"{tag}_{cand['id']}", lengths[:per], out_dir)):
+        cut = split_window(path, f"{tag}_{cand['id']}", lengths[:per], out_dir)
+        # The shots are the window's own frames: its measure stands for them (no second read).
+        _sharpness.same_detail(path, [p for p, _o in cut])
+        for n, (shot_path, offset) in enumerate(cut):
             asset = MediaAsset(
                 kind="video", source="youtube",
                 url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(start + offset)}",
@@ -4796,6 +5041,10 @@ def _image_pool(queries: List[str], subject: str, subject_type: str, need: int,
         seen.add(cand.identity)
         got = _download(_dc_replace(cand), cand.query or subject, out_dir)
         if not got or _photo_seen_before(got.local_path):
+            continue
+        blur = picture_blur_reason(got.local_path)                # src/sharpness.py
+        if blur:
+            _mark_bad(cand.identity, "", blur)
             continue
         keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got))
         if keep:
