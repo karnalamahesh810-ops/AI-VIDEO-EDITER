@@ -290,6 +290,10 @@ def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[di
         sub["action"] = "build"
         # The batch records each video's final state itself (record), waited for and retried.
         sub["_caller_writes_result"] = True
+        if clock is not None:
+            # The job's deadline (handler._job_seconds_left, the AI review's second render) counts
+            # from the batch's start: RunPod stops the whole job, not each video.
+            sub["_job_started"] = clock.started
         if job_id:
             sub["_ledger_job"] = ledger_id(job_id, n)
         if pid:
