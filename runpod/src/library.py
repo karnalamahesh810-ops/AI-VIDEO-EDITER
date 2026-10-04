@@ -561,6 +561,44 @@ class Library:
                     if e.get("saved", True) and e.get("kind", "video") == kind and e.get("phash")
                     and e["id"] != exclude}
 
+    def unstamped(self, entries: List[dict]) -> List[dict]:
+        """The pictures among `entries` (from find(kind="image")) with no stock
+        agency's credit bar or stamp on their own pixels (src/stockblock.py): an
+        image look places a library picture with no other check, and rows kept
+        before 2026-10-04 were never read for one. A picture that shows one
+        leaves the library, reversibly, like any the library check turns down;
+        one that cannot be fetched stays (a check never drops what it cannot see)."""
+        if not getattr(config, "WATERMARK_CHECK", True):
+            return list(entries)
+        out: List[dict] = []
+        work = tempfile.mkdtemp(prefix="libpics_")
+        try:
+            for e in entries:
+                if (e.get("kind") or "image") != "image" or _user_kept(e):
+                    out.append(e)
+                    continue
+                path = os.path.join(work, f"lib_{_safe_id(e['id'])}.jpg")
+                try:
+                    url = e.get("read_url") or storage.broker_read_url(
+                        e.get("bucket") or self.bucket, e["path"], self.project_id, self.job_id)
+                    storage.download(url, path)
+                except Exception:  # noqa: BLE001 - unreadable here is no finding
+                    out.append(e)
+                    continue
+                why = media.watermark_reason(path, "library")
+                if not why:
+                    out.append(e)
+                    continue
+                v = libstore.Verdict(kind="image")
+                v.bad(why)
+                with self._lock:
+                    e["saved"] = False
+                    self.pending[e["id"]] = _removal_row(e, v)
+                print(f"[library] {e['id']} removed from the library: {why}", flush=True)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        return out
+
     def fetch(self, entry: dict, work: str, seconds: float, job: dict) -> Optional[media.MediaAsset]:
         """A library item as a local asset for one line (None if it cannot be read or is bad)."""
         kind = entry.get("kind") or "video"

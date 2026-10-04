@@ -430,6 +430,32 @@ class EveryPath(unittest.TestCase):
         self.assertFalse(entry["saved"])
         self.assertIn("img:copy", lib.pending)
 
+    def test_an_image_look_never_places_a_stamped_library_picture(self):
+        from src import treatments
+        work = tempfile.mkdtemp()
+        stamped = picture(os.path.join(work, "stamped.jpg"), bar=(0.09, "alamy"))
+        clean = picture(os.path.join(work, "clean.jpg"))
+        files = {"https://signed/a": stamped, "https://signed/b": clean}
+        entries = [{"id": f"img:{k}", "kind": "image", "read_url": f"https://signed/{k}", "attribution": "NPS"}
+                   for k in "abc"]
+
+        def download(url, path):
+            if url not in files:
+                raise StorageError("gone")
+            return shutil.copy(files[url], path)
+        lib = library.Library("p", "j")
+        with mock.patch.object(library.storage, "download", side_effect=download), \
+                mock.patch.object(localvision, "available", return_value=False):
+            got = lib.unstamped(entries)
+            self.assertEqual([e["id"] for e in got], ["img:b", "img:c"])    # c could not be read: it stays
+            self.assertFalse(entries[0]["saved"])
+            self.assertIn("img:a", lib.pending)                             # out of the library, reversibly
+            with mock.patch.object(library.Library, "find", return_value=[dict(e) for e in entries]):
+                media_ = treatments._library_pictures(lib, "Lake Mead", 3)
+        self.assertEqual([m["url"] for m in media_], ["https://signed/b", "https://signed/c"])
+        with mock.patch.object(config, "WATERMARK_CHECK", False):
+            self.assertEqual(len(lib.unstamped(entries)), 3)
+
     def test_the_library_check_turns_down_a_saved_comp_by_its_bar(self):
         import numpy as np
         work = tempfile.mkdtemp()
