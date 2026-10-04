@@ -1077,11 +1077,42 @@ class Gate:
                 out[futures[f]] = Check(ok=True, unverified=True, why=f"the check failed ({type(e).__name__})")
         for f in late:
             out[futures[f]] = Check(ok=True, unverified=True, why="not checked in time")
+        self._ask_again(out, want, probe, deadline)
         self.checked = len(out)
         self.unverified = sum(1 for c in out.values() if c.unverified)
         if late:
             self.notes.append(f"{_n(len(late), 'file')} not checked in time - used as they are")
         return out
+
+    def _ask_again(self, out: Dict[str, Check], want: Dict[str, str], probe: set, deadline: float) -> None:
+        """
+        Links that got no clear answer (a timeout, a 5xx, a rate limit - never
+        a plain 404 or 403) are asked once more after a short pause when there
+        are many of them: a few seconds of storage trouble must not fail the
+        job (MediaMissing) or get good scenes replaced. Updates `out` in place.
+        """
+        pause = float(getattr(config, "QUALITY_RETRY_PAUSE_SECONDS", 0) or 0)
+        soft = [u for u, c in out.items() if not c.ok and not c.reached and not c.unverified
+                and u.startswith(("http://", "https://")) and _gone_kind(c) == "unreadable"]
+        if pause <= 0 or len(soft) < max(3, int(0.1 * len(out))):
+            return
+        print(f"[quality] {_n(len(soft), 'file')} got no answer from storage ({out[soft[0]].why}); "
+              f"asking once more in {pause:.0f} s", flush=True)
+        time.sleep(pause)
+        pool = ThreadPoolExecutor(max_workers=max(1, min(config.QUALITY_PARALLEL, len(soft))))
+        futures = {pool.submit(self._check_one, u, want[u], u in probe): u for u in soft}
+        done, _late = _wait(futures, timeout=max(15.0, deadline - time.time()))
+        pool.shutdown(wait=False, cancel_futures=True)
+        back = 0
+        for f in done:
+            try:
+                got = f.result()
+            except Exception:  # noqa: BLE001 - the first answer stands
+                continue
+            out[futures[f]] = got
+            back += 1 if got.ok else 0
+        if back:
+            self.notes.append(f"{_n(back, 'file')} answered on a second try (storage was slow)")
 
     def _check_one(self, url: str, kind: str, probe: bool) -> Check:
         got = reach(url, kind)

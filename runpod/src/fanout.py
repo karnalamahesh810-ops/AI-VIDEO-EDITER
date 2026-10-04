@@ -904,17 +904,27 @@ def parent_is_worker() -> bool:
     return bool(mine and mine == config.POD_RENDER_ENDPOINT_ID)
 
 
-def spread_chunks() -> int:
+def spread_chunks(total_frames: int = 0, concurrency: int = None) -> int:
     """
     How many chunks a spread render is cut into: POD_RENDER_CHUNKS, and when
     the parent is itself an endpoint worker never more than FANOUT_PARTS (the
     endpoint's workers, the parent's own included) - one chunk a machine. With
     12 chunks on 10 machines the last two waited for a machine to finish its
     first chunk: a whole second round for a sixth of the video.
+
+    A very long video gets more, shorter chunks instead: no chunk longer than
+    a machine is expected to draw in 60% of the time a worker's chunk is
+    given (POD_RENDER_CHUNK_TIMEOUT_SECONDS). Ten chunks of an hour-long
+    video would each run past that limit, be given up on every worker at
+    once and land on the parent alone; the extra chunks wait in the queue
+    for the first machine that is free.
     """
     n = int(config.POD_RENDER_CHUNKS)
     if parent_is_worker():
         n = min(n, max(2, int(config.FANOUT_PARTS)))
+    if total_frames and total_frames > 0:
+        longest = renderer.frames_per_second(concurrency) * float(config.POD_RENDER_CHUNK_TIMEOUT_SECONDS) * 0.6
+        n = max(n, int(math.ceil(total_frames / max(1.0, longest))))
     return n
 
 
@@ -1953,7 +1963,7 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     fps = max(1, int(doc.get("fps") or 30))
     # Every frame of the video: the brand intro and outro around the narration.
     total = brandkit.total_frames(doc)
-    ranges = plan_chunks(doc, spread_chunks(), config.POD_RENDER_MIN_CHUNK_FRAMES)
+    ranges = plan_chunks(doc, spread_chunks(total, concurrency), config.POD_RENDER_MIN_CHUNK_FRAMES)
     if len(ranges) < 2:
         return False
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", job_id or "job")[:60]

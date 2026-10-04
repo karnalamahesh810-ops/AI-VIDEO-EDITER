@@ -623,7 +623,10 @@ def _run_streaming(cmd, timeout, on_progress, cancel=None, stall: float = 0.0) -
             why = "cancel"
         elif now > deadline:
             why = "timeout"
-        elif stall and now - heard > stall:
+        elif stall and best < 0.8 and now - heard > stall:
+            # (Only while frames are being drawn: once they all are, the sound
+            # of a long video is mixed without a line of output, and a render
+            # that far along is left to its time limit.)
             why = "stall"
         if why:
             break

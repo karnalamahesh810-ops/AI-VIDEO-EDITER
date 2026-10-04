@@ -134,6 +134,37 @@ class BeforeTheRender(unittest.TestCase):
                 quality.Gate(doc, tempfile.mkdtemp()).before_render()
         self.assertIn("refused by storage", str(cm.exception))
 
+    def test_a_short_storage_outage_is_waited_out_and_nothing_is_repaired(self):
+        doc = _doc(10)
+        state = {"calls": 0, "slept": []}
+
+        def get(url, **kw):
+            state["calls"] += 1
+            if not state["slept"]:
+                raise quality.requests.ConnectionError("storage is not answering")
+            return Resp(206)
+
+        def sleep(seconds):
+            if seconds >= 10:                                        # the pause before asking again
+                state["slept"].append(seconds)
+        with _settings(), mock.patch.object(config, "QUALITY_RETRY_PAUSE_SECONDS", 15), \
+                mock.patch.object(quality.requests, "get", side_effect=get), \
+                mock.patch.object(quality.time, "sleep", side_effect=sleep):
+            gate = quality.Gate(doc, tempfile.mkdtemp())
+            self.assertEqual(gate.before_render(), 0)                # nothing repaired, nothing stopped
+        self.assertEqual(state["slept"], [15])
+        self.assertEqual(gate.found["unreachable"], 0)
+        self.assertTrue(all(s["media"]["type"] == "video" for s in doc["scenes"]))
+        self.assertTrue(any("second try" in n for n in gate.notes))
+
+    def test_a_plain_no_from_storage_is_not_asked_again(self):
+        slept = []
+        with _settings(), mock.patch.object(config, "QUALITY_RETRY_PAUSE_SECONDS", 15), _storage(code=404), \
+                mock.patch.object(quality.time, "sleep", side_effect=slept.append):
+            with self.assertRaises(quality.MediaMissing):
+                quality.Gate(_doc(10), tempfile.mkdtemp()).before_render()
+        self.assertNotIn(15, slept)
+
     def test_files_that_were_never_saved_are_still_re_sourced_until_most_are_gone(self):
         # An upload outage leaves a dead machine's paths in the timeline: the
         # ladder re-sources them (test_quality's outage regression) - but a

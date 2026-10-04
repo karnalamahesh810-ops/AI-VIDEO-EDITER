@@ -846,9 +846,10 @@ RENDER_TIMEOUT_MIN_SECONDS = float(os.getenv("RENDER_TIMEOUT_MIN_SECONDS", "1800
 RENDER_TIMEOUT_MAX_SECONDS = float(os.getenv("RENDER_TIMEOUT_MAX_SECONDS", "14400"))
 # CPUs this container may use; 0 = read the container's own limit (render.cpus).
 RENDER_CPUS = int(os.getenv("RENDER_CPUS", "0"))
-# A render that prints progress and then says nothing at all for this long is
-# hung: it is stopped with a clear error instead of sitting until its time
-# limit. 0 = off.
+# A render that says nothing at all for this long while its frames are being
+# drawn is hung: it is stopped with a clear error instead of sitting until its
+# time limit. (Not once every frame is drawn: a long video's sound is mixed
+# without a line of output.) 0 = off.
 RENDER_STALL_SECONDS = float(os.getenv("RENDER_STALL_SECONDS", "900"))
 # After a spread render broke on a chunk that no machine could draw, the whole
 # video is rendered on this one machine only when that is estimated to take no
@@ -1173,6 +1174,10 @@ QUALITY_MIN_IMAGE_SIDE = int(os.getenv("QUALITY_MIN_IMAGE_SIDE", "320"))
 # 0 = always repair.
 QUALITY_MISSING_SHARE = float(os.getenv("QUALITY_MISSING_SHARE", "0.3"))
 QUALITY_MISSING_MIN = int(os.getenv("QUALITY_MISSING_MIN", "3"))
+# Many files with no clear answer from storage (timeouts, 5xx, rate limits -
+# never a plain 404) are asked once more after this pause before anything is
+# repaired or the render is stopped: a short outage is waited out. 0 = off.
+QUALITY_RETRY_PAUSE_SECONDS = float(os.getenv("QUALITY_RETRY_PAUSE_SECONDS", "15"))
 # The scan: black for QUALITY_BLACK_SECONDS or more, a picture frozen for
 # QUALITY_FREEZE_SECONDS or more, silence of QUALITY_SILENCE_SECONDS or more.
 QUALITY_BLACK_SECONDS = float(os.getenv("QUALITY_BLACK_SECONDS", "0.5"))

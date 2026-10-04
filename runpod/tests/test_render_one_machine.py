@@ -167,6 +167,17 @@ class ServerlessParent(unittest.TestCase):
             with _serverless("ep"), mock.patch.dict(os.environ, {"JOB_B64": "e30="}):
                 self.assertEqual(fanout.spread_chunks(), 12)     # a pod is extra to the endpoint's workers
 
+    def test_a_very_long_video_gets_more_chunks_so_none_outruns_a_workers_time(self):
+        with mock.patch.multiple(config, POD_RENDER_ENDPOINT_ID="ep", POD_RENDER_CHUNKS=12, FANOUT_PARTS=10,
+                                 POD_RENDER_CHUNK_TIMEOUT_SECONDS=1800, RENDER_CPUS=16, RENDER_FPS_PER_TAB=0.45), \
+                _serverless("ep"):
+            self.assertEqual(fanout.spread_chunks(52000, 12), 10)        # 29 minutes: one chunk a machine
+            n = fanout.spread_chunks(108000, 12)                         # an hour
+            self.assertGreater(n, 10)
+            # No chunk is expected to take a worker more than 60% of the time it is given.
+            self.assertLessEqual(render.estimate_seconds(108000 / n, 12), 0.6 * 1800 + 1)
+            self.assertEqual(fanout.spread_chunks(0, 12), 10)
+
     def test_the_yellowstone_render_is_spread_with_its_repaired_local_files_published(self):
         d = tempfile.mkdtemp()
         doc = _doc([260] * 200)                                  # ~29 minutes, 52,000 frames
