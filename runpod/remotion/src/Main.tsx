@@ -17,6 +17,7 @@ import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve, type Amb
   from "./components/ambienceMix";
 import { BrandVideo, EndCard, Watermark } from "./components/brand/BrandLayers";
 import { brandFrames, brandOf } from "./components/brand/brandLayout";
+import { musicPasses, musicVolume as makeMusicVolume, trackSeconds } from "./components/musicMix";
 
 // The music beds were replaced by the owner's own tracks (2026-10-01); a
 // document planned before names the old bed, which no longer ships (its 404
@@ -24,7 +25,9 @@ import { brandFrames, brandOf } from "./components/brand/brandLayout";
 const BGM_RENAMED: Record<string, string> = {
   investigative: "investigative-v5", suspense: "suspense-v2", crime: "crime-v1",
 };
-export const bgmFile = (name: string): string => `bgm/${BGM_RENAMED[name] ?? name}.mp3`;
+/** The bundled track a "bgm://<name>" link plays (an old bed's name = the track that replaced it). */
+export const bgmTrack = (name: string): string => BGM_RENAMED[name] ?? name;
+export const bgmFile = (name: string): string => `bgm/${bgmTrack(name)}.mp3`;
 
 const PHOTO_CARDS = new Set<OverlayType>(["photo-card", "name-card"]);
 // Case-file looks that show a still of the story when they were given no
@@ -188,57 +191,27 @@ const textScale = (ov: Overlay): number => {
 };
 
 /**
- * The music level at a frame: the section's mood level, ramped over 1.5 s at
- * each section change, and ducked under speech (a word is being spoken).
+ * The music under the whole narration (components/musicMix.ts: its level at
+ * every frame, its trim, its repeats). One pass of the track when it is as
+ * long as the video; a shorter one is played pass after pass, crossfaded over
+ * 3 s at equal power before its own tail - Remotion's loop repeats with a
+ * hard cut, and the crime bed ends in 11 s of its own fade and silence. An
+ * own file whose length nobody measured still uses Remotion's loop.
  */
-const makeMusicVolume = (props: TimelineProps) => {
-  const base = props.bgm?.volume ?? 0.12;
-  const sections = props.music?.sections || [];
-  const duck = props.music?.duck ?? 0.55;
-  // The editor's "Music level" (1 = the automatic mix under the voice). The
-  // planner's sections used to ignore every editor setting, so the owner could
-  // not turn the music up at all (2026-10-01).
-  const gain = Math.max(0, Number(props.music?.gain ?? 1) || 0);
-  const fps = props.fps;
-  // Whether a word is being spoken, per frame (0.15 s before a word to 0.35 s
-  // after it), built once. The Player evaluates this callback for EVERY frame of
-  // the video whenever it changes, and it used to scan every word each time:
-  // 0.2-0.45 s per preview frame on a 22-minute video, so the editor played at
-  // a few frames a second.
-  const total = Math.max(1, Math.ceil(props.durationInFrames));
-  const speaking = new Uint8Array(total + 1);
-  for (const sc of props.scenes) {
-    for (const w of sc.words || []) {
-      const a = Math.max(0, Math.ceil((w.start - 0.15) * fps));
-      const b = Math.min(total, Math.floor((w.end + 0.35) * fps));
-      for (let f = a; f <= b; f++) speaking[f] = 1;
-    }
-  }
-  const ramp = Math.max(1, Math.round(fps * 1.5));
-  const levelAt = (f: number): number => {
-    if (!sections.length) return base;
-    let level = sections[0].volume;
-    for (const s of sections) {
-      if (f >= s.startFrame) {
-        const t = Math.min(1, (f - s.startFrame) / ramp);
-        level = level + (s.volume - level) * t;
-      }
-    }
-    return level;
-  };
-  // The editor's trim: music only between `from` and `to` (frames), faded over
-  // 1.5 s at each end. Unset = the whole video.
-  const from = Math.max(0, Number(props.music?.from ?? 0) || 0);
-  const to = Math.min(total, Number(props.music?.to ?? total) || total);
-  const trimmed = (f: number) => {
-    if (f < from || f > to) return 0;
-    return Math.min(1, (f - from) / ramp + (from > 0 ? 0 : 1), (to - f) / ramp + (to < total ? 0 : 1));
-  };
-  return (f: number) => {
-    const level = levelAt(f) * (sections.length ? gain : 1) * trimmed(f);
-    const on = speaking[Math.min(total, Math.max(0, Math.round(f)))] === 1;
-    return Math.max(0, Math.min(1, on ? level * duck : level));
-  };
+const musicNodes = (bgm: NonNullable<TimelineProps["bgm"]>, volume: (f: number) => number, fps: number,
+  total: number) => {
+  const track = bgm.url.startsWith("bgm://") ? bgmTrack(bgm.url.slice(6)) : "";
+  const src = track ? staticFile(`bgm/${track}.mp3`) : bgm.url;
+  return musicPasses(total, fps, trackSeconds(track, bgm)).map((p, k) => (
+    <Sequence key={`bgm-${k}`} from={p.from} durationInFrames={p.frames} layout="none">
+      {p.loop ? (
+        // The ducking must follow the video's frames, not restart with each loop of the track.
+        <Audio src={src} volume={volume} loop loopVolumeCurveBehavior="extend" />
+      ) : (
+        <Audio src={src} volume={(f: number) => volume(p.from + f) * passGain(p, f)} />
+      )}
+    </Sequence>
+  ));
 };
 
 /** Length and loudest point of every file in public/sfx (written with the files). */
@@ -418,6 +391,11 @@ const Body: React.FC<TimelineProps> = (props) => {
     () => (bgm?.url ? makeMusicVolume(props) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scenes, bgm?.url, bgm?.volume, props.music, props.fps, props.durationInFrames]);
+  const bgmNodes = React.useMemo(
+    () => (bgm?.url && musicVolume
+      ? musicNodes(bgm, musicVolume, fps, Math.max(1, Math.ceil(props.durationInFrames))) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bgm?.url, bgm?.track, bgm?.trackSeconds, musicVolume, fps, props.durationInFrames]);
   // The sound built into each look (LookSounds.tsx), from one pass over the document.
   const lookSounds = React.useMemo(
     () => planLookSounds(props, fps),
@@ -511,16 +489,7 @@ const Body: React.FC<TimelineProps> = (props) => {
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
       {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
-      {bgm?.url && musicVolume ? (
-        <Audio
-          src={bgm.url.startsWith("bgm://") ? staticFile(bgmFile(bgm.url.slice(6))) : bgm.url}
-          volume={musicVolume}
-          loop
-          // A 12-minute bed under a 22-minute video: the ducking must follow the
-          // video's frames, not restart with each loop of the track.
-          loopVolumeCurveBehavior="extend"
-        />
-      ) : null}
+      {bgmNodes}
       {bedNodes}
       {sfxNodes}
     </AbsoluteFill>
