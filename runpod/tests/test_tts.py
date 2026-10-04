@@ -167,10 +167,10 @@ class Requests(unittest.TestCase):
         sample = os.path.join(self.dir, "me.wav")
         with open(sample, "wb") as f:
             f.write(b"RIFFsample")
-        with configured(TTS_REFERENCE_AUDIO=sample):
+        with configured(TTS_REFERENCE_AUDIO=sample, TTS_MODEL="chatterbox"):
             body = tts.request_body("Hello.", tts.options())
         self.assertEqual(body["reference_audio"], "data:audio/wav;base64," + base64.b64encode(b"RIFFsample").decode())
-        with configured(TTS_REFERENCE_AUDIO=os.path.join(self.dir, "gone.wav")):
+        with configured(TTS_REFERENCE_AUDIO=os.path.join(self.dir, "gone.wav"), TTS_MODEL="chatterbox"):
             with self.assertRaises(tts.TtsError) as ctx:
                 tts.request_body("Hello.", tts.options())
         self.assertIn("TTS_REFERENCE_AUDIO", str(ctx.exception))
@@ -304,6 +304,20 @@ class Requests(unittest.TestCase):
                                deadline=time.time() + 0.5)
         post.assert_not_called()
         self.assertIn("part 3 of 9 was not voiced in time", str(ctx.exception))
+
+    def test_the_workers_own_voice_sample_only_goes_with_the_voice_that_clones(self):
+        owner = "https://files.example/owner.wav"
+        with configured(TTS_REFERENCE_AUDIO=owner, TTS_MODEL="kokoro"):
+            self.assertEqual(tts.options()["reference"], "")                 # Kokoro would refuse every part
+            self.assertNotIn("reference_audio", tts.request_body("Hi.", tts.options()))
+            self.assertEqual(tts.options({"tts_model": "chatterbox"})["reference"], owner)
+        with configured(TTS_REFERENCE_AUDIO=owner, TTS_MODEL="chatterbox"):
+            self.assertEqual(tts.options()["reference"], owner)
+            for kokoro in ("kokoro", "Kokoro-82M", "tts-1"):                 # a job that picks a built-in voice
+                self.assertEqual(tts.options({"tts_model": kokoro})["reference"], "", kokoro)
+            # A sample the job sends itself is never dropped: the endpoint says what is wrong with it.
+            self.assertEqual(tts.options({"tts_model": "kokoro", "tts_reference_audio": "https://x.example/a.wav"})
+                             ["reference"], "https://x.example/a.wav")
 
     def test_a_raw_pcm_answer_is_never_asked_for(self):
         with configured(TTS_FORMAT="pcm"):

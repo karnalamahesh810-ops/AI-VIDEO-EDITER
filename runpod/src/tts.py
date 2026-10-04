@@ -70,6 +70,9 @@ PARAGRAPH_FILL = 0.6
 # stopped early. Only judged on a part long enough for the rate to mean something.
 MAX_CHARS_PER_SECOND = 32.0
 MIN_CHARS_TO_JUDGE = 80
+# The model names the voice endpoint answers with Kokoro (tts_server/engines.py
+# _MODEL_NAMES): built-in voices only, never a voice sample.
+KOKORO_MODELS = {"kokoro", "kokoro-82m", "tts-1", "tts-1-hd"}
 
 
 def _sleep(seconds: float, stop: Optional[threading.Event] = None) -> None:
@@ -156,10 +159,13 @@ def options(inp: Optional[dict] = None) -> Dict[str, Any]:
         speed = float(inp.get("tts_speed") or config.TTS_SPEED or 1.0)
     except (TypeError, ValueError):
         speed = float(config.TTS_SPEED or 1.0)
+    model = text("tts_model", config.TTS_MODEL or "kokoro")
     ref = inp.get("tts_reference_audio")
     if not (isinstance(ref, str) and re.match(r"https?://", ref.strip())):
-        ref = config.TTS_REFERENCE_AUDIO
-    return {"model": text("tts_model", config.TTS_MODEL or "kokoro"),
+        # The worker's own sample is for the voice that clones: sent along with
+        # Kokoro it would make the endpoint refuse every part of the narration.
+        ref = "" if model.lower() in KOKORO_MODELS else config.TTS_REFERENCE_AUDIO
+    return {"model": model,
             "voice": text("tts_voice", config.TTS_VOICE or "af_heart"),
             "speed": round(max(0.5, min(2.0, speed)), 3),
             "reference": str(ref or "").strip(),

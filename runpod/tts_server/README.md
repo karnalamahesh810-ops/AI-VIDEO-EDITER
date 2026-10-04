@@ -153,7 +153,7 @@ value as the worker's `TTS_API_KEY` when nothing else guards the port.
 | `TTS_MODEL` | `kokoro` | or `chatterbox` |
 | `TTS_VOICE` | `af_heart` | Kokoro voice |
 | `TTS_SPEED` | `1.0` | 0.5-2.0 |
-| `TTS_REFERENCE_AUDIO` | empty | voice sample (link or file) for Chatterbox cloning |
+| `TTS_REFERENCE_AUDIO` | empty | voice sample (link or file) for Chatterbox cloning; never sent with a Kokoro model (the endpoint would refuse every part) |
 | `TTS_FIELDS`, `TTS_EXTRA` | empty | JSON: rename request fields / add fields, for another server |
 | `TTS_FORMAT` | `flac` | what each part comes back as |
 | `TTS_OUTPUT_FORMAT` | `mp3` | what the narration is stored as (128 kbit/s, 44.1 kHz mono) |

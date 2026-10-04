@@ -331,17 +331,33 @@ def _fetch(url: str) -> bytes:
     raise Refused(f"the voice sample link redirects more than {REFERENCE_MAX_REDIRECTS} times")
 
 
+_SAMPLE_LOCKS: Dict[str, threading.Lock] = {}
+_SAMPLE_LOCKS_GUARD = threading.Lock()
+
+
+def _sample_lock(key: str) -> threading.Lock:
+    with _SAMPLE_LOCKS_GUARD:
+        return _SAMPLE_LOCKS.setdefault(key, threading.Lock())
+
+
 def reference_file(value: str) -> str:
     """
     A voice sample - a link, a data: URI or bare base64 - as a clean mono WAV
     on this disk (its first 30 s; Chatterbox listens to about 10). Kept by
-    content, so the thirteen parts of one narration decode it once.
+    content, so the thirteen parts of one narration decode it once - also
+    when several of them arrive at the same moment (one fetches, the others
+    wait for it and read the same file).
     """
     value = str(value or "").strip()
     if not value:
         return ""
     os.makedirs(REFERENCE_DIR, exist_ok=True)
     key = hashlib.sha256(value.encode("utf-8", "ignore")).hexdigest()[:32]
+    with _sample_lock(key):
+        return _reference_file(value, key)
+
+
+def _reference_file(value: str, key: str) -> str:
     wav = os.path.join(REFERENCE_DIR, f"{key}.wav")
     if os.path.isfile(wav) and os.path.getsize(wav) > 44:
         return wav
@@ -356,8 +372,8 @@ def reference_file(value: str) -> str:
             raise Refused("the voice sample is too large (30 MB at most; 10-30 s is all that is used)")
     if len(data) < 1000:
         raise Refused("the voice sample is empty or not audio")
-    # File names of this request's own: the parts of one narration arrive
-    # together with the same new sample and must never write over each other.
+    # File names of this request's own, so not even another server process
+    # with the same new sample can write over them.
     fd, raw = tempfile.mkstemp(prefix=f"{key}.", suffix=".src", dir=REFERENCE_DIR)
     tmp = raw[:-len(".src")] + ".tmp.wav"
     try:
@@ -375,7 +391,13 @@ def reference_file(value: str) -> str:
             seconds = w.getnframes() / float(w.getframerate() or 1)
         if seconds < REFERENCE_MIN_SECONDS:
             raise Refused(f"the voice sample is only {seconds:.1f} s long; 10-30 s of clear speech works best")
-        os.replace(tmp, wav)
+        try:
+            os.replace(tmp, wav)
+        except OSError:
+            # Windows will not replace a file another process just wrote or holds
+            # open: that file is this same sample, decoded the same way.
+            if not (os.path.isfile(wav) and os.path.getsize(wav) > 44):
+                raise
     finally:
         for path in (raw, tmp):
             try:

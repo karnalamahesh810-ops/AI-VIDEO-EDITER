@@ -278,7 +278,12 @@ class Encoding(unittest.TestCase):
         self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         sample, _ = engines.encode(tone(6.0, 44100), 44100, "mp3")
         value = "data:audio/mp3;base64," + base64.b64encode(sample).decode()
-        start, got, failed = threading.Barrier(4), [], []
+        start, got, failed, decodes = threading.Barrier(4), [], [], []
+        real_run = engines.subprocess.run
+
+        def run(argv, *a, **kw):
+            decodes.append(argv[-1])
+            return real_run(argv, *a, **kw)
 
         def part():
             start.wait()
@@ -286,14 +291,17 @@ class Encoding(unittest.TestCase):
                 got.append(engines.reference_file(value))
             except Exception as e:  # noqa: BLE001 - collected for the assertion below
                 failed.append(e)
-        with mock.patch.object(engines, "REFERENCE_DIR", d):
+        with mock.patch.object(engines, "REFERENCE_DIR", d), mock.patch.object(engines.subprocess, "run",
+                                                                                side_effect=run):
             threads = [threading.Thread(target=part) for _ in range(4)]
             for t in threads:
                 t.start()
             for t in threads:
                 t.join(60)
         self.assertEqual(failed, [])
+        self.assertEqual(len(got), 4)
         self.assertEqual(len(set(got)), 1)
+        self.assertEqual(len(decodes), 1)                                       # one part decodes, three reuse it
         self.assertEqual(os.listdir(d), [os.path.basename(got[0])])            # no temp file of any part left
         with wave.open(got[0], "rb") as w:
             self.assertAlmostEqual(w.getnframes() / w.getframerate(), 6.0, delta=0.2)
@@ -555,6 +563,10 @@ class Models(unittest.TestCase):
             self.assertEqual(fetch_models.wanted(), ["kokoro"])
         with mock.patch.dict(os.environ, {"WITH_CHATTERBOX": "1"}):
             self.assertEqual(fetch_models.wanted(), ["kokoro", "chatterbox"])
+
+    def test_the_worker_knows_which_model_names_mean_kokoro(self):
+        # The worker leaves its own voice sample out for exactly these (src/tts.py options).
+        self.assertEqual(tts.KOKORO_MODELS, {k for k, v in engines._MODEL_NAMES.items() if v == "kokoro" and k})
 
     def test_the_default_voice_of_worker_and_endpoint_is_one_the_image_fetches(self):
         self.assertRegex(engines.DEFAULT_VOICE, r"^[a-z]{2}_[a-z0-9]+$")
