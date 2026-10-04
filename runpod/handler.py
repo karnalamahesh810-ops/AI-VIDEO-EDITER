@@ -72,7 +72,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
 from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
-from src import ambience, gapfill, grade, packs, quality, review, voicepolish
+from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
 from src import brandkit, stockblock
 from src import restore
 from src import batch, sources
@@ -825,7 +825,7 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
     return made
 
 
-def _fill_missing_media(doc: dict) -> int:
+def _fill_missing_media(doc: dict, fresh: bool = True) -> int:
     """
     Give every scene something to render, never another scene's clip.
 
@@ -843,9 +843,18 @@ def _fill_missing_media(doc: dict) -> int:
     neighbouring shot held over it while its clip still covers the longer
     scene (the scenes merge, src/gapfill.hold_or_animate), else its line as a
     text card on the quiet background. Returns how many scenes were patched.
+
+    Never the fallback ladder here (as before the shot cap): the plan's ladder
+    has already run for every line still empty (do_plan, then the check
+    before publishing), and a third search would only spend time and model
+    calls on the same lines. `fresh` off - a render chunk, which must draw
+    exactly what the other machines draw - also leaves out the runner-ups and
+    other moments (src/shotcap.py), whose checks go over the network.
     """
-    got = gapfill.hold_or_animate(doc, label="before the render")
-    return int(got.get("graphic", 0)) + int(got.get("held", 0)) + int(got.get("card", 0))
+    got = gapfill.hold_or_animate(doc, label="before the render", laddered=True, fresh=fresh)
+    # ("alternative", "moment" and "ladder": the fresh shots a line gets when holding
+    # the shot beside it would run past SHOT_MAX_SECONDS, src/shotcap.py.)
+    return sum(int(got.get(k, 0)) for k in ("graphic", "held", "card", "alternative", "moment", "ladder"))
 
 
 def _store_narration(local: str, ext: str, inp: dict) -> str:
@@ -1004,6 +1013,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # judged like any beat. Off: the beats as they are.
     from src import hookboost
     segments, mention_focus, boost_info = hookboost.prepare(segments, brief, mention_focus)
+    # No shot on screen longer than SHOT_MAX_SECONDS (src/shotcap.py; the owner,
+    # 2026-10-04: "some of the clips are playing more than seven seconds on the
+    # timeline"): a longer beat is cut into 2+ shots on word boundaries here, so
+    # each is planned, sourced and judged like any beat. 0 = the beats as they are.
+    segments, mention_focus, cap_info = shotcap.prepare(segments, brief, mention_focus, until=audio_duration)
 
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
@@ -1038,7 +1052,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # within HOOK_SECONDS is a hook line (best-of search, no generated image);
     # "place" and "recency" carry the line's own place and "last month first"
     # into the pools and the searches (the owner's review, 2026-09-30).
-    jobs = [{"index": i, "query": shot["query"], "seconds": seg.duration,
+    # With the shot cap on, each line asks for a clip as long as its shot is ON
+    # SCREEN (to the next line's first word) instead of as long as it is spoken:
+    # a clip is never slowed to fill its scene (src/shotcap.py) - not even on a
+    # beat whose words left no cut (a long pause), which stays longer than the cap.
+    on_screen = shotcap.screen_seconds(segments, audio_duration) if shotcap.enabled() else None
+    jobs = [{"index": i, "query": shot["query"],
+             "seconds": seg.duration if on_screen is None else max(seg.duration, on_screen[i]),
              "start": round(float(seg.start), 2),
              "visual_type": shot.get("visualType", "footage"),
              "fallbacks": shot.get("fallbacks") or [],
@@ -1243,6 +1263,17 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         pool_stats["variety"] = dict(media.restore_held(jobs, results_by_index, held), held=len(held),
                                      reasons=dict(collections.Counter(r for _a, r, _k in held.values())))
         print(f"[worker] variety: {pool_stats['variety']}", flush=True)
+    # Still empty, with the shot cap on: a clip the judge approved for this very line (a runner-up of
+    # the clip the variety rules took off it) or for another piece of the same cut beat comes before
+    # the ladder's pictures - real footage of the same sentence (src/shotcap.py runner_ups_first).
+    if shotcap.enabled() and any(results_by_index[j["index"]] is None for j in jobs):
+        try:
+            first = shotcap.runner_ups_first(jobs, results_by_index, cap_info, held=held)
+        except Exception as e:  # noqa: BLE001 - the ladder below
+            print(f"[worker] runner-ups skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
+            first = {}
+        if any(first.values()):
+            pool_stats["runnerUpsFirst"] = first
     # Still empty: never a reused shot (the owner, 2026-10-01: the Lake Powell
     # video reused 47 clips here and left its last 23 scenes empty). The fast
     # fallback ladder instead - the library's unused clips of the line's
@@ -1320,7 +1351,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # (d) the last resort for a line the ladder could not fill: the planner's
     # graphic for it, else the neighbouring shot held over it (src/gapfill.py).
     # Never an empty scene, never another scene's clip.
-    last = gapfill.hold_or_animate(doc, label="after the fallback fill")
+    # (The ladder has just run for these lines: a hold the shot cap refuses goes
+    # to a pick-a-shot runner-up, another moment of the clip beside the line,
+    # then the shot beside it held past the cap - never past 12 s, never
+    # slowed - and only then to the text card.)
+    last = gapfill.hold_or_animate(doc, label="after the fallback fill", laddered=True)
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
     if boost_info and doc["meta"].get("hookBoost") is not None:
         # A shot of a cut beat that missed the relevance gate gives way to the good shot beside it.
@@ -1407,6 +1442,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if doc["meta"].get("hookBoost"):
         # The opening as it ended up (a shot the ladder could not fill was held over by its neighbour).
         doc["meta"]["hookBoost"]["opening"] = hookboost.opening_stats(doc["scenes"], doc["fps"])
+    # The shot cap's report (src/shotcap.py): beats over the cap before, the cuts
+    # made, the shots over it now, what replaced a hold that would have run long.
+    if shotcap.enabled():
+        doc["meta"]["shotCap"] = shotcap.report(doc, cap_info)
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).
@@ -1800,10 +1839,13 @@ def _no_repeats(doc: dict, report: Reporter = None) -> dict:
               f"{got.get('replaced', 0)} replaced by fresh ones; {got.get('empty', 0)} empty scene(s) filled",
               flush=True)
         doc.setdefault("meta", {}).setdefault("fallbackFill", {})["beforePublishing"] = dict(got)
+        if isinstance(doc.get("meta", {}).get("shotCap"), dict) and shotcap.enabled():
+            # The shot cap's report as the timeline now stands (a replaced repeat, a held line).
+            doc["meta"]["shotCap"] = shotcap.report(doc, doc["meta"]["shotCap"])
     return got
 
 
-def _sanitize_stills(doc: dict, work: str, fetched: dict = None) -> int:
+def _sanitize_stills(doc: dict, work: str, fetched: dict = None, fresh: bool = True) -> int:
     """
     Re-encode every still to a real JPEG before Chrome sees it.
 
@@ -1814,7 +1856,8 @@ def _sanitize_stills(doc: dict, work: str, fetched: dict = None) -> int:
     clean JPEG (remote ones are fetched first, or taken from `fetched`: the
     copies the quality check downloaded to decode them); one that cannot be
     decoded is turned into an empty scene, which _fill_missing_media then
-    covers with a matching shot. Returns how many stills were dropped.
+    covers with a matching shot (`fresh` as there). Returns how many stills
+    were dropped.
     """
     from src.assetserver import is_local
     dropped = 0
@@ -1859,7 +1902,7 @@ def _sanitize_stills(doc: dict, work: str, fetched: dict = None) -> int:
     if dropped:
         print(f"[worker] {dropped} still(s) could not be decoded; covered by other shots",
               flush=True)
-        _fill_missing_media(doc)
+        _fill_missing_media(doc, fresh=fresh)
     return dropped
 
 
@@ -2500,7 +2543,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "AI_REVIEW_SECONDS", "AI_REVIEW_MIN_MATCH", "AI_REVIEW_MAX_FIX_SHARE",
                       # Stock-agency and watermarked pictures (src/stockblock.py, the owner 2026-10-04).
                       "STOCK_BLOCK", "STOCK_BLOCK_FILE_NAMES", "STOCK_BLOCK_WORDS", "WATERMARK_CHECK",
-                      "WATERMARK_CLIP_SHARE", "STOCK_GATE_REPAIR")
+                      "WATERMARK_CLIP_SHARE", "STOCK_GATE_REPAIR",
+                      # No shot on screen longer than this (src/shotcap.py; the owner, 2026-10-04). 0 = off.
+                      "SHOT_MAX_SECONDS")
 
 
 def _apply_config(overrides) -> dict:
@@ -2623,6 +2668,7 @@ def handler(job):
     report = Reporter(reports_to, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
+    shotcap.reset()                     # and what the shot cap cut and swapped
     packs.reset()                       # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's
     kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
@@ -2704,8 +2750,10 @@ def handler(job):
         if action == "render_chunk":
             # One frame range of a split render, queued by its parent (src/fanout.py).
             doc = inp.get("timeline") or {}
-            _sanitize_stills(doc, work)
-            _fill_missing_media(doc)
+            # (No runner-up or other moment here: every chunk must draw the same document, and those
+            # are checked over the network - one machine could take one where another could not.)
+            _sanitize_stills(doc, work, fresh=False)
+            _fill_missing_media(doc, fresh=False)
 
             def chunk_progress(frac):
                 try:

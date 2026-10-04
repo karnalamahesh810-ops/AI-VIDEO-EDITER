@@ -558,7 +558,7 @@ def settle(doc: dict, info: Optional[dict]) -> Dict[str, int]:
     on one good shot as it was before the booster. A beat whose shots all missed
     the gate is left as the sourcing made it. Returns {"beats", "held"}.
     """
-    from . import gapfill, timeline
+    from . import gapfill, shotcap, timeline
     scenes = doc.get("scenes") or []
     fps = max(1, int(doc.get("fps") or 30))
     out = {"beats": 0, "held": 0}
@@ -579,7 +579,8 @@ def settle(doc: dict, info: Optional[dict]) -> Dict[str, int]:
                 and _solid(scenes[i + 1]) else None
             need = int(sc.get("durationInFrames", 0))
             side = None
-            for rate in (float(getattr(config, "HOLD_MIN_RATE", 0.85)), 0.6):
+            # (With the shot cap on: within SHOT_MAX_SECONDS and at real speed only, src/shotcap.py.)
+            for rate in shotcap.hold_rates():
                 if prev is not None and gapfill._room(prev, fps, rate) >= need:
                     side = "prev"
                     break

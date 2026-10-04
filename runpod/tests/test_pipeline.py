@@ -777,6 +777,10 @@ class PipelineProgress(unittest.TestCase):
         # deleted. build must never let one hard beat destroy the rest.
         import handler
         doc = build_doc(n=3, seconds=3.0)
+        for s in doc["scenes"]:
+            # The neighbours' clips run 6 s: they cover the held line at real speed (with the
+            # shot cap on, SHOT_MAX_SECONDS, a clip is never slowed to stretch over a line).
+            s["media"]["clipSeconds"] = 6.0
         doc["scenes"][1]["media"] = {"type": "color", "url": "", "source": "none"}
         doc["scenes"][1]["reviewRequired"] = True
         doc["scenes"][1]["reviewReason"] = "No media found for this beat"

@@ -714,8 +714,19 @@ class Hit:
 
 
 def covers(entry: Entry, seconds: float) -> bool:
-    """The clip can fill `seconds` without playing slower than the renderer's floor (0.6x, src/quality.py)."""
-    return seconds <= 0 or entry.seconds <= 0 or entry.seconds / 0.6 >= seconds - 0.07
+    """
+    The clip can fill `seconds` without playing slower than the renderer's
+    floor (0.6x, src/quality.py) - with SHOT_MAX_SECONDS on (src/shotcap.py)
+    without being slowed at all: it holds the line itself (`seconds` less the
+    usual pad, media.SEQ_SHOT_PAD) at real speed.
+    """
+    if seconds <= 0 or entry.seconds <= 0:
+        return True
+    from . import shotcap
+    if shotcap.enabled():
+        from . import media
+        return entry.seconds >= seconds - media.SEQ_SHOT_PAD - 0.07
+    return entry.seconds / 0.6 >= seconds - 0.07
 
 
 def find(text, niches: Optional[Sequence[str]] = None, used=None, *, index: Optional[int] = None,
