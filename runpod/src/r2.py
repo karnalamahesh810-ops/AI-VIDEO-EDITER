@@ -226,6 +226,68 @@ def delete(key: str, bucket: str = "") -> bool:
     return r.status_code in (200, 204)
 
 
+_NEEDED = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_BASE")
+
+
+def check(public: bool = True) -> dict:
+    """
+    Is Cloudflare R2 really usable? A round trip on a tiny probe object:
+    write it, read it back through the S3 API, through a presigned link and
+    (with `public`) through R2_PUBLIC_BASE - the link every render worker
+    fetches scene media from - then delete it. Each step is reported, so a
+    wrong key, a wrong bucket name or a public domain that is not connected
+    shows up here rather than mid-render. Never returns a secret value.
+    """
+    missing = [n for n in _NEEDED if not getattr(config, n, "")]
+    out = {"mode": "r2", "bucket": config.R2_BUCKET, "ok": False, "missing": missing,
+           "steps": {}, "detail": ""}
+    if missing:
+        out["detail"] = "not set on this endpoint: " + ", ".join(missing)
+        return out
+    key = f"healthcheck/probe-{uuid.uuid4().hex}.txt"
+    body = f"thumbgenius r2 probe {time.time():.0f}".encode()
+    steps = out["steps"]
+
+    def step(name, fn):
+        try:
+            fn()
+            steps[name] = "ok"
+            return True
+        except Exception as e:  # noqa: BLE001 - reported, never raised
+            steps[name] = f"failed: {type(e).__name__}: {str(e)[:200]}"
+            return False
+
+    def expect(data):
+        if data != body:
+            raise RuntimeError("read back different bytes" if data else "object not found after upload")
+
+    def fetch(url):
+        r = requests.get(url, timeout=30, headers={"User-Agent": config.USER_AGENT})
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        expect(r.content)
+
+    if step("upload", lambda: upload_bytes(body, key, content_type="text/plain", deadline=time.time() + 30)):
+        step("read", lambda: expect(get_bytes(key, timeout=30)))
+        step("presigned", lambda: fetch(presign(key, expires=300)))
+        if public:
+            step("public", lambda: fetch(public_url(key)))
+        step("delete", lambda: delete(key) or (_ for _ in ()).throw(RuntimeError("delete refused")))
+    failed = {k: v for k, v in steps.items() if v != "ok"}
+    out["ok"] = not failed
+    if failed.get("upload"):
+        out["detail"] = ("cannot write to the bucket: check R2_ACCOUNT_ID, the access key pair "
+                         "(Object Read & Write on this bucket) and R2_BUCKET")
+    elif failed.get("public"):
+        out["detail"] = ("R2_PUBLIC_BASE does not serve the bucket: connect a custom domain or "
+                         "enable the r2.dev URL in Cloudflare, and set R2_PUBLIC_BASE to it")
+    elif failed:
+        out["detail"] = "R2 step(s) failed: " + ", ".join(failed)
+    else:
+        out["detail"] = "Cloudflare R2 read/write/public link all working"
+    return out
+
+
 def locate(url: str) -> Optional[tuple]:
     """(bucket, key) of a link under one of our public bases (videos or library), else None."""
     for base, bucket in ((config.R2_PUBLIC_BASE, config.R2_BUCKET),

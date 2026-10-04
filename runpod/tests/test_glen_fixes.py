@@ -9,6 +9,7 @@ import os
 import tempfile
 import time
 import unittest
+import urllib.parse
 from unittest import mock
 
 from src import config, director, fanout, media, pools, storage, treatments, vision
@@ -43,6 +44,115 @@ class BrokerUploadRetries(unittest.TestCase):
             with self.assertRaises(storage.StorageError):
                 storage.broker_upload(__file__, "video-media", "projects/p/x", "p", "j")
         slept.assert_not_called()
+
+
+class RenderChunkUploadRetries(unittest.TestCase):
+    """2026-10-04: four render_chunk children rendered their frames, then lost
+    them to one 60 s broker read timeout each - run_chunk passed no deadline,
+    so the upload was never retried and the parent re-rendered every chunk."""
+
+    def test_a_stalled_broker_is_retried_instead_of_losing_the_chunk(self):
+        import requests
+        calls = {"n": 0}
+
+        def broker(payload, timeout=60):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise requests.exceptions.ReadTimeout("Read timed out. (read timeout=60)")
+            return {"ok": True, "uploadUrl": "https://up", "readUrl": "https://read"}
+
+        with tempfile.TemporaryDirectory() as work, \
+                mock.patch.object(storage, "broker_enabled", return_value=True), \
+                mock.patch.object(storage, "_broker", side_effect=broker), \
+                mock.patch.object(storage, "upload_to_signed_url", return_value=10), \
+                mock.patch.object(storage.time, "sleep"):
+            out = fanout.run_chunk({"frames": [0, 299], "chunk": 3, "project_id": "p",
+                                    "parent_job_id": "j", "deadline_at": time.time() + 900},
+                                   work, lambda *a: open(a[1], "wb").write(b"x"))
+        self.assertEqual(out["url"], "https://read")
+        self.assertEqual(calls["n"], 4)                  # two timeouts, then upload + read
+
+
+class CloudflareOnlyStorage(unittest.TestCase):
+    """R2_ONLY with R2 configured: files go to Cloudflare R2, never the app's storage."""
+
+    def test_uploads_go_to_r2_and_never_touch_the_broker(self):
+        from src import r2
+        with mock.patch.object(config, "R2_ONLY", True), \
+                mock.patch.object(r2, "enabled", return_value=True), \
+                mock.patch.object(r2, "upload", return_value="https://pub/x") as up, \
+                mock.patch.object(r2, "presign", return_value="https://signed/x"), \
+                mock.patch.object(storage, "_broker", side_effect=AssertionError("Supabase used")), \
+                mock.patch.object(storage, "upload_to_supabase", side_effect=AssertionError("Supabase used")):
+            url = storage.broker_upload(__file__, "video-media", "/projects/p/parts/j/render_003.mp4", "p", "j")
+        self.assertEqual(url, "https://signed/x")
+        self.assertEqual(up.call_args[0][1], "projects/p/parts/j/render_003.mp4")   # readable by path
+
+    def test_reads_come_from_r2_and_old_supabase_files_stay_readable(self):
+        from src import r2
+        with mock.patch.object(config, "R2_ONLY", True), \
+                mock.patch.object(r2, "enabled", return_value=True), \
+                mock.patch.object(r2, "presign", return_value="https://signed/r2"), \
+                mock.patch.object(storage, "_broker", return_value={"ok": True, "readUrl": "https://supabase/old"}):
+            with mock.patch.object(r2, "head", return_value={"size": 1}):
+                self.assertEqual(storage.broker_read_url("b", "projects/p/a.mp4", "p", "j"), "https://signed/r2")
+            with mock.patch.object(r2, "head", return_value=None):
+                self.assertEqual(storage.broker_read_url("b", "projects/p/a.mp4", "p", "j"), "https://supabase/old")
+
+    def test_without_r2_credentials_the_app_storage_still_works(self):
+        from src import r2
+        with mock.patch.object(config, "R2_ONLY", True), mock.patch.object(r2, "enabled", return_value=False):
+            self.assertFalse(storage.r2_only())
+
+
+class CloudflareHealthCheck(unittest.TestCase):
+    """health's storage check is a real R2 round trip once R2 is configured."""
+    VALS = {"R2_ACCOUNT_ID": "acct", "R2_ACCESS_KEY_ID": "k", "R2_SECRET_ACCESS_KEY": "s",
+            "R2_BUCKET": "videos", "R2_PUBLIC_BASE": "https://cdn.example.com", "R2_ONLY": True}
+
+    def _fake_store(self, public_status=200):
+        from src import r2
+        store = {}
+
+        def put(key, body, size, ctype, bucket, cc, deadline, reopen=None):
+            store[key] = body
+
+        def get(url, **kw):
+            r = mock.Mock()
+            key = url.split("?")[0].split("/videos/")[-1] if "r2.cloudflarestorage" in url else url.split(".com/")[-1]
+            r.status_code = public_status if "cdn.example.com" in url else 200
+            r.content = store.get(urllib.parse.unquote(key), b"")
+            return r
+        return r2, store, put, get
+
+    def test_a_working_bucket_passes_every_step(self):
+        r2, store, put, get = self._fake_store()
+        with mock.patch.multiple(config, **self.VALS), mock.patch.object(r2, "_put", side_effect=put), \
+                mock.patch.object(r2, "get_bytes", side_effect=lambda k, **kw: store.get(k)), \
+                mock.patch.object(r2.requests, "get", side_effect=get), \
+                mock.patch.object(r2, "delete", side_effect=lambda k: store.pop(k, None) is not None):
+            out = storage.check()
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(out["mode"], "r2")
+        self.assertEqual(set(out["steps"]), {"upload", "read", "presigned", "public", "delete"})
+        self.assertFalse(store)                                              # the probe is cleaned up
+
+    def test_a_public_domain_that_is_not_connected_is_named(self):
+        r2, store, put, get = self._fake_store(public_status=404)
+        with mock.patch.multiple(config, **self.VALS), mock.patch.object(r2, "_put", side_effect=put), \
+                mock.patch.object(r2, "get_bytes", side_effect=lambda k, **kw: store.get(k)), \
+                mock.patch.object(r2.requests, "get", side_effect=get), \
+                mock.patch.object(r2, "delete", return_value=True):
+            out = storage.check()
+        self.assertFalse(out["ok"])
+        self.assertIn("R2_PUBLIC_BASE", out["detail"])
+
+    def test_missing_settings_are_listed_by_name_without_values(self):
+        with mock.patch.multiple(config, **{**self.VALS, "R2_SECRET_ACCESS_KEY": "", "R2_PUBLIC_BASE": ""}):
+            out = storage.check()
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["missing"], ["R2_SECRET_ACCESS_KEY", "R2_PUBLIC_BASE"])
+        self.assertNotIn("k", out["detail"].split())                          # no secret echoed
 
 
 class LostPartClipsComeBack(unittest.TestCase):

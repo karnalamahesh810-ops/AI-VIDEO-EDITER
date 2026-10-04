@@ -417,8 +417,12 @@ def _put_scene_file(local: str, obj: str, bucket: str, project_id: str, job_id: 
                              deadline=time.time() + config.R2_MEDIA_UPLOAD_SECONDS,
                              cache_control=r2.IMMUTABLE), None
         except Exception as e:  # noqa: BLE001 - the app's storage below
+            if storage.r2_only():
+                raise           # Cloudflare only: never fall back to the app's storage
             print(f"[worker] R2 upload of {os.path.basename(obj)} failed, using app storage: "
                   f"{type(e).__name__}: {str(e)[:120]}", flush=True)
+    if storage.r2_only():       # R2_SCENE_MEDIA off: still Cloudflare, by path
+        return storage.broker_upload(local, bucket, obj, project_id, job_id, read_ttl=_MEDIA_LINK_TTL), None
     ref = {"bucket": bucket, "path": obj}
     if storage.broker_enabled():
         return storage.broker_upload(local, bucket, obj, project_id, job_id, read_ttl=_MEDIA_LINK_TTL), ref
@@ -1928,7 +1932,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
                 "video_b64": payload, "quality": checked}
 
     upload_url = inp.get("upload_url")
-    if upload_url:
+    if upload_url and not storage.r2_only():   # Cloudflare only: R2 below instead
         size = storage.upload_to_signed_url(out_path, upload_url)
         public_url = inp.get("public_url") or ""
         return {
@@ -1962,6 +1966,8 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
                 "quality": checked,
             }
         except Exception as e:  # noqa: BLE001 - the app's storage is the fallback
+            if storage.r2_only():
+                raise           # Cloudflare only: never fall back to the app's storage
             print(f"[worker] R2 upload failed, using app storage: {type(e).__name__}: {str(e)[:200]}",
                   flush=True)
             renderer.fit_size(out_path)     # app storage still caps each file
@@ -2056,7 +2062,9 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
                                      concurrency=inp.get("concurrency") or config.RENDER_CONCURRENCY)
     if finished:
         pass
-    elif split and not spread and remote_doc is not None and _all_remote(remote_doc):
+    # The Supabase-broker chunk render only when Cloudflare R2 is not set up:
+    # with R2, chunks travel through R2 alone (render_pod above).
+    elif split and not spread and not r2.enabled() and remote_doc is not None and _all_remote(remote_doc):
         fanout.render(remote_doc, out_path, parent_job_id=(report.job or {}).get("id", ""),
                       project_id=inp.get("project_id") or "",
                       bucket=inp.get("media_bucket") or config.MEDIA_BUCKET, work=work,

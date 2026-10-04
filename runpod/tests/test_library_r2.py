@@ -799,6 +799,7 @@ class SceneMediaOnR2(unittest.TestCase):
         h, d = self.handler, tempfile.mkdtemp()
         doc = self.doc(d)
         with mock.patch.multiple(config, **R2ON), mock.patch.object(config, "R2_SCENE_MEDIA", True), \
+                mock.patch.object(config, "R2_ONLY", False), \
                 mock.patch.object(h.r2, "upload", side_effect=RuntimeError("R2 upload failed: HTTP 403")), \
                 mock.patch.object(h.storage, "broker_enabled", return_value=True), \
                 mock.patch.object(h.storage, "broker_upload", return_value="https://signed/new") as up, \
@@ -811,10 +812,28 @@ class SceneMediaOnR2(unittest.TestCase):
         self.assertNotIn("thumbStorage", m)                                  # the stale reference is gone
         self.assertEqual(up.call_args.args[2], "projects/p/media/s0.mp4")
 
+    def test_cloudflare_only_never_falls_back_to_app_storage(self):
+        h, d = self.handler, tempfile.mkdtemp()
+        doc = self.doc(d)
+        with mock.patch.multiple(config, **R2ON), mock.patch.object(config, "R2_SCENE_MEDIA", True), \
+                mock.patch.object(config, "R2_ONLY", True), \
+                mock.patch.object(h.r2, "upload", side_effect=RuntimeError("R2 upload failed: HTTP 403")), \
+                mock.patch.object(h.storage, "_broker", return_value={"ok": True}) as broker, \
+                mock.patch.object(h.storage, "upload_to_supabase") as supa, \
+                mock.patch.object(h, "_thumbnail", return_value=""), \
+                mock.patch.object(h, "_preview_proxy", return_value=""):
+            try:
+                h.publish_media(doc, "p", "video-media", lambda *a, **k: None, job_id="j")
+            except Exception:  # noqa: BLE001 - failing loudly is allowed; Supabase is not
+                pass
+        broker.assert_not_called()
+        supa.assert_not_called()
+
     def test_off_switch_keeps_the_app_storage(self):
         h, d = self.handler, tempfile.mkdtemp()
         doc = self.doc(d)
         with mock.patch.multiple(config, **R2ON), mock.patch.object(config, "R2_SCENE_MEDIA", False), \
+                mock.patch.object(config, "R2_ONLY", False), \
                 mock.patch.object(h.r2, "upload", side_effect=AssertionError("R2 used")), \
                 mock.patch.object(h.storage, "broker_enabled", return_value=True), \
                 mock.patch.object(h.storage, "broker_upload", return_value="https://signed/x"), \

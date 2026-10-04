@@ -269,8 +269,8 @@ class _Units:
                         costs.absorb(out.get("costs"))
                         events.absorb(out.get("events"))
                     if state != "COMPLETED" or not isinstance(out, dict) or not self.accept(unit, out, True):
-                        print(f"[fanout] {label}: unit {jid[:8]} {state}: "
-                              f"{str(out.get('error') if isinstance(out, dict) else out)[:160]}", flush=True)
+                        why = out.get("error") if isinstance(out, dict) else (out or st.get("error"))
+                        print(f"[fanout] {label}: unit {jid[:8]} {state}: {str(why)[:160]}", flush=True)
                         self.failed.append(unit)
                     seen_progress[jid] = unit.get("weight", 1)
                     changed = True
@@ -513,6 +513,11 @@ def render_enabled(doc: dict, project_id: str) -> bool:
     way the scene media must be published first, so other machines can read it."""
     if pod_render_enabled(doc):
         return True
+    if r2.enabled():
+        # With Cloudflare R2 configured, rendered chunks go through R2 only:
+        # never the Supabase-broker chunk render below. A render the spread
+        # render cannot take renders whole on this machine.
+        return False
     seconds = doc.get("durationInFrames", 0) / max(1, doc.get("fps", 30))
     return bool(config.FANOUT_RENDER and seconds >= config.FANOUT_RENDER_MIN_SECONDS
                 and readiness(config.FANOUT_MIN_SCENES, project_id)["enabled"])
@@ -669,16 +674,18 @@ def render(doc: dict, out_path: str, *, parent_job_id: str, project_id: str, buc
         frac = done / max(1, total)
         report(f"Rendering video {int(frac * 100)}% on {busy} workers", 70 + int(20 * frac))
 
+    deadline = time.time() + config.FANOUT_TIMEOUT_SECONDS + 3 * total_frames / fps
     runner = _Units(
         units,
         payload=lambda u: {"action": "render_chunk", "parent_job_id": parent_job_id,
                            "project_id": project_id, "bucket": bucket, "timeline": doc,
-                           "frames": list(u["frames"]), "chunk": u["i"]},
+                           "frames": list(u["frames"]), "chunk": u["i"],
+                           "deadline_at": deadline},
         local=lambda u: render_local(u["frames"], u["path"], True, None),
         accept=accept,
         progress=lambda u, o: u["weight"] * float(o.get("frac") or 0),
         report=show,
-        deadline=time.time() + config.FANOUT_TIMEOUT_SECONDS + 3 * total_frames / fps)
+        deadline=deadline)
     failed = runner.run("render") if units else []
     for unit in failed:                         # anything lost is rendered here
         print(f"[fanout] rendering chunk {unit['i']} here", flush=True)
@@ -732,8 +739,17 @@ def run_chunk(inp: dict, work: str, render_local: Callable) -> dict:
     path = os.path.join(work, f"chunk_{i:03d}.mp4")
     render_local((a, b), path, True, None)
     obj = f"projects/{inp['project_id']}/parts/{inp['parent_job_id']}/render_{i:03d}.mp4"
+    # A rendered chunk is minutes of work; a broker hiccup must not throw it
+    # away. On 2026-10-04 the worker-storage function stalled (60 s read
+    # timeouts) and four children failed on their first upload attempt, so
+    # the parent re-rendered every one of their chunks alone, one by one.
+    # Retry until the parent stops waiting (or CHUNK_UPLOAD_GRACE_SECONDS).
+    until = time.time() + config.CHUNK_UPLOAD_GRACE_SECONDS
+    if inp.get("deadline_at"):
+        until = max(time.time() + 60.0, float(inp["deadline_at"]) - 15.0)
     url = storage.broker_upload(path, inp.get("bucket") or config.MEDIA_BUCKET, obj,
-                                inp["project_id"], inp["parent_job_id"], read_ttl=60 * 60 * 6)
+                                inp["project_id"], inp["parent_job_id"], read_ttl=60 * 60 * 6,
+                                deadline=until)
     return {"url": url, "path": obj, "frames": [a, b]}
 
 

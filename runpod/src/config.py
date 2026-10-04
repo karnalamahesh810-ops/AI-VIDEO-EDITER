@@ -454,6 +454,9 @@ FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "3"))
 # its own time box past the sourcing deadline. The Glen Canyon job lost 148
 # of 167 found scenes here while the app's database was restarting.
 PART_UPLOAD_GRACE_SECONDS = float(os.getenv("PART_UPLOAD_GRACE_SECONDS", "30"))
+# How long a render_chunk child keeps retrying its upload when the parent did
+# not say how long it will wait (deadline_at in the payload).
+CHUNK_UPLOAD_GRACE_SECONDS = float(os.getenv("CHUNK_UPLOAD_GRACE_SECONDS", "300"))
 REFETCH_SECONDS = float(os.getenv("REFETCH_SECONDS", "300"))
 REFETCH_PARALLEL = int(os.getenv("REFETCH_PARALLEL", "12"))
 # The last pass over scenes still empty after sourcing, before any shot is
@@ -852,9 +855,11 @@ RENDER_BUNDLE_TIMEOUT = int(os.getenv("RENDER_BUNDLE_TIMEOUT", "600"))
 # R2 (POD_RENDER_PREFIX). The pod joins the pictures without re-encoding, the
 # sound slices sample-exactly, and encodes the sound once (render.finalize).
 # Any chunk that fails, times out or is still queued when the pod is free is
-# rendered on the pod; a slow one is raced by a copy on the pod. Off until
-# verified on a real run; videos shorter than POD_RENDER_MIN_SECONDS stay whole.
-POD_RENDER_FANOUT = _flag("POD_RENDER_FANOUT", False)
+# rendered on the pod; a slow one is raced by a copy on the pod. On by
+# default: rendered chunks travel only through Cloudflare R2, never the app's
+# Supabase storage (whose broker stalls lost four chunks on 2026-10-04).
+# Videos shorter than POD_RENDER_MIN_SECONDS stay whole.
+POD_RENDER_FANOUT = _flag("POD_RENDER_FANOUT", True)
 POD_RENDER_CHUNKS = int(os.getenv("POD_RENDER_CHUNKS", "12"))
 POD_RENDER_MIN_SECONDS = float(os.getenv("POD_RENDER_MIN_SECONDS", "90"))
 # No chunk shorter than this many frames (a chunk's start-up costs ~30-45 s).
@@ -951,6 +956,12 @@ R2_LIBRARY_PREFIX = os.getenv("R2_LIBRARY_PREFIX", "").strip()
 # link-only name (no storage reference, so nothing re-signs them) instead of
 # the app's video-media bucket. On whenever R2 is configured; 0 = app storage.
 R2_SCENE_MEDIA = _flag("R2_SCENE_MEDIA", True)
+# Every file this worker stores goes to Cloudflare R2 (R2_BUCKET) once R2 is
+# configured: scene media, render chunks, parts' clips, the library and the
+# final video - the app's Supabase storage is never written, not even as a
+# fallback (its broker stalls lost a render on 2026-10-04). Files already in
+# Supabase can still be read. Without R2 credentials this has no effect.
+R2_ONLY = _flag("R2_ONLY", True)
 R2_MEDIA_UPLOAD_SECONDS = float(os.getenv("R2_MEDIA_UPLOAD_SECONDS", "120"))
 # Approved photos are kept too (never a generated image), when their long
 # side is at least LIBRARY_IMAGE_MIN_SIDE.
