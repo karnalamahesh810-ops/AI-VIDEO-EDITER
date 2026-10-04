@@ -9,9 +9,10 @@ and the whole video rendered on one 16-vCPU serverless worker until its flat
 
 Now: the spread render (fanout.render_pod) runs from a serverless parent too,
 publishes whatever is local first, cuts one chunk a machine, stops with a
-plain reason when the video itself cannot be drawn (files gone from storage,
-a chunk no machine can draw) instead of handing hours of work to one machine,
-and the whole-video render that remains as the last resort says it is on one
+plain reason when storage says files the video draws are gone (instead of
+handing hours of work to one machine), still falls back to the whole video
+when the machines fail (a chunk that failed everywhere, no worker free), and
+the whole-video render that remains as the last resort says it is on one
 machine and is refused when it could not finish in time. RunPod, R2, storage
 and Remotion are faked.
 """
@@ -229,7 +230,7 @@ class ServerlessParent(unittest.TestCase):
         doc = _doc([150] * 16)
         workers = FakeWorkers({1: "fail", 2: "fail"})
         with _serverless("ep"):
-            out, calls = _spread(doc, workers, pod_fails=(0,), RENDER_WHOLE_RETRY_SECONDS=1)
+            out, calls = _spread(doc, workers, pod_fails=(0,))
         self.assertTrue(out.get("ok"), out)
         self.assertEqual(calls["stats"]["handedOver"], 1)        # the parent's chunk went to a worker
         self.assertEqual(calls["stats"]["onPod"], 2)             # the workers' two were drawn here
@@ -251,7 +252,7 @@ class StopsWithTheReason(unittest.TestCase):
                                  "pub.example/.../s8.mp4"}}
                 return super().status(jid)
         workers = Workers({1: "slow", 3: "slow"})
-        out, calls = _spread(doc, workers, RENDER_WHOLE_RETRY_SECONDS=10 ** 9)
+        out, calls = _spread(doc, workers)
         err = out.get("error")
         self.assertIsInstance(err, fanout.SpreadFailed)
         self.assertEqual(err.missing, ["https://pub.example/media/s8.mp4"])
@@ -275,25 +276,55 @@ class StopsWithTheReason(unittest.TestCase):
         self.assertEqual(out["error"].missing, ["https://pub.example/media/s1.mp4"])
         self.assertEqual(calls["render"], [])                    # no frame drawn for a chunk that cannot finish
 
-    def test_a_chunk_no_machine_can_draw_does_not_send_a_long_video_to_one_machine(self):
-        doc = _doc([150] * 16)
-        workers = FakeWorkers({1: "fail"})
-        out, _calls = _spread(doc, workers, pod_fails=(600,), RENDER_WHOLE_RETRY_SECONDS=1)
-        err = out.get("error")
-        self.assertIsInstance(err, fanout.SpreadFailed)
-        self.assertEqual(err.missing, [])
-        text = str(err)
-        self.assertIn("chunk 1 (frames 600-1199) could not be rendered", text)
-        self.assertIn("the compositor crashed", text)            # the chunk's own error, not the last one seen
-        self.assertIn("was not rendered again on one machine", text)
-        # A short video is still tried whole (cheap), as before.
-        out, _calls = _spread(_doc([150] * 16), FakeWorkers({1: "fail"}), pod_fails=(600,),
-                              RENDER_WHOLE_RETRY_SECONDS=10 ** 9)
+    def _long(self):
+        """The Yellowstone size (~29 minutes, 52,000 frames) and its chunk ranges in _spread's settings."""
+        doc = _doc([260] * 200)
+        with _pod_env():
+            ranges = fanout.plan_chunks(doc, fanout.spread_chunks(doc["durationInFrames"], 12),
+                                        config.POD_RENDER_MIN_CHUNK_FRAMES)
+        return doc, ranges
+
+    def test_a_chunk_that_failed_on_every_machine_still_falls_back_to_the_whole_video(self):
+        # A chunk that failed on its worker and again here is a break of the
+        # machines (a crash, a full disk), not proof the video cannot be drawn:
+        # however long the video, render_pod returns False and the caller
+        # renders the whole video with its scaled limit, as before. Only
+        # storage's own "no" may end the render with SpreadFailed.
+        doc, ranges = self._long()
+        a, b = ranges[1]
+        out, calls = _spread(doc, FakeWorkers({1: "fail"}), pod_fails=(a,))
+        self.assertNotIn("error", out)                           # never SpreadFailed for a machine failure
         self.assertIs(out.get("ok"), False)
+        self.assertIn(f"chunk 1 (frames {a}-{b}) could not be rendered", calls["stats"]["error"])
+        self.assertIn("the compositor crashed", calls["stats"]["error"])    # the chunk's own error
+        self.assertFalse(fanout._LIVE)
+
+    def test_the_parents_chunk_no_worker_takes_still_falls_back_to_the_whole_video(self):
+        # The parent's own chunk fails and no worker can be given it (the
+        # endpoint refuses the job): a break of the machines - the whole video
+        # renders on this machine, however long, never SpreadFailed.
+        doc, _ranges = self._long()
+        out, calls = _spread(doc, FakeWorkers({0: "submit_fail"}), pod_fails=(0,))
+        self.assertNotIn("error", out)
+        self.assertIs(out.get("ok"), False)
+        self.assertIn("no worker took it", calls["stats"]["error"])
+        self.assertFalse(fanout._LIVE)
+
+    def test_a_long_video_whose_files_are_gone_still_stops_at_once(self):
+        # The one fail-fast: storage said no for a file a chunk draws.
+        doc, _ranges = self._long()
+
+        def fetch(url):
+            if url.endswith("/media/s1.mp4"):
+                raise fanout.Gone("download failed (HTTP 404): " + url, 404)
+        out, calls = _spread(doc, FakeWorkers({i: "slow" for i in range(1, 40)}), fetch=fetch)
+        self.assertIsInstance(out.get("error"), fanout.SpreadFailed)
+        self.assertEqual(out["error"].missing, ["https://pub.example/media/s1.mp4"])
+        self.assertEqual(calls["render"], [])
 
     def test_a_break_of_the_machines_not_the_video_still_falls_back(self):
         # The timeline cannot go up, a join fails: nothing says the video cannot be drawn.
-        with _pod_env(RENDER_WHOLE_RETRY_SECONDS=1), \
+        with _pod_env(), \
                 mock.patch.object(fanout.r2, "upload_bytes", side_effect=RuntimeError("R2 down")), \
                 mock.patch.object(fanout, "_delete_keys"):
             ok = fanout.render_pod(_doc([150] * 16), os.path.join(tempfile.mkdtemp(), "f.mp4"), job_id="j",
@@ -576,10 +607,8 @@ class TheLastResort(unittest.TestCase):
 
     def test_a_spread_that_cannot_be_repaired_fails_with_its_reason_not_a_whole_render(self):
         doc = self._short()
-        why = ("The video could not be rendered: chunk 4 (frames 20800-25999) could not be rendered: chunk 4: "
-               "failed on the pod (RenderError: the compositor crashed). Every machine that tried this part failed, "
-               "so the whole 29-minute video was not rendered again on one machine (about 2 h 40 min to reach the "
-               "same frames).")
+        why = ("The video could not be rendered: 1 file it needs is not in storage any more - deleted from "
+               "storage? (pub.example/.../s3.mp4)")
         with self.assertRaises(fanout.SpreadFailed) as cm:
             self._do_render(doc, lambda d, out, **kw: (_ for _ in ()).throw(fanout.SpreadFailed(why)),
                             render_side_effect=AssertionError("never the whole video on one machine"))

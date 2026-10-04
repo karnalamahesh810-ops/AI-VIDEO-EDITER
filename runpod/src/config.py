@@ -851,11 +851,6 @@ RENDER_CPUS = int(os.getenv("RENDER_CPUS", "0"))
 # time limit. (Not once every frame is drawn: a long video's sound is mixed
 # without a line of output.) 0 = off.
 RENDER_STALL_SECONDS = float(os.getenv("RENDER_STALL_SECONDS", "900"))
-# After a spread render broke on a chunk that no machine could draw, the whole
-# video is rendered on this one machine only when that is estimated to take no
-# longer than this: the same frames would fail again, so a long video stops
-# with the reason instead of running for hours first.
-RENDER_WHOLE_RETRY_SECONDS = float(os.getenv("RENDER_WHOLE_RETRY_SECONDS", "900"))
 
 # --- render speed (src/render.py; measured 2026-10-01) ---------------------------
 # x264 preset of every h264 render. Remotion's default, medium, encodes beside

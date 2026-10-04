@@ -2174,9 +2174,10 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
     # whether this machine is a pod or itself one of those workers: this
     # finished document - stills cleaned, gaps filled, repaired scenes and all -
     # is what every machine draws, and whatever in it is a file on this disk is
-    # published for them first (fanout.local_refs). When it cannot run, the
-    # whole video renders here; when it breaks on the video itself it raises
-    # (fanout.SpreadFailed) and do_render repairs what is named or fails.
+    # published for them first (fanout.local_refs). When it cannot run or the
+    # machines fail, the whole video renders here; only when storage says files
+    # it draws are gone does it raise (fanout.SpreadFailed) - do_render then
+    # repairs what is named or fails.
     spread = fanout.pod_render_enabled(doc)
     if spread:
         finished = fanout.render_pod(doc, out_path,

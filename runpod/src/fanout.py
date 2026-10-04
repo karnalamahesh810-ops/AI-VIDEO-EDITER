@@ -878,12 +878,15 @@ def pod_render_enabled(doc: Optional[dict] = None) -> bool:
 
 class SpreadFailed(RuntimeError):
     """
-    The spread render broke in a way the whole video on one machine would
-    repeat: a chunk no machine could draw, or files the video needs that are
-    gone from storage (`missing`: their links). render_pod raises it instead
-    of handing a long video to one machine for hours to fail on the same
-    frames; the quality check repairs what is named and the video is drawn
-    once more, or the job ends with this reason.
+    The spread render broke on files the video needs that storage says are
+    not there (`missing`: their links; a 404, 403 or 410 for a download):
+    the whole video on one machine would fail on the same files. render_pod
+    raises it instead of handing the video to one machine; the quality check
+    repairs what is named and the video is drawn once more, or the job ends
+    with this reason. Only storage's own "no" raises it: a chunk that failed
+    on the machines (a crash, a full disk, no free worker) is not proof the
+    video cannot be drawn, so render_pod returns False and the whole video
+    renders on one machine with its scaled time limit, as before.
     """
 
     def __init__(self, message: str, missing: Optional[List[str]] = None):
@@ -1569,8 +1572,11 @@ class _PodRender:
         # Files the video needs that storage no longer has (a chunk's download
         # was answered 404): no machine can draw that chunk.
         self.missing: List[str] = []
-        # The run broke on the video itself (a chunk no machine could draw),
-        # not on the machines: the whole video on one machine would break too.
+        # The run broke on the video itself - storage said files it draws are
+        # not there (_gone, and only there) - not on the machines: render_pod
+        # then raises SpreadFailed. A chunk that failed here and on a worker,
+        # or that no worker took, is a break of the machines: render_pod
+        # returns False and the whole video renders on one machine, as before.
         self.content = False
 
     # ---- worker jobs
@@ -1806,7 +1812,8 @@ class _PodRender:
                     self.counts["handedOver"] += 1
                     print(f"[pod-render] chunk {c.i} goes to a worker instead", flush=True)
                 else:
-                    self.content = True
+                    # A break of the machines, not proof the video cannot be
+                    # drawn: the whole-video fallback stays (never self.content).
                     self.fatal = (f"chunk {c.i} (frames {c.a}-{c.b}) could not be rendered: {err[:600]}; "
                                   f"no worker took it ({why})")
         self.wake.set()
@@ -1861,7 +1868,8 @@ class _PodRender:
                         mark = f"chunk {stuck.i}: "
                         own = list(dict.fromkeys(e[len(mark):] for e in self.errors if e.startswith(mark)))
                         last = (": " + ("; then ".join(own) if own else self.errors[-1])[:900]) if self.errors else ""
-                        self.content = True
+                        # (The machines failed on it - a crash, a full disk - not
+                        # storage: the whole-video fallback stays, never self.content.)
                         self.fatal = f"chunk {stuck.i} (frames {stuck.a}-{stuck.b}) could not be rendered{last}"
                         break
                 if not watching and not local.is_alive():
@@ -1951,12 +1959,11 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     published for the other machines first (local_refs).
 
     True when `out_path` was written; False when the spread render could not
-    run or broke on the machines (the reason is logged, every worker job is
+    run or broke on the machines - a chunk that failed here and on a worker,
+    no worker free, a failed join (the reason is logged, every worker job is
     cancelled): the caller then renders the whole video on this machine.
-    Raises SpreadFailed when it broke on the video itself - files gone from
-    storage, or a chunk no machine could draw in a video too long to try
-    again whole (RENDER_WHOLE_RETRY_SECONDS): one machine would spend hours
-    reaching the same frames.
+    Raises SpreadFailed only when storage said files the video draws are not
+    there (_PodRender._gone): every machine would fail on them.
     """
     if not pod_render_enabled(doc):
         return False
@@ -2012,24 +2019,19 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
             t.start()
             with _CLEANUP_LOCK:
                 _CLEANUP.append(t)
-    if not ok and runner is not None and runner.content:
-        seconds = renderer.estimate_seconds(total, concurrency)
-        if runner.missing or seconds > float(config.RENDER_WHOLE_RETRY_SECONDS):
-            raise SpreadFailed(_spread_failed_text(runner, total, fps, seconds), missing=runner.missing)
+    # Only storage's own "no" ends it here (runner.content is set by _gone
+    # alone); any other break returns False: the whole video, as before.
+    if not ok and runner is not None and runner.content and runner.missing:
+        raise SpreadFailed(_spread_failed_text(runner), missing=runner.missing)
     return ok
 
 
-def _spread_failed_text(runner: "_PodRender", total: int, fps: int, seconds: float) -> str:
+def _spread_failed_text(runner: "_PodRender") -> str:
     """Why a spread render stopped for good, in plain words (the job's error when nothing can be repaired)."""
-    if runner.missing:
-        n = len(runner.missing)
-        names = ", ".join(_short(u) for u in runner.missing[:3]) + (f" and {n - 3} more" if n > 3 else "")
-        return (f"The video could not be rendered: {n} file{'' if n == 1 else 's'} it needs "
-                f"{'is' if n == 1 else 'are'} not in storage any more - deleted from storage? ({names})")
-    minutes = max(1, int(round(total / fps / 60.0)))
-    return (f"The video could not be rendered: {runner.fatal}. Every machine that tried this part failed, so "
-            f"the whole {minutes}-minute video was not rendered again on one machine (about "
-            f"{renderer._minutes(seconds)} to reach the same frames).")
+    n = len(runner.missing)
+    names = ", ".join(_short(u) for u in runner.missing[:3]) + (f" and {n - 3} more" if n > 3 else "")
+    return (f"The video could not be rendered: {n} file{'' if n == 1 else 's'} it needs "
+            f"{'is' if n == 1 else 'are'} not in storage any more - deleted from storage? ({names})")
 
 
 # The R2 clean-ups still running (a job's last seconds: handler waits for them).
