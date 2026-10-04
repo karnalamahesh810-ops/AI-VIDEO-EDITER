@@ -623,6 +623,10 @@ class Counts(unittest.TestCase):
         self.assertEqual(stockblock.stats(), {"blocked": 0, "watermarked": 0})
 
     def test_the_fan_out_parent_adds_each_parts_count_to_the_jobs(self):
+        from src import ytdlp
+        # fanout.source sets the job's sourcing deadline: put it back, or every later test's
+        # downloads stop ~a minute on (and the restore tests read a deadline they never set).
+        self.addCleanup(ytdlp.set_deadline, ytdlp.DEADLINE[0])
         stockblock.note("a stock-agency picture (alamy)", "search", key="parent-1")
         work = tempfile.mkdtemp()
         jobs = [{"index": i, "query": f"q{i}"} for i in range(9)]
