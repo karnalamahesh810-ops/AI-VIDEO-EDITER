@@ -782,20 +782,37 @@ def _scene_lines(scene: Optional[dict]) -> str:
     return scene_intent.SceneIntent.from_dict(scene).vision_lines() if scene else ""
 
 
+def _wanted_line(wants: str) -> str:
+    """The line under INTENT for a line whose wanted shots include a map ("map") or a chart,
+    diagram or cross-section ("chart"): a real published one is acceptable - the instructions'
+    text, studio and AI rules would read a drawn picture's labels, legend and style as faults.
+    Real footage or a photo that fits stays just as good: the INTENT decides."""
+    if wants not in ("map", "chart"):
+        return ""
+    what = "a map" if wants == "map" else "a chart, a diagram or a cross-section"
+    return (f"WANTED: the line's wanted shots include {what}. A real published one of what the line is about - a "
+            "government agency's, a scientist's or a news report's - is acceptable: its drawn style, its labels and "
+            "its legend do not make it ai_generated, studio or has_text_or_watermark. Real footage or a photograph "
+            "that fits the INTENT is just as good; score how well the candidate shows what the INTENT describes. "
+            "Still hard rejects: a TV weather map or forecast graphic (studio), a presentation slide or a page of "
+            "text (has_text_or_watermark), an AI-made or fantasy picture (ai_generated), a stock watermark.\n")
+
+
 def judge(path: str, intent: str, context: str = "", event: bool = False,
-          scene: Optional[dict] = None) -> Optional[dict]:
+          scene: Optional[dict] = None, wants: str = "") -> Optional[dict]:
     """
     Verdict for one candidate file, or None when no model could be reached.
 
     None means "unknown", not "bad": the caller keeps its pre-vision behaviour
     rather than rejecting every clip because an API is down. `event`: the beat
     belongs to a news/weather/disaster story, so the footage must be of that
-    specific event and place, not the same kind of thing elsewhere.
+    specific event and place, not the same kind of thing elsewhere. `wants`:
+    "map" or "chart" when the line asks for a map or a diagram (_wanted_line).
     """
     if not enabled() or not path or not os.path.exists(path):
         return None
     key = (f"{_fingerprint(path)}|{int(event)}|{intent}|{_STORY['line'][:80]}"
-           f"|{_scene_lines(scene)[:160]}")
+           f"|{_scene_lines(scene)[:160]}|{wants if wants in ('map', 'chart') else ''}")
     with _LOCK:
         if key in _CACHE:
             return _CACHE[key]
@@ -809,7 +826,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
 
     content = [{"type": "text", "text":
                 (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
-                + f"INTENT: {intent}\n" + _scene_lines(scene) + f"NARRATION: {context}\n"
+                + f"INTENT: {intent}\n" + _scene_lines(scene) + _wanted_line(wants) + f"NARRATION: {context}\n"
                 f"These are {len(frames)} frames from the candidate. "
                 "Answer with ONLY the JSON object described in your instructions - no prose."}]
     content += [{"type": "image_url",

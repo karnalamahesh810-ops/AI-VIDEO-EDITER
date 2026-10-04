@@ -74,6 +74,61 @@ class SitesThatRefuse(unittest.TestCase):
         self.assertFalse(imagefix.host_refused(url))
 
 
+class SharedHosts(unittest.TestCase):
+    """A host serving many sites' or people's pictures: refusals count against one site's part of it."""
+
+    def setUp(self):
+        imagefix._HOST_FAILS.clear()
+
+    def tearDown(self):
+        imagefix._HOST_FAILS.clear()
+
+    def _refuse(self, *urls):
+        for u in urls:
+            imagefix._note_refusal(u, "download failed after 1 attempt(s): 403 Client Error: Forbidden")
+
+    def test_two_refusals_for_one_wordpress_site_leave_the_others_on_jetpack_alone(self):
+        self._refuse("https://i0.wp.com/www.site-a.com/wp-content/a.jpg",
+                     "https://i0.wp.com/www.site-a.com/wp-content/b.jpg")
+        self.assertTrue(imagefix.host_refused("https://i0.wp.com/www.site-a.com/wp-content/c.jpg"))
+        self.assertFalse(imagefix.host_refused("https://i0.wp.com/www.site-b.com/wp-content/c.jpg"))
+
+    def test_on_pinterest_or_flickr_each_picture_is_its_own(self):
+        pin = "https://i.pinimg.com/originals/fe/b3/a5/feb3a511b2338c4e.jpg"
+        self._refuse(pin, pin)
+        self.assertTrue(imagefix.host_refused(pin))
+        self.assertFalse(imagefix.host_refused("https://i.pinimg.com/originals/aa/bb/cc/other.jpg"))
+        flickr = "https://farm66.staticflickr.com/65535/53879128333_a4f6c98be9_o.jpg"   # by the family's name
+        self._refuse(flickr, flickr)
+        self.assertTrue(imagefix.host_refused(flickr))
+        self.assertFalse(imagefix.host_refused("https://farm66.staticflickr.com/65535/1_2_o.jpg"))
+
+    def test_a_squarespace_site_is_its_content_id(self):
+        self._refuse("https://images.squarespace-cdn.com/content/v1/5a1b2c/1.jpg",
+                     "https://images.squarespace-cdn.com/content/v1/5a1b2c/2.jpg")
+        self.assertTrue(imagefix.host_refused("https://images.squarespace-cdn.com/content/v1/5a1b2c/3.jpg"))
+        self.assertFalse(imagefix.host_refused("https://images.squarespace-cdn.com/content/v1/9z8y7x/3.jpg"))
+
+    def test_a_shared_host_refusing_every_part_is_skipped_as_a_whole(self):
+        for n in range(imagefix.SHARED_FAILS_MAX - 1):
+            self._refuse(f"https://i.pinimg.com/originals/{n:02d}/x/y/p.jpg")
+        self.assertFalse(imagefix.host_refused("https://i.pinimg.com/originals/zz/x/y/new.jpg"))
+        self._refuse("https://i.pinimg.com/originals/99/x/y/p.jpg")
+        self.assertTrue(imagefix.host_refused("https://i.pinimg.com/originals/zz/x/y/new.jpg"))
+
+    def test_an_ordinary_site_is_still_one_host(self):
+        self._refuse("https://www.nps.gov/articles/a.jpg", "https://www.nps.gov/media/b.jpg")
+        self.assertTrue(imagefix.host_refused("https://www.nps.gov/images/c.jpg"))
+
+    def test_a_shared_hosts_part_is_asked_again_later(self):
+        url = "https://i0.wp.com/www.site-a.com/a.jpg"
+        self._refuse(url, url)
+        for key in list(imagefix._HOST_FAILS):
+            n, _t = imagefix._HOST_FAILS[key]
+            imagefix._HOST_FAILS[key] = (n, time.time() - imagefix.HOST_FAILS_SECONDS - 1)
+        self.assertFalse(imagefix.host_refused(url))
+
+
 class TriesThatCanStillHelp(unittest.TestCase):
     """imagefix._fetch_raw: each try only while it can still change the answer (measured 2026-10-04)."""
 

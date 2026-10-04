@@ -611,6 +611,14 @@ def search_wikimedia(query: str, limit: int = 5) -> List[MediaAsset]:
     return out
 
 
+def openverse_on() -> bool:
+    """Openverse is asked for pictures: always while pictures need not be sharp full
+    screen, and with PICTURE_SHARPNESS_CHECK on only when OPENVERSE_WHEN_SHARP says so -
+    it serves Flickr's 1024 px copies (its listed size is the original's), and none of
+    24 passed the real-detail check on Yellowstone searches (2026-10-04)."""
+    return bool(getattr(config, "OPENVERSE_WHEN_SHARP", False)) or not _sharpness.picture_on()
+
+
 def search_openverse(query: str, limit: int = 5) -> List[MediaAsset]:
     """Openverse aggregates CC-licensed images across many providers. No key needed."""
     try:
@@ -1206,6 +1214,38 @@ def _image_label(asset) -> str:
 # Candidates the local CLIP pass rejected before any remote call.
 LOCAL_REJECTED = {"n": 0}
 
+# A line whose wanted shots ask for a map, or for a chart / diagram / cross-section /
+# graphic (the director's "Idaho map", "state outlines", "cross-section graphic",
+# "comparison graphic"): a real published one is the shot for it. Scene intents carry
+# no visual type of their own, so such a line was treated like any other - its maps
+# turned down as TV weather maps, its diagrams as slides - and 8 of the Yellowstone
+# re-cut's 16 hardest still lines (2026-10-04) were lines like these.
+_WANTS_MAP = re.compile(r"\b(?:maps?|outlines?)\b", re.I)
+_WANTS_CHART = re.compile(r"\b(?:charts?|graphs?|graphics?|infographics?|diagrams?|cross[- ]?sections?)\b", re.I)
+
+
+def wanted_kind(scene_intent: Optional[dict] = None) -> str:
+    """"map", "chart" or "document" when this line asks for that kind of picture, else "": the
+    scene intent's own visual type, else the words of its wanted shots and visual subjects.
+    Without an argument, the intent of the scene being sourced on this thread."""
+    si = _SCENE_INTENT.get() if scene_intent is None else scene_intent
+    if not isinstance(si, dict):
+        return ""
+    v = str(si.get("visualType") or si.get("visual_type") or "").lower()
+    if v in ("map", "chart", "document"):
+        return v
+    words = []
+    for key in ("desired_shots", "visual_subjects"):
+        vals = si.get(key)
+        vals = [vals] if isinstance(vals, str) else (vals if isinstance(vals, (list, tuple)) else [])
+        words += [str(x) for x in vals if isinstance(x, str)]
+    blob = " ".join(words)
+    if _WANTS_MAP.search(blob):
+        return "map"
+    if _WANTS_CHART.search(blob):
+        return "chart"
+    return ""
+
 
 def _local_check(path: str, intent_text: str) -> Optional[dict]:
     """The local model's verdict for this scene's candidate, or None when the
@@ -1213,14 +1253,9 @@ def _local_check(path: str, intent_text: str) -> Optional[dict]:
     if not config.LOCAL_VISION_ENABLED or not _localvision.available():
         return None
     si = _SCENE_INTENT.get() or {}
-    wants = ""
-    if isinstance(si, dict):
-        v = str(si.get("visualType") or si.get("visual_type") or "").lower()
-        if v in ("map", "chart", "document"):
-            wants = v
     return _localvision.check(path, intent_text, subject_type=_SUBJECT_TYPE.get() or "",
                               subject=str((si or {}).get("subject") or "") if isinstance(si, dict) else "",
-                              wants=wants)
+                              wants=wanted_kind())
 
 
 def _local_keep(local: dict, label: str, intent_text: str, why: str) -> bool:
@@ -1335,8 +1370,7 @@ def slop_reason(path: str, label: str = "", source_url: str = "") -> str:
     from . import slop
     if not slop.enabled():
         return ""
-    si = _SCENE_INTENT.get() or {}
-    wants = str((si.get("visualType") or si.get("visual_type") or "") if isinstance(si, dict) else "").lower()
+    wants = wanted_kind()
     kind = "image" if _is_still(path) else "video"
     try:
         why = slop.metadata_reason(label) or slop.check_file(
@@ -1345,10 +1379,13 @@ def slop_reason(path: str, label: str = "", source_url: str = "") -> str:
     except Exception as e:  # noqa: BLE001 - a filter error never drops a clip
         print(f"[slop] check failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
         return ""
-    # Only CLIP's reading of the colours is waived for a photo desk; a picture
-    # whose own content credentials say "generated" never is.
+    # Only CLIP's reading of the colours is waived for a photo desk - and for a
+    # line that asks for a map or a diagram, whose published pictures are drawn
+    # (CLIP reads an agency's cross-section as "an illustration"); the vision
+    # judge still turns down an AI-made one. A picture whose own content
+    # credentials say "generated" never is.
     if why.startswith("an AI-generated or painted picture") and kind == "image" \
-            and _real_photo_source(label, source_url):
+            and (_real_photo_source(label, source_url) or wants in ("map", "chart")):
         why = ""
     if why:
         with _CACHE_LOCK:
@@ -1433,8 +1470,12 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
             return _local_keep(local, label, intent, "no remote model"), None
         return True, None
     scene = _SCENE_INTENT.get()
+    wants = wanted_kind()
+    # A line asking for a map or a diagram: the judge is told a real published one is acceptable
+    # (real footage or a photo that fits stays just as good - the INTENT decides).
     verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()),
-                           **({"scene": scene} if scene else {}))
+                           **({"scene": scene} if scene else {}),
+                           **({"wants": wants} if wants in ("map", "chart") else {}))
     if verdict is None and not config.ACCEPT_UNJUDGED:
         # Every model failed on this clip. Google answered "high demand" for
         # half an hour on 2026-09-29 and rejecting all of those left most of a
@@ -3634,18 +3675,27 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     try:
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
-        for attempt in attempts:
-            if _ytdlp.stopped():
-                break
-            got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
-                              nth=nth, used=used, prompt=prompt,
-                              allow_youtube=allow_youtube,
-                              allow_stock=allow_stock, require_cc=require_cc,
-                              intent=intent or query, context=context,
-                              subject=subject)
-            if got:
-                _count_photo(got)
-                return got
+        # A still line (STILLS_ALL_WORDINGS_FIRST) asks every wording for pictures first, then
+        # lets footage stand in for the still on every wording, then one illustration - each
+        # wording used to walk pictures, footage and an illustration before the next wording
+        # was asked at all (the Yellowstone re-cut, 2026-10-04: 140 YouTube sections for 10
+        # clip pieces, and Wikimedia Commons answers the short wordings that come last).
+        stages: List[Optional[str]] = [None]
+        if visual_type == "image" and getattr(config, "STILLS_ALL_WORDINGS_FIRST", False) and not youtube_only():
+            stages = ["pictures", "footage"] + ([] if config.PREFER_GENERATED_IMAGES else ["generated"])
+        for stage in stages:
+            for attempt in (attempts[:1] if stage == "generated" else attempts):
+                if _ytdlp.stopped():
+                    break
+                got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
+                                  nth=nth, used=used, prompt=prompt,
+                                  allow_youtube=allow_youtube,
+                                  allow_stock=allow_stock, require_cc=require_cc,
+                                  intent=intent or query, context=context,
+                                  subject=subject, **({"stage": stage} if stage else {}))
+                if got:
+                    _count_photo(got)
+                    return got
         return None
     finally:
         if providers_token is not None:
@@ -3664,7 +3714,8 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
                 used: set = None, prompt: str = "",
                 allow_youtube: bool = None, allow_stock: bool = None,
                 require_cc: bool = None, intent: str = "",
-                context: str = "", subject: str = "") -> Optional[MediaAsset]:
+                context: str = "", subject: str = "",
+                stage: Optional[str] = None) -> Optional[MediaAsset]:
     """
     Find and download one visual for a scene, from the provider registry
     (src/providers.py) in its order: YouTube, Dailymotion, web video, the
@@ -3678,18 +3729,20 @@ def _source_one(query: str, seconds: float, work_dir: str, *,
     wrong clip. `nth` and `used` keep a long video from repeating itself:
     the Nth scene to ask the same question reaches further down the result
     list, and `used` is every asset already placed anywhere in this video.
+    `stage` asks one part of a still line's list only (providers.still_stage).
     """
     allow_youtube = config.ALLOW_YOUTUBE if allow_youtube is None else allow_youtube
     allow_stock = config.ALLOW_STOCK if allow_stock is None else allow_stock
     require_cc = config.REQUIRE_CC if require_cc is None else require_cc
     if youtube_only():
         visual_type, allow_youtube, allow_stock = "footage", True, False
+        stage = None
     ctx = providers.SourceContext(
         query=query, seconds=seconds, work_dir=work_dir, visual_type=visual_type, nth=nth,
         used=used, prompt=prompt, allow_youtube=bool(allow_youtube), allow_stock=bool(allow_stock),
         require_cc=bool(require_cc), intent=intent, context=context, subject=subject,
         subject_type=_SUBJECT_TYPE.get() or "", youtube_only=bool(youtube_only()),
-        enabled_names=_ENABLED_PROVIDERS.get())
+        enabled_names=_ENABLED_PROVIDERS.get(), stage=stage)
     return providers.source_one(ctx)
 
 
@@ -5232,8 +5285,9 @@ def _image_pool(queries: List[str], subject: str, subject_type: str, need: int,
     found: List[MediaAsset] = []
     if subject and subject_type in ("person", "place", "event"):
         found += _cached_search(search_wikipedia_article_images, subject)
+    searches = (search_wikimedia, search_web_images) + ((search_openverse,) if openverse_on() else ())
     for q in queries:
-        for search in (search_wikimedia, search_web_images, search_openverse):
+        for search in searches:
             found += _cached_search(search, q)
     shots, seen = [], set()
     for cand in found:
