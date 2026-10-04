@@ -380,12 +380,14 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
     # Clips a part chose but could not hand over (the app's storage down):
     # (scene index, the part's asset record), fetched again from their source.
     lost: List[tuple] = []
+    children = ChildTimes()             # where the parts' workers spent their time
 
     def fetch(unit: dict, out: Any, remote: bool) -> bool:
         if not remote:
             for j, a in zip(sorted(unit["jobs"], key=lambda j: j["index"]), out or []):
                 results[j["index"]] = a
             return True
+        children.note(out)
         assets = out.get("assets")
         if not isinstance(assets, dict):
             return False
@@ -482,6 +484,8 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
         for j, a in zip(sorted(todo, key=lambda j: j["index"]), got):
             results[j["index"]] = a
     stats["sourced_by_parent_last"] = len(todo)
+    if children.summary():
+        stats["children"] = children.summary()
     media.LAST_STATS["fanout"] = stats
     return results
 
@@ -757,7 +761,11 @@ def run_chunk(inp: dict, work: str, render_local: Callable) -> dict:
 
 
 def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -> dict:
-    """The child side: source one part, upload its files, return them."""
+    """The child side: source one part, upload its files, return them - and where the
+    part's time went (stageSeconds: its sourcing threads' seconds per stage, as the
+    parent's own meta.sourcing.stageSeconds; partSeconds: wall seconds finding and
+    handing over), which the parent sums into meta.sourcing.fanout.children."""
+    t0 = time.time()
     brief = inp.get("brief") or {}
     set_story(brief)
     if inp.get("deadline_at"):
@@ -771,6 +779,7 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
         if beats:
             seqs.append(dict(s, beats=beats))
     assets = source_many(local_jobs, work, seqs, set(inp.get("exclude") or []))
+    t_found = time.time()
     project_id, parent = inp["project_id"], inp["parent_job_id"]
     bucket = inp.get("bucket") or config.MEDIA_BUCKET
     out: Dict[str, dict] = {}
@@ -806,7 +815,59 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
             if got:
                 out[got[0]] = got[1]
     delivered = sum(1 for d in out.values() if not d.get("refetch"))
-    return {"assets": out, "delivered": delivered, "refetch": len(out) - delivered, "asked": len(jobs)}
+    return {"assets": out, "delivered": delivered, "refetch": len(out) - delivered, "asked": len(jobs),
+            "stageSeconds": media.stage_seconds(),
+            "partSeconds": {"finding": round(t_found - t0, 1), "uploading": round(time.time() - t_found, 1)}}
+
+
+class ChildTimes:
+    """
+    Where the parts' workers spent their time, summed over every part that came back
+    (meta.sourcing.fanout.children): the parts' own job seconds - what RunPod bills,
+    from the worker's start to its answer - split into finding, handing over and the
+    rest (start-up: the YouTube pre-check, the ledger), and their sourcing threads'
+    seconds per stage. A child used to return none of it, so whether a video needs
+    ten machines or five could not be read from a real job.
+    """
+
+    def __init__(self):
+        self.parts = 0
+        self.seconds = self.longest = self.finding = self.uploading = 0.0
+        self.stages: Dict[str, List[float]] = {}
+
+    @staticmethod
+    def _num(value) -> float:
+        try:
+            return max(0.0, float(value or 0.0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def note(self, out: Any) -> None:
+        if not isinstance(out, dict):
+            return
+        secs = self._num(out.get("elapsed"))
+        self.parts += 1
+        self.seconds += secs
+        self.longest = max(self.longest, secs)
+        part = out.get("partSeconds") if isinstance(out.get("partSeconds"), dict) else {}
+        self.finding += self._num(part.get("finding"))
+        self.uploading += self._num(part.get("uploading"))
+        stages = out.get("stageSeconds") if isinstance(out.get("stageSeconds"), dict) else {}
+        for name, row in stages.items():
+            if isinstance(row, dict):
+                agg = self.stages.setdefault(str(name), [0.0, 0.0])
+                agg[0] += self._num(row.get("n"))
+                agg[1] += self._num(row.get("seconds"))
+
+    def summary(self) -> Optional[dict]:
+        if not self.parts:
+            return None
+        other = max(0.0, self.seconds - self.finding - self.uploading)
+        return {"parts": self.parts, "seconds": round(self.seconds, 1), "longestSeconds": round(self.longest, 1),
+                "findingSeconds": round(self.finding, 1), "uploadingSeconds": round(self.uploading, 1),
+                "otherSeconds": round(other, 1),
+                "stageSeconds": {k: {"n": int(n), "seconds": round(s, 1), "mean": round(s / n, 2) if n else 0.0}
+                                 for k, (n, s) in sorted(self.stages.items())}}
 
 
 # ===========================================================================
