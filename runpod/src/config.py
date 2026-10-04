@@ -1163,7 +1163,9 @@ STOCK_BLOCK_WORDS = _flag("STOCK_BLOCK_WORDS", True)
 # check off). Measured 2026-10-04 on 102 stamped agency previews and 267 clean
 # pictures (the Lake Mead video's own, Wikimedia, and a held-out set heavy in
 # documents and newspapers): bar + stamp at 0.75 turn down 74 of the 102 and 5
-# of the 267 (1.9 %); the first prompts at 0.8 turned down 17 (6.4 %).
+# of the 267 (1.9 %); the first prompts at 0.8 turned down 17 (6.4 %). With
+# the storm / sea / sky prompts (review, same day): still 74 of the 102, 2 of
+# the 267, and 10 of 352 clean weather pictures (29 without them).
 WATERMARK_CHECK = _flag("WATERMARK_CHECK", True)
 WATERMARK_CLIP_SHARE = float(os.getenv("WATERMARK_CLIP_SHARE", "0.75"))
 # STOCK_GATE_REPAIR: the quality gate also replaces a stock-agency picture it

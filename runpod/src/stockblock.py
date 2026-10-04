@@ -54,6 +54,13 @@ new agency previews):
   11 Getty boxes. Their own addresses are blocked by name; only a copy
   elsewhere relies on the pixels. An autocorrelation search for the repeated
   stamp did not separate the sets and is not used.
+  Review (same day): on clean weather pictures the stamp read polished skies
+  and seas as stock - 29 of 352 Commons pictures (half the lightning strikes,
+  breaking waves, surf, storm surge, waterfalls); with plain prompts for the
+  storm, sea and sky 10 of 352, the clean set above 2 of 267, the agency
+  previews still 74 of 102 (PLAIN_PROMPTS). Every one of the Lake Mead
+  video's 20 agency pictures came from an agency's own address or file name,
+  which the names block before any download.
 
 Counted for the job (stats(): doc.meta.sourcing.stockBlocked). Nothing here
 raises: an unreadable file or a missing model is "no finding".
@@ -321,7 +328,8 @@ def blocked(item: Any, where: str = "") -> str:
 def stats() -> Dict[str, Any]:
     """{"blocked": n kept out by their names, "byAgency": {...}, "byPath": {...},
     "watermarked": n turned down by their pixels, "byMark": {...},
-    "pixels": {"barChecked": n, "stampChecked": n}, "pixelSeconds": time the pixel checks took}"""
+    "pixels": {"barChecked": n, "stampChecked": n, "stampSkipped": n with the model busy past
+    STAMP_WAIT_SECONDS}, "pixelSeconds": time the pixel checks took}"""
     with _LOCK:
         out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in _STATS.items()}
     out.setdefault("blocked", 0)
@@ -366,13 +374,27 @@ BAR_MIN_TRANSITIONS = 20
 # Documents and archive prints are written on, so without plain prompts of
 # their own CLIP read their writing as a stamp: a ledger page, a 2007 Record of
 # Decision and a captioned 1930s print of Black Canyon were turned down on the
-# Lake Mead video's pictures until the last six were added (2026-10-04).
+# Lake Mead video's pictures until the six document prompts were added (2026-10-04).
+# The weather channel's own subjects need theirs too: the stamp prompts also
+# draw a polished, stock-looking sky or sea with no mark at all. On 352 clean
+# Wikimedia Commons weather pictures (three sets, the third untouched until
+# the prompts were chosen) 29 were turned down - 4 of 8 lightning strikes, 3
+# of 8 breaking waves, big-wave surf, storm surge, aurora, waterfalls - and
+# 10 with the last three prompts (2.8 %); the other clean pictures 5 -> 2 of
+# 267, the 102 agency previews still 74, synthetic stamps on weather pictures
+# 94 -> 86 of 117 (review, 2026-10-04).
 STAMP_PROMPTS = ["a watermark", "watermarked image", "stock photo watermark", "alamy", "gettyimages",
                  "shutterstock", "iStock", "dreamstime", "depositphotos", "adobe stock", "123rf"]
 PLAIN_PROMPTS = ["a photo", "a landscape", "a building", "people", "a river", "a lake", "a desert", "a city",
                  "an old photo", "a map", "text", "a sign",
                  "a document", "a page of handwriting", "a scanned document", "a letter",
-                 "an archive photograph with a caption", "a historical photograph"]
+                 "an archive photograph with a caption", "a historical photograph",
+                 "a storm", "the sea", "the sky"]
+# How long a picture waits for one of the local model's few slots
+# (localvision._RUN, shared with the clip checks) before its stamp check is
+# skipped - no finding, as with no model. Measured 2026-10-04 on an 8-core
+# laptop with 16 sourcing threads asking at once: 8 s at the median, 12 s at most.
+STAMP_WAIT_SECONDS = 30.0
 
 
 def is_still(path: str) -> bool:
@@ -455,9 +477,17 @@ def stamp_share(path: str) -> Optional[float]:
         from PIL import Image
         with Image.open(path) as im:
             tiles = [_model_size(t, localvision._SIZE) for t in _tiles(im.convert("RGB"))]
-        with localvision._RUN:
+        if not localvision._RUN.acquire(timeout=STAMP_WAIT_SECONDS):
+            with _LOCK:
+                _bump("pixels", "stampSkipped")
+            print(f"[stockblock] stamp check skipped: the local model stayed busy {STAMP_WAIT_SECONDS:.0f} s",
+                  flush=True)
+            return None
+        try:
             emb = localvision.embed_images(tiles)
             txt = localvision.embed_texts(STAMP_PROMPTS + PLAIN_PROMPTS)
+        finally:
+            localvision._RUN.release()
         logits = 100.0 * emb @ txt.T
         logits -= logits.max(axis=1, keepdims=True)
         p = np.exp(logits)

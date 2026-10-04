@@ -550,6 +550,40 @@ class EveryPath(unittest.TestCase):
             self.assertIsNone(media._pick_unused([dataclasses.replace(cand)], set(), "q", work, intent="Lake Mead"))
         self.assertEqual(downloads, [cand.url])             # the next scene skipped it before downloading
 
+    def test_a_picture_turned_down_by_its_pixels_hands_the_scene_to_the_next_candidate(self):
+        # The scene search and the ladder's picture rung: a bar, then a stamp, then a clean picture - the
+        # clean one is placed; a rejection never ends the scene's search on its own.
+        from src import ledger, slop
+        work = tempfile.mkdtemp()
+        files = {"https://blog.example.com/bar.jpg": picture(os.path.join(work, "bar.jpg"), bar=(0.09, "alamy")),
+                 "https://blog.example.com/stamp.jpg": picture(os.path.join(work, "stamp.jpg"), colour=(150, 110, 70)),
+                 PLAIN: picture(os.path.join(work, "clean.jpg"))}
+
+        def download(c, q, w):
+            c.local_path = files[c.url]
+            return c
+
+        def share(path):
+            return 0.95 if path == files["https://blog.example.com/stamp.jpg"] else 0.1
+
+        def cands():
+            return [photo(u) for u in files]
+        with mock.patch.dict(media._BAD, clear=True), \
+                mock.patch.object(media, "_download", side_effect=download), \
+                mock.patch.object(media, "_photo_seen_before", return_value=False), \
+                mock.patch.object(media, "_asset_ok", return_value=(True, "")), \
+                mock.patch.object(media.ledger, "photo_used", return_value=False), \
+                mock.patch.object(media, "_judge_gate", return_value=(True, {"score": 0.9})), \
+                mock.patch.object(stockblock, "stamp_share", side_effect=share):
+            got = media._pick_unused(cands(), set(), "q", work, intent="Lake Mead")
+            self.assertEqual(got.url, PLAIN)
+            media._BAD.clear()
+            job = {"index": 0, "query": "lake mead", "start": 0.0, "subject": "Lake Mead", "intent": "Lake Mead"}
+            with mock.patch.object(media, "_cached_search", return_value=cands()):
+                got = gapfill._still_for(job, 0, "lake mead", "Lake Mead", gapfill.Used(), work, 1e12,
+                                         imagefix, ledger, media, slop)
+            self.assertEqual(got.url, PLAIN)
+
     def test_the_quality_gate_can_replace_an_agency_picture_on_an_older_timeline(self):
         doc = {"fps": 30, "scenes": [
             {"id": "s0", "startFrame": 0, "durationInFrames": 90, "text": "a",
@@ -728,6 +762,41 @@ class Pixels(unittest.TestCase):
         for p in ("a document", "a page of handwriting", "a scanned document", "an archive photograph with a caption"):
             self.assertIn(p, stockblock.PLAIN_PROMPTS)
         self.assertFalse(set(stockblock.PLAIN_PROMPTS) & set(stockblock.STAMP_PROMPTS))
+
+    def test_the_weather_channels_own_subjects_have_plain_prompts(self):
+        # Without them the stamp prompts drew clean lightning, breaking waves and storm surge (29 of 352
+        # clean Commons weather pictures turned down; 10 with these three).
+        for p in ("a storm", "the sea", "the sky"):
+            self.assertIn(p, stockblock.PLAIN_PROMPTS)
+
+    def test_a_busy_model_skips_the_stamp_check_after_its_wait_and_never_blocks_a_picture(self):
+        import threading
+        import time
+        work = tempfile.mkdtemp()
+        busy = threading.BoundedSemaphore(1)
+        busy.acquire()                                      # every slot of the model taken
+        with mock.patch.object(localvision, "available", return_value=True), \
+                mock.patch.object(localvision, "_RUN", busy), \
+                mock.patch.object(localvision, "embed_images") as emb, \
+                mock.patch.object(stockblock, "STAMP_WAIT_SECONDS", 0.05):
+            t0 = time.time()
+            self.assertIsNone(stockblock.stamp_share(picture(os.path.join(work, "p.jpg"))))
+            self.assertEqual(stockblock.watermark_reason(picture(os.path.join(work, "q.jpg"), colour=(90, 90, 160))),
+                             "")                            # no finding: the picture may be used
+            self.assertLess(time.time() - t0, 5)
+        emb.assert_not_called()
+        self.assertEqual(stockblock.stats()["pixels"]["stampSkipped"], 2)
+
+    def test_a_model_error_gives_its_slot_back(self):
+        import threading
+        work = tempfile.mkdtemp()
+        slot = threading.BoundedSemaphore(1)
+        with mock.patch.object(localvision, "available", return_value=True), \
+                mock.patch.object(localvision, "_RUN", slot), \
+                mock.patch.object(localvision, "embed_images", side_effect=RuntimeError("onnx")):
+            self.assertIsNone(stockblock.stamp_share(picture(os.path.join(work, "p.jpg"))))
+        self.assertTrue(slot.acquire(blocking=False))       # released, not leaked
+        slot.release()
 
     @unittest.skipUnless(localvision.available(), "the local CLIP model is not installed here")
     def test_with_the_real_model_a_plain_picture_passes(self):
