@@ -81,8 +81,9 @@ _SYSTEM = (
     "screenshot, or a meme or collage with text. Look closely for a stock agency's "
     "mark even when faint: its name (alamy, gettyimages, iStock, shutterstock, "
     "dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
-    "repeated across the picture, a translucent box with a photographer credit, an "
-    "image ID or agency address along an edge, or a credit bar under the picture - "
+    "repeated across the picture, a translucent box with the agency's name and a "
+    "photographer credit, the agency's image ID or web address along an edge "
+    "(\"Image ID: 2J7W6N8 www.alamy.com\"), or a credit bar under the picture - "
     "each of these sets has_text_or_watermark true. Small incidental real-world text "
     "(a street sign) is fine.\n"
     "STORY is the whole video's subject. A shot that contradicts it (another "
@@ -133,15 +134,17 @@ _STRICT_TEXT_RULE = (
     "screenshot, or a meme or collage with text. Look closely for a stock agency's "
     "mark even when faint: its name (alamy, gettyimages, iStock, shutterstock, "
     "dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
-    "repeated across the picture, a translucent box with a photographer credit, an "
-    "image ID or agency address along an edge, or a credit bar under the picture - "
+    "repeated across the picture, a translucent box with the agency's name and a "
+    "photographer credit, the agency's image ID or web address along an edge "
+    "(\"Image ID: 2J7W6N8 www.alamy.com\"), or a credit bar under the picture - "
     "each of these sets has_text_or_watermark true. Small incidental real-world text "
     "(a street sign) is fine.\n")
 _STAMP_RULE = (
     " A stock agency's mark counts even when faint: its name (alamy, gettyimages, iStock, "
     "shutterstock, dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
-    "repeated across the picture, a translucent box with a photographer credit, an image ID "
-    "or agency address along an edge, or a credit bar under the picture.")
+    "repeated across the picture, a translucent box with the agency's name and a photographer "
+    "credit, the agency's image ID or web address along an edge (\"Image ID: 2J7W6N8 "
+    "www.alamy.com\"), or a credit bar under the picture.")
 _NEWS_TEXT_RULE = (
     "TV NEWS FOOTAGE IS WELCOME: field video, aerials, interviews and press "
     "conferences from a news report are exactly what this documentary uses, WITH "
