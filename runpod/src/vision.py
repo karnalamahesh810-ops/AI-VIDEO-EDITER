@@ -78,7 +78,12 @@ _SYSTEM = (
     "recording, software UI, a video game, a news desk or presenter talking to "
     "camera, a thumbnail/title card, burned-in subtitles, a channel logo, a "
     "stock-photo watermark, a product listing or poster for sale, a website "
-    "screenshot, or a meme or collage with text. Small incidental real-world text "
+    "screenshot, or a meme or collage with text. Look closely for a stock agency's "
+    "mark even when faint: its name (alamy, gettyimages, iStock, shutterstock, "
+    "dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
+    "repeated across the picture, a translucent box with a photographer credit, an "
+    "image ID or agency address along an edge, or a credit bar under the picture - "
+    "each of these sets has_text_or_watermark true. Small incidental real-world text "
     "(a street sign) is fine.\n"
     "STORY is the whole video's subject. A shot that contradicts it (another "
     "person, another event, another era) is wrong even if it fits the line's "
@@ -125,8 +130,18 @@ _STRICT_TEXT_RULE = (
     "recording, software UI, a video game, a news desk or presenter talking to "
     "camera, a thumbnail/title card, burned-in subtitles, a channel logo, a "
     "stock-photo watermark, a product listing or poster for sale, a website "
-    "screenshot, or a meme or collage with text. Small incidental real-world text "
+    "screenshot, or a meme or collage with text. Look closely for a stock agency's "
+    "mark even when faint: its name (alamy, gettyimages, iStock, shutterstock, "
+    "dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
+    "repeated across the picture, a translucent box with a photographer credit, an "
+    "image ID or agency address along an edge, or a credit bar under the picture - "
+    "each of these sets has_text_or_watermark true. Small incidental real-world text "
     "(a street sign) is fine.\n")
+_STAMP_RULE = (
+    " A stock agency's mark counts even when faint: its name (alamy, gettyimages, iStock, "
+    "shutterstock, dreamstime, depositphotos, Adobe Stock, 123RF) or logo stamped once or "
+    "repeated across the picture, a translucent box with a photographer credit, an image ID "
+    "or agency address along an edge, or a credit bar under the picture.")
 _NEWS_TEXT_RULE = (
     "TV NEWS FOOTAGE IS WELCOME: field video, aerials, interviews and press "
     "conferences from a news report are exactly what this documentary uses, WITH "
@@ -140,7 +155,7 @@ _NEWS_TEXT_RULE = (
     "art or corrupted/blocky frames, a screen recording, software UI, a video game, a "
     "news anchor at a studio desk, a thumbnail/title card, an advertisement (a QR "
     "code, a website or phone number to visit, a product offer), a product listing or "
-    "poster for sale, a website screenshot, or a meme or collage with text. Small "
+    "poster for sale, a website screenshot, or a meme or collage with text." + _STAMP_RULE + " Small "
     "incidental real-world text (a street sign) is fine.\n")
 
 
