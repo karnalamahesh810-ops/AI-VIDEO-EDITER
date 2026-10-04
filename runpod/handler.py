@@ -2238,7 +2238,10 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         project_id = inp.get("project_id") or "adhoc"
         key = f"projects/{project_id}/final-{int(time.time())}-{uuid.uuid4().hex[:12]}.mp4"
         try:
-            url = r2.upload(out_path, key, deadline=time.time() + config.FINAL_UPLOAD_RETRY_SECONDS)
+            # Downloads as "<title>.mp4" from the app's Download link (r2.attachment).
+            title = str(inp.get("title") or (doc.get("meta") or {}).get("title") or "video")
+            url = r2.upload(out_path, key, deadline=time.time() + config.FINAL_UPLOAD_RETRY_SECONDS,
+                            content_disposition=r2.attachment(title))
             print(f"[worker] final video on R2: {key}", flush=True)
             return {
                 "video_url": url,

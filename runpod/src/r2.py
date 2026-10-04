@@ -25,6 +25,7 @@ import hashlib
 import hmac
 import mimetypes
 import os
+import re
 import time
 import urllib.parse
 import uuid
@@ -121,8 +122,27 @@ def content_type(path: str, default: str = "application/octet-stream") -> str:
             ".json": "application/json"}.get(ext) or mimetypes.guess_type(path or "")[0] or default
 
 
+def attachment(name: str, ext: str = ".mp4") -> str:
+    """
+    A Content-Disposition that makes a link download the object as `name` (a
+    video's title) instead of playing it in the tab. The app's Download button
+    is a plain link to the public URL: a cross-origin `download` attribute is
+    ignored, and fetching the file into the page needs CORS and holds 1-3 GB in
+    memory (the owner, 2026-10-04: "video download button not working"). A
+    <video> element ignores the header, so the editor still plays the file.
+    ASCII filename for every browser, the full title in filename*.
+    """
+    # Characters no file name may hold (Windows' list) go first, then runs of spaces.
+    base = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", str(name or ""))
+    base = re.sub(r"\s+", " ", base).strip(" .")[:150] or "video"
+    plain = re.sub(r"[^A-Za-z0-9 ._()\-,!&']+", " ", base.encode("ascii", "ignore").decode())
+    plain = re.sub(r"\s+", " ", plain).strip(" .") or "video"
+    return (f'attachment; filename="{plain}{ext}"; '
+            f"filename*=UTF-8''{urllib.parse.quote(base + ext, safe='')}")
+
+
 def _put(key: str, body, size: int, content_type: str, bucket: str, cache_control: str,
-         deadline: float, reopen=None) -> None:
+         deadline: float, reopen=None, content_disposition: str = "") -> None:
     """One PUT, retried on network errors, 5xx and 429 until `deadline`."""
     attempt, last = 0, None
     while True:
@@ -131,6 +151,8 @@ def _put(key: str, body, size: int, content_type: str, bucket: str, cache_contro
             hdrs = {"content-type": content_type, "content-length": str(size)}
             if cache_control:
                 hdrs["cache-control"] = cache_control
+            if content_disposition:
+                hdrs["content-disposition"] = content_disposition
             headers = _auth_headers("PUT", key, hdrs, "UNSIGNED-PAYLOAD", bucket=bucket)
             data = reopen() if reopen else body
             try:
@@ -152,14 +174,15 @@ def _put(key: str, body, size: int, content_type: str, bucket: str, cache_contro
 
 
 def upload(path: str, key: str, content_type: str = "video/mp4", deadline: float = 0.0,
-           bucket: str = "", base: str = "", cache_control: str = "") -> str:
+           bucket: str = "", base: str = "", cache_control: str = "",
+           content_disposition: str = "") -> str:
     """PUT a local file to a bucket and return its public URL. Retries
     transient failures (network, 5xx, 429) until `deadline`."""
     size = os.path.getsize(path)
     if size > MAX_SINGLE_PUT:
         raise RuntimeError(f"{size / 1e9:.1f} GB is over R2's single-upload limit")
     _put(key, None, size, content_type, bucket, cache_control, deadline or time.time() + 600,
-         reopen=lambda: open(path, "rb"))
+         reopen=lambda: open(path, "rb"), content_disposition=content_disposition)
     return public_url(key, base)
 
 

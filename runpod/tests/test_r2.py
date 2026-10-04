@@ -47,6 +47,25 @@ class R2Test(unittest.TestCase):
         self.assertEqual(put.call_count, 2)
         self.assertTrue(put.call_args.args[0].startswith("https://acct123.r2.cloudflarestorage.com/videos/"))
 
+    def test_a_final_video_downloads_under_its_title(self):
+        # The app's Download button is a plain link: the file itself says "save me as <title>.mp4".
+        cd = r2.attachment("New Footage Beneath Lake Powell Reveals What’s Been Hidden — The Truth")
+        self.assertTrue(cd.startswith('attachment; filename="New Footage Beneath Lake Powell Reveals Whats Been '
+                                      'Hidden The Truth.mp4"'))
+        self.assertIn("filename*=UTF-8''New%20Footage%20Beneath", cd)
+        self.assertIn("%E2%80%94", cd)                              # the full title, dash included
+        self.assertEqual(r2.attachment(""), "attachment; filename=\"video.mp4\"; filename*=UTF-8''video.mp4")
+        self.assertNotIn("/", r2.attachment("a/b\\c?").split("filename*=")[0])
+        cd.encode("latin-1")                                        # a valid HTTP header value
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "f.mp4")
+            open(p, "wb").write(b"x")
+            with mock.patch.object(r2.requests, "put", return_value=mock.Mock(status_code=200, text="")) as put:
+                r2.upload(p, "k.mp4", content_disposition=cd)
+        headers = put.call_args.kwargs["headers"]
+        self.assertEqual(headers["content-disposition"], cd)
+        self.assertIn("content-disposition", headers["Authorization"])   # signed with the request
+
     def test_a_refusal_is_not_retried(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "f.mp4")
