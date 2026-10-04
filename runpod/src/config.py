@@ -358,9 +358,6 @@ ALLOW_WEB_IMAGES = _flag("ALLOW_WEB_IMAGES", True)
 # news sites), downloaded by yt-dlp. Only when the job is not youtube_only.
 ALLOW_WEB_VIDEO = _flag("ALLOW_WEB_VIDEO", True)
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
-# Google Images via Bright Data's SERP API (tried first when set).
-BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY", "")
-BRIGHTDATA_SERP_ZONE = os.getenv("BRIGHTDATA_SERP_ZONE", "serp_api1")
 
 # Director calls: when the first model has been silent this long, the next one
 # is asked in parallel and the first valid answer wins. A call gives up after
@@ -798,7 +795,7 @@ R2_PUBLIC_BASE = os.getenv("R2_PUBLIC_BASE", "").strip()
 # free plan), so each video may spend at most SERPAPI_MAX_PER_JOB searches.
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
 SERPAPI_MAX_PER_JOB = int(os.getenv("SERPAPI_MAX_PER_JOB", "30"))
-# Google Videos through SerpApi when Bright Data is off or answers empty: a few
+# Google Videos through SerpApi: a few
 # per video so the free plan's 250 searches a month last (2026-10-01).
 SERPAPI_VIDEO_MAX_PER_JOB = int(os.getenv("SERPAPI_VIDEO_MAX_PER_JOB", "8"))
 # Yandex Images as a picture source after Google/Bing (media.search_yandex_images).

@@ -195,96 +195,6 @@ class MediaAsset:
 # Real imagery: Wikimedia Commons + Openverse
 # --------------------------------------------------------------------------- #
 
-# Bright Data's SERP zone answers some calls with a page that is not JSON.
-# Measured locally that was 2 in 9; on the worker, ten fan-out parts firing
-# searches at once got 212 of them in one job. So: a few at a time per
-# worker, and up to three tries with a pause between.
-_SERP_SLOTS = threading.BoundedSemaphore(max(1, int(os.getenv("SERP_CONCURRENCY", "3"))))
-
-
-# Set when Bright Data refuses the account (no credit, key revoked): every later
-# search skips it - images go straight to DuckDuckGo - instead of paying a
-# failed request (and its retries) per search.
-_BRIGHTDATA_REFUSED = {"why": ""}
-_REFUSAL_WORDS = ("balance", "credit", "payment", "insufficient", "suspended", "billing")
-
-
-def brightdata_available() -> bool:
-    return bool(config.BRIGHTDATA_API_KEY and config.BRIGHTDATA_SERP_ZONE and not _BRIGHTDATA_REFUSED["why"])
-
-
-def _brightdata_serp(google_url: str, timeout: int = 45) -> dict:
-    """
-    The parsed JSON Bright Data returns for one Google results URL (raises on
-    failure). 45 s a try: it answers in seconds or not at all ("not JSON: ''"
-    13 times on the Lake Powell job), and each try holds one of three slots
-    the scenes' video and picture searches share (was 150 s, and 90 s).
-    """
-    if _BRIGHTDATA_REFUSED["why"]:
-        raise ValueError(f"Bright Data off for this worker: {_BRIGHTDATA_REFUSED['why']}")
-    last = ""
-    for attempt in range(2):
-        if attempt:
-            costs.record("serp.call")
-            time.sleep(2.0)
-        try:
-            with _SERP_SLOTS:
-                r = requests.post(
-                    "https://api.brightdata.com/request",
-                    headers={"Authorization": f"Bearer {config.BRIGHTDATA_API_KEY}",
-                             "Content-Type": "application/json"},
-                    json={"zone": config.BRIGHTDATA_SERP_ZONE, "format": "raw", "url": google_url},
-                    timeout=timeout)
-        except requests.RequestException as e:
-            last = type(e).__name__
-            continue
-        text = r.text if isinstance(getattr(r, "text", ""), str) else ""
-        refusal = r.status_code in (401, 402, 403) or (
-            r.status_code >= 400 and any(w in text.lower()[:400] for w in _REFUSAL_WORDS))
-        if refusal:
-            _BRIGHTDATA_REFUSED["why"] = f"HTTP {r.status_code}"
-            print(f"[media] Bright Data refused the account (HTTP {r.status_code}); "
-                  "image search falls back to DuckDuckGo for the rest of this worker", flush=True)
-            raise ValueError(f"Bright Data SERP refused: HTTP {r.status_code}")
-        if "throttled" in text[:300].lower():
-            # "The request was auto-throttled due to low success rate": it will
-            # not get better within this job.
-            _brightdata_off("throttled")
-            raise ValueError("Bright Data SERP: throttled")
-        if r.status_code == 429 or r.status_code >= 500:
-            last = f"HTTP {r.status_code}"
-            continue
-        r.raise_for_status()
-        try:
-            body = r.json()
-        except ValueError:
-            last = f"not JSON: {text[:100]!r}"
-            continue
-        if isinstance(body, dict):
-            with _CACHE_LOCK:
-                _BRIGHTDATA_FAILS["n"] = 0
-            return body
-        last = f"unexpected {type(body).__name__}"
-    with _CACHE_LOCK:
-        _BRIGHTDATA_FAILS["n"] += 1
-        failing = _BRIGHTDATA_FAILS["n"] >= 3
-    if failing:
-        _brightdata_off(f"3 calls in a row failed ({last})")
-    raise ValueError(f"Bright Data SERP: {last}")
-
-
-# Consecutive failed SERP calls. Throttled or empty answers used to be retried
-# three times per search (up to 150 s each) all job long, behind a two-slot
-# semaphore: clip finding queued on a service that had stopped working.
-_BRIGHTDATA_FAILS = {"n": 0}
-
-
-def _brightdata_off(why: str) -> None:
-    if not _BRIGHTDATA_REFUSED["why"]:
-        _BRIGHTDATA_REFUSED["why"] = why
-        print(f"[media] Bright Data off for the rest of this job: {why}", flush=True)
-
-
 def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
     """
     Real photographs of the named subject from a general image search.
@@ -299,22 +209,10 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
     if not config.ALLOW_WEB_IMAGES or not query.strip():
         return []
     rows = []
-    if brightdata_available():
-        # Google Images through Bright Data's SERP API: 100 results per call
-        # with the full-size original (press photos: NOAA, TIME, NASA...).
-        # Billed per successful search, not per image.
-        costs.record("serp.call")
-        try:
-            body = _brightdata_serp("https://www.google.com/search?tbm=isch&brd_json=1&q="
-                                    + urllib.parse.quote_plus(query))
-            for it in (body.get("images") or [])[:limit * 3]:
-                rows.append((it.get("original_image"), 0, 0,
-                             it.get("image_alt") or it.get("source") or "",
-                             it.get("title") or "", it.get("thumbnail") or ""))
-        except (requests.RequestException, ValueError) as e:
-            _source_error("web_images_brightdata", e)
-            rows = []
-    if not rows and config.SERPER_API_KEY:
+    # (Bright Data's SERP API used to be asked first; removed 2026-10-04 at the owner's
+    # word: it took 44 s a search and timed out 300+ times a video. DuckDuckGo
+    # through a residential route answers in 1-3 s with its own thumbnail copy.)
+    if config.SERPER_API_KEY:
         try:
             r = requests.post("https://google.serper.dev/images",
                               headers={"X-API-KEY": config.SERPER_API_KEY,
@@ -332,7 +230,8 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
         # RunPod job returned no web images at all, consistent with the image
         # search rate-limiting a datacenter address the way YouTube does.
         # One direct attempt stays as the fallback for an unproxied box.
-        from_proxy = _next_proxy()
+        # A picture route when there is one (every Decodo IP: config.IMAGE_PROXIES), else a YouTube one.
+        from_proxy = _imagefix._residential_route() or _next_proxy()
         for proxy in ([from_proxy, None] if from_proxy else [None]):
             try:
                 from ddgs import DDGS
@@ -386,6 +285,15 @@ _YANDEX_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 # SerpApi searches spent by this job (the plan's monthly quota is small).
 _SERPAPI_USED = {"n": 0}
+
+
+def _serpapi_spent(error) -> None:
+    """SerpApi answered 429 / 401 / 403 (the month's searches are used up, or the key is refused): no more
+    calls for the rest of this job - each one only costs time."""
+    if re.search(r"\b(429|401|403)\b", str(error)):
+        with _CACHE_LOCK:
+            _SERPAPI_USED["n"] = max(_SERPAPI_USED["n"], config.SERPAPI_MAX_PER_JOB)
+            _SERPAPI_VIDEO_USED["n"] = max(_SERPAPI_VIDEO_USED["n"], config.SERPAPI_VIDEO_MAX_PER_JOB)
 # Social-network crawler links SerpApi's Google Images returns: short-lived,
 # login-walled, usually a post with text on it - never worth a download.
 _SERPAPI_SKIP_HOSTS = ("lookaside.fbsbx.com", "lookaside.instagram.com")
@@ -1838,7 +1746,7 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
     footage" it returned 8 YouTube videos the flat search had not, plus
     TikTok/Facebook clips. One paid call per distinct query, cached per job.
     """
-    if not query.strip() or not (brightdata_available() or config.SERPAPI_API_KEY):
+    if not query.strip() or not config.SERPAPI_API_KEY:
         return []
     key = query.strip().lower()
     with _CACHE_LOCK:
@@ -1846,29 +1754,8 @@ def search_google_videos(query: str, limit: int = 10) -> List[dict]:
             return _GOOGLE_VIDEO_CACHE[key]
     if _ytdlp.stopped():
         return []
-    rows: List[dict] = []
-    if brightdata_available():
-        costs.record("serp.call")
-        try:
-            body = _brightdata_serp("https://www.google.com/search?tbm=vid&brd_json=1&q="
-                                    + urllib.parse.quote_plus(query))
-            for it in (body.get("organic") or [])[:limit]:
-                url = it.get("link") or ""
-                if not url.startswith("http"):
-                    continue
-                secs = it.get("duration_sec")
-                if not secs and it.get("duration"):
-                    secs = _clock_seconds(it["duration"])
-                rows.append({"url": url, "title": (it.get("title") or "")[:200],
-                             "site": urllib.parse.urlparse(url).netloc.replace("www.", ""),
-                             "seconds": float(secs or 0)})
-        except (requests.RequestException, ValueError) as e:
-            _source_error("search_google_videos", e)
-            rows = []
-    if not rows:
-        # Bright Data off or empty-handed (2026-10-01: "not JSON: ''"): SerpApi's
-        # Google Videos, a few per video (the owner's plan is 250 searches a month).
-        rows = _serpapi_videos(query, limit)
+    # SerpApi's Google Videos, a few per video (the owner's plan is 250 searches a month).
+    rows: List[dict] = _serpapi_videos(query, limit)
     if rows or not _ytdlp.stopped():
         with _CACHE_LOCK:
             _GOOGLE_VIDEO_CACHE[key] = rows
@@ -1900,6 +1787,7 @@ def _serpapi_videos(query: str, limit: int = 10) -> List[dict]:
         costs.record("serpapi.search")
     except (requests.RequestException, ValueError) as e:
         _source_error("serpapi_google_videos", e)
+        _serpapi_spent(e)
         return []
     out = []
     for it in (body.get("video_results") or [])[:limit]:
@@ -3149,13 +3037,11 @@ def reset_cache():
     with _CACHE_LOCK:
         _BAD.clear()                    # what was unusable is decided again per job
     _LIBRARY_KEEP["on"] = False         # the job's Library.load turns it on
-    _BRIGHTDATA_REFUSED["why"] = ""     # a topped-up account works again on the next job
     from . import official
     official.reset()                    # each satellite sector once per video
     LOCAL_REJECTED["n"] = 0
     _SERPAPI_USED["n"] = 0              # SerpApi's per-job budget starts again
     _SERPAPI_VIDEO_USED["n"] = 0
-    _BRIGHTDATA_FAILS["n"] = 0
     _IMAGE_NO_CREDIT["hit"] = False
     UNJUDGED_KEPT.update(n=0, rejected=0)
     _ytdlp.reset()

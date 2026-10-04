@@ -123,20 +123,5 @@ class UnusableOnceUnusableForAll(SceneScope):
         self.assertEqual(os.listdir(d), [])                              # nothing left behind
 
 
-class SerpTimeout(unittest.TestCase):
-    def tearDown(self):
-        media.reset_cache()
-
-    def test_a_serp_call_waits_45_seconds_at_most(self):
-        r = mock.Mock(status_code=200, text="{}")
-        r.json.return_value = {"organic": []}
-        with mock.patch.object(config, "BRIGHTDATA_API_KEY", "k"), \
-                mock.patch.object(config, "BRIGHTDATA_SERP_ZONE", "z"), \
-                mock.patch.object(media.requests, "post", return_value=r) as post:
-            media.reset_cache()
-            media._brightdata_serp("https://www.google.com/search?tbm=vid&q=x")
-        self.assertEqual(post.call_args.kwargs["timeout"], 45)
-
-
 if __name__ == "__main__":
     unittest.main()

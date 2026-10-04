@@ -39,7 +39,7 @@ DEFAULT_PRICES: Dict[str, float] = {
     "image.generate": 4.0,               # credits: one generated image
     "runpod.worker_second": 0.576 / 3600,  # USD: serverless cpu3c-16-32 (the endpoint prefers 16 cores since 2026-09-28)
     "proxy.gb": 0.0,                     # USD per GB (ISP proxies are flat monthly)
-    "serp.call": 0.0015,                 # USD: one Bright Data SERP request
+    "serp.call": 0.0015,                 # USD: one paid SERP request (old documents; no provider uses it now)
     "storage.gb": 0.021,                 # USD per GB-month kept
     "tts.char": 0.0,                     # the app pays for TTS; kept for the total
 }

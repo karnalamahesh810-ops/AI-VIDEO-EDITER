@@ -232,7 +232,7 @@ class WrongPlaceEventYear(Styled):
         resp = mock.Mock(status_code=200, json=lambda: body, raise_for_status=lambda: None)
         media._SERPAPI_VIDEO_USED["n"] = 0
         media._GOOGLE_VIDEO_CACHE.clear()
-        with mock.patch.object(media, "brightdata_available", return_value=False),                 mock.patch.object(media.config, "SERPAPI_API_KEY", "k"),                 mock.patch.object(media.config, "SERPAPI_VIDEO_MAX_PER_JOB", 2),                 mock.patch.object(media.requests, "get", return_value=resp) as get:
+        with mock.patch.object(media.config, "SERPAPI_API_KEY", "k"),                 mock.patch.object(media.config, "SERPAPI_VIDEO_MAX_PER_JOB", 2),                 mock.patch.object(media.requests, "get", return_value=resp) as get:
             rows = media.search_google_videos("lake powell aerial")
             self.assertEqual(rows, [{"url": "https://www.youtube.com/watch?v=abcdefghijk", "title": "Lake Powell aerial",
                                      "site": "youtube.com", "seconds": 192.0}])
