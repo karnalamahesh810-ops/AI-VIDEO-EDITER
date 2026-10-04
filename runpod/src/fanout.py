@@ -35,6 +35,7 @@ import threading
 import time
 import urllib.parse
 import uuid
+from urllib.request import url2pathname
 from dataclasses import asdict, fields
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -875,6 +876,48 @@ def pod_render_enabled(doc: Optional[dict] = None) -> bool:
     return pod_render_ready(doc)["enabled"]
 
 
+class SpreadFailed(RuntimeError):
+    """
+    The spread render broke in a way the whole video on one machine would
+    repeat: a chunk no machine could draw, or files the video needs that are
+    gone from storage (`missing`: their links). render_pod raises it instead
+    of handing a long video to one machine for hours to fail on the same
+    frames; the quality check repairs what is named and the video is drawn
+    once more, or the job ends with this reason.
+    """
+
+    def __init__(self, message: str, missing: Optional[List[str]] = None):
+        super().__init__(message)
+        self.missing = list(missing or [])
+
+
+def parent_is_worker() -> bool:
+    """
+    This machine is itself one of the serverless endpoint's workers (RunPod
+    sets RUNPOD_ENDPOINT_ID on them; a pod runs scripts/pod_job.py from
+    JOB_URL / JOB_B64 and is extra to the endpoint): it holds one of the
+    workers its chunks would otherwise run on.
+    """
+    if os.getenv("JOB_URL") or os.getenv("JOB_B64"):
+        return False
+    mine = os.getenv("RUNPOD_ENDPOINT_ID", "").strip()
+    return bool(mine and mine == config.POD_RENDER_ENDPOINT_ID)
+
+
+def spread_chunks() -> int:
+    """
+    How many chunks a spread render is cut into: POD_RENDER_CHUNKS, and when
+    the parent is itself an endpoint worker never more than FANOUT_PARTS (the
+    endpoint's workers, the parent's own included) - one chunk a machine. With
+    12 chunks on 10 machines the last two waited for a machine to finish its
+    first chunk: a whole second round for a sixth of the video.
+    """
+    n = int(config.POD_RENDER_CHUNKS)
+    if parent_is_worker():
+        n = min(n, max(2, int(config.FANOUT_PARTS)))
+    return n
+
+
 def _sfx_spans(doc: dict) -> List[tuple]:
     """(first frame, end frame) of every planned sound effect."""
     fps = max(1, int(doc.get("fps") or 30))
@@ -1010,14 +1053,23 @@ def _stream_to(r, path: str) -> None:
     os.replace(part, path)
 
 
+class Gone(RuntimeError):
+    """A download the storage answered "no" to (404, 403, 410...): the file is not there to be had."""
+
+    def __init__(self, message: str, status: int):
+        super().__init__(message)
+        self.status = status
+
+
 def _fetch(url: str, path: str, key: str = "", bucket: str = "", tries: int = 4) -> str:
     """
     Download `url` (or R2 `key`) to `path`, retried with backoff. Our own R2
     objects go through the S3 API with this worker's keys; anything else (a
-    signed narration link, a picture elsewhere) is a plain GET.
+    signed narration link, a picture elsewhere) is a plain GET. Raises Gone
+    when the storage's last word was a plain "no" (never retried).
     """
     loc = (bucket or config.R2_BUCKET, key) if key else (_r2_location(url) if url else None)
-    last = ""
+    last, status = "", 0
     for attempt in range(tries):
         try:
             if loc and r2.enabled():
@@ -1035,10 +1087,13 @@ def _fetch(url: str, path: str, key: str = "", bucket: str = "", tries: int = 4)
                         return path
                     last = f"HTTP {r.status_code}"
                     if r.status_code in (400, 401, 403, 404, 410):
+                        status = int(r.status_code)
                         break
         except Exception as e:  # noqa: BLE001 - retried
             last = f"{type(e).__name__}: {str(e)[:120]}"
         time.sleep(min(20.0, 2.0 * (attempt + 1)))
+    if status:
+        raise Gone(f"download failed ({last}): {key or url[:120]}", status)
     raise RuntimeError(f"download failed ({last}): {key or url[:120]}")
 
 
@@ -1081,20 +1136,70 @@ def _media_dicts(doc: dict) -> List[dict]:
     return out
 
 
+def _local_file(value) -> str:
+    """The file on this disk a document field names ("" for a web link, a bundled track, or no such file)."""
+    v = str(value or "")
+    if not v or v.lower().startswith(("http://", "https://", "bgm://", "data:", "blob:")):
+        return ""
+    if v.lower().startswith("file://"):
+        v = url2pathname(urllib.parse.urlparse(v).path)
+    return v if os.path.isfile(v) else ""
+
+
+# Parts of a document the renderer never loads a file from (what was searched,
+# the editor's other choices): their local paths stay on this machine.
+_NOT_DRAWN = frozenset({"meta", "semanticMetadata", "alternatives", "choices"})
+
+
+def local_refs(doc: dict) -> List[Tuple[dict, str, str]]:
+    """
+    [(the dict, its field, the file)] for every file on this disk the renderer
+    would load from `doc`: whatever is local when the render starts - a scene
+    the quality check just repaired, the cleaned stills, the polished
+    narration, a brand kit file, a picture of a graphic. The named media
+    first (_media_dicts), then every other "url" or "thumbnail" anywhere in
+    the drawn document (the fields render.localise serves), so a new kind of
+    local file is published too instead of failing on every other machine.
+    On 2026-10-03 one repaired scene's local file kept a 29-minute video on
+    one worker: the old chunk render refused any document with a local file.
+    """
+    out: List[Tuple[dict, str, str]] = []
+    seen = set()
+
+    def take(m: dict) -> None:
+        for field in ("url", "thumbnail"):
+            if (id(m), field) in seen:
+                continue
+            path = _local_file(m.get(field)) if isinstance(m.get(field), str) else ""
+            if path:
+                seen.add((id(m), field))
+                out.append((m, field, path))
+    for m in _media_dicts(doc):
+        take(m)
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            take(node)
+            for key, value in node.items():
+                if key not in _NOT_DRAWN and isinstance(value, (dict, list)):
+                    walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+    walk({k: v for k, v in doc.items() if k not in _NOT_DRAWN})
+    return out
+
+
 def _publish_files(doc: dict, prefix: str, deadline: float) -> Tuple[dict, List[str]]:
     """
     A copy of the pod's finished document whose every local file (its cleaned
-    stills, anything not yet on the web) is uploaded to R2 under `prefix`: the
-    exact bytes the pod renders, so every machine draws the same frames.
-    Returns (that copy, the keys uploaded). Raises when a file cannot go up.
+    stills, anything not yet on the web: local_refs) is uploaded to R2 under
+    `prefix`: the exact bytes the pod renders, so every machine draws the same
+    frames. Returns (that copy, the keys uploaded). Raises when a file cannot
+    go up.
     """
     remote = copy.deepcopy(doc)
-    refs = []
-    for m in _media_dicts(remote):
-        for field in ("url", "thumbnail"):
-            v = str(m.get(field) or "")
-            if v and not v.startswith(("http://", "https://", "bgm://", "data:")) and os.path.isfile(v):
-                refs.append((m, field, v))
+    refs = local_refs(remote)
     files = sorted({v for _m, _f, v in refs})
 
     def up(path: str) -> Tuple[str, str, str]:
@@ -1167,9 +1272,15 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
         if s0 <= b and s1 >= a:
             on.append(i)
     wanted: List[Tuple[dict, str]] = []
+    # What the range cannot be drawn without: its own scenes' clips and
+    # pictures (a still, a neighbour's backdrop or a graphic's picture only
+    # dress a frame; the narration is the quality check's to stop a render over).
+    needed: set = set()
     for i in on:
         m = scenes[i].get("media") or {}
         wanted += [(m, "url"), (m, "thumbnail")]
+        if m.get("type") in ("video", "image") and str(m.get("url") or "").startswith(("http://", "https://")):
+            needed.add(str(m["url"]))
         anim = scenes[i].get("animation")
         if isinstance(anim, dict):
             wanted += [(x, "url") for x in anim.get("media") or [] if isinstance(x, dict)]
@@ -1195,12 +1306,18 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
             ext = os.path.splitext(urllib.parse.urlparse(url).path)[1][:6] or ".bin"
             targets[url] = os.path.join(work, "media", hashlib.sha1(url.encode("utf-8")).hexdigest()[:16] + ext)
 
+    gone: Dict[str, int] = {}
+
     def get(item):
         url, path = item
         if os.path.isfile(path) and os.path.getsize(path) > 0:
             return url, path                      # an earlier chunk on this machine fetched it
         try:
             return url, _fetch(url, path)
+        except Gone as e:                         # storage said no: the renderer would be told the same
+            gone[url] = e.status
+            print(f"[chunk] not in storage (HTTP {e.status}): {str(e)[:120]}", flush=True)
+            return url, ""
         except Exception as e:  # noqa: BLE001 - Remotion reads the link itself
             print(f"[chunk] prefetch failed, the renderer reads the link: {str(e)[:120]}", flush=True)
             return url, ""
@@ -1215,8 +1332,33 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
         if url in got:
             m[field] = got[url]
     size = sum(os.path.getsize(p) for p in got.values() if os.path.isfile(p))
+    missing = sorted(u for u in gone if u in needed)
     return {"files": len(got), "failed": len(targets) - len(got), "mb": round(size / 1e6, 1),
-            "seconds": round(time.time() - started, 1)}
+            "seconds": round(time.time() - started, 1),
+            # Scenes' own files storage refused: this range cannot be drawn, here or anywhere.
+            **({"missing": missing, "status": gone[missing[0]]} if missing else {})}
+
+
+def _missing_error(missing: List[str], status: int) -> str:
+    """A chunk's error when files it draws are gone from storage, in plain words."""
+    names = ", ".join(_short(u) for u in missing[:3]) + (f" and {len(missing) - 3} more" if len(missing) > 3 else "")
+    n = len(missing)
+    return (f"{n} file{'' if n == 1 else 's'} this part of the video draws {'is' if n == 1 else 'are'} "
+            f"not in storage (HTTP {status}): {names}")
+
+
+def _short(url: str) -> str:
+    """A link for a message: host and file name, never its query (signed links carry tokens)."""
+    p = urllib.parse.urlparse(str(url or ""))
+    return f"{p.netloc}/.../{os.path.basename(p.path)}" if p.path.count("/") > 1 else f"{p.netloc}{p.path}"
+
+
+def _plain(err, limit: int = 300) -> str:
+    """A chunk's error on one line for the log, the stats and the job's error: never a web page's markup."""
+    text = str(err if err is not None else "")
+    if renderer.has_markup(text):
+        text = renderer.plain_error(text)
+    return " ".join(text.split())[:limit]
 
 
 def _load_timeline(inp: dict, work: str) -> dict:
@@ -1257,6 +1399,12 @@ def run_pod_chunk(inp: dict, work: str, progress: Callable = None) -> dict:
         return {"ok": False, "chunk": i, "error": "bad chunk prefix"}
     doc = _load_timeline(inp, work)
     fetched = _localize(doc, a, b, work)
+    if fetched.get("missing"):
+        # Not drawn: the renderer would fail on the same files minutes in, with
+        # a storage error page for an error. The parent stops the spread render
+        # and the quality check repairs those scenes (or says the media is gone).
+        return {"ok": False, "chunk": i, "missing": fetched["missing"][:50],
+                "error": _missing_error(fetched["missing"], int(fetched.get("status") or 0))}
     video = os.path.join(work, f"chunk_{i:03d}.mp4")
     audio = os.path.join(work, f"chunk_{i:03d}.wav")
     # The pod's encoder settings: pictures encoded differently would not join
@@ -1401,6 +1549,12 @@ class _PodRender:
         self.errors: List[str] = []
         self.local_failures = 0
         self._last_pct = -1
+        # Files the video needs that storage no longer has (a chunk's download
+        # was answered 404): no machine can draw that chunk.
+        self.missing: List[str] = []
+        # The run broke on the video itself (a chunk no machine could draw),
+        # not on the machines: the whole video on one machine would break too.
+        self.content = False
 
     # ---- worker jobs
     def _payload(self, c: _Chunk) -> dict:
@@ -1448,9 +1602,23 @@ class _PodRender:
     def _note(self, c: _Chunk, why: str, event: str) -> None:
         """Keep a chunk's failure for the stats and the job's events (the first few)."""
         if len(self.errors) < 12:
-            self.errors.append(f"chunk {c.i}: {why}"[:240])
+            self.errors.append(f"chunk {c.i}: {why}"[:700])
             events.emit("render", event, level="warning", message=f"chunk {c.i}: {why}",
                         data={"chunk": c.i, "frames": [c.a, c.b]})
+
+    def _gone(self, c: _Chunk, missing: List[str], why: str) -> None:
+        """
+        Files chunk `c` draws are gone from storage (caller holds the lock):
+        no machine can draw it, so the spread render stops now - the other
+        machines are not left drawing a video that cannot be finished.
+        """
+        for u in missing:
+            if u not in self.missing:
+                self.missing.append(str(u))
+        self.content = True
+        self._note(c, why, "chunk_media_missing")
+        self.fatal = self.fatal or f"chunk {c.i} (frames {c.a}-{c.b}) cannot be drawn: {why}"
+        self.wake.set()
 
     def _poll(self, pool: ThreadPoolExecutor, fetch_pool: ThreadPoolExecutor) -> None:
         with self.lock:
@@ -1481,11 +1649,17 @@ class _PodRender:
                     else:
                         self.counts["workerFailed"] += 1
                         err = out.get("error") if isinstance(out, dict) else out
-                        self._drop_worker(c, f"the worker could not render it ({str(err)[:160]})", cancel=False)
+                        gone = out.get("missing") if isinstance(out, dict) else None
+                        if isinstance(gone, list) and gone:
+                            _unregister(c.job)
+                            c.job, c.remote_dead = "", True
+                            self._gone(c, [str(u) for u in gone], str(err)[:300])
+                            continue
+                        self._drop_worker(c, f"the worker could not render it ({_plain(err, 300)})", cancel=False)
                 elif state in ("FAILED", "CANCELLED", "TIMED_OUT"):
                     self.counts["workerFailed"] += 1
                     err = (out.get("error") if isinstance(out, dict) else out) or st.get("error") or state
-                    self._drop_worker(c, f"worker job {state.lower()} ({str(err)[:160]})", cancel=False)
+                    self._drop_worker(c, f"worker job {state.lower()} ({_plain(err, 300)})", cancel=False)
 
     def _collect(self, c: _Chunk, out: dict) -> None:
         """Download a worker's finished chunk and check it."""
@@ -1560,27 +1734,35 @@ class _PodRender:
             c.local_frac = max(c.local_frac, float(frac))
         ok = cancelled = False
         err = ""
+        gone: List[str] = []
         try:
             # The same bytes the workers draw: the document's links fetched
             # through R2 (the pod's own stills are local files already).
             chunk_doc = copy.deepcopy(self.doc)
-            _localize(chunk_doc, c.a, c.b, self.work)
-            renderer.render(chunk_doc, c.pod_video, composition=self.composition, concurrency=self.concurrency,
-                            serve_dir=self.work, on_progress=prog, frames=(c.a, c.b), audio_to=c.pod_audio,
-                            cancel=c.local_cancel)
-            ok = _chunk_ok(c.pod_video, c.pod_audio, c.frames)
-            if not ok:
-                err = f"incomplete on the pod ({_count_frames(c.pod_video)} of {c.frames} frames)"
+            fetched = _localize(chunk_doc, c.a, c.b, self.work)
+            gone = list((fetched or {}).get("missing") or [])
+            if gone:
+                err = _missing_error(gone, int(fetched.get("status") or 0))     # not drawn: it would fail on them
+            else:
+                renderer.render(chunk_doc, c.pod_video, composition=self.composition, concurrency=self.concurrency,
+                                serve_dir=self.work, on_progress=prog, frames=(c.a, c.b), audio_to=c.pod_audio,
+                                cancel=c.local_cancel)
+                ok = _chunk_ok(c.pod_video, c.pod_audio, c.frames)
+                if not ok:
+                    err = f"incomplete on the pod ({_count_frames(c.pod_video)} of {c.frames} frames)"
         except renderer.RenderCancelled:
             cancelled = True
         except Exception as e:  # noqa: BLE001 - reported below
-            err = f"failed on the pod ({type(e).__name__}: {str(e)[:300]})"
+            err = f"failed on the pod ({type(e).__name__}: {_plain(e, 600)})"
         if err:
             print(f"[pod-render] chunk {c.i} {err}", flush=True)
         hand = False
         with self.lock:
             c.local = False
-            if ok:
+            if gone and not c.done:
+                c.local_failed = True
+                self._gone(c, gone, err)
+            elif ok:
                 self.local_fps = c.frames / max(1.0, time.time() - started)
                 if not c.done:
                     c.done, c.source, c.video, c.audio = True, "pod", c.pod_video, c.pod_audio
@@ -1607,7 +1789,8 @@ class _PodRender:
                     self.counts["handedOver"] += 1
                     print(f"[pod-render] chunk {c.i} goes to a worker instead", flush=True)
                 else:
-                    self.fatal = (f"chunk {c.i} (frames {c.a}-{c.b}) could not be rendered: {err[:160]}; "
+                    self.content = True
+                    self.fatal = (f"chunk {c.i} (frames {c.a}-{c.b}) could not be rendered: {err[:600]}; "
                                   f"no worker took it ({why})")
         self.wake.set()
 
@@ -1634,7 +1817,8 @@ class _PodRender:
         pct = 70 + int(20 * min(1.0, frac))
         if pct != self._last_pct:
             self._last_pct = pct
-            self.report(f"Rendering video {int(min(1.0, frac) * 100)}% on {max(1, busy)} machines", pct)
+            n = max(1, busy)
+            self.report(f"Rendering video {int(min(1.0, frac) * 100)}% on {n} machine{'' if n == 1 else 's'}", pct)
 
     # ---- the whole run
     def run(self) -> None:
@@ -1656,7 +1840,11 @@ class _PodRender:
                                   and not c.local and not c.handing
                                   and (c.local_failed or (broken and c.remote_dead))), None)
                     if stuck is not None:
-                        last = f": {self.errors[-1]}" if self.errors else ""
+                        # Every failure of this chunk, here and on the workers (else the last one seen).
+                        mark = f"chunk {stuck.i}: "
+                        own = list(dict.fromkeys(e[len(mark):] for e in self.errors if e.startswith(mark)))
+                        last = (": " + ("; then ".join(own) if own else self.errors[-1])[:900]) if self.errors else ""
+                        self.content = True
                         self.fatal = f"chunk {stuck.i} (frames {stuck.a}-{stuck.b}) could not be rendered{last}"
                         break
                 if not watching and not local.is_alive():
@@ -1740,17 +1928,25 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
                composition: str = "Main", concurrency: int = None) -> bool:
     """
     Render the pod's finished document `doc` to `out_path`, spread over the
-    serverless workers (see the notes above this section). True when
-    `out_path` was written; False when the spread render could not run or
-    broke (the reason is logged, every worker job is cancelled): the caller
-    then renders the whole video on the pod.
+    serverless workers (see the notes above this section). The parent may be
+    a pod or itself one of the endpoint's serverless workers (spread_chunks:
+    then one chunk a machine). Whatever in `doc` is a file on this disk is
+    published for the other machines first (local_refs).
+
+    True when `out_path` was written; False when the spread render could not
+    run or broke on the machines (the reason is logged, every worker job is
+    cancelled): the caller then renders the whole video on this machine.
+    Raises SpreadFailed when it broke on the video itself - files gone from
+    storage, or a chunk no machine could draw in a video too long to try
+    again whole (RENDER_WHOLE_RETRY_SECONDS): one machine would spend hours
+    reaching the same frames.
     """
     if not pod_render_enabled(doc):
         return False
     fps = max(1, int(doc.get("fps") or 30))
     # Every frame of the video: the brand intro and outro around the narration.
     total = brandkit.total_frames(doc)
-    ranges = plan_chunks(doc, config.POD_RENDER_CHUNKS, config.POD_RENDER_MIN_CHUNK_FRAMES)
+    ranges = plan_chunks(doc, spread_chunks(), config.POD_RENDER_MIN_CHUNK_FRAMES)
     if len(ranges) < 2:
         return False
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", job_id or "job")[:60]
@@ -1777,7 +1973,7 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
         ok = True
     except Exception as e:  # noqa: BLE001 - the whole video is rendered on the pod instead
         reason = f"{type(e).__name__}: {str(e)[:300]}"
-        print(f"[pod-render] spread render stopped ({reason}); rendering the whole video on the pod", flush=True)
+        print(f"[pod-render] spread render stopped ({reason})", flush=True)
     finally:
         stats = {**(runner.stats() if runner is not None else {"chunks": len(ranges)}), "ok": ok}
         if reason:
@@ -1794,5 +1990,49 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
                              f"{stats.get('seconds', 0)} s") if ok else reason,
                     data={k: v for k, v in stats.items() if k != "errors"})
         if not config.POD_RENDER_KEEP_CHUNKS and (keys or runner is not None):
-            threading.Thread(target=_delete_prefix, args=(prefix, list(keys)), daemon=True).start()
+            t = threading.Thread(target=_delete_prefix, args=(prefix, list(keys)), daemon=True,
+                                 name="chunk-cleanup")
+            t.start()
+            with _CLEANUP_LOCK:
+                _CLEANUP.append(t)
+    if not ok and runner is not None and runner.content:
+        seconds = renderer.estimate_seconds(total, concurrency)
+        if runner.missing or seconds > float(config.RENDER_WHOLE_RETRY_SECONDS):
+            raise SpreadFailed(_spread_failed_text(runner, total, fps, seconds), missing=runner.missing)
     return ok
+
+
+def _spread_failed_text(runner: "_PodRender", total: int, fps: int, seconds: float) -> str:
+    """Why a spread render stopped for good, in plain words (the job's error when nothing can be repaired)."""
+    if runner.missing:
+        n = len(runner.missing)
+        names = ", ".join(_short(u) for u in runner.missing[:3]) + (f" and {n - 3} more" if n > 3 else "")
+        return (f"The video could not be rendered: {n} file{'' if n == 1 else 's'} it needs "
+                f"{'is' if n == 1 else 'are'} not in storage any more - deleted from storage? ({names})")
+    minutes = max(1, int(round(total / fps / 60.0)))
+    return (f"The video could not be rendered: {runner.fatal}. Every machine that tried this part failed, so "
+            f"the whole {minutes}-minute video was not rendered again on one machine (about "
+            f"{renderer._minutes(seconds)} to reach the same frames).")
+
+
+# The R2 clean-ups still running (a job's last seconds: handler waits for them).
+_CLEANUP: List[threading.Thread] = []
+_CLEANUP_LOCK = threading.Lock()
+
+
+def finish_cleanup(seconds: float = 20.0) -> int:
+    """
+    Wait, at most `seconds`, for the chunk files of this job's spread renders
+    to be deleted from R2. On a serverless parent the worker is frozen as soon
+    as its job returns: a clean-up left to a background thread there may never
+    run and its chunks stay in the bucket. Returns how many are still running.
+    """
+    with _CLEANUP_LOCK:
+        pending = [t for t in _CLEANUP if t.is_alive()]
+        _CLEANUP[:] = pending
+    until = time.time() + max(0.0, seconds)
+    for t in pending:
+        t.join(timeout=max(0.0, until - time.time()))
+    with _CLEANUP_LOCK:
+        _CLEANUP[:] = [t for t in _CLEANUP if t.is_alive()]
+        return len(_CLEANUP)
