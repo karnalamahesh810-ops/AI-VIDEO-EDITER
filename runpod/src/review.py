@@ -1066,6 +1066,11 @@ class Review:
         self.model = ""
         self.seconds: Dict[str, float] = {}
         self.redraw = False
+        # The job's own clock (after_render): the gate drawing the video once more anyway, when the
+        # job is stopped from outside (epoch seconds, 0 = not known) and how long the first render took.
+        self.again = False
+        self.job_deadline = 0.0
+        self.draw_seconds = 0.0
         self._undo: List[Callable[[], None]] = []
         self._report: Optional[dict] = None
         self._rows = 0
@@ -1147,18 +1152,27 @@ class Review:
             self.planned = None
 
     # ---- after the render ---------------------------------------------------
-    def after_render(self, path: str, gate=None, may_fix: bool = True) -> bool:
+    def after_render(self, path: str, gate=None, may_fix: bool = True, again: bool = False,
+                     deadline: float = 0.0, draw_seconds: float = 0.0) -> bool:
         """
         Review the finished file. True when something was fixed and the video
         should be drawn once more (the gate's one second render is then taken:
         Gate.join_second_render). `may_fix` False: that render is already
-        spent, so the review only lists. Never raises; takes about
-        AI_REVIEW_SECONDS at most.
+        spent, so the review only lists. `again`: the gate draws the video
+        once more anyway (its own repairs), so the fixes cost no render of
+        their own. `deadline`: when the job is stopped from outside (epoch
+        seconds; 0 = not known) and `draw_seconds` how long the first render
+        took - a second render that could not finish before it is never asked
+        for (_time_for_render). Never raises; takes about AI_REVIEW_SECONDS at
+        most.
         """
         if not self.on:
             return False
         self._started = time.time()
         self._deadline = self._started + self.budget
+        self.again = bool(again)
+        self.job_deadline = max(0.0, _f(deadline) or 0.0)
+        self.draw_seconds = max(0.0, _f(draw_seconds) or 0.0)
         try:
             return self._after_render(path, gate, may_fix)
         except Exception as e:  # noqa: BLE001 - the review must never be what fails a video
@@ -1348,7 +1362,38 @@ class Review:
             return "the one second render was already used"
         if not config.QUALITY_RERENDER:
             return "second renders are switched off (QUALITY_RERENDER)"
-        return ""
+        return self._time_for_render()
+
+    def _time_for_render(self) -> str:
+        """
+        "" when the job still has the time to draw the video once more, else
+        why not. A job past its limit (config.JOB_MAX_SECONDS: the endpoint's
+        execution timeout, a pod's watchdog) is killed with nothing saved, so
+        a fix that needs a render of its own is only worth one that finishes:
+        about the first render's time (draw_seconds; this machine's estimate
+        for the frames when not measured) x AI_REVIEW_RENDER_FACTOR, plus
+        AI_REVIEW_RENDER_RESERVE_SECONDS for the scan, the upload and saving
+        after it. Not asked when the gate draws the video again anyway, or the
+        job's limit is not known.
+        """
+        if self.again or self.job_deadline <= 0:
+            return ""
+        from . import render as renderer
+        draw = self.draw_seconds
+        if draw <= 0:
+            try:
+                from . import brandkit
+                draw = float(renderer.estimate_seconds(brandkit.total_frames(self.doc)))
+            except Exception:  # noqa: BLE001 - only the reserve is counted
+                draw = 0.0
+        need = draw * max(1.0, float(getattr(config, "AI_REVIEW_RENDER_FACTOR", 1.25))) \
+            + max(0.0, float(getattr(config, "AI_REVIEW_RENDER_RESERVE_SECONDS", 900.0)))
+        left = self.job_deadline - time.time()
+        if left >= need:
+            return ""
+        have = renderer._minutes(left) if left >= 60 else "under a minute"
+        return (f"not enough of the job's time is left for a second render "
+                f"(about {renderer._minutes(need)} needed, {have} left)")
 
     def _snapshot(self, target: dict) -> None:
         before = copy.deepcopy(target)
@@ -1385,6 +1430,9 @@ class Review:
         if not flagged:
             return False
         blocked = self._why_no_fix(gate, may_fix)
+        if blocked:
+            self.notes.append(f"nothing was changed: {blocked}")
+            self._event("not_fixed", blocked, level="warning", always=True)
         floor = float(config.AI_REVIEW_MIN_MATCH)
 
         def wanted(v: dict) -> List[str]:
@@ -1450,6 +1498,10 @@ class Review:
                                       else "the review's time ran out before another shot was searched for")
         if not self.fixed:
             self._undo.clear()
+            return False
+        late = self._time_for_render()          # the fixes took time too: asked again before the render
+        if late:
+            self._not_applied(late)
             return False
         if not gate.join_second_render([r["index"] for r in self.fixed if "index" in r], "the AI review"):
             self._not_applied("the second render could not be prepared, so the first one is kept")

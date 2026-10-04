@@ -994,6 +994,98 @@ class Budgets(unittest.TestCase):
         self.assertEqual(costs.LEDGER.units["vision.review"], 1)
 
 
+class JobTime(unittest.TestCase):
+    """A second render of the review's own is asked for only while the job has the time to finish it."""
+
+    BAD = {"line 1": {"match": 0.2, "issues": ["mismatch"]}}
+
+    def _doc(self):
+        scenes = [scene(i, video(_clip(f"j{i}.mp4", 4.0), 4.0), seconds=4.0) for i in range(3)]
+        for i, s in enumerate(scenes):
+            s["semanticMetadata"]["alternatives"] = [alternative(_clip(f"j_alt{i}.mp4", 4.0), ident=f"yt:jalt{i}")]
+        return doc_of(scenes)
+
+    def test_a_fix_the_job_has_no_time_to_render_is_only_listed(self):
+        doc = self._doc()
+        before = copy.deepcopy(doc)
+        gate = FakeGate()
+        with _Review(fake_vision(self.BAD), AI_REVIEW_RENDER_FACTOR=1.25, AI_REVIEW_RENDER_RESERVE_SECONDS=900.0):
+            rev = review.Review(doc, tempfile.mkdtemp())
+            # The first render took 10 min: about 10 x 1.25 + 15 = 27.5 min needed, 25 min left.
+            self.assertFalse(rev.after_render("/x/final.mp4", gate, may_fix=True,
+                                              deadline=time.time() + 1500, draw_seconds=600))
+        self.assertFalse(gate.rerendered)                                          # never asked for
+        self.assertEqual(doc, before)
+        self.assertEqual(rev.fixed, [])
+        self.assertEqual([(r["scene"], r["why"]) for r in rev.left],
+                         [("s0001", "not enough of the job's time is left for a second render "
+                                    "(about 28 min needed, 25 min left)")])
+        report = rev.finish()
+        self.assertFalse(report["rerendered"])
+        self.assertTrue(any(n.startswith("nothing was changed: not enough of the job's time") for n in report["notes"]))
+        self.assertIn("not_fixed", [e["event"] for e in events._EVENTS if e["stage"] == "review"])
+
+    def test_time_enough_no_known_limit_or_the_gates_own_second_render_fixes_as_before(self):
+        for kw in ({"deadline": time.time() + 3000, "draw_seconds": 600},                  # 27.5 min of 50
+                   {"deadline": 0.0, "draw_seconds": 600},                                 # no known limit
+                   {"deadline": time.time() + 60, "draw_seconds": 600, "again": True}):    # drawn again anyway
+            doc = self._doc()
+            gate = FakeGate()
+            with _Review(fake_vision(self.BAD)):
+                rev = review.Review(doc, tempfile.mkdtemp())
+                self.assertTrue(rev.after_render("/x/final.mp4", gate, may_fix=True, **kw), kw)
+            self.assertTrue(gate.rerendered, kw)
+            self.assertEqual([r["scene"] for r in rev.fixed], ["s0001"], kw)
+
+    def test_the_time_the_fixes_took_is_counted_before_the_render_is_asked_for(self):
+        doc = self._doc()
+        before = copy.deepcopy(doc)
+        gate = FakeGate()
+        late = "not enough of the job's time is left for a second render (about 16 min needed, 9 min left)"
+        with _Review(fake_vision(self.BAD)), \
+                mock.patch.object(review.Review, "_time_for_render", side_effect=["", late]):
+            rev = review.Review(doc, tempfile.mkdtemp())
+            self.assertFalse(rev.after_render("/x/final.mp4", gate, may_fix=True,
+                                              deadline=time.time() + 10 ** 6, draw_seconds=1))
+        self.assertFalse(gate.rerendered)
+        self.assertEqual(doc["scenes"], before["scenes"])                          # the swap taken back
+        self.assertEqual(rev.fixed, [])
+        self.assertEqual([(r["scene"], r["why"]) for r in rev.left], [("s0001", late)])
+
+    def test_a_render_not_timed_is_estimated_for_this_machine(self):
+        rev = review.Review(self._doc(), tempfile.mkdtemp())
+        rev.job_deadline = time.time() + 1000
+        with mock.patch.object(config, "AI_REVIEW_RENDER_RESERVE_SECONDS", 900.0):
+            with mock.patch.object(render, "estimate_seconds", return_value=5000.0) as est:
+                self.assertIn("not enough of the job's time", rev._time_for_render())
+            self.assertEqual(est.call_args[0][0], 360)                             # the document's frames
+            with mock.patch.object(render, "estimate_seconds", return_value=10.0):
+                self.assertEqual(rev._time_for_render(), "")                      # 912.5 s of 1000
+
+    def test_the_jobs_limit_is_this_machines_own(self):
+        keys = ("JOB_MAX_SECONDS", "RUNPOD_WEBHOOK_GET_JOB", "POD_MAX_SECONDS", "POD_EXIT")
+
+        def limit(**env):
+            with mock.patch.dict(os.environ, {}, clear=False):
+                for k in keys:
+                    os.environ.pop(k, None)
+                os.environ.update(env)
+                return config._job_max_seconds()
+        self.assertEqual(limit(), 0.0)                                             # a laptop or a test: none known
+        self.assertEqual(limit(RUNPOD_WEBHOOK_GET_JOB="https://api.runpod.ai/x"), 10800.0)   # the endpoint's 3 h
+        self.assertEqual(limit(POD_EXIT="terminate"), 18000.0)                    # scripts/pod_job.py's 5 h watchdog
+        self.assertEqual(limit(POD_EXIT="terminate", POD_MAX_SECONDS="7200"), 7200.0)
+        self.assertEqual(limit(POD_EXIT="terminate", POD_MAX_SECONDS="0"), 0.0)
+        self.assertEqual(limit(JOB_MAX_SECONDS="5400", RUNPOD_WEBHOOK_GET_JOB="x"), 5400.0)
+        self.assertEqual(limit(JOB_MAX_SECONDS="soon"), 0.0)                      # malformed: never a crash
+        with mock.patch.object(config, "JOB_MAX_SECONDS", 3600.0):
+            self.assertEqual(handler._job_deadline({"_job_started": 1000.0}), 4600.0)
+            self.assertEqual(handler._job_deadline({}), 0.0)                       # not said when it started
+            self.assertEqual(handler._job_deadline({"_job_started": "x"}), 0.0)
+        with mock.patch.object(config, "JOB_MAX_SECONDS", 0.0):
+            self.assertEqual(handler._job_deadline({"_job_started": 1000.0}), 0.0)
+
+
 class NeverTheCause(unittest.TestCase):
     def test_a_prose_answer_a_missing_model_or_a_broken_step_is_a_skipped_review(self):
         doc = doc_of([scene(i, video(_clip(f"n{i}.mp4", 4.0), 4.0)) for i in range(3)])
@@ -1332,6 +1424,28 @@ class DoRender(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(out["review"]["left"][0]["why"], "fixing is switched off (AI_REVIEW_FIX)")
         self.assertFalse(out["review"]["rerendered"])
+
+    def test_a_job_near_its_time_limit_gets_no_second_render_of_the_reviews_own(self):
+        # The job started 9,900 s ago and is stopped at 10,000 s: a second render could not finish.
+        late = {"_job_started": time.time() - 9900}
+        out, calls, _ctx = self._run([self.clean, self.clean], inp=late, JOB_MAX_SECONDS=10000.0)
+        self.assertEqual(len(calls), 1)                                           # the first video goes out
+        self.assertEqual(out["review"]["fixed"], [])
+        self.assertTrue(out["review"]["left"][0]["why"].startswith("not enough of the job's time is left"))
+        self.assertFalse(out["quality"]["render"].get("rerendered"))
+        self.assertEqual(self.doc["scenes"][1]["media"]["url"], _clip("e2e_1.mp4", 4.0))
+        # The gate's own repair draws the video again anyway: the swap joins that render.
+        self.setUp()
+        out, calls, _ctx = self._run([self.black, self.clean], inp=late, JOB_MAX_SECONDS=10000.0)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1]["scenes"][1]["media"]["url"], self.alt)
+        self.assertEqual(out["review"]["fixed"][0]["scene"], "s0001")
+        # A job with time to spare (or no known limit) is drawn again for the swap, as before.
+        self.setUp()
+        out, calls, _ctx = self._run([self.clean, self.clean], inp={"_job_started": time.time()},
+                                     JOB_MAX_SECONDS=10000.0)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1]["scenes"][1]["media"]["url"], self.alt)
 
 
 class HandlerWiring(unittest.TestCase):

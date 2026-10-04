@@ -1229,6 +1229,37 @@ AI_REVIEW_MIN_MATCH = float(os.getenv("AI_REVIEW_MIN_MATCH", "0.45"))
 # more likely wrong than the video: nothing is swapped, everything is listed.
 AI_REVIEW_MAX_FIX_SHARE = float(os.getenv("AI_REVIEW_MAX_FIX_SHARE", "0.3"))
 
+
+def _job_max_seconds() -> float:
+    """JOB_MAX_SECONDS when set; else this machine's own job limit (see below); 0 = none known."""
+    try:
+        raw = os.getenv("JOB_MAX_SECONDS", "").strip()
+        if raw:
+            return max(0.0, float(raw))
+        if os.getenv("RUNPOD_WEBHOOK_GET_JOB"):             # a serverless worker (handler.Reporter.SERVERLESS)
+            return 10800.0
+        pod = os.getenv("POD_MAX_SECONDS", "").strip()      # read the way scripts/pod_job.py reads it
+        if pod:
+            return max(0.0, float(pod))
+        return 18000.0 if os.getenv("POD_EXIT") == "terminate" else 0.0
+    except ValueError:
+        return 0.0                                          # a malformed value: no known limit
+
+
+# The longest one job may run before it is stopped from outside, with nothing
+# saved: the serverless endpoint's executionTimeout (3 h on tuxcziwby5plod,
+# README "Endpoint configuration") or, on the app's pods, scripts/pod_job.py's
+# own watchdog (POD_MAX_SECONDS, 5 h). 0 = no known limit (a laptop, a test).
+# The AI review's second render reads it: it is drawn only when it can still
+# finish in what is left - the first render's own time x
+# AI_REVIEW_RENDER_FACTOR, plus AI_REVIEW_RENDER_RESERVE_SECONDS for its scan,
+# the upload and saving the clips after it. Otherwise the review only lists and
+# the first video goes out. (A second render the quality gate draws for its
+# own repairs is not held to it; the review's fixes join that one for free.)
+JOB_MAX_SECONDS = _job_max_seconds()
+AI_REVIEW_RENDER_FACTOR = float(os.getenv("AI_REVIEW_RENDER_FACTOR", "1.25"))
+AI_REVIEW_RENDER_RESERVE_SECONDS = float(os.getenv("AI_REVIEW_RENDER_RESERVE_SECONDS", "900"))
+
 # --- niche footage packs (src/packs.py, src/packbuild.py) ----------------------
 # A shelf of pre-checked clips per niche (water, weather, fire, earth, nature,
 # cities) kept on R2 and read by their public link: the owner's rule "no empty

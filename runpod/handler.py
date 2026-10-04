@@ -1870,6 +1870,21 @@ def _raise_explained(err: BaseException, gate) -> None:
     raise err
 
 
+def _job_deadline(inp: dict) -> float:
+    """
+    When this job is stopped from outside (epoch seconds): its start (handler
+    sets inp["_job_started"]) plus config.JOB_MAX_SECONDS - the serverless
+    endpoint's execution timeout or a pod's own watchdog. 0 = not known (no
+    limit set, or a caller that did not say when the job started). Never raises.
+    """
+    try:
+        started = float(inp.get("_job_started") or 0)
+        limit = float(config.JOB_MAX_SECONDS or 0)
+    except (AttributeError, TypeError, ValueError):
+        return 0.0
+    return started + limit if started > 0 and limit > 0 else 0.0
+
+
 def do_render(doc: dict, inp: dict, work: str, report: Reporter,
               split: bool = False) -> dict:
     # The document may have come back from a browser, so validate before
@@ -1930,6 +1945,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # A bed the renderer cannot play (an unknown file, an editor's bad numbers) is dropped.
     ambience.clean(doc)
     out_path = os.path.join(work, "final.mp4")
+    drawing = time.time()               # how long a draw takes here: the AI review's second render is timed by it
     try:
         _draw(doc, inp, work, report, split, out_path, gate)
     except Exception as e:  # noqa: BLE001 - drawn once more when the error names files that can be replaced
@@ -1945,6 +1961,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # The finished file is scanned (black, frozen, silent): a real defect is
     # repaired and the video drawn once more - never twice - and the better
     # of the two files is kept.
+    drawn_in = time.time() - drawing
     spent = gate.rerendered             # that one second render already drawn (a render that failed on a file)
     # The AI review (src/review.py, AI_REVIEW; off = none of this does anything):
     # a vision model looks at the finished video scene by scene and the sound is
@@ -1952,11 +1969,13 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # scene's other choice, a title moved off a face) joins the SAME second
     # render - one more draw for the gate's repairs and the review's together,
     # never a third. Its frames are planned on the document as it was drawn,
-    # before the gate's scan repairs anything.
+    # before the gate's scan repairs anything. A second render of its own is
+    # asked for only while the job has the time to finish it (_job_deadline).
     reviewer = review.Review(doc, work, report)
     reviewer.plan()
     again = gate.after_render(out_path)
-    if reviewer.after_render(out_path, gate, may_fix=not spent):
+    if reviewer.after_render(out_path, gate, may_fix=not spent, again=again,
+                             deadline=_job_deadline(inp), draw_seconds=drawn_in):
         again = True
         try:
             _sign_supabase_urls(doc)    # a swapped-in choice may live in the app's private storage
@@ -2418,6 +2437,10 @@ def handler(job):
     inp = job.get("input") or {}
     # The storage broker authorises uploads by the running job's id.
     inp["_job_id"] = job_id
+    # When the job started: what may still start a long step near the end reads how much of
+    # the job's time is left from it (do_render's AI review: _job_deadline). A caller running
+    # several videos in one job passes the job's own start.
+    inp.setdefault("_job_started", started)
     # The video style (news compilation, documentary...) becomes per-job
     # config overrides before they are applied, so fan-out parts inherit it.
     # Replace Clip sources with the style the timeline was planned with.
