@@ -147,7 +147,12 @@ def broker_read_url(bucket: str, object_path: str, project_id: str, job_id: str,
     if r2_only():
         from . import r2
         key = object_path.lstrip("/")
-        if r2.head(key):
+        try:
+            found = r2.head(key)
+        except Exception as e:  # noqa: BLE001 - the broker can still serve it
+            print(f"[storage] R2 lookup of {os.path.basename(key)} failed ({str(e)[:90]})", flush=True)
+            found = None
+        if found:
             return r2.presign(key, expires=max(60, min(int(read_ttl), _R2_MAX_TTL)))
     return _broker({"project_id": project_id, "job_id": job_id, "bucket": bucket,
                     "path": object_path.lstrip("/"), "action": "read",
@@ -226,6 +231,11 @@ def check(bucket: str = None) -> dict:
     with all the work already paid for. Read-only: lists the bucket, writes
     nothing.
     """
+    from . import r2
+    if config.R2_ONLY and any(getattr(config, n, "") for n in r2._NEEDED):
+        # Cloudflare only: R2 is the storage that has to work - a real round
+        # trip, and with R2 half-configured the missing settings by name.
+        return r2.check()
     if broker_enabled():
         # No key to test; ask the broker whether it is deployed and reachable.
         out = {"mode": "broker", "url": bool(config.SUPABASE_URL), "serviceKey": False,

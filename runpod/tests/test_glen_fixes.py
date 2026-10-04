@@ -9,6 +9,7 @@ import os
 import tempfile
 import time
 import unittest
+import urllib.parse
 from unittest import mock
 
 from src import config, director, fanout, media, pools, storage, treatments, vision
@@ -102,6 +103,56 @@ class CloudflareOnlyStorage(unittest.TestCase):
         from src import r2
         with mock.patch.object(config, "R2_ONLY", True), mock.patch.object(r2, "enabled", return_value=False):
             self.assertFalse(storage.r2_only())
+
+
+class CloudflareHealthCheck(unittest.TestCase):
+    """health's storage check is a real R2 round trip once R2 is configured."""
+    VALS = {"R2_ACCOUNT_ID": "acct", "R2_ACCESS_KEY_ID": "k", "R2_SECRET_ACCESS_KEY": "s",
+            "R2_BUCKET": "videos", "R2_PUBLIC_BASE": "https://cdn.example.com", "R2_ONLY": True}
+
+    def _fake_store(self, public_status=200):
+        from src import r2
+        store = {}
+
+        def put(key, body, size, ctype, bucket, cc, deadline, reopen=None):
+            store[key] = body
+
+        def get(url, **kw):
+            r = mock.Mock()
+            key = url.split("?")[0].split("/videos/")[-1] if "r2.cloudflarestorage" in url else url.split(".com/")[-1]
+            r.status_code = public_status if "cdn.example.com" in url else 200
+            r.content = store.get(urllib.parse.unquote(key), b"")
+            return r
+        return r2, store, put, get
+
+    def test_a_working_bucket_passes_every_step(self):
+        r2, store, put, get = self._fake_store()
+        with mock.patch.multiple(config, **self.VALS), mock.patch.object(r2, "_put", side_effect=put), \
+                mock.patch.object(r2, "get_bytes", side_effect=lambda k, **kw: store.get(k)), \
+                mock.patch.object(r2.requests, "get", side_effect=get), \
+                mock.patch.object(r2, "delete", side_effect=lambda k: store.pop(k, None) is not None):
+            out = storage.check()
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(out["mode"], "r2")
+        self.assertEqual(set(out["steps"]), {"upload", "read", "presigned", "public", "delete"})
+        self.assertFalse(store)                                              # the probe is cleaned up
+
+    def test_a_public_domain_that_is_not_connected_is_named(self):
+        r2, store, put, get = self._fake_store(public_status=404)
+        with mock.patch.multiple(config, **self.VALS), mock.patch.object(r2, "_put", side_effect=put), \
+                mock.patch.object(r2, "get_bytes", side_effect=lambda k, **kw: store.get(k)), \
+                mock.patch.object(r2.requests, "get", side_effect=get), \
+                mock.patch.object(r2, "delete", return_value=True):
+            out = storage.check()
+        self.assertFalse(out["ok"])
+        self.assertIn("R2_PUBLIC_BASE", out["detail"])
+
+    def test_missing_settings_are_listed_by_name_without_values(self):
+        with mock.patch.multiple(config, **{**self.VALS, "R2_SECRET_ACCESS_KEY": "", "R2_PUBLIC_BASE": ""}):
+            out = storage.check()
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["missing"], ["R2_SECRET_ACCESS_KEY", "R2_PUBLIC_BASE"])
+        self.assertNotIn("k", out["detail"].split())                          # no secret echoed
 
 
 class LostPartClipsComeBack(unittest.TestCase):
