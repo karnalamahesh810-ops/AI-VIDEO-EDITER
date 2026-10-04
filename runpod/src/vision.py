@@ -783,18 +783,19 @@ def _scene_lines(scene: Optional[dict]) -> str:
 
 
 def _wanted_line(wants: str) -> str:
-    """The line under INTENT for a line that asks for a map ("map") or a chart, diagram or
-    cross-section ("chart"): a real published one is the shot - the instructions' text,
-    studio and AI rules read a drawn picture's labels, legend and style as faults."""
+    """The line under INTENT for a line whose wanted shots include a map ("map") or a chart,
+    diagram or cross-section ("chart"): a real published one is acceptable - the instructions'
+    text, studio and AI rules would read a drawn picture's labels, legend and style as faults.
+    Real footage or a photo that fits stays just as good: the INTENT decides."""
     if wants not in ("map", "chart"):
         return ""
     what = "a map" if wants == "map" else "a chart, a diagram or a cross-section"
-    return (f"WANTED: the line asks for {what}. A real published one of what the line is about - a government "
-            "agency's, a scientist's or a news report's - is the right shot: its drawn style, its labels and its "
-            "legend do not make it ai_generated, studio or has_text_or_watermark. Score how well it shows what the "
-            "INTENT describes. Still hard rejects: a TV weather map or forecast graphic (studio), a presentation "
-            "slide or a page of text (has_text_or_watermark), an AI-made or fantasy picture (ai_generated), a stock "
-            "watermark.\n")
+    return (f"WANTED: the line's wanted shots include {what}. A real published one of what the line is about - a "
+            "government agency's, a scientist's or a news report's - is acceptable: its drawn style, its labels and "
+            "its legend do not make it ai_generated, studio or has_text_or_watermark. Real footage or a photograph "
+            "that fits the INTENT is just as good; score how well the candidate shows what the INTENT describes. "
+            "Still hard rejects: a TV weather map or forecast graphic (studio), a presentation slide or a page of "
+            "text (has_text_or_watermark), an AI-made or fantasy picture (ai_generated), a stock watermark.\n")
 
 
 def judge(path: str, intent: str, context: str = "", event: bool = False,

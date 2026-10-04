@@ -151,12 +151,14 @@ class TheJudgeIsTold(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_a_map_or_diagram_line_reads_that_a_published_one_is_the_shot(self):
+    def test_a_map_or_diagram_line_reads_that_a_published_one_is_acceptable(self):
         vision.judge(self.path, "Snake River Plain hotspot track map", "", wants="map")
         vision.judge(self.path, "Yellowstone magma reservoir cross-section", "", wants="chart")
-        self.assertIn("WANTED: the line asks for a map.", self.asked[0])
+        self.assertIn("WANTED: the line's wanted shots include a map.", self.asked[0])
         self.assertIn("a chart, a diagram or a cross-section", self.asked[1])
         for text in self.asked:
+            self.assertIn("is acceptable", text)
+            self.assertIn("Real footage or a photograph that fits the INTENT is just as good", text)
             self.assertIn("TV weather map or forecast graphic (studio)", text)      # still rejected
             self.assertIn("presentation slide", text)
 

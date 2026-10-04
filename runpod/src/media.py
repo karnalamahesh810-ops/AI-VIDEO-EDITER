@@ -1471,7 +1471,8 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         return True, None
     scene = _SCENE_INTENT.get()
     wants = wanted_kind()
-    # A line asking for a map or a diagram: the judge is told a real published one is the shot.
+    # A line asking for a map or a diagram: the judge is told a real published one is acceptable
+    # (real footage or a photo that fits stays just as good - the INTENT decides).
     verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()),
                            **({"scene": scene} if scene else {}),
                            **({"wants": wants} if wants in ("map", "chart") else {}))
