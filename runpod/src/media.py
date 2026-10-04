@@ -3791,15 +3791,35 @@ _ARCHIVE_TITLE_RE = re.compile(r"\b(newsreel|archive|archival|pathe|path\u00e9|p
                                r"huntley|18\d\d|19[0-8]\d|1990s?)\b", re.I)
 
 
-def _verdicts(assets: Dict[int, Optional["MediaAsset"]], workers: int = 6) -> Dict[int, tuple]:
+def _asset_ok_for(job: Optional[Dict[str, Any]], asset) -> tuple:
+    """
+    _asset_ok in the line's own context. Outside source_for_segment - pass 2's check and its
+    replacements, the rescue and the fallback ladder's pictures - the line's subject type
+    was not set, so a document line's scan, its right shot, was turned down as "a page of
+    text, not a photo": the scan found in pass 1 was dropped, three paid searches brought
+    scans turned down the same way, and the line ended empty (verified 2026-10-05).
+    """
+    token = _SUBJECT_TYPE.set(str((job or {}).get("subject_type") or ""))
+    try:
+        return _asset_ok(asset)
+    finally:
+        _SUBJECT_TYPE.reset(token)
+
+
+def _verdicts(assets: Dict[int, Optional["MediaAsset"]], workers: int = 6,
+              jobs: Optional[Dict[int, Dict[str, Any]]] = None) -> Dict[int, tuple]:
     """_asset_ok for many assets at once, by index (each reads its own file; a check that
-    breaks is left out, for the caller to run again where it would have run)."""
+    breaks is left out, for the caller to run again where it would have run). `jobs`: each
+    index's line, whose context the check runs in (_asset_ok_for)."""
     items = [(i, a) for i, a in assets.items() if a is not None]
     out: Dict[int, tuple] = {}
     if len(items) < 2:
         return out
+
+    def check(i: int, a) -> tuple:
+        return _asset_ok_for(jobs[i], a) if jobs and i in jobs else _asset_ok(a)
     with ThreadPoolExecutor(max_workers=max(1, min(int(workers or 1), len(items)))) as pool:
-        futures = {pool.submit(contextvars.copy_context().run, _asset_ok, a): i for i, a in items}
+        futures = {pool.submit(contextvars.copy_context().run, check, i, a): i for i, a in items}
         for fut in as_completed(futures):
             try:
                 out[futures[fut]] = fut.result()
@@ -4159,7 +4179,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     todo = []  # (job, nth, bad_reason, is_duplicate)
     # Each check reads its own file (a clip's frames, a picture's real detail): they run
     # side by side first, and the scenes are then decided in story order as before.
-    verdicts = _verdicts({job["index"]: results[job["index"]] for job, _nth in plan}, workers)
+    verdicts = _verdicts({job["index"]: results[job["index"]] for job, _nth in plan}, workers,
+                         jobs={job["index"]: job for job, _nth in plan})
     for job, nth in plan:
         i = job["index"]
         asset = results[i]
@@ -4169,7 +4190,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             empty += 1
             todo.append((job, nth, "", False))
             continue
-        ok, why = verdicts[i] if i in verdicts else _asset_ok(asset)
+        ok, why = verdicts[i] if i in verdicts else _asset_ok_for(job, asset)
         if not ok:
             rejected += 1
             print(f"[media] scene {i + 1}: dropping clip ({why})", flush=True)
@@ -4222,7 +4243,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 candidate = None
             if not candidate:
                 continue
-            ok, why = _asset_ok(candidate)
+            ok, why = _asset_ok_for(job, candidate)
             if not ok:
                 print(f"[media] scene {job['index'] + 1}: replacement also bad ({why})",
                       flush=True)
@@ -5015,7 +5036,7 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 if slop.ai_host(cand.url, getattr(cand, "page_url", "") or "") or slop.metadata_reason(cand.attribution):
                     continue
                 got = _download(_dc_replace(cand), q, work_dir)
-                fine, why = _asset_ok(got) if got else (True, "")
+                fine, why = _asset_ok_for(job, got) if got else (True, "")
                 if not fine:
                     _mark_bad(cand.identity, "", why)     # too blurry for any line (src/sharpness.py)...
                     got = None

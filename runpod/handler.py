@@ -2739,6 +2739,7 @@ def handler(job):
     report = Reporter(reports_to, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
+    pools.reset()                       # and the spare pool moments it may draw on
     shotcap.reset()                     # and what the shot cap cut and swapped
     packs.reset()                       # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's

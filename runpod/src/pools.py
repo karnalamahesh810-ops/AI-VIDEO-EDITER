@@ -629,6 +629,19 @@ _RESERVE_LOCK = threading.Lock()
 _RESERVE_META: Dict[str, dict] = {}
 
 
+def reset() -> None:
+    """
+    Forget the reserve: the handler calls this as every job starts. It used to be emptied
+    only when a job pooled its own subjects (source_by_subject), so on a reused serverless
+    worker a job that did not - a render's quality gate, a fan-out parent whose parts pool
+    for it - drew the previous video's spare moments, and a line naming no place could get
+    another video's footage, unjudged (verified 2026-10-05).
+    """
+    with _RESERVE_LOCK:
+        _RESERVE.clear()
+        _RESERVE_META.clear()
+
+
 def spare_moments(limit: int = 0) -> List[dict]:
     """
     The pools' approved moments no line took, best first, for the clip

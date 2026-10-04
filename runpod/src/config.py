@@ -297,8 +297,10 @@ JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "12"))
 #  - the fine pass (moments.refine) is remembered per video, coarse moment,
 #    clip length and intent, as the scout already is: a scene searched again
 #    (pass 2, the stronger hook, a re-cut) paid it again on the same video.
-# Off ("0", the default): exactly as before.
-JUDGE_MEMORY = _flag("JUDGE_MEMORY", False)
+# On by default since 2026-10-05 (the owner: no quality risk - the scene-set
+# simulation picked the same shots with 21% fewer paid calls and 32% fewer
+# downloads). "0" = exactly as before.
+JUDGE_MEMORY = _flag("JUDGE_MEMORY", True)
 # Searches a typed scene intent expands to (src/intent.py), specific first.
 INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # The candidate pool (src/candidates.py): every search variant plus
