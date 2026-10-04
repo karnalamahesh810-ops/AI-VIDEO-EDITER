@@ -71,6 +71,16 @@ NOT_CITED = [
     "According to legend, the canyon was carved by a giant.",
     "Nature always finds a way.",                                       # the word, not the journal
     "The Geological Survey office in Denver closed in 2019.",
+    "A geological survey found that the canyon is six million years old.",   # a survey, not the USGS
+    "According to a geological survey, the rock is younger than thought.",
+    "The state forest service said the fire is contained.",             # not the U.S. Forest Service
+    "According to the drought monitor, 80 percent of the state is dry.",  # lower case: not named
+    "WHO said the lake would last forever?",                            # the word, not the World Health Organization
+    "Brad Udall of Colorado State University says the river is shrinking.",  # a person and where they work
+    "A lawsuit against the EPA found its way to the Supreme Court.",    # the agency is not the one speaking
+    "According to locals, the lake was once much higher.",
+    "Data shows the lake is dropping.",
+    "Reports say the dam could fail.",
     "",
 ]
 
@@ -127,6 +137,35 @@ class Detection(unittest.TestCase):
         # and no tag for a line that names nothing, whatever the list says
         self.assertIsNone(S.find("The lake is low.", listed=listed))
         self.assertIsNone(S.find("Glen Canyon Institute is based in Utah.", listed=listed))
+
+    def test_a_tag_never_names_a_body_the_line_did_not(self):
+        # another country's survey, a state's department: their own name as said - never the U.S. body's tag
+        got = S.find("According to the Geological Survey of India, the quake was a 6.1.")
+        self.assertEqual(got["name"], "GEOLOGICAL SURVEY OF INDIA")
+        got = S.find("According to the state Department of Agriculture, crops are failing.")
+        self.assertIsNotNone(got)
+        self.assertNotIn("USDA", got["name"])
+        self.assertEqual(S.find("The county Forest Service says the trail is closed.")["name"], "FOREST SERVICE")
+        # the WHO only as the organisation
+        self.assertEqual(S.find("According to WHO, the water is unsafe.")["name"], "WHO")
+        self.assertEqual(S.find("The WHO says the water is unsafe.")["name"], "WHO")
+        # a built-in name in its own capitals, its small words in any case
+        self.assertEqual(S.find("The Bureau Of Reclamation says the lake is low.")["name"], "USBR")
+
+    def test_a_year_to_come_or_another_years_line_never_dates_the_source(self):
+        # a projection's horizon is not when the source said it
+        got = S.find("According to 2050 projections from the IPCC, the sea will rise a meter.")
+        self.assertEqual((got["name"], got["year"]), ("IPCC", None))
+        # the brief's year only on a line that says no year of its own, never one still to come
+        listed = S.brief_sources({"sources": [{"name": "bureau of reclamation", "year": 2024},
+                                              {"name": "Pacific Institute", "year": 2999}]})
+        self.assertEqual([e["tag"] for e in listed], ["USBR", "PACIFIC INSTITUTE"])
+        got = S.find("In 1983 the Bureau of Reclamation warned that the dam could fail.", listed=listed)
+        self.assertEqual((got["name"], got["year"], got["listed"]), ("USBR", None, False))
+        got = S.find("According to the Bureau of Reclamation, the lake is low.", listed=listed)
+        self.assertEqual((got["name"], got["year"]), ("USBR", 2024))
+        got = S.find("According to the Pacific Institute, the plan fails.", listed=listed)
+        self.assertEqual((got["name"], got["year"]), ("PACIFIC INSTITUTE", None))
 
     def test_everyday_words_are_journals_only_where_something_was_published(self):
         self.assertEqual(S.find("The paper appeared in Science in 2021.")["name"], "SCIENCE")

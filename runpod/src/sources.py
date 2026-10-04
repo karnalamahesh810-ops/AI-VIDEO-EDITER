@@ -9,10 +9,14 @@ line must name an organisation or a publication inside an attribution
 report found", "researchers at the University of Arizona found", "a study
 published in Nature"), and the year is shown only when the line says it of that
 source ("a 2024 NOAA report") - or the brief's own sources list gives it for
-the source the line names. A figure with no named source gets no tag; "experts
+the source a line names that says no year itself - and never a year still to
+come ("2050 projections"). A figure with no named source gets no tag; "experts
 say", "studies show" and "according to officials" name nobody; an agency that
 is doing something ("the Bureau of Reclamation built the dam") is not being
-cited, and a person is introduced by the person looks, not cited here.
+cited, and a person is introduced by the person looks, not cited here. A
+built-in short form is shown only for that body as written ("a geological
+survey", "the state Department of Agriculture" and "the Geological Survey of
+India" are not the USGS or the USDA).
 
 find() is what treatments.py calls per line (behind config.SOURCE_TAGS): pure
 functions, no network, deterministic. settle() runs once the pictures are final
@@ -118,13 +122,32 @@ Conservancy""".split())
 _CAP = r"(?:U\.S\.|[A-Z][A-Za-z0-9&'’-]*)"
 _PHRASE = re.compile(_CAP + r"(?:\s+(?:(?:of|for|on)\s+(?:the\s+)?|and\s+|&\s+)?" + _CAP + r"){1,7}")
 _US = r"(?:(?:(?i:United[\s-]+States)|U\.?\s?S\.?)\s+)?"
+_SMALL = frozenset(("of", "and", "for", "the", "on", "in", "&"))
+# A lower-case word before a federal or world body's name that makes it some other body: "the state Department of
+# Agriculture" is not the USDA, "the county Forest Service" not the U.S. Forest Service.
+_LOCAL = frozenset("state state's states' local county city provincial regional tribal municipal territorial".split())
 
 
 def _spelled(name: str) -> str:
+    """
+    A spelled-out name as it is written: its capitals kept (or the whole name in capitals), only the small words
+    in any case. "Bureau of Reclamation" or "BUREAU OF RECLAMATION" - never "a geological survey" (a survey, not
+    the USGS) or "the state forest service" (not the U.S. Forest Service).
+    """
     words = name.split()
     if len(words) == 1:
         return re.escape(name)                      # one word: only as written
-    return "(?i:" + r"[\s-]+".join(re.escape(w) for w in words) + ")"
+    return r"[\s-]+".join("(?i:" + re.escape(w) + ")" if w.lower() in _SMALL
+                          else "(?:" + re.escape(w) + "|" + re.escape(w.upper()) + ")" for w in words)
+
+
+def _titled(name: str) -> str:
+    """ "bureau of reclamation" -> "Bureau of Reclamation" (a brief's own spelling of a built-in name)."""
+    return " ".join(w if w.lower() in _SMALL or w[:1].isupper() else w[:1].upper() + w[1:] for w in name.split())
+
+
+def _this_year() -> int:
+    return time.gmtime().tm_year
 
 
 def _acronym(a: str) -> str:
@@ -199,6 +222,10 @@ _R_DOC_NOUN = re.compile(r"^" + _POSS + r"\s+(?:(?P<y2>" + _Y + r")\s+)?(?:repor
                          r"audit|paper|review|outlook|estimate|forecast|bulletin|briefing|memo|investigation|"
                          r"projection|dataset|database)\b", re.I)
 _R_IN_YEAR = re.compile(r"^\s+in\s+(" + _Y + r")\b", re.I)
+# The name is the object of the line, not its speaker: "a lawsuit against the EPA found ...", "the deal with the
+# Bureau of Reclamation says ..." (the people who speak for a body are read by _L_PEOPLE first).
+_NOT_SUBJECT = re.compile(r"\b(?:against|about|on|over|into|onto|towards?|than|like|unlike|despite|without|under|"
+                          r"between|behind|near|beyond|upon|versus|vs\.?|with)\s+(?:the\s+)?$", re.I)
 _ENDS_SENTENCE = re.compile(r"[.!?…][\"'”’)\]]*\s*$")
 _KEY_SKIP = {"the", "us", "united", "states", "of", "for", "and", "on"}
 
@@ -232,7 +259,7 @@ def brief_sources(brief: Optional[dict]) -> List[dict]:
         name = re.sub(r"^the\s+", "", name, flags=re.I)
         if len(name) < 2 or len(name) > 80:
             continue
-        known = next((kid for kid, _tag, rx in _KNOWN_RX if rx.fullmatch(name)), "")
+        known = next((kid for kid, _tag, rx in _KNOWN_RX if rx.fullmatch(name) or rx.fullmatch(_titled(name))), "")
         tag = next((t for kid, t, _rx in _KNOWN_RX if kid == known), "") or (short or name).upper()
         if len(tag) > MAX_NAME:
             continue
@@ -255,6 +282,27 @@ def _before_is_name(text: str, start: int) -> bool:
     return word[:1].isupper() and word.rstrip(".") not in _LEAD and word not in ("U.S.", "US")
 
 
+def _other_body(text: str, start: int, end: int) -> bool:
+    """
+    The built-in name at text[start:end] is part of some other body's name, so its tag would name the wrong one:
+    a capitalised word before it ("British Geological Survey"), a local word before it ("the state Department of
+    Agriculture"), or "of <Name>" after it ("the Geological Survey of India").
+    """
+    if _before_is_name(text, start):
+        return True
+    m = re.search(r"([A-Za-z][A-Za-z'’]*)\s+$", text[:start])
+    if m and m.group(1).lower().replace("’", "'") in _LOCAL:
+        return True
+    return re.match(r"\s+of\s+(?:the\s+)?[A-Z]", text[end:]) is not None
+
+
+def _who_cited(text: str, start: int, end: int) -> bool:
+    """ "WHO" is the World Health Organization only as one ("the WHO", "according to WHO", "WHO's report") - never
+    the word ("WHO decided this?")."""
+    return bool(re.search(r"(?:\bthe|\baccording\s+to|\bciting|\bby|\bfrom)\s+$", text[:start], re.I)
+                or text[end:end + 2] in ("'s", "’s"))
+
+
 def _candidates(text: str, listed: Optional[List[dict]] = None) -> List[dict]:
     """Every name in the text that could be a source, in the order said: {"start", "end", "id", "tag", "kind"}."""
     found: List[dict] = []
@@ -265,7 +313,9 @@ def _candidates(text: str, listed: Optional[List[dict]] = None) -> List[dict]:
                               "listed": True})
     for kid, tag, rx in _KNOWN_RX:
         for m in rx.finditer(text):
-            if not _before_is_name(text, m.start()):
+            if kid == "who" and m.group(0) == "WHO" and not _who_cited(text, m.start(), m.end()):
+                continue
+            if not _other_body(text, m.start(), m.end()):
                 found.append({"start": m.start(), "end": m.end(), "id": kid, "tag": tag, "kind": "org"})
     for kid, tag, rx in _JOURNAL_RX:
         for m in rx.finditer(text):
@@ -300,6 +350,11 @@ def _generic(text: str, start: int, end: int) -> Optional[dict]:
         return None
     if all(w == "Administration" for w in org) and len(caps) < 3:
         return None                         # "the Biden Administration" is not a publication
+    first_org = next(i for i, (w, _a, _b) in enumerate(words) if re.sub(r"(?:'s|’s)$", "", w) in _ORG_WORDS)
+    if any(w.lower() in ("of", "for") for w, _a, _b in words[:first_org]):
+        # "Brad Udall of Colorado State University": a person and where they work. The person looks introduce
+        # people; a source tag never shows a person's name.
+        return None
     a, b = words[0][1], words[-1][2]
     name = re.sub(r"(?:'s|’s)$", "", re.sub(r"\s+", " ", text[a:b]))
     if text[a:b].endswith(("'s", "’s")):
@@ -346,7 +401,7 @@ def _cited(text: str, c: dict) -> Optional[Tuple[str, Optional[int]]]:
         return "a-report", _year(m.group("y0"), m.group("y1"), r.group("y2"))
     if _L_PEOPLE.search(left) and _R_SHOW.match(right):
         return "people-at", None
-    if _R_VERB.match(right):
+    if _R_VERB.match(right) and not _NOT_SUBJECT.search(left):
         return "says", None
     return None
 
@@ -381,14 +436,16 @@ def find(text: str, after: str = "", listed: Optional[List[dict]] = None) -> Opt
         if got is None:
             continue
         how, year = got
+        if year is not None and not 1900 <= year <= _this_year():
+            year = None                     # a year to come ("2050 projections") is not when the source said it
         by_list = False
-        if year is None:
+        if year is None and not re.search(r"(?<!\d)" + _Y + r"(?!\d)", line):
+            # The brief's year for the source - only on a line that says no year of its own: "in 1983 the Bureau
+            # warned ..." is not the Bureau's 2026 report.
             for entry in listed or []:
-                if entry["id"] == c["id"] and entry.get("year"):
+                if entry["id"] == c["id"] and entry.get("year") and 1900 <= int(entry["year"]) <= _this_year():
                     year, by_list = int(entry["year"]), True
                     break
-        if year is not None and not 1900 <= year <= 2100:
-            year = None
         key, at = _key(whole, c["start"], min(c["end"], limit))
         return {"id": c["id"], "name": c["tag"], "year": year, "key": key, "start": at,
                 "said": re.sub(r"\s+", " ", whole[c["start"]:c["end"]]), "how": how,
