@@ -45,6 +45,33 @@ class BrokerUploadRetries(unittest.TestCase):
         slept.assert_not_called()
 
 
+class RenderChunkUploadRetries(unittest.TestCase):
+    """2026-10-04: four render_chunk children rendered their frames, then lost
+    them to one 60 s broker read timeout each - run_chunk passed no deadline,
+    so the upload was never retried and the parent re-rendered every chunk."""
+
+    def test_a_stalled_broker_is_retried_instead_of_losing_the_chunk(self):
+        import requests
+        calls = {"n": 0}
+
+        def broker(payload, timeout=60):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise requests.exceptions.ReadTimeout("Read timed out. (read timeout=60)")
+            return {"ok": True, "uploadUrl": "https://up", "readUrl": "https://read"}
+
+        with tempfile.TemporaryDirectory() as work, \
+                mock.patch.object(storage, "broker_enabled", return_value=True), \
+                mock.patch.object(storage, "_broker", side_effect=broker), \
+                mock.patch.object(storage, "upload_to_signed_url", return_value=10), \
+                mock.patch.object(storage.time, "sleep"):
+            out = fanout.run_chunk({"frames": [0, 299], "chunk": 3, "project_id": "p",
+                                    "parent_job_id": "j", "deadline_at": time.time() + 900},
+                                   work, lambda *a: open(a[1], "wb").write(b"x"))
+        self.assertEqual(out["url"], "https://read")
+        self.assertEqual(calls["n"], 4)                  # two timeouts, then upload + read
+
+
 class LostPartClipsComeBack(unittest.TestCase):
     def tearDown(self):
         from src import ytdlp

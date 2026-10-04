@@ -97,7 +97,8 @@ def parallel_storage_enabled() -> bool:
 
 
 def _broker(payload: dict, timeout: int = 60) -> dict:
-    r = requests.post(config.STORAGE_BROKER_URL, json=payload, timeout=timeout)
+    # Connect fails fast; a stalled broker should cost a retry, not a minute.
+    r = requests.post(config.STORAGE_BROKER_URL, json=payload, timeout=(10, timeout))
     try:
         body = r.json()
     except ValueError:
@@ -186,8 +187,11 @@ def broker_upload(local_path: str, bucket: str, object_path: str, project_id: st
         return signed_url(ref["path"], bucket=bucket, expires_in=read_ttl)
 
     def once() -> str:
-        upload_to_signed_url(local_path, _broker({**ref, "action": "upload"})["uploadUrl"])
-        return _broker({**ref, "action": "read", "expires_in": read_ttl})["readUrl"]
+        # Signing a URL is quick; with a deadline, a hung broker call is cut
+        # short so the retry loop gets more than one attempt in.
+        t = 30 if deadline else 60
+        upload_to_signed_url(local_path, _broker({**ref, "action": "upload"}, timeout=t)["uploadUrl"])
+        return _broker({**ref, "action": "read", "expires_in": read_ttl}, timeout=t)["readUrl"]
     return _retrying(once, deadline, f"upload of {os.path.basename(object_path)}")
 
 

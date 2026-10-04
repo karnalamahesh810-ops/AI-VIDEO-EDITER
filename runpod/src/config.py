@@ -454,6 +454,9 @@ FANOUT_REFILL_MIN = int(os.getenv("FANOUT_REFILL_MIN", "3"))
 # its own time box past the sourcing deadline. The Glen Canyon job lost 148
 # of 167 found scenes here while the app's database was restarting.
 PART_UPLOAD_GRACE_SECONDS = float(os.getenv("PART_UPLOAD_GRACE_SECONDS", "30"))
+# How long a render_chunk child keeps retrying its upload when the parent did
+# not say how long it will wait (deadline_at in the payload).
+CHUNK_UPLOAD_GRACE_SECONDS = float(os.getenv("CHUNK_UPLOAD_GRACE_SECONDS", "300"))
 REFETCH_SECONDS = float(os.getenv("REFETCH_SECONDS", "300"))
 REFETCH_PARALLEL = int(os.getenv("REFETCH_PARALLEL", "12"))
 # The last pass over scenes still empty after sourcing, before any shot is
