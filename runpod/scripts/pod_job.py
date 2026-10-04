@@ -252,11 +252,19 @@ def main() -> None:
             print("[pod] could not save the finished timeline to the app (the video itself is next)", flush=True)
     ok = write(fields, 600) if pid else True
     succeeded = fields["status"] == "done"
+    safe = succeeded and ok
+    if str(inp.get("action") or "").lower() == "batch" and isinstance(out.get("total"), int):
+        # A batch (src/batch.py) wrote each video's own row itself, and every video it made is in R2 already:
+        # what this pod keeps is safe once every finished video's row is saved. A video of the batch that
+        # failed keeps nothing up (nothing of it to keep); the pod is deleted only when every video is done.
+        ok = all(d.get("saved") for d in out.get("done") or [] if isinstance(d, dict) and d.get("project"))
+        succeeded = out.get("ok") is True
+        safe = ok
     print(f"[pod] job finished in {int(time.time() - started)}s: {fields.get('status')} "
           f"(project updated: {ok}) {str(out.get('video_url') or out.get('error') or '')[:160]}", flush=True)
     if fetch:
         fetch.set_job("done" if succeeded and ok else "failed", "" if succeeded else fields.get("error_message", ""))
-    decision = after_job(succeeded and ok, kept, fetch.laptop_has_it if fetch else None,
+    decision = after_job(safe, kept, fetch.laptop_has_it if fetch else None,
                          float(os.environ.get("POD_FETCH_WAIT_SECONDS", "1800")))
     if decision == "stay":
         cap = float(os.environ.get("POD_STAY_MAX_SECONDS", "0") or 0)

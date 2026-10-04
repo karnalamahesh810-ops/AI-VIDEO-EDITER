@@ -1,0 +1,23 @@
+[
+ {
+  "id": "src-tag",
+  "name": "Source Tag",
+  "category": "CALLOUTS",
+  "description": "LOW CORNER. The citation for a fact whose source the narration names: one thin rule draws out from the corner, then 'SOURCE: USBR, 2024' rises under it in small tracked caps (label = 'Source'; text = the source as said, or the short form viewers know; subtitle = the year, only when the narration says it). No box, no band: white on the picture with a soft shadow. It holds still and leaves in its last 9 frames. align left / right picks the corner; with captions on it sits clear above them. Silent. Placed only by the planner's source pass (src/sources.py, config.SOURCE_TAGS): a source is never invented, a figure with no named source gets no tag.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": ["text", "subtitle", "label", "align"],
+  "cues": ["source"],
+  "duration": 3.0,
+  "sfx": "none",
+  "sfx_at": 12,
+  "types": false,
+  "sounds": [],
+  "sample": {"text": "USBR", "subtitle": "2024", "label": "Source"},
+  "family": "src",
+  "file": "LibSourceTag",
+  "exit": "none",
+  "auto_pick": false
+ }
+]

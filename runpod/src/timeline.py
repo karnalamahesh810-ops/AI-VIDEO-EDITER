@@ -1596,6 +1596,8 @@ def _build(segments: List[Segment], shots: List[dict],
     # The looks' own sounds (remotion LookSounds): set by the planner that
     # knows them; without it the rows above carry every sound, as before.
     look_sounds: Optional[Dict[str, Any]] = None
+    # The source tags the planner placed (src/sources.py, config.SOURCE_TAGS), for meta: which words named each.
+    source_tags: List[dict] = []
     if pack:
         title_card = [o for o in overlays if o.get("type") == "title" and inp.get("title_overlay")
                       and o.get("text") == str(inp["title_overlay"])[:240]]
@@ -1612,6 +1614,7 @@ def _build(segments: List[Segment], shots: List[dict],
         music = planned["music"]
         treatment_counts = planned["counts"]
         look_sounds = planned.get("lookSounds")
+        source_tags = list(planned.get("sources") or [])
     # Every image look gets a real picture for every slot (the scene's own,
     # then nearby ones of the same subject, then the clip library), or a look
     # that needs fewer, or none (the owner's Lake Powell video: empty slots).
@@ -1731,6 +1734,8 @@ def _build(segments: List[Segment], shots: List[dict],
             "voiceLufsSource": voice_how,
             "warnings": warnings,
             **({"hookBoost": hook_boost} if hook_boost else {}),
+            # On-screen sources: each tag with the narration's words that named its source (never invented).
+            **({"sourceTags": {"placed": source_tags}} if source_tags else {}),
         },
     }
 

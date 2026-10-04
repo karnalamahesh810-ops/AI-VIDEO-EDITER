@@ -47,6 +47,7 @@ import { LOOKS as L_LibDocsPro } from "./LibDocsPro";
 import { LOOKS as L_LibNumbersPro } from "./LibNumbersPro";
 import { LOOKS as L_LibTextPro } from "./LibTextPro";
 import { LOOKS as L_LibGeoMaps } from "./LibGeoMaps";
+import { LOOKS as L_LibSourceTag } from "./LibSourceTag";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -126,6 +127,9 @@ export const LIBRARY: Record<string, Look> = {
   // Auto maps (LibGeoMaps): a named river, canal, lake, reservoir or dam on real geography (src/automaps.py).
   // Registered autoPick false: only the planner path behind config.AUTO_MAPS places them.
   ...pick(L_LibGeoMaps, ["geo-river-trace", "geo-reservoir"]),
+  // The source tag (LibSourceTag): "SOURCE: USBR, 2024" in a low corner, for a fact whose source the narration
+  // names (src/sources.py). Registered autoPick false: only the planner path behind config.SOURCE_TAGS places it.
+  ...pick(L_LibSourceTag, ["src-tag"]),
   // Pro documents and kinetic text (LibDocsPro): real type on real-looking paper, a camera that finds the line.
   ...pick(L_LibDocsPro, ["kx-article-zoom", "kx-official-memo", "kx-report-cover", "kx-handwritten-note", "kx-keyword-stack",
     "kx-quote-portrait", "kx-alert-strip", "kx-definition", "kx-letter-signature", "kx-social-post"]),

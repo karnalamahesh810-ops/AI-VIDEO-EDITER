@@ -16,6 +16,13 @@ import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 /** Fraction of the frame height reserved at the bottom for captions. */
 export const CAPTION_SAFE_ZONE = 0.26;
 
+/**
+ * Whether the burned-in captions are on (Main.tsx sets it round the overlay
+ * track): a look that lives in the bottom strip - the source tag - moves
+ * above the captions instead of sitting in them. False outside Main.
+ */
+export const CaptionsOn = React.createContext(false);
+
 /** Panel fill used by every overlay that needs a readable surface. */
 export const PANEL_BG = "rgba(10,10,12,0.82)";
 export const PANEL_SHADOW = "0 18px 50px rgba(0,0,0,0.55)";

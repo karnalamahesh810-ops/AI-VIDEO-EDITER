@@ -76,6 +76,40 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class Batch(unittest.TestCase):
+    """A batch on a pod (src/batch.py writes each video's row itself): the pod never stays up for a video of it
+    that failed, and is deleted only when every video is done and saved."""
+
+    def _main(self, out):
+        import tempfile
+        with tempfile.TemporaryDirectory() as keep:
+            open(os.path.join(keep, "final.mp4"), "wb").close()       # the last video's copy, kept on the pod
+            with mock.patch.object(pod_job, "load_job", return_value={"id": "pod-x", "input": {
+                        "action": "batch", "jobs": [{"project_id": "p1"}, {"project_id": "p2"}]}}), \
+                    mock.patch.object(pod_job.handler, "handler", return_value=out) as run, \
+                    mock.patch.object(pod_job, "save_adhoc_result", return_value=""), \
+                    mock.patch.object(pod_job, "_cancel_chunks"), \
+                    mock.patch.object(pod_job, "stop_this_pod") as stop, \
+                    mock.patch.object(pod_job.storage, "_broker_patch", side_effect=AssertionError("wrote a row")), \
+                    mock.patch.object(pod_job.config, "RENDER_KEEP_DIR", keep), \
+                    mock.patch.object(pod_job.time, "sleep", side_effect=AssertionError("stayed up")), \
+                    mock.patch.dict(os.environ, {"POD_MAX_SECONDS": "0", "POD_EXIT": "terminate",
+                                                 "POD_FETCH_TOKEN": ""}, clear=False):
+                pod_job.main()
+        run.assert_called_once()
+        return stop
+
+    def test_a_failed_video_of_a_batch_keeps_no_pod_up(self):
+        stop = self._main({"ok": False, "action": "batch", "total": 2, "done": [{"project": "p1", "saved": True}],
+                           "failed": [{"project": "p2", "error": "no footage", "saved": True}]})
+        stop.assert_called_once_with(terminate=False)               # stopped (its log kept), never left running
+
+    def test_a_batch_with_every_video_done_and_saved_deletes_the_pod(self):
+        stop = self._main({"ok": True, "action": "batch", "total": 2, "failed": [],
+                           "done": [{"project": "p1", "saved": True}, {"project": "p2", "saved": True}]})
+        stop.assert_called_once_with(terminate=True)
+
+
 class Safety(unittest.TestCase):
     def test_a_job_that_cannot_load_stops_the_pod(self):
         with mock.patch.object(pod_job, "load_job", side_effect=RuntimeError("no job")), \

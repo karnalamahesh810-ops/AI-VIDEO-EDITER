@@ -429,6 +429,20 @@ PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
 # turn. With 300 s a scene every one of them starts within the box. 0 = off.
 SCENE_SECONDS_MIN = float(os.getenv("SCENE_SECONDS_MIN", "120"))
 SCENE_SECONDS_MAX = float(os.getenv("SCENE_SECONDS_MAX", "300"))
+# Batch mode (src/batch.py, the handler's action "batch"): several videos queued as one job run one after
+# another on the same machine. This is the most a batch may run side by side; a job's "max_parallel" can only
+# ask for fewer. 1 = strictly one at a time - and the only value this worker honours today: a build keeps its
+# state module-wide (config overrides, the cost ledger, the event log, the storage job id), so two builds in
+# one process would write into each other's project.
+BATCH_MAX_PARALLEL = int(os.getenv("BATCH_MAX_PARALLEL", "1"))
+# The longest a batch may run: RunPod stops a job at its endpoint's execution timeout (3 h on tuxcziwby5plod) and a
+# stopped job writes nothing more, so its unfinished projects would sit at "rendering". A batch starts no video that
+# would not fit (BATCH_VIDEO_SECONDS, or the longest of the batch so far) and, BATCH_LIMIT_MARGIN_SECONDS before the
+# limit, writes the video still being made and every one not started as failed itself. A job's own
+# "time_limit_seconds" replaces it (a batch queued with a longer RunPod policy, or on a pod); 0 = no limit.
+BATCH_TIME_LIMIT_SECONDS = float(os.getenv("BATCH_TIME_LIMIT_SECONDS", "10800"))
+BATCH_VIDEO_SECONDS = float(os.getenv("BATCH_VIDEO_SECONDS", "2700"))
+BATCH_LIMIT_MARGIN_SECONDS = float(os.getenv("BATCH_LIMIT_MARGIN_SECONDS", "300"))
 # Split one long video's sourcing across workers (src/fanout.py). RunPod
 # injects RUNPOD_ENDPOINT_ID into its workers; the API key is set on the
 # template (FANOUT_API_KEY) so a worker can queue parts on its own endpoint.
@@ -764,6 +778,17 @@ REFRAME_ENABLED = _flag("REFRAME_ENABLED", False)
 AUTO_MAPS = _flag("AUTO_MAPS", False)
 # Seconds an auto map keeps from any other map before it, so maps never crowd the cut.
 AUTO_MAP_GAP = float(os.getenv("AUTO_MAP_GAP", "15"))
+# On-screen sources (src/sources.py): a line that states a fact and NAMES where it comes from ("according to the
+# Bureau of Reclamation", "USGS data shows", "a 2024 NOAA report found") gets a small citation tag in a low corner
+# for about three seconds: "SOURCE: USBR, 2024". Only what the narration itself says (or the brief's own sources
+# list) - never a guessed source, never a guessed year; a figure with no named source gets no tag. Off by default
+# until the owner has approved the look from its stills; a job turns it on with config {"SOURCE_TAGS": true}.
+SOURCE_TAGS = _flag("SOURCE_TAGS", False)
+# At most one source tag per SOURCE_TAG_GAP seconds, none in the first SOURCE_TAG_FIRST_SECONDS of the video,
+# each on screen about SOURCE_TAG_SECONDS.
+SOURCE_TAG_GAP = float(os.getenv("SOURCE_TAG_GAP", "30"))
+SOURCE_TAG_FIRST_SECONDS = float(os.getenv("SOURCE_TAG_FIRST_SECONDS", "5"))
+SOURCE_TAG_SECONDS = float(os.getenv("SOURCE_TAG_SECONDS", "3"))
 # Footage moves and still aiming separately (the news styles keep their
 # clips as shot: src/styles.py).
 REFRAME_CLIPS = _flag("REFRAME_CLIPS", True)

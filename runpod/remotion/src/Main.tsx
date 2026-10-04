@@ -4,6 +4,7 @@ import { SceneClip } from "./components/SceneClip";
 import { BlurBackdrop } from "./components/AnimationScene";
 import { KScale } from "./components/pro/ProGraphics";
 import { Captions } from "./components/Captions";
+import { CaptionsOn } from "./components/layout";
 import { MotionWrap } from "./components/MotionWrap";
 import { resolveOverlay, templateFor } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
@@ -475,7 +476,9 @@ const Body: React.FC<TimelineProps> = (props) => {
           </Sequence>
         ))}
 
-      {/* Overlay track — graphics sit on top of everything visual */}
+      {/* Overlay track — graphics sit on top of everything visual (a look in the
+          bottom strip, the source tag, reads CaptionsOn to stay clear of the captions) */}
+      <CaptionsOn.Provider value={Boolean(captions.enabled)}>
       {showOverlays && (overlays || []).map((ov, i) => (
         <Sequence
           key={`ov-${i}`}
@@ -486,6 +489,7 @@ const Body: React.FC<TimelineProps> = (props) => {
           {overlayNodes[i]}
         </Sequence>
       ))}
+      </CaptionsOn.Provider>
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
       {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
