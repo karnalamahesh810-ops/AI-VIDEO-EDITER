@@ -83,6 +83,8 @@ class Speak(Base):
                          ({"input": "Hi.", "response_format": "exe"}, "not supported"),
                          ({"input": "Hi.", "voice": "zz_nobody"}, "unknown voice"),
                          ({"input": "Hi.", "voice": "../../etc/passwd"}, "unknown voice"),
+                         ({"input": "Hi.", "voice": "af_heart,af_bella,am_michael,am_onyx,bm_george"}, "at most 4"),
+                         ({"input": "Hi.", "voice": "af_heart," * 5000}, "blend up to 4"),
                          ({"input": "x" * (engines.MAX_INPUT_CHARS + 1)}, "one request takes up to"),
                          ({"input": "Hi.", "reference_audio": "https://x.example/me.wav"}, "needs model 'chatterbox'"),
                          ("not a dict", "JSON object")):
@@ -256,6 +258,132 @@ class Encoding(unittest.TestCase):
         self.assertIn("only 1.0 s", str(too_short.exception))
         self.assertIn("cannot be read as audio", str(junk.exception))
 
+    def test_a_sample_that_is_a_list_of_other_files_is_never_followed(self):
+        """An ffconcat "sample" naming a file on this machine: ffmpeg would read that file as the voice."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        secret, _ = engines.encode(tone(6.0), 24000, "wav")
+        with open(os.path.join(d, "other-customer.wav"), "wb") as f:
+            f.write(secret)
+        listing = ("ffconcat version 1.0\n" + "# padding\n" * 120 + "file 'other-customer.wav'\n").encode()
+        with mock.patch.object(engines, "REFERENCE_DIR", d):
+            with self.assertRaises(engines.Refused) as ctx:
+                engines.reference_file(base64.b64encode(listing).decode())
+        self.assertIn("cannot be read as audio", str(ctx.exception))
+        self.assertEqual(os.listdir(d), ["other-customer.wav"])
+
+    def test_the_parts_of_one_narration_bring_the_same_new_sample_at_once(self):
+        import threading
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        sample, _ = engines.encode(tone(6.0, 44100), 44100, "mp3")
+        value = "data:audio/mp3;base64," + base64.b64encode(sample).decode()
+        start, got, failed = threading.Barrier(4), [], []
+
+        def part():
+            start.wait()
+            try:
+                got.append(engines.reference_file(value))
+            except Exception as e:  # noqa: BLE001 - collected for the assertion below
+                failed.append(e)
+        with mock.patch.object(engines, "REFERENCE_DIR", d):
+            threads = [threading.Thread(target=part) for _ in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(60)
+        self.assertEqual(failed, [])
+        self.assertEqual(len(set(got)), 1)
+        self.assertEqual(os.listdir(d), [os.path.basename(got[0])])            # no temp file of any part left
+        with wave.open(got[0], "rb") as w:
+            self.assertAlmostEqual(w.getnframes() / w.getframerate(), 6.0, delta=0.2)
+
+
+class FakeGet:
+    """What requests.get(..., stream=True) gives back, as much as engines._fetch reads."""
+
+    def __init__(self, status=200, body=b"", location=""):
+        self.status_code, self.body = status, body
+        self.headers = {"location": location} if location else {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def iter_content(self, chunk_size=1):
+        for i in range(0, len(self.body), chunk_size):
+            yield self.body[i:i + chunk_size]
+
+
+def resolves_to(*addresses):
+    """socket.getaddrinfo's answer for a host with these addresses."""
+    import socket
+    return lambda host, port, *a, **kw: [(socket.AF_INET6 if ":" in ip else socket.AF_INET, socket.SOCK_STREAM, 6,
+                                          "", (ip, port)) for ip in addresses]
+
+
+@unittest.skipUnless(READY, "needs the tts_server folder")
+class SampleLinks(unittest.TestCase):
+    """A voice sample by link: the endpoint never fetches from this machine or a private network."""
+
+    def test_a_link_to_this_machine_or_a_private_network_is_refused_unfetched(self):
+        import requests
+        for ip in ("127.0.0.1", "10.0.0.5", "192.168.1.20", "169.254.169.254", "100.64.0.1", "::1",
+                   "::ffff:127.0.0.1", "fd00::1"):
+            with mock.patch.object(engines.socket, "getaddrinfo", side_effect=resolves_to("93.184.215.14", ip)), \
+                    mock.patch.object(requests, "get") as get:
+                with self.assertRaises(engines.Refused, msg=ip) as ctx:
+                    engines._fetch("https://samples.example/me.wav")
+            get.assert_not_called()
+            self.assertIn("public internet address", str(ctx.exception))
+        with self.assertRaises(engines.Refused):
+            engines._fetch("ftp://samples.example/me.wav")
+
+    def test_every_redirect_is_checked_again(self):
+        import requests
+        hosts = {"samples.example": "93.184.215.14", "inside.example": "10.1.2.3"}
+
+        def getaddrinfo(host, port, *a, **kw):
+            return resolves_to(hosts[host])(host, port)
+        with mock.patch.object(engines.socket, "getaddrinfo", side_effect=getaddrinfo), \
+                mock.patch.object(requests, "get", side_effect=[
+                    FakeGet(302, location="http://inside.example/latest/meta-data")]) as get:
+            with self.assertRaises(engines.Refused) as ctx:
+                engines._fetch("https://samples.example/me.wav")
+        self.assertEqual(get.call_count, 1)
+        self.assertIs(get.call_args.kwargs["allow_redirects"], False)
+        self.assertIn("public internet address", str(ctx.exception))
+        with mock.patch.object(engines.socket, "getaddrinfo", side_effect=getaddrinfo), \
+                mock.patch.object(requests, "get", side_effect=[FakeGet(301, location="/v2/me.wav"),
+                                                                FakeGet(200, body=b"RIFF" + b"\0" * 2000)]) as get:
+            self.assertEqual(len(engines._fetch("https://samples.example/me.wav")), 2004)
+        self.assertEqual(get.call_args.args[0], "https://samples.example/v2/me.wav")
+        with mock.patch.object(engines.socket, "getaddrinfo", side_effect=getaddrinfo), \
+                mock.patch.object(requests, "get", side_effect=[FakeGet(302, location="/again")] * 9):
+            with self.assertRaises(engines.Refused) as ctx:
+                engines._fetch("https://samples.example/me.wav")
+        self.assertIn("redirects more than", str(ctx.exception))
+
+    def test_a_busy_host_is_worth_another_try_a_missing_sample_is_not(self):
+        import requests
+        with mock.patch.object(engines.socket, "getaddrinfo", side_effect=resolves_to("93.184.215.14")):
+            with mock.patch.object(requests, "get", return_value=FakeGet(503)):
+                with self.assertRaises(RuntimeError) as busy:
+                    engines._fetch("https://samples.example/me.wav")
+            with mock.patch.object(requests, "get", return_value=FakeGet(404)):
+                with self.assertRaises(engines.Refused) as missing:
+                    engines._fetch("https://samples.example/me.wav")
+            with mock.patch.object(engines, "REFERENCE_MAX_BYTES", 1000), \
+                    mock.patch.object(requests, "get", return_value=FakeGet(200, body=b"x" * 5000)):
+                with self.assertRaises(engines.Refused) as large:
+                    engines._fetch("https://samples.example/me.wav")
+        self.assertNotIsInstance(busy.exception, engines.Refused)
+        self.assertIn("HTTP 503", str(busy.exception))
+        self.assertIn("HTTP 404", str(missing.exception))
+        self.assertIn("too large", str(large.exception))
+
 
 class QueueHandler(Base):
     def test_the_audio_goes_back_base64_with_what_the_worker_counts(self):
@@ -304,6 +432,15 @@ class HttpServer(Base):
         self.assertEqual((r.status_code, r.json()["error"]["type"]), (500, "server_error"))
         r = self.client.post("/v1/audio/speech", content=b"not json", headers={"Content-Type": "application/json"})
         self.assertEqual(r.status_code, 400)
+
+    def test_a_body_over_the_limit_is_refused_unread(self):
+        with mock.patch.object(server, "MAX_BODY_BYTES", 2000):
+            r = self.client.post("/v1/audio/speech", json={"input": "Hi.", "reference_audio": "x" * 5000})
+            self.assertEqual((r.status_code, r.json()["error"]["type"]), (413, "invalid_request_error"))
+            self.assertEqual(self.said, [])                               # never reached the model
+            r = self.client.post("/v1/audio/speech", json={"input": "Lake Mead is falling.", "response_format": "pcm"})
+            self.assertEqual(r.status_code, 200)                         # a normal part is far under it
+        self.assertGreaterEqual(server.MAX_BODY_BYTES, engines.REFERENCE_MAX_BYTES * 4 // 3)   # a whole sample fits
 
     def test_with_a_server_key_only_its_bearer_gets_speech(self):
         with mock.patch.dict(os.environ, {"TTS_SERVER_KEY": "s3cret"}):

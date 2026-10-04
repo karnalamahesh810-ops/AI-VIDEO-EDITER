@@ -24,13 +24,16 @@ import base64
 import glob
 import hashlib
 import io
+import ipaddress
 import json
 import os
 import re
+import socket
 import subprocess
 import tempfile
 import threading
 import time
+import urllib.parse
 import wave
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -50,6 +53,13 @@ REFERENCE_MAX_BYTES = 30 * 1024 * 1024
 REFERENCE_MIN_SECONDS = 3.0
 REFERENCE_KEEP_SECONDS = 30
 REFERENCE_DIR = os.getenv("TTS_REFERENCE_DIR", os.path.join(tempfile.gettempdir(), "tts_refs"))
+# A voice sample is read as a plain audio file and nothing else: ffmpeg would
+# otherwise follow an ffconcat list or a playlist "sample" to other files on
+# this machine (or other addresses). Demuxer names, as `ffmpeg -demuxers` prints them.
+SAMPLE_FORMATS = "wav,w64,mp3,flac,ogg,mov,matroska,aac,aiff,caf,asf"
+REFERENCE_MAX_REDIRECTS = 3
+# Kokoro blends at most this many voices ("af_heart,af_bella"); a longer list is refused.
+MAX_BLEND = 4
 
 # OpenAI's voice names, for clients that only know those.
 OPENAI_VOICES = {"alloy": "af_alloy", "echo": "am_echo", "fable": "bm_fable", "onyx": "am_onyx",
@@ -114,9 +124,13 @@ class Kokoro:
         return self.pipelines[lang]
 
     def resolve(self, voice: Optional[str]) -> List[str]:
-        """The voice(s) a request means: one name, or several joined by "," for an even blend."""
-        names = [OPENAI_VOICES.get(v, v) for v in
-                 (p.strip().lower() for p in str(voice or DEFAULT_VOICE).split(",")) if v]
+        """The voice(s) a request means: one name, or up to MAX_BLEND joined by "," for an even blend."""
+        raw = str(voice or DEFAULT_VOICE)
+        if len(raw) > 40 * MAX_BLEND:
+            raise Refused(f"voice is {len(raw)} characters; name one voice, or blend up to {MAX_BLEND}")
+        names = [OPENAI_VOICES.get(v, v) for v in (p.strip().lower() for p in raw.split(",")) if v]
+        if len(names) > MAX_BLEND:
+            raise Refused(f"{len(names)} voices to blend; at most {MAX_BLEND}")
         names = names or [DEFAULT_VOICE]
         have = set(self.voices())
         for n in names:
@@ -259,21 +273,62 @@ CHATTERBOX = Chatterbox()
 # The voice sample
 # --------------------------------------------------------------------------- #
 
-def _fetch(url: str) -> bytes:
-    import requests
+def _public_address(url: str) -> bool:
+    """
+    The link's host is on the public internet: every address it resolves to
+    is global - never this machine, a private network or a cloud's metadata
+    service. A name that does not resolve right now is a RuntimeError (worth
+    another try), not a refusal.
+    """
     try:
-        with requests.get(url, stream=True, timeout=(10, 60)) as r:
-            if r.status_code >= 400:
-                raise Refused(f"the voice sample could not be downloaded (HTTP {r.status_code})")
-            data = b""
-            for block in r.iter_content(chunk_size=1 << 20):
-                data += block
-                if len(data) > REFERENCE_MAX_BYTES:
-                    raise Refused("the voice sample is too large (30 MB at most; 10-30 s is all that is used)")
-            return data
-    except requests.RequestException as e:
-        # The link may be down for a moment: a failure worth another try, not a refusal.
-        raise RuntimeError(f"the voice sample could not be downloaded ({type(e).__name__})") from None
+        parts = urllib.parse.urlsplit(url)
+        host, port = parts.hostname, parts.port
+    except ValueError:
+        return False
+    if parts.scheme not in ("http", "https") or not host:
+        return False
+    try:
+        infos = socket.getaddrinfo(host, port or (443 if parts.scheme == "https" else 80), type=socket.SOCK_STREAM)
+    except (socket.gaierror, UnicodeError) as e:
+        raise RuntimeError(f"the voice sample's host cannot be resolved ({type(e).__name__})") from None
+    for info in infos:
+        ip = ipaddress.ip_address(str(info[4][0]).split("%", 1)[0])
+        if ip.version == 6 and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if not ip.is_global:
+            return False
+    return bool(infos)
+
+
+def _fetch(url: str) -> bytes:
+    """
+    A voice sample by link: public addresses only, every redirect checked
+    again (at most REFERENCE_MAX_REDIRECTS), at most REFERENCE_MAX_BYTES read.
+    """
+    import requests
+    for _hop in range(REFERENCE_MAX_REDIRECTS + 1):
+        if not _public_address(url):
+            raise Refused("the voice sample link must point at a public internet address")
+        try:
+            with requests.get(url, stream=True, timeout=(10, 60), allow_redirects=False) as r:
+                if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
+                    url = urllib.parse.urljoin(url, r.headers["location"])
+                    continue
+                if r.status_code == 429 or r.status_code >= 500:
+                    # The sample's host is busy or down for a moment: worth another try.
+                    raise RuntimeError(f"the voice sample could not be downloaded (HTTP {r.status_code})")
+                if r.status_code >= 300:
+                    raise Refused(f"the voice sample could not be downloaded (HTTP {r.status_code})")
+                data = bytearray()
+                for block in r.iter_content(chunk_size=1 << 20):
+                    data += block
+                    if len(data) > REFERENCE_MAX_BYTES:
+                        raise Refused("the voice sample is too large (30 MB at most; 10-30 s is all that is used)")
+                return bytes(data)
+        except requests.RequestException as e:
+            # The link may be down for a moment: a failure worth another try, not a refusal.
+            raise RuntimeError(f"the voice sample could not be downloaded ({type(e).__name__})") from None
+    raise Refused(f"the voice sample link redirects more than {REFERENCE_MAX_REDIRECTS} times")
 
 
 def reference_file(value: str) -> str:
@@ -301,26 +356,32 @@ def reference_file(value: str) -> str:
             raise Refused("the voice sample is too large (30 MB at most; 10-30 s is all that is used)")
     if len(data) < 1000:
         raise Refused("the voice sample is empty or not audio")
-    raw = os.path.join(REFERENCE_DIR, f"{key}.src")
-    with open(raw, "wb") as f:
-        f.write(data)
+    # File names of this request's own: the parts of one narration arrive
+    # together with the same new sample and must never write over each other.
+    fd, raw = tempfile.mkstemp(prefix=f"{key}.", suffix=".src", dir=REFERENCE_DIR)
+    tmp = raw[:-len(".src")] + ".tmp.wav"
     try:
-        p = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-loglevel", "error", "-y", "-i", raw, "-vn",
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        # Read as a plain audio file only (SAMPLE_FORMATS): never as a list or
+        # playlist that names other files or addresses.
+        p = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-loglevel", "error", "-y",
+                            "-protocol_whitelist", "file", "-format_whitelist", SAMPLE_FORMATS, "-i", raw, "-vn",
                             "-ac", "1", "-ar", "24000", "-t", str(REFERENCE_KEEP_SECONDS), "-c:a", "pcm_s16le",
-                            wav + ".tmp.wav"], capture_output=True, timeout=120)
+                            tmp], capture_output=True, timeout=120)
+        if p.returncode != 0 or not os.path.isfile(tmp):
+            raise Refused("the voice sample cannot be read as audio")
+        with wave.open(tmp, "rb") as w:
+            seconds = w.getnframes() / float(w.getframerate() or 1)
+        if seconds < REFERENCE_MIN_SECONDS:
+            raise Refused(f"the voice sample is only {seconds:.1f} s long; 10-30 s of clear speech works best")
+        os.replace(tmp, wav)
     finally:
-        try:
-            os.remove(raw)
-        except OSError:
-            pass
-    if p.returncode != 0 or not os.path.isfile(wav + ".tmp.wav"):
-        raise Refused("the voice sample cannot be read as audio")
-    with wave.open(wav + ".tmp.wav", "rb") as w:
-        seconds = w.getnframes() / float(w.getframerate() or 1)
-    if seconds < REFERENCE_MIN_SECONDS:
-        os.remove(wav + ".tmp.wav")
-        raise Refused(f"the voice sample is only {seconds:.1f} s long; 10-30 s of clear speech works best")
-    os.replace(wav + ".tmp.wav", wav)
+        for path in (raw, tmp):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
     return wav
 
 

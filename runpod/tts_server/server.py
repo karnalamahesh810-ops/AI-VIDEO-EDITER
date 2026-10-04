@@ -15,8 +15,11 @@ On a RunPod queue endpoint the same engines sit behind rp_handler.py instead.
 With TTS_SERVER_KEY set, every speech request must carry
 "Authorization: Bearer <key>"; without it the server trusts whatever stands
 in front of it (RunPod checks its own API key before a request arrives).
+A request body is read up to TTS_MAX_BODY_BYTES (a 30 MB voice sample as
+base64 fits; the worker's own parts are a few kB) and refused past it.
 """
 import hmac
+import json
 import os
 from contextlib import asynccontextmanager
 
@@ -39,6 +42,24 @@ async def _lifespan(_app):
 
 
 app = FastAPI(title="ThumbGenius voice endpoint", docs_url=None, redoc_url=None, lifespan=_lifespan)
+
+MAX_BODY_BYTES = int(os.getenv("TTS_MAX_BODY_BYTES", str(engines.REFERENCE_MAX_BYTES * 4 // 3 + (1 << 20))))
+
+
+async def _body(request: Request):
+    """The request's body, or None once it is over MAX_BODY_BYTES (nothing past that is read)."""
+    try:
+        declared = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        declared = 0
+    if declared > MAX_BODY_BYTES:
+        return None
+    data = bytearray()
+    async for block in request.stream():
+        data += block
+        if len(data) > MAX_BODY_BYTES:
+            return None
+    return bytes(data)
 
 
 def _error(status: int, message: str, kind: str) -> JSONResponse:
@@ -80,9 +101,12 @@ def models() -> dict:
 async def speech(request: Request):
     if not _allowed(request):
         return _error(401, "missing or wrong API key", "authentication_error")
+    raw = await _body(request)
+    if raw is None:
+        return _error(413, f"the request is larger than {MAX_BODY_BYTES // (1 << 20)} MB", "invalid_request_error")
     try:
-        body = await request.json()
-    except Exception:  # noqa: BLE001 - not JSON at all
+        body = json.loads(raw)
+    except ValueError:                  # not JSON at all (or not text)
         return _error(400, "the request body must be JSON", "invalid_request_error")
     try:
         # The models are not async: one generation at a time, off the event loop.

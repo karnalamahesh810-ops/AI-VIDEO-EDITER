@@ -41,6 +41,13 @@ POST /v1/audio/speech
 - Errors use OpenAI's shape. A request that can never work (unknown voice,
   Chatterbox not in the image, a sample that is not audio) is a 400; the queue
   handler answers `{"refused": "why"}` so the worker does not retry it.
+- Limits: `input` up to 6,000 characters (`TTS_MAX_INPUT_CHARS`; the worker sends
+  1,500), at most 4 blended voices, a request body up to `TTS_MAX_BODY_BYTES`
+  (~41 MB, a 413 past it; RunPod's own limit is 10 MB on `/run`, 20 MB on `/runsync`).
+- A voice sample link must resolve to public internet addresses only (never
+  this machine or a private network; every redirect is checked again), and a
+  sample is decoded as a plain audio file only - never as a list or playlist
+  that names other files.
 
 On a RunPod **queue** endpoint the same fields go in `{"input": {...}}` to
 `/runsync`, and the audio comes back as `output.audio_base64`.
@@ -53,7 +60,8 @@ On a RunPod **queue** endpoint the same fields go in `{"input": {...}}` to
 | Chatterbox weights and `chatterbox-tts` | MIT | commercial use allowed; keep the notice |
 | `resemble-perth` (inside Chatterbox) | MIT | every Chatterbox output carries an inaudible watermark |
 | spaCy and `en_core_web_sm` | MIT | |
-| espeak-ng | GPL-3.0 | a separate program Kokoro falls back to for unknown words; fine to run on our own endpoint, do not hand the image to others without the GPL notice |
+| espeak-ng (apt), and `phonemizer-fork` + `espeakng-loader` (pulled in by `misaki[en]`) | GPL-3.0 | Kokoro's fallback for words its dictionary does not know; fine to run on our own endpoint, and the audio it makes is ours. Do not hand the image to others without the GPL notice and sources |
+| `pykakasi` (pulled in by `chatterbox-tts`, Chatterbox image only) | GPL-3.0 | same as above; `gradio` (Apache-2.0) comes along too |
 | PyTorch | BSD-3 | |
 | FastAPI, uvicorn | MIT / BSD-3 | |
 | ffmpeg (Debian build) | GPL/LGPL | separate program |
@@ -78,6 +86,15 @@ Python packages: `kokoro==0.9.4`, `misaki[en]==0.9.4`, `chatterbox-tts==0.1.7`
 good build, run `pip freeze` in the image and commit it as `requirements.lock`
 so every later build is identical.
 
+Checked 2026-10-04 against the Hugging Face API at the pinned revisions: both
+repositories are public and ungated, Kokoro's card says `apache-2.0`, Chatterbox's
+`mit`; the files fetched are exactly `config.json`, `kokoro-v1_0.pth` and the 54
+`voices/*.pt` packs, and `ve`/`t3_cfg`/`s3gen.safetensors`, `tokenizer.json`,
+`conds.pt` (what `chatterbox-tts` 0.1.7's `from_local` reads). Not yet built:
+`chatterbox-tts` 0.1.7 also pins `transformers==5.2.0`, `numpy<2` and
+`gradio==6.8.0`, so the Chatterbox image must be smoke-tested with **both**
+engines (Kokoro imports transformers' ALBERT) before it is used.
+
 ## First deploy
 
 1. **Build and push** (from this folder; needs Docker and a registry):
@@ -99,10 +116,17 @@ so every later build is identical.
    Listen to `test.mp3`. With the Chatterbox image, repeat with
    `"model":"chatterbox"` and a `reference_audio` link.
 3. **RunPod serverless endpoint** (queue type):
-   - GPU: 24 GB (A5000 / L4 / 3090). Kokoro alone also fits 16 GB.
+   - GPU: Kokoro needs under 2 GB of GPU memory - the 16 GB tier (A4000 / A4500 /
+     RTX 4000 / RTX 2000, $0.58/h) is enough, with 24 GB (L4 / A5000 / 3090, $0.69/h)
+     as a second choice for availability. Chatterbox: 24 GB (3090 / A5000; the L4 is
+     slow for it) or the 4090 tier ($1.10/h, about twice as fast).
    - Container disk 20 GB; no network volume needed (the models are in the image).
    - Max workers 4 (the video worker voices 4 parts at once), min workers 0,
      idle timeout 5 s, FlashBoot on.
+   - **The account has 10 workers across all endpoints**, and on 2026-09-28 the
+     video endpoint (`tuxcziwby5plod`) had all 10: lower its max to 6-8 (only while
+     no job runs) or have RunPod raise the quota first, or this endpoint cannot be
+     created with any workers.
    - **Leave "Container Start Command" empty** - a template's start command
      overrides the image's and the handler never starts.
    - Environment: nothing required. Optional: `TTS_PRELOAD=kokoro,chatterbox`,
@@ -137,6 +161,7 @@ value as the worker's `TTS_API_KEY` when nothing else guards the port.
 | `TTS_WORKERS` | `4` | parts voiced at once |
 | `TTS_TIMEOUT` | `600` | seconds per part (a cold worker loads its model first) |
 | `TTS_RETRIES` | `3` | extra attempts per part |
+| `TTS_TOTAL_SECONDS` | `1800` | the whole narration, every part, retry and cold start; past it the jobs still running are cancelled and the video stops with a plain message (0 = no limit) |
 | `TTS_GAP_SECONDS` | `0.3` | the breath between two parts |
 | `TTS_LUFS` | `0` = -20 | narration loudness (the worker's own narration level) |
 | `TTS_MAX_CHARS` | `120000` | longest script (about two hours) |
@@ -160,8 +185,9 @@ and in `timeline.meta`.
 
 ## Cost - an ESTIMATE, not a measurement
 
-RunPod serverless 24 GB (A5000 / L4 / 3090): $0.69 per hour = $0.00019 per
-second (their price page, 2026-10-04). Start-up and the 5 s idle are billed too.
+RunPod serverless (flex) on their price page, 2026-10-04: 16 GB $0.58/h ($0.00016/s),
+24 GB (A5000 / L4 / 3090) $0.69/h ($0.00019/s), 24 GB 4090 $1.10/h. Start-up and the
+5 s idle are billed too. The video worker (16 vCPU, ~$0.58/h) waits while the voice works.
 
 | 20-minute narration (~18,000 characters, 12-13 parts) | GPU time (estimate) | Cost (estimate) |
 |---|---|---|
