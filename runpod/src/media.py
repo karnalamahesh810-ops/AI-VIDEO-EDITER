@@ -1214,6 +1214,38 @@ def _image_label(asset) -> str:
 # Candidates the local CLIP pass rejected before any remote call.
 LOCAL_REJECTED = {"n": 0}
 
+# A line whose wanted shots ask for a map, or for a chart / diagram / cross-section /
+# graphic (the director's "Idaho map", "state outlines", "cross-section graphic",
+# "comparison graphic"): a real published one is the shot for it. Scene intents carry
+# no visual type of their own, so such a line was treated like any other - its maps
+# turned down as TV weather maps, its diagrams as slides - and 8 of the Yellowstone
+# re-cut's 16 hardest still lines (2026-10-04) were lines like these.
+_WANTS_MAP = re.compile(r"\b(?:maps?|outlines?)\b", re.I)
+_WANTS_CHART = re.compile(r"\b(?:charts?|graphs?|graphics?|infographics?|diagrams?|cross[- ]?sections?)\b", re.I)
+
+
+def wanted_kind(scene_intent: Optional[dict] = None) -> str:
+    """"map", "chart" or "document" when this line asks for that kind of picture, else "": the
+    scene intent's own visual type, else the words of its wanted shots and visual subjects.
+    Without an argument, the intent of the scene being sourced on this thread."""
+    si = _SCENE_INTENT.get() if scene_intent is None else scene_intent
+    if not isinstance(si, dict):
+        return ""
+    v = str(si.get("visualType") or si.get("visual_type") or "").lower()
+    if v in ("map", "chart", "document"):
+        return v
+    words = []
+    for key in ("desired_shots", "visual_subjects"):
+        vals = si.get(key)
+        vals = [vals] if isinstance(vals, str) else (vals if isinstance(vals, (list, tuple)) else [])
+        words += [str(x) for x in vals if isinstance(x, str)]
+    blob = " ".join(words)
+    if _WANTS_MAP.search(blob):
+        return "map"
+    if _WANTS_CHART.search(blob):
+        return "chart"
+    return ""
+
 
 def _local_check(path: str, intent_text: str) -> Optional[dict]:
     """The local model's verdict for this scene's candidate, or None when the
@@ -1221,14 +1253,9 @@ def _local_check(path: str, intent_text: str) -> Optional[dict]:
     if not config.LOCAL_VISION_ENABLED or not _localvision.available():
         return None
     si = _SCENE_INTENT.get() or {}
-    wants = ""
-    if isinstance(si, dict):
-        v = str(si.get("visualType") or si.get("visual_type") or "").lower()
-        if v in ("map", "chart", "document"):
-            wants = v
     return _localvision.check(path, intent_text, subject_type=_SUBJECT_TYPE.get() or "",
                               subject=str((si or {}).get("subject") or "") if isinstance(si, dict) else "",
-                              wants=wants)
+                              wants=wanted_kind())
 
 
 def _local_keep(local: dict, label: str, intent_text: str, why: str) -> bool:
@@ -1343,8 +1370,7 @@ def slop_reason(path: str, label: str = "", source_url: str = "") -> str:
     from . import slop
     if not slop.enabled():
         return ""
-    si = _SCENE_INTENT.get() or {}
-    wants = str((si.get("visualType") or si.get("visual_type") or "") if isinstance(si, dict) else "").lower()
+    wants = wanted_kind()
     kind = "image" if _is_still(path) else "video"
     try:
         why = slop.metadata_reason(label) or slop.check_file(
@@ -1353,10 +1379,13 @@ def slop_reason(path: str, label: str = "", source_url: str = "") -> str:
     except Exception as e:  # noqa: BLE001 - a filter error never drops a clip
         print(f"[slop] check failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
         return ""
-    # Only CLIP's reading of the colours is waived for a photo desk; a picture
-    # whose own content credentials say "generated" never is.
+    # Only CLIP's reading of the colours is waived for a photo desk - and for a
+    # line that asks for a map or a diagram, whose published pictures are drawn
+    # (CLIP reads an agency's cross-section as "an illustration"); the vision
+    # judge still turns down an AI-made one. A picture whose own content
+    # credentials say "generated" never is.
     if why.startswith("an AI-generated or painted picture") and kind == "image" \
-            and _real_photo_source(label, source_url):
+            and (_real_photo_source(label, source_url) or wants in ("map", "chart")):
         why = ""
     if why:
         with _CACHE_LOCK:
@@ -1441,8 +1470,11 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
             return _local_keep(local, label, intent, "no remote model"), None
         return True, None
     scene = _SCENE_INTENT.get()
+    wants = wanted_kind()
+    # A line asking for a map or a diagram: the judge is told a real published one is the shot.
     verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()),
-                           **({"scene": scene} if scene else {}))
+                           **({"scene": scene} if scene else {}),
+                           **({"wants": wants} if wants in ("map", "chart") else {}))
     if verdict is None and not config.ACCEPT_UNJUDGED:
         # Every model failed on this clip. Google answered "high demand" for
         # half an hour on 2026-09-29 and rejecting all of those left most of a
