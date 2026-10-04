@@ -28,7 +28,7 @@ from typing import Optional
 import requests
 
 from . import config
-from .storage import StorageError, download
+from .storage import STOPPED, StorageError, download
 
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
@@ -93,6 +93,12 @@ def _note_refusal(url: str, why: str = "") -> None:
         return
     if re.search(r"\b(404|410)\b", why or ""):
         return                     # that one picture is gone, not the site refusing
+    if re.search(r"\b429\b", why or ""):
+        # A rate limit, not a refusal: a busy shared host (Flickr's live.staticflickr.com answered
+        # 429 twice on 2026-10-04 and seven good pictures on it were then skipped for 30 minutes).
+        return
+    if STOPPED in (why or ""):
+        return                     # the asking scene's time ran out, not the site's fault
     with _HOST_LOCK:
         n, last = _HOST_FAILS.get(host, (0, 0.0))
         if time.time() - last >= HOST_FAILS_SECONDS:
@@ -201,7 +207,7 @@ def fetch(url: str, dest: str, page_url: str = "", thumbnail: str = "", *, allow
                 # thumbnail, ~300-800 px): small, but a real photo of the right thing
                 # beats a held-over shot or an empty scene. It is upscaled later like
                 # any small still (src/upscale.py).
-                if thumbnail and thumbnail != url:
+                if thumbnail and thumbnail != url and STOPPED not in str(e):
                     try:
                         got = download(thumbnail, dest, timeout=30, headers=_browser_headers(thumbnail))
                     except StorageError:
@@ -224,19 +230,66 @@ def _note_provenance(path: str) -> None:
         pass
 
 
+def _stopped() -> bool:
+    """The asking scene's time is up (src/ytdlp.py's stop and deadline): no new try is made and a
+    transfer in flight ends, as at a scene's next search or clip download."""
+    try:
+        from . import ytdlp
+        return ytdlp.stopped()
+    except Exception:  # noqa: BLE001 - no stop known
+        return False
+
+
+def _get(url: str, dest: str, headers: Optional[dict] = None, proxy: str = "", timeout: int = 20) -> str:
+    """One try of a picture: a short wait for the connection, the whole transfer bounded
+    (PICTURE_CONNECT_SECONDS, PICTURE_FETCH_SECONDS) and the asking scene's stop heard."""
+    kw = {"proxy": proxy} if proxy else {}
+    return download(url, dest, timeout=timeout, attempts=1, headers=headers,
+                    connect_timeout=float(getattr(config, "PICTURE_CONNECT_SECONDS", 20.0) or 20.0),
+                    max_seconds=float(getattr(config, "PICTURE_FETCH_SECONDS", 0.0) or 0.0), stop=_stopped, **kw)
+
+
+def _no_connection(e: Exception) -> bool:
+    """The host never took the connection: no request was sent, so other headers or a Chrome TLS
+    fingerprint cannot change the answer - only another route can."""
+    return isinstance(getattr(e, "__cause__", None), requests.exceptions.ConnectTimeout)
+
+
+def _gone(e: Exception) -> bool:
+    """The host answered that the picture is not there (404 / 410)."""
+    resp = getattr(getattr(e, "__cause__", None), "response", None)
+    return getattr(resp, "status_code", None) in (404, 410)
+
+
 def _fetch_raw(url: str, dest: str, page_url: str, allow_agency: bool = False) -> str:
+    """
+    The tries for one picture, each only while it can still help (measured
+    off RunPod 2026-10-04 on Yellowstone searches): a host that never took the
+    connection goes straight to the residential route (the browser and Chrome
+    tries cost 20 s each and cannot change a refused connection); a picture
+    both the plain and the browser ask found gone (404/410) is final - no
+    fingerprint or route brings it back (each such link cost two more tries,
+    one of them through the residential route). A refusal (403, an HTML page,
+    a rate limit) and a slow answer still get every try. No new try once the
+    asking scene's time is up.
+    """
     errors = []
     try:
-        return download(url, dest, timeout=20, attempts=1)
+        return _get(url, dest)
     except StorageError as e:
         errors.append(str(e))
-        # The host never answered: other headers or a Chrome TLS fingerprint
-        # cannot help, and each retry would hold a sourcing thread another
-        # minute. (A TLS or refused connection still goes on to curl_cffi.)
+        first = e
+    if _no_connection(first):
+        return _by_route(url, dest, page_url, errors)
+    if STOPPED in str(first):
+        raise StorageError("picture download failed: " + " | ".join(errors)[:400])
     try:
-        return download(url, dest, timeout=20, attempts=1, headers=_browser_headers(url, page_url))
+        return _get(url, dest, headers=_browser_headers(url, page_url))
     except StorageError as e:
         errors.append(str(e))
+        second = e
+    if (_gone(first) and _gone(second)) or _stopped():
+        raise StorageError("picture download failed: " + " | ".join(errors)[:400])
     if any("HTML" in e for e in errors):
         og = _og_image(url, page_url)
         from . import stockblock
@@ -245,20 +298,24 @@ def _fetch_raw(url: str, dest: str, page_url: str, allow_agency: bool = False) -
             og = ""                     # the page stands for an agency's preview
         if og and og != url:
             try:
-                return download(og, dest, timeout=20, attempts=1, headers=_browser_headers(og, url))
+                return _get(og, dest, headers=_browser_headers(og, url))
             except StorageError as e:
                 errors.append(str(e))
     try:
         return _curl_cffi_get(url, dest, page_url)
     except Exception as e:  # noqa: BLE001 - curl_cffi missing or refused too
         errors.append(str(e)[:120])
-    # The host refused or ignored a datacenter address (403, an HTML challenge
-    # page, no answer): once more through a residential route (IMAGE_PROXIES),
-    # as a browser at home would arrive.
-    proxy = _residential_route()
+    return _by_route(url, dest, page_url, errors)
+
+
+def _by_route(url: str, dest: str, page_url: str, errors: list) -> str:
+    """The host refused or ignored a datacenter address (403, an HTML challenge
+    page, no answer): once more through a residential route (IMAGE_PROXIES), as
+    a browser at home would arrive. Raises with every try's error otherwise."""
+    proxy = _residential_route() if not _stopped() else ""
     if proxy:
         try:
-            return download(url, dest, timeout=25, attempts=1, headers=_browser_headers(url, page_url), proxy=proxy)
+            return _get(url, dest, headers=_browser_headers(url, page_url), proxy=proxy, timeout=25)
         except StorageError as e:
             errors.append("via proxy: " + str(e)[:100])
     raise StorageError("picture download failed: " + " | ".join(errors)[:400])

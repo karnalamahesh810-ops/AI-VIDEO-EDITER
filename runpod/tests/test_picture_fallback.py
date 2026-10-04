@@ -5,11 +5,15 @@ one news site timing out three tries at a time - and 97 scenes were left with
 no picture). A site that refused twice is not asked again for a while; the
 ladder's picture rung tries more pictures and a second search wording.
 """
+import os
+import tempfile
 import time
 import unittest
 from unittest import mock
 
-from src import gapfill, imagefix
+import requests
+
+from src import gapfill, imagefix, storage, ytdlp
 from src.storage import StorageError
 
 
@@ -55,6 +59,152 @@ class SitesThatRefuse(unittest.TestCase):
             with self.assertRaises(StorageError):
                 imagefix.fetch(url, "C:/nonexistent/p.jpg")
         self.assertEqual(raw.call_count, 2)          # the third never reached the site
+
+    def test_a_rate_limit_is_not_a_refusal(self):
+        # 2026-10-04: Flickr answered 429 twice and seven good pictures on it were skipped for 30 minutes.
+        url = "https://live.staticflickr.com/65535/a_b.jpg"
+        for _ in range(3):
+            imagefix._note_refusal(url, "download failed after 1 attempt(s): 429 Client Error: Too Many Requests")
+        self.assertFalse(imagefix.host_refused(url))
+
+    def test_a_download_cut_by_the_scenes_own_stop_is_not_a_refusal(self):
+        url = "https://news.example.com/a.jpg"
+        for _ in range(3):
+            imagefix._note_refusal(url, f"picture download failed: {storage.STOPPED}: the time for it is up")
+        self.assertFalse(imagefix.host_refused(url))
+
+
+class TriesThatCanStillHelp(unittest.TestCase):
+    """imagefix._fetch_raw: each try only while it can still change the answer (measured 2026-10-04)."""
+
+    def setUp(self):
+        imagefix._HOST_FAILS.clear()
+        self.work = tempfile.mkdtemp()
+        self.calls = []
+
+    def tearDown(self):
+        imagefix._HOST_FAILS.clear()
+
+    def _answer(self, code: int):
+        """storage.download as it fails on an HTTP answer: its cause carries the response."""
+        def fake(url, dest, timeout=180, headers=None, proxy="", attempts=3, **bounds):
+            self.calls.append(("route" if proxy else "browser" if headers else "plain", bounds))
+            try:
+                raise requests.HTTPError(f"{code} Client Error", response=_resp(code))
+            except requests.HTTPError as e:
+                raise StorageError(f"download failed after 1 attempt(s): {e}") from e
+        return fake
+
+    def _fetch(self, code: int, route: str = "http://proxy.example:1"):
+        with mock.patch.object(imagefix, "download", side_effect=self._answer(code)), \
+                mock.patch.object(imagefix, "_residential_route", return_value=route), \
+                mock.patch.object(imagefix, "_og_image", return_value=""), \
+                mock.patch.object(imagefix, "_curl_cffi_get", side_effect=RuntimeError(f"HTTP {code}")) as cffi:
+            with self.assertRaises(StorageError):
+                imagefix._fetch_raw("https://cdn.example.com/gone.jpg", os.path.join(self.work, "p.jpg"), "")
+        return [c[0] for c in self.calls], cffi.call_count
+
+    def test_a_picture_gone_for_the_plain_and_the_browser_ask_is_final(self):
+        tries, cffi = self._fetch(404)
+        self.assertEqual(tries, ["plain", "browser"])                # no route, no Chrome fingerprint
+        self.assertEqual(cffi, 0)
+
+    def test_a_refusal_still_gets_every_try(self):
+        tries, cffi = self._fetch(403)
+        self.assertEqual(tries, ["plain", "browser", "route"])
+        self.assertEqual(cffi, 1)
+
+    def test_every_try_is_bounded_and_hears_the_scenes_stop(self):
+        self._fetch(403)
+        for _name, bounds in self.calls:
+            self.assertGreater(bounds["max_seconds"], 0)
+            self.assertLessEqual(bounds["connect_timeout"], 20)
+            self.assertTrue(callable(bounds["stop"]))
+
+    def test_no_try_once_the_scenes_time_is_up(self):
+        token = ytdlp.STOP.set((None, time.time() - 1))
+        try:
+            with mock.patch.object(imagefix, "_residential_route", return_value="http://proxy.example:1"), \
+                    mock.patch.object(imagefix, "_curl_cffi_get") as cffi, \
+                    mock.patch.object(storage.requests, "get", side_effect=AssertionError("never asked")):
+                with self.assertRaises(StorageError) as got:
+                    imagefix.fetch("https://news.example.com/late.jpg", os.path.join(self.work, "late.jpg"))
+        finally:
+            ytdlp.STOP.reset(token)
+        self.assertIn(storage.STOPPED, str(got.exception))
+        cffi.assert_not_called()
+        self.assertFalse(imagefix.host_refused("https://news.example.com/other.jpg"))
+        imagefix._note_refusal("https://news.example.com/x.jpg", "403")
+        self.assertFalse(imagefix.host_refused("https://news.example.com/other.jpg"))   # the stop never counted
+
+
+def _resp(code: int) -> requests.Response:
+    r = requests.Response()
+    r.status_code = code
+    return r
+
+
+class _Slow:
+    """A streamed answer that sends a small chunk every `gap` seconds, forever (a trickling host)."""
+
+    def __init__(self, gap: float):
+        self.gap = gap
+        self.status_code = 200
+        self.headers = {"Content-Type": "image/jpeg"}
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size=1):
+        while True:
+            time.sleep(self.gap)
+            yield b"\xff" * 512
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+class BoundedDownloads(unittest.TestCase):
+    def test_a_trickling_host_is_cut_at_the_transfer_cap_and_not_asked_again(self):
+        asked = []
+
+        def get(*a, **kw):
+            asked.append(kw.get("timeout"))
+            return _Slow(0.02)
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(storage.requests, "get", side_effect=get):
+            t0 = time.time()
+            with self.assertRaises(StorageError) as got:
+                storage.download("https://slow.example.com/a.jpg", os.path.join(d, "a.jpg"), timeout=20,
+                                 attempts=3, connect_timeout=7, max_seconds=0.3)
+            self.assertLess(time.time() - t0, 3.0)
+            self.assertEqual(os.listdir(d), [])                       # no partial file left
+        self.assertIn("longer than", str(got.exception))
+        self.assertEqual(asked, [(7, 20)])                            # one try: retrying cannot help
+
+    def test_the_callers_stop_ends_a_transfer_in_flight(self):
+        stop_at = time.time() + 0.2
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(storage.requests, "get", side_effect=lambda *a, **kw: _Slow(0.02)):
+            with self.assertRaises(StorageError) as got:
+                storage.download("https://slow.example.com/a.jpg", os.path.join(d, "a.jpg"),
+                                 stop=lambda: time.time() > stop_at)
+        self.assertIn(storage.STOPPED, str(got.exception))
+
+    def test_without_bounds_a_download_is_unchanged(self):
+        class _Done(_Slow):
+            def iter_content(self, chunk_size=1):
+                self.size = chunk_size
+                yield b"\xff\xd8\xff" + b"x" * 100
+        answer = _Done(0)
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(storage.requests, "get", side_effect=lambda *a, **kw: answer) as get:
+            out = storage.download("https://x.example.com/a.jpg", os.path.join(d, "a.jpg"))
+            self.assertTrue(os.path.isfile(out))
+        self.assertEqual(get.call_args.kwargs["timeout"], (20, 180))
+        self.assertEqual(answer.size, 1 << 20)
 
 
 class TheLadderPictureRung(unittest.TestCase):

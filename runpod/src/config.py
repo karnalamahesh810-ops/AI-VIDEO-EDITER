@@ -354,6 +354,14 @@ MOMENT_PARALLEL = int(os.getenv("MOMENT_PARALLEL", "5"))
 # Real photographs of named people, places and events. Serper (Google Images)
 # when SERPER_API_KEY is set; otherwise the keyless DuckDuckGo image search.
 ALLOW_WEB_IMAGES = _flag("ALLOW_WEB_IMAGES", True)
+# One try of a picture download (src/imagefix.py): how long the host may take
+# to accept the connection, and how long the whole transfer may run. A host
+# that took no connection used to cost ~20 s on each of the plain, browser and
+# Chrome-fingerprint tries plus 25 s through the residential route (~85 s a
+# picture, measured 62 s off RunPod 2026-10-04), and a host trickling bytes had
+# no limit at all: each 20 s read timeout restarts with every byte.
+PICTURE_CONNECT_SECONDS = float(os.getenv("PICTURE_CONNECT_SECONDS", "10"))
+PICTURE_FETCH_SECONDS = float(os.getenv("PICTURE_FETCH_SECONDS", "60"))
 # Non-YouTube videos from Google's video search (TikTok, Facebook, Vimeo,
 # news sites), downloaded by yt-dlp. Only when the job is not youtube_only.
 ALLOW_WEB_VIDEO = _flag("ALLOW_WEB_VIDEO", True)

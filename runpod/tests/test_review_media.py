@@ -235,7 +235,7 @@ class PictureDownloads(unittest.TestCase):
     def test_two_scenes_fetching_one_picture_download_it_once(self):
         calls = []
 
-        def slow_download(url, dest, timeout=180, headers=None, proxy="", attempts=3):
+        def slow_download(url, dest, timeout=180, headers=None, proxy="", attempts=3, **bounds):
             calls.append(dest)
             time.sleep(0.3)
             return _webp(dest)
@@ -260,30 +260,53 @@ class PictureDownloads(unittest.TestCase):
             self.assertEqual(len(calls), 1)
             self.assertEqual(imagefix.sniff(dest), "jpeg")
 
-    def test_a_host_that_never_answers_gets_one_browser_try_and_one_residential_route(self):
+    def test_a_host_that_never_takes_the_connection_goes_straight_to_one_residential_route(self):
         calls = []
 
-        def timeout_download(url, dest, timeout=180, headers=None, proxy="", attempts=3):
-            calls.append(headers)
+        def timeout_download(url, dest, timeout=180, headers=None, proxy="", attempts=3, **bounds):
+            calls.append((headers, proxy))
             try:
                 raise requests.ConnectTimeout("connect timed out")
             except requests.ConnectTimeout as e:
                 raise storage.StorageError(f"download failed after 3 attempt(s): {e}") from e
 
-        # 2026-10-02: a host that never answers gets the browser try and one residential route too
-        # (each a single 20 s attempt now, not 3 x 60 s) - a slow home route sometimes answers.
+        # 2026-10-02: a host that never answers gets one residential route - a slow home route
+        # sometimes answers. 2026-10-04: no browser or Chrome-fingerprint try first - with no
+        # connection no request was ever sent, and each cost a 20 s wait (62 s a picture, measured).
         with tempfile.TemporaryDirectory() as d, \
                 mock.patch.object(imagefix, "download", side_effect=timeout_download), \
                 mock.patch.object(imagefix, "_residential_route", return_value="http://proxy.example:1"), \
-                mock.patch.object(imagefix, "_curl_cffi_get", side_effect=RuntimeError("refused")):
+                mock.patch.object(imagefix, "_curl_cffi_get", side_effect=RuntimeError("refused")) as cffi:
             with self.assertRaises(storage.StorageError):
                 imagefix.fetch("https://dead.example.com/a.jpg", os.path.join(d, "p.jpg"))
-        self.assertEqual(len(calls), 3)
-        self.assertIsNone(calls[0])
-        self.assertIn("Mozilla", calls[2]["User-Agent"])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0], (None, ""))
+        self.assertIn("Mozilla", calls[1][0]["User-Agent"])
+        self.assertEqual(calls[1][1], "http://proxy.example:1")
+        cffi.assert_not_called()
+
+    def test_a_host_slow_to_answer_still_gets_the_browser_try(self):
+        calls = []
+
+        def slow_download(url, dest, timeout=180, headers=None, proxy="", attempts=3, **bounds):
+            calls.append(headers)
+            if headers is None:
+                try:
+                    raise requests.ReadTimeout("read timed out")
+                except requests.ReadTimeout as e:
+                    raise storage.StorageError(f"download failed after 1 attempt(s): {e}") from e
+            return _webp(dest)
+
+        # Measured 2026-10-04: a host that took the connection but did not answer in 20 s
+        # answered the browser try at once.
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(imagefix, "download", side_effect=slow_download):
+            out = imagefix.fetch("https://slow.example.com/a.jpg", os.path.join(d, "p.jpg"))
+            self.assertEqual(imagefix.sniff(out), "jpeg")
+        self.assertEqual(len(calls), 2)
 
     def test_a_tls_block_still_reaches_curl_cffi(self):
-        def ssl_download(url, dest, timeout=180, headers=None, proxy="", attempts=3):
+        def ssl_download(url, dest, timeout=180, headers=None, proxy="", attempts=3, **bounds):
             try:
                 raise requests.exceptions.SSLError("handshake")
             except requests.exceptions.SSLError as e:
