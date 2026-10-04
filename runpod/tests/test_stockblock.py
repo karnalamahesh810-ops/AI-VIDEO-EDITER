@@ -198,6 +198,37 @@ class EveryPath(unittest.TestCase):
         self.assertEqual(st["byAgency"], {"alamy": 2})
         self.assertEqual(st["byPath"], {"search": 2})
 
+    def test_the_keyless_search_reads_past_a_page_full_of_agencies(self):
+        # "Lake Mead bathtub ring" on 2026-10-04: 10 of the first 12 rows were agencies' (1 usable of 18, 6 of 35).
+        rows = [{"image": f"https://c8.alamy.com/comp/X{k}/x.jpg", "width": 1300, "height": 900, "title": "x",
+                 "url": "https://www.alamy.com/x"} for k in range(20)]
+        rows += [{"image": f"https://www.nps.gov/lake/{k}.jpg", "width": 1300, "height": 900, "title": "Lake Mead",
+                  "url": "https://www.nps.gov/lake"} for k in range(10)]
+        asked = []
+
+        class FakeDDGS:
+            def __init__(self, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def images(self, query, max_results=10):
+                asked.append(max_results)
+                return rows[:max_results]
+        with mock.patch.object(config, "ALLOW_WEB_IMAGES", True), mock.patch.object(config, "SERPER_API_KEY", ""), \
+                mock.patch.object(media._imagefix, "_residential_route", return_value=""), \
+                mock.patch.object(media, "_next_proxy", return_value=None), \
+                mock.patch("ddgs.DDGS", FakeDDGS):
+            found = media.search_web_images("lake mead bathtub ring", 6)
+        self.assertEqual(len(found), 6)
+        self.assertTrue(all(a.url.startswith("https://www.nps.gov/") for a in found))
+        self.assertGreaterEqual(asked[0], 30)
+        self.assertEqual(stockblock.stats()["blocked"], 20)
+
     def test_the_yandex_search_uses_the_same_list(self):
         page = mock.Mock(url="https://yandex.com/images/search", text=(
             'img_url=https%3A%2F%2Fthumbs.dreamstime.com%2Fz%2Fa.jpg&x "origUrl":"https://www.nps.gov/b.jpg"'))

@@ -236,8 +236,12 @@ def search_web_images(query: str, limit: int = 6) -> List[MediaAsset]:
         for proxy in ([from_proxy, None] if from_proxy else [None]):
             try:
                 from ddgs import DDGS
+                # The whole first page (~35 rows, the same one request as 12): stock
+                # agencies fill most of the top rows for some lines ("Lake Mead bathtub
+                # ring": 10 of the first 12, 1 usable picture left of 18; 6 of 35) and
+                # are never used (src/stockblock.py, 2026-10-04).
                 with DDGS(proxy=proxy, timeout=15) as ddg:
-                    for it in ddg.images(query, max_results=limit * 2):
+                    for it in ddg.images(query, max_results=max(limit * 2, 40)):
                         rows.append((it.get("image"), it.get("width") or 0,
                                      it.get("height") or 0, it.get("title") or "",
                                      it.get("url") or "", it.get("thumbnail") or ""))
