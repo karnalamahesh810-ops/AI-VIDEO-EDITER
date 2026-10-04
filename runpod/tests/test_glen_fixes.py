@@ -72,6 +72,38 @@ class RenderChunkUploadRetries(unittest.TestCase):
         self.assertEqual(calls["n"], 4)                  # two timeouts, then upload + read
 
 
+class CloudflareOnlyStorage(unittest.TestCase):
+    """R2_ONLY with R2 configured: files go to Cloudflare R2, never the app's storage."""
+
+    def test_uploads_go_to_r2_and_never_touch_the_broker(self):
+        from src import r2
+        with mock.patch.object(config, "R2_ONLY", True), \
+                mock.patch.object(r2, "enabled", return_value=True), \
+                mock.patch.object(r2, "upload", return_value="https://pub/x") as up, \
+                mock.patch.object(r2, "presign", return_value="https://signed/x"), \
+                mock.patch.object(storage, "_broker", side_effect=AssertionError("Supabase used")), \
+                mock.patch.object(storage, "upload_to_supabase", side_effect=AssertionError("Supabase used")):
+            url = storage.broker_upload(__file__, "video-media", "/projects/p/parts/j/render_003.mp4", "p", "j")
+        self.assertEqual(url, "https://signed/x")
+        self.assertEqual(up.call_args[0][1], "projects/p/parts/j/render_003.mp4")   # readable by path
+
+    def test_reads_come_from_r2_and_old_supabase_files_stay_readable(self):
+        from src import r2
+        with mock.patch.object(config, "R2_ONLY", True), \
+                mock.patch.object(r2, "enabled", return_value=True), \
+                mock.patch.object(r2, "presign", return_value="https://signed/r2"), \
+                mock.patch.object(storage, "_broker", return_value={"ok": True, "readUrl": "https://supabase/old"}):
+            with mock.patch.object(r2, "head", return_value={"size": 1}):
+                self.assertEqual(storage.broker_read_url("b", "projects/p/a.mp4", "p", "j"), "https://signed/r2")
+            with mock.patch.object(r2, "head", return_value=None):
+                self.assertEqual(storage.broker_read_url("b", "projects/p/a.mp4", "p", "j"), "https://supabase/old")
+
+    def test_without_r2_credentials_the_app_storage_still_works(self):
+        from src import r2
+        with mock.patch.object(config, "R2_ONLY", True), mock.patch.object(r2, "enabled", return_value=False):
+            self.assertFalse(storage.r2_only())
+
+
 class LostPartClipsComeBack(unittest.TestCase):
     def tearDown(self):
         from src import ytdlp

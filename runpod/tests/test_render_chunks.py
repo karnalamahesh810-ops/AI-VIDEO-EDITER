@@ -136,8 +136,8 @@ class Readiness(unittest.TestCase):
         for need in ("POD_RENDER_FANOUT", "API key", "endpoint", "R2"):
             self.assertIn(need, text)
         if "POD_RENDER_FANOUT" not in os.environ:
-            with mock.patch.object(config, "POD_RENDER_FANOUT", config._flag("POD_RENDER_FANOUT", False)):
-                self.assertFalse(config.POD_RENDER_FANOUT)                     # off until verified
+            with mock.patch.object(config, "POD_RENDER_FANOUT", config._flag("POD_RENDER_FANOUT", True)):
+                self.assertTrue(config.POD_RENDER_FANOUT)                      # chunks go through R2 by default
 
     def test_on_it_splits_a_long_render_and_publishes_media_first(self):
         with _pod_env():
@@ -145,6 +145,24 @@ class Readiness(unittest.TestCase):
             self.assertTrue(fanout.render_enabled(_doc([150] * 40), "p1"))       # build publishes first
             with mock.patch.object(config, "POD_RENDER_MIN_SECONDS", 600):
                 self.assertFalse(fanout.pod_render_enabled(_doc([150] * 40)))    # 200 s: stays whole
+
+
+class CloudflareOnly(unittest.TestCase):
+    """With R2 configured, rendered chunks never go through the app's Supabase broker."""
+
+    def test_r2_configured_never_selects_the_supabase_chunk_render(self):
+        doc = _doc([150] * 40)
+        with mock.patch.object(fanout, "pod_render_enabled", return_value=False), \
+                mock.patch.object(fanout.r2, "enabled", return_value=True), \
+                mock.patch.object(config, "FANOUT_RENDER", True), \
+                mock.patch.object(fanout, "readiness", return_value={"enabled": True}):
+            self.assertFalse(fanout.render_enabled(doc, "p1"))
+        with mock.patch.object(fanout, "pod_render_enabled", return_value=False), \
+                mock.patch.object(fanout.r2, "enabled", return_value=False), \
+                mock.patch.object(config, "FANOUT_RENDER", True), \
+                mock.patch.object(config, "FANOUT_RENDER_MIN_SECONDS", 0), \
+                mock.patch.object(fanout, "readiness", return_value={"enabled": True}):
+            self.assertTrue(fanout.render_enabled(doc, "p1"))     # no R2: the old path still works
 
 
 class _pod_env:

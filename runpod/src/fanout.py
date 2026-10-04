@@ -513,6 +513,11 @@ def render_enabled(doc: dict, project_id: str) -> bool:
     way the scene media must be published first, so other machines can read it."""
     if pod_render_enabled(doc):
         return True
+    if r2.enabled():
+        # With Cloudflare R2 configured, rendered chunks go through R2 only:
+        # never the Supabase-broker chunk render below. A render the spread
+        # render cannot take renders whole on this machine.
+        return False
     seconds = doc.get("durationInFrames", 0) / max(1, doc.get("fps", 30))
     return bool(config.FANOUT_RENDER and seconds >= config.FANOUT_RENDER_MIN_SECONDS
                 and readiness(config.FANOUT_MIN_SCENES, project_id)["enabled"])

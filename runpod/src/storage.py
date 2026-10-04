@@ -86,6 +86,15 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
     raise StorageError(f"download failed after {attempt} attempt(s): {last_error}") from last_error
 
 
+def r2_only() -> bool:
+    """Files are stored in Cloudflare R2 only (config.R2_ONLY with R2 configured)."""
+    from . import r2
+    return bool(config.R2_ONLY and r2.enabled())
+
+
+_R2_MAX_TTL = 7 * 24 * 60 * 60          # the longest an S3 presigned link may live
+
+
 def broker_enabled() -> bool:
     """Upload through the app's worker-storage function (no service key here)."""
     return bool(config.STORAGE_BROKER_URL and not config.SUPABASE_SERVICE_KEY)
@@ -132,7 +141,14 @@ def broker_library_upsert(project_id: str, job_id: str, rows: list) -> dict:
 
 def broker_read_url(bucket: str, object_path: str, project_id: str, job_id: str,
                     read_ttl: int = 60 * 60) -> str:
-    """A signed read URL for an existing object, through the app's broker."""
+    """A signed read URL for an existing object, through the app's broker.
+    With R2_ONLY, an object in R2 is read from R2; one stored in Supabase
+    before the switch is still read through the broker."""
+    if r2_only():
+        from . import r2
+        key = object_path.lstrip("/")
+        if r2.head(key):
+            return r2.presign(key, expires=max(60, min(int(read_ttl), _R2_MAX_TTL)))
     return _broker({"project_id": project_id, "job_id": job_id, "bucket": bucket,
                     "path": object_path.lstrip("/"), "action": "read",
                     "expires_in": read_ttl})["readUrl"]
@@ -180,6 +196,12 @@ def broker_upload(local_path: str, bucket: str, object_path: str, project_id: st
     """
     ref = {"project_id": project_id, "job_id": job_id,
            "bucket": bucket, "path": object_path.lstrip("/")}
+    if r2_only():
+        # Same key as the broker path would use, so readers find it by path.
+        from . import r2
+        r2.upload(local_path, ref["path"], content_type=r2.content_type(local_path),
+                  deadline=deadline or time.time() + 600)
+        return r2.presign(ref["path"], expires=max(60, min(int(read_ttl), _R2_MAX_TTL)))
     if not broker_enabled():
         if not (config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY):
             raise StorageError("parallel uploads need worker-storage or Supabase service credentials")
