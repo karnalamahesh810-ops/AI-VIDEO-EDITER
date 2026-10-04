@@ -795,12 +795,13 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
 
     With SHOT_MAX_SECONDS on (src/shotcap.py) a hold never makes a shot longer
     than the cap and never slows its clip to stretch; a line that cannot be
-    held that way gets a pick-a-shot runner-up of a shot beside it, then
-    another moment of a neighbouring clip (where this job may fetch: `search`,
-    else when it planned the video; into `work`, else the plan's directory),
-    then the ladder (unless the caller has just run it: `laddered`), and only
-    then the text card ("alternative", "moment" and "ladder" are added to the
-    counts); never a shot in `banned` (the quality check's failed ones).
+    held that way gets a pick-a-shot runner-up (its own, else one of a shot
+    beside it), then another moment of a neighbouring clip (where this job
+    may fetch: `search`, else when it planned the video; into `work`, else
+    the plan's directory), then the ladder (unless the caller has just run
+    it: `laddered`), and only then the text card ("alternative", "moment" and
+    "ladder" are added to the counts); never a shot in `banned` (the quality
+    check's failed ones).
     """
     from . import shotcap
     scenes = doc.get("scenes") or []

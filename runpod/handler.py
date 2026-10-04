@@ -790,8 +790,8 @@ def _fill_missing_media(doc: dict) -> int:
     text card on the quiet background. Returns how many scenes were patched.
     """
     got = gapfill.hold_or_animate(doc, label="before the render")
-    # ("alternative" and "ladder": the fresh shots a line gets when holding the shot
-    # beside it would run past SHOT_MAX_SECONDS, src/shotcap.py.)
+    # ("alternative", "moment" and "ladder": the fresh shots a line gets when holding
+    # the shot beside it would run past SHOT_MAX_SECONDS, src/shotcap.py.)
     return sum(int(got.get(k, 0)) for k in ("graphic", "held", "card", "alternative", "moment", "ladder"))
 
 
@@ -1187,7 +1187,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # graphic for it, else the neighbouring shot held over it (src/gapfill.py).
     # Never an empty scene, never another scene's clip.
     # (The ladder has just run for these lines: a hold the shot cap refuses goes
-    # to a pick-a-shot runner-up of the shot beside it, then to the text card.)
+    # to a pick-a-shot runner-up, another moment of the clip beside the line,
+    # then to the text card.)
     last = gapfill.hold_or_animate(doc, label="after the fallback fill", laddered=True)
     doc["meta"]["fallbackFill"] = {"ladder": fallback, "lastResort": last}
     if boost_info and doc["meta"].get("hookBoost") is not None:
