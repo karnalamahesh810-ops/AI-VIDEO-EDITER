@@ -1474,8 +1474,10 @@ class Review:
                     used.shots.pop(k, None)
                     swap_in(s, pick, why)
                     used.add(k, pick["shot"])
+                    # choice/asset: which of the scene's choices it is, for the saved timeline (carry_swaps).
                     self._did(self._row(k, fixable[0], why, smp=smp, how=f"swapped for its choice {pick['rank']} "
-                                        f"(scored {pick['score']:.2f} for this line)", also=fixable[1:] or None))
+                                        f"(scored {pick['score']:.2f} for this line)", also=fixable[1:] or None,
+                                        choice=pick["rank"], asset=str(pick["alt"].get("assetId") or "")))
                     continue                # a new picture: what was said of the old one no longer holds
                 if "repeat" in fixable and len(ladder) < LADDER_MAX:
                     ladder[k] = ("repeat", note or DEFAULT_NOTE["repeat"])
@@ -1564,7 +1566,7 @@ class Review:
         """The video shows the first render after all: the changes come out of the document and are listed."""
         self._take_back()
         for r in self.fixed:
-            row = {k: v for k, v in r.items() if k not in ("how", "also")}
+            row = {k: v for k, v in r.items() if k not in ("how", "also", "choice", "asset")}
             row["why"] = why
             self.left.append(row)
         self.fixed = []
@@ -1650,19 +1652,87 @@ class Review:
         return out
 
 
-def mark_for_review(doc: dict, reviewed: Optional[dict]) -> int:
+def carry_swaps(doc: dict, drawn: dict, reviewed: Optional[dict]) -> Dict[str, dict]:
+    """
+    The runner-up swaps the finished video kept, made on the saved timeline
+    too (a build: `doc` is what the job saves as the project's timeline,
+    `drawn` the render copy the review changed), so the editor shows the clip
+    the video shows and a later render from the editor keeps it instead of
+    bringing the rejected clip back. Only a scene's own choice, found again on
+    the saved scene by its place and asset and showing in the render copy;
+    the fallback ladder's replacements and moved titles are marked for the
+    owner instead (mark_for_review), as the quality gate's repairs are.
+    Returns {scene id: the saved scene as it was} for the scenes changed
+    (unsaved_back puts one back when its file could not be saved). The
+    clip's file may be on this disk: the caller publishes the timeline.
+    Never raises.
+    """
+    out: Dict[str, dict] = {}
+    try:
+        saved = {s.get("id"): s for s in (doc or {}).get("scenes") or [] if isinstance(s, dict)}
+        shown = {s.get("id"): s for s in (drawn or {}).get("scenes") or [] if isinstance(s, dict)}
+        for r in (reviewed or {}).get("fixed") or []:
+            if not isinstance(r, dict) or not isinstance(r.get("choice"), int) or not r.get("asset"):
+                continue
+            s, now = saved.get(r.get("scene")), shown.get(r.get("scene"))
+            if s is None or now is None or s.get("id") in out:
+                continue
+            sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
+            alts = [a for a in (sem.get("alternatives") or []) if isinstance(a, dict)]
+            alt = alts[r["choice"] - 1] if 0 < r["choice"] <= len(alts) else None
+            now_sem = now.get("semanticMetadata") if isinstance(now.get("semanticMetadata"), dict) else {}
+            if alt is None or str(alt.get("assetId") or "") != r["asset"] or now_sem.get("assetId") != r["asset"]:
+                continue                        # not the same choice on both: left marked for the owner
+            src = _alt_file(alt)
+            kind = str((now.get("media") or {}).get("type") or "")
+            if not src or kind not in ("video", "image"):
+                continue
+            before = copy.deepcopy(s)
+            swap_in(s, {"alt": alt, "src": src, "kind": kind,
+                        "seconds": _f((now.get("media") or {}).get("clipSeconds")) or 0.0},
+                    str(r.get("note") or DEFAULT_NOTE.get(str(r.get("issue")), "")))
+            out[str(s.get("id"))] = before
+    except Exception as e:  # noqa: BLE001 - the saved timeline keeps what it has, marked for the owner
+        print(f"[review] the swaps were not carried to the saved timeline: {type(e).__name__}: {str(e)[:120]}",
+              flush=True)
+    return out
+
+
+def unsaved_back(doc: dict, carried: Dict[str, dict]) -> List[str]:
+    """
+    A carried swap whose clip is still a file on this disk after the timeline
+    was published (its upload failed) gets the saved scene it replaced back:
+    a saved timeline never points at a file that goes with the job. Removes
+    those from `carried`; returns their ids.
+    """
+    back = []
+    for s in (doc or {}).get("scenes") or []:
+        sid = str(s.get("id")) if isinstance(s, dict) else ""
+        if sid not in carried:
+            continue
+        url = str((s.get("media") or {}).get("url") or "")
+        if not url.startswith(("http://", "https://")):
+            s.clear()
+            s.update(carried.pop(sid))
+            back.append(sid)
+    return back
+
+
+def mark_for_review(doc: dict, reviewed: Optional[dict], carried=None) -> int:
     """
     A saved timeline's scenes the review changed or flagged in the finished
     video (its render copy), marked for the editor with what was done - the
     editor shows the timeline, and the owner must see what changed (the
-    quality gate's rule, quality.mark_for_review). The sound's findings are
-    not a scene's. Returns how many scenes were marked.
+    quality gate's rule, quality.mark_for_review). A scene in `carried` shows
+    its swap on the saved timeline already (carry_swaps: marked by the swap
+    itself). The sound's findings are not a scene's. Returns how many scenes
+    were marked.
     """
     by_id = {s.get("id"): s for s in (doc or {}).get("scenes") or [] if isinstance(s, dict)}
     n = 0
     for r in (reviewed or {}).get("fixed") or []:
         s = by_id.get(r.get("scene"))
-        if s is None or r.get("issue") == "text-over-face":
+        if s is None or r.get("issue") == "text-over-face" or r.get("scene") in (carried or ()):
             continue
         s["reviewRequired"] = True
         s["reviewReason"] = (f"The AI review changed this scene in the finished video ({r.get('note')}): "

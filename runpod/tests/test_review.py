@@ -1189,6 +1189,67 @@ class Report(unittest.TestCase):
         self.assertNotIn("reviewRequired", doc["scenes"][0])
 
 
+class SavedTimeline(unittest.TestCase):
+    """A build saves its own timeline: a swap the video kept is made there too, so the editor and a later
+    render show what the video shows; what cannot be carried is marked for the owner."""
+
+    def _pair(self):
+        scenes = [scene(i, video(f"https://pub.r2.dev/media/s{i:04d}-a1b2.mp4", 4.0), seconds=4.0) for i in range(3)]
+        scenes[1]["semanticMetadata"]["alternatives"] = [
+            alternative(_clip("saved_weak.mp4", 4.0), score=0.5, ident="yt:savedweak01", published=False),
+            alternative(_clip("saved_alt.mp4", 4.0), ident="yt:savedalt001", published=False)]
+        saved = doc_of(scenes)
+        return saved, copy.deepcopy(saved)                  # the build's timeline and its render copy
+
+    def _reviewed(self, drawn):
+        with _Review(fake_vision({"line 1": {"match": 0.2, "issues": ["mismatch"], "note": "a harbour"}})):
+            rev = review.Review(drawn, tempfile.mkdtemp())
+            self.assertTrue(rev.after_render("/x/final.mp4", FakeGate(), may_fix=True))
+        return rev.finish()
+
+    def test_a_kept_swap_is_made_on_the_saved_timeline_too(self):
+        saved, drawn = self._pair()
+        reviewed = self._reviewed(drawn)
+        self.assertEqual((reviewed["fixed"][0]["choice"], reviewed["fixed"][0]["asset"]), (2, "yt:savedalt001"))
+        carried = review.carry_swaps(saved, drawn, reviewed)
+        self.assertEqual(list(carried), ["s0001"])
+        s = saved["scenes"][1]
+        self.assertEqual(s["media"]["url"], _clip("saved_alt.mp4", 4.0))         # published with the timeline
+        self.assertEqual(s["media"]["clipSeconds"], 4.0)
+        self.assertEqual(s["semanticMetadata"]["assetId"], "yt:savedalt001")
+        self.assertEqual([a["assetId"] for a in s["semanticMetadata"]["alternatives"]], ["yt:savedweak01"])
+        self.assertEqual(review.mark_for_review(saved, reviewed, carried=carried), 0)
+        self.assertIn("AI review swapped this scene's picture", s["reviewReason"])   # not "replace it here"
+        self.assertEqual(carried["s0001"]["media"]["url"], "https://pub.r2.dev/media/s0001-a1b2.mp4")
+        # Its file saved: it stays. Not saved: the clip the timeline had comes back, marked for the owner.
+        s["media"]["url"] = "https://pub.r2.dev/media/s0001-c3d4.mp4"
+        self.assertEqual(review.unsaved_back(saved, dict(carried)), [])
+        saved, drawn = self._pair()
+        reviewed = self._reviewed(drawn)
+        carried = review.carry_swaps(saved, drawn, reviewed)
+        self.assertEqual(review.unsaved_back(saved, carried), ["s0001"])
+        self.assertEqual(carried, {})
+        self.assertEqual(saved["scenes"][1]["media"]["url"], "https://pub.r2.dev/media/s0001-a1b2.mp4")
+        self.assertEqual(review.mark_for_review(saved, reviewed, carried=carried), 1)
+        self.assertIn("replace it here to match", saved["scenes"][1]["reviewReason"])
+
+    def test_what_is_not_the_same_choice_on_both_or_not_a_choice_is_only_marked(self):
+        saved, drawn = self._pair()
+        reviewed = self._reviewed(drawn)
+        before = copy.deepcopy(saved)
+        for change in ({"asset": "yt:someother01"}, {"choice": 1}, {"choice": 9}, {"choice": None}):
+            rows = [dict(reviewed["fixed"][0], **change)]
+            self.assertEqual(review.carry_swaps(saved, drawn, {"fixed": rows}), {}, change)
+        ladder = {"fixed": [{"scene": "s0001", "issue": "repeat", "note": "x", "how": "replaced with a library clip"}]}
+        self.assertEqual(review.carry_swaps(saved, drawn, ladder), {})               # the ladder's: marked only
+        gone = copy.deepcopy(saved)
+        gone["scenes"][1]["semanticMetadata"]["alternatives"][1]["localPath"] = os.path.join(MEDIA, "gone.mp4")
+        self.assertEqual(review.carry_swaps(gone, drawn, reviewed), {})              # its file went with the job
+        self.assertEqual(saved, before)
+        self.assertEqual(review.carry_swaps(saved, None, reviewed), {})              # never raises
+        self.assertEqual(review.carry_swaps(None, drawn, reviewed), {})
+
+
 # --------------------------------------------------------------------------- #
 # The quality gate's part: the ladder for another check, the one second render
 # --------------------------------------------------------------------------- #
@@ -1481,6 +1542,79 @@ class HandlerWiring(unittest.TestCase):
         self.assertEqual(out["timeline"]["meta"]["review"], reviewed)
         self.assertEqual(out["review"], reviewed)
         self.assertIn("AI review changed this scene", out["timeline"]["scenes"][1]["reviewReason"])
+
+    def _split_build(self, saves: bool):
+        """A long build (its clips saved before the render) whose review swapped scene 2 for its choice."""
+        from tests.test_pipeline import build_doc
+        doc = build_doc(n=3, seconds=3.0)
+        alt = _clip("hw_alt.mp4", 4.0)
+        doc["scenes"][1].setdefault("semanticMetadata", {})["alternatives"] = [
+            alternative(alt, ident="yt:hwaltvideo1", published=False)]
+        sid = doc["scenes"][1]["id"]
+        seen = {}
+        published = []
+
+        def fake_render(d, inp, work, report, split=False):
+            seen.update(split=split, started=inp.get("_job_started"))
+            s = d["scenes"][1]                          # what the review did to the render copy
+            review.swap_in(s, {"alt": s["semanticMetadata"]["alternatives"][0], "src": alt, "kind": "video",
+                               "seconds": 4.0}, "a harbour")
+            return {"video_url": "u", "duration": 9,
+                    "quality": {"summary": "Quality check: 3/3 scenes OK", "repairs": []},
+                    "review": {"summary": "AI review: 2/3 scenes fit the narration, 1 clip swapped", "left": [],
+                               "fixed": [{"scene": sid, "issue": "mismatch", "note": "a harbour", "choice": 1,
+                                          "asset": "yt:hwaltvideo1", "how": "swapped for its choice 1"}]}}
+
+        def fake_publish(d, project_id, bucket, report, job_id="", band=(66, 68)):
+            published.append(band)
+            n = 0
+            for s in d["scenes"]:
+                m = s.get("media") or {}
+                if m.get("url") and not str(m["url"]).startswith("http") and (saves or len(published) == 1):
+                    m["url"] = f"https://pub.r2.dev/projects/p1/media/{s['id']}-{len(published)}.mp4"
+                    n += 1
+            return n
+        with mock.patch.object(handler, "do_plan", return_value=doc), \
+                mock.patch.object(handler, "_require_youtube"), mock.patch.object(handler, "_require_ai_credit"), \
+                mock.patch.object(handler, "do_render", side_effect=fake_render), \
+                mock.patch.object(handler, "publish_media", side_effect=fake_publish), \
+                mock.patch.object(handler.fanout, "render_enabled", return_value=True), \
+                mock.patch.object(handler.storage, "patch_project"):
+            t0 = time.time()
+            out = handler.handler({"id": "job-split", "input": {"action": "build", "project_id": "p1"}})
+        self.assertTrue(out["ok"], out)
+        self.assertTrue(seen["split"])
+        self.assertTrue(t0 - 5 <= seen["started"] <= t0 + 5)                      # the job's clock reaches the render
+        return out["timeline"]["scenes"][1], published
+
+    def test_a_job_that_runs_several_videos_keeps_its_own_start(self):
+        from tests.test_pipeline import build_doc
+        seen = []
+
+        def fake_render(d, inp, work, report, split=False):
+            seen.append(inp.get("_job_started"))
+            return {"video_url": "u", "duration": 6, "quality": {"summary": "Quality check: 2/2 scenes OK", "repairs": []}}
+        with mock.patch.object(handler, "do_plan", return_value=build_doc(n=2, seconds=3.0)), \
+                mock.patch.object(handler, "_require_youtube"), mock.patch.object(handler, "_require_ai_credit"), \
+                mock.patch.object(handler, "do_render", side_effect=fake_render), \
+                mock.patch.object(handler, "publish_media"), mock.patch.object(handler.storage, "patch_project"):
+            out = handler.handler({"id": "job-b", "input": {"action": "build", "_job_started": 1234.5}})
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(seen, [1234.5])                    # a batch's own start, not this video's
+
+    def test_a_split_build_saves_the_swapped_clip_with_its_timeline(self):
+        s, published = self._split_build(saves=True)
+        self.assertEqual(published, [(62, 69), (93, 94)])                          # before the render, and the swap
+        self.assertEqual(s["media"]["url"], f"https://pub.r2.dev/projects/p1/media/{s['id']}-2.mp4")
+        self.assertEqual(s["semanticMetadata"]["assetId"], "yt:hwaltvideo1")
+        self.assertIn("AI review swapped this scene's picture", s["reviewReason"])
+
+    def test_a_swapped_clip_that_cannot_be_saved_leaves_the_saved_clip_marked(self):
+        s, published = self._split_build(saves=False)
+        self.assertEqual(len(published), 2)
+        self.assertEqual(s["media"]["url"], f"https://pub.r2.dev/projects/p1/media/{s['id']}-1.mp4")   # as saved
+        self.assertNotEqual(s["semanticMetadata"].get("assetId"), "yt:hwaltvideo1")
+        self.assertIn("replace it here to match", s["reviewReason"])
 
     def test_the_review_flags_can_be_set_per_job(self):
         prev = handler._apply_config({"AI_REVIEW": "1", "AI_REVIEW_FIX": "0", "AI_REVIEW_MAX_CALLS": "3"})

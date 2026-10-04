@@ -2804,10 +2804,25 @@ def handler(job):
                 doc.setdefault("meta", {})["quality"] = out["quality"]
                 quality.mark_for_review(doc, out["quality"])
             if isinstance(out.get("review"), dict):
-                # The AI review's report with the saved timeline too, and the scenes it
-                # changed or flagged in the video marked for the editor.
+                # The AI review's report with the saved timeline too. A clip it swapped for the
+                # scene's own other choice is swapped on the saved timeline as well, so the editor
+                # and a later render show what the video shows (review.carry_swaps): its file is
+                # saved with the others below, or now when they were saved before the render - a
+                # swap whose file cannot be saved is taken back there. The rest it changed or
+                # found is marked for the editor.
                 doc.setdefault("meta", {})["review"] = out["review"]
-                review.mark_for_review(doc, out["review"])
+                carried = review.carry_swaps(doc, local_doc, out["review"])
+                if carried and split:
+                    count = doc["meta"].get("publishedMedia")
+                    try:
+                        n = publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
+                                          report, job_id=job_id, band=(93, 94))
+                        if isinstance(count, int):
+                            doc["meta"]["publishedMedia"] = count + n
+                    except Exception as e:  # noqa: BLE001 - the video is done; the saved clips stay as they were
+                        print(f"[review] swapped clips not saved: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                    review.unsaved_back(doc, carried)
+                review.mark_for_review(doc, out["review"], carried=carried)
             if not split and project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))
