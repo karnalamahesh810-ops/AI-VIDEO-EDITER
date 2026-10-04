@@ -618,6 +618,11 @@ def _bind_split_images(doc: dict, work: str, put) -> int:
     if not targets:
         return 0
 
+    # The address each picture came from, kept on the look's media as sourceUrl:
+    # a restore of a project whose files vanished (src/restore.py) can fetch
+    # it again; the two deleted projects' contrast pictures had no record.
+    picked: Dict[str, str] = {}
+
     def fetch(query: str, dest: str) -> str:
         from PIL import Image
         try:
@@ -639,6 +644,7 @@ def _bind_split_images(doc: dict, work: str, put) -> int:
                 if min(im.size) < 360:
                     continue
                 im.save(dest, "JPEG", quality=88)
+                picked[dest] = url
                 return dest
             except Exception:  # noqa: BLE001 - try the next result
                 continue
@@ -674,7 +680,8 @@ def _bind_split_images(doc: dict, work: str, put) -> int:
         ov["type"] = "split"
         ov["template"] = "CMP_SPLIT_V1"
         ov["items"] = [{"label": labels[0]}, {"label": labels[1]}]
-        ov["media"] = [{"type": "image", "url": u, "source": "web"} for u in urls]
+        ov["media"] = [{"type": "image", "url": u, "source": "web", **({"sourceUrl": picked[p]} if picked.get(p) else {})}
+                       for u, p in zip(urls, (a, b))]
         made += 1
     if made:
         print(f"[worker] {made} contrast(s) shown as a split of two photos", flush=True)
@@ -720,6 +727,11 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
     if not targets:
         return 0
 
+    # The address each picture came from, kept on the look's media as sourceUrl:
+    # a restore of a project whose files vanished (src/restore.py) can fetch
+    # it again; the two deleted projects' contrast pictures had no record.
+    picked: Dict[str, str] = {}
+
     def fetch(query: str, dest: str) -> str:
         from PIL import Image
         try:
@@ -741,6 +753,7 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
                 if min(im.size) < 360:
                     continue
                 im.save(dest, "JPEG", quality=88)
+                picked[dest] = url
                 return dest
             except Exception:  # noqa: BLE001 - try the next result
                 continue
@@ -768,7 +781,8 @@ def _bind_overlay_photos(doc: dict, work: str, put) -> int:
             except Exception as e:  # noqa: BLE001
                 print(f"[worker] overlay photo {n}: upload failed ({type(e).__name__})", flush=True)
         if url:
-            ov["media"] = [{"type": "image", "url": url, "source": "web"}]
+            ov["media"] = [{"type": "image", "url": url, "source": "web",
+                            **({"sourceUrl": picked[path]} if picked.get(path) else {})}]
             made += 1
         elif ov.get("type") != "map":
             drop.add(n)

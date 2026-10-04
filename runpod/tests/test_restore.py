@@ -794,6 +794,59 @@ class HandlerAction(Bench):
 
 
 # --------------------------------------------------------------------------- #
+class WhatPlansRecordForALaterRestore(Bench):
+    """The deleted projects' contrast pictures had no copy and no recorded address: new plans keep it."""
+
+    def test_a_contrast_pictures_address_is_kept_on_the_look_and_a_restore_fetches_it_again(self):
+        from tests.test_split_images import doc_with, jpeg_bytes
+        doc = doc_with([{"label": "Solid ground"}, {"label": "Submerged mud"}])
+        queries = []
+
+        def search(q, limit=6):
+            queries.append(q)
+            return [media.MediaAsset(kind="image", source="web", url=f"https://img/{len(queries)}.jpg")]
+        stored = {}
+
+        def put(local, name):
+            stored[name] = local
+            return url(name.split("/")[0], name.split("/")[1].replace(".jpg", "-abcdefabcdef.jpg"))
+        resp = mock.Mock(status_code=200, content=jpeg_bytes())
+        with mock.patch.object(config, "SPLIT_IMAGES", True), \
+                mock.patch.object(media, "search_web_images", side_effect=search), \
+                mock.patch("requests.get", return_value=resp):
+            self.assertEqual(handler._bind_split_images(doc, self.work, put), 1)
+        ov = doc["overlays"][0]
+        self.assertEqual([m["sourceUrl"] for m in ov["media"]], ["https://img/1.jpg", "https://img/2.jpg"])
+        self.assertEqual([m["source"] for m in ov["media"]], ["web", "web"])
+        # Years later the files are gone: the look's pictures come again from those addresses, unpolished.
+        shutil.rmtree(self.work)
+        os.makedirs(self.work)
+        out = self.run_restore(timeline(clip_scene(0), overlays=[ov]), refetch=True)
+        self.assertEqual((out["refetched"], out["failed"]), (3, 0))
+        self.assertEqual([c[1] for c in self.fetches() if c[0] == "picture"], ["https://img/1.jpg", "https://img/2.jpg"])
+        self.assertIn(key("split", "000_0-abcdefabcdef.jpg"), self.r2.keys_put())
+        self.assertEqual([p[0] for p in self.polished], ["upscale_clip"])             # the scene's clip only
+
+    def test_a_web_pictures_page_and_small_copy_are_kept_on_the_scene_and_used_to_fetch_it_again(self):
+        from tests.test_pipeline import simple_plan
+        from src import timeline as tl_mod
+        segments, shots, assets = simple_plan(2)
+        assets[0] = media.MediaAsset(kind="image", source="web_image", url="https://host.example/a.jpg",
+                                     local_path="file:///tmp/a.jpg", page_url="https://host.example/page",
+                                     thumbnail="https://duckduckgo.example/small.jpg")
+        doc = tl_mod.build(segments, shots, assets, audio_url="file:///tmp/vo.mp3", audio_duration=6.0, inp={})
+        sem = [s["semanticMetadata"] for s in doc["scenes"]]
+        self.assertEqual((sem[0]["pageUrl"], sem[0]["sourceThumbnail"]),
+                         ("https://host.example/page", "https://duckduckgo.example/small.jpg"))
+        self.assertNotIn("pageUrl", sem[1])                                          # a clip has none: nothing added
+        scene = photo_scene(1, src="https://host.example/a.jpg")
+        scene["semanticMetadata"].update(pageUrl="https://host.example/page", sourceThumbnail="https://duckduckgo.example/small.jpg")
+        self.run_restore(timeline(scene))
+        self.assertEqual(self.fetches(), [("picture", "https://host.example/a.jpg", "https://host.example/page",
+                                           "https://duckduckgo.example/small.jpg")])
+
+
+# --------------------------------------------------------------------------- #
 @unittest.skipUnless(FFMPEG, "needs ffmpeg")
 class RealFiles(unittest.TestCase):
     """The tone check on real files: the plan's own measurement tells a shot from another."""
