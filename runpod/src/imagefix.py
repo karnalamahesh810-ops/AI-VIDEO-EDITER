@@ -163,7 +163,7 @@ def _curl_cffi_get(url: str, dest: str, page_url: str = "") -> str:
     return dest
 
 
-def fetch(url: str, dest: str, page_url: str = "", thumbnail: str = "") -> str:
+def fetch(url: str, dest: str, page_url: str = "", thumbnail: str = "", *, allow_agency: bool = False) -> str:
     """
     Download a picture to `dest` and normalize it. Raises StorageError when
     every way of asking failed.
@@ -172,14 +172,17 @@ def fetch(url: str, dest: str, page_url: str = "", thumbnail: str = "") -> str:
     browser's headers with a Referer (hotlink blocks), then the picture the
     page stands for when the URL was a web page, then curl_cffi's Chrome
     fingerprint.
+
+    `allow_agency`: a picture a timeline already shows, fetched again to put
+    it back (src/restore.py) - the stock-agency block is for new choices.
     """
     if os.path.isfile(url):
         with _dest_lock(url):
             _note_provenance(url)
             return normalize(url)
-    # A stock agency's picture is never fetched, whoever asks (src/stockblock.py).
+    # A stock agency's picture is never fetched as a new choice, whoever asks (src/stockblock.py).
     from . import stockblock
-    why = stockblock.reason(url, page_url, thumbnail)
+    why = "" if allow_agency else stockblock.reason(url, page_url, thumbnail)
     if why:
         stockblock.note(why, "fetch", key=url)
         raise StorageError(f"picture not fetched: {why}")
@@ -191,7 +194,7 @@ def fetch(url: str, dest: str, page_url: str = "", thumbnail: str = "") -> str:
                                "not asked again for now")
         with _slot(url):
             try:
-                got = _fetch_raw(url, dest, page_url)
+                got = _fetch_raw(url, dest, page_url, allow_agency=allow_agency)
             except StorageError as e:
                 _note_refusal(url, str(e))
                 # The search engine's own copy of the picture (Google's / DuckDuckGo's
@@ -221,7 +224,7 @@ def _note_provenance(path: str) -> None:
         pass
 
 
-def _fetch_raw(url: str, dest: str, page_url: str) -> str:
+def _fetch_raw(url: str, dest: str, page_url: str, allow_agency: bool = False) -> str:
     errors = []
     try:
         return download(url, dest, timeout=20, attempts=1)
@@ -237,7 +240,7 @@ def _fetch_raw(url: str, dest: str, page_url: str) -> str:
     if any("HTML" in e for e in errors):
         og = _og_image(url, page_url)
         from . import stockblock
-        if og and og != url and stockblock.reason(og):
+        if og and og != url and not allow_agency and stockblock.reason(og):
             stockblock.note(stockblock.reason(og), "fetch", key=og)
             og = ""                     # the page stands for an agency's preview
         if og and og != url:
