@@ -83722,6 +83722,929 @@
    "autoPick": false
   },
   {
+   "id": "LIB_PR_DOC_SPOTLIGHT",
+   "name": "Document Spotlight",
+   "category": "DOCUMENTS",
+   "component": "motion",
+   "description": "A document set in real type (its kind as a kicker, the headline in Source Serif, the narration's sentence as its body) lands on a dark desk; the camera pushes in and leans toward the key words, a hand-drawn loop circles them (frame 30 -> 52; a phrase over two lines gets a hand underline per line) and a callout with a leader line names them (frame 54). For a report, records, a study, a newspaper or a law the line cites.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "body": {
+     "type": "string",
+     "label": "Body text",
+     "max": 600
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "pr-doc-spotlight",
+    "sfx": {
+     "name": "paper-slide",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sounds": [
+     {
+      "name": "paper-slide",
+      "alt": [
+       "paper"
+      ],
+      "at": 2,
+      "gain_db": -3.0
+     },
+     {
+      "name": "marker-draw",
+      "alt": [
+       "marker"
+      ],
+      "at": 30,
+      "align": "start",
+      "gain_db": -2.0
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "click"
+      ],
+      "at": 54,
+      "gain_db": -6.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "document",
+    "record",
+    "report"
+   ],
+   "tags": [
+    "lib",
+    "pr",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_PR_PHOTO_FOCUS",
+   "name": "Photo Focus",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "The still fills the frame; from frame 10 the camera eases in on its subject (a reviewed anchor, else the frame's centre), the edges fall back into shade, a hand-drawn ring circles the subject (frame 34 -> 56) and a callout with a leader line names it (frame 54) when the line names it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "pr-photo-focus",
+    "sfx": {
+     "name": "magnifier-glide",
+     "volume": 0.3
+    },
+    "sfxAt": 34,
+    "types": false,
+    "leastSeconds": 4.6,
+    "sounds": [
+     {
+      "name": "magnifier-glide",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 10,
+      "align": "start",
+      "gain_db": -4.0
+     },
+     {
+      "name": "marker-draw",
+      "alt": [
+       "marker"
+      ],
+      "at": 34,
+      "align": "start",
+      "gain_db": -2.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo-detail",
+    "photo-place",
+    "photo-object",
+    "photo"
+   ],
+   "tags": [
+    "lib",
+    "pr",
+    "own-backdrop",
+    "still"
+   ]
+  },
+  {
+   "id": "LIB_PR_GRAPH_BUILD",
+   "name": "Graph Build",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "The line's own figures on dark glass: three or more years as a line that draws in (frames 12 -> 60, cubic in-out) with its area filling behind, each point popping and its value counting up as the line reaches it, the last point ringed with the change since the first; other figures as bars growing in turn, the largest in the accent and ringed. Title and unit above.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "pr-graph-build",
+    "sfx": {
+     "name": "whoosh-soft",
+     "volume": 0.3
+    },
+    "sfxAt": 12,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sounds": [
+     {
+      "name": "whoosh-soft",
+      "alt": [
+       "swipe"
+      ],
+      "at": 2,
+      "gain_db": -6.0
+     },
+     {
+      "name": "count-roll",
+      "alt": [
+       "counter"
+      ],
+      "at": 14,
+      "align": "start",
+      "gain_db": -8.0
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "click"
+      ],
+      "at": 62,
+      "gain_db": -5.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "series",
+    "compare-values",
+    "then-now"
+   ],
+   "tags": [
+    "lib",
+    "pr"
+   ]
+  },
+  {
+   "id": "LIB_PR_MAP_PATH",
+   "name": "Map Path",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Two places on a dark vector map (the states, else the countries): the camera starts close on the first, pin and name, and travels out to a view of both (frames 8 -> 52) while the route draws along the great circle (frames 20 -> 62) with a soft glow and a bright head; the second pin lands as the route arrives, then its name and the distance (as said, else straight-line miles).",
+   "kind": "card",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "pr-map-path",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 20,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 8,
+      "align": "start",
+      "gain_db": -5.0
+     },
+     {
+      "name": "map-route",
+      "alt": [
+       "marker-draw"
+      ],
+      "at": 20,
+      "align": "start",
+      "gain_db": -4.0
+     },
+     {
+      "name": "pin-drop",
+      "alt": [
+       "map-ping"
+      ],
+      "at": 62,
+      "gain_db": -3.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "route",
+    "distance"
+   ],
+   "tags": [
+    "lib",
+    "pr",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "LIB_PR_NUMBER_REVEAL",
+   "name": "Number Reveal",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "One figure, big and low on the footage over a feathered shade: what it counts in small tracked caps in the accent, the number counting up in Anton with tabular figures (frames 6 -> 40), its unit beside it, an accent rule drawing under it and one line of what it means (subtitle). Left, or right with align.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "align": {
+     "type": "enum",
+     "label": "Placement",
+     "options": [
+      "auto",
+      "left",
+      "right",
+      "center"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "pr-number-reveal",
+    "sfx": {
+     "name": "count-roll",
+     "volume": 0.3
+    },
+    "sfxAt": 40,
+    "types": false,
+    "leastSeconds": 3.9,
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "counter",
+       "ui-tick"
+      ],
+      "at": 6,
+      "align": "start",
+      "gain_db": -8.0
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-pop"
+      ],
+      "at": 40,
+      "gain_db": -4.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "measurement",
+    "count",
+    "money"
+   ],
+   "tags": [
+    "lib",
+    "pr"
+   ]
+  },
+  {
    "id": "LIB_PX_APERTURE_IRIS",
    "name": "Aperture Open",
    "category": "IMAGES",

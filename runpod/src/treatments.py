@@ -1684,7 +1684,16 @@ def _least_used(ids: List[str], counts: Optional[Dict[str, int]]) -> Optional[st
 # dark vector map in at most one map in four.
 SATELLITE_PLACE_MAPS = ["MAP_LOCATION_ZOOM_V1", "MAP_LOCATION_PULSE_V1", "MAP_TILT_V1", "MAP_INSET_V1",
                         "MAP_FOCUS_V1", "MAP_TRACE_V1", "MAP_DISASTER_V1"]
-TWO_PLACE_MAPS = ["MAP_DISTANCE_V1", "MAP_TRACE_V1"]
+# The premium looks (remotion LibPremium, 2026-10-05): a document spotlight, a photo focus, a chart that draws
+# in, a map path between two places, a number reveal. Each is preferred where its line asks for it and no
+# two of them come within PREMIUM_GAP seconds of each other (the owner: better animations, not over-used).
+PR_DOC = "LIB_PR_DOC_SPOTLIGHT"
+PR_PHOTO = "LIB_PR_PHOTO_FOCUS"
+PR_GRAPH = "LIB_PR_GRAPH_BUILD"
+PR_MAP = "LIB_PR_MAP_PATH"
+PR_NUMBER = "LIB_PR_NUMBER_REVEAL"
+PREMIUM_GAP = 45.0
+TWO_PLACE_MAPS = ["MAP_DISTANCE_V1", "MAP_TRACE_V1", PR_MAP]
 VECTOR_MAP_EVERY = 4
 
 
@@ -1710,7 +1719,8 @@ def _map_ids(overlay: dict, pack: dict, still: bool = False, n_maps: int = 0) ->
     by_variant = next((t["id"] for t in templates.for_component("map")
                        if (t.get("defaults") or {}).get("variant") == variant), "") if variant else ""
     if variant.startswith("route") or variant == "satellite-route":
-        ids, fits = [pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"] + _pro(MX_ROUTE), by_variant.startswith("MAP_ROUTE")
+        ids = [pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1", PR_MAP] + _pro(MX_ROUTE)
+        fits = by_variant.startswith("MAP_ROUTE")
     elif variant.startswith("spread") or n_locs >= 3:
         # Three or more areas: the spread map lights each one in turn.
         ids, fits = [pack["multi"]] + _pro(MX_MANY if n_locs >= 3 else []), by_variant.startswith("MAP_SPREAD")
@@ -2705,6 +2715,7 @@ class _Planner:
         self.phrases: Dict[str, float] = {}
         # Photo captions shown, by name: the same name is not captioned again within CAPTION_REPEAT_GAP.
         self.captions: Dict[str, float] = {}
+        self.last_premium = -1e9
         self.skip_next_still = False
         self.n_maps = 0
         # Auto maps (src/automaps.py): (feature id, section) already mapped - one per feature per section.
@@ -3336,7 +3347,7 @@ class _Planner:
             # The bold count leads; after BOLD_COUNT_RUN of them in a row, one other look for variety.
             req["lead"] = lead
         if c["cue"] == "route":
-            req.update(ids=[self.pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1"] + _pro(MX_ROUTE), cues=[],
+            req.update(ids=[self.pack["route"], "MAP_ROUTE_SAT_V1", "MAP_TRACE_V1", PR_MAP] + _pro(MX_ROUTE), cues=[],
                        cue="route", group="map", mode="seq")
         # (A span of time - "3 days later", "48 hours" - is a relative time: _musts gives it no graphic.)
         self._specific(req, c, seg)
@@ -3378,6 +3389,16 @@ class _Planner:
             req["cues"] = want + [x for x in req["cues"] if x not in want]
             req["props_by_cue"] = {**req.get("props_by_cue", {}), **by_cue}
             req.pop("lead", None)
+        # The premium look this line's cue asks for (PR_*), preferred where it fits, with the line's own words.
+        premium = _premium_props(c, text, props)
+        if premium and auto_ok(premium[0]):
+            tid, extra = premium
+            req["prefer"] = list(req.get("prefer") or []) + [tid]
+            # tried first while fresh (not shown in LOOK_GAP) - after the bold count when that leads, and
+            # never before the looks drawn for what this line says more exactly (a record, a rate, a share)
+            if not want:
+                req.setdefault("first", tid)
+            by_id[tid] = {**props, **extra}
         if by_id:
             req["props_by_id"] = {**req.get("props_by_id", {}), **by_id}
 
@@ -3564,6 +3585,14 @@ class _Planner:
         else:
             shown = caption
         props = ({"text": shown} if by_kind else {"text": shown.upper()}) if shown else {}
+        exact = [x for x in for_line if auto_ok(x) and x != PR_PHOTO]
+        if auto_ok(PR_PHOTO) and any(t["id"] == PR_PHOTO for t in pool)                 and ("photo-detail" in line or (shown and not exact)):
+            # The photo focus (a push-in and a ring round the subject) is for a still whose subject the line
+            # names, or points at ("look closely", "you can see"): preferred there, spaced by PREMIUM_GAP.
+            specific = [PR_PHOTO] + [x for x in specific if x != PR_PHOTO]
+            premium_first = PR_PHOTO
+        else:
+            premium_first = ""
         by_id = {}
         hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else {}
         if hint.get("type") == "map" and hint.get("locations"):
@@ -3574,7 +3603,8 @@ class _Planner:
             if said and str((t.get("defaults") or {}).get("variant") or "").startswith("px-"):
                 by_id[t["id"]] = {**props, **said}
         req = {"ids": [t["id"] for t in pool], "prefer": specific, "props": props, "props_by_id": by_id,
-               "mode": "director", "group": "photo", "emphasis": "medium", "never_again": True}
+               "mode": "director", "group": "photo", "emphasis": "medium", "never_again": True,
+               **({"first": premium_first} if premium_first else {})}
         got = self._request(req, seg, scene, "director")
         if got and shown:
             self.captions[shown.lower()] = float(seg.start)
@@ -3800,6 +3830,8 @@ class _Planner:
                 return None
         elif mode == "director" and t.get("kind") in CARD_KINDS and self.rhythm.overlaps(t_in):
             return None
+        if str(t.get("id") or "").startswith("LIB_PR_") and t_in - self.last_premium < PREMIUM_GAP:
+            return None             # two premium looks never come close together: another look, or none
         # Never into a full-screen scene or a span already taken ahead (the job's title card).
         t_out = min(t_out, self._clear_until(t_in))
         if mode in ("normal", "director") and not dated:
@@ -3834,6 +3866,8 @@ class _Planner:
             overlay["media"] = [media]
         idx = len(self.overlays)
         self.overlays.append(overlay)
+        if str(t.get("id") or "").startswith("LIB_PR_"):
+            self.last_premium = o_start / fps
         tr_idx = len(self.treatments)
         if klass in _PERSIST_CLASSES:
             self.persisting.append((idx, tr_idx, klass))
@@ -4480,6 +4514,35 @@ def layout_window(template: dict, klass: str) -> tuple:
         lo, hi = LAYOUT_WINDOWS["full"]          # a card of words is a card: 2.5-5 s
     lo = max(lo, animation_seconds(template))
     return lo, max(hi, lo)
+
+
+def _premium_props(c: dict, text: str, props: dict) -> Optional[Tuple[str, dict]]:
+    """
+    (premium look, the props it adds) for a cue whose line suits one: a figure with a few words after it
+    (the number reveal's one line of context, as said, at most seven words), a document (the key words its
+    loop circles: a superlative, a figure, a name, as said), a series or two values to compare (the graph).
+    None otherwise.
+    """
+    cue = c.get("cue")
+    if cue in ("big-number", "measurement", "count", "money"):
+        norm = numwords.normalize(re.sub(r"\s+", " ", text or "").strip())
+        after = _after_figure(norm, props)
+        at = norm.find(after) if after else -1
+        # (a whole clause only: it ends on the line's punctuation - not where the line runs on into the next)
+        whole = at >= 0 and bool(re.match(r"\s*[.,;:!?]", norm[at + len(after):]))
+        line = screentext.headline(after, norm, words=7, chars=40) if whole and len(_words(after)) >= 2 else ""
+        if line and after[:1].islower():
+            line = line[:1].lower() + line[1:]          # "3,516 FT / above sea level", as said
+        if line and _words(line.lower()) == _words(str(props.get("text") or "").lower()):
+            line = ""                                   # never the label said twice ("PEOPLE DIED / People died")
+        return (PR_NUMBER, {"subtitle": line}) if line else None
+    if cue == "document":
+        body = str(props.get("body") or text or "")
+        key = screentext.doc_key(body)
+        return PR_DOC, ({"highlight": key} if key else {})
+    if cue in ("series", "compare-values", "then-now") and len(props.get("items") or []) >= 2:
+        return PR_GRAPH, {}
+    return None
 
 
 def _figure_key(cue: dict) -> Optional[tuple]:

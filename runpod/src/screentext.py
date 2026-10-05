@@ -320,6 +320,42 @@ def key_phrase(narration: str, words: int = HEAD_WORDS, chars: int = HEAD_CHARS,
     return ""
 
 
+def doc_key(body: str, words: int = 6, chars: int = 40) -> str:
+    """
+    The words a document's loop circles: the claim it makes - a superlative ("lowest level since it first
+    filled"), a figure with its unit, else the name it is about - as said; '' when there is none.
+    """
+    b = repair(body)
+    if not b:
+        return ""
+    m = _SUPERLATIVE.search(b)
+    if m:
+        toks = tokens(m.group(1))
+        i, j, _cut = _trim(b, toks, 0, len(toks))
+        # a superlative's phrase runs to its clause's end when that fits ("lowest level since it first filled")
+        start = m.start(1) + toks[i][2] if j > i else m.start(1)
+        rest = re.split(r"[,;:.!?]|\s[-–—]\s", b[start:])[0].strip()
+        rt = tokens(rest)
+        while rt and len(rt) > words:
+            rt = rt[:-1]
+        while rt and rt[-1][1] in _DANGLING:
+            rt = rt[:-1]
+        cand = rest[:rt[-1][3]] if rt else ""
+        cand = re.sub(r"^(?:the)\s+", "", cand, flags=re.I)
+        if len(tokens(cand)) >= 2 and len(cand) <= chars:
+            return cand
+    k = key_phrase(b, words, chars)
+    if len(tokens(k)) >= 2 or (k and not re.fullmatch(r"[\d,.$%\s]+", k)):
+        return k
+    # else what the document says: the end of its first clause ("the lake could keep falling for years")
+    clause = re.split(r"[,;:.!?]|\s[-–—]\s", b)[0]
+    ct = tokens(clause)[-words:]
+    while ct and (ct[0][1] in _LEAD or ct[0][1] in ("the", "a", "an", "that")):
+        ct = ct[1:]
+    cand = clause[ct[0][2]:ct[-1][3]] if ct else ""
+    return cand if len(ct) >= 3 and len(cand) <= chars else ""
+
+
 def headline(text: str, narration: str, words: int = HEAD_WORDS, chars: int = HEAD_CHARS,
              term: bool = False) -> str:
     """

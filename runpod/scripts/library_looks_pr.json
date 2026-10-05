@@ -1,0 +1,324 @@
+[
+ {
+  "id": "pr-doc-spotlight",
+  "name": "Document Spotlight",
+  "category": "DOCUMENTS",
+  "description": "A document set in real type (its kind as a kicker, the headline in Source Serif, the narration's sentence as its body) lands on a dark desk; the camera pushes in and leans toward the key words, a hand-drawn loop circles them (frame 30 -> 52; a phrase over two lines gets a hand underline per line) and a callout with a leader line names them (frame 54). For a report, records, a study, a newspaper or a law the line cites.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "body",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "document",
+   "record",
+   "report"
+  ],
+  "duration": 6.0,
+  "least": 5.0,
+  "sfx": "paper-slide",
+  "sfx_at": 30,
+  "types": false,
+  "sounds": [
+   {
+    "name": "paper-slide",
+    "alt": [
+     "paper"
+    ],
+    "at": 2,
+    "gain_db": -3.0
+   },
+   {
+    "name": "marker-draw",
+    "alt": [
+     "marker"
+    ],
+    "at": 30,
+    "align": "start",
+    "gain_db": -2.0
+   },
+   {
+    "name": "ui-pop",
+    "alt": [
+     "click"
+    ],
+    "at": 54,
+    "gain_db": -6.0
+   }
+  ],
+  "sample": {
+   "text": "Lake Powell's water fell to its lowest level since it first filled",
+   "label": "Report",
+   "subtitle": "Bureau of Reclamation",
+   "body": "The bureau's data show the reservoir fell to its lowest level since it first filled in 1980.",
+   "highlight": "lowest level since it first filled"
+  },
+  "family": "pr",
+  "file": "LibPremium",
+  "exit": "none",
+  "auto_pick": true
+ },
+ {
+  "id": "pr-photo-focus",
+  "name": "Photo Focus",
+  "category": "IMAGES",
+  "description": "The still fills the frame; from frame 10 the camera eases in on its subject (a reviewed anchor, else the frame's centre), the edges fall back into shade, a hand-drawn ring circles the subject (frame 34 -> 56) and a callout with a leader line names it (frame 54) when the line names it.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "photo-detail",
+   "photo-place",
+   "photo-object",
+   "photo"
+  ],
+  "duration": 5.5,
+  "least": 4.6,
+  "sfx": "marker-draw",
+  "sfx_at": 34,
+  "types": false,
+  "sounds": [
+   {
+    "name": "magnifier-glide",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 10,
+    "align": "start",
+    "gain_db": -4.0
+   },
+   {
+    "name": "marker-draw",
+    "alt": [
+     "marker"
+    ],
+    "at": 34,
+    "align": "start",
+    "gain_db": -2.0
+   }
+  ],
+  "sample": {
+   "text": "Glen Canyon Dam",
+   "subtitle": "Spillway tunnel, 1983"
+  },
+  "family": "pr",
+  "file": "LibPremium",
+  "exit": "none",
+  "auto_pick": true
+ },
+ {
+  "id": "pr-graph-build",
+  "name": "Graph Build",
+  "category": "CHARTS",
+  "description": "The line's own figures on dark glass: three or more years as a line that draws in (frames 12 -> 60, cubic in-out) with its area filling behind, each point popping and its value counting up as the line reaches it, the last point ringed with the change since the first; other figures as bars growing in turn, the largest in the accent and ringed. Title and unit above.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "series",
+   "compare-values",
+   "then-now"
+  ],
+  "duration": 6.0,
+  "least": 5.0,
+  "sfx": "whoosh-soft",
+  "sfx_at": 12,
+  "types": false,
+  "sounds": [
+   {
+    "name": "whoosh-soft",
+    "alt": [
+     "swipe"
+    ],
+    "at": 2,
+    "gain_db": -6.0
+   },
+   {
+    "name": "count-roll",
+    "alt": [
+     "counter"
+    ],
+    "at": 14,
+    "align": "start",
+    "gain_db": -8.0
+   },
+   {
+    "name": "ui-pop",
+    "alt": [
+     "click"
+    ],
+    "at": 62,
+    "gain_db": -5.0
+   }
+  ],
+  "sample": {
+   "text": "Lake Powell",
+   "subtitle": "Elevation",
+   "suffix": "FT",
+   "items": [
+    {
+     "label": "1980",
+     "value": 3700
+    },
+    {
+     "label": "2005",
+     "value": 3555
+    },
+    {
+     "label": "2022",
+     "value": 3522
+    }
+   ]
+  },
+  "family": "pr",
+  "file": "LibPremium",
+  "exit": "none",
+  "auto_pick": true
+ },
+ {
+  "id": "pr-map-path",
+  "name": "Map Path",
+  "category": "MAPS",
+  "description": "Two places on a dark vector map (the states, else the countries): the camera starts close on the first, pin and name, and travels out to a view of both (frames 8 -> 52) while the route draws along the great circle (frames 20 -> 62) with a soft glow and a bright head; the second pin lands as the route arrives, then its name and the distance (as said, else straight-line miles).",
+  "kind": "map",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "locations",
+   "value",
+   "suffix"
+  ],
+  "cues": [
+   "route",
+   "distance"
+  ],
+  "duration": 6.0,
+  "least": 5.0,
+  "sfx": "map-route",
+  "sfx_at": 20,
+  "types": false,
+  "sounds": [
+   {
+    "name": "map-swoop",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 8,
+    "align": "start",
+    "gain_db": -5.0
+   },
+   {
+    "name": "map-route",
+    "alt": [
+     "marker-draw"
+    ],
+    "at": 20,
+    "align": "start",
+    "gain_db": -4.0
+   },
+   {
+    "name": "pin-drop",
+    "alt": [
+     "map-ping"
+    ],
+    "at": 62,
+    "gain_db": -3.0
+   }
+  ],
+  "sample": {
+   "text": "Downstream",
+   "locations": [
+    {
+     "label": "Page, Arizona",
+     "lat": 36.9147,
+     "lon": -111.4558
+    },
+    {
+     "label": "Las Vegas, Nevada",
+     "lat": 36.1699,
+     "lon": -115.1398
+    }
+   ]
+  },
+  "family": "pr",
+  "file": "LibPremium",
+  "exit": "none",
+  "auto_pick": true
+ },
+ {
+  "id": "pr-number-reveal",
+  "name": "Number Reveal",
+  "category": "NUMBERS",
+  "description": "One figure, big and low on the footage over a feathered shade: what it counts in small tracked caps in the accent, the number counting up in Anton with tabular figures (frames 6 -> 40), its unit beside it, an accent rule drawing under it and one line of what it means (subtitle). Left, or right with align.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "prefix",
+   "text",
+   "subtitle",
+   "align"
+  ],
+  "cues": [
+   "big-number",
+   "measurement",
+   "count",
+   "money"
+  ],
+  "duration": 4.5,
+  "least": 3.9,
+  "sfx": "count-final",
+  "sfx_at": 40,
+  "types": false,
+  "sounds": [
+   {
+    "name": "count-roll",
+    "alt": [
+     "counter",
+     "ui-tick"
+    ],
+    "at": 6,
+    "align": "start",
+    "gain_db": -8.0
+   },
+   {
+    "name": "count-final",
+    "alt": [
+     "ui-pop"
+    ],
+    "at": 40,
+    "gain_db": -4.0
+   }
+  ],
+  "sample": {
+   "value": 3516,
+   "suffix": "FT",
+   "text": "Lake Powell",
+   "subtitle": "above sea level, the lowest since 1963"
+  },
+  "family": "pr",
+  "file": "LibPremium",
+  "exit": "none",
+  "auto_pick": true
+ }
+]

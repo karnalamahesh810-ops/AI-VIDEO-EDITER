@@ -28,7 +28,8 @@ from typing import Dict, List, Optional, Tuple
 from . import config, sfxplan, templates
 
 POINTING_PHOTO = {"LIB_PE_RED_ARROW", "LIB_PE_CIRCLE_SPOTLIGHT"}
-DETAIL_PHOTO = {"LIB_PE_MAGNIFY", "LIB_PE_CASE_FILE"}
+# (the photo focus, LibPremium: its push-in and ring centre on the anchor found; the frame's centre without one)
+DETAIL_PHOTO = {"LIB_PE_MAGNIFY", "LIB_PE_CASE_FILE", "LIB_PR_PHOTO_FOCUS"}
 PHOTO_FALLBACK = "LIB_PE_CASE_FILE"
 VIDEO_MARKS = ("LIB_VM_ARROW", "LIB_VM_CIRCLE", "LIB_VM_BOX")
 MARK_SECONDS = 3.0          # a mark does not track motion: short, on a steady moment
