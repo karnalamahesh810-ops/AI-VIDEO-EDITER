@@ -269,6 +269,27 @@ class TheHookCheck(unittest.TestCase):
         self.assertEqual(doc["scenes"][0]["media"]["url"], refetched)
         self.assertIn("t=188", doc["scenes"][0]["semanticMetadata"]["sourceUrl"])
 
+    def test_a_title_card_on_the_first_frame_scored_0_is_still_cut_again(self):
+        # The defect this check exists for: the judge is told to score a title card 0 with text, so the
+        # verdict's score says nothing about the middle - the re-cut from it is judged on its own.
+        doc, first, second = self.glen_canyon()
+        refetched = self.file("yt_R_z4cbZu3Ok_186100_7500_0123456789_c00020.mp4")
+        fetches = []
+
+        def judge(path, intent, context="", **kw):
+            v = (dict(VERDICT, opening=False, score=0.0, has_text_or_watermark=True) if path == first
+                 else dict(VERDICT))
+            return dict(v, frames=vision.opening_times(kw["span"]), span=kw["span"])
+
+        def fetch(vid, work, at, need, title="", **kw):
+            fetches.append(round(at, 2))
+            return refetched, True, 0
+        with mock.patch.object(vision, "judge", side_effect=judge),                 mock.patch.object(filters, "_video_seconds", side_effect=lambda p: 3.5 if p == first else 3.5),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(filters, "trim_clip", return_value=""),                 mock.patch.object(media, "fetch_clean_clip", side_effect=fetch),                 mock.patch.object(gapfill, "hold_or_animate", return_value={}):
+            out = hookcheck.check(doc, work=self.work)
+        self.assertEqual(fetches, [188.1])
+        self.assertEqual((out["moved"], out["cleared"]), (1, 0))
+        self.assertEqual(doc["scenes"][0]["media"]["url"], refetched)
+
     def test_a_moved_start_never_leaves_a_clip_the_renderer_would_slow(self):
         # A crossfade into the next scene plays this clip 0.5 s longer (quality.scene_need): a 4.0 s file
         # past its cut at 0.6 s would cover 3.3 s of the 3.5 s it must.
@@ -282,7 +303,7 @@ class TheHookCheck(unittest.TestCase):
                 mock.patch.object(filters, "trim_clip", side_effect=AssertionError("would be slowed")), \
                 mock.patch.object(gapfill, "hold_or_animate", return_value={}):
             out = hookcheck.check(doc, work=self.work)
-        self.assertEqual((out["moved"], out["cleared"]), (0, 1))      # (0.6 under the floor: not cut again either)
+        self.assertEqual((out["moved"], out["cleared"]), (0, 1))      # (its re-cut comes back empty here)
 
     def test_a_clip_turned_down_takes_a_runner_up_that_passes(self):
         doc, first, second = self.glen_canyon()

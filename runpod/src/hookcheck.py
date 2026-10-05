@@ -277,10 +277,13 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
     (True when it passed and is on the scene): first inside its own file - past
     a shot change in its first MOVE_REACH seconds, else (the first frame turned
     down) as far as the file runs on past what the scene shows - and then, a
-    YouTube clip whose middle and end fit, cut again from its source starting at
-    the middle frame the judge saw fit (one download). Never a cut shorter than
-    `cover` (what the scene plays, a crossfade into the next included; `span`
-    when not given): a clip is never slowed.
+    YouTube clip whose first frame was turned down, cut again from its source
+    starting at its middle frame (one download, the new cut judged like any:
+    the verdict's own score takes in that bad first frame - a title card there
+    is told to score 0 - so it says nothing about the middle). Never a cut
+    shorter than `cover` (what the scene plays, a crossfade into the next
+    included; `span` when not given): a clip is never slowed. Nothing is tried
+    that no verdict could follow (vision off, the calls spent).
     """
     from . import filters, media
     if (scene.get("media") or {}).get("type") != "video" or not path:
@@ -312,7 +315,7 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
                 scene["semanticMetadata"]["cutCheck"]["moved"] = round(at, 2)
                 return True
             _remove(out)
-    if v.get("opening") is not False or float(v.get("score") or 0.0) < config.VISION_MIN_SCORE or not work:
+    if v.get("opening") is not False or not work:
         return False
     vid, was = _source_point(scene, path)
     frames = list(v.get("frames") or [])
