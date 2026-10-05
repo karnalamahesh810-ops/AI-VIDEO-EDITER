@@ -8,7 +8,8 @@ import { CaptionsOn } from "./components/layout";
 import { MotionWrap } from "./components/MotionWrap";
 import { motionClass } from "./components/motion/lookClass";
 import { StageFx, stageWindows } from "./components/motion/stage";
-import { sceneAvoid } from "./components/motion/avoid";
+import { sceneAvoid, sceneBusy } from "./components/motion/avoid";
+import { PictureGuard } from "./components/motion/pictureGuard";
 import { resolveOverlay, templateFor } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
 import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
@@ -161,6 +162,11 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
     const avoid = sceneAvoid(ov, scenes);
     if (avoid.length) ov = { ...ov, avoid };
   }
+  // Words over busy footage (a detailed map, lettering in the picture) sit on a slim blurred panel instead of
+  // a soft shade (the kinetic type looks read overlay.backing; the planner's choice wins when it made one).
+  if (/^kt-/.test(ov.variant || "") && !(ov as { backing?: string }).backing && sceneBusy(ov, scenes)) {
+    ov = { ...ov, backing: "panel" } as Overlay;
+  }
   const scale = textScale(ov);
   const klass = motionClass(ov);
   if (ov.backdrop === "blur") {
@@ -177,13 +183,27 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
         </KScale.Provider>
       </MotionWrap>, sound);
   }
+  const hot = accentFor(ov, accent, accent2);
+  // An image look draws only pictures that load; when none does it is drawn as the scene's own picture,
+  // blurred, with the look's words (components/motion/pictureGuard.tsx) - never an empty box.
+  const body = pics && pics.length ? (
+    <PictureGuard media={pics} overlay={ov} still={stillUnder(ov, scenes)} accent={hot}
+      render={(ok) => <Component overlay={{ ...ov, media: ok }} accent={hot} />} />
+  ) : <Component overlay={ov} accent={hot} />;
   return withSound(
     <MotionWrap motion={ov.motion} exit={ov.exit} speed={ov.speed} klass={klass}
       placement={{ position: ov.position, scale: ov.scale, opacity: ov.opacity }}>
       <KScale.Provider value={scale}>
-        <Component overlay={ov} accent={accentFor(ov, accent, accent2)} />
+        {body}
       </KScale.Provider>
     </MotionWrap>, sound);
+};
+
+/** The still of the scene an overlay starts on (its picture, or its clip's thumbnail). */
+const stillUnder = (ov: Overlay, scenes: TimelineProps["scenes"]): string => {
+  const under = scenes.find((s) => ov.startFrame >= s.startFrame && ov.startFrame < s.startFrame + s.durationInFrames);
+  const m = under?.media;
+  return m ? (m.type === "image" ? m.url : m.thumbnail || "") : "";
 };
 
 /**
@@ -379,7 +399,7 @@ const Body: React.FC<TimelineProps> = (props) => {
   // In the editor's Player, mount each clip this long before it appears so its
   // video has loaded by its first frame; without it every cut stalled on a
   // fresh download. Rendering ignores premounting.
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames: bodyFrames } = useVideoConfig();
   const premount = Math.round(fps * 2);
   // An animation scene's backdrop: the nearest clip of the story, blurred.
   const backdrops = React.useMemo(() => {
@@ -487,7 +507,9 @@ const Body: React.FC<TimelineProps> = (props) => {
         <Sequence
           key={`ov-${i}`}
           from={ov.startFrame}
-          durationInFrames={ov.durationInFrames}
+          // Never past the end of the video: the look's own exit (MotionWrap, inside its duration) then
+          // always plays whole instead of the outer sequence cutting it mid-exit.
+          durationInFrames={Math.max(1, Math.min(ov.durationInFrames, bodyFrames - ov.startFrame))}
           premountFor={premount}
         >
           {overlayNodes[i]}

@@ -862,7 +862,9 @@ def _library() -> list:
         elif n > 1:
             tags.append("stills")
         sfx = look.get("sfx") or "none"
-        t = T("LIB_" + look["id"].upper().replace("-", "_"), look["name"], look["category"], "motion",
+        # A family may name its registry ids itself ("template": the kinetic type looks are KT_NUMBER, KT_DATE, ...).
+        tid = look.get("template") or ("LIB_" + look["id"].upper().replace("-", "_"))
+        t = T(tid, look["name"], look["category"], "motion",
               look["description"], props=[p for p in look.get("props", []) if p in P],
               duration=float(look.get("duration") or 4.5), variant=look["id"], entrance="fade",
               exit_=look.get("exit") or "fade",
@@ -888,6 +890,35 @@ def _library() -> list:
     return out
 
 
+# ---------------------------------------------------------------- retired looks
+# The looks the owner retired (2026-10-05: the big outlined condensed words and figures, "15 TIMES", the boxed
+# "ALMOST 15" stack - "it looks cheap, like a CapCut font"). One home for the list: RETIRED_IDS in
+# remotion/src/legacyLooks.ts, which also draws each one as its clean kinetic-type replacement at render. Here
+# they are written "retired": true and "autoPick": false: the planner never picks them, the editor hides them.
+LEGACY = os.path.join(ROOT, "remotion", "src", "legacyLooks.ts")
+
+
+def retired_ids() -> set:
+    """The retired template ids (legacyLooks.ts RETIRED_IDS)."""
+    import re
+    with open(LEGACY, encoding="utf-8") as fh:
+        src = fh.read()
+    m = re.search(r"RETIRED_IDS\s*=\s*\[(.*?)\]\s*as const", src, re.S)
+    if not m:
+        raise SystemExit("legacyLooks.ts: RETIRED_IDS not found")
+    body = re.sub(r"//[^\n]*", "", m.group(1))
+    return set(re.findall(r'"([A-Z0-9_]+)"', body))
+
+
+def _retire(templates: list) -> list:
+    gone = retired_ids()
+    for t in templates:
+        if t["id"] in gone:
+            t["retired"] = True
+            t["autoPick"] = False
+    return templates
+
+
 def build() -> dict:
     """The registry, as written to OUT (every template with its built-in sound design)."""
     design = designer()
@@ -895,8 +926,8 @@ def build() -> dict:
         "version": 1,
         "categories": ["TEXT", "HEADLINES", "LOWER_THIRDS", "NUMBERS", "CHARTS", "COMPARISONS", "TIMELINES",
                        "MAPS", "CALLOUTS", "QUOTES", "DOCUMENTS", "IMAGES", "TRANSITIONS", "CAPTIONS"],
-        "templates": [with_sound(copy.deepcopy(t), None, design["looks"].get(t["id"]), design["replace"])
-                      for t in TEMPLATES] + _library(),
+        "templates": _retire([with_sound(copy.deepcopy(t), None, design["looks"].get(t["id"]), design["replace"])
+                              for t in TEMPLATES] + _library()),
         "imageTreatments": IMAGE_TREATMENTS,
         "transitions": TRANSITIONS,
         "sfx": SFX,

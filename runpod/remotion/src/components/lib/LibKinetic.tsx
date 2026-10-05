@@ -49,8 +49,11 @@ const useLook = (overlay: Overlay, accent: string) => {
   const k = W / 1920;
   const dir = directionOf(overlay);
   // The accent: the overlay's theme (or the brand kit's colour, theme "accent"), else the direction's own.
-  const themed = overlay.theme && overlay.theme !== "auto";
-  const hot = themed ? (THEMES[overlay.theme || ""] || accent || dir.accent) : dir.accent;
+  // The brand kit's accent leads (the kicker, the bar, the ring); the worker's unset default (#FFD400, a hard
+  // yellow) gives way to the direction's refined gold, so a video without a brand kit never gets a yellow fill.
+  const themed = overlay.theme && overlay.theme !== "auto" && overlay.theme !== "accent";
+  const brand = accent && !/^#?ffd400$/i.test(accent.trim()) ? accent : "";
+  const hot = themed ? (THEMES[overlay.theme || ""] || brand || dir.accent) : (brand || dir.accent);
   const out = exitProg(f, dur, 12, S);
   const ks = fontScaleOf(overlay);
   const panel = String((overlay as { backing?: string }).backing || "") === "panel";
@@ -851,7 +854,7 @@ const Statement: Look = ({ overlay, accent }) => {
   const align = right ? "right" : "left";
   const f30 = f / S;
   const joined = fit.lines.join(" ");
-  const shown = typedAt(Math.floor(f30), joined, joined.length);
+  const shown = joined.slice(0, typedAt(Math.floor(f30), joined, joined.length));
   const done = typingEnds(joined);
   let left = shown;
   const drift = idle(f, done * S, dur) * 4 * k;

@@ -45,7 +45,7 @@ const BARE_NUMBER = /^(?:(almost|about|nearly|roughly|over|more than|under|less 
 
 const title = (s: string) => s.toLowerCase().replace(/(^|\s)([a-z])/g, (_m, a: string, b: string) => a + b.toUpperCase());
 const kt = (ov: Overlay, variant: string, props: Partial<Overlay>): Overlay => ({
-  ...ov, ...props, type: "motion", variant, template: `LIB_${variant.toUpperCase().replace(/-/g, "_")}`,
+  ...ov, ...props, type: "motion", variant, template: variant.toUpperCase().replace(/-/g, "_"), // KT_NUMBER, KT_MULTIPLIER, ... (the registry ids)
   motion: "fade", exit: "fade", textStyle: undefined, align: undefined,
 } as Overlay);
 

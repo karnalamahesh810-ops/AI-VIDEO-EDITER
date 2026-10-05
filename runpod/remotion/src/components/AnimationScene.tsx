@@ -32,7 +32,7 @@ export const BlurBackdrop: React.FC<{ still: string; frames: number }> = ({ stil
     <AbsoluteFill style={{ backgroundColor: "#08080a", overflow: "hidden" }}>
       {still ? (
         <AbsoluteFill>
-          <Img src={still} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.18 + drift * 0.06})`,
+          <Img src={still} onError={() => undefined} maxRetries={1} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.18 + drift * 0.06})`,
             filter: "blur(16px) grayscale(0.4) brightness(0.55) contrast(1.05)" }} />
         </AbsoluteFill>
       ) : (

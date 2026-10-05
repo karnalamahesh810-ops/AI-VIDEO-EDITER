@@ -66,3 +66,25 @@ export const sceneAvoid = (ov: Overlay, scenes: Scene[] | undefined): Box[] => {
   const sc = (scenes || []).find((s) => at >= s.startFrame && at < s.startFrame + s.durationInFrames);
   return sc ? mediaAvoid(sc.media) : [];
 };
+
+/**
+ * Footage too busy for words on a soft shade (the owner, 2026-10-05, on the "ALMOST 15" boxes over a detailed
+ * map: "over busy footage like detailed maps, use a soft blurred or dimmed backing panel"): the worker's
+ * measure when it has one (media.focus.busy, 0..1 edge density or true), else lettering burned into the
+ * picture (map labels, chyrons: two or more rows of it, or a picture whose subject is text).
+ */
+export const mediaBusy = (m: SceneMedia | null | undefined): boolean => {
+  const focus = m?.focus as (Record<string, unknown> & { bands?: unknown[]; kind?: string }) | undefined;
+  if (!focus || typeof focus !== "object") return false;
+  const busy = focus.busy;
+  if (typeof busy === "number" && Number.isFinite(busy)) return busy >= 0.55;
+  if (busy === true) return true;
+  return (Array.isArray(focus.bands) && focus.bands.length >= 2) || focus.kind === "text";
+};
+
+/** Whether the scene an overlay starts on is busy footage (mediaBusy). */
+export const sceneBusy = (ov: Overlay, scenes: Scene[] | undefined): boolean => {
+  const at = ov.startFrame;
+  const sc = (scenes || []).find((s) => at >= s.startFrame && at < s.startFrame + s.durationInFrames);
+  return sc ? mediaBusy(sc.media) : false;
+};

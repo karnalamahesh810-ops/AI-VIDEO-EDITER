@@ -1,0 +1,413 @@
+[
+ {
+  "id": "kt-number",
+  "template": "KT_NUMBER",
+  "name": "Number",
+  "category": "NUMBERS",
+  "description": "A figure the narration says counts up to its value in clean white tabular figures with thousands separators (180,000 / 1.25M), its unit beside or under it, a small accent kicker and bar, one line of context; hero size (14 % of the frame height), low left in the calm side of the picture over a soft shade.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "prefix",
+   "label",
+   "subtitle",
+   "text"
+  ],
+  "cues": [
+   "big-number",
+   "count",
+   "measurement",
+   "money"
+  ],
+  "duration": 4.5,
+  "least": 3.5,
+  "sfx": "count-final",
+  "types": false,
+  "sample": {
+   "value": 180000,
+   "suffix": "ACRE-FT",
+   "label": "Las Vegas uses",
+   "subtitle": "a year from Lake Mead"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 36
+ },
+ {
+  "id": "kt-percent",
+  "template": "KT_PERCENT",
+  "name": "Percent Ring",
+  "category": "NUMBERS",
+  "description": "A ring that fills to the share while the number counts up to it (27%), an accent kicker and a one-line context beside it; for a percent or a share of a whole.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "suffix",
+   "label",
+   "subtitle",
+   "text"
+  ],
+  "cues": [
+   "percent",
+   "shares"
+  ],
+  "duration": 4.5,
+  "least": 3.5,
+  "sfx": "count-final",
+  "types": false,
+  "sample": {
+   "value": 27,
+   "suffix": "%",
+   "label": "Lake Mead",
+   "subtitle": "full - the lowest since it first filled"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 40
+ },
+ {
+  "id": "kt-multiplier",
+  "template": "KT_MULTIPLIER",
+  "name": "Multiplier",
+  "category": "NUMBERS",
+  "description": "\"15 times\": the count climbs to 15x inside a ring of ticks that light one by one and close on the landing, with a one-line context; for times / twice / triple / half lines.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "label",
+   "subtitle",
+   "text"
+  ],
+  "cues": [
+   "ratio",
+   "change"
+  ],
+  "duration": 4.5,
+  "least": 3.5,
+  "sfx": "count-final",
+  "types": false,
+  "sample": {
+   "value": 15,
+   "suffix": "×",
+   "label": "Arizona loses",
+   "subtitle": "as much water as the place everyone blames"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 40
+ },
+ {
+  "id": "kt-chip",
+  "template": "KT_CHIP",
+  "name": "Number Chip",
+  "category": "NUMBERS",
+  "description": "The same clean figure compact, in a small charcoal chip with an accent edge and a label: for a quick run of numbers or a minor figure.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "suffix",
+   "prefix",
+   "label",
+   "text"
+  ],
+  "cues": [
+   "count",
+   "big-number"
+  ],
+  "duration": 3.2,
+  "least": 2.5,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "value": 440000,
+   "suffix": "ACRE-FT",
+   "label": "California"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true
+ },
+ {
+  "id": "kt-compare",
+  "template": "KT_COMPARE",
+  "name": "Compare Bars",
+  "category": "COMPARISONS",
+  "description": "Two or three values as bars that grow from one edge (\"50,000 vs 760,000\", \"1x vs 15x\"), the larger in the accent, figures counting, a kicker and a context line.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "items",
+   "suffix",
+   "label",
+   "subtitle",
+   "text"
+  ],
+  "cues": [
+   "money-compare",
+   "then-now",
+   "compare"
+  ],
+  "duration": 5.0,
+  "least": 4.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "Annual cut",
+   "items": [
+    {
+     "label": "Nevada",
+     "value": 50000
+    },
+    {
+     "label": "Arizona",
+     "value": 760000
+    }
+   ],
+   "subtitle": "acre-feet a year"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true
+ },
+ {
+  "id": "kt-progress",
+  "template": "KT_PROGRESS",
+  "name": "Progress Bar",
+  "category": "NUMBERS",
+  "description": "A bar that fills for \"3 of 4\" or a share of a whole while the figure counts, with a kicker and one line of context.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "label",
+   "subtitle",
+   "text"
+  ],
+  "cues": [
+   "shares"
+  ],
+  "duration": 4.5,
+  "least": 4.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "value": 3,
+   "total": 4,
+   "label": "Farm water",
+   "subtitle": "of every four gallons goes onto fields"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true
+ },
+ {
+  "id": "kt-date",
+  "template": "KT_DATE",
+  "name": "Date",
+  "category": "TIMELINES",
+  "description": "A date said (\"August 21\" and its year rolling in like an odometer) top left, a small kicker and an accent rule that draws on.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 3.8,
+  "least": 3.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "August 21",
+   "subtitle": "2026",
+   "label": "Friday"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true
+ },
+ {
+  "id": "kt-year",
+  "template": "KT_YEAR",
+  "name": "Year",
+  "category": "TIMELINES",
+  "description": "A year said, its digits rolling into place like an odometer, top left, a kicker and a context line.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 3.8,
+  "least": 3.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "value": 2007,
+   "label": "The rules were written",
+   "subtitle": "and they expire this year"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true
+ },
+ {
+  "id": "kt-time",
+  "template": "KT_TIME",
+  "name": "Time of Day",
+  "category": "TIMELINES",
+  "description": "A time of day said (\"3 AM\") top left with a small kicker and an accent rule.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "time-of-day"
+  ],
+  "duration": 3.5,
+  "least": 3.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "3 AM",
+   "label": "The call came"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true
+ },
+ {
+  "id": "kt-keyword",
+  "template": "KT_KEYWORD",
+  "name": "Key Phrase",
+  "category": "TEXT",
+  "description": "The key phrase being said, white bold grotesk over a soft shade, a small accent kicker and a bar that draws on, low left in the calm side of the picture; the words come up into focus one by one.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "key-phrase",
+   "headline",
+   "emphasis"
+  ],
+  "duration": 3.8,
+  "least": 3.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "The state next door",
+   "label": "Colorado River cuts"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true
+ },
+ {
+  "id": "kt-statement",
+  "template": "KT_STATEMENT",
+  "name": "Statement",
+  "category": "TEXT",
+  "description": "A line of the narration typed on in the text face over a soft shade, low left, up to three lines, with an accent caret; a question gets a \"The question\" kicker.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "quote",
+   "question",
+   "statement"
+  ],
+  "duration": 4.5,
+  "least": 3.0,
+  "sfx": "none",
+  "types": true,
+  "sample": {
+   "text": "Who actually uses the water?",
+   "label": "The question"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 6
+ },
+ {
+  "id": "kt-lower-third",
+  "template": "KT_LOWER_THIRD",
+  "name": "Lower Third",
+  "category": "LOWER_THIRDS",
+  "description": "A name and role, low left: the name in bold white grotesk, the role under it, a slim accent bar.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "person",
+   "name"
+  ],
+  "duration": 4.5,
+  "least": 4.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "Jack Schmidt",
+   "subtitle": "Colorado River researcher, Utah State University"
+  },
+  "family": "kt",
+  "file": "LibKinetic",
+  "exit": "fade",
+  "auto_pick": true
+ }
+]

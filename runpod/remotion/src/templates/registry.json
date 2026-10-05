@@ -179,7 +179,9 @@
    "tags": [
     "vidrush",
     "label"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_DUAL_LABELS_V1",
@@ -474,7 +476,9 @@
    "cues": [
     "aside"
    ],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_TYPEWRITER_V1",
@@ -625,7 +629,9 @@
     "term",
     "verdict"
    ],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_QUESTION_V1",
@@ -764,7 +770,9 @@
    "cues": [
     "question"
    ],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_WORD_TYPE_V1",
@@ -908,7 +916,9 @@
    "cues": [
     "key-word"
    ],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_SENTENCE_HIGHLIGHT_V1",
@@ -1045,7 +1055,9 @@
    "cues": [
     "thesis"
    ],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_KEY_PHRASE_V1",
@@ -1177,7 +1189,9 @@
    "cues": [
     "key-phrase"
    ],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_WARNING_V1",
@@ -1468,7 +1482,9 @@
     ]
    },
    "cues": [],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_UNDERLINE_TITLE_V1",
@@ -1608,7 +1624,9 @@
     ]
    },
    "cues": [],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_BAR_TITLE_V1",
@@ -1752,7 +1770,9 @@
     ]
    },
    "cues": [],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TEXT_SWOOSH_TITLE_V1",
@@ -1892,7 +1912,9 @@
     ]
    },
    "cues": [],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "HEADLINE_CHAPTER_GHOST_V1",
@@ -17895,7 +17917,9 @@
    "tags": [
     "lib",
     "hl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_SPLIT_LINE",
@@ -18053,7 +18077,9 @@
    "tags": [
     "lib",
     "hl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_WIPE_BAR",
@@ -18211,7 +18237,9 @@
    "tags": [
     "lib",
     "hl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_KEYWORD_POP",
@@ -18370,7 +18398,9 @@
    "tags": [
     "lib",
     "hl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_FOCUS_PULL",
@@ -18529,7 +18559,9 @@
    "tags": [
     "lib",
     "hl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_LETTER_FLIP",
@@ -18687,7 +18719,9 @@
    "tags": [
     "lib",
     "hl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_OUTLINE_FILL",
@@ -18847,7 +18881,9 @@
     "lib",
     "hl",
     "own-backdrop"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_MARKER_SWEEP",
@@ -19012,7 +19048,9 @@
     "lib",
     "hl",
     "own-backdrop"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_CENTER_STACK",
@@ -19175,7 +19213,9 @@
    "tags": [
     "lib",
     "hl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_HL_TICKER_SLIDE",
@@ -19333,7 +19373,9 @@
    "tags": [
     "lib",
     "hl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_PB_WIPE_COMPARE",
@@ -23685,7 +23727,9 @@
    "tags": [
     "lib",
     "qs"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_QS_SAID_STAMP",
@@ -57196,7 +57240,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_TYPE_TERMINAL",
@@ -57347,7 +57393,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_WORD_BY_WORD",
@@ -57502,7 +57550,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_MARKER_HIGHLIGHT",
@@ -57656,7 +57706,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_BLUR_IN",
@@ -57814,7 +57866,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_SPLIT_REVEAL",
@@ -57967,7 +58021,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_BOX_STACK",
@@ -58116,7 +58172,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_NEWS_CLIPPING",
@@ -58572,7 +58630,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_SIDE_NOTE",
@@ -58874,7 +58934,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_QUESTION",
@@ -59021,7 +59083,9 @@
    "tags": [
     "lib",
     "ed"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_ED_ALERT_BAR",
@@ -60595,7 +60659,9 @@
    "tags": [
     "lib",
     "dt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_DT_BIG_STACK",
@@ -60758,7 +60824,9 @@
    "tags": [
     "lib",
     "dt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_DT_LETTER_DROP",
@@ -60944,7 +61012,9 @@
    "tags": [
     "lib",
     "dt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_CT_CLEAN_COUNT",
@@ -66812,7 +66882,9 @@
    "tags": [
     "lib",
     "bt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TXT_KEY_PHRASE",
@@ -66989,7 +67061,9 @@
    "tags": [
     "lib",
     "txt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TXT_QUOTE_LINE",
@@ -67163,7 +67237,9 @@
    "tags": [
     "lib",
     "txt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TXT_HEADLINE_WORDS",
@@ -67336,7 +67412,9 @@
    "tags": [
     "lib",
     "txt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TXT_BREAKING_TAG",
@@ -67683,7 +67761,9 @@
    "tags": [
     "lib",
     "txt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TXT_BULLET_TRIO",
@@ -68565,7 +68645,9 @@
    "tags": [
     "lib",
     "txt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TXT_KICKER_HEADLINE",
@@ -68750,7 +68832,9 @@
    "tags": [
     "lib",
     "txt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TXT_CHAPTER_MINIMAL",
@@ -81158,6 +81242,1953 @@
     "own-backdrop"
    ],
    "autoPick": false
+  },
+  {
+   "id": "KT_NUMBER",
+   "name": "Number",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A figure the narration says counts up to its value in clean white tabular figures with thousands separators (180,000 / 1.25M), its unit beside or under it, a small accent kicker and bar, one line of context; hero size (14 % of the frame height), low left in the calm side of the picture over a soft shade.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-number",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 36,
+    "types": false,
+    "leastSeconds": 3.5,
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 36,
+      "until": 75,
+      "gain_db": -4.0,
+      "when": "value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "tick"
+      ],
+      "at": 75,
+      "when": "value"
+     },
+     {
+      "name": "count-final",
+      "at": 36,
+      "when": "no-value"
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-number",
+    "count",
+    "measurement",
+    "money"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_PERCENT",
+   "name": "Percent Ring",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A ring that fills to the share while the number counts up to it (27%), an accent kicker and a one-line context beside it; for a percent or a share of a whole.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-percent",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 40,
+    "types": false,
+    "leastSeconds": 3.5,
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 1,
+      "until": 40,
+      "gain_db": -4.0,
+      "when": "value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "tick"
+      ],
+      "at": 40,
+      "when": "value"
+     },
+     {
+      "name": "count-final",
+      "at": 40,
+      "when": "no-value"
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent",
+    "shares"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_MULTIPLIER",
+   "name": "Multiplier",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "\"15 times\": the count climbs to 15x inside a ring of ticks that light one by one and close on the landing, with a one-line context; for times / twice / triple / half lines.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-multiplier",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "sfxAt": 40,
+    "types": false,
+    "leastSeconds": 3.5,
+    "sounds": [
+     {
+      "name": "count-final",
+      "at": 40
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ratio",
+    "change"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_CHIP",
+   "name": "Number Chip",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "The same clean figure compact, in a small charcoal chip with an accent edge and a label: for a quick run of numbers or a minor figure.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.2,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-chip",
+    "sfx": {
+     "name": "count-final",
+     "volume": 0.3
+    },
+    "types": false,
+    "leastSeconds": 2.5,
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 6,
+      "until": 45,
+      "gain_db": -4.0,
+      "when": "value"
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "tick"
+      ],
+      "at": 45,
+      "when": "value"
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "count",
+    "big-number"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_COMPARE",
+   "name": "Compare Bars",
+   "category": "COMPARISONS",
+   "component": "motion",
+   "description": "Two or three values as bars that grow from one edge (\"50,000 vs 760,000\", \"1x vs 15x\"), the larger in the accent, figures counting, a kicker and a context line.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-compare",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    },
+    "types": false,
+    "leastSeconds": 4.0,
+    "sounds": []
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "money-compare",
+    "then-now",
+    "compare"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_PROGRESS",
+   "name": "Progress Bar",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A bar that fills for \"3 of 4\" or a share of a whole while the figure counts, with a kicker and one line of context.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-progress",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    },
+    "types": false,
+    "leastSeconds": 4.0,
+    "sounds": []
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "shares"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_DATE",
+   "name": "Date",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A date said (\"August 21\" and its year rolling in like an odometer) top left, a small kicker and an accent rule that draws on.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.8,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-date",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "types": false,
+    "leastSeconds": 3.0,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 8,
+      "gain_db": -2.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_YEAR",
+   "name": "Year",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A year said, its digits rolling into place like an odometer, top left, a kicker and a context line.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.8,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-year",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "types": false,
+    "leastSeconds": 3.0,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 8,
+      "gain_db": -2.0
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_TIME",
+   "name": "Time of Day",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A time of day said (\"3 AM\") top left with a small kicker and an accent rule.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-time",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    },
+    "types": false,
+    "leastSeconds": 3.0,
+    "sounds": []
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_KEYWORD",
+   "name": "Key Phrase",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "The key phrase being said, white bold grotesk over a soft shade, a small accent kicker and a bar that draws on, low left in the calm side of the picture; the words come up into focus one by one.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.8,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-keyword",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    },
+    "types": false,
+    "leastSeconds": 3.0,
+    "sounds": []
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "key-phrase",
+    "headline",
+    "emphasis"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_STATEMENT",
+   "name": "Statement",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A line of the narration typed on in the text face over a soft shade, low left, up to three lines, with an accent caret; a question gets a \"The question\" kicker.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-statement",
+    "sfx": {
+     "name": "keys",
+     "volume": 0.3
+    },
+    "sfxAt": 6,
+    "types": true,
+    "leastSeconds": 3.0,
+    "sounds": [
+     {
+      "name": "keys",
+      "kind": "typing",
+      "at": 6
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "quote",
+    "question",
+    "statement"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_LOWER_THIRD",
+   "name": "Lower Third",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "A name and role, low left: the name in bold white grotesk, the role under it, a slim accent bar.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-lower-third",
+    "sfx": {
+     "name": "none",
+     "volume": 0.0
+    },
+    "types": false,
+    "leastSeconds": 4.0,
+    "sounds": []
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "person",
+    "name"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
   },
   {
    "id": "LIB_NX_STAT_CONTEXT",
