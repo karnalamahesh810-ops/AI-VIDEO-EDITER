@@ -81,7 +81,7 @@ const pinned = (family: string, weight: string): string => {
       if (!url) continue;
       const face = new FontFace(family, `url(${url}) format('woff2')`,
         { weight, style: "normal", unicodeRange: (info.unicodeRanges as Record<string, string>)[subset] });
-      document.fonts.add(face);
+      (document.fonts as unknown as { add: (f: FontFace) => void }).add(face);
       const handle = delayRender(`Loading font ${family} (${subset})`, { timeoutInMilliseconds: 60000 });
       face.load().then(() => continueRender(handle)).catch((e: unknown) => {
         console.warn(`[fonts] ${family} did not load: ${e instanceof Error ? e.message : String(e)}`);

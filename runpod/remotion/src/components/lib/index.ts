@@ -50,6 +50,7 @@ import { LOOKS as L_LibGeoMaps } from "./LibGeoMaps";
 import { LOOKS as L_LibSourceTag } from "./LibSourceTag";
 import { LOOKS as L_LibRealData } from "./LibRealData";
 import { LOOKS as L_LibPremium } from "./LibPremium";
+import { LOOKS as L_LibKinetic } from "./LibKinetic";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -152,4 +153,8 @@ export const LIBRARY: Record<string, Look> = {
   // Premium (LibPremium, 2026-10-05): a document spotlight with a drawn loop and callout, a photo focus with a ring,
   // a chart that draws in, a map path between two places, a number reveal; the planner picks them where the line asks.
   ...pick(L_LibPremium, ["pr-doc-spotlight", "pr-photo-focus", "pr-graph-build", "pr-map-path", "pr-number-reveal"]),
+  // Kinetic type (LibKinetic, 2026-10-05): the words, figures, shares, multipliers, dates and names the narration says,
+  // in one editorial type system with three directions (typeKit.tsx) - the replacement of the outlined condensed words.
+  ...pick(L_LibKinetic, ["kt-keyword", "kt-number", "kt-chip", "kt-percent", "kt-progress", "kt-multiplier", "kt-compare",
+    "kt-date", "kt-year", "kt-time", "kt-lower-third", "kt-statement"]),
 };

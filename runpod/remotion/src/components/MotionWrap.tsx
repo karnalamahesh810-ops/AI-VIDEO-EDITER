@@ -1,21 +1,37 @@
 import React from "react";
-import { AbsoluteFill, interpolate, random, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import { clamp01, cubicIn, cubicOut, expoOut } from "./motion/ease";
+import type { MotionClass } from "./motion/lookClass";
 
 /**
  * The entrance and exit a graphic moves with, plus its placement.
  *
- * `motion` (overlay.motion) is the entrance, one of twelve moves an editor
- * reaches for: rise, drop, slide-left, slide-right, zoom-in, zoom-out, blur,
- * wipe, wipe-up, flip, glitch, and fade (no movement). `exit` is separate
- * (fade, slide, scale, none), so a graphic that slides in can fade out.
- * `speed` scales both. `placement` (position, scale, opacity) is how the
- * editor moves a premade animation around without touching its template.
+ * Every look gets a designed entry and a mirrored exit by what it is on
+ * screen (components/motion/lookClass.ts; the owner, 2026-10-05: "the other
+ * overlay animations are also not smooth - make them smoother and better"):
+ *
+ *   full   grows in from 96 % out of a soft focus (the clip under it pushes
+ *          in and dims at the same time: components/motion/stage.tsx), and
+ *          leaves growing a touch and softening;
+ *   panel  grows in from 97 % with a short focus pull, leaves the same way;
+ *   text   rises a few pixels into focus, leaves rising out of focus;
+ *   tag    slides a short way in, leaves the way it came;
+ *   mark   fades (its stroke draws itself on).
+ *
+ * Entries run 12-16 frames on expo / cubic curves, exits 12 frames eased in,
+ * at 30 fps and scaled by the real rate (60 fps moves the same in seconds).
+ * No exit is ever a hard cut ("none" now leaves like "fade"), and nothing
+ * jitters (the old "glitch" entrance arrives as a focus pull).
+ *
+ * `motion` (overlay.motion) may still name an entrance an editor reaches for:
+ * rise, drop, slide-left, slide-right, zoom-in, zoom-out, blur, wipe,
+ * wipe-up, flip, glitch, fade ("fade" = the class's own entry). `exit` is
+ * fade, slide, scale or none. `speed` scales both. `placement` (position,
+ * scale, opacity) is how the editor moves a premade animation around.
  */
 export const MOTIONS = ["fade", "rise", "drop", "slide-left", "slide-right", "zoom-in", "zoom-out",
   "blur", "wipe", "wipe-up", "flip", "glitch"] as const;
 export const EXITS = ["fade", "slide", "scale", "none"] as const;
-
-const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
 
 // Where an "auto" placement leaves the template's own layout alone; the
 // named positions nudge the whole graphic toward a corner or the centre.
@@ -30,80 +46,102 @@ export interface Placement {
   opacity?: number;
 }
 
+type Parts = { o: number; tx: number; ty: number; s: number; blur: number; clip?: string; rot?: number };
+const REST: Parts = { o: 1, tx: 0, ty: 0, s: 1, blur: 0 };
+
+/** The class's own entry at progress frames `t` (30-fps frames since the start, already rate-scaled). */
+const classIn = (klass: MotionClass, t: number, k: number): Parts => {
+  switch (klass) {
+    case "full": return { o: cubicOut(t / 12), tx: 0, ty: 0, s: 0.96 + 0.04 * expoOut(t / 16), blur: 10 * k * (1 - cubicOut(t / 13)) };
+    case "panel": return { o: cubicOut(t / 10), tx: 0, ty: 0, s: 0.97 + 0.03 * expoOut(t / 15), blur: 6 * k * (1 - cubicOut(t / 11)) };
+    case "tag": return { o: cubicOut(t / 9), tx: -18 * k * (1 - expoOut(t / 14)), ty: 0, s: 1, blur: 3 * k * (1 - cubicOut(t / 8)) };
+    case "mark": return { o: cubicOut(t / 8), tx: 0, ty: 0, s: 1, blur: 0 };
+    default: return { o: cubicOut(t / 9), tx: 0, ty: 16 * k * (1 - expoOut(t / 15)), s: 1, blur: 5 * k * (1 - cubicOut(t / 11)) };
+  }
+};
+
+/** The class's own exit at progress x (0 holding, 1 gone), eased in. */
+const classOut = (klass: MotionClass, x: number, k: number): Parts => {
+  switch (klass) {
+    case "full": return { o: 1 - x, tx: 0, ty: 0, s: 1 + 0.018 * x, blur: 8 * k * x };
+    case "panel": return { o: 1 - x, tx: 0, ty: 0, s: 1 - 0.015 * x, blur: 5 * k * x };
+    case "tag": return { o: 1 - x, tx: -14 * k * x, ty: 0, s: 1, blur: 2 * k * x };
+    case "mark": return { o: 1 - x, tx: 0, ty: 0, s: 1, blur: 0 };
+    default: return { o: 1 - x, tx: 0, ty: -10 * k * x, s: 1, blur: 4 * k * x };
+  }
+};
+
+/** A named entrance an editor chose, at progress e (0..1, expo-out). */
+const namedIn = (name: string, e: number, k: number): Parts => {
+  const from = 1 - e;
+  switch (name) {
+    case "rise": return { ...REST, o: clamp01(e * 1.6), ty: from * 70 * k };
+    case "drop": return { ...REST, o: clamp01(e * 1.6), ty: -from * 70 * k };
+    case "slide-left": return { ...REST, o: clamp01(e * 1.6), tx: from * 200 * k };
+    case "slide-right": return { ...REST, o: clamp01(e * 1.6), tx: -from * 200 * k };
+    case "zoom-in": return { ...REST, o: clamp01(e * 1.6), s: 0.86 + 0.14 * e };
+    case "zoom-out": return { ...REST, o: clamp01(e * 1.6), s: 1.14 - 0.14 * e };
+    case "blur": case "glitch": return { ...REST, o: clamp01(e * 1.4), blur: from * 16 * k, s: 1.03 - 0.03 * e };
+    case "wipe": return { ...REST, clip: `inset(0 ${(from * 100).toFixed(2)}% 0 0)` };
+    case "wipe-up": return { ...REST, clip: `inset(${(from * 100).toFixed(2)}% 0 0 0)` };
+    case "flip": return { ...REST, o: clamp01(e * 1.6), rot: from * 60 };
+    default: return REST;
+  }
+};
+
+const namedOut = (name: string, x: number, k: number): Parts | null => {
+  switch (name) {
+    case "slide": case "slide-left": return { ...REST, o: 1 - x, tx: -x * 160 * k };
+    case "slide-right": return { ...REST, o: 1 - x, tx: x * 160 * k };
+    case "rise": return { ...REST, o: 1 - x, ty: -x * 60 * k };
+    case "drop": return { ...REST, o: 1 - x, ty: x * 60 * k };
+    case "scale": case "zoom-in": return { ...REST, o: 1 - x, s: 1 + 0.06 * x };
+    case "zoom-out": return { ...REST, o: 1 - x, s: 1 - 0.08 * x };
+    case "blur": case "glitch": return { ...REST, o: 1 - x, blur: x * 14 * k };
+    case "wipe": return { ...REST, clip: `inset(0 0 0 ${(x * 100).toFixed(2)}%)` };
+    case "wipe-up": return { ...REST, clip: `inset(0 0 ${(x * 100).toFixed(2)}% 0)` };
+    case "flip": return { ...REST, o: 1 - x, rot: -x * 60 };
+    default: return null;
+  }
+};
+
+const css = (p: Parts, k: number): React.CSSProperties => {
+  const t: string[] = [];
+  if (p.tx || p.ty) t.push(`translate(${p.tx.toFixed(2)}px, ${p.ty.toFixed(2)}px)`);
+  if (p.rot) t.push(`perspective(${(1400 * k).toFixed(0)}px) rotateY(${p.rot.toFixed(2)}deg)`);
+  if (p.s !== 1) t.push(`scale(${p.s.toFixed(5)})`);
+  const out: React.CSSProperties = {};
+  if (t.length) out.transform = t.join(" ");
+  if (p.o < 1) out.opacity = Math.max(0, p.o);
+  if (p.blur > 0.05) out.filter = `blur(${p.blur.toFixed(2)}px)`;
+  if (p.clip) out.clipPath = p.clip;
+  return out;
+};
+
 export const MotionWrap: React.FC<{
   motion?: string;
   exit?: string;
   speed?: number;
   placement?: Placement;
+  klass?: MotionClass;
   children: React.ReactNode;
-}> = ({ motion, exit, speed, placement, children }) => {
+}> = ({ motion, exit, speed, placement, klass = "text", children }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames, width, height } = useVideoConfig();
   const k = width / 1920;
+  const S = fps / 30;
   const spd = Math.max(0.5, Math.min(2, speed || 1));
-  const inF = Math.min(Math.round((fps * 0.5) / spd), Math.max(2, Math.floor(durationInFrames / 3)));
-  const outF = Math.min(Math.round((fps * 0.35) / spd), Math.max(2, Math.floor(durationInFrames / 4)));
-  const e = interpolate(frame, [0, inF], [0, 1], { ...clamp, easing: (t) => 1 - Math.pow(1 - t, 3) });
-  const exitKind = exit || (motion && motion !== "fade" ? "same" : "fade");
-  // How far into the exit we are, 0..1; "none" never moves out ...
-  const x = exitKind === "none" ? 0
-    : interpolate(frame, [durationInFrames - outF, durationInFrames], [0, 1], { ...clamp, easing: (t) => t * t });
-  // ... but never pops off on a hard cut either (the owner, 2026-10-05: "an animation going only a short
-  // time and then skipping"): a look with no exit of its own fades over its last few frames.
-  const tailF = Math.max(1, Math.min(6, Math.floor(durationInFrames / 6)));
-  const tail = exitKind === "none"
-    ? interpolate(frame, [durationInFrames - tailF, durationInFrames], [1, 0], { ...clamp, easing: (t) => t * t })
-    : 1;
-
-  const entrance = motion && motion !== "fade" ? motion : "";
-  const from = 1 - e;
-  let style: React.CSSProperties = {};
-  // Entrance.
-  switch (entrance) {
-    case "rise": style = { transform: `translateY(${from * 90 * k}px)` }; break;
-    case "drop": style = { transform: `translateY(${-from * 90 * k}px)` }; break;
-    case "slide-left": style = { transform: `translateX(${from * 260 * k}px)` }; break;
-    case "slide-right": style = { transform: `translateX(${-from * 260 * k}px)` }; break;
-    case "zoom-in": style = { transform: `scale(${0.8 + 0.2 * e})` }; break;
-    case "zoom-out": style = { transform: `scale(${1.25 - 0.25 * e})` }; break;
-    case "blur": style = { filter: `blur(${from * 18 * k}px)` }; break;
-    case "wipe": style = { clipPath: `inset(0 ${from * 100}% 0 0)` }; break;
-    case "wipe-up": style = { clipPath: `inset(${from * 100}% 0 0 0)` }; break;
-    case "flip": style = { transform: `perspective(${1400 * k}px) rotateY(${from * 70}deg)` }; break;
-    case "glitch": {
-      const active = frame < inF;
-      const j = active ? (random(`g${Math.floor(frame / 2)}`) - 0.5) * 40 * k : 0;
-      const band = active ? random(`b${Math.floor(frame / 2)}`) * 80 : 0;
-      style = { transform: `translateX(${j}px)`, clipPath: active ? `inset(${band}% 0 ${Math.max(0, 80 - band)}% 0)` : undefined };
-      if (active && random(`o${frame}`) > 0.5) style.clipPath = undefined;
-      break;
-    }
-    default: break;
-  }
-  // Exit, layered on top of the entrance's transform once the entrance is done.
-  let exitStyle: React.CSSProperties = {};
-  if (x > 0) {
-    const kind = exitKind === "same" ? entrance : exitKind;
-    switch (kind) {
-      case "fade": exitStyle = { opacity: 1 - x }; break;
-      case "slide": case "slide-left": exitStyle = { transform: `translateX(${-x * 260 * k}px)`, opacity: 1 - x }; break;
-      case "slide-right": exitStyle = { transform: `translateX(${x * 260 * k}px)`, opacity: 1 - x }; break;
-      case "rise": exitStyle = { transform: `translateY(${-x * 90 * k}px)`, opacity: 1 - x }; break;
-      case "drop": exitStyle = { transform: `translateY(${x * 90 * k}px)`, opacity: 1 - x }; break;
-      case "scale": case "zoom-in": exitStyle = { transform: `scale(${1 + 0.08 * x})`, opacity: 1 - x }; break;
-      case "zoom-out": exitStyle = { transform: `scale(${1 - 0.1 * x})`, opacity: 1 - x }; break;
-      case "blur": exitStyle = { filter: `blur(${x * 18 * k}px)`, opacity: 1 - x }; break;
-      case "wipe": exitStyle = { clipPath: `inset(0 0 0 ${x * 100}%)` }; break;
-      case "wipe-up": exitStyle = { clipPath: `inset(0 0 ${x * 100}% 0)` }; break;
-      case "flip": exitStyle = { transform: `perspective(${1400 * k}px) rotateY(${-x * 70}deg)`, opacity: 1 - x }; break;
-      case "glitch": {
-        const j = (random(`x${Math.floor(frame / 2)}`) - 0.5) * 40 * k;
-        exitStyle = { transform: `translateX(${j}px)`, opacity: 1 - x * 0.7 };
-        break;
-      }
-      default: exitStyle = { opacity: 1 - x };
-    }
-  }
+  // 30-fps frames since the start, at this rate and speed.
+  const t = (frame / S) * spd;
+  const dur30 = (durationInFrames / S) * spd;
+  // The exit: 12 frames (never more than a quarter of the look), eased in.
+  const outLen = Math.max(2, Math.min(12, Math.floor(dur30 / 4)));
+  const x = cubicIn(clamp01((t - (dur30 - outLen)) / outLen));
+  const named = motion && motion !== "fade" ? motion : "";
+  const inLen = Math.max(2, Math.min(16, Math.floor(dur30 / 3)));
+  const entry = named ? namedIn(named, expoOut(t / inLen), k) : classIn(klass, t * (16 / Math.max(16, inLen)), k);
+  const exitKind = exit && exit !== "none" && exit !== "fade" ? exit : "";
+  const leave = x > 0 ? (exitKind && namedOut(exitKind, x, k)) || classOut(klass, x, k) : REST;
 
   // Placement: a named position, a scale and an opacity around everything.
   const pos = placement?.position && placement.position !== "auto" ? POSITION_SHIFT[placement.position] : undefined;
@@ -112,10 +150,10 @@ export const MotionWrap: React.FC<{
   const placed: React.CSSProperties = (pos || scale !== 1 || opacity !== 1)
     ? { transform: `translate(${(pos?.[0] ?? 0) * width}px, ${(pos?.[1] ?? 0) * height}px) scale(${scale})`, opacity }
     : {};
-
-  const outer: React.CSSProperties = tail < 1
-    ? { ...exitStyle, opacity: (exitStyle.opacity === undefined ? 1 : Number(exitStyle.opacity)) * tail }
-    : exitStyle;
-  const inner = <AbsoluteFill style={outer}><AbsoluteFill style={style}>{children}</AbsoluteFill></AbsoluteFill>;
+  const inner = (
+    <AbsoluteFill style={css(leave, k)}>
+      <AbsoluteFill style={css(entry, k)}>{children}</AbsoluteFill>
+    </AbsoluteFill>
+  );
   return Object.keys(placed).length ? <AbsoluteFill style={placed}>{inner}</AbsoluteFill> : inner;
 };

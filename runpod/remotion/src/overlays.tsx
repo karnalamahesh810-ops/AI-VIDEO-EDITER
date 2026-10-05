@@ -39,9 +39,8 @@ import type { Overlay, OverlayType } from "./types";
 // One accent per graphic, on white type and near-black panels (the owner, 2026-10-05: "some fonts, the
 // colours ... not great"): a clean warm gold for the documentary packs (was a dull ochre, #d6a83c), a
 // clear crimson, and the cool accents a step brighter so they read on dark footage.
-export const THEMES: Record<string, string> = {
-  gold: "#F2B544", red: "#E5484D", teal: "#2DD4BF", blue: "#4C9AFF", white: "#F5F3EE", amber: "#FFB224",
-};
+export { THEMES } from "./components/themes";
+import { THEMES } from "./components/themes";
 
 const PERSON_TAGS = new Set(["tag", "line", "serif", "chyron"]);
 
@@ -72,8 +71,12 @@ export const OVERLAYS: Record<OverlayType, OverlayComponent> = {
   // Typed letter by letter (the typing contract in LibEditorText: frame 6 on,
   // 2 frames a character up to 48 characters, else 1), so the planner's "keys"
   // sound matches it; a question keeps its "THE QUESTION" kicker.
-  typewriter: (p) => (/\?\s*$/.test(p.overlay.text || "") && !p.overlay.label
-    ? <EdTypeClean {...p} overlay={{ ...p.overlay, label: "The question" }} /> : <EdTypeClean {...p} />),
+  // (The outlined typed line - EdTypeClean - was retired with the poster style, 2026-10-05: a typed line is the
+  // kinetic-type statement, typed on with an accent caret over a soft shade, LibKinetic kt-statement.)
+  typewriter: (p) => {
+    const Look = LIBRARY["kt-statement"];
+    return Look ? <Look {...p} /> : <EdTypeClean {...p} />;
+  },
   stat: (p) => {
     // More number looks (ProCharts): the variant picks the drawing.
     const Look = STAT_LOOKS[p.overlay.variant || ""];

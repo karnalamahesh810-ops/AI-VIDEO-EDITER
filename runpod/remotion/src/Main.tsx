@@ -6,6 +6,9 @@ import { KScale } from "./components/pro/ProGraphics";
 import { CaptionTrack } from "./components/Captions";
 import { CaptionsOn } from "./components/layout";
 import { MotionWrap } from "./components/MotionWrap";
+import { motionClass } from "./components/motion/lookClass";
+import { StageFx, stageWindows } from "./components/motion/stage";
+import { sceneAvoid } from "./components/motion/avoid";
 import { resolveOverlay, templateFor } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
 import type { Overlay, OverlayType, SceneMedia, TimelineProps } from "./types";
@@ -152,7 +155,14 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
   // A document can arrive from the editor or an older schema, so an unknown
   // type is possible at runtime even though it is not at compile time.
   if (!Component) return null;
+  // Somebody else's graphics and the faces on the picture under the look (a station logo, a chyron, a
+  // face): a look that places its words keeps them out of these (components/motion/avoid.ts).
+  if (!ov.avoid) {
+    const avoid = sceneAvoid(ov, scenes);
+    if (avoid.length) ov = { ...ov, avoid };
+  }
   const scale = textScale(ov);
+  const klass = motionClass(ov);
   if (ov.backdrop === "blur") {
     // Full screen for its moment only: a blurred still of the clip under it,
     // the graphic drawn as a full-frame scene; the clip keeps its slot.
@@ -160,7 +170,7 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
     const m = under?.media;
     const still = m ? (m.type === "image" ? m.url : m.thumbnail || "") : "";
     return withSound(
-      <MotionWrap motion="fade" exit="fade" speed={1.6}>
+      <MotionWrap motion="fade" exit="fade" klass="full">
         <BlurBackdrop still={still} frames={ov.durationInFrames} />
         <KScale.Provider value={scale}>
           <Component overlay={{ ...ov, fullFrame: true }} accent={accentFor(ov, accent, accent2)} />
@@ -168,7 +178,7 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
       </MotionWrap>, sound);
   }
   return withSound(
-    <MotionWrap motion={ov.motion} exit={ov.exit} speed={ov.speed}
+    <MotionWrap motion={ov.motion} exit={ov.exit} speed={ov.speed} klass={klass}
       placement={{ position: ov.position, scale: ov.scale, opacity: ov.opacity }}>
       <KScale.Provider value={scale}>
         <Component overlay={ov} accent={accentFor(ov, accent, accent2)} />
@@ -402,6 +412,8 @@ const Body: React.FC<TimelineProps> = (props) => {
     () => planLookSounds(props, fps),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [overlays, scenes, props.lookSounds, props.meta, props.sfxEnabled, props.sfxVolume, fps]);
+  // The frames each full-screen graphic holds the screen (the clip under it moves: StageFx).
+  const stageWins = React.useMemo(() => stageWindows((overlays || []).map((o) => resolveOverlay(o))), [overlays]);
   const overlayNodes = React.useMemo(
     () => (overlays || []).map((ov, i) => renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`], accent2)),
     [overlays, captions.accent, scenes, lookSounds, accent2]);
@@ -436,6 +448,9 @@ const Body: React.FC<TimelineProps> = (props) => {
       <style>{PAGE_CSS_GUARD}</style>
       {/* Visual track — one clip per spoken clause, under the video's one grade */}
       <GradeContext.Provider value={grade}>
+      {/* Under a full-screen graphic the clip pushes in, softens and dims as the graphic grows in, and
+          settles back as it leaves (components/motion/stage.tsx): no map or chart ever cuts in on a clip. */}
+      <StageFx windows={showOverlays ? stageWins : []}>
       {scenes.map((scene, i) => (
         <Sequence
           key={scene.id}
@@ -454,6 +469,7 @@ const Body: React.FC<TimelineProps> = (props) => {
           </CrossfadeIn>
         </Sequence>
       ))}
+      </StageFx>
       </GradeContext.Provider>
 
       {/* The owner's overlay transitions ("pack:<name>"): a clip screen-blended

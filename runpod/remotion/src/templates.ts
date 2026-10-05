@@ -9,6 +9,7 @@
  */
 import registry from "./templates/registry.json";
 import type { Overlay } from "./types";
+import { remapRetired } from "./legacyLooks";
 
 export interface TemplateDef {
   id: string;
@@ -25,6 +26,8 @@ export interface TemplateDef {
   tags: string[];
   /** false: the planner never picks this look on its own (it waits for the owner's approval); the editor still offers it. */
   autoPick?: boolean;
+  /** true: a look the owner retired (legacyLooks.ts): never picked, hidden from the look picker, drawn as its replacement. */
+  retired?: boolean;
 }
 
 export interface Registry {
@@ -54,7 +57,9 @@ export const TEMPLATES: Record<string, TemplateDef> = Object.fromEntries(
 export const templateFor = (id?: string): TemplateDef | undefined => (id ? TEMPLATES[id] : undefined);
 
 /** An overlay with its template's defaults filled in where the document left them out. */
-export const resolveOverlay = (ov: Overlay): Overlay => {
+export const resolveOverlay = (raw: Overlay): Overlay => {
+  // A retired look (the outlined condensed words, the boxed stack) is drawn as its clean replacement (legacyLooks.ts).
+  const ov = remapRetired(raw);
   const t = templateFor(ov.template);
   if (!t) return ov;
   const out: Overlay = { ...ov };
