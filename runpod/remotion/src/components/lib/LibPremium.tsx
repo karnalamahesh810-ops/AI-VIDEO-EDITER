@@ -258,8 +258,11 @@ const DocSpotlight: Look = ({ overlay, accent }) => {
   const draw = inOf(f, 30 * S, 22 * S, easeInOut);
   const seed = hash(hl || head);
   // Where the loop sits on screen once the camera has moved (for the callout's leader line).
-  // One loop round the key words (on one line, or the two lines they run over); three or more: a hand underline each.
-  const one = spans.length >= 1 && spans.length <= 2 ? {
+  // One loop round the key words: on one line, or over two lines when the two parts sit one above the other
+  // (the loop would otherwise ring words that are not the key ones); else a hand underline under each part.
+  const widest = Math.max(1, ...spans.map((sp) => sp.x1 - sp.x0));
+  const union = spans.length ? Math.max(...spans.map((sp) => sp.x1)) - Math.min(...spans.map((sp) => sp.x0)) : 0;
+  const one = spans.length === 1 || (spans.length === 2 && union <= widest * 1.3) ? {
     x0: Math.min(...spans.map((sp) => sp.x0)), x1: Math.max(...spans.map((sp) => sp.x1)),
     top: spans[0].top, lh: spans[0].lh * spans.length, size: spans[0].size * (spans.length === 2 ? 1.7 : 1) } : null;
   const loop = one ? { cx: pad + (one.x0 + one.x1) / 2, cy: one.top + one.lh * (spans.length === 2 ? 0.46 : 0.42),
@@ -274,7 +277,8 @@ const DocSpotlight: Look = ({ overlay, accent }) => {
   const callP = inOf(f, 54 * S, 16 * S);
   const callX = W - 150 * k;
   const callY = H * 0.72;
-  const label = hl.length <= 34 ? hl : words(hl).slice(0, 4).join(" ");
+  // The callout names the key words whole (two lines at most), never a cut piece of them.
+  const label = hl.length <= 60 ? hl : "";
   return (
     <AbsoluteFill style={{ opacity: 1 - out }}>
       <AbsoluteFill style={{ background: `radial-gradient(ellipse 80% 75% at 50% 45%, #171a20 0%, #0b0d11 60%, #050608 100%)`,
@@ -554,7 +558,7 @@ const geoCentroidOf = (g: Feat): [number, number] | null => {
 };
 const inUS = (p: { lat: number; lon: number }) => p.lat > 18 && p.lat < 72 && p.lon > -170 && p.lon < -64;
 /** Never a view narrower than this many miles across: the states round the route must read as shapes. */
-const MIN_VIEW_MILES = 620;
+const MIN_VIEW_MILES = 420;
 
 /**
  * Two places on a dark relief map (the states, else the countries, their
@@ -610,6 +614,15 @@ const MapPath: Look = ({ overlay, accent }) => {
   const dist = distanceText(miles, num(overlay.value), overlay.suffix);
   const midS = route.length ? toScreen(route[Math.floor(route.length / 2)]) : [(sa[0] + sb[0]) / 2, (sa[1] + sb[1]) / 2];
   const distP = inOf(f, 66 * S, 14 * S);
+  // The distance sits off the route's middle, on its upper side and clear of both pins and their names.
+  const dx = sb[0] - sa[0], dy = sb[1] - sa[1];
+  const len = Math.max(1, Math.hypot(dx, dy));
+  let nx = -dy / len, ny = dx / len;
+  if (ny > 0) { nx = -nx; ny = -ny; }
+  let off = 70 * k;
+  const chipAt = (o: number): [number, number] => [midS[0] + nx * o, midS[1] + ny * o];
+  while (off < 260 * k && [sa, sb].some((q) => Math.hypot(chipAt(off)[0] - q[0], chipAt(off)[1] - q[1]) < 150 * k)) off += 20 * k;
+  const chip = chipAt(off);
   const title = str(overlay.text).toUpperCase();
   const bLeft = pb[0] < pa[0];
   // The names of the land round the route, faint (only those whose centre is in the final view).
@@ -682,7 +695,7 @@ const MapPath: Look = ({ overlay, accent }) => {
       {name(sa, nameA, inOf(f, 10 * S, 14 * S), bLeft)}
       {name(sb, nameB, inOf(f, 64 * S, 14 * S), !bLeft)}
       {dist ? (
-        <div style={{ position: "absolute", left: midS[0], top: midS[1] - 78 * k,
+        <div style={{ position: "absolute", left: chip[0], top: chip[1] - 26 * k,
           transform: `translate(-50%, ${((1 - distP) * 10 * k).toFixed(1)}px)`, opacity: distP,
           padding: `${10 * k}px ${22 * k}px`, background: GLASS, border: `${2 * k}px solid ${hot}`, borderRadius: 40 * k,
           fontFamily: ANTON, fontSize: 34 * k, color: "#fff", letterSpacing: "0.02em", whiteSpace: "nowrap",
