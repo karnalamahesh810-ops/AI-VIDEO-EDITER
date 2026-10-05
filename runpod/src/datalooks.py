@@ -1031,7 +1031,10 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
     themes: Dict[str, int] = {}
     styles: Dict[str, int] = {}
     for o in before:
-        if o.get("theme") and (str(o.get("template") or "") in FIGURE_LOOKS or o.get("template") in RETIRED_IDS):
+        if str(o.get("template") or "").startswith("LIB_VR_"):
+            continue        # the VidRush date looks' "serif" / "typewriter" is their lettering, not a colour
+        if o.get("theme") and (str(o.get("template") or "") in FIGURE_LOOKS or o.get("template") in RETIRED_IDS
+                               or o.get("template") in KT_DATA):
             themes[str(o["theme"])] = themes.get(str(o["theme"]), 0) + 3
         elif o.get("theme"):
             themes[str(o["theme"])] = themes.get(str(o["theme"]), 0) + 1
@@ -1053,7 +1056,9 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
     remapped: List[dict] = []
     for ov in before:
         tid = str(ov.get("template") or "")
-        if tid in KT_DATA and ov.get("dataLook"):
+        if tid in KT_DATA and (ov.get("dataLook") or (plan_data and allowed is None)):
+            # this planner's own looks, and the build's KT figure leads (treatments.BOLD_COUNT_LOOK): every
+            # figure is ranked and placed again here, so one moment is never shown twice
             removed.append({"template": tid, "at": round(int(ov.get("startFrame") or 0) / fps, 2), "why": "re-planned"})
             continue
         if tid in RETIRED_IDS:

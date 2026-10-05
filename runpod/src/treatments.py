@@ -1861,13 +1861,25 @@ LEGACY_DATE_LOOKS = ["LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK"]
 # that, with a digit count sound"): the bold count leads for a number, a count,
 # a percentage, money and an age; the other number looks come in for variety,
 # once after every BOLD_COUNT_RUN bold counts in a row.
-BOLD_COUNT_LOOK = "LIB_BT_COUNT"
+# Since 2026-10-05 the lead is the kinetic-type number (LibKinetic kt-number): the
+# outlined bold count (LIB_BT_COUNT) is retired (remotion/src/legacyLooks.ts). The
+# data planner (src/datalooks.py) re-plans every figure at the end of the build and
+# replaces this one with the KT look it ranks for the moment (a ring for a share...).
+BOLD_COUNT_LOOK = "KT_NUMBER"
 BOLD_COUNT_CUES = {"big-number", "count", "percent", "money", "age"}
 BOLD_COUNT_RUN = 2
+# The KT date looks are the data planner's (src/datalooks.py: on the word, after the
+# build); the cue picker never takes them, so a date is never shown twice.
+KT_DATE_LOOKS = {"KT_DATE", "KT_YEAR", "KT_TIME"}
+# The words a line puts on screen in the one clean type style (the owner, 2026-10-05: the outlined condensed
+# words, the typed boxes and the headline stacks are retired): a typed statement or a question, a key phrase.
+KT_TEXT_FIRST = {"question": "KT_STATEMENT", "statement": "KT_STATEMENT", "typewriter": "KT_STATEMENT",
+                 "key-phrase": "KT_KEYWORD", "headline": "KT_KEYWORD", "term": "KT_KEYWORD"}
 # Where the text-only looks sit, in turn: the lower third at the safe margin,
 # left or right, never mid-frame (the owner, 2026-10-01: "not in perfect
-# places"); the editor may still choose the centre.
-TEXT_LOOK_ALIGNS = {TEXT_DATE_LOOK: ["left", "right"], BOLD_COUNT_LOOK: ["right", "left"]}
+# places"); the editor may still choose the centre. (The KT looks place
+# themselves: LibKinetic's calm-zone placement, one place per kind.)
+TEXT_LOOK_ALIGNS = {TEXT_DATE_LOOK: ["left", "right"], "LIB_BT_COUNT": ["right", "left"]}
 # How they are lettered, in turn across both looks so no two in a row look the same
 # (LibBoldText: clean white with a rule, silver shine, the key part in amber, white on a soft shade).
 TEXT_LOOK_STYLES = ["clean", "shine", "accent", "shade"]
@@ -2437,7 +2449,12 @@ def _template_for_cue(cue: str, pack: dict, used_recently: set,
     if cue == "typewriter":
         options = [t for t in options if templates.types(t)]
     options = [t for t in options if look_fits(t["id"], text) and not _needs_places(t, props) and auto_ok(t["id"])
-               and t["id"] not in VR_LOOKS]
+               and t["id"] not in VR_LOOKS and not (cue in DATE_CUES and t["id"] in KT_DATE_LOOKS)]
+    first = KT_TEXT_FIRST.get(cue)
+    if first:
+        # The clean kinetic-type words lead where the retired condensed text looks used to (registry order
+        # breaks ties after the least-used sort below, so this stays first until it has been used).
+        options = sorted(options, key=lambda t: t["id"] != first)
     if cue in SINGLE_FIGURE_CUES or (cue in TEXT_CUES and cue != "chapter"):
         # One figure, or words: on the clip, never a card that covers it.
         options = [t for t in options if "own-backdrop" not in (t.get("tags") or [])] or options
@@ -3892,6 +3909,9 @@ class _Planner:
             if cue in SINGLE_FIGURE_CUES and over_footage:
                 # One figure over footage: the compact corner looks first (tags ride on the clip).
                 stage_prefer = set(prefer) | {t["id"] for t in pool if t.get("kind") == "tag"}
+            if cue in KT_TEXT_FIRST:
+                # The clean kinetic-type words first, where the retired condensed text looks used to lead.
+                stage_prefer = set(stage_prefer) | {KT_TEXT_FIRST[cue]}
             fresh, stale = self.looks.order(pool, at, prefer=stage_prefer, demote=demote,
                                             text_beat=text_beat or cue in TEXT_BEAT_CUES)
             for t in fresh:

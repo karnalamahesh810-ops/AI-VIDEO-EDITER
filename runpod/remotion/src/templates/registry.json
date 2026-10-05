@@ -81360,7 +81360,7 @@
     "exit": "fade",
     "variant": "kt-number",
     "sfx": {
-     "name": "count-final",
+     "name": "letter-tick",
      "volume": 0.3
     },
     "sfxAt": 36,
@@ -81368,27 +81368,25 @@
     "leastSeconds": 3.5,
     "sounds": [
      {
-      "name": "count-roll",
+      "name": "count-tick",
       "alt": [
-       "count-tick"
+       "count-roll",
+       "ui-tick"
       ],
-      "at": 36,
-      "until": 75,
-      "gain_db": -4.0,
+      "at": 4,
+      "align": "start",
+      "until": 35,
+      "gain_db": -8,
       "when": "value"
      },
      {
-      "name": "count-final",
+      "name": "letter-tick",
       "alt": [
+       "ui-tick",
        "tick"
       ],
-      "at": 75,
-      "when": "value"
-     },
-     {
-      "name": "count-final",
       "at": 36,
-      "when": "no-value"
+      "gain_db": -6
      }
     ]
    },
@@ -81426,7 +81424,9 @@
     "big-number",
     "count",
     "measurement",
-    "money"
+    "money",
+    "percent",
+    "age"
    ],
    "tags": [
     "lib",
@@ -81549,7 +81549,7 @@
     "exit": "fade",
     "variant": "kt-percent",
     "sfx": {
-     "name": "count-final",
+     "name": "letter-tick",
      "volume": 0.3
     },
     "sfxAt": 40,
@@ -81557,27 +81557,25 @@
     "leastSeconds": 3.5,
     "sounds": [
      {
-      "name": "count-roll",
+      "name": "count-tick",
       "alt": [
-       "count-tick"
+       "count-roll",
+       "ui-tick"
       ],
-      "at": 1,
-      "until": 40,
-      "gain_db": -4.0,
+      "at": 4,
+      "align": "start",
+      "until": 39,
+      "gain_db": -8,
       "when": "value"
      },
      {
-      "name": "count-final",
+      "name": "letter-tick",
       "alt": [
+       "ui-tick",
        "tick"
       ],
       "at": 40,
-      "when": "value"
-     },
-     {
-      "name": "count-final",
-      "at": 40,
-      "when": "no-value"
+      "gain_db": -6
      }
     ]
    },
@@ -81732,7 +81730,7 @@
     "exit": "fade",
     "variant": "kt-multiplier",
     "sfx": {
-     "name": "count-final",
+     "name": "letter-tick",
      "volume": 0.3
     },
     "sfxAt": 40,
@@ -81740,8 +81738,25 @@
     "leastSeconds": 3.5,
     "sounds": [
      {
-      "name": "count-final",
-      "at": 40
+      "name": "count-tick",
+      "alt": [
+       "count-roll",
+       "ui-tick"
+      ],
+      "at": 4,
+      "align": "start",
+      "until": 39,
+      "gain_db": -8,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 40,
+      "gain_db": -6
      }
     ]
    },
@@ -81896,29 +81911,20 @@
     "exit": "fade",
     "variant": "kt-chip",
     "sfx": {
-     "name": "count-final",
+     "name": "letter-tick",
      "volume": 0.3
     },
     "types": false,
     "leastSeconds": 2.5,
     "sounds": [
      {
-      "name": "count-roll",
+      "name": "letter-tick",
       "alt": [
-       "count-tick"
-      ],
-      "at": 6,
-      "until": 45,
-      "gain_db": -4.0,
-      "when": "value"
-     },
-     {
-      "name": "count-final",
-      "alt": [
+       "ui-tick",
        "tick"
       ],
-      "at": 45,
-      "when": "value"
+      "at": 10,
+      "gain_db": -6
      }
     ]
    },
@@ -82077,12 +82083,22 @@
     "exit": "fade",
     "variant": "kt-compare",
     "sfx": {
-     "name": "none",
-     "volume": 0.0
+     "name": "letter-tick",
+     "volume": 0.3
     },
     "types": false,
     "leastSeconds": 4.0,
-    "sounds": []
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 20,
+      "gain_db": -6
+     }
+    ]
    },
    "variants": {
     "style": [
@@ -82235,12 +82251,34 @@
     "exit": "fade",
     "variant": "kt-progress",
     "sfx": {
-     "name": "none",
-     "volume": 0.0
+     "name": "letter-tick",
+     "volume": 0.3
     },
     "types": false,
     "leastSeconds": 4.0,
-    "sounds": []
+    "sounds": [
+     {
+      "name": "count-tick",
+      "alt": [
+       "count-roll",
+       "ui-tick"
+      ],
+      "at": 4,
+      "align": "start",
+      "until": 35,
+      "gain_db": -8,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 36,
+      "gain_db": -6
+     }
+    ]
    },
    "variants": {
     "style": [
@@ -82882,7 +82920,8 @@
    "cues": [
     "key-phrase",
     "headline",
-    "emphasis"
+    "emphasis",
+    "term"
    ],
    "tags": [
     "lib",
@@ -83034,7 +83073,8 @@
    "cues": [
     "quote",
     "question",
-    "statement"
+    "statement",
+    "typewriter"
    ],
    "tags": [
     "lib",

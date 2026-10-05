@@ -322,19 +322,20 @@ class Dates(unittest.TestCase):
             self.assertFalse([s for s in mine if s["name"] in ("hit-deep", "date-slam", "impact-punch")], mine)
 
     def test_the_registry_still_offers_the_old_date_looks_for_the_editor(self):
-        # Bold text only: the letter drop for a date, a date and a time, a time of day.
+        # The letter drop and the bold date cards are retired (2026-10-05, legacyLooks.ts): still in the
+        # registry so older documents draw (as their KT twin), never offered for a date again.
+        for tid in (treatments.TEXT_DATE_LOOK, "LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK"):
+            self.assertIsNotNone(templates.get(tid), tid)
+            self.assertTrue(templates.get(tid).get("retired"), tid)
         for cue in ("date", "datetime", "time-of-day"):
-            self.assertEqual([t["id"] for t in treatments.date_looks(cue)], [treatments.TEXT_DATE_LOOK], cue)
-        # A registry without it falls back to the bold type looks left (the boxed
-        # and banded date cards are banned: the 2026-09-30 audit); never a banned look.
-        real = templates.get
-        hidden = {treatments.TEXT_DATE_LOOK}
-        with mock.patch.object(templates, "get", lambda tid: None if tid in hidden else real(tid)):
-            for cue in ("date", "datetime"):
-                self.assertEqual([t["id"] for t in treatments.date_looks(cue)],
-                                 ["LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK"], cue)
-            for cue in ("date", "datetime", "time-of-day"):
-                self.assertFalse([t["id"] for t in treatments.date_looks(cue) if templates.banned(t["id"])], cue)
+            offered = [t["id"] for t in treatments.date_looks(cue)]
+            self.assertFalse([t for t in offered if templates.get(t).get("retired")], (cue, offered))
+            self.assertFalse([t for t in offered if templates.banned(t)], cue)
+        # The planner's cue picker leaves a date to the VidRush date and the data planner's KT date (on its word).
+        pack = treatments.pack_for({}, "")
+        for cue in ("date", "datetime", "time-of-day"):
+            got = treatments._template_for_cue(cue, pack, set(), {}, text="On July 2, the rain began.")
+            self.assertNotIn(got, treatments.KT_DATE_LOOKS | {treatments.TEXT_DATE_LOOK}, cue)
 
 
 # --------------------------------------------------------------------------- C. labels and person cards

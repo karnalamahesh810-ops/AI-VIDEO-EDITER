@@ -178,7 +178,8 @@ class NeverOnItsOwn(unittest.TestCase):
         for t in family("LIB_NX_") + family("LIB_TX_"):
             self.assertIs(t.get("autoPick"), False, t["id"])
             self.assertFalse(treatments.auto_ok(t["id"]), t["id"])
-        self.assertTrue(treatments.auto_ok("LIB_BT_COUNT"))
+        self.assertTrue(treatments.auto_ok(treatments.BOLD_COUNT_LOOK))
+        self.assertFalse(treatments.auto_ok("LIB_BT_COUNT"))         # retired (2026-10-05): never picked again
         self.assertTrue(treatments.auto_ok("LIB_CT_RING_PRO"))
 
     def test_no_planned_video_shows_them(self):

@@ -20,11 +20,13 @@
    "big-number",
    "count",
    "measurement",
-   "money"
+   "money",
+   "percent",
+   "age"
   ],
   "duration": 4.5,
   "least": 3.5,
-  "sfx": "count-final",
+  "sfx": "none",
   "types": false,
   "sample": {
    "value": 180000,
@@ -36,7 +38,30 @@
   "file": "LibKinetic",
   "exit": "fade",
   "auto_pick": true,
-  "sfx_at": 36
+  "sfx_at": 36,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "count-roll",
+     "ui-tick"
+    ],
+    "at": 4,
+    "align": "start",
+    "until": 35,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 36,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-percent",
@@ -61,7 +86,7 @@
   ],
   "duration": 4.5,
   "least": 3.5,
-  "sfx": "count-final",
+  "sfx": "none",
   "types": false,
   "sample": {
    "value": 27,
@@ -73,7 +98,30 @@
   "file": "LibKinetic",
   "exit": "fade",
   "auto_pick": true,
-  "sfx_at": 40
+  "sfx_at": 40,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "count-roll",
+     "ui-tick"
+    ],
+    "at": 4,
+    "align": "start",
+    "until": 39,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 40,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-multiplier",
@@ -97,11 +145,11 @@
   ],
   "duration": 4.5,
   "least": 3.5,
-  "sfx": "count-final",
+  "sfx": "none",
   "types": false,
   "sample": {
    "value": 15,
-   "suffix": "×",
+   "suffix": "\u00d7",
    "label": "Arizona loses",
    "subtitle": "as much water as the place everyone blames"
   },
@@ -109,7 +157,30 @@
   "file": "LibKinetic",
   "exit": "fade",
   "auto_pick": true,
-  "sfx_at": 40
+  "sfx_at": 40,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "count-roll",
+     "ui-tick"
+    ],
+    "at": 4,
+    "align": "start",
+    "until": 39,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 40,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-chip",
@@ -143,7 +214,18 @@
   "family": "kt",
   "file": "LibKinetic",
   "exit": "fade",
-  "auto_pick": true
+  "auto_pick": true,
+  "sounds": [
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 10,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-compare",
@@ -187,7 +269,18 @@
   "family": "kt",
   "file": "LibKinetic",
   "exit": "fade",
-  "auto_pick": true
+  "auto_pick": true,
+  "sounds": [
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 20,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-progress",
@@ -221,7 +314,30 @@
   "family": "kt",
   "file": "LibKinetic",
   "exit": "fade",
-  "auto_pick": true
+  "auto_pick": true,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "count-roll",
+     "ui-tick"
+    ],
+    "at": 4,
+    "align": "start",
+    "until": 35,
+    "gain_db": -8,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 36,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-date",
@@ -332,7 +448,8 @@
   "cues": [
    "key-phrase",
    "headline",
-   "emphasis"
+   "emphasis",
+   "term"
   ],
   "duration": 3.8,
   "least": 3.0,
@@ -363,7 +480,8 @@
   "cues": [
    "quote",
    "question",
-   "statement"
+   "statement",
+   "typewriter"
   ],
   "duration": 4.5,
   "least": 3.0,

@@ -1762,6 +1762,16 @@ def _build(segments: List[Segment], shots: List[dict],
             from . import datalooks
             report = datalooks.finish(doc)
             doc["meta"]["overlayCount"] = len(doc["overlays"])
+            # A transition's sound never lands within a second of a look's own, nor over it (as when it was
+            # planned): the re-planned looks bring their sounds to new frames, so a clashing cut goes quiet.
+            near = sfxplan.doc_look_sounds(doc)
+            if near:
+                def _clear(tr: dict) -> bool:
+                    a, d = int(tr.get("startFrame") or 0), int(tr.get("durationFrames") or 0)
+                    return not any(abs(a - s["startFrame"]) <= 30 or (s["startFrame"] < a + d
+                                                                      and a < s["startFrame"] + s["frames"])
+                                   for s in near)
+                doc["sfx"] = [s for s in doc.get("sfx") or [] if s.get("kind") != "transition" or _clear(s)]
             doc["meta"]["dataLooks"] = {k: report[k] for k in ("addedByLook", "shortBefore", "shortAfter")} | {
                 "dropped": len(report["dropped"]), "removed": len(report["removed"])}
             print(f"[timeline] data looks: {report['addedByLook']}; {len(report['removed'])} old figure look(s) "

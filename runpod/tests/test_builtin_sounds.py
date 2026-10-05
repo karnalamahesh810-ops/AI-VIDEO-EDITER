@@ -388,7 +388,8 @@ class Planner(unittest.TestCase):
         self.assertEqual(looks[3], treatments.BOLD_COUNT_LOOK, looks)
         for o in figures:
             if o["template"] == treatments.BOLD_COUNT_LOOK:
-                self.assertIn(o["align"], ("left", "right", "center"))
+                # the kinetic number places itself (LibKinetic's calm zone, one place per kind): no turned align
+                self.assertEqual(o.get("variant"), "kt-number", o)
 
 
 # --------------------------------------------------------------------------- the TypeScript twin

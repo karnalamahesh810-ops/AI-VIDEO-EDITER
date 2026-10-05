@@ -164,7 +164,8 @@ class Planner(unittest.TestCase):
                           or o["template"] in treatments.OLD_DATE_LOOKS], out["overlays"])
 
     def test_the_registry_keeps_the_text_style_choice(self):
-        for tid in (treatments.TEXT_DATE_LOOK, treatments.BOLD_COUNT_LOOK):
+        # (the retired bold looks, still drawn for older documents; the KT looks have one clean style)
+        for tid in ("LIB_DT_LETTER_DROP", "LIB_BT_COUNT"):
             spec = templates.get(tid)["props"]["textStyle"]
             self.assertEqual(spec["options"], ["auto", "clean", "shine", "accent", "shade"], tid)
 
