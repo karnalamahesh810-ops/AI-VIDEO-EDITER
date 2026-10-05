@@ -855,6 +855,21 @@ SOURCE_TAGS = _flag("SOURCE_TAGS", False)
 SOURCE_TAG_GAP = float(os.getenv("SOURCE_TAG_GAP", "30"))
 SOURCE_TAG_FIRST_SECONDS = float(os.getenv("SOURCE_TAG_FIRST_SECONDS", "5"))
 SOURCE_TAG_SECONDS = float(os.getenv("SOURCE_TAG_SECONDS", "3"))
+# Real data graphics (src/datagraphics.py, src/realdata.py; the owner, 2026-10-05): a line that states a
+# measurable water or weather fact - a reservoir's level or how full it is, a river's flow, the share of a state in
+# drought, a temperature record - gets a chart of the REAL, current numbers from the official source (USBR, USGS,
+# the U.S. Drought Monitor, NOAA) with the source and the date of the data in its corner. Off by default until the
+# owner has seen it; a job turns it on with config {"DATA_GRAPHICS": true}.
+DATA_GRAPHICS = _flag("DATA_GRAPHICS", False)
+# At most one data graphic per this many seconds of video (the owner: one every 45-60 s at most).
+DATA_GRAPHICS_GAP = float(os.getenv("DATA_GRAPHICS_GAP", "50"))
+# None in the video's first seconds unless the line there states the number itself.
+DATA_GRAPHICS_HOOK_SECONDS = float(os.getenv("DATA_GRAPHICS_HOOK_SECONDS", "15"))
+# The whole job's time for fetching the numbers (it runs beside the footage search), each request at most
+# DATA_FETCH_SECONDS; the planner waits at most DATA_GRAPHICS_WAIT more for answers still out.
+DATA_GRAPHICS_SECONDS = float(os.getenv("DATA_GRAPHICS_SECONDS", "45"))
+DATA_FETCH_SECONDS = float(os.getenv("DATA_FETCH_SECONDS", "12"))
+DATA_GRAPHICS_WAIT = float(os.getenv("DATA_GRAPHICS_WAIT", "15"))
 # Footage moves and still aiming separately (the news styles keep their
 # clips as shot: src/styles.py).
 REFRAME_CLIPS = _flag("REFRAME_CLIPS", True)

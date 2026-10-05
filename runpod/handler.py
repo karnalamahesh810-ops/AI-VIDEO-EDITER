@@ -82,6 +82,7 @@ from src import ambience, gapfill, grade, packs, quality, review, shotcap, voice
 from src import brandkit, stockblock
 from src import recut, restore
 from src import batch, sources
+from src import datagraphics
 from src import tts
 from src import sharpness
 
@@ -1042,6 +1043,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     mentions.apply_focus(shots, segments, mention_focus, brief)
     # Out of AI credits already: stop before a single footage search is paid for.
     vision.require_credits()
+    # Real data graphics (src/datagraphics.py, DATA_GRAPHICS): the official numbers behind the narration's water
+    # and weather facts (USBR, USGS, the Drought Monitor, NOAA - free, keyless), fetched beside the footage search
+    # in their own time box; nothing in it can fail the job. Off: nothing starts.
+    data_store = datagraphics.start([s.text or "" for s in segments], brief) if config.DATA_GRAPHICS else None
 
     # Per-scene overrides from the editor win over the director's choice.
     for key, query in (inp.get("scene_queries") or {}).items():
@@ -1322,22 +1327,30 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
 
     # No percentage: the sourcing bands already reach the mid 60s.
     report("Designing motion graphics and animations")
-    doc = timeline.build(
-        segments, shots, assets,
-        # The resolved URL, not the temp path: the document has to stay
-        # meaningful after this job's work directory is gone.
-        audio_url=audio_src or audio_path,
-        audio_duration=audio_duration,
-        inp=inp,
-        planner=planner,
-        warnings=warnings,
-        # The narration on this disk: every sound is levelled against its
-        # measured loudness (the owner's Lake Powell video was planned
-        # against an assumed voice, voiceLufsSource "assumed").
-        narration_path=audio_path,
-        # Its pictures of a subject fill an image look's slots the story cannot.
-        library=LAST_LIBRARY.get("lib"),
-    )
+    if data_store is not None:
+        # Long done beside the footage search as a rule; a source still answering gets a few seconds more.
+        data_store.wait(config.DATA_GRAPHICS_WAIT)
+    with datagraphics.use(data_store):
+        doc = timeline.build(
+            segments, shots, assets,
+            # The resolved URL, not the temp path: the document has to stay
+            # meaningful after this job's work directory is gone.
+            audio_url=audio_src or audio_path,
+            audio_duration=audio_duration,
+            inp=inp,
+            planner=planner,
+            warnings=warnings,
+            # The narration on this disk: every sound is levelled against its
+            # measured loudness (the owner's Lake Powell video was planned
+            # against an assumed voice, voiceLufsSource "assumed").
+            narration_path=audio_path,
+            # Its pictures of a subject fill an image look's slots the story cannot.
+            library=LAST_LIBRARY.get("lib"),
+        )
+    if data_store is not None:
+        # What was fetched from where and how long it took, beside what the planner did with it.
+        doc.setdefault("meta", {}).setdefault("dataGraphics", {"facts": 0, "shown": 0, "disagree": 0, "items": []})
+        doc["meta"]["dataGraphics"]["fetch"] = data_store.report()
     # What the hook booster changed (src/hookboost.py): the cuts made before the
     # shots were planned, and the opening as it was built.
     if doc.get("meta", {}).get("hookBoost") or boost_info:
@@ -2552,6 +2565,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "AUTO_MAPS", "AUTO_MAP_GAP",
                       # On-screen sources (src/sources.py): "SOURCE: USBR, 2024" where the narration names its source.
                       "SOURCE_TAGS", "SOURCE_TAG_GAP", "SOURCE_TAG_FIRST_SECONDS", "SOURCE_TAG_SECONDS",
+                      # Real data graphics (src/datagraphics.py): official numbers charted where the narration
+                      # states a water or weather fact.
+                      "DATA_GRAPHICS", "DATA_GRAPHICS_GAP", "DATA_GRAPHICS_HOOK_SECONDS", "DATA_GRAPHICS_SECONDS",
+                      "DATA_GRAPHICS_WAIT",
                       # The AI review of the finished video (src/review.py): one job can try it
                       # ({"config": {"AI_REVIEW": 1}}), or review without fixing (AI_REVIEW_FIX 0).
                       "AI_REVIEW", "AI_REVIEW_FIX", "AI_REVIEW_AUDIO", "AI_REVIEW_GROUP", "AI_REVIEW_MAX_CALLS",
