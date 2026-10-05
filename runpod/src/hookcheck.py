@@ -520,15 +520,24 @@ def _plays(scenes: List[dict], i: int, fps: int) -> float:
 
 
 def _hook_shot(scene: dict) -> str:
-    """The scene's clip or picture on this disk when it is one this check reads, else ''."""
+    """
+    The scene's clip or picture on this disk when it is one this check reads,
+    else ''. A cold open's flash (HOOK_TEASER) too: it is the video's very
+    first second - the first second of a later clip, judged against that
+    clip's own line (gapfill.known_jobs).
+    """
     m = scene.get("media") or {}
-    if scene.get("teaser") or scene.get("animation") or m.get("type") not in ("video", "image"):
+    if scene.get("animation") or m.get("type") not in ("video", "image"):
         return ""
     return _local(m.get("url"))
 
 
 def _todo(scenes: List[dict], fps: int, known) -> Dict[int, tuple]:
-    """{scene index: (file, job, span)} for every shot of the hook not yet checked on its own cut."""
+    """
+    {scene index: (file, job, span)} for every shot of the hook not yet
+    checked on its own cut. `known`: the plan's lines by scene number
+    (gapfill.known_jobs - after a cold open, not by the line's old place).
+    """
     from . import gapfill
     out: Dict[int, tuple] = {}
     for i, s in enumerate(scenes):
@@ -586,7 +595,7 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
     for rnd in range(2):
         scenes = doc.get("scenes") or []
         fps = max(1, int(doc.get("fps") or 30))
-        known = gapfill.CONTEXT.get("jobs")
+        known = gapfill.known_jobs(doc)        # by scene number, a cold open's flashes counted
         todo = _todo(scenes, fps, known)
         ahead = _prefetch(todo)
         cleared: List[dict] = []
@@ -632,7 +641,8 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
                 continue
             before = (copy.deepcopy(s.get("media")), copy.deepcopy(s.get("semanticMetadata")),
                       s.get("reviewRequired"), s.get("reviewReason"))
-            if swap_runner_up(doc, i, job, span):
+            # (A cold open's flash is a look at a later clip, not a line of its own: no runner-up.)
+            if not s.get("teaser") and swap_runner_up(doc, i, job, span):
                 out["swapped"] += 1
                 unmark(doc, s)
                 print(f"[hook] {s.get('id')}: a runner-up took its place", flush=True)

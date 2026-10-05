@@ -809,7 +809,8 @@ def _instead_of_hold(doc: dict, refused: List[dict], out: Dict[str, int], ladder
     todo = [k for k in todo if _empty(scenes[k])]
     work = CONTEXT.get("work") or ""
     if todo and not laddered and CONTEXT.get("jobs") and work and config.FALLBACK_FILL and config.NO_REUSE:
-        jobs = [job_for(sc, k, fps, CONTEXT.get("jobs")) for k, sc in enumerate(scenes)]
+        known = known_jobs(doc)
+        jobs = [job_for(sc, k, fps, known) for k, sc in enumerate(scenes)]
         results: Dict[int, Any] = {}
         try:
             fill_empty(jobs, results, work, library=CONTEXT.get("library"),
@@ -981,6 +982,32 @@ def find_repeats(doc: dict) -> List[Tuple[int, str]]:
     return out
 
 
+def known_jobs(doc: dict, known: Optional[Dict[int, dict]] = None) -> Optional[Dict[int, dict]]:
+    """
+    The plan's lines (CONTEXT["jobs"], or `known`) keyed by the scene number
+    each ended on, as job_for reads them (scene id s<n>). The plan keys them by
+    the line's place before the cold open (HOOK_TEASER, hookboost.add_teaser:
+    doc.meta.hookBoost.teaser) put its flashes in front and dropped the lines
+    they covered: there scene n is line n - flashes + dropped, and flash j a
+    one-second look at line fromBeat. Without a cold open: as they are.
+    """
+    known = CONTEXT.get("jobs") if known is None else known
+    teaser = ((doc.get("meta") or {}).get("hookBoost") or {}).get("teaser") or {}
+    flashes = teaser.get("flashes") if isinstance(teaser, dict) else None
+    if not known or not flashes:
+        return known
+    n, dropped = len(flashes), int(teaser.get("droppedBeats") or 0)
+    out: Dict[int, dict] = {}
+    for idx, job in known.items():
+        if isinstance(idx, int) and idx >= dropped:
+            out[idx - dropped + n] = job
+    for j, flash in enumerate(flashes):
+        src = flash.get("fromBeat") if isinstance(flash, dict) else None
+        if isinstance(src, int) and src in known:
+            out[j] = known[src]
+    return out
+
+
 def job_for(scene: dict, i: int, fps: int, known: Optional[Dict[int, dict]] = None) -> dict:
     """A sourcing line for one scene: the plan's own (by scene id) when known, else read off the scene."""
     sem = scene.get("semanticMetadata") or {}
@@ -1056,7 +1083,8 @@ def final_check(doc: dict, *, label: str = "before publishing") -> Dict[str, int
     empties = [i for i, s in enumerate(scenes) if _empty(s)]
     out["empty"] = len(empties)
     if empties:
-        jobs = [job_for(s, i, fps, CONTEXT.get("jobs")) for i, s in enumerate(scenes)]
+        known = known_jobs(doc)
+        jobs = [job_for(s, i, fps, known) for i, s in enumerate(scenes)]
         results: Dict[int, Any] = {}
         used = Used()
         for i, s in enumerate(scenes):

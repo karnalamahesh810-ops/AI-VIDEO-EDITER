@@ -766,7 +766,7 @@ def _opening_turned_down(doc: dict, i: int, asset, seconds: float) -> str:
     s = scenes[i]
     if not hookcheck.in_hook(int(s.get("startFrame") or 0) / fps):
         return ""
-    job = dict(gapfill.job_for(s, i, fps, gapfill.CONTEXT.get("jobs")), hook=True, seconds=seconds)
+    job = dict(gapfill.job_for(s, i, fps, gapfill.known_jobs(doc)), hook=True, seconds=seconds)
     keep, verdict = hookcheck.judge(asset.local_path, job, seconds)
     if keep is False:
         print(f"[shotcap] scene {i + 1}: another moment turned down by the opening check "

@@ -629,6 +629,42 @@ class TheHookCheck(unittest.TestCase):
         self.assertEqual(s0["semanticMetadata"]["hookCheck"]["turnedDown"]["assetId"], "yt:R_z4cbZu3Ok@23")
         self.assertEqual([a["assetId"] for a in s0["semanticMetadata"]["alternatives"]], ["yt:ALTNONE0001@3"])
 
+    def test_after_a_cold_open_each_shot_is_judged_against_its_own_line(self):
+        # HOOK_TEASER put 3 flashes of later shots in front and numbered the scenes anew; the plan's lines
+        # are keyed by their old place, so scene s0003 (line 0's own shot) was judged against line 3's
+        # intent - every hook scene one line off by the flashes - and the flashes were never checked.
+        files = [self.file(f"yt_LINE{k:07d}_{10000 * (k + 1)}_7500_abcdef0123_c00020.mp4") for k in range(8)]
+        scenes = [scene(j, {"type": "video", "url": files[5 + j], "source": "youtube", "clipSeconds": 7.0},
+                        float(j), 1.0, assetId=f"yt:LINE{5 + j:07d}@1") for j in range(3)]
+        for j in range(3):
+            scenes[j]["teaser"] = True
+        scenes += [scene(3 + k, {"type": "video", "url": files[k], "source": "youtube", "clipSeconds": 3.5},
+                         3.0 + 3.0 * k, 3.0, assetId=f"yt:LINE{k:07d}@1") for k in range(8)]
+        doc = {"fps": FPS, "overlays": [], "scenes": scenes,
+               "meta": {"hookBoost": {"teaser": {"flashes": [{"fromBeat": 5}, {"fromBeat": 6}, {"fromBeat": 7}],
+                                                 "droppedBeats": 0}}}}
+        gapfill.remember([{"index": k, "intent": f"INTENT OF LINE {k}", "query": f"q{k}"} for k in range(8)],
+                         self.work)
+        asked = {}
+
+        def judge(path, intent, context="", **kw):
+            line = files.index(path)
+            asked.setdefault(os.path.basename(path), set()).add(intent)
+            v = dict(VERDICT) if intent == f"INTENT OF LINE {line}" else dict(VERDICT, score=0.1)
+            return dict(v, frames=vision.opening_times(kw["span"]), span=kw["span"])
+        with mock.patch.object(vision, "judge", side_effect=judge),                 mock.patch.object(filters, "_video_seconds", return_value=3.5),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(gapfill, "hold_or_animate", return_value={}):
+            out = hookcheck.check(doc, work=self.work)
+        self.assertEqual((out["checked"], out["kept"], out["cleared"]), (11, 11, 0))
+        for k in range(8):
+            self.assertEqual(asked[os.path.basename(files[k])], {f"INTENT OF LINE {k}"})
+        self.assertTrue(all(sc["semanticMetadata"]["cutCheck"]["ok"] for sc in doc["scenes"][:3]))   # flashes checked
+        # Without a cold open the plan's lines are read as they are.
+        self.assertIs(gapfill.known_jobs({"meta": {}}), gapfill.CONTEXT["jobs"])
+        # Two flashes covering line 0 entirely (dropped): scene 2 is line 1, scene 3 line 2.
+        teaser = {"meta": {"hookBoost": {"teaser": {"flashes": [{"fromBeat": 2}, {"fromBeat": 1}],
+                                                    "droppedBeats": 1}}}}
+        self.assertEqual(gapfill.known_jobs(teaser, {0: "a", 1: "b", 2: "c"}), {0: "c", 1: "b", 2: "b", 3: "c"})
+
     def test_off_changes_nothing(self):
         doc, first, second = self.glen_canyon()
         with mock.patch.object(config, "HOOK_CUT_CHECK", False), mock.patch.object(vision, "judge") as j:

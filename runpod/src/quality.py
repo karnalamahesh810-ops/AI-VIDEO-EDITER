@@ -1442,7 +1442,8 @@ class Gate:
         `order`, not spread over the video."""
         scenes = self.doc["scenes"]
         plan = gapfill.CONTEXT if CONTEXT.get("plan") and gapfill.CONTEXT.get("jobs") else {}
-        jobs = [gapfill.job_for(s, k, self.fps, plan.get("jobs")) for k, s in enumerate(scenes)]
+        known = gapfill.known_jobs(self.doc, plan.get("jobs")) if plan.get("jobs") else None
+        jobs = [gapfill.job_for(s, k, self.fps, known) for k, s in enumerate(scenes)]
         todo = set(order)
         used = gapfill.Used()
         for k, s in enumerate(scenes):
