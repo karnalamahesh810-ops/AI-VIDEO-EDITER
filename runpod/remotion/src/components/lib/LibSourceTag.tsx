@@ -121,6 +121,63 @@ const SourceTag: Look = ({ overlay, accent }) => {
   );
 };
 
+/**
+ * The source tag's own line inside a full-screen look (the real data graphics, LibRealData.tsx): the same thin
+ * accent rule and rising tracked caps in the same low corner, read as "SOURCE: USBR · DATA AS OF OCT 3, 2026".
+ * `at` delays it (frames at 30 fps from the look's first frame); it leaves with the look's last `EXIT` frames.
+ * `room` is the widest it may be, a share of the frame's width.
+ */
+export const SourceLine: React.FC<{ name: string; note?: string; label?: string; align?: "left" | "right";
+  at?: number; accent?: string; room?: number }> = ({ name, note, label, align = "left", at = 0, accent, room = 0.62 }) => {
+  const own = useCurrentFrame();
+  const { fps, durationInFrames: dur, width, height } = useVideoConfig();
+  const k = useK();
+  const captions = React.useContext(CaptionsOn);
+  const S = fps / 30;
+  const frame = own - at * S;
+  const right = align === "right";
+  const ac = accent || AMBER;
+  const lab = clean(label, 14) || "SOURCE";
+  const who = clean(name, 44);
+  const tail = clean(note, 40);
+  if (!who) return null;
+  const line = `${lab}: ${who}${tail ? ` · ${tail}` : ""}`;
+  const size = Math.max(MIN_SIZE * k, Math.min(SIZE * k, (room * width) / Math.max(1, widthEm(line))));
+  const cap = size * SUBLINE_CAP;
+  const exitAt = Math.max(Math.round((16 + at) * S), dur - Math.round(EXIT * S));
+  const q = easeIn(clamp01((own - exitAt) / (6 * S)));
+  const qRule = easeIn(clamp01((own - exitAt - 2 * S) / (7 * S)));
+  const pRule = easeOut(clamp01(frame / (9 * S))) * (1 - qRule);
+  const pLabel = easeOut(clamp01((frame - 3 * S) / (9 * S)));
+  const pName = easeOut(clamp01((frame - 6 * S) / (10 * S)));
+  const mx = MARGIN * (width / 1920);
+  const bottom = captions ? height * CAPTION_SAFE_ZONE : MARGIN * 0.8 * (height / 1080);
+  const font: React.CSSProperties = { fontFamily: SUBLINE, fontWeight: 700, fontSize: size, lineHeight: 1,
+    letterSpacing: `${TRACK}em`, textTransform: "uppercase", whiteSpace: "pre" };
+  const rise = (p: number): React.CSSProperties => ({ display: "inline-block", opacity: p * (1 - q),
+    transform: `translateY(${((1 - p) * 0.9 + q * 0.45).toFixed(4)}em)` });
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      <div style={{ position: "absolute", bottom, ...(right ? { right: mx } : { left: mx }), display: "flex",
+        flexDirection: "column", alignItems: right ? "flex-end" : "flex-start" }}>
+        <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "stretch" }}>
+          <div style={{ height: Math.max(1.5, RULE * k), background: ac, borderRadius: RULE * k,
+            marginBottom: cap * 0.78, transformOrigin: right ? "100% 50%" : "0% 50%",
+            transform: `scaleX(${pRule.toFixed(4)})`, opacity: pRule > 0.001 ? 1 : 0,
+            boxShadow: `0 ${px(1, k)} ${px(3, k)} rgba(0,0,0,.5)` }} />
+          <div style={{ ...font, filter: SHADOW(k), marginRight: `${-TRACK}em` }}>
+            <div style={{ clipPath: "inset(-0.5em -0.7em -0.14em -0.7em)" }}>
+              <span style={{ ...rise(pLabel), color: "rgba(255,255,255,.72)" }}>{`${lab}: `}</span>
+              <span style={{ ...rise(pName), color: WHITE }}>{who}</span>
+              {tail ? <span style={{ ...rise(pName), color: "rgba(255,255,255,.86)", fontWeight: 600 }}>{` · ${tail}`}</span> : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 export const LOOKS: Record<string, Look> = {
   "src-tag": SourceTag,
 };
