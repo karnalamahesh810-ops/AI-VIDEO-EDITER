@@ -102,7 +102,7 @@ class World:
             times = [30.0 * k for k in range(1, 21)]
         return _b64({"vid": info["id"], "fine": bool(window)}), times
 
-    def fetch(self, vid, out_dir, start, need, title=""):
+    def fetch(self, vid, out_dir, start, need, title="", least=None):
         bucket = int(start // 10)
         with self.lock:
             self.n += 1
