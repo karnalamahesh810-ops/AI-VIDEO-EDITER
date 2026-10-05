@@ -1782,6 +1782,9 @@ def drop_invalid_overlays(doc: dict) -> int:
     overlays = doc.get("overlays")
     if not isinstance(overlays, list):
         return 0
+    # The same line's text card twice on the same frames (a recut pass ran the ladder again): one stays.
+    from . import screentext
+    screentext.dedupe_cards(overlays)
     total = int(doc.get("durationInFrames") or 0)
     kept, dropped = [], []
     for i, ov in enumerate(overlays):

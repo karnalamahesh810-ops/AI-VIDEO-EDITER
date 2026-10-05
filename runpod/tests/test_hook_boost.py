@@ -425,7 +425,8 @@ class QuietScreen(unittest.TestCase):
     def test_a_headline_question_or_quote_waits_until_after_the_first_five_seconds(self):
         for first in ("Why is the largest lake in the country disappearing?",
                       "Officials call it a once in a lifetime flood event.",
-                      "Warning: the river is expected to crest tonight."):
+                      # (a warning label holds six words at most: src/screentext.py, 2026-10-05)
+                      "Warning: the river will crest tonight."):
             before, _ = self.early_graphics(first, False)
             self.assertTrue(set(before) & hookboost.TEXT_CATEGORIES, (first, before))      # drawn today ...
             after, held = self.early_graphics(first, True)

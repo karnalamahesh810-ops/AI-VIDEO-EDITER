@@ -747,9 +747,15 @@ def _hold(doc: dict, i: int, rate: Optional[float], ceiling: bool = False) -> bo
 def _card(doc: dict, s: dict) -> bool:
     text = (s.get("text") or "").strip()
     if text and s.get("durationInFrames"):
-        doc.setdefault("overlays", []).append({
-            "type": "highlight", "text": text[:180],
-            "startFrame": int(s.get("startFrame") or 0), "durationInFrames": int(s["durationInFrames"])})
+        card = {"type": "highlight", "text": text[:180],
+                "startFrame": int(s.get("startFrame") or 0), "durationInFrames": int(s["durationInFrames"])}
+        overlays = doc.setdefault("overlays", [])
+        # A line run through the ladder twice (a recut pass) keeps one card, not two stacked on the same
+        # frames (Yellowstone 2026-10-04: 9 of its text cards were doubled).
+        if not any(isinstance(ov, dict) and ov.get("type") == "highlight"
+                   and all(ov.get(k) == card[k] for k in ("text", "startFrame", "durationInFrames"))
+                   for ov in overlays):
+            overlays.append(card)
     s["reviewRequired"] = True
     s["reviewReason"] = "No usable clip found — the line is shown as text; use Find footage to add one"
     return bool(text)

@@ -283,7 +283,9 @@ class Rules(unittest.TestCase):
 
     def test_about_one_still_in_two_gets_a_photo_look_never_the_same_twice_in_a_row(self):
         n = 12
-        out = small(["The old intake tower now stands in open air."] * n,
+        # (The line names what the still shows: a photo look is for a picture the line is about,
+        # src/screentext.photo_caption - 2026-10-05.)
+        out = small(["The old intake tower of Hoover Dam now stands in open air."] * n,
                     [{"subject": "Hoover Dam", "subjectType": "place"} for _ in range(n)], kinds=["image"] * n)
         photos = [o["template"] for o in out["overlays"]
                   if cues(o) & {"photo", "photo-place", "place-photo", "photos"}]

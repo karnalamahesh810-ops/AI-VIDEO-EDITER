@@ -1194,9 +1194,10 @@ class TimelineBuild(unittest.TestCase):
 
     def test_data_graphics_hold_longer_than_the_beat_that_triggered_them(self):
         segments, shots, assets = simple_plan(8, seconds=2.5)
+        # (Its labels are words the line says: a chart's rows are the narration's, src/screentext.items.)
         shots[1]["overlay"] = {"type": "bar-chart", "text": "t",
-                               "items": [{"label": "a", "value": 1},
-                                         {"label": "b", "value": 2}]}
+                               "items": [{"label": "beat", "value": 1},
+                                         {"label": "narration", "value": 2}]}
         doc = timeline.build(segments, shots, assets, audio_url="file:///vo.mp3",
                              audio_duration=20.0, inp={})
         chart = doc["overlays"][0]

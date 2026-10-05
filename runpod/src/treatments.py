@@ -45,7 +45,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, hookboost, numwords, templates
 from . import automaps, config, numwords, templates
-from . import sources
+from . import screentext, sources
 from .transcribe import Segment
 
 # Read off VidRush's own timelines (an animation block every 8-10 s through
@@ -861,8 +861,13 @@ def _text_cues(text: str, seg, shot: dict, have: set) -> List[dict]:
     m = _TERM.search(t)
     if m:
         term = m.group(1).strip(" .,'\"”’")
-        term_words = [w for w in term.split() if w.lower() not in _LABEL_SKIP] or term.split()
-        term = " ".join(term_words[:3])
+        # The term as said ("once in a lifetime", not "Once Lifetime Flood"): only its glue at the ends goes.
+        term_words = term.split()
+        while term_words and term_words[-1].lower() in _LABEL_SKIP:
+            term_words.pop()
+        while term_words and term_words[0].lower() in _LABEL_SKIP:
+            term_words.pop(0)
+        term = " ".join(term_words[:4])
         if 3 <= len(term) <= 30:
             out.append({"cue": "term", "emphasis": "medium",
                         "props": {"text": term.title() if term.islower() else term, "_key": term.split()[0]}})
@@ -1004,6 +1009,42 @@ def _role_of(name: str, cast: List[dict]) -> str:
 
 
 # --------------------------------------------------------------- cues
+def _warn_phrase(text: str, m) -> str:
+    """
+    The warning as a label: the alarm word with the words that make it a phrase, as said - "an
+    emergency warning for every marina" -> "EMERGENCY WARNING", "Evacuation orders were issued" ->
+    "EVACUATION ORDERS", "the dead pool" -> "DEAD POOL". (It was the 24 letters either side of the
+    word, cut mid-word and stripped of apostrophes: "THE DANGER HERE ISNT ALWAYS THE".)
+    """
+    words = [(w.group(0), w.start(), w.end()) for w in re.finditer(r"[A-Za-z][\w'’-]*", text)]
+    k = next((n for n, (_w, a, b) in enumerate(words) if a <= m.start() < b), None)
+    if k is None:
+        return ""
+    after = re.match(r"\s*:\s*([^.!?;]+)", text[m.end():])
+    if after:
+        # "Warning: the river will crest tonight" - the warning is what follows the colon, when it is short
+        clause = after.group(1).strip().rstrip(",")
+        return clause.upper() if len(clause) <= 32 and len(clause.split()) <= 6 else ""
+    j = next((n for n, (_w, a, b) in enumerate(words) if a < m.end() <= b), k)
+    stop = _LABEL_SKIP | _NOT_A_LABEL
+    # up to two describing words before it ("flash flood warning"), two naming words after ("warning signs")
+    def verb(w: str) -> bool:
+        w = w.lower()
+        return w.endswith(("ed", "ing")) and w not in ("warning", "warnings", "flooding", "crossing", "opening")
+    i = k
+    while i > 0 and k - i < 2 and words[i - 1][0].lower() not in stop and words[i - 1][0] not in _CAP_STOP \
+            and not verb(words[i - 1][0]) and not re.search(r"[.,;:!?]", text[words[i - 1][2]:words[i][1]]):
+        i -= 1
+    while j + 1 < len(words) and j - k < 2 and words[j + 1][0].lower() not in stop \
+            and not re.search(r"[.,;:!?]", text[words[j][2]:words[j + 1][1]]) and not verb(words[j + 1][0]):
+        j += 1
+    phrase = text[words[i][1]:words[j][2]].strip()
+    if len(phrase.split()) < 2 and phrase.lower() in ("critical", "fatal", "deadly", "dangerous", "warning",
+                                                      "emergency", "danger", "collapse"):
+        return ""                   # one alarm word alone is no label
+    return phrase.upper() if len(phrase) <= 32 else ""
+
+
 def cues_for(seg: Segment, shot: dict, brief: Optional[dict]) -> List[dict]:
     """
     What the line asks for, most specific first: [{cue, props, emphasis}].
@@ -1088,22 +1129,9 @@ def cues_for(seg: Segment, shot: dict, brief: Optional[dict]) -> List[dict]:
         out.append({"cue": "question", "emphasis": "medium", "props": {"text": text.strip()}})
     m = _WARN.search(text)
     if m:
-        a = max(0, m.start() - 24)
-        b = min(len(text), m.end() + 24)
-        while a > 0 and text[a - 1].isalnum():
-            a += 1
-            if a >= m.start():
-                a = m.start()
-                break
-        while b < len(text) and text[b - 1].isalnum() and text[b].isalnum():
-            b -= 1
-            if b <= m.end():
-                b = m.end()
-                break
-        phrase = re.sub(r"[^\w\s-]", "", text[a:b]).strip().upper()
-        if len(phrase) > 40:
-            phrase = phrase[:40].rsplit(" ", 1)[0]
-        out.append({"cue": "warning", "emphasis": "medium", "props": {"text": phrase}})
+        phrase = _warn_phrase(text, m)
+        if phrase:
+            out.append({"cue": "warning", "emphasis": "medium", "props": {"text": phrase}})
     m = _ROUTE.search(text)
     locs = shot.get("overlay", {}).get("locations") if isinstance(shot.get("overlay"), dict) else None
     if m and locs and len(locs) >= 2:
@@ -2443,6 +2471,7 @@ def _hint_props(overlay: dict) -> dict:
 
 
 WINDOW_GAP = 90.0        # seconds between two scenes shown in a player window
+CAPTION_REPEAT_GAP = 120.0   # a photo caption names the same thing again only after this long
 _ARCHIVE_COUNTS: Dict[str, int] = {}
 _PIP_KINDS = {"place", "location", "landmark", "building", "structure", "object", "artifact", "thing", "document"}
 
@@ -2674,6 +2703,8 @@ class _Planner:
         self.introduced: List[str] = []
         self.last_person_full = -1e9
         self.phrases: Dict[str, float] = {}
+        # Photo captions shown, by name: the same name is not captioned again within CAPTION_REPEAT_GAP.
+        self.captions: Dict[str, float] = {}
         self.skip_next_still = False
         self.n_maps = 0
         # Auto maps (src/automaps.py): (feature id, section) already mapped - one per feature per section.
@@ -2705,6 +2736,10 @@ class _Planner:
         # A persisting look (LibPersist, "ps-") is one object riding across cuts:
         # no second one is scheduled while it is live.
         self.persist_until = -1e9
+        # When each line's must-show graphic (its chosen date, its clear figure) will land, by line:
+        # a look laid before it never runs into it (it ends BREATH early, or is not laid when that
+        # leaves it under its least time) - the must-show is never cut for an optional look.
+        self.must_at: Dict[int, float] = {}
         # (overlay index, treatment index, layout class) of the overlays that may
         # be held across the short cuts that follow them (_persist_figures).
         self.persisting: List[tuple] = []
@@ -2740,6 +2775,7 @@ class _Planner:
                 except (TypeError, ValueError):
                     pass
         self._vr_select()
+        self.must_at = self._must_times()
         for i, seg in enumerate(self.segments):
             self.i = i
             self._beat(i, seg)
@@ -2748,6 +2784,8 @@ class _Planner:
         # One graphic at a time, never over a full-screen scene (a safety net
         # behind the placement rules; the sounds are planned after it).
         self._one_at_a_time()
+        # Typing artefacts out of every word on screen (a mojibake quote, a leading full stop).
+        screentext.audit(self.overlays)
         # A line that names where its fact comes from: a small citation tag in a low corner
         # (src/sources.py), laid only where the screen is free - no other graphic moves for it.
         cited = self._source_tags() if config.SOURCE_TAGS else []
@@ -2932,6 +2970,24 @@ class _Planner:
                 chosen.append(m)
         self.vr_chosen = {m["i"] for m in chosen}
 
+    def _must_times(self) -> Dict[int, float]:
+        """When each line's must-show graphic should land (seconds), by line: a chosen date or time, a clear figure."""
+        out: Dict[int, float] = {i: float(m["at"]) for i, m in self.vr_moments.items() if i in self.vr_chosen}
+        for i, seg in enumerate(self.segments):
+            scene = self.scenes[i] if i < len(self.scenes) else {}
+            if (scene.get("media") or {}).get("type") == "animation":
+                continue
+            shot = self.shots[i] if i < len(self.shots) else {}
+            fig = next((c for c in cues_for(seg, shot, self.brief)
+                        if c["cue"] in FIGURE_CUES and c["cue"] != "time-span"), None)
+            if fig is None or not _clear_figure(fig):
+                continue
+            w = _voice_window(seg, dict(fig.get("props") or {}), 1.0, 1.0, self.fps,
+                              ahead=tuple(self.segments[i + 1:i + 1 + KEY_LOOKAHEAD]))
+            if w is not None:
+                out[i] = min(out.get(i, w[0]), w[0])
+        return out
+
     def _vr_request(self, seg) -> Optional[dict]:
         """The date or time graphic for this line, when it was chosen - or when the one that took its room never showed."""
         m = self.vr_moments.get(self.i)
@@ -3026,6 +3082,7 @@ class _Planner:
             got = self._request(req, seg, scene, req.get("mode", "must"))
             if got:
                 placed.append(got)
+        self.must_at.pop(i, None)       # this line's must-shows are laid (or could not be): no longer ahead
         if forecast and len(placed) < 2:
             got = self._request(forecast, seg, scene, "seq" if placed else "must")
             if got:
@@ -3416,7 +3473,10 @@ class _Planner:
         if cue in ("headline", "key-phrase"):
             short = _clause(said, 8, 60) or _clause(text, 8, 60)
             phrase = str(hint.get("highlight") or "").strip()
-            if not (phrase and len(_words(phrase)) <= 5):
+            # The director's "highlight" is its 1-3 key words; one word alone ("biggest", "concrete",
+            # "That's") is a random word on screen (the owner, 2026-10-05): only a phrase of the
+            # line that carries meaning stands (src/screentext.py), else the line's own key phrase.
+            if not (phrase and len(_words(phrase)) <= 5 and screentext.headline(phrase, text)):
                 phrase = _key_phrase(text, shot)
             if cue == "key-phrase" and not phrase and short:
                 cue = "headline"
@@ -3491,7 +3551,19 @@ class _Planner:
             return None
         # The looks drawn for what the line says lead (those the planner may pick); else the subject's own.
         specific = [x for x in for_line if auto_ok(x)] or for_kind
-        props = {"text": subject.upper()} if subject and not by_kind else ({"text": subject} if subject else {})
+        # The caption is the name of what the picture shows, as the line says it - never the picture's
+        # search subject ("LAKE POWELL LOW WATER EXPOSING PREVIOUSLY SUBMERGED TERRAIN"); none when
+        # the line does not name it (src/screentext.photo_caption, the owner 2026-10-05).
+        caption = screentext.photo_caption(subject, " ".join([seg.text or "", self._ahead_text()]))
+        if not caption and not line:
+            # A photo animation is for a still the line is about: one it names, or one it describes
+            # (a waterline, then and now, an old photograph) - not every still (the owner: not over-used).
+            return None
+        if caption and float(seg.start) - self.captions.get(caption.lower(), -1e9) < CAPTION_REPEAT_GAP:
+            shown = ""              # "YELLOWSTONE" on every picture of a Yellowstone video says nothing new
+        else:
+            shown = caption
+        props = ({"text": shown} if by_kind else {"text": shown.upper()}) if shown else {}
         by_id = {}
         hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else {}
         if hint.get("type") == "map" and hint.get("locations"):
@@ -3503,7 +3575,10 @@ class _Planner:
                 by_id[t["id"]] = {**props, **said}
         req = {"ids": [t["id"] for t in pool], "prefer": specific, "props": props, "props_by_id": by_id,
                "mode": "director", "group": "photo", "emphasis": "medium", "never_again": True}
-        return self._request(req, seg, scene, "director")
+        got = self._request(req, seg, scene, "director")
+        if got and shown:
+            self.captions[shown.lower()] = float(seg.start)
+        return got
 
     def _stills_after(self, i: int) -> int:
         """How many still pictures the next scenes have (for the multi-photo looks)."""
@@ -3645,6 +3720,13 @@ class _Planner:
             props = pro_props(t, cue or "", props, seg.text or "", shot)
             if props is None:
                 return None
+        # The words on screen are the narration's own, short and meaningful (src/screentext.py, the
+        # owner 2026-10-05: "random words ... text super long"): checked against this line and the
+        # lines its word may still come in; nothing worth showing left -> not this look.
+        if req.get("own_words") is not True:
+            props = screentext.clean_props(t, cue or "", props, seg.text or "", self._ahead_text())
+            if props is None:
+                return None
         if _needs_places(t, props):
             return None
         motion = props.pop("_motion", "")
@@ -3720,8 +3802,13 @@ class _Planner:
             return None
         # Never into a full-screen scene or a span already taken ahead (the job's title card).
         t_out = min(t_out, self._clear_until(t_in))
+        if mode in ("normal", "director") and not dated:
+            # ... nor into a must-show graphic still to come (a date, a clear figure on a later line).
+            ahead_must = [m for j, m in self.must_at.items() if j > self.i and m > t_in + 1e-6]
+            if ahead_must:
+                t_out = min(t_out, min(ahead_must) - BREATH)
         if t_out - t_in < least - SHORT_BY:
-            return None
+            return None             # no room for its whole animation: another look, or none - never cut short
         o_start = max(0, min(int(round(t_in * fps)), self.total - 1))
         frames = max(1, min(int(round((t_out - t_in) * fps)), self.total - o_start))
         sfx = resolved.pop("sfx", {"name": "none", "volume": 0.0})
@@ -3780,6 +3867,12 @@ class _Planner:
                 self.last_min_figure = at
         return {"idx": idx, "t": t, "cue": cue or "", "sfx": sfx, "klass": klass,
                 "emphasis": req.get("emphasis") or t["emphasis"]}
+
+    def _ahead_text(self) -> str:
+        """The next KEY_LOOKAHEAD lines' words (a graphic may wait for its word there)."""
+        if self.i < 0:
+            return ""
+        return " ".join(getattr(s, "text", "") or "" for s in self.segments[self.i + 1:self.i + 1 + KEY_LOOKAHEAD])
 
     def _align_for(self, tid: str, scene: dict) -> str:
         """The next placement of a text-only look (TEXT_LOOK_ALIGNS), never the centre on a person's shot."""
@@ -4316,12 +4409,47 @@ def _voice_window(seg, props: dict, lo: float, hi: float, fps: int = 30, until: 
 SHORT_BY = 0.5 / 30
 
 
+# The least time each kind of look stays up (the owner, 2026-10-05: "some graphic animations, maps,
+# document animations only stay a short time and then skip ... they need to stay"). Measured on the
+# Yellowstone timeline before this: photo looks 2.5-4.5 s (median 2.6), documents 2.5-3.9, numbers
+# 2.3-2.7 (17 of 17 under 4 s), text 2.2-4.5 (12 of 29 under 2.5 s) - a photo look's push-in, a
+# document's zoom or a map's fly-in never finished. A look that cannot get its time (the next graphic,
+# a full-screen scene or the video's end comes first) is not laid - never cut short.
+FAMILY_LEAST = {"map": 4.5, "document": 4.5, "photo": 4.5, "chart": 4.0}
+# A text, number or date look stays this long once it has landed (its visual hit), then leaves.
+LANDED_HOLD = 2.5
+LANDED_FAMILIES = ("text", "number", "date")
+
+
+def look_family(template: Optional[dict]) -> str:
+    """map | document | photo | chart | number | date | text | fx: what kind of look this is, for its least time."""
+    t = template or {}
+    cat = t.get("category") or ""
+    if t.get("kind") == "map" or t.get("component") == "map" or cat == "MAPS":
+        return "map"
+    if cat == "DOCUMENTS" or t.get("component") == "article-zoom":
+        return "document"
+    if cat == "IMAGES" or t.get("component") in ("photo-card", "name-card", "split"):
+        return "photo"
+    if cat in ("CHARTS", "COMPARISONS"):
+        return "chart"
+    if cat == "TIMELINES":
+        # several dated rows are a chart; one date or year is read like a word
+        return "chart" if t.get("kind") == "card" and "items" in (t.get("props") or {}) else "date"
+    if cat == "NUMBERS":
+        return "number"
+    if cat == "TRANSITIONS":
+        return "fx"
+    return "text"
+
+
 def animation_seconds(template: dict) -> float:
     """
     The least time a look needs on screen: its entrance up to its visual hit
     (the registry's sfxAt, else ENTRANCE_FRAMES), SETTLE seconds landed, and
     its exit (EXIT_FRAMES), all at 30 fps - or the registry's leastSeconds
-    when its animation needs longer.
+    when its animation needs longer - and never under its family's least
+    (FAMILY_LEAST; a text, number or date look LANDED_HOLD seconds after it lands).
     """
     d = (template or {}).get("defaults") or {}
     try:
@@ -4333,7 +4461,16 @@ def animation_seconds(template: dict) -> float:
         own = float(d.get("leastSeconds") or 0.0)
     except (TypeError, ValueError):
         own = 0.0
-    return max((max(0.0, hit) + EXIT_FRAMES) / 30.0 + SETTLE, own)
+    least = max((max(0.0, hit) + EXIT_FRAMES) / 30.0 + SETTLE, own)
+    if not any((template or {}).get(k) for k in ("category", "component", "kind")):
+        return least                    # (no look to read a family from)
+    fam = look_family(template)
+    if fam in FAMILY_LEAST:
+        least = max(least, FAMILY_LEAST[fam])
+    elif fam in LANDED_FAMILIES:
+        # on screen LANDED_HOLD seconds from its landing to its last frame (the exit included)
+        least = max(least, max(0.0, hit) / 30.0 + LANDED_HOLD)
+    return least
 
 
 def layout_window(template: dict, klass: str) -> tuple:
