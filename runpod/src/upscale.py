@@ -297,11 +297,21 @@ def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
     Photos under MIN_IMAGE_LONG_SIDE were only accepted because the upscaler
     is installed (filters.min_image_long_side), so they go first and are
     exempt from the time box: skipped, they would render blown up.
+
+    With ARCHIVE_RESTORE, archive clips are restored first, in their own time
+    box (src/archive_restore.py); a restored clip skips the steps below, and
+    one that could not be restored goes through them as before.
     """
     deadline = time.time() + (deadline_seconds or config.UPSCALE_SECONDS)
     with _LOCK:
         FRAMED.clear()                  # this job's framed clips only
         UPSCALED.clear()
+    restored: dict = {}
+    if getattr(config, "ARCHIVE_RESTORE", False):
+        assets = [a for a in assets if a]
+        restored = _archive_restore(assets, deadline_seconds)
+        if not deadline_seconds:
+            deadline = time.time() + config.UPSCALE_SECONDS     # the photos' box starts after it
     seen, jobs = set(), []
     for a in assets:
         path = getattr(a, "local_path", "") or ""
@@ -311,9 +321,11 @@ def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
         if a.kind == "image" and a.source != "generated":
             jobs.append(("image", path, _below_floor(path)))
         elif a.kind == "video" and a.source not in ("archive_org",):
+            if restored and _is_restored(path):
+                continue                # already 1080 lines and sharpened
             jobs.append(("clip", path, False))
     if not jobs or not (config.UPSCALE_ENABLED or config.ALLOW_VERTICAL):
-        return {"queued": 0}
+        return {"queued": 0, "archiveRestore": restored} if restored else {"queued": 0}
     jobs.sort(key=lambda j: not j[2])   # must-upscale photos first (stable: scene order otherwise)
     done = {"image": 0, "clip": 0, "framed": 0, "skipped_time": 0}
 
@@ -337,7 +349,41 @@ def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
     print(f"[upscale] {done['image']} photo(s) and {done['clip']} clip(s) upscaled, "
           f"{done['framed']} vertical clip(s) framed, of {len(jobs)} checked "
           f"({done['skipped_time']} skipped for time)", flush=True)
+    if restored:
+        return dict(done, queued=len(jobs), archiveRestore=restored)
     return dict(done, queued=len(jobs))
+
+
+def _archive_restore(assets: list, deadline_seconds: float = 0.0) -> dict:
+    """Old footage restore (src/archive_restore.py) for a job's clips: its report, never an
+    error. A caller's own time box (deadline_seconds: a re-cut) bounds it too."""
+    from . import archive_restore
+    archive_restore.reset()
+    box = float(config.ARCHIVE_RESTORE_SECONDS)
+    if deadline_seconds:
+        box = min(box, float(deadline_seconds))
+    t0 = time.time()
+    try:
+        report = archive_restore.restore_assets(assets, box)
+    except Exception as e:  # noqa: BLE001 - the clips go on unrestored
+        print(f"[upscale] archive restore skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+        report = {"on": True, "restored": 0, "error": type(e).__name__}
+    with _LOCK:
+        STATS["archive"] = STATS.get("archive", 0) + int(report.get("restored") or 0)
+        STATS["seconds"] += time.time() - t0
+    return report
+
+
+def _is_restored(path: str) -> bool:
+    from . import archive_restore
+    return archive_restore.is_restored(path)
+
+
+def is_restored(path: str) -> bool:
+    """The clip at `path` was restored as archive film in this job (src/archive_restore.py)."""
+    if not path or not getattr(config, "ARCHIVE_RESTORE", False):
+        return False
+    return _is_restored(path)
 
 
 def stats() -> dict:

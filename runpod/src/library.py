@@ -723,6 +723,10 @@ class Library:
                 # a 1920x1080 library clip it would pass every later check and
                 # show up pillarboxed in videos that never allow vertical.
                 continue
+            if kind == "video" and upscale.is_restored(url) and not config.ARCHIVE_RESTORE_LIBRARY:
+                # Archive film restored for this job (src/archive_restore.py): while
+                # the owner tries the look, other videos keep getting the original.
+                continue
             picks.append((s, m, sem, ident, url, kind))
             have.add(ident)
         return self._keep(doc, picks, on_r2)
