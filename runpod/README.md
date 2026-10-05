@@ -210,7 +210,8 @@ the same job.
     "script": "optional authored script (keeps your spelling, uses whisper timing)",
     "audio_url": "https://.../narration.mp3", // TTS output or uploaded VO; may be left out with a script, see below
     "bgm_url": "https://.../suspense.mp3",
-    "captions": true,
+    "captions": true,                         // burned-in subtitles; off when left out
+    "caption_style": "netflix",               // netflix | cinema_box | doc_serif | minimal | clean_highlight | news_bold | letterbox
     "maps": true,                             // false to disable map overlays
     "allow_youtube": true,
     "require_cc": true,

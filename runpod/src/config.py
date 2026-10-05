@@ -383,6 +383,42 @@ MOMENT_FINE_TILES = int(os.getenv("MOMENT_FINE_TILES", "20"))
 CLEAN_CUTS = _flag("CLEAN_CUTS", True)
 CUT_MARGIN_SECONDS = float(os.getenv("CUT_MARGIN_SECONDS", "2.0"))
 SHOT_CUT_THRESHOLD = float(os.getenv("SHOT_CUT_THRESHOLD", "0.4"))
+# A softer jump is a shot change too when it stands out from the frames around
+# it (filters.shot_changes). The owner's Glen Canyon test (2026-10-05) opened on
+# 1.43 s of the shot before its clip: a cut between two grey shots ffmpeg scored
+# 0.36, under SHOT_CUT_THRESHOLD, so the cut window never saw it. Such a frame
+# counts when its score is at least SHOT_CUT_SOFT_THRESHOLD and SHOT_CUT_RATIO
+# times the median of the frames within half a second of it, and the two frames
+# either side of it do not show the same picture (a normalised correlation of
+# their small grey copies under SHOT_CUT_SAME_PICTURE: an exposure flicker or a
+# flash of old film stays one shot - measured 0.87-0.91 there, 0.09-0.33 at real
+# cuts). SHOT_CUT_SOFT_THRESHOLD 0 = the fixed threshold only, as before.
+SHOT_CUT_SOFT_THRESHOLD = float(os.getenv("SHOT_CUT_SOFT_THRESHOLD", "0.2"))
+SHOT_CUT_RATIO = float(os.getenv("SHOT_CUT_RATIO", "4.0"))
+SHOT_CUT_SAME_PICTURE = float(os.getenv("SHOT_CUT_SAME_PICTURE", "0.75"))
+# ...and it must open a new shot (filters._new_shot): a handheld or eyewitness
+# camera that starts to swing jumps ffmpeg's score for one frame too (the score
+# answers a change in motion, not motion). Not a cut when the frame after the
+# jump is the one before it moved (their likeness over small shifts at least
+# SHOT_CUT_MOVED), or when the picture after it does not hold steady (the
+# median likeness, over small shifts, of its next few frames each to the one
+# after under SHOT_CUT_STEADY). Measured on 81 softer jumps in real downloads
+# (2026-10-05): swings and jolts 0.82-0.97 moved, real cuts 0.79 at most; the
+# new shot after a real cut 0.87-1.0 steady (one cut into a fast zoom, 0.58,
+# is missed, as by the fixed threshold), inside a swing 0.53-0.83. 0 = off.
+SHOT_CUT_MOVED = float(os.getenv("SHOT_CUT_MOVED", "0.8"))
+SHOT_CUT_STEADY = float(os.getenv("SHOT_CUT_STEADY", "0.85"))
+# Every footage cut starts after a shot change, never on the last second of the
+# shot before it: a planned in-point under CUT_GUARD_SECONDS before a shot
+# change moves forward past it - CUT_SNAP_PAD past it, so no frame of the shot
+# before shows - and the clip keeps its length from later in the section. When
+# that runs past what the section has left (a run of short shots), the clip
+# starts just after another shot change that leaves enough; only when none
+# does - measured against what the line plays, its crossfade included, not the
+# grab's margin - is the section not used (the caller's next candidate or the
+# fallback ladder takes the line - a clip is never slowed).
+CUT_GUARD_SECONDS = float(os.getenv("CUT_GUARD_SECONDS", "1.0"))
+CUT_SNAP_PAD = float(os.getenv("CUT_SNAP_PAD", "0.1"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp
 # metadata call plus one vision call; the beat then costs about the slowest.
 # This is also the ONLY candidates a query ever gets: _plan_grabs slices the
@@ -570,6 +606,19 @@ REUSE_MIN_GAP_SECONDS = float(os.getenv("REUSE_MIN_GAP_SECONDS", "60"))
 # of from a subject pool, retried for footage after sourcing if it ended on a
 # still, and never given a generated image unless GENERATED_IMAGES_IN_HOOK.
 HOOK_SECONDS = float(os.getenv("HOOK_SECONDS", "45"))
+# The hook's own check (src/hookcheck.py; the owner, 2026-10-05: in a 5-minute
+# Glen Canyon test "the first second or two didn't match"): every clip of the
+# first HOOK_SECONDS is judged on its actual cut - frames at its first moment,
+# middle and end, the first frame on its own (vision.judge `span`) - the hook
+# search's own candidates in the same call they always had, a clip any other
+# pass placed (the rescue pass, another moment of the clip beside it, a chain,
+# a spare pool moment, the ladder) once more. A clip turned down has its start
+# moved (inside its file, else cut again from its source's middle) or up to
+# HOOK_CUT_TRIES pick-a-shot runner-ups tried before the last resort covers
+# its line; the check makes at most HOOK_CUT_MAX_CALLS vision calls a video.
+HOOK_CUT_CHECK = _flag("HOOK_CUT_CHECK", True)
+HOOK_CUT_TRIES = int(os.getenv("HOOK_CUT_TRIES", "2"))
+HOOK_CUT_MAX_CALLS = int(os.getenv("HOOK_CUT_MAX_CALLS", "30"))
 GENERATED_IMAGES_IN_HOOK = _flag("GENERATED_IMAGES_IN_HOOK", False)
 HOOK_JUDGE_BEST_OF = int(os.getenv("HOOK_JUDGE_BEST_OF", "3"))
 HOOK_POOL_SCOUT = int(os.getenv("HOOK_POOL_SCOUT", "4"))
@@ -867,6 +916,36 @@ UPSCALE_PARALLEL = int(os.getenv("UPSCALE_PARALLEL", "4"))
 # With the upscaler, a photo this small is still usable (it is upscaled 2-4x
 # with real detail instead of blown up blurry).
 MIN_IMAGE_LONG_SIDE_UPSCALED = int(os.getenv("MIN_IMAGE_LONG_SIDE_UPSCALED", "640"))
+# Old footage restore (src/archive_restore.py; the owner approved it 2026-10-05):
+# archive clips (a year before 1990, a newsreel, Pathe... or archive.org - the
+# ones allowed down to MIN_ARCHIVE_HEIGHT lines) under ARCHIVE_RESTORE_BELOW
+# lines, interlaced, or a full-HD file holding fewer than
+# ARCHIVE_RESTORE_SHARP_LINES real lines are deinterlaced, deblocked, cropped
+# of black borders, denoised and scaled to the size a cover fit shows 1:1
+# (ffmpeg on the CPU: ~20-30 CPU s, ~5 s on 4 threads for a 7 s 480-line
+# clip). On by default since the owner switched it on 2026-10-05; a job turns
+# it off with {"config": {"ARCHIVE_RESTORE": 0}}. ARCHIVE_RESTORE_SECONDS boxes a video's
+# restores (clips not started by then stay as they are); one clip gets at most
+# ARCHIVE_RESTORE_CLIP_SECONDS and keeps its file on a timeout or an error.
+# ARCHIVE_RESTORE_PARALLEL clips at once (0 = CPUs / ARCHIVE_RESTORE_THREADS),
+# each ffmpeg on ARCHIVE_RESTORE_THREADS threads; files longer than
+# ARCHIVE_RESTORE_MAX_CLIP_SECONDS (a whole archive.org film) are left alone.
+# ARCHIVE_RESTORE_SMOOTH also interpolates film with repeated frames
+# (telecined 24 -> 30 fps). Restored files are cached on the machine by
+# (video id, start, length) up to ARCHIVE_RESTORE_CACHE_MB, and kept out of
+# the clip library unless ARCHIVE_RESTORE_LIBRARY.
+ARCHIVE_RESTORE = _flag("ARCHIVE_RESTORE", True)
+ARCHIVE_RESTORE_SECONDS = float(os.getenv("ARCHIVE_RESTORE_SECONDS", "240"))
+ARCHIVE_RESTORE_CLIP_SECONDS = float(os.getenv("ARCHIVE_RESTORE_CLIP_SECONDS", "90"))
+ARCHIVE_RESTORE_MAX_CLIP_SECONDS = float(os.getenv("ARCHIVE_RESTORE_MAX_CLIP_SECONDS", "30"))
+ARCHIVE_RESTORE_THREADS = int(os.getenv("ARCHIVE_RESTORE_THREADS", "4"))
+ARCHIVE_RESTORE_PARALLEL = int(os.getenv("ARCHIVE_RESTORE_PARALLEL", "0"))
+ARCHIVE_RESTORE_BELOW = int(os.getenv("ARCHIVE_RESTORE_BELOW", "1000"))
+ARCHIVE_RESTORE_SHARP_LINES = int(os.getenv("ARCHIVE_RESTORE_SHARP_LINES", "576"))
+ARCHIVE_RESTORE_SMOOTH = _flag("ARCHIVE_RESTORE_SMOOTH", False)
+ARCHIVE_RESTORE_LIBRARY = _flag("ARCHIVE_RESTORE_LIBRARY", False)
+ARCHIVE_RESTORE_CACHE_DIR = os.getenv("ARCHIVE_RESTORE_CACHE_DIR", "")
+ARCHIVE_RESTORE_CACHE_MB = float(os.getenv("ARCHIVE_RESTORE_CACHE_MB", "2048"))
 # Smart reframing (src/reframe.py): a slow push toward the subject (faces,
 # what stands out, the action) on a locked-off shot, and stills aimed at their
 # subject - the owner, 2026-10-01: "it feels hand-edited". Detection is
@@ -897,6 +976,21 @@ SOURCE_TAGS = _flag("SOURCE_TAGS", False)
 SOURCE_TAG_GAP = float(os.getenv("SOURCE_TAG_GAP", "30"))
 SOURCE_TAG_FIRST_SECONDS = float(os.getenv("SOURCE_TAG_FIRST_SECONDS", "5"))
 SOURCE_TAG_SECONDS = float(os.getenv("SOURCE_TAG_SECONDS", "3"))
+# Real data graphics (src/datagraphics.py, src/realdata.py; the owner, 2026-10-05): a line that states a
+# measurable water or weather fact - a reservoir's level or how full it is, a river's flow, the share of a state in
+# drought, a temperature record - gets a chart of the REAL, current numbers from the official source (USBR, USGS,
+# the U.S. Drought Monitor, NOAA) with the source and the date of the data in its corner. On by default since the
+# owner switched it on 2026-10-05; a job turns it off with config {"DATA_GRAPHICS": false}.
+DATA_GRAPHICS = _flag("DATA_GRAPHICS", True)
+# At most one data graphic per this many seconds of video (the owner: one every 45-60 s at most).
+DATA_GRAPHICS_GAP = float(os.getenv("DATA_GRAPHICS_GAP", "50"))
+# None in the video's first seconds unless the line there states the number itself.
+DATA_GRAPHICS_HOOK_SECONDS = float(os.getenv("DATA_GRAPHICS_HOOK_SECONDS", "15"))
+# The whole job's time for fetching the numbers (it runs beside the footage search), each request at most
+# DATA_FETCH_SECONDS; the planner waits at most DATA_GRAPHICS_WAIT more for answers still out.
+DATA_GRAPHICS_SECONDS = float(os.getenv("DATA_GRAPHICS_SECONDS", "45"))
+DATA_FETCH_SECONDS = float(os.getenv("DATA_FETCH_SECONDS", "12"))
+DATA_GRAPHICS_WAIT = float(os.getenv("DATA_GRAPHICS_WAIT", "15"))
 # Footage moves and still aiming separately (the news styles keep their
 # clips as shot: src/styles.py).
 REFRAME_CLIPS = _flag("REFRAME_CLIPS", True)
@@ -911,6 +1005,23 @@ REFRAME_MIN_CONFIDENCE = float(os.getenv("REFRAME_MIN_CONFIDENCE", "0.45"))
 # maps (Apache-2.0, 4.6 MB ONNX); both baked in by scripts/fetch_models.py.
 FACE_MODEL = os.getenv("FACE_MODEL", "/opt/models/face_detection_yunet_2023mar.onnx")
 SALIENCY_MODEL = os.getenv("SALIENCY_MODEL", "/opt/models/u2netp.onnx")
+# Living photos (src/living.py): a still moves with real depth - its depth map
+# (Depth-Anything-V2-Small, Apache-2.0, ONNX on the CPU) cuts it into 2-3 layers
+# along occlusion edges, and the renderer moves the nearer ones a little more
+# than the farther ones over the scene's own move (2.5D parallax instead of a
+# flat Ken Burns). On by default since the owner switched it on 2026-10-05 (at
+# the recommended strength); a job turns it off with config {"LIVING_PHOTOS": false}. LIVING_PHOTOS_SECONDS boxes the whole
+# video, LIVING_PHOTOS_PARALLEL pictures at once (~0.4 s of one core each for the
+# depth, ~1 s with the layers); LIVING_PHOTOS_STRENGTH is the relative shift
+# between the nearest and the farthest layer over a shot (a share of the frame);
+# no living move on a shot shorter than LIVING_PHOTOS_MIN_SECONDS.
+LIVING_PHOTOS = _flag("LIVING_PHOTOS", True)
+LIVING_PHOTOS_SECONDS = float(os.getenv("LIVING_PHOTOS_SECONDS", "90"))
+LIVING_PHOTOS_PARALLEL = int(os.getenv("LIVING_PHOTOS_PARALLEL", "6"))
+LIVING_PHOTOS_STRENGTH = float(os.getenv("LIVING_PHOTOS_STRENGTH", "0.06"))
+LIVING_PHOTOS_MIN_SECONDS = float(os.getenv("LIVING_PHOTOS_MIN_SECONDS", "1.5"))
+LIVING_PHOTOS_MAX_LAYERS = int(os.getenv("LIVING_PHOTOS_MAX_LAYERS", "3"))
+LIVING_DEPTH_MODEL = os.getenv("LIVING_DEPTH_MODEL", "/opt/models/depth-anything-v2-small/model.onnx")
 # Vertical / square phone video (news-compilation styles, src/styles.py):
 # accepted and framed on a blurred copy of itself before render, the way news
 # compilation channels show TikTok/X clips. The sharp band keeps the middle

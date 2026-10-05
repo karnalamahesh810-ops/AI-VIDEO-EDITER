@@ -82,8 +82,11 @@ from src import ambience, gapfill, grade, packs, quality, review, shotcap, voice
 from src import brandkit, stockblock
 from src import recut, restore
 from src import batch, sources
+from src import datagraphics
 from src import tts
 from src import sharpness
+from src import living
+from src import hookcheck
 
 
 def _work_dir(job_id: str) -> str:
@@ -562,11 +565,42 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
             scene["reviewRequired"] = True
             scene["reviewReason"] = "Media could not be saved; re-source before rendering"
             failures += 1
+    _publish_living(doc, project_id, job_id)
     doc["meta"]["publishedMedia"] = len(published)
     if failures:
         doc["meta"]["warnings"].append(
             f"{failures} scene(s) could not be saved to storage.")
     return len(published)
+
+
+def _publish_living(doc: dict, project_id: str, job_id: str = "") -> dict:
+    """
+    The depth layers of living photos (src/living.py) go up with the scene
+    media, to Cloudflare R2 only: a public link that never expires, like the
+    scene files. Without R2 scene media a layered still is drawn flat - a
+    signed link would lapse and nothing re-signs layers. Never fails the job.
+    """
+    if not living.blocks(doc):
+        return {}
+    put = None
+    if project_id and _scene_media_on_r2():
+        def put(local: str, obj: str) -> str:
+            return r2.upload(local, r2.tokened(obj), content_type=r2.content_type(local),
+                             deadline=time.time() + config.R2_MEDIA_UPLOAD_SECONDS, cache_control=r2.IMMUTABLE)
+    try:
+        got = living.publish(doc, put, f"projects/{project_id or 'adhoc'}/media")
+    except Exception as e:  # noqa: BLE001 - the stills are drawn flat
+        print(f"[living] layers not saved: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        got = {"dropped": len(living.blocks(doc))}
+        for _i, _liv in living.blocks(doc):
+            living.drop(doc["scenes"][_i]["media"])
+    if got.get("uploaded") or got.get("dropped"):
+        print(f"[living] {got.get('uploaded', 0)} layer file(s) saved, {got.get('dropped', 0)} still(s) "
+              "left flat", flush=True)
+        meta = doc.setdefault("meta", {})
+        if isinstance(meta.get("living"), dict):
+            meta["living"]["published"] = got
+    return got
 
 
 def _source_with_pools(jobs: list, work: str, *, require_cc: bool, exclude: set, source_rest,
@@ -1042,6 +1076,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     mentions.apply_focus(shots, segments, mention_focus, brief)
     # Out of AI credits already: stop before a single footage search is paid for.
     vision.require_credits()
+    # Real data graphics (src/datagraphics.py, DATA_GRAPHICS): the official numbers behind the narration's water
+    # and weather facts (USBR, USGS, the Drought Monitor, NOAA - free, keyless), fetched beside the footage search
+    # in their own time box; nothing in it can fail the job. Off: nothing starts.
+    data_store = datagraphics.start([s.text or "" for s in segments], brief) if config.DATA_GRAPHICS else None
 
     # Per-scene overrides from the editor win over the director's choice.
     for key, query in (inp.get("scene_queries") or {}).items():
@@ -1309,35 +1347,50 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     _ytdlp_mod.set_deadline(0.0)               # later steps (resource, render) are not time boxed here
     # Small photos get Real-ESRGAN detail and soft clips a sharpen pass to
     # 1080p, before anything is uploaded or rendered (time-boxed; a failure
-    # keeps the original file).
-    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL:
-        report("Enhancing pictures and clips to HD", 64)
+    # keeps the original file). With ARCHIVE_RESTORE, archive film is
+    # restored first (src/archive_restore.py) and the restored file is the
+    # one published.
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE:
+        report("Restoring archive footage and enhancing pictures to HD" if config.ARCHIVE_RESTORE
+               else "Enhancing pictures and clips to HD", 64)
         try:
             pool_stats["upscale"] = upscale.upscale_assets([a for a in assets if a is not None])
         except Exception as e:  # noqa: BLE001 - never fail a video over polish
             print(f"[worker] upscale skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
+    if config.ARCHIVE_RESTORE:
+        # What was restored, how, and how long it took (meta.sourcing.archiveRestore).
+        media.LAST_STATS["archiveRestore"] = (pool_stats.get("upscale") or {}).pop(
+            "archiveRestore", None) or {"on": True, "restored": 0}
     vision.require_credits()
 
     # No percentage: the sourcing bands already reach the mid 60s.
     report("Designing motion graphics and animations")
-    doc = timeline.build(
-        segments, shots, assets,
-        # The resolved URL, not the temp path: the document has to stay
-        # meaningful after this job's work directory is gone.
-        audio_url=audio_src or audio_path,
-        audio_duration=audio_duration,
-        inp=inp,
-        planner=planner,
-        warnings=warnings,
-        # The narration on this disk: every sound is levelled against its
-        # measured loudness (the owner's Lake Powell video was planned
-        # against an assumed voice, voiceLufsSource "assumed").
-        narration_path=audio_path,
-        # Its pictures of a subject fill an image look's slots the story cannot.
-        library=LAST_LIBRARY.get("lib"),
-    )
+    if data_store is not None:
+        # Long done beside the footage search as a rule; a source still answering gets a few seconds more.
+        data_store.wait(config.DATA_GRAPHICS_WAIT)
+    with datagraphics.use(data_store):
+        doc = timeline.build(
+            segments, shots, assets,
+            # The resolved URL, not the temp path: the document has to stay
+            # meaningful after this job's work directory is gone.
+            audio_url=audio_src or audio_path,
+            audio_duration=audio_duration,
+            inp=inp,
+            planner=planner,
+            warnings=warnings,
+            # The narration on this disk: every sound is levelled against its
+            # measured loudness (the owner's Lake Powell video was planned
+            # against an assumed voice, voiceLufsSource "assumed").
+            narration_path=audio_path,
+            # Its pictures of a subject fill an image look's slots the story cannot.
+            library=LAST_LIBRARY.get("lib"),
+        )
+    if data_store is not None:
+        # What was fetched from where and how long it took, beside what the planner did with it.
+        doc.setdefault("meta", {}).setdefault("dataGraphics", {"facts": 0, "shown": 0, "disagree": 0, "items": []})
+        doc["meta"]["dataGraphics"]["fetch"] = data_store.report()
     # What the hook booster changed (src/hookboost.py): the cuts made before the
     # shots were planned, and the opening as it was built.
     if doc.get("meta", {}).get("hookBoost") or boost_info:
@@ -1382,6 +1435,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if config.REFRAME_ENABLED:
         report("Framing shots on their subjects")
         doc["meta"]["reframe"] = reframe.place(doc)
+    # Living photos (src/living.py): each eligible still cut into depth layers
+    # from its full-size file, which the renderer moves against each other over
+    # the still's own move. Time-boxed; a picture without layers stays flat.
+    if config.LIVING_PHOTOS:
+        report("Giving still pictures depth")
+        doc["meta"]["living"] = living.place(doc)
     # The source tags (src/sources.py) with the pictures final: one whose corner has a face under it
     # takes the other low corner or is left out, and none stays on a scene that became a full-screen
     # graphic. A no-op for a video with no source tag (every video while SOURCE_TAGS is off).
@@ -1672,8 +1731,9 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         raise ValueError(f"no usable media found for '{query}' - try different wording")
 
     # The same polish as a build: with the style's ALLOW_VERTICAL a vertical
-    # replacement (or choice) is framed on its blurred copy, not cropped at render.
-    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL:
+    # replacement (or choice) is framed on its blurred copy, not cropped at render;
+    # with ARCHIVE_RESTORE an archive replacement is restored.
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE:
         try:
             upscale.upscale_assets([asset])
         except Exception as e:  # noqa: BLE001 - never fail a replacement over polish
@@ -1700,6 +1760,12 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
     scene["query"] = query
     scene["motion"] = (timeline._IMAGE_MOTIONS[idx % len(timeline._IMAGE_MOTIONS)]
                        if asset.kind == "image" else "none")
+    if config.LIVING_PHOTOS and asset.kind == "image":
+        # The new still's depth layers, as a plan makes them (src/living.py).
+        try:
+            living.place_one(doc, idx)
+        except Exception as e:  # noqa: BLE001 - drawn flat
+            print(f"[living] replacement left flat: {type(e).__name__}: {str(e)[:100]}", flush=True)
     scene["reviewRequired"] = bool(asset.review_required)
     scene["reviewReason"] = asset.review_reason or ""
     alternatives = list(asset.alternatives or [])
@@ -1854,6 +1920,31 @@ def _no_repeats(doc: dict, report: Reporter = None) -> dict:
         if isinstance(doc.get("meta", {}).get("shotCap"), dict) and shotcap.enabled():
             # The shot cap's report as the timeline now stands (a replaced repeat, a held line).
             doc["meta"]["shotCap"] = shotcap.report(doc, doc["meta"]["shotCap"])
+    return got
+
+
+def _hook_check(doc: dict, work: str, report: Reporter = None) -> dict:
+    """
+    The hook's own check (src/hookcheck.py; the owner's Glen Canyon test,
+    2026-10-05: "the first second or two didn't match"), on the timeline as it
+    will be published: every clip and picture of the first HOOK_SECONDS judged
+    on its own cut - its first moment, middle and end - and one turned down
+    moved, swapped for a runner-up or covered by the last resort. Its report is
+    doc.meta.hookCheck. Never fails the job.
+    """
+    if not hookcheck.enabled():
+        return {}
+    try:
+        if report is not None:
+            report("Checking the opening shots", 66)
+        got = hookcheck.check(doc, work=work)
+    except Exception as e:  # noqa: BLE001 - the timeline as it is beats a failed job
+        print(f"[worker] hook check skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        return {}
+    doc.setdefault("meta", {})["hookCheck"] = got
+    if (got.get("moved") or got.get("swapped") or got.get("cleared")) and shotcap.enabled() \
+            and isinstance(doc["meta"].get("shotCap"), dict):
+        doc["meta"]["shotCap"] = shotcap.report(doc, doc["meta"]["shotCap"])     # as the timeline now stands
     return got
 
 
@@ -2552,6 +2643,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "AUTO_MAPS", "AUTO_MAP_GAP",
                       # On-screen sources (src/sources.py): "SOURCE: USBR, 2024" where the narration names its source.
                       "SOURCE_TAGS", "SOURCE_TAG_GAP", "SOURCE_TAG_FIRST_SECONDS", "SOURCE_TAG_SECONDS",
+                      # Real data graphics (src/datagraphics.py): official numbers charted where the narration
+                      # states a water or weather fact.
+                      "DATA_GRAPHICS", "DATA_GRAPHICS_GAP", "DATA_GRAPHICS_HOOK_SECONDS", "DATA_GRAPHICS_SECONDS",
+                      "DATA_GRAPHICS_WAIT",
                       # The AI review of the finished video (src/review.py): one job can try it
                       # ({"config": {"AI_REVIEW": 1}}), or review without fixing (AI_REVIEW_FIX 0).
                       "AI_REVIEW", "AI_REVIEW_FIX", "AI_REVIEW_AUDIO", "AI_REVIEW_GROUP", "AI_REVIEW_MAX_CALLS",
@@ -2568,7 +2663,18 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "DIRECTOR_ROUTINE_MODEL",
                       # The cost plan (2026-10-05): each lever is off until a job turns it on for an A/B.
                       "DIRECTOR_REASONING_EFFORT", "DIRECTOR_ROUTINE_REASONING_EFFORT", "VISION_TILE_MODEL",
-                      "JUDGE_MEMORY")
+                      "JUDGE_MEMORY",
+                      # Living photos (src/living.py): stills drawn as depth layers (2.5D parallax).
+                      "LIVING_PHOTOS", "LIVING_PHOTOS_SECONDS", "LIVING_PHOTOS_STRENGTH",
+                      "LIVING_PHOTOS_MIN_SECONDS", "LIVING_PHOTOS_MAX_LAYERS",
+                      # Old footage restore (src/archive_restore.py; on since 2026-10-05, a job can turn it off).
+                      "ARCHIVE_RESTORE", "ARCHIVE_RESTORE_SECONDS", "ARCHIVE_RESTORE_SMOOTH",
+                      # Clean in-points (src/filters.py; the owner's Glen Canyon test, 2026-10-05: "the first
+                      # second or two didn't match"). A/B one job.
+                      "SHOT_CUT_THRESHOLD", "SHOT_CUT_SOFT_THRESHOLD", "SHOT_CUT_RATIO", "SHOT_CUT_SAME_PICTURE",
+                      "CUT_GUARD_SECONDS", "CUT_SNAP_PAD",
+                      # The hook's own check (src/hookcheck.py, the same test).
+                      "HOOK_CUT_CHECK", "HOOK_CUT_TRIES", "HOOK_CUT_MAX_CALLS")
 
 
 def _apply_config(overrides) -> dict:
@@ -2741,6 +2847,7 @@ def handler(job):
     gapfill.reset()                     # the fallback ladder's plan is this job's own
     pools.reset()                       # and the spare pool moments it may draw on
     shotcap.reset()                     # and what the shot cap cut and swapped
+    hookcheck.reset()                   # and the hook check's vision calls
     packs.reset()                       # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's
     kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
@@ -2924,6 +3031,10 @@ def handler(job):
                     # The baked-in CPU models (Dockerfile: scripts/fetch_models.py).
                     "localVision": localvision.available(),
                     "upscaler": upscale.available(),
+                    # Living photos' depth model (src/living.py): baked in, and on for this worker or not.
+                    "livingPhotos": living.status(),
+                    # Old footage restore (src/archive_restore.py): on for this worker or not.
+                    "archiveRestore": bool(config.ARCHIVE_RESTORE),
                     "r2": r2.enabled(),
                     # Script -> video: whether a script-only job can have its narration made here.
                     "freeVoice": tts.status(),
@@ -2963,6 +3074,7 @@ def handler(job):
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
             _no_repeats(doc, report)            # the last look before the editor gets it
+            _hook_check(doc, work, report)      # the opening's clips judged on their own cuts
             _keep_in_library(doc, report)
             ledger.note(doc)                    # while the photos are still here to hash
             # Without this the timeline points at files this job is about to
@@ -3055,6 +3167,7 @@ def handler(job):
             doc = do_plan(inp, work, report)
             _sanitize_videos(doc)
             _no_repeats(doc, report)            # the last look before the render and the editor
+            _hook_check(doc, work, report)      # the opening's clips judged on their own cuts
             _keep_in_library(doc, report)
             ledger.note(doc)                    # while the photos are still here to hash
             if project_id:

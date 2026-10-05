@@ -48,6 +48,7 @@ import { LOOKS as L_LibNumbersPro } from "./LibNumbersPro";
 import { LOOKS as L_LibTextPro } from "./LibTextPro";
 import { LOOKS as L_LibGeoMaps } from "./LibGeoMaps";
 import { LOOKS as L_LibSourceTag } from "./LibSourceTag";
+import { LOOKS as L_LibRealData } from "./LibRealData";
 import { LOOKS as L_LibPremium } from "./LibPremium";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
@@ -131,6 +132,10 @@ export const LIBRARY: Record<string, Look> = {
   // The source tag (LibSourceTag): "SOURCE: USBR, 2024" in a low corner, for a fact whose source the narration
   // names (src/sources.py). Registered autoPick false: only the planner path behind config.SOURCE_TAGS places it.
   ...pick(L_LibSourceTag, ["src-tag"]),
+  // Real data graphics (LibRealData): charts of the official numbers (USBR, USGS, the Drought Monitor, NOAA) behind
+  // a narration's water and weather facts, the source and the date of the data in the corner (src/datagraphics.py).
+  // Registered autoPick false: only the planner path behind config.DATA_GRAPHICS places them.
+  ...pick(L_LibRealData, ["rd-line", "rd-number", "rd-bars", "rd-gauge"]),
   // Pro documents and kinetic text (LibDocsPro): real type on real-looking paper, a camera that finds the line.
   ...pick(L_LibDocsPro, ["kx-article-zoom", "kx-official-memo", "kx-report-cover", "kx-handwritten-note", "kx-keyword-stack",
     "kx-quote-portrait", "kx-alert-strip", "kx-definition", "kx-letter-signature", "kx-social-post"]),

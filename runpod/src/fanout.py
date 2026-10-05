@@ -564,6 +564,39 @@ def _renderer_id() -> str:
         return ""
 
 
+# A subtitle cue lasts at most 7 s (remotion/src/components/captionCues.ts) and is placed for its whole run;
+# a letterbox band bridges a pause of up to 1.2 s between two cues (captionPlan.ts BAND_HOLD), so a frame
+# in such a pause depends on the graphics of the cue before it too: 7 + 1.2, and a margin.
+CAPTION_REACH_SECONDS = 9.0
+
+
+def _caption_context(doc: dict, a: int, b: int) -> dict:
+    """
+    What the subtitles on frames a..b depend on beyond the scenes there: the
+    renderer sets the whole narration's words into phrase cues at once (a cue
+    may cross a scene), and places each cue clear of every graphic on screen
+    at any moment of it - so every word, and the graphics within a cue's
+    reach of the range, are part of the chunk.
+    """
+    words = [(w.get("text"), w.get("start"), w.get("end")) for sc in doc.get("scenes") or []
+             for w in sc.get("words") or []]
+    # A scene without word timings has its text spread over its frames; every scene start is a shot change.
+    scenes_text = [(sc.get("startFrame"), sc.get("durationInFrames"), None if sc.get("words") else sc.get("text"))
+                   for sc in doc.get("scenes") or []]
+    reach = int(round(CAPTION_REACH_SECONDS * float(doc.get("fps") or 30)))
+    near = []
+    for o in doc.get("overlays") or []:
+        s0 = int(o.get("startFrame") or 0)
+        s1 = s0 + int(o.get("durationInFrames") or 0)
+        if s0 <= b + reach and s1 >= a - reach:
+            near.append({k: o.get(k) for k in ("template", "type", "variant", "position", "scale", "backdrop",
+                                                "startFrame", "durationInFrames")})
+    anims = [(sc.get("startFrame"), sc.get("durationInFrames"), (sc.get("animation") or {}).get("template"))
+             for sc in doc.get("scenes") or [] if (sc.get("media") or {}).get("type") == "animation"]
+    digest = hashlib.sha1(json.dumps([words, scenes_text], default=str).encode("utf-8")).hexdigest()[:16]
+    return {"words": digest, "graphics": near, "animations": anims}
+
+
 def chunk_hash(doc: dict, a: int, b: int) -> str:
     """
     A fingerprint of everything that draws frames a..b: the scenes and
@@ -605,6 +638,8 @@ def chunk_hash(doc: dict, a: int, b: int) -> str:
     payload = {"fps": doc.get("fps"), "width": doc.get("width"), "height": doc.get("height"),
                "captions": doc.get("captions"), "brand": doc.get("brand"), "overlaysEnabled": doc.get("overlaysEnabled"),
                "scenes": scenes, "overlays": overlays, "grade": doc.get("grade"), "renderer": _renderer_id()}
+    if isinstance(doc.get("captions"), dict) and doc["captions"].get("enabled"):
+        payload["captionContext"] = _caption_context(doc, a, b)
     if intro or _outro:
         # Where the range sits against the intro, the narration and the outro.
         payload["layout"] = [intro, body, _outro, a, b]
@@ -1364,6 +1399,8 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
         wanted += [(m, "url"), (m, "thumbnail")]
         if m.get("type") in ("video", "image") and str(m.get("url") or "").startswith(("http://", "https://")):
             needed.add(str(m["url"]))
+        # A living photo's depth layers (src/living.py): through the S3 API like the still itself.
+        wanted += [(x, "url") for x in _living_layers(m)]
         anim = scenes[i].get("animation")
         if isinstance(anim, dict):
             wanted += [(x, "url") for x in anim.get("media") or [] if isinstance(x, dict)]
@@ -1410,6 +1447,13 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
             for url, path in ex.map(get, list(targets.items())):
                 if path:
                     got[url] = path
+    # A living photo with a layer storage refused is drawn flat - on every machine alike, since
+    # storage gives every machine the same answer (a layer that would 404 in the renderer
+    # fails the chunk otherwise).
+    for i in on:
+        m = scenes[i].get("media") or {}
+        if any(str(x.get("url") or "") in gone for x in _living_layers(m)):
+            m.pop("living", None)
     for m, field in wanted:
         url = str(m.get(field) or "")
         if url in got:
@@ -1420,6 +1464,13 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
             "seconds": round(time.time() - started, 1),
             # Scenes' own files storage refused: this range cannot be drawn, here or anywhere.
             **({"missing": missing, "status": gone[missing[0]]} if missing else {})}
+
+
+def _living_layers(m) -> List[dict]:
+    """The depth layer dicts of a living photo's media (media.living.layers), or []."""
+    liv = m.get("living") if isinstance(m, dict) else None
+    layers = liv.get("layers") if isinstance(liv, dict) else None
+    return [x for x in layers if isinstance(x, dict)] if isinstance(layers, list) else []
 
 
 def _missing_error(missing: List[str], status: int) -> str:

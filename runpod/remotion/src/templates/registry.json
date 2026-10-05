@@ -88676,6 +88676,728 @@
    ]
   },
   {
+   "id": "LIB_RD_LINE",
+   "name": "Real Data Line",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "FULL SCREEN, REAL DATA. A line chart of the official numbers over time (overlay.data from src/datagraphics.py: USBR, USGS, the U.S. Drought Monitor, NOAA - never the narration's or a model's numbers): the title and the metric top-left, a quiet axis, the line draws left to right with a soft glow and the area under it filling, the reference levels the source states dashed (full pool, minimum power pool, dead pool), the start of the window marked small, then the latest reading lands with a pulse and its value and date called out beside it, the change since the start in a chip. 'SOURCE: USBR · DATA AS OF OCT 3, 2026' rises in the low corner in the source tag's own line. Placed only by the real data path (config.DATA_GRAPHICS), on the fact's first word.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "rd-line",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 50,
+    "types": false,
+    "leastSeconds": 4.2,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 18,
+      "every": 6,
+      "count": 5,
+      "gain_db": -10
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 50,
+      "gain_db": -4
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "data"
+   ],
+   "tags": [
+    "lib",
+    "rd"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "LIB_RD_NUMBER",
+   "name": "Real Data Number",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "FULL SCREEN, REAL DATA. One official number, big: the latest reading counts up in Anton with its unit (6,580 CFS, 5.19 MAF), the station or reservoir and the metric above it, its date under it, and a sparkline of the series beneath that draws to the same reading, the change since the start of the window in a chip. The source and the date of the data rise in the low corner in the source tag's line. Data only from overlay.data (src/datagraphics.py). Placed only by the real data path (config.DATA_GRAPHICS).",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "rd-number",
+    "sfx": {
+     "name": "count-roll",
+     "volume": 0.3
+    },
+    "sfxAt": 40,
+    "types": false,
+    "leastSeconds": 4.0,
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick",
+       "ui-tick"
+      ],
+      "at": 8,
+      "align": "start",
+      "until": 39,
+      "gain_db": -12
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 40,
+      "gain_db": -5
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "data"
+   ],
+   "tags": [
+    "lib",
+    "rd"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "LIB_RD_BARS",
+   "name": "Real Data Bars",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "FULL SCREEN, REAL DATA. Comparison bars of official numbers on a true zero: for drought, the share of the area in drought and in each worse category this week (U.S. Drought Monitor), the category the narration names in the accent; the bars grow in turn with their values counting, the highlighted one landing last with a click. The source and the date of the data rise in the low corner in the source tag's line. Data only from overlay.data (src/datagraphics.py). Placed only by the real data path (config.DATA_GRAPHICS).",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "rd-bars",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 42,
+    "types": false,
+    "leastSeconds": 4.0,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 10,
+      "every": 6,
+      "count": 4,
+      "gain_db": -10
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 42,
+      "gain_db": -5
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "data"
+   ],
+   "tags": [
+    "lib",
+    "rd"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "LIB_RD_GAUGE",
+   "name": "Real Data Fill Gauge",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "FULL SCREEN, REAL DATA. A reservoir's fill level: a tall glass vessel with 0-100% marks fills with water to the share of live capacity the agency's own storage gives (USBR), its surface rippling, last year's level a dashed ghost line; beside it the share counts up in Anton, 'OF LIVE CAPACITY', the storage in million acre-feet out of the capacity, and the date of the reading. The source and the date rise in the low corner in the source tag's line. Data only from overlay.data (src/datagraphics.py). Placed only by the real data path (config.DATA_GRAPHICS).",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "none",
+    "variant": "rd-gauge",
+    "sfx": {
+     "name": "count-roll",
+     "volume": 0.3
+    },
+    "sfxAt": 42,
+    "types": false,
+    "leastSeconds": 4.0,
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick",
+       "ui-tick"
+      ],
+      "at": 12,
+      "align": "start",
+      "until": 41,
+      "gain_db": -12
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 42,
+      "gain_db": -5
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "data"
+   ],
+   "tags": [
+    "lib",
+    "rd"
+   ],
+   "autoPick": false
+  },
+  {
    "id": "LIB_SRC_TAG",
    "name": "Source Tag",
    "category": "CALLOUTS",
@@ -91466,34 +92188,160 @@
   }
  },
  "captionStyles": {
-  "documentary": {
-   "name": "Documentary",
-   "weight": 600,
-   "size": 1.0,
+  "netflix": {
+   "font": "inter",
+   "weight": 500,
+   "size": 50,
+   "lineHeight": 1.24,
+   "letterSpacing": 0.0,
+   "color": "#FFFFFF",
+   "shadow": "soft",
+   "outline": 0,
    "background": "none",
-   "emphasis": "numbers"
+   "boxColor": "",
+   "radius": 0,
+   "align": "center",
+   "highlight": "none",
+   "dim": 1.0,
+   "lineChars": 42,
+   "charWidth": 0.5,
+   "bottom": 0.09,
+   "name": "Streaming",
+   "description": "White medium sans with a soft drop shadow and no box - the streaming-service look."
   },
-  "news": {
-   "name": "News",
-   "weight": 700,
-   "size": 0.95,
-   "background": "bar",
-   "emphasis": "keywords"
-  },
-  "modern": {
-   "name": "Modern",
-   "weight": 800,
-   "size": 1.15,
-   "background": "none",
-   "emphasis": "keywords"
-  },
-  "case": {
-   "name": "Case File",
-   "weight": 700,
-   "size": 0.9,
+  "cinema_box": {
+   "font": "geist",
+   "weight": 500,
+   "size": 46,
+   "lineHeight": 1.24,
+   "letterSpacing": 0.0,
+   "color": "#FFFFFF",
+   "shadow": "none",
+   "outline": 0,
    "background": "box",
-   "emphasis": "none"
+   "boxColor": "rgba(12,12,14,0.72)",
+   "radius": 6,
+   "align": "center",
+   "highlight": "none",
+   "dim": 1.0,
+   "lineChars": 42,
+   "charWidth": 0.52,
+   "bottom": 0.09,
+   "name": "Cinema box",
+   "description": "White text on a subtle semi-transparent dark box behind each line."
+  },
+  "doc_serif": {
+   "font": "source-serif",
+   "weight": 500,
+   "size": 52,
+   "lineHeight": 1.2,
+   "letterSpacing": 0.004,
+   "color": "#FFFFFF",
+   "shadow": "soft",
+   "outline": 0,
+   "background": "none",
+   "boxColor": "",
+   "radius": 0,
+   "align": "center",
+   "highlight": "none",
+   "dim": 1.0,
+   "lineChars": 42,
+   "charWidth": 0.48,
+   "bottom": 0.09,
+   "name": "Documentary serif",
+   "description": "A refined serif in white with a soft shadow - the public-broadcast documentary feel."
+  },
+  "minimal": {
+   "font": "inter",
+   "weight": 400,
+   "size": 40,
+   "lineHeight": 1.24,
+   "letterSpacing": 0.03,
+   "color": "#F2F2F2",
+   "shadow": "subtle",
+   "outline": 0,
+   "background": "none",
+   "boxColor": "",
+   "radius": 0,
+   "align": "left",
+   "highlight": "none",
+   "dim": 1.0,
+   "lineChars": 42,
+   "charWidth": 0.53,
+   "bottom": 0.085,
+   "name": "Minimal",
+   "description": "Smaller, lighter and letter-spaced, set lower left like a premium documentary."
+  },
+  "clean_highlight": {
+   "font": "inter",
+   "weight": 600,
+   "size": 50,
+   "lineHeight": 1.24,
+   "letterSpacing": 0.0,
+   "color": "#FFFFFF",
+   "shadow": "soft",
+   "outline": 0,
+   "background": "none",
+   "boxColor": "",
+   "radius": 0,
+   "align": "center",
+   "highlight": "word",
+   "dim": 0.8,
+   "lineChars": 42,
+   "charWidth": 0.52,
+   "bottom": 0.09,
+   "name": "Clean highlight",
+   "description": "The Netflix layout; the word being spoken is gently brighter and tinted. Nothing moves or grows."
+  },
+  "news_bold": {
+   "font": "barlow-condensed",
+   "weight": 700,
+   "size": 58,
+   "lineHeight": 1.16,
+   "letterSpacing": 0.01,
+   "color": "#FFFFFF",
+   "shadow": "subtle",
+   "outline": 2,
+   "background": "none",
+   "boxColor": "",
+   "radius": 0,
+   "align": "center",
+   "highlight": "none",
+   "dim": 1.0,
+   "lineChars": 42,
+   "charWidth": 0.42,
+   "bottom": 0.09,
+   "name": "News bold",
+   "description": "Bold condensed sans with a thin dark outline, for news and weather channels."
+  },
+  "letterbox": {
+   "font": "inter",
+   "weight": 500,
+   "size": 42,
+   "lineHeight": 1.22,
+   "letterSpacing": 0.015,
+   "color": "#FFFFFF",
+   "shadow": "none",
+   "outline": 0,
+   "background": "band",
+   "boxColor": "rgba(0,0,0,0.82)",
+   "radius": 0,
+   "align": "center",
+   "highlight": "none",
+   "dim": 1.0,
+   "lineChars": 42,
+   "charWidth": 0.52,
+   "bottom": 0.0,
+   "name": "Letterbox",
+   "description": "Centred in a thin dark band along the very bottom of the frame - cinematic."
   }
+ },
+ "captionStyleDefault": "netflix",
+ "captionStyleAliases": {
+  "documentary": "netflix",
+  "news": "news_bold",
+  "modern": "clean_highlight",
+  "case": "cinema_box"
  },
  "musicMoods": {
   "INTRO": 0.16,

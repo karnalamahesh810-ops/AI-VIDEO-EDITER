@@ -114,6 +114,17 @@ class MediaAsset:
     # coarse or fine storyboard score, whether the cut window was free of
     # shot changes (src/moments.py, clean_window below).
     moment: Dict[str, Any] = field(default_factory=dict)
+    # How the shot was checked against its line - the editor and the later
+    # checks read it (semanticMetadata.judgedBy; the owner's Glen Canyon test,
+    # 2026-10-05, opened on two clips nothing had looked at): "frames" the
+    # vision judge on three frames, "opening" the same judge's opening check
+    # (the first moment, middle and end of what the scene shows - every clip
+    # of the hook, src/hookcheck.py), "tile" a storyboard tile's rating (a
+    # subject pool's moment), "library" / "pack" judged when first found,
+    # "local" the local CLIP model only, "none" nothing, "" not recorded.
+    judged_by: str = ""
+    # The opening check's verdict on this very cut (vision.cut_record).
+    cut_check: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def identity(self) -> str:
@@ -184,6 +195,8 @@ class MediaAsset:
             self.quality = verdict.get("quality")
             self.vision_model = verdict.get("model", "")
             self.specificity = verdict.get("specificity", "") or ""
+            self.cut_check = vision.cut_record(verdict)
+            self.judged_by = "opening" if self.cut_check else "frames"
         elif intent and vision.enabled() and self.source != "generated":
             # Vision is on but no model could judge this one: it is kept (an API
             # outage must not empty the timeline) but must not pass silently.
@@ -1101,6 +1114,25 @@ _KEEP_ALT_FILES: contextvars.ContextVar = contextvars.ContextVar("keep_alt_files
 # unless GENERATED_IMAGES_IN_HOOK, and it judges more candidates and keeps
 # the best of more passes (_judge_limits).
 _IN_HOOK: contextvars.ContextVar = contextvars.ContextVar("in_hook", default=False)
+# The seconds of a clip its scene shows, while a hook scene is sourced or
+# checked: the judge's opening check looks at the clip's first moment, middle
+# and end of that span (vision.judge `span`, src/hookcheck.py) - the owner's
+# Glen Canyon test (2026-10-05) opened on 1.4 s of another shot the judge's
+# frames at a quarter, a half and three quarters of the clip never saw.
+_SHOWN_SECONDS: contextvars.ContextVar = contextvars.ContextVar("shown_seconds", default=None)
+
+
+def _opening_span(path: str) -> Optional[float]:
+    """The span the judge's opening check reads for `path` here, or None (not a hook clip, or the check is off)."""
+    if not (_IN_HOOK.get() and getattr(config, "HOOK_CUT_CHECK", False)) or _is_still(path):
+        return None
+    try:
+        span = float(_SHOWN_SECONDS.get() or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return span if span > 0 else None
+
+
 # "month" (or "week") for a line of a story about now: YouTube's and
 # Dailymotion's uploads of the last month are searched first, and older
 # uploads only when nothing recent passes (config.RECENT_FOOTAGE_FIRST).
@@ -1329,17 +1361,22 @@ def _mark_bad(video: str, moment: str, why: str) -> None:
         _BAD[key] = why[:80]
 
 
-def judge_clip(path: str, job: Dict[str, Any], label: str = "", source_url: str = "") -> tuple:
+def judge_clip(path: str, job: Dict[str, Any], label: str = "", source_url: str = "",
+               shown: Optional[float] = None) -> tuple:
     """
     (keep, verdict) for a clip found outside the per-scene search (a subject
     pool's moment): the same gate a searched clip passes - the AI-slop and
     not-footage filters, the local model and the vision judge - against the
-    line's own intent, place and event.
+    line's own intent, place and event. A hook line's clip gets the opening
+    check on the `shown` seconds its scene plays (the line's own seconds when
+    not given).
     """
+    span = shown if shown is not None else job.get("seconds")
     tokens = [(_SUBJECT_TYPE, _SUBJECT_TYPE.set(job.get("subject_type") or "")),
               (_EVENT_WINDOW, _EVENT_WINDOW.set(job.get("event_window") or "")),
               (_SCENE_INTENT, _SCENE_INTENT.set(job.get("scene_intent") or None)),
-              (_IN_HOOK, _IN_HOOK.set(bool(job.get("hook"))))]
+              (_IN_HOOK, _IN_HOOK.set(bool(job.get("hook")))),
+              (_SHOWN_SECONDS, _SHOWN_SECONDS.set(span))]
     try:
         return _vision_gate(path, job.get("intent") or job.get("query") or "", job.get("context") or "", label,
                             source_url)
@@ -1496,11 +1533,15 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         return True, None
     scene = _SCENE_INTENT.get()
     wants = wanted_kind()
+    # A clip in the hook: the judge looks at its first moment, middle and end, and says whether the
+    # first frame itself fits (vision.judge `span`; src/hookcheck.py) - same one call.
+    span = _opening_span(path)
     # A line asking for a map or a diagram: the judge is told a real published one is acceptable
     # (real footage or a photo that fits stays just as good - the INTENT decides).
     verdict = vision.judge(path, intent, context, event=bool(_EVENT_WINDOW.get()),
                            **({"scene": scene} if scene else {}),
-                           **({"wants": wants} if wants in ("map", "chart") else {}))
+                           **({"wants": wants} if wants in ("map", "chart") else {}),
+                           **({"span": span} if span else {}))
     if verdict is None and not config.ACCEPT_UNJUDGED:
         # Every model failed on this clip. Google answered "high demand" for
         # half an hour on 2026-09-29 and rejecting all of those left most of a
@@ -1522,6 +1563,10 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         why = judged_line_free(verdict)
         if why:
             _GATE_SLOP.set(why)
+    if verdict is not None and verdict.get("frames"):
+        # The opening check's own decision goes with the verdict (a copy: the cached one stays as the
+        # model answered) - the scene keeps it (MediaAsset.cut_check) and src/hookcheck.py reads it.
+        verdict = dict(verdict, accepted=keep)
     if verdict is not None:
         mark = "keep" if keep else "REJECT"
         flags = []
@@ -1531,6 +1576,8 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
             flags.append("talking head")
         if verdict.get("quality") is not None:
             flags.append(f"quality {verdict['quality']:.2f}")
+        if verdict.get("opening") is False:
+            flags.append("opening frame does not fit")
         print(f"[vision] {mark} {verdict['score']:.2f} {label[:50]!r}"
               f"{' (' + ', '.join(flags) + ')' if flags else ''}"
               f" — {verdict['description'][:90]}", flush=True)
@@ -2295,6 +2342,8 @@ def _best_of(passed: List[MediaAsset]) -> Optional[MediaAsset]:
             "score": a.relevance_score, "quality": a.quality, "finalScore": a.final_score,
             "specificity": a.specificity, "moment": dict(a.moment or {}),
             "description": (a.content_description or "")[:160], "source": a.source}
+        if a.cut_check:
+            entry["cutCheck"] = dict(a.cut_check)       # a hook line's opening check on this very cut
         # The library keeps approved clips the video does not show
         # (library.record_from_doc): their files stay until the job ends.
         keep = keep_files or (_LIBRARY_KEEP["on"] and a.kind == "video" and not a.review_reason.startswith(
@@ -2455,8 +2504,9 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             tried.add(candidate["id"])
             if ledger.moment_used(candidate["id"], point, point + grab):
                 continue                            # an earlier video showed this moment
-            path = _yt_fetch_retry(candidate["id"], out_dir, point, grab,
-                                   candidate["title"])
+            # With a margin, cut clean: never opening on the end of the shot before (filters.tidy_clip).
+            path, clean, cuts = fetch_clean_clip(candidate["id"], out_dir, point, grab, candidate["title"],
+                                                 least=_plays(seconds, grab))
             if not path:
                 continue
             # Burned-in subtitles only become visible after the download, and a
@@ -2493,7 +2543,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                 continue
             asset = _asset_for(path, query_or_url, grab, require_cc,
                                title=candidate["title"])
-            asset.moment = {"start": round(float(point), 1), "score": (moment or {}).get("score")}
+            asset.moment = {"start": round(float(point), 1), "score": (moment or {}).get("score"),
+                            "clean": clean, "cuts": cuts}
             # Not returned yet: the first clip to clear the floor is rarely the
             # best one available. Up to JUDGE_BEST_OF passing clips are compared.
             passed.append(asset.apply_verdict(verdict, intent))
@@ -2674,7 +2725,7 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
                 pass
             continue
         if path and margin:
-            path = tidy_clip(path, grab, prefer=min(point, margin))[0]
+            path = tidy_clip(path, grab, prefer=min(point, margin), least=_plays(seconds, grab))[0]
         if not path:
             continue
         why = "burned-in text or UI" if has_burned_captions(path) else motion_rejects(path)
@@ -2787,7 +2838,7 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
         margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
         path = _web_fetch(row["url"], out_dir, max(0.0, start - margin), grab + 2 * margin)
         if path and margin:
-            path = tidy_clip(path, grab, prefer=min(start, margin))[0]
+            path = tidy_clip(path, grab, prefer=min(start, margin), least=_plays(seconds, grab))[0]
         if not path:
             continue
         w, h = _video_dims(path)
@@ -2987,11 +3038,14 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             _release_inflight(c.id)
             continue
         mkey = f"yt:{c.id}@{int(point // 10)}"
-        if _is_bad(mkey):
+        least = _plays(seconds, grab)
+        if _is_bad(mkey) or _short_section(mkey, least):
             _release_inflight(c.id)
-            continue                        # another scene found this moment unusable
-        path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title)
+            continue                        # another scene found this moment unusable (or too short for it)
+        path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title, least=least)
         if not path:
+            if clean is False:
+                _note_short_section(mkey, least)    # downloaded, but no clean start long enough: not again
             _release_inflight(c.id)
             continue
         still = motion_rejects(path)
@@ -3017,8 +3071,9 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             _mark_bad(f"yt:{c.id}", mkey, _GATE_SLOP.get())
             v = verdict or {}
             score = float(v.get("score") or 0.0)
+            # (A hook clip that opens on something else is a clear no too: never the "best available".)
             clear_no = bool(v.get("has_text_or_watermark")) or bool(v.get("is_talking_head")) \
-                or bool(v.get("ai_generated")) or bool(v.get("studio"))
+                or bool(v.get("ai_generated")) or bool(v.get("studio")) or v.get("opening") is False
             if (score >= config.VISION_SOFT_MIN_SCORE and not clear_no
                     and (soft is None or score > soft["score"])):
                 # The best near-miss so far: kept in case nothing passes.
@@ -3107,8 +3162,13 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
 
 
 def fetch_clean_clip(video_id: str, out_dir: str, start: float, need: float,
-                     title: str = "") -> tuple:
-    """(path, clean, cuts): a YouTube section with margin, cut clean around `start`."""
+                     title: str = "", least: Optional[float] = None) -> tuple:
+    """
+    (path, clean, cuts): a YouTube section with margin, cut clean around
+    `start`. `least`: the shortest clip the caller can use (tidy_clip; `need`
+    when not given). ("", True, 0) when the download failed; ("", False, cuts)
+    when it came but no clean start leaves `least` (filters.tidy_clip).
+    """
     margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
     fetch_start = max(0.0, start - margin)
     path = _yt_fetch_retry(video_id, out_dir, fetch_start, need + 2 * margin, title)
@@ -3116,7 +3176,31 @@ def fetch_clean_clip(video_id: str, out_dir: str, start: float, need: float,
         return "", True, 0
     if not margin:
         return path, True, 0
-    return tidy_clip(path, need, prefer=start - fetch_start)
+    return tidy_clip(path, need, prefer=start - fetch_start, least=least)
+
+
+def _plays(seconds: float, grab: float) -> float:
+    """The shortest clip a line of `seconds` can use from a `grab`-second section: what its scene plays,
+    a crossfade into the next included (SEQ_SHOT_PAD) - the rest of the grab is only margin."""
+    return min(float(grab), max(1.0, float(seconds or 0.0)) + SEQ_SHOT_PAD)
+
+
+# Sections tidy_clip threw away (no clean start long enough), by moment key -> the shortest clip
+# a line asked for there: a line asking for as much or more skips the download.
+_SHORT_SECTIONS: Dict[str, float] = {}
+
+
+def _short_section(mkey: str, least: float) -> bool:
+    with _CACHE_LOCK:
+        got = _SHORT_SECTIONS.get(mkey)
+    return got is not None and least >= got - 0.01
+
+
+def _note_short_section(mkey: str, least: float) -> None:
+    with _CACHE_LOCK:
+        if len(_SHORT_SECTIONS) > 5000:
+            _SHORT_SECTIONS.clear()
+        _SHORT_SECTIONS[mkey] = min(float(least), _SHORT_SECTIONS.get(mkey, float(least)))
 
 
 # Fine passes already paid for in this job (JUDGE_MEMORY): video, coarse moment, clip
@@ -3357,6 +3441,7 @@ def reset_cache():
     SLOP_REJECTED.clear()
     with _CACHE_LOCK:
         _BAD.clear()                    # what was unusable is decided again per job
+        _SHORT_SECTIONS.clear()
     _LIBRARY_KEEP["on"] = False         # the job's Library.load turns it on
     from . import official
     official.reset()                    # each satellite sector once per video
@@ -3720,6 +3805,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     judged_token = _SCENE_JUDGED.set([0])
     tried_token = _SCENE_TRIED.set(set())
     hook_token = _IN_HOOK.set(bool(hook))
+    shown_token = _SHOWN_SECONDS.set(seconds)       # a hook clip's opening check reads this span
     recency_token = _RECENCY.set(recency or "")
     # A footage beat falls back to a photo only while the style's photo cap
     # (PHOTO_MAX_PER_10MIN) has room; after that it stays a footage search
@@ -3758,6 +3844,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
         if providers_token is not None:
             _ENABLED_PROVIDERS.reset(providers_token)
         _RECENCY.reset(recency_token)
+        _SHOWN_SECONDS.reset(shown_token)
         _IN_HOOK.reset(hook_token)
         _SCENE_TRIED.reset(tried_token)
         _SCENE_JUDGED.reset(judged_token)
@@ -4754,11 +4841,14 @@ def fill_chains(jobs: List[Dict[str, Any]], results, work_dir: str = "") -> int:
             if not _asset_ok(MediaAsset(kind="video", source="youtube", url="", local_path=path))[0] \
                     or motion_rejects(path) or slop_reason(path, prev.attribution or ""):
                 break
+            # Not judged itself: its verdict is the clip before's (judgedBy "chain"); a hook line's
+            # chain is judged on its own cut by the hook check (src/hookcheck.py).
             asset = _dc_replace(prev, local_path=path, url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
                                 duration=need, moment_key=f"yt:{vid}@{int(at // max(1.0, float(config.POOL_MIN_GAP_SECONDS)))}",
                                 moment={"start": round(at, 1), "chain": True, "chain_of": prev.identity,
                                         "clean": clean, "cuts": cuts},
-                                alternatives=[], intent=job.get("intent") or prev.intent)
+                                alternatives=[], intent=job.get("intent") or prev.intent,
+                                judged_by="chain", cut_check={})
             put(i, asset)
             filled += 1
         return filled
@@ -4919,7 +5009,8 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                     used.add(key)
                 if ledger.moment_used(vid, at, at + need):
                     continue                        # shown in an earlier video
-                path = _yt_fetch_retry(vid, work_dir, at, need, title=job.get("subject") or "")
+                # With a margin, cut clean: never opening on the end of the shot before (filters.tidy_clip).
+                path, clean, cuts = fetch_clean_clip(vid, work_dir, at, need, job.get("subject") or "")
                 if not path:
                     continue
                 if motion_rejects(path):
@@ -4927,7 +5018,8 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                 asset = MediaAsset(kind="video", source="youtube", url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
                                    local_path=path, license=donor.license, attribution=donor.attribution,
                                    query=job.get("query", ""), moment_key=key,
-                                   moment={"start": round(at, 1), "fresh_from": donor.identity},
+                                   moment={"start": round(at, 1), "fresh_from": donor.identity,
+                                           "clean": clean, "cuts": cuts},
                                    relevance_score=(donor.relevance_score * 0.95 if donor.relevance_score is not None else None),
                                    review_required=True,
                                    review_reason=f"Another moment of a video used for {job.get('subject') or 'this subject'}")
@@ -4939,14 +5031,22 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                 local = _local_check(path, job.get("intent", "")) if job.get("intent") else None
                 if local is not None and local["reject"]:
                     continue
+                asset.judged_by = "local" if local is not None else "none"
                 if vision.enabled() and job.get("intent"):
-                    verdict = vision.judge(path, job.get("intent", ""), job.get("query", ""))
+                    # A hook line's moment gets the opening check on what its scene shows (src/hookcheck.py).
+                    hook_span = float(job.get("seconds") or need) if job.get("hook") and \
+                        getattr(config, "HOOK_CUT_CHECK", False) else None
+                    verdict = vision.judge(path, job.get("intent", ""), job.get("query", ""),
+                                           **({"span": hook_span} if hook_span else {}))
                     if verdict is not None and (float(verdict.get("score") or 0) < config.VISION_SOFT_MIN_SCORE
-                                                or verdict.get("ai_generated") or verdict.get("studio")):
+                                                or verdict.get("ai_generated") or verdict.get("studio")
+                                                or verdict.get("opening") is False):
                         continue
                     if verdict is not None:
                         asset.relevance_score = float(verdict.get("score") or 0)
                         asset.content_description = str(verdict.get("description") or "")[:300]
+                        asset.cut_check = vision.cut_record(dict(verdict, accepted=vision.acceptable(verdict)))
+                        asset.judged_by = "opening" if asset.cut_check else "frames"
                 return asset
             unreserve(vid, scene_at)
         return None
@@ -5058,8 +5158,26 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                     continue
                 if not _rescue_local_ok(path, intent_text):
                     continue
+                asset.judged_by = "local" if config.LOCAL_VISION_ENABLED and _localvision.available() else "none"
                 asset.review_required = True
                 asset.review_reason = "Found in the last pass without an AI check - make sure it fits the line"
+                if job.get("hook"):
+                    # The opening never takes a clip nothing looked at (the owner's Glen Canyon test,
+                    # 2026-10-05): the judge's opening check on this very cut, or the next result.
+                    from . import hookcheck
+                    keep, verdict = hookcheck.judge(path, dict(job, intent=intent_text),
+                                                    float(job.get("seconds") or need))
+                    if keep is False:
+                        print(f"[rescue] hook line {job['index'] + 1}: {c['id']} turned down by the opening "
+                              f"check ({hookcheck.why(verdict)})", flush=True)
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
+                        continue
+                    if verdict:
+                        asset.apply_verdict(verdict, intent_text)
+                        asset.review_reason = "Found in the last pass; the opening check passed it - check it fits"
                 return asset
             return None
 
@@ -5114,6 +5232,7 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                                 return None
                             room[0] -= 1
                     got.intent = intent_text
+                    got.judged_by = "local" if config.LOCAL_VISION_ENABLED and _localvision.available() else "none"
                     got.review_required = True
                     got.review_reason = "Picture found in the last pass without an AI check - make sure it fits"
                     return got

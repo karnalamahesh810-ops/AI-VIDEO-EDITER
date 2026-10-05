@@ -501,6 +501,15 @@ def _probe_source(url: str) -> str:
 # The image looks' pictures (Main.tsx lookPictures, kept in step)
 # --------------------------------------------------------------------------- #
 
+def _layer_urls(m) -> List[str]:
+    """The depth layers a living photo draws (media.living, src/living.py), or []."""
+    liv = m.get("living") if isinstance(m, dict) else None
+    layers = liv.get("layers") if isinstance(liv, dict) else None
+    if not isinstance(layers, list):
+        return []
+    return [str(x["url"]) for x in layers if isinstance(x, dict) and isinstance(x.get("url"), str) and x["url"]]
+
+
 def _still_of(m) -> str:
     if not isinstance(m, dict) or not m.get("url"):
         return ""
@@ -1026,6 +1035,7 @@ class Gate:
                              checks[str(self.doc["scenes"][i]["media"]["url"])])
                             for i, (code, _why) in sorted(problems.items()) if code == "unreachable"])
         self._thumbnails(checks)
+        self._living(checks)
         self._overlay_media(checks)
         self._music(checks)
         self._music_span(checks)
@@ -1077,6 +1087,8 @@ class Gate:
                     probe.add(str(m["url"]))
             if isinstance(m.get("thumbnail"), str) and m["thumbnail"]:
                 add(m["thumbnail"], "file")
+            for url in _layer_urls(m):
+                add(url, "file")
             anim = s.get("animation")
             for x in (anim.get("media") or []) if isinstance(anim, dict) else []:
                 if isinstance(x, dict) and x.get("url"):
@@ -1270,6 +1282,22 @@ class Gate:
                 self._fixed(i, "thumbnail", f"its still ({short(th)}) cannot load: {got.why}",
                             "dropped - the looks borrow another picture")
 
+    def _living(self, checks: Dict[str, Check]) -> None:
+        """A living photo (src/living.py) whose depth layers cannot all be read - or were not
+        answered in time: a layer that hangs would stall the render - is drawn flat, as before."""
+        for i, s in enumerate(self.doc.get("scenes") or []):
+            m = s.get("media") or {}
+            urls = _layer_urls(m)
+            bad = [(u, checks.get(u)) for u in urls if checks.get(u) is None or not checks[u].ok or checks[u].unverified]
+            if not bad:
+                continue
+            m.pop("living", None)
+            self.found["layers"] += 1
+            got = bad[0][1]
+            why = got.why if got is not None else "not checked"
+            self._fixed(i, "layers", f"its depth layers ({short(bad[0][0])}) cannot be used: {why}",
+                        "drawn as a flat still")
+
     def _overlay_media(self, checks: Dict[str, Check]) -> None:
         """Pictures an overlay or a full-screen graphic draws that cannot load are taken out."""
         def bad(m) -> str:
@@ -1442,7 +1470,8 @@ class Gate:
         `order`, not spread over the video."""
         scenes = self.doc["scenes"]
         plan = gapfill.CONTEXT if CONTEXT.get("plan") and gapfill.CONTEXT.get("jobs") else {}
-        jobs = [gapfill.job_for(s, k, self.fps, plan.get("jobs")) for k, s in enumerate(scenes)]
+        known = gapfill.known_jobs(self.doc, plan.get("jobs")) if plan.get("jobs") else None
+        jobs = [gapfill.job_for(s, k, self.fps, known) for k, s in enumerate(scenes)]
         todo = set(order)
         used = gapfill.Used()
         for k, s in enumerate(scenes):
@@ -2126,6 +2155,8 @@ class Gate:
             m = s.get("media") or {}
             if m.get("type") in ("video", "image") and m.get("url"):
                 add(m["url"], m["type"])
+            for url in _layer_urls(m):
+                add(url, "file")
             anim = s.get("animation")
             for x in (anim.get("media") or []) if isinstance(anim, dict) else []:
                 if isinstance(x, dict):
@@ -2221,6 +2252,9 @@ class Gate:
             if isinstance(m.get("thumbnail"), str) and hit(m["thumbnail"]):
                 m.pop("thumbnail", None)
                 changed += 1
+            if any(hit(u) for u in _layer_urls(m)):
+                m.pop("living", None)           # its depth layers: drawn flat
+                changed += 1
             anim = s.get("animation")
             if isinstance(anim, dict) and isinstance(anim.get("media"), list):
                 kept = [x for x in anim["media"] if not (isinstance(x, dict) and hit(x.get("url")))]
@@ -2283,6 +2317,8 @@ class Gate:
             parts.append(_n(f["timing"], "clip") + " slowed to fill its scene")
         if f["thumbnail"]:
             parts.append(_n(f["thumbnail"], "broken still") + " dropped")
+        if f["layers"]:
+            parts.append(_n(f["layers"], "living photo") + " drawn flat (its layers could not load)")
         if f["overlay"]:
             parts.append(_n(f["overlay"], "graphic") + " fixed")
         if f["music"]:
@@ -2342,7 +2378,8 @@ def mark_for_review(doc: dict, checked: Optional[dict]) -> int:
     n = 0
     for r in (checked or {}).get("repairs") or []:
         s = by_id.get(r.get("scene"))
-        if s is None or r.get("problem") in ("timing", "thumbnail", "overlay", "music", "music-length", "sound"):
+        if s is None or r.get("problem") in ("timing", "thumbnail", "overlay", "music", "music-length", "sound",
+                                             "layers"):
             continue
         s["reviewRequired"] = True
         s["reviewReason"] = (f"The quality check replaced this scene in the finished video ({r.get('detail')}): "

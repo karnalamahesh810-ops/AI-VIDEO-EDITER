@@ -173,6 +173,35 @@ export interface MediaReframe {
  */
 export type SceneReframe = "off" | "auto" | false | null | { from: Box; to: Box };
 
+/** One depth layer of a living photo (src/living.py), listed back to front. */
+export interface LivingLayer {
+  url: string;
+  /** Its depth, 0 = far .. 1 = near: how far it moves against the others. */
+  depth: number;
+  /** Cut to its own box ([x0, y0, x1, y1], shares of the picture); absent = the whole picture. */
+  box?: [number, number, number, number];
+}
+
+/**
+ * A still drawn with real depth (src/living.py; transitions/livingPhoto.tsx):
+ * the scene's own move on the stack, each layer moved against it by its
+ * depth. Bound to the picture by `source`; missing or unloadable layers =
+ * the flat picture, as before.
+ */
+export interface MediaLiving {
+  v?: number;
+  layers: LivingLayer[];
+  /** The nearest layer's middle (shares of the picture): the camera moves about it. */
+  focus?: { x: number; y: number };
+  /** The picture's width / height the layers were cut at. */
+  aspect?: number;
+  /** The shift between the nearest and the farthest layer over a shot (a share of the frame). */
+  strength?: number;
+  quality?: number;
+  source?: string;
+  by?: string;
+}
+
 export interface SceneMedia {
   /** "animation": the scene is a full-screen motion graphic (scene.animation). */
   type: "video" | "image" | "color" | "animation";
@@ -194,6 +223,8 @@ export interface SceneMedia {
   /** Smart reframing: what was found in the picture, and the move planned for it. */
   focus?: MediaFocus;
   reframe?: MediaReframe;
+  /** A still's depth layers (living photos); absent = drawn flat. */
+  living?: MediaLiving;
 }
 
 export interface Scene {
@@ -226,6 +257,8 @@ export interface Scene {
   frame?: "full" | "inset" | "window";
   /** The editor's reframing choice for this scene (see SceneReframe). */
   reframe?: SceneReframe;
+  /** The editor's say on a living photo: "off" (or false) = the still drawn flat; absent / "auto" = its layers. */
+  living?: "off" | "auto" | false | null;
   /** Per-clip effect drawn over / applied to the media. */
   effect?: SceneEffect;
   /** Vision-model match record: what the frames actually show, and how well. */
@@ -287,10 +320,59 @@ export interface GeoDoc {
   river?: string;
 }
 
+/**
+ * The real numbers a data graphic draws (src/datagraphics.py from src/realdata.py: USBR, USGS, the U.S. Drought
+ * Monitor, NOAA) - never the narration's or a model's. Dates are ISO ("2026-10-03"); `points` run oldest first
+ * and end on the latest reading itself. Drawn by components/lib/LibRealData.tsx (rd-line, rd-number, rd-bars,
+ * rd-gauge); every field but `points` and `latest` is optional.
+ */
+export interface DataDoc {
+  v?: number;
+  look?: string;
+  /** elevation | percent_full | storage | flow | drought | temperature | precip | alerts */
+  metric?: string;
+  entity?: string;
+  /** "LAKE POWELL", "COLORADO RIVER AT LEES FERRY, AZ" (the overlay's text, when set, wins). */
+  title?: string;
+  /** "PERCENT OF LIVE CAPACITY" (the overlay's label, when set, wins). */
+  kicker?: string;
+  /** "FT", "%", "MAF", "CFS", "°F", "IN". */
+  unit?: string;
+  decimals?: number;
+  /** How far apart the points are: day | week | month | year. */
+  step?: string;
+  points?: [string, number][];
+  latest?: { date: string; value: number; label?: string };
+  /** The reading the line compares with (a year said, a year ago, the start of the window). */
+  compare?: { date: string; value: number; label?: string };
+  /** The change since `compare` as written by the planner: "−158.5 FT SINCE JAN 2001". */
+  delta?: { value?: number; text: string };
+  /** Levels the source itself states (full pool, minimum power pool, dead pool). */
+  refs?: { label: string; value: number }[];
+  /** A fixed axis ([0, 100] for a share). */
+  range?: [number, number];
+  /** rd-bars: the rows, the one the narration names highlighted. */
+  bars?: { label: string; value: number; highlight?: boolean }[];
+  /** rd-gauge: the storage behind the share, out of the capacity (million acre-feet). */
+  storage?: { value: number; capacity: number; unit?: string };
+  /** A record year: its value, rank and the word ("WARMEST OF 131 YEARS"). */
+  record?: { date: string; value: number; label: string; rank: number; of: number; word: string };
+  /** The short name shown ("USBR"), the agency in full, the official data URL (never "url": that is media). */
+  source?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  asOf?: string;
+  /** "OCT 3, 2026", "THROUGH 2025": the date of the data, shown in the corner. */
+  asOfLabel?: string;
+  week?: string;
+}
+
 export interface Overlay {
   type: OverlayType;
   /** An auto map's geometry (src/automaps.py). */
   geo?: GeoDoc;
+  /** A real data graphic's numbers (src/datagraphics.py). */
+  data?: DataDoc;
   text: string;
   subtitle?: string;
   label?: string;
@@ -445,9 +527,15 @@ export interface TimelineProps {
   captions: {
     enabled: boolean;
     position: "bottom" | "center";
+    /** The brand accent: the graphics' colour, and the spoken word's tint in a highlighting subtitle style. */
     accent: string;
+    /** The brand font, kept for the graphics; the subtitles always use their style's own face. */
     fontFamily: string;
-    /** documentary | news | modern (templates/registry.json captionStyles). */
+    /**
+     * netflix | cinema_box | doc_serif | minimal | clean_highlight | news_bold | letterbox
+     * (templates/registry.json captionStyles); an older id (documentary, news, modern, case)
+     * draws as its closest new style, absent = netflix (templates.ts captionStyleId).
+     */
     style?: string;
   };
   scenes: Scene[];

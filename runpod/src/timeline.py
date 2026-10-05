@@ -1531,6 +1531,11 @@ def _build(segments: List[Segment], shots: List[dict],
                 "contentDescription": getattr(asset, "content_description", "") or "",
                 "relevanceScore": getattr(asset, "relevance_score", None),
                 "qualityScore": getattr(asset, "quality", None),
+                # How that verdict was reached (media.MediaAsset.judged_by) and, for a hook clip, the
+                # opening check on this very cut (src/hookcheck.py).
+                **({"judgedBy": asset.judged_by} if asset is not None and getattr(asset, "judged_by", "") else {}),
+                **({"cutCheck": dict(asset.cut_check)} if asset is not None and getattr(asset, "cut_check", None)
+                   else {}),
                 "provider": getattr(asset, "source", "") or "",
                 # What makes this clip this clip (video id + moment), so the
                 # clip library can keep and re-find it.
@@ -1598,6 +1603,8 @@ def _build(segments: List[Segment], shots: List[dict],
     look_sounds: Optional[Dict[str, Any]] = None
     # The source tags the planner placed (src/sources.py, config.SOURCE_TAGS), for meta: which words named each.
     source_tags: List[dict] = []
+    # The real data graphics' report (src/datagraphics.py, config.DATA_GRAPHICS): every fact, shown or why not.
+    data_graphics: Optional[Dict[str, Any]] = None
     if pack:
         title_card = [o for o in overlays if o.get("type") == "title" and inp.get("title_overlay")
                       and o.get("text") == str(inp["title_overlay"])[:240]]
@@ -1615,6 +1622,11 @@ def _build(segments: List[Segment], shots: List[dict],
         treatment_counts = planned["counts"]
         look_sounds = planned.get("lookSounds")
         source_tags = list(planned.get("sources") or [])
+        data_graphics = planned.get("dataGraphics")
+        if data_graphics:
+            # A narration number the official data does not bear out: flagged, never "corrected".
+            from . import datagraphics
+            warnings.extend(datagraphics.warnings_for(data_graphics))
     # Every image look gets a real picture for every slot (the scene's own,
     # then nearby ones of the same subject, then the clip library), or a look
     # that needs fewer, or none (the owner's Lake Powell video: empty slots).
@@ -1697,7 +1709,10 @@ def _build(segments: List[Segment], shots: List[dict],
             "position": brand.get("captionPosition", "bottom"),
             "accent": brand.get("accent", "#FFD400"),
             "fontFamily": brand.get("fontFamily", "Inter"),
-            "style": str(inp.get("caption_style") or (pack or {}).get("caption") or "documentary"),
+            # The subtitle style shown when the user switches captions on: theirs (an older id draws as
+            # its closest new style), else Netflix - the style pack no longer picks one (the owner,
+            # 2026-10-05: clean Netflix-like subtitles by default).
+            "style": templates.caption_style_id(inp.get("caption_style")),
         },
         "music": music,
         "scenes": scenes,
@@ -1736,6 +1751,8 @@ def _build(segments: List[Segment], shots: List[dict],
             **({"hookBoost": hook_boost} if hook_boost else {}),
             # On-screen sources: each tag with the narration's words that named its source (never invented).
             **({"sourceTags": {"placed": source_tags}} if source_tags else {}),
+            # Real data graphics: each fact the narration stated, its chart or why not, and its number checked.
+            **({"dataGraphics": data_graphics} if data_graphics else {}),
         },
     }
 

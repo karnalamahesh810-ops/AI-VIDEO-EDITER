@@ -45,7 +45,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, hookboost, numwords, templates
 from . import automaps, config, numwords, templates
-from . import screentext, sources
+from . import datagraphics, screentext, sources
 from .transcribe import Segment
 
 # Read off VidRush's own timelines (an animation block every 8-10 s through
@@ -2720,6 +2720,13 @@ class _Planner:
         self.n_maps = 0
         # Auto maps (src/automaps.py): (feature id, section) already mapped - one per feature per section.
         self.auto_used: set = set()
+        # Real data graphics (src/datagraphics.py, behind config.DATA_GRAPHICS): every fact found with what became
+        # of it (the job report), the ones that may show and the lines chosen for one, those shown, the last look.
+        self.data_report: List[dict] = []
+        self.data_cands: List[dict] = []
+        self.data_chosen: Dict[int, dict] = {}
+        self.data_shown: List[dict] = []
+        self.data_last_look = ""
         self.i = 0
         # Video style (src/styles.py): "minimal" = a news compilation's cut -
         # dates, spaced figures and maps only; "normal" drops the filler label.
@@ -2786,6 +2793,8 @@ class _Planner:
                 except (TypeError, ValueError):
                     pass
         self._vr_select()
+        if config.DATA_GRAPHICS:
+            self._data_select()
         self.must_at = self._must_times()
         for i, seg in enumerate(self.segments):
             self.i = i
@@ -2813,7 +2822,9 @@ class _Planner:
                 # pack's intensity against the voice; `sfx` holds no row for them.
                 "lookSounds": {"intensity": round(max(0.0, float(self.pack.get("sfxIntensity", 1.0))), 3)},
                 # The source tags shown, each with the words that named its source (for the audit).
-                **({"sources": cited} if cited else {})}
+                **({"sources": cited} if cited else {}),
+                # Real data graphics: every fact the narration stated, shown or why not, and its check.
+                **({"dataGraphics": self._data_meta()} if self.data_report else {})}
 
     def _source_tags(self) -> List[dict]:
         """
@@ -2984,6 +2995,12 @@ class _Planner:
     def _must_times(self) -> Dict[int, float]:
         """When each line's must-show graphic should land (seconds), by line: a chosen date or time, a clear figure."""
         out: Dict[int, float] = {i: float(m["at"]) for i, m in self.vr_moments.items() if i in self.vr_chosen}
+        for i, c in (getattr(self, "data_chosen", None) or {}).items():
+            # (a real-data graphic _data_select chose: a must-show too)
+            try:
+                out[i] = min(out.get(i, float(c["at"])), float(c["at"]))
+            except (KeyError, TypeError, ValueError):
+                pass
         for i, seg in enumerate(self.segments):
             scene = self.scenes[i] if i < len(self.scenes) else {}
             if (scene.get("media") or {}).get("type") == "animation":
@@ -3050,10 +3067,23 @@ class _Planner:
             hint = None
         cues = cues_for(seg, shot, self.brief)
         placed: List[dict] = []
+        # 0. A measurable fact with its real data (src/datagraphics.py, config.DATA_GRAPHICS): the chart of the
+        #    official numbers lands on the fact's first word and holds the screen; the line's own number look is
+        #    not drawn as well.
+        data_req = self._data_request(i, seg) if self.data_cands else None
 
         # 1. What always shows: a date or a time, a clear figure (it counts up),
         #    the first mention of a named person - in the order they are said.
         musts, repeated = self._musts(seg, shot, scene, cues, hint)
+        if data_req:
+            got = self._request(data_req, seg, scene, "must")
+            if got:
+                placed.append(got)
+                self._data_placed(data_req["data"], got, cues, at)
+                musts = [r for r in musts if r.get("figure_key") is None]
+                repeated = None
+            else:
+                data_req["data"]["rep"]["status"] = "not placed: another graphic held the screen on its word"
         minimal = self.density == "minimal"
         if hint and hint.get("type") == "map" and hint.get("locations"):
             self.last_locations = list(hint["locations"])
@@ -3256,6 +3286,171 @@ class _Planner:
                                                                          "_geo": plan["geo"]},
                 "group": "map", "emphasis": "high", "cue": "place", "layout": "map", "auto_map": True,
                 "auto_id": plan["id"], "auto_section": section}
+
+    # ------------------------------------------------------ real data graphics
+    def _data_at(self, seg, f: dict) -> Optional[Tuple[float, str]]:
+        """
+        When the chart comes in and the word it comes in on: (seconds, word), or None when none of the fact's words
+        is among the line's timed words. On the fact's first word as said - unless the number comes so long after
+        it that the chart's figure would land before the number is spoken: then on the first word that leaves the
+        figure landing on (or just after) its number, a word that times only itself (never an earlier "the").
+        """
+        found = []
+        for k in f["keys"]:
+            got = _said([seg], {"_key": k})
+            if got is not None:
+                found.append((float(got[0]), k))
+        if not found:
+            return None
+        first = min(found)
+        num_key = datagraphics._key_of(f.get("said")) if f.get("said") is not None else ""
+        number = next((t for t, k in found if k == num_key), None)
+        land = min(float(((templates.get(t) or {}).get("defaults") or {}).get("sfxAt") or 40)
+                   for t in datagraphics.LOOKS.values()) / 30.0
+        if number is None or number - land <= first[0] + 0.05:
+            return first
+        words = list(getattr(seg, "words", None) or [])
+        for w in words:
+            start = _attr(w, "start")
+            text = re.sub(r"^[^\w$]+|[^\w%]+$", "", str(_attr(w, "text") or ""))
+            if start is None or not text or float(start) < number - land - 1e-6:
+                continue
+            if float(start) > number:
+                break
+            got = _key_span(words, text)
+            if got is not None and abs(got[0] - float(start)) < 1e-6:
+                return float(start), text
+        return number, num_key
+
+    def _data_select(self) -> None:
+        """
+        Every measurable fact the narration states (datagraphics.detect) with what becomes of it, and the lines that
+        show a chart of its real data: the data fetched (this job's store), its first word among the line's timed
+        words, none in the first DATA_GRAPHICS_HOOK_SECONDS unless the line says the number, at most one per
+        DATA_GRAPHICS_GAP seconds and the same entity and metric once per REPEAT_SECONDS - the strongest first (a
+        number said, the entity named), then the earliest.
+        """
+        store = datagraphics.current()
+        try:
+            facts = datagraphics.detect([getattr(s, "text", "") or "" for s in self.segments], self.brief)
+        except Exception as e:  # noqa: BLE001 - a chart is a nicety, never a failure
+            print(f"[treatments] data graphics skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+            return
+        hook = float(config.DATA_GRAPHICS_HOOK_SECONDS)
+        for f in facts:
+            i = f["line"]
+            rep = {"line": i, "entity": f["entity"], "metric": f["metric"], "said": f["saidText"], "status": ""}
+            self.data_report.append(rep)
+            scene = self.scenes[i] if i < len(self.scenes) else {}
+            if i >= len(self.segments) or (scene.get("media") or {}).get("type") == "animation":
+                rep["status"] = "skipped: the line is already a full-screen graphic"
+                continue
+            series = store.get(f["key"]) if store is not None else None
+            if not series:
+                rep["status"] = "no data: " + (store.why(f["key"]) if store is not None else "nothing was fetched")
+                continue
+            got = self._data_at(self.segments[i], f)
+            if got is None:
+                rep["status"] = "skipped: its words are not among the line's timed words"
+                continue
+            at, word = got
+            if at < hook and f.get("said") is None:
+                rep["status"] = f"skipped: the first {hook:g} s, and the line says no number"
+                continue
+            self.data_cands.append(dict(f, at=at, word=word, series=series, rep=rep,
+                                        strength=(2 if f.get("said") is not None else 0) + (1 if f.get("named") else 0)))
+        gap = float(config.DATA_GRAPHICS_GAP)
+        chosen: List[dict] = []
+        for c in sorted(self.data_cands, key=lambda c: (-c["strength"], c["at"])):
+            if c["line"] in {o["line"] for o in chosen}:
+                c["rep"]["status"] = "skipped: one data graphic per line"
+            elif any(o["entity"] == c["entity"] and o["metric"] == c["metric"]
+                     and abs(c["at"] - o["at"]) < datagraphics.REPEAT_SECONDS for o in chosen):
+                c["rep"]["status"] = "skipped: the same chart shortly before or after"
+            elif any(abs(c["at"] - o["at"]) < gap for o in chosen):
+                c["rep"]["status"] = f"skipped: another data graphic within {gap:g} s"
+            else:
+                chosen.append(c)
+        self.data_chosen = {c["line"]: c for c in chosen}
+
+    def _data_late(self, i: int) -> Optional[dict]:
+        """A fact on line i that was not chosen but fits now: the one that took its room never showed."""
+        gap = float(config.DATA_GRAPHICS_GAP)
+        ahead = [o for o in self.data_chosen.values() if o["line"] > i]
+        for c in self.data_cands:
+            if c["line"] != i or not c["rep"]["status"].startswith("skipped: another data graphic"):
+                continue
+            if all(abs(c["at"] - s["at"]) >= gap for s in self.data_shown) \
+                    and all(abs(c["at"] - o["at"]) >= gap for o in ahead) \
+                    and not any(s["entity"] == c["entity"] and s["metric"] == c["metric"]
+                                and abs(c["at"] - s["at"]) < datagraphics.REPEAT_SECONDS for s in self.data_shown):
+                return c
+        return None
+
+    @staticmethod
+    def _data_look_fits(c: dict, look: str) -> bool:
+        if look == "gauge":
+            return c["metric"] == "percent_full"
+        if look == "bars":
+            return c["metric"] == "drought"
+        if look == "line":
+            return len((c["series"] or {}).get("points") or []) >= 2
+        return not c.get("record")
+
+    def _data_request(self, i: int, seg) -> Optional[dict]:
+        """The data graphic line i shows (_data_select's choice, or one that fits now), as a must-show request for
+        its look - the next look in turn when the last data graphic used the same one - or None."""
+        c = self.data_chosen.get(i) or self._data_late(i)
+        if c is None:
+            return None
+        look = c["look"]
+        if look == self.data_last_look and self._data_look_fits(c, datagraphics.ALTERNATE.get(look, look)):
+            look = datagraphics.ALTERNATE[look]
+        tid = datagraphics.LOOKS.get(look, "")
+        if not templates.get(tid) or templates.banned(tid):
+            c["rep"]["status"] = "skipped: its look is not allowed in this video"
+            return None
+        try:
+            props, data = datagraphics.build(c, c["series"], look)
+        except Exception as e:  # noqa: BLE001 - a chart is a nicety, never a failure
+            c["rep"]["status"] = f"skipped: {type(e).__name__}: {str(e)[:120]}"
+            return None
+        c["look_used"] = look
+        return {"ids": [tid], "first": tid, "props": dict(props, _key=c["word"], _data=data), "cue": "data",
+                "group": "data", "emphasis": "high", "layout": "full", "mode": "must", "data": c}
+
+    def _data_placed(self, c: dict, got: dict, cues: List[dict], at: float) -> None:
+        """A data graphic landed: the report (with the narration's number checked against the live one)."""
+        ov = self.overlays[got["idx"]]
+        start = int(ov["startFrame"]) / float(self.fps)
+        series = c["series"]
+        c["rep"].update(status="shown", at=round(start, 2), look=c.get("look_used"), template=got["t"]["id"],
+                        source=series.get("sourceName"), asOf=series.get("asOf"), url=series.get("url"),
+                        check=datagraphics.check(c, series))
+        c["rep"]["_overlay"] = ov
+        self.data_shown.append({"at": start, "entity": c["entity"], "metric": c["metric"]})
+        self.data_last_look = c.get("look_used") or ""
+        for cue in cues:
+            key = _figure_key(cue)
+            if key:
+                self.seen_figures[key] = at          # the chart showed this figure: no gauge of it right after
+
+    def _data_meta(self) -> dict:
+        """The report for meta.dataGraphics: every fact, shown (when, how long, its check) or why not."""
+        items, shown, disagree = [], 0, 0
+        for rep in self.data_report:
+            r = {k: v for k, v in rep.items() if k != "_overlay"}
+            ov = rep.get("_overlay")
+            if ov is not None:
+                if any(o is ov for o in self.overlays):
+                    r["seconds"] = round(int(ov["durationInFrames"]) / float(self.fps), 2)
+                    shown += 1
+                    disagree += int((r.get("check") or {}).get("agrees") is False)
+                else:
+                    r["status"] = "dropped: another graphic took its place"
+            r["status"] = r.get("status") or "not placed: the screen was not free on its word"
+            items.append(r)
+        return {"facts": len(items), "shown": shown, "disagree": disagree, "items": items}
 
     def _animation_scene(self, seg, scene: dict, at: float, scene_frames: int) -> None:
         """The beat already IS a graphic (timeline.build filled it): no overlay on top, but it counts."""
@@ -3648,8 +3843,9 @@ class _Planner:
         prefer = set(req.get("prefer") or ())
         by_cue = req.get("props_by_cue") or {}
         by_id = req.get("props_by_id") or {}
-        if req.get("auto_map"):
-            # An auto map (src/automaps.py): its own looks, registered autoPick false, asked for by name.
+        if req.get("auto_map") or req.get("data"):
+            # An auto map (src/automaps.py) or a real data graphic (src/datagraphics.py): its own looks,
+            # registered autoPick false, asked for by name.
             for tid in req["ids"]:
                 t = templates.get(tid)
                 if t and look_fits(tid, text):
@@ -3721,7 +3917,7 @@ class _Planner:
         for t, cue, props in self._candidates(req, seg, scene, mode):
             # (The VidRush date looks carry generic cues - "caption", "date" - but only
             # the date pass, _vr_request, may place them.)
-            if t["id"] in tried or not (auto_ok(t["id"]) or req.get("auto_map")) \
+            if t["id"] in tried or not (auto_ok(t["id"]) or req.get("auto_map") or req.get("data")) \
                     or (t["id"] in VR_LOOKS and not req.get("vr")):
                 continue
             tried.add(t["id"])
@@ -3762,6 +3958,7 @@ class _Planner:
         motion = props.pop("_motion", "")
         key = props.pop("_key", "")
         geo = props.pop("_geo", None)
+        data_doc = props.pop("_data", None)
         resolved = templates.resolve(t["id"], style=self.style, entrance=motion, props=props, pack=self.pack)
         if not resolved:
             return None
@@ -3848,6 +4045,8 @@ class _Planner:
         overlay.pop("seconds", None)
         if geo:
             overlay["geo"] = geo           # the auto map's geometry (src/automaps.py), drawn by the renderer
+        if data_doc:
+            overlay["data"] = data_doc     # the real data a chart draws (src/datagraphics.py, LibRealData.tsx)
         if t["id"] in VR_LOOKS:
             # One theme for every date and time look of the video, whatever the pack's colour.
             overlay["theme"] = self.vr_theme

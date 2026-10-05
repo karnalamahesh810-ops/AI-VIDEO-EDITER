@@ -293,9 +293,11 @@ def parse(raw: Any) -> Optional[dict]:
     if (raw.get("font") or raw.get("fontFamily")) and not named_font:
         warnings.append(f"font {str(raw.get('font') or raw.get('fontFamily'))[:40]!r} is not one the renderer has")
     caption = str(raw.get("caption_style") or raw.get("captionStyle") or "").strip().lower()
-    if caption and caption not in templates.load().get("captionStyles", {}):
+    # An older id (documentary, news, modern, case) is kept as its closest new style.
+    known = templates.caption_style_id(caption, default=False) if caption else ""
+    if caption and not known:
         warnings.append(f"caption style {caption[:30]!r} unknown")
-        caption = ""
+    caption = known
     kit = {
         "id": _text(raw.get("id"), 64), "name": _text(raw.get("name"), 80) or "Brand kit",
         "accent": accent, "accent2": accent2, "font": named_font, "caption_style": caption or None,
