@@ -665,7 +665,8 @@ class Library:
             review_reason=entry.get("review_reason") or "",
             content_description=entry.get("description") or "",
             relevance_score=entry.get("relevance"), quality=entry.get("quality"),
-            moment_key=entry["id"])
+            moment_key=entry["id"],
+            judged_by="library")                # judged for the line it was first found for
 
     # ------------------------------------------------------------------ #
     # Keeping this job's good clips and photos

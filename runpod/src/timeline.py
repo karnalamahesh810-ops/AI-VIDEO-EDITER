@@ -1531,6 +1531,11 @@ def _build(segments: List[Segment], shots: List[dict],
                 "contentDescription": getattr(asset, "content_description", "") or "",
                 "relevanceScore": getattr(asset, "relevance_score", None),
                 "qualityScore": getattr(asset, "quality", None),
+                # How that verdict was reached (media.MediaAsset.judged_by) and, for a hook clip, the
+                # opening check on this very cut (src/hookcheck.py).
+                **({"judgedBy": asset.judged_by} if asset is not None and getattr(asset, "judged_by", "") else {}),
+                **({"cutCheck": dict(asset.cut_check)} if asset is not None and getattr(asset, "cut_check", None)
+                   else {}),
                 "provider": getattr(asset, "source", "") or "",
                 # What makes this clip this clip (video id + moment), so the
                 # clip library can keep and re-find it.
