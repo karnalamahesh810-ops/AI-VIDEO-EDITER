@@ -1364,6 +1364,8 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
         wanted += [(m, "url"), (m, "thumbnail")]
         if m.get("type") in ("video", "image") and str(m.get("url") or "").startswith(("http://", "https://")):
             needed.add(str(m["url"]))
+        # A living photo's depth layers (src/living.py): through the S3 API like the still itself.
+        wanted += [(x, "url") for x in _living_layers(m)]
         anim = scenes[i].get("animation")
         if isinstance(anim, dict):
             wanted += [(x, "url") for x in anim.get("media") or [] if isinstance(x, dict)]
@@ -1410,6 +1412,13 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
             for url, path in ex.map(get, list(targets.items())):
                 if path:
                     got[url] = path
+    # A living photo with a layer storage refused is drawn flat - on every machine alike, since
+    # storage gives every machine the same answer (a layer that would 404 in the renderer
+    # fails the chunk otherwise).
+    for i in on:
+        m = scenes[i].get("media") or {}
+        if any(str(x.get("url") or "") in gone for x in _living_layers(m)):
+            m.pop("living", None)
     for m, field in wanted:
         url = str(m.get(field) or "")
         if url in got:
@@ -1420,6 +1429,13 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
             "seconds": round(time.time() - started, 1),
             # Scenes' own files storage refused: this range cannot be drawn, here or anywhere.
             **({"missing": missing, "status": gone[missing[0]]} if missing else {})}
+
+
+def _living_layers(m) -> List[dict]:
+    """The depth layer dicts of a living photo's media (media.living.layers), or []."""
+    liv = m.get("living") if isinstance(m, dict) else None
+    layers = liv.get("layers") if isinstance(liv, dict) else None
+    return [x for x in layers if isinstance(x, dict)] if isinstance(layers, list) else []
 
 
 def _missing_error(missing: List[str], status: int) -> str:

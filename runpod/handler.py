@@ -84,6 +84,7 @@ from src import recut, restore
 from src import batch, sources
 from src import tts
 from src import sharpness
+from src import living
 
 
 def _work_dir(job_id: str) -> str:
@@ -562,11 +563,42 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
             scene["reviewRequired"] = True
             scene["reviewReason"] = "Media could not be saved; re-source before rendering"
             failures += 1
+    _publish_living(doc, project_id, job_id)
     doc["meta"]["publishedMedia"] = len(published)
     if failures:
         doc["meta"]["warnings"].append(
             f"{failures} scene(s) could not be saved to storage.")
     return len(published)
+
+
+def _publish_living(doc: dict, project_id: str, job_id: str = "") -> dict:
+    """
+    The depth layers of living photos (src/living.py) go up with the scene
+    media, to Cloudflare R2 only: a public link that never expires, like the
+    scene files. Without R2 scene media a layered still is drawn flat - a
+    signed link would lapse and nothing re-signs layers. Never fails the job.
+    """
+    if not living.blocks(doc):
+        return {}
+    put = None
+    if project_id and _scene_media_on_r2():
+        def put(local: str, obj: str) -> str:
+            return r2.upload(local, r2.tokened(obj), content_type=r2.content_type(local),
+                             deadline=time.time() + config.R2_MEDIA_UPLOAD_SECONDS, cache_control=r2.IMMUTABLE)
+    try:
+        got = living.publish(doc, put, f"projects/{project_id or 'adhoc'}/media")
+    except Exception as e:  # noqa: BLE001 - the stills are drawn flat
+        print(f"[living] layers not saved: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        got = {"dropped": len(living.blocks(doc))}
+        for _i, _liv in living.blocks(doc):
+            living.drop(doc["scenes"][_i]["media"])
+    if got.get("uploaded") or got.get("dropped"):
+        print(f"[living] {got.get('uploaded', 0)} layer file(s) saved, {got.get('dropped', 0)} still(s) "
+              "left flat", flush=True)
+        meta = doc.setdefault("meta", {})
+        if isinstance(meta.get("living"), dict):
+            meta["living"]["published"] = got
+    return got
 
 
 def _source_with_pools(jobs: list, work: str, *, require_cc: bool, exclude: set, source_rest,
@@ -1382,6 +1414,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if config.REFRAME_ENABLED:
         report("Framing shots on their subjects")
         doc["meta"]["reframe"] = reframe.place(doc)
+    # Living photos (src/living.py): each eligible still cut into depth layers
+    # from its full-size file, which the renderer moves against each other over
+    # the still's own move. Time-boxed; a picture without layers stays flat.
+    if config.LIVING_PHOTOS:
+        report("Giving still pictures depth")
+        doc["meta"]["living"] = living.place(doc)
     # The source tags (src/sources.py) with the pictures final: one whose corner has a face under it
     # takes the other low corner or is left out, and none stays on a scene that became a full-screen
     # graphic. A no-op for a video with no source tag (every video while SOURCE_TAGS is off).
@@ -1700,6 +1738,12 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
     scene["query"] = query
     scene["motion"] = (timeline._IMAGE_MOTIONS[idx % len(timeline._IMAGE_MOTIONS)]
                        if asset.kind == "image" else "none")
+    if config.LIVING_PHOTOS and asset.kind == "image":
+        # The new still's depth layers, as a plan makes them (src/living.py).
+        try:
+            living.place_one(doc, idx)
+        except Exception as e:  # noqa: BLE001 - drawn flat
+            print(f"[living] replacement left flat: {type(e).__name__}: {str(e)[:100]}", flush=True)
     scene["reviewRequired"] = bool(asset.review_required)
     scene["reviewReason"] = asset.review_reason or ""
     alternatives = list(asset.alternatives or [])
@@ -2568,7 +2612,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "DIRECTOR_ROUTINE_MODEL",
                       # The cost plan (2026-10-05): each lever is off until a job turns it on for an A/B.
                       "DIRECTOR_REASONING_EFFORT", "DIRECTOR_ROUTINE_REASONING_EFFORT", "VISION_TILE_MODEL",
-                      "JUDGE_MEMORY")
+                      "JUDGE_MEMORY",
+                      # Living photos (src/living.py): stills drawn as depth layers (2.5D parallax).
+                      "LIVING_PHOTOS", "LIVING_PHOTOS_SECONDS", "LIVING_PHOTOS_STRENGTH",
+                      "LIVING_PHOTOS_MIN_SECONDS", "LIVING_PHOTOS_MAX_LAYERS")
 
 
 def _apply_config(overrides) -> dict:
@@ -2924,6 +2971,8 @@ def handler(job):
                     # The baked-in CPU models (Dockerfile: scripts/fetch_models.py).
                     "localVision": localvision.available(),
                     "upscaler": upscale.available(),
+                    # Living photos' depth model (src/living.py): baked in, and on for this worker or not.
+                    "livingPhotos": living.status(),
                     "r2": r2.enabled(),
                     # Script -> video: whether a script-only job can have its narration made here.
                     "freeVoice": tts.status(),

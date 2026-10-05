@@ -173,6 +173,35 @@ export interface MediaReframe {
  */
 export type SceneReframe = "off" | "auto" | false | null | { from: Box; to: Box };
 
+/** One depth layer of a living photo (src/living.py), listed back to front. */
+export interface LivingLayer {
+  url: string;
+  /** Its depth, 0 = far .. 1 = near: how far it moves against the others. */
+  depth: number;
+  /** Cut to its own box ([x0, y0, x1, y1], shares of the picture); absent = the whole picture. */
+  box?: [number, number, number, number];
+}
+
+/**
+ * A still drawn with real depth (src/living.py; transitions/livingPhoto.tsx):
+ * the scene's own move on the stack, each layer moved against it by its
+ * depth. Bound to the picture by `source`; missing or unloadable layers =
+ * the flat picture, as before.
+ */
+export interface MediaLiving {
+  v?: number;
+  layers: LivingLayer[];
+  /** The nearest layer's middle (shares of the picture): the camera moves about it. */
+  focus?: { x: number; y: number };
+  /** The picture's width / height the layers were cut at. */
+  aspect?: number;
+  /** The shift between the nearest and the farthest layer over a shot (a share of the frame). */
+  strength?: number;
+  quality?: number;
+  source?: string;
+  by?: string;
+}
+
 export interface SceneMedia {
   /** "animation": the scene is a full-screen motion graphic (scene.animation). */
   type: "video" | "image" | "color" | "animation";
@@ -194,6 +223,8 @@ export interface SceneMedia {
   /** Smart reframing: what was found in the picture, and the move planned for it. */
   focus?: MediaFocus;
   reframe?: MediaReframe;
+  /** A still's depth layers (living photos); absent = drawn flat. */
+  living?: MediaLiving;
 }
 
 export interface Scene {
@@ -226,6 +257,8 @@ export interface Scene {
   frame?: "full" | "inset" | "window";
   /** The editor's reframing choice for this scene (see SceneReframe). */
   reframe?: SceneReframe;
+  /** The editor's say on a living photo: "off" (or false) = the still drawn flat; absent / "auto" = its layers. */
+  living?: "off" | "auto" | false | null;
   /** Per-clip effect drawn over / applied to the media. */
   effect?: SceneEffect;
   /** Vision-model match record: what the frames actually show, and how well. */

@@ -8,6 +8,10 @@ Bake the local models into the image (run once at docker build).
 * YuNet face detector 2023mar, ONNX (OpenCV Zoo on Hugging Face, MIT) and
   U2-Net-p salient-object maps, ONNX (U-2-Net, Apache-2.0; the export rembg
   publishes) for src/reframe.py - 0.2 MB + 4.6 MB.
+* Depth-Anything-V2-Small, fp32 ONNX (onnx-community's transformers.js
+  export of depth-anything/Depth-Anything-V2-Small, Apache-2.0) for
+  src/living.py - ~99 MB. Only the Small model: Depth-Anything-V2 Base and
+  Large are CC-BY-NC (non-commercial) and must never be baked in.
 
 Every file is pinned to a revision and checked against its SHA-256; a
 mismatch fails the build rather than shipping an unknown model.
@@ -41,6 +45,11 @@ REFRAME_FILES = {
         "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
         "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8"),
 }
+# Living photos (src/living.py): relative depth of a still. Apache-2.0 (the Small model only).
+DEPTH_REPO = "onnx-community/depth-anything-v2-small"
+DEPTH_REV = "4472b7362082ad9968fee890ca0f1e5aca36b93d"
+DEPTH_FILE = ("onnx/model.onnx", "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c")
+DEPTH_DEST = os.path.join("depth-anything-v2-small", "model.onnx")
 
 
 def sha(data: bytes) -> str:
@@ -83,6 +92,16 @@ def main() -> None:
         with open(os.path.join(ROOT, name), "wb") as fh:
             fh.write(data)
         print(f"reframe {name}: {len(data) // 1000} KB")
+
+    name, want = DEPTH_FILE
+    data = get(f"https://huggingface.co/{DEPTH_REPO}/resolve/{DEPTH_REV}/{name}")
+    if sha(data) != want:
+        raise SystemExit(f"checksum mismatch for {DEPTH_REPO}/{name}")
+    dest = os.path.join(ROOT, DEPTH_DEST)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "wb") as fh:
+        fh.write(data)
+    print(f"depth {DEPTH_DEST}: {len(data) // 1_000_000} MB")
 
 
 if __name__ == "__main__":

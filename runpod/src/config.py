@@ -911,6 +911,23 @@ REFRAME_MIN_CONFIDENCE = float(os.getenv("REFRAME_MIN_CONFIDENCE", "0.45"))
 # maps (Apache-2.0, 4.6 MB ONNX); both baked in by scripts/fetch_models.py.
 FACE_MODEL = os.getenv("FACE_MODEL", "/opt/models/face_detection_yunet_2023mar.onnx")
 SALIENCY_MODEL = os.getenv("SALIENCY_MODEL", "/opt/models/u2netp.onnx")
+# Living photos (src/living.py): a still moves with real depth - its depth map
+# (Depth-Anything-V2-Small, Apache-2.0, ONNX on the CPU) cuts it into 2-3 layers
+# along occlusion edges, and the renderer moves the nearer ones a little more
+# than the farther ones over the scene's own move (2.5D parallax instead of a
+# flat Ken Burns). Off by default until the owner has seen the demo; a job turns
+# it on with config {"LIVING_PHOTOS": true}. LIVING_PHOTOS_SECONDS boxes the whole
+# video, LIVING_PHOTOS_PARALLEL pictures at once (~0.4 s of one core each for the
+# depth, ~1 s with the layers); LIVING_PHOTOS_STRENGTH is the relative shift
+# between the nearest and the farthest layer over a shot (a share of the frame);
+# no living move on a shot shorter than LIVING_PHOTOS_MIN_SECONDS.
+LIVING_PHOTOS = _flag("LIVING_PHOTOS", False)
+LIVING_PHOTOS_SECONDS = float(os.getenv("LIVING_PHOTOS_SECONDS", "90"))
+LIVING_PHOTOS_PARALLEL = int(os.getenv("LIVING_PHOTOS_PARALLEL", "6"))
+LIVING_PHOTOS_STRENGTH = float(os.getenv("LIVING_PHOTOS_STRENGTH", "0.06"))
+LIVING_PHOTOS_MIN_SECONDS = float(os.getenv("LIVING_PHOTOS_MIN_SECONDS", "1.5"))
+LIVING_PHOTOS_MAX_LAYERS = int(os.getenv("LIVING_PHOTOS_MAX_LAYERS", "3"))
+LIVING_DEPTH_MODEL = os.getenv("LIVING_DEPTH_MODEL", "/opt/models/depth-anything-v2-small/model.onnx")
 # Vertical / square phone video (news-compilation styles, src/styles.py):
 # accepted and framed on a blurred copy of itself before render, the way news
 # compilation channels show TikTok/X clips. The sharp band keeps the middle
