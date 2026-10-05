@@ -786,7 +786,7 @@ _CAPTION_BASE = {"font": "inter", "weight": 500, "size": 50, "lineHeight": 1.24,
                  "radius": 0, "align": "center", "highlight": "none", "dim": 1.0, "lineChars": 42,
                  "charWidth": 0.5, "bottom": 0.09}
 CAPTION_STYLES = {
-    "netflix": {**_CAPTION_BASE, "name": "Netflix",
+    "netflix": {**_CAPTION_BASE, "name": "Streaming",
                 "description": "White medium sans with a soft drop shadow and no box - the streaming-service look."},
     "cinema_box": {**_CAPTION_BASE, "name": "Cinema box", "font": "geist", "size": 46, "shadow": "none",
                    "background": "box", "boxColor": "rgba(12,12,14,0.72)", "radius": 6, "charWidth": 0.52,

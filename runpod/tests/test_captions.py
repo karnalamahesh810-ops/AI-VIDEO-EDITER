@@ -430,7 +430,7 @@ class Renderer(unittest.TestCase):
         lt = {"template": "LIB_VR_CAPTION_TYPED", "type": "motion", "text": "Glen Canyon Dam, 1983", "startFrame": 0,
               "durationInFrames": 120}
         plan = self.run_calls({"op": "plan", "doc": self._doc("netflix", [lt])})[0]
-        self.assertEqual(plan["style"]["name"], "Netflix")
+        self.assertEqual(plan["style"]["name"], "Streaming")
         modes = [(c["from"], p["mode"]) for c, p in zip(plan["cues"], plan["places"])]
         self.assertEqual(modes[0][1], "lifted")                          # on screen with the lower third
         self.assertTrue(all(m == "default" for f, m in modes if f >= 150), modes)
