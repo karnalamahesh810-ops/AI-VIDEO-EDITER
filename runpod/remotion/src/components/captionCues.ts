@@ -82,11 +82,13 @@ const WORDLESS = /^[^\p{L}\p{N}]+$/u;
  */
 export function cleanWords(words: CueWord[]): CueWord[] {
   const out: CueWord[] = [];
+  // A missing time is missing (Number(null) would read it as 0 s and set the word at the very start).
+  const num = (v: unknown) => (v === null || v === undefined || v === "" ? NaN : Number(v));
   const sorted = (words || [])
-    .filter((w) => w && typeof w.text === "string" && w.text.trim() && Number.isFinite(Number(w.start)))
+    .filter((w) => w && typeof w.text === "string" && w.text.trim() && Number.isFinite(num(w.start)))
     .map((w) => {
-      const start = Math.max(0, Number(w.start));
-      const end = Number.isFinite(Number(w.end)) ? Math.max(start, Number(w.end)) : start;
+      const start = Math.max(0, num(w.start));
+      const end = Number.isFinite(num(w.end)) ? Math.max(start, num(w.end)) : start;
       return { text: w.text.trim().replace(/\s+/g, " "), start, end };
     })
     .sort((a, b) => a.start - b.start);
@@ -113,10 +115,11 @@ export function cleanWords(words: CueWord[]): CueWord[] {
 const SENTENCE_END = /[.!?…]["'”’)\]]*$/;
 const CLAUSE_END = /([,;:]["'”’)\]]*|\s?[—–]|--)$/;
 // A line or cue may well start with these: conjunctions, relative words, prepositions, a clause's subject.
+// Not "of": it binds to the noun before it ("the size / of cars", "every rule / of geology" read badly).
 const BREAK_BEFORE = new Set([
   "and", "but", "or", "nor", "so", "yet", "because", "which", "who", "whom", "whose", "that", "when", "where",
   "while", "until", "unless", "although", "though", "if", "as", "after", "before", "since", "than", "then",
-  "to", "of", "in", "on", "at", "for", "with", "from", "by", "into", "onto", "over", "under", "through",
+  "to", "in", "on", "at", "for", "with", "from", "by", "into", "onto", "over", "under", "through",
   "across", "about", "against", "between", "during", "without", "within", "along", "around", "behind",
   "beyond", "toward", "towards", "upon", "instead", "despite", "above", "below", "beneath", "underneath",
   "inside", "outside", "near", "past", "like", "among", "throughout", "i", "we", "they", "he", "she", "it",
@@ -184,9 +187,13 @@ interface Split {
  * words do not fit two lines.
  */
 function splitLines(len: (a: number, b: number) => number, costs: number[], a: number, b: number,
-  max: number, tail: (a: number, b: number) => number): Split | null {
+  max: number, tail: (a: number, b: number) => number, ends: boolean[]): Split | null {
   if (len(a, b) <= max || a === b) return { k: -1, cost: 0 };
   const n = b - a + 1;
+  // A sentence that ends inside a line, the next one going on after it on the same line ("the only
+  // thing / they could. They closed that spillway"), reads badly: on two lines, a sentence ends a line.
+  let inner = 0;
+  for (let k = a; k < b; k++) if (ends[k]) inner++;
   let best: Split | null = null;
   for (let k = a; k < b; k++) {
     const top = len(a, k);
@@ -196,7 +203,7 @@ function splitLines(len: (a: number, b: number) => number, costs: number[], a: n
     const bottomWords = b - k;
     // An orphan: one word alone on a line (allowed only when the cue is that short).
     if (n >= 4 && (topWords < 2 || bottomWords < 2)) continue;
-    let cost = costs[k] + Math.abs(top - bottom) * 0.12 + tail(a, k);
+    let cost = costs[k] + Math.abs(top - bottom) * 0.12 + tail(a, k) + (inner - (ends[k] ? 1 : 0)) * 5;
     if (top > bottom) cost += (top - bottom) * 0.05;          // a pyramid: the top line the shorter
     if (n === 3 && Math.min(topWords, bottomWords) === 1) cost += 4;
     if (!best || cost < best.cost) best = { k, cost };
@@ -229,17 +236,19 @@ export function buildCues(input: CueWord[], options: CueOptions = {}): Cue[] {
     }
   }
   const costs = ws.map((_, i) => breakCost(ws, i, shots));
+  const ends = ws.map((w) => SENTENCE_END.test(w.text));
   const prefix = [0];
   for (const w of ws) prefix.push(prefix[prefix.length - 1] + w.text.length);
   const len = (a: number, b: number) => prefix[b + 1] - prefix[a] + (b - a);
   const max = o.maxLineChars;
-  // The first words of the next sentence left dangling at the end of a line or cue ("... planned for. So").
+  // The first words of the next sentence left dangling at the end of a line or cue ("... planned for. So"),
+  // a few words dearest; a longer run of them still costs ("A ghost town. A brand new waterfall that").
   const tail = (a: number, b: number): number => {
     if (b >= n - 1 || SENTENCE_END.test(ws[b].text)) return 0;
     for (let k = b - 1; k >= a; k--) {
       if (SENTENCE_END.test(ws[k].text)) {
         const rest = len(k + 1, b);
-        return rest < 24 ? 10 - rest * 0.3 : 0;
+        return rest < 24 ? 10 - rest * 0.3 : 4;
       }
     }
     return 0;
@@ -257,7 +266,7 @@ export function buildCues(input: CueWord[], options: CueOptions = {}): Cue[] {
   };
 
   const cueCost = (a: number, b: number): { cost: number; split: Split } | null => {
-    const split = splitLines(len, costs, a, b, max, tail);
+    const split = splitLines(len, costs, a, b, max, tail, ends);
     if (!split) return null;
     const chars = len(a, b);
     const span = ws[b].end - ws[a].start;

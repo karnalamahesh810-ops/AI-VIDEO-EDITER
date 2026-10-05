@@ -55,10 +55,13 @@ export function textShadow(style: CaptionStyleDef, unit: number): string {
     }
   }
   if (style.shadow === "soft") {
-    layers.push(`0 0 ${px(2)} rgba(0,0,0,0.85)`, `0 ${px(1)} ${px(3)} rgba(0,0,0,0.8)`,
-      `0 ${px(2)} ${px(12)} rgba(0,0,0,0.55)`);
+    // A tight dark edge (holds white letters on a white shirt, snow or sky), a close drop and a wide
+    // soft one - still a shadow, not an outline.
+    layers.push(`0 0 ${px(1.5)} rgba(0,0,0,0.9)`, `0 0 ${px(4)} rgba(0,0,0,0.55)`,
+      `0 ${px(2)} ${px(4)} rgba(0,0,0,0.75)`, `0 ${px(3)} ${px(16)} rgba(0,0,0,0.5)`);
   } else if (style.shadow === "subtle") {
-    layers.push(`0 ${px(1)} ${px(2)} rgba(0,0,0,0.75)`, `0 0 ${px(10)} rgba(0,0,0,0.38)`);
+    layers.push(`0 0 ${px(1.2)} rgba(0,0,0,0.75)`, `0 ${px(1)} ${px(3)} rgba(0,0,0,0.7)`,
+      `0 0 ${px(12)} rgba(0,0,0,0.4)`);
   }
   return layers.length ? layers.join(", ") : "none";
 }

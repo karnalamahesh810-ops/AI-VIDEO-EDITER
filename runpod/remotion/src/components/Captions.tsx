@@ -5,6 +5,7 @@ import { cueAt } from "./captionCues";
 import { planCaptions, type CaptionPlan } from "./captionPlan";
 import { BOX_GAP, BOX_PAD, LEFT_EDGE, bandHeight, bandPad, unitFor } from "./captionLayout";
 import { highlightColor, rgba, textStyle } from "./captionStyle";
+import { fadeRange } from "./layout";
 
 /**
  * The burned-in subtitles: one track over the whole narration (Main.tsx),
@@ -31,8 +32,9 @@ const Band: React.FC<{ plan: CaptionPlan; frame: number; fade: number }> = ({ pl
   const { width, height } = useVideoConfig();
   const run = plan.bands.find(([a, b]) => frame >= a && frame < b);
   if (!run) return null;
-  const f = Math.min(fade, Math.max(1, Math.floor((run[1] - run[0]) / 3)));
-  const opacity = interpolate(frame, [run[0], run[0] + f, run[1] - f, run[1]], [0, 1, 1, 0], clamp);
+  // fadeRange: strictly increasing for any run, a 2-frame one too (a cue cut short by a lifted one
+  // after it) - interpolate() throws on a repeated point and would fail the render.
+  const opacity = interpolate(frame - run[0], fadeRange(run[1] - run[0], fade), [0, 1, 1, 0], clamp);
   return (
     <AbsoluteFill style={{ justifyContent: "flex-end", pointerEvents: "none" }}>
       <div style={{ height: bandHeight(plan.style, width, height), background: plan.style.boxColor, opacity }} />
@@ -72,9 +74,12 @@ export const CaptionTrack: React.FC<{ props: TrackProps }> = ({ props }) => {
       const next = words[words.indexOf(w) + 1];
       const on = interpolate(nowSec - w.start, [0, HIGHLIGHT_SECONDS], [0, 1], clamp)
         * (next ? 1 - interpolate(nowSec - next.start, [0, HIGHLIGHT_SECONDS], [0, 1], clamp) : 1);
-      const mix = (v: number) => Math.round(255 + (v - 255) * on);
+      // The other words a solid, slightly dimmer white (not see-through: a translucent letter lets its
+      // own shadow through and turns grey and soft over bright water or sky).
+      const base = 255 * style.dim;
+      const mix = (v: number) => Math.round(base + (v - base) * on);
       return (
-        <span key={wi} style={{ color: rgba([mix(hi[0]), mix(hi[1]), mix(hi[2])], style.dim + (1 - style.dim) * on) }}>
+        <span key={wi} style={{ color: rgba([mix(hi[0]), mix(hi[1]), mix(hi[2])], 1) }}>
           {wi ? " " : ""}{w.text}
         </span>
       );

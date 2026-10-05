@@ -11,7 +11,7 @@ look: a hex mask of 8 digits per row, top row first; bit c = column c). A
 picture a look shows is a transparent stand-in: a subtitle may sit over a
 photo as it sits over footage, never over the look's own labels and frames.
 
-    cd runpod && SKIP_DOTENV=1 python scripts/build_caption_footprints.py [--only LIB_LT_] [--keep DIR]
+    cd runpod && SKIP_DOTENV=1 python scripts/build_caption_footprints.py [--only LIB_LT_,CMP_] [--keep DIR]
 
 Run it after adding or changing looks; a look without a footprint is treated
 as covering nothing unless it is moved to a bottom position (captionPlace.ts
@@ -79,6 +79,27 @@ SAMPLE_BY_COMPONENT = {
     "ring-stat": {"text": "full", "value": 26, "suffix": "%"},
     "bullets": {"text": "What failed", "items": [{"label": "Spillway lining"}, {"label": "Gate seals"},
                                                  {"label": "Forecasts"}]},
+    # The data looks draw nothing without their figures (a review on 2026-10-05 found them unmeasured),
+    # and the split's label pills sit low in the frame, right where a subtitle goes.
+    "split": {"text": "Then and now", "items": [{"label": "SPILLWAY TUNNELS"}, {"label": "CANYON WALL"}]},
+    "counter": {"text": "people displaced", "value": 12000},
+    "number-roll": {"text": "feet below full", "value": 170},
+    "trend": {"text": "LAKE POWELL", "value": 3516, "suffix": " ft", "label": "down"},
+    "donut": {"text": "full", "value": 26, "suffix": "%"},
+    "line-chart": {"text": "Lake Powell level", "suffix": " ft",
+                   "items": [{"label": "2000", "value": 3680}, {"label": "2010", "value": 3640},
+                             {"label": "2020", "value": 3600}, {"label": "2026", "value": 3516}]},
+    "area-chart": {"text": "Lake Powell level", "suffix": " ft",
+                   "items": [{"label": "2000", "value": 3680}, {"label": "2010", "value": 3640},
+                             {"label": "2020", "value": 3600}, {"label": "2026", "value": 3516}]},
+    "ranking": {"text": "Largest reservoirs", "items": [{"label": "Lake Mead", "value": 26}, {"label": "Lake Powell",
+                                                                                              "value": 24},
+                                                        {"label": "Lake Sakakawea", "value": 23},
+                                                        {"label": "Lake Oahe", "value": 22}]},
+    "scale-compare": {"text": "How big", "items": [{"label": "Lake Powell", "value": 24},
+                                                   {"label": "Lake Tahoe", "value": 120}]},
+    "year-roll": {"text": "", "items": [{"label": "1963"}, {"label": "2026"}]},
+    "progress-steps": {"text": "", "items": [{"label": "Drought"}, {"label": "Rationing"}, {"label": "Dead pool"}]},
 }
 SKIP_COMPONENTS = {"map"}
 
@@ -110,7 +131,7 @@ def sheet(only: str = "") -> dict:
     pic = stand_in_picture()
     looks = []
     for t in templates.all_templates():
-        if only and not t["id"].startswith(only):
+        if only and not t["id"].startswith(tuple(x.strip() for x in only.split(",") if x.strip())):
             continue
         if t["component"] in SKIP_COMPONENTS or t["category"] == "MAPS":
             continue
@@ -165,6 +186,18 @@ def grid_of(png_paths) -> str:
     return "".join(format(sum(1 << c for c in range(cols) if covered[r, c]), "08x") for r in range(rows))
 
 
+def without_seam(mask: str) -> str:
+    """
+    A split's footprint without its divider: the thin line between its two
+    pictures runs the full height of the frame, so a subtitle (drawn above
+    the graphics) crosses it as it would the seam between two shots - only
+    the label pills low in each half are kept clear of.
+    """
+    cols, rows = GRID
+    seam = sum(1 << c for c in range(cols // 2 - 1, cols // 2 + 1))
+    return "".join(format(int(mask[r * 8:(r + 1) * 8], 16) & ~seam & ((1 << cols) - 1), "08x") for r in range(rows))
+
+
 def write(data: dict) -> None:
     """The data file, one look per line (diffs stay readable)."""
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
@@ -175,7 +208,7 @@ def write(data: dict) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", default="", help="measure only the templates whose id starts with this")
+    ap.add_argument("--only", default="", help="measure only the templates whose id starts with this (several: comma-separated)")
     ap.add_argument("--keep", default="", help="keep the frames in this directory")
     ap.add_argument("--concurrency", type=int, default=6)
     ap.add_argument("--reuse", action="store_true", help="measure the frames already in --keep again (no drawing)")
@@ -196,7 +229,9 @@ def main() -> int:
             json.dump(props, fh)
         shutil.rmtree(frames_dir, ignore_errors=True)
         print(f"drawing {n} looks x {len(SAMPLES)} moments...", flush=True)
+        # Only the sampled frames: the composition runs on past them (Root.tsx) so no look is cut short.
         cmd = renderer._renderer_argv() + ["render", "src/index.ts", "CaptionFootprints", frames_dir, "--sequence",
+                                           f"--frames=0-{n * len(SAMPLES) - 1}",
                                            "--image-format=png", f"--scale={SCALE}", f"--props={props_path}",
                                            f"--concurrency={args.concurrency}", "--log=error",
                                            "--timeout=60000"]
@@ -212,6 +247,8 @@ def main() -> int:
     k = len(SAMPLES)
     for i, look in enumerate(props["looks"]):
         mask = grid_of(pngs[i * k:(i + 1) * k])
+        if look["overlay"].get("type") == "split":
+            mask = without_seam(mask)
         if mask.strip("0"):
             data["looks"][look["id"]] = mask
         else:

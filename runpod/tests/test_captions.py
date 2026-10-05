@@ -185,6 +185,18 @@ class Footprints(unittest.TestCase):
         self.assertGreaterEqual(min(rows_of("LIB_VR_CAPTION_TYPED")), 12)   # the typed "Place, Year" sits bottom left
         self.assertEqual(max(rows_of("LIB_VR_CAPTION_TYPED")), 17)
 
+    def test_the_split_labels_and_the_data_looks_are_measured(self):
+        # 2026-10-05 review: the split was measured without its label pills (low in each half, where a
+        # subtitle goes) and ten data looks drew nothing from empty samples, so nothing kept clear of them.
+        with open(FOOTPRINTS, encoding="utf-8") as fh:
+            data = json.load(fh)
+        split = data["looks"]["CMP_SPLIT_V1"]
+        rows = {r: int(split[r * 8:(r + 1) * 8], 16) for r in range(18)}
+        self.assertTrue(any(rows[r] for r in range(13, 17)))                 # the pills
+        self.assertFalse(any(v & (0b11 << 15) for v in rows.values()))      # not the divider between the pictures
+        for key in ("NUM_TREND_V1", "NUM_DONUT_V1", "CHART_LINE_V1", "CHART_RANKING_V1", "TL_PROGRESS_STEPS_V1"):
+            self.assertIn(key, data["looks"])
+
 
 # --------------------------------------------------------------------------- the renderer's code under node
 def _node():
@@ -437,6 +449,78 @@ class Renderer(unittest.TestCase):
         plan = self.run_calls({"op": "plan", "doc": self._doc("letterbox")})[0]
         self.assertEqual(len(plan["bands"]), 1)                         # one band through the whole run of speech
         self.assertEqual(plan["bands"][0][0], plan["cues"][0]["from"])
+
+    def test_missing_or_empty_words_never_fail_the_plan(self):
+        base = {"fps": 30, "width": 1920, "height": 1080, "durationInFrames": 300,
+                "captions": {"enabled": True, "style": "netflix"}}
+        docs = [
+            {**base, "scenes": []},
+            {**base, "scenes": [{"id": "s0", "startFrame": 0, "durationInFrames": 300, "text": ""}]},
+            {**base, "scenes": [{"id": "s0", "startFrame": 0, "durationInFrames": 300, "text": "", "words": []}]},
+            {**base, "scenes": [{"id": "s0", "startFrame": 0, "durationInFrames": 90, "text": "Old pasted script."}]},
+            {**base, "scenes": [{"id": "s0", "startFrame": 0, "durationInFrames": 300, "text": "x", "words": [
+                {"text": "", "start": 0.1, "end": 0.2}, {"text": "ok", "start": None, "end": 0.3},
+                {"text": "water", "start": 0.5, "end": None}, {"text": "  ", "start": 0.6, "end": 0.7}]}]},
+        ]
+        plans = self.run_calls(*({"op": "plan", "doc": d} for d in docs))
+        self.assertEqual([len(p["cues"]) for p in plans[:3]], [0, 0, 0])
+        self.assertEqual([c["text"] for c in plans[3]["cues"]], ["Old pasted script."])   # text without timings
+        self.assertEqual([c["text"] for c in plans[4]["cues"]], ["water"])
+        for p in plans:
+            self.assertEqual(len(p["cues"]), len(p["places"]))
+            for c in p["cues"]:
+                self.assertGreater(c["to"], c["from"])
+
+    def test_a_sentence_ends_a_line_never_runs_on_inside_one(self):
+        # 2026-10-05 review: "The engineers did the only thing / they could. They closed that spillway down".
+        text = ("The engineers did the only thing they could. They closed that spillway down as far as they "
+                "dared. Then the water coming out the bottom changed color. It had been white.")
+        words = _words(text, step=0.3)
+        cues = self.cues(words)
+        self.assert_professional(words, cues)
+        for c in cues:
+            if len(c["lines"]) < 2:
+                continue
+            for line in c["lines"]:
+                inner = [w["text"] for w in line[:-1]]
+                self.assertFalse(any(re.search(r"[.!?]$", t) for t in inner), c["text"])
+
+    def test_of_stays_with_the_noun_before_it(self):
+        words = _words("boulders the size of cars and the rule of geology")
+        costs = self.run_calls(*({"op": "break", "words": words, "i": i} for i in range(len(words) - 1)))
+        by = {words[i]["text"]: c for i, c in enumerate(costs)}
+        self.assertGreater(by["size"], by["cars"])           # "size / of" dearer than "cars / and"
+        self.assertGreater(by["rule"], by["cars"])
+
+    def test_letterbox_band_leaves_room_for_a_bottom_corner_graphic_and_never_bridges_it(self):
+        # A graphic low in the left corner, clear of the centred text but inside the band's strip:
+        # the band would cover it (the subtitles draw above the graphics), so that cue is drawn on
+        # its own line boxes and the band stops for it - before and after, the band is back.
+        corner = {"template": "LIB_VR_CAPTION_TYPED", "type": "motion", "text": "1983", "startFrame": 60,
+                  "durationInFrames": 40, "position": "bottom-left", "scale": 0.5}
+        words = "It was quiet. The gates opened. Water poured out. Nobody knew. Then the rumble came back."
+        doc = self._doc("letterbox", [corner], words_text=words)
+        plan = self.run_calls({"op": "plan", "doc": doc})[0]
+        modes = [p["mode"] for p in plan["places"]]
+        hit = [i for i, c in enumerate(plan["cues"]) if c["from"] < 100 and c["to"] > 60]
+        self.assertTrue(hit)
+        for i in hit:
+            self.assertNotEqual(modes[i], "default")
+        for a, b in plan["bands"]:
+            self.assertFalse(a < 100 and b > 60, plan["bands"])       # no band while the graphic is up
+        self.assertGreaterEqual(len(plan["bands"]), 2)
+        # A centred position never moves the letterbox band off the bottom.
+        doc = self._doc("letterbox")
+        doc["captions"]["position"] = "center"
+        plan = self.run_calls({"op": "plan", "doc": doc})[0]
+        self.assertTrue(all(p["y1"] > 0.9 for p in plan["places"]))
+
+    def test_the_subtitles_draw_above_the_graphics(self):
+        # Placed clear of every graphic, the track is drawn last (as a player draws subtitles): a cue that
+        # cannot clear a full-screen card stays readable instead of vanishing under it.
+        with open(os.path.join(REMOTION, "src", "Main.tsx"), encoding="utf-8") as fh:
+            body = fh.read().split("const Body", 1)[1]
+        self.assertLess(body.index("overlayNodes[i]"), body.index("<CaptionTrack"))
 
     def test_a_vertical_frame_sets_shorter_lines(self):
         doc = self._doc("netflix")

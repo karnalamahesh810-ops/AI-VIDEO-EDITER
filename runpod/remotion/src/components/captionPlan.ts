@@ -5,7 +5,7 @@ import footprintData from "../data/caption_footprints.json";
 import { buildCues, cueFrames, narrationWords, type FrameCue } from "./captionCues";
 import { footprintRects, guessRects, placeCue, placeRects, rectsDuring, type FootprintData, type Obstacle,
   type Placement, type Rect } from "./captionPlace";
-import { cueBox, lineCharsFor } from "./captionLayout";
+import { bandBox, cueBox, lineCharsFor } from "./captionLayout";
 
 /**
  * The subtitles of a whole video, planned once (Captions.tsx draws them):
@@ -89,16 +89,34 @@ export function planCaptions(props: PlanInput, fps: number, width: number, heigh
   const cues = cueFrames(buildCues(words, { maxLineChars: lineCharsFor(style, width, height), shotChanges: shots, fps }),
     fps);
   const obstacles = captionObstacles(props, width, height, data);
-  const places = cues.map((c) => placeCue(cueBox(c, style, width, height, props.captions?.position),
-    rectsDuring(obstacles, c.from, c.to)));
+  const band = style.background === "band" ? bandBox(style, width, height) : null;
+  // The brand logo is drawn above everything (Main.tsx), the band too: the band may run under it.
+  const graphics = obstacles.filter((o) => o.what !== "watermark");
+  const places = cues.map((c): Placement => {
+    const rects = rectsDuring(obstacles, c.from, c.to);
+    const box = cueBox(c, style, width, height, props.captions?.position);
+    const own = placeCue(box, rects);
+    if (!band) return own;
+    // Letterbox: the band spans the whole width (the subtitles draw above the graphics), so the cue
+    // sits in it only while no graphic is in that strip; else it is drawn on its own line boxes - where
+    // it would be when its own box is clear (a graphic in a bottom corner), above the graphic if not.
+    const bandClear = placeCue(band, rectsDuring(graphics, c.from, c.to)).mode === "default";
+    return own.mode !== "default" || bandClear ? own : { y1: own.y1, mode: "lifted" };
+  });
   const bands: [number, number][] = [];
-  if (style.background === "band") {
+  if (band) {
     const hold = Math.round(BAND_HOLD * fps);
+    let open = false;
     cues.forEach((c, i) => {
-      if (places[i].mode !== "default") return;
+      // A cue off the band closes it: the band never bridges a pause over a cue that left it.
+      if (places[i].mode !== "default") {
+        open = false;
+        return;
+      }
       const last = bands[bands.length - 1];
-      if (last && c.from - last[1] <= hold) last[1] = c.to;
+      if (open && last && c.from - last[1] <= hold) last[1] = c.to;
       else bands.push([c.from, c.to]);
+      open = true;
     });
   }
   return { style, cues, places, bands };

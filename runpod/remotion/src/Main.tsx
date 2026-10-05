@@ -464,11 +464,7 @@ const Body: React.FC<TimelineProps> = (props) => {
         voiceLufs={(props.meta as { voiceLufs?: unknown } | undefined)?.voiceLufs}
         volume={props.sfxEnabled === false ? 0 : Math.min(1, Math.max(0, Number(props.sfxVolume ?? 1)))} />
 
-      {/* Caption track, burned in over the visuals but under the graphics: one track over the
-          whole narration, so a phrase cue is never cut at a scene's edge (components/Captions.tsx) */}
-      {captions.enabled ? <CaptionTrack props={props} /> : null}
-
-      {/* Overlay track — graphics sit on top of everything visual (a look in the
+      {/* Overlay track — graphics sit on top of the visuals (a look in the
           bottom strip, the source tag, reads CaptionsOn to stay clear of the captions) */}
       <CaptionsOn.Provider value={Boolean(captions.enabled)}>
       {showOverlays && (overlays || []).map((ov, i) => (
@@ -482,6 +478,12 @@ const Body: React.FC<TimelineProps> = (props) => {
         </Sequence>
       ))}
       </CaptionsOn.Provider>
+
+      {/* Caption track, burned in on top, as a player draws subtitles: one track over the whole
+          narration, so a phrase cue is never cut at a scene's edge, each cue placed clear of the
+          graphics on screen with it (components/Captions.tsx). On top, a cue that cannot clear a
+          full-screen card (a map, a split's divider) stays readable instead of vanishing under it. */}
+      {captions.enabled ? <CaptionTrack props={props} /> : null}
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
       {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}

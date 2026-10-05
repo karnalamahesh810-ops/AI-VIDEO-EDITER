@@ -564,8 +564,10 @@ def _renderer_id() -> str:
         return ""
 
 
-# A subtitle cue lasts at most 7 s (remotion/src/components/captionCues.ts) and is placed for its whole run.
-CAPTION_REACH_SECONDS = 8.0
+# A subtitle cue lasts at most 7 s (remotion/src/components/captionCues.ts) and is placed for its whole run;
+# a letterbox band bridges a pause of up to 1.2 s between two cues (captionPlan.ts BAND_HOLD), so a frame
+# in such a pause depends on the graphics of the cue before it too: 7 + 1.2, and a margin.
+CAPTION_REACH_SECONDS = 9.0
 
 
 def _caption_context(doc: dict, a: int, b: int) -> dict:

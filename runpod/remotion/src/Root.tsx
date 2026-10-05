@@ -41,7 +41,10 @@ export const RemotionRoot: React.FC = () => {
       })}
     />
     {/* Not a video: every look on a transparent frame, measured for the subtitles to keep clear of
-        (scripts/build_caption_footprints.py -> data/caption_footprints.json). */}
+        (scripts/build_caption_footprints.py -> data/caption_footprints.json). It runs a look's length
+        past its last sample (never drawn: the script renders only the sampled frames), because a
+        Sequence is cut at the composition's end - the last looks would otherwise be measured mid-exit,
+        fading, and a short --only run would measure every look that way. */}
     <Composition
       id="CaptionFootprints"
       component={FootprintSheet}
@@ -50,7 +53,10 @@ export const RemotionRoot: React.FC = () => {
       width={1920}
       height={1080}
       defaultProps={sheet}
-      calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, props.looks.length * props.samples) })}
+      calculateMetadata={({ props }) => ({
+        durationInFrames: Math.max(1, props.looks.length * props.samples
+          + Math.max(0, ...props.looks.map((l) => l.overlay.durationInFrames || 0))),
+      })}
     />
     </>
   );

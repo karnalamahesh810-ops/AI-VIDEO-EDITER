@@ -46,8 +46,13 @@ export function cueBox(cue: Pick<Cue, "lines" | "width">, style: CaptionStyleDef
   const w = Math.min(0.92, textW / width);
   const h = textH / height;
   const x0 = style.align === "left" ? LEFT_EDGE : 0.5 - w / 2;
-  const y1 = position === "center" ? 0.5 + h / 2
-    : style.background === "band" ? 1 - bandPad(style, height) / height
+  // A letterbox band is always along the bottom (Captions.tsx draws it there whatever the position).
+  const y1 = style.background === "band" ? 1 - bandPad(style, height) / height
+    : position === "center" ? 0.5 + h / 2
       : 1 - bottomFor(style, width, height);
   return { x0, x1: x0 + w, h, y1 };
 }
+
+/** The letterbox band as a box: the frame's whole width along its bottom edge. */
+export const bandBox = (style: CaptionStyleDef, width: number, height: number): CueBox =>
+  ({ x0: 0, x1: 1, h: bandHeight(style, width, height) / height, y1: 1 });
