@@ -483,6 +483,34 @@ class TheHookCheck(unittest.TestCase):
         self.assertEqual(calls[0]["search"], True)
         self.assertEqual(out["lastResort"]["held"], 1)
 
+    def test_the_last_resort_covers_only_the_lines_it_cleared(self):
+        # A text card the plan left after the hook is still an "empty" scene (media colour): the last resort
+        # used to walk the whole video again - other moments, the full ladder with its model calls, one more
+        # highlight overlay - for every such card, outside the hook check's cap.
+        doc, first, second = self.glen_canyon()
+        card = scene(3, {"type": "color", "url": "", "source": "none"}, 100.0, 4.0)
+        card["text"] = "The reservoir kept falling."
+        doc["scenes"].append(card)
+        doc["overlays"].append({"type": "highlight", "text": card["text"], "startFrame": 3000, "durationInFrames": 120})
+        gapfill.remember([{"index": i, "query": f"q{i}", "start": 0.0} for i in range(4)], self.work)
+        asked = {"alternative": [], "moments": [], "ladder": []}
+
+        def judge(path, intent, context="", **kw):
+            v = dict(VERDICT, has_text_or_watermark=True, score=0.0) if path == first else dict(VERDICT)
+            return dict(v, frames=vision.opening_times(kw["span"]), span=kw["span"])
+        with mock.patch.object(vision, "judge", side_effect=judge),                 mock.patch.object(config, "SHOT_MAX_SECONDS", 7.0),                 mock.patch.object(filters, "_video_seconds", return_value=4.0),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(gapfill, "graphic_for", return_value=None),                 mock.patch.object(gapfill, "_hold", return_value=False),                 mock.patch.object(shotcap, "alternative_for",
+                                  side_effect=lambda d, k, u: asked["alternative"].append(d["scenes"][k]["id"])),                 mock.patch.object(shotcap, "other_moments",
+                                  side_effect=lambda d, todo, *a: asked["moments"].extend(
+                                      d["scenes"][k]["id"] for k in todo) or {}),                 mock.patch.object(gapfill, "fill_empty",
+                                  side_effect=lambda jobs, results, work, **kw: asked["ladder"].extend(
+                                      kw.get("indices") or [])):
+            out = hookcheck.check(doc, work=self.work)
+        self.assertEqual(out["cleared"], 1)
+        self.assertEqual(set(asked["alternative"]), {"s0000"})       # its own runner-up check, then the last resort
+        self.assertEqual(asked["moments"], ["s0000"])
+        self.assertEqual(asked["ladder"], [0])
+        self.assertEqual(sum(1 for o in doc["overlays"] if o.get("startFrame") == 3000), 1)   # no second card
+
     def test_a_near_miss_whose_opening_fits_stays_flagged_when_nothing_beats_it(self):
         doc, first, second = self.glen_canyon()
 

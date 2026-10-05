@@ -589,7 +589,7 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
         known = gapfill.CONTEXT.get("jobs")
         todo = _todo(scenes, fps, known)
         ahead = _prefetch(todo)
-        cleared = 0
+        cleared: List[dict] = []
         for i, s in enumerate(scenes):
             if int(s.get("startFrame") or 0) / fps >= float(config.HOOK_SECONDS):
                 break
@@ -654,7 +654,7 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
                 continue
             unmark(doc, s)
             clear(s, reason)
-            cleared += 1
+            cleared.append(s)
             out["cleared"] += 1
         if not cleared:
             break
@@ -662,8 +662,10 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
         # other moments, the ladder - each checked on the next round), then without fetching anything.
         fresh = rnd == 0 and bool(work)
         try:
+            # Only the lines this round cleared: the text cards the plan left elsewhere had their ladder and
+            # their last resort, and another pass over them would be time and model calls outside this cap.
             got = gapfill.hold_or_animate(doc, label=label, laddered=not fresh, fresh=fresh,
-                                          search=fresh, work=work)
+                                          search=fresh, work=work, only=cleared)
         except Exception as e:  # noqa: BLE001 - a text card is what is left
             print(f"[hook] last resort failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             got = {}

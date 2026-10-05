@@ -867,7 +867,8 @@ def _hold_long(doc: dict, cards: List[dict], out: Dict[str, int]) -> List[dict]:
 
 def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
                     search: Optional[bool] = None, work: str = "",
-                    banned: Sequence[Shot] = (), fresh: bool = True) -> Dict[str, int]:
+                    banned: Sequence[Shot] = (), fresh: bool = True,
+                    only: Optional[Sequence[dict]] = None) -> Dict[str, int]:
     """
     (d) Every empty scene: the planner's own graphic for its line (numbers,
     money, maps), else the neighbouring shot held over it while the clip
@@ -887,7 +888,9 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     beside it held past the cap up to shotcap.CEILING at real speed, and
     only then the text card ("alternative", "moment", "ladder" and "long" are
     added to the counts; a long hold also counts as "held"); never a shot in
-    `banned` (the quality check's failed ones).
+    `banned` (the quality check's failed ones). `only` (scene dicts): just
+    these of the empty scenes - the hook check's last resort for the lines it
+    cleared, never another pass over every text card the plan left.
     """
     from . import shotcap
     scenes = doc.get("scenes") or []
@@ -899,6 +902,8 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     for i in range(len(scenes) - 1, -1, -1):
         s = scenes[i]
         if not _empty(s):
+            continue
+        if only is not None and not any(s is x for x in only):
             continue
         if _hook(s, fps):
             out["hook"] += 1
