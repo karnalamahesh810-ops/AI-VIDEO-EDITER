@@ -244,15 +244,16 @@ class OffChangesNothing(unittest.TestCase):
         uc.assert_called_once_with(p, config.MIN_CLIP_HEIGHT)         # the archive.org film still kept as it was
         self.assertFalse(upscale.is_restored(p))
 
-    def test_the_flag_is_off_by_default_and_a_job_can_turn_it_on(self):
+    def test_the_flag_is_on_by_default_and_a_job_can_turn_it_off(self):
+        # On since the owner switched it on (2026-10-05).
         import handler
-        self.assertFalse(config.ARCHIVE_RESTORE)
+        self.assertTrue(config.ARCHIVE_RESTORE)
         for key in ("ARCHIVE_RESTORE", "ARCHIVE_RESTORE_SECONDS", "ARCHIVE_RESTORE_SMOOTH"):
             self.assertIn(key, handler.CONFIG_OVERRIDABLE)
         before = (config.ARCHIVE_RESTORE, config.ARCHIVE_RESTORE_SECONDS)
-        prev = handler._apply_config({"ARCHIVE_RESTORE": "1", "ARCHIVE_RESTORE_SECONDS": "90"})
+        prev = handler._apply_config({"ARCHIVE_RESTORE": "0", "ARCHIVE_RESTORE_SECONDS": "90"})
         try:
-            self.assertIs(config.ARCHIVE_RESTORE, True)
+            self.assertIs(config.ARCHIVE_RESTORE, False)
             self.assertEqual(config.ARCHIVE_RESTORE_SECONDS, 90.0)
         finally:
             handler._restore_config(prev)

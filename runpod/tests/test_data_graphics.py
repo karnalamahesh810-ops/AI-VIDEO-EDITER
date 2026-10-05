@@ -489,19 +489,20 @@ class ThePlanner(OnRecord):
         cm.__enter__()
         self.addCleanup(cm.__exit__, None, None, None)
 
-    def test_flag_is_off_by_default_and_overridable(self):
-        self.assertFalse(config.DATA_GRAPHICS)
+    def test_flag_is_on_by_default_and_overridable(self):
+        # On since the owner switched it on (2026-10-05); a job can still turn it off.
+        self.assertTrue(config.DATA_GRAPHICS)
         import handler
         for key in ("DATA_GRAPHICS", "DATA_GRAPHICS_GAP", "DATA_GRAPHICS_HOOK_SECONDS", "DATA_GRAPHICS_SECONDS",
                     "DATA_GRAPHICS_WAIT"):
             self.assertIn(key, handler.CONFIG_OVERRIDABLE)
-        prev = handler._apply_config({"DATA_GRAPHICS": "true", "DATA_GRAPHICS_GAP": "45"})
+        prev = handler._apply_config({"DATA_GRAPHICS": "false", "DATA_GRAPHICS_GAP": "45"})
         try:
-            self.assertTrue(config.DATA_GRAPHICS)
+            self.assertFalse(config.DATA_GRAPHICS)
             self.assertEqual(config.DATA_GRAPHICS_GAP, 45.0)
         finally:
             handler._restore_config(prev)
-        self.assertFalse(config.DATA_GRAPHICS)
+        self.assertTrue(config.DATA_GRAPHICS)
 
     def test_flag_off_changes_nothing(self):
         lines = [PLAIN] * 4 + [POWELL] + [PLAIN] * 9 + [MEAD] + [PLAIN] * 4

@@ -2641,7 +2641,7 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # Living photos (src/living.py): stills drawn as depth layers (2.5D parallax).
                       "LIVING_PHOTOS", "LIVING_PHOTOS_SECONDS", "LIVING_PHOTOS_STRENGTH",
                       "LIVING_PHOTOS_MIN_SECONDS", "LIVING_PHOTOS_MAX_LAYERS",
-                      # Old footage restore (src/archive_restore.py; off until the owner has seen it).
+                      # Old footage restore (src/archive_restore.py; on since 2026-10-05, a job can turn it off).
                       "ARCHIVE_RESTORE", "ARCHIVE_RESTORE_SECONDS", "ARCHIVE_RESTORE_SMOOTH")
 
 

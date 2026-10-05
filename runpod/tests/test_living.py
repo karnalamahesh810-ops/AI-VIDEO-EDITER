@@ -76,8 +76,10 @@ def _fake_build(tmp):
 
 
 class Flags(unittest.TestCase):
-    def test_off_by_default_and_overridable_per_job(self):
-        self.assertFalse(config.LIVING_PHOTOS)
+    def test_on_by_default_and_overridable_per_job(self):
+        # On since the owner switched it on (2026-10-05), at the recommended strength.
+        self.assertTrue(config.LIVING_PHOTOS)
+        self.assertEqual(config.LIVING_PHOTOS_STRENGTH, 0.06)
         for key in ("LIVING_PHOTOS", "LIVING_PHOTOS_SECONDS", "LIVING_PHOTOS_STRENGTH", "LIVING_PHOTOS_MIN_SECONDS",
                     "LIVING_PHOTOS_MAX_LAYERS"):
             self.assertIn(key, handler.CONFIG_OVERRIDABLE, key)
@@ -86,7 +88,7 @@ class Flags(unittest.TestCase):
         self.assertTrue(0.03 <= config.LIVING_PHOTOS_STRENGTH <= living.MAX_STRENGTH)
 
     def test_off_means_nothing_happens(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(config, "LIVING_PHOTOS", False):
             doc = _doc([_still_scene(0, _picture(os.path.join(d, "a.jpg")))])
             called = []
             self.assertEqual(living.place(doc, build_fn=lambda *a, **k: called.append(1)), {})
@@ -95,13 +97,14 @@ class Flags(unittest.TestCase):
             self.assertFalse(living.place_one(doc, 0))
 
     def test_the_overrides_apply_and_restore(self):
-        before = handler._apply_config({"LIVING_PHOTOS": "1", "LIVING_PHOTOS_STRENGTH": "0.02"})
+        before = handler._apply_config({"LIVING_PHOTOS": "0", "LIVING_PHOTOS_STRENGTH": "0.02"})
         try:
-            self.assertTrue(config.LIVING_PHOTOS)
+            self.assertFalse(config.LIVING_PHOTOS)
             self.assertEqual(config.LIVING_PHOTOS_STRENGTH, 0.02)
         finally:
             handler._restore_config(before)
-        self.assertFalse(config.LIVING_PHOTOS)
+        self.assertTrue(config.LIVING_PHOTOS)
+        self.assertEqual(config.LIVING_PHOTOS_STRENGTH, 0.06)
 
     def test_the_model_is_the_commercially_licensed_small_one(self):
         spec = importlib.util.spec_from_file_location("fetch_models", os.path.join(ROOT, "scripts", "fetch_models.py"))

@@ -874,8 +874,8 @@ MIN_IMAGE_LONG_SIDE_UPSCALED = int(os.getenv("MIN_IMAGE_LONG_SIDE_UPSCALED", "64
 # ARCHIVE_RESTORE_SHARP_LINES real lines are deinterlaced, deblocked, cropped
 # of black borders, denoised and scaled to the size a cover fit shows 1:1
 # (ffmpeg on the CPU: ~20-30 CPU s, ~5 s on 4 threads for a 7 s 480-line
-# clip). Off until the owner has seen it: a job turns it on with
-# {"config": {"ARCHIVE_RESTORE": 1}}. ARCHIVE_RESTORE_SECONDS boxes a video's
+# clip). On by default since the owner switched it on 2026-10-05; a job turns
+# it off with {"config": {"ARCHIVE_RESTORE": 0}}. ARCHIVE_RESTORE_SECONDS boxes a video's
 # restores (clips not started by then stay as they are); one clip gets at most
 # ARCHIVE_RESTORE_CLIP_SECONDS and keeps its file on a timeout or an error.
 # ARCHIVE_RESTORE_PARALLEL clips at once (0 = CPUs / ARCHIVE_RESTORE_THREADS),
@@ -885,7 +885,7 @@ MIN_IMAGE_LONG_SIDE_UPSCALED = int(os.getenv("MIN_IMAGE_LONG_SIDE_UPSCALED", "64
 # (telecined 24 -> 30 fps). Restored files are cached on the machine by
 # (video id, start, length) up to ARCHIVE_RESTORE_CACHE_MB, and kept out of
 # the clip library unless ARCHIVE_RESTORE_LIBRARY.
-ARCHIVE_RESTORE = _flag("ARCHIVE_RESTORE", False)
+ARCHIVE_RESTORE = _flag("ARCHIVE_RESTORE", True)
 ARCHIVE_RESTORE_SECONDS = float(os.getenv("ARCHIVE_RESTORE_SECONDS", "240"))
 ARCHIVE_RESTORE_CLIP_SECONDS = float(os.getenv("ARCHIVE_RESTORE_CLIP_SECONDS", "90"))
 ARCHIVE_RESTORE_MAX_CLIP_SECONDS = float(os.getenv("ARCHIVE_RESTORE_MAX_CLIP_SECONDS", "30"))
@@ -930,9 +930,9 @@ SOURCE_TAG_SECONDS = float(os.getenv("SOURCE_TAG_SECONDS", "3"))
 # Real data graphics (src/datagraphics.py, src/realdata.py; the owner, 2026-10-05): a line that states a
 # measurable water or weather fact - a reservoir's level or how full it is, a river's flow, the share of a state in
 # drought, a temperature record - gets a chart of the REAL, current numbers from the official source (USBR, USGS,
-# the U.S. Drought Monitor, NOAA) with the source and the date of the data in its corner. Off by default until the
-# owner has seen it; a job turns it on with config {"DATA_GRAPHICS": true}.
-DATA_GRAPHICS = _flag("DATA_GRAPHICS", False)
+# the U.S. Drought Monitor, NOAA) with the source and the date of the data in its corner. On by default since the
+# owner switched it on 2026-10-05; a job turns it off with config {"DATA_GRAPHICS": false}.
+DATA_GRAPHICS = _flag("DATA_GRAPHICS", True)
 # At most one data graphic per this many seconds of video (the owner: one every 45-60 s at most).
 DATA_GRAPHICS_GAP = float(os.getenv("DATA_GRAPHICS_GAP", "50"))
 # None in the video's first seconds unless the line there states the number itself.
@@ -960,13 +960,13 @@ SALIENCY_MODEL = os.getenv("SALIENCY_MODEL", "/opt/models/u2netp.onnx")
 # (Depth-Anything-V2-Small, Apache-2.0, ONNX on the CPU) cuts it into 2-3 layers
 # along occlusion edges, and the renderer moves the nearer ones a little more
 # than the farther ones over the scene's own move (2.5D parallax instead of a
-# flat Ken Burns). Off by default until the owner has seen the demo; a job turns
-# it on with config {"LIVING_PHOTOS": true}. LIVING_PHOTOS_SECONDS boxes the whole
+# flat Ken Burns). On by default since the owner switched it on 2026-10-05 (at
+# the recommended strength); a job turns it off with config {"LIVING_PHOTOS": false}. LIVING_PHOTOS_SECONDS boxes the whole
 # video, LIVING_PHOTOS_PARALLEL pictures at once (~0.4 s of one core each for the
 # depth, ~1 s with the layers); LIVING_PHOTOS_STRENGTH is the relative shift
 # between the nearest and the farthest layer over a shot (a share of the frame);
 # no living move on a shot shorter than LIVING_PHOTOS_MIN_SECONDS.
-LIVING_PHOTOS = _flag("LIVING_PHOTOS", False)
+LIVING_PHOTOS = _flag("LIVING_PHOTOS", True)
 LIVING_PHOTOS_SECONDS = float(os.getenv("LIVING_PHOTOS_SECONDS", "90"))
 LIVING_PHOTOS_PARALLEL = int(os.getenv("LIVING_PHOTOS_PARALLEL", "6"))
 LIVING_PHOTOS_STRENGTH = float(os.getenv("LIVING_PHOTOS_STRENGTH", "0.06"))

@@ -37,9 +37,9 @@ after the upscale and the reframe pass):
 Skipped: documents, maps, charts, screenshots and text-heavy pictures, faces in
 close-up (parallax on a face looks fake), held-still styles, inset and window
 frames, short shots, pictures too soft for the move, and whatever the time box
-(LIVING_PHOTOS_SECONDS) does not reach. Off until the owner has seen the demo:
-LIVING_PHOTOS, per job {"config": {"LIVING_PHOTOS": 1}}. Nothing here can fail
-a job.
+(LIVING_PHOTOS_SECONDS) does not reach. On by default since the owner switched
+it on 2026-10-05: LIVING_PHOTOS, off per job with {"config": {"LIVING_PHOTOS": 0}}.
+Nothing here can fail a job.
 """
 from __future__ import annotations
 

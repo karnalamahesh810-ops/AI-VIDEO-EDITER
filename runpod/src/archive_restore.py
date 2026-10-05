@@ -3,8 +3,8 @@ Old footage restore (the owner approved it 2026-10-05): archival and
 low-resolution clips - newsreels, old TV, early digital, allowed down to
 MIN_ARCHIVE_HEIGHT lines - are cleaned up before they are published, so they
 sit next to modern 1080p footage without black edges, combing, colour
-fringes and smeared noise. Off by default (ARCHIVE_RESTORE) until the owner
-has seen it; a job tries it with {"config": {"ARCHIVE_RESTORE": 1}}.
+fringes and smeared noise. On by default (ARCHIVE_RESTORE) since the owner
+switched it on 2026-10-05; a job turns it off with {"config": {"ARCHIVE_RESTORE": 0}}.
 
 What a clip gets, in one ffmpeg pass on the CPU (measured 2026-10-05 on 11
 sections of KIRO-TV 1980, a 1930s Boulder Dam home movie, the 1936
