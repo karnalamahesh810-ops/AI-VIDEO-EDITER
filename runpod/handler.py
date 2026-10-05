@@ -1346,15 +1346,22 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     _ytdlp_mod.set_deadline(0.0)               # later steps (resource, render) are not time boxed here
     # Small photos get Real-ESRGAN detail and soft clips a sharpen pass to
     # 1080p, before anything is uploaded or rendered (time-boxed; a failure
-    # keeps the original file).
-    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL:
-        report("Enhancing pictures and clips to HD", 64)
+    # keeps the original file). With ARCHIVE_RESTORE, archive film is
+    # restored first (src/archive_restore.py) and the restored file is the
+    # one published.
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE:
+        report("Restoring archive footage and enhancing pictures to HD" if config.ARCHIVE_RESTORE
+               else "Enhancing pictures and clips to HD", 64)
         try:
             pool_stats["upscale"] = upscale.upscale_assets([a for a in assets if a is not None])
         except Exception as e:  # noqa: BLE001 - never fail a video over polish
             print(f"[worker] upscale skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
+    if config.ARCHIVE_RESTORE:
+        # What was restored, how, and how long it took (meta.sourcing.archiveRestore).
+        media.LAST_STATS["archiveRestore"] = (pool_stats.get("upscale") or {}).pop(
+            "archiveRestore", None) or {"on": True, "restored": 0}
     vision.require_credits()
 
     # No percentage: the sourcing bands already reach the mid 60s.
@@ -1723,8 +1730,9 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         raise ValueError(f"no usable media found for '{query}' - try different wording")
 
     # The same polish as a build: with the style's ALLOW_VERTICAL a vertical
-    # replacement (or choice) is framed on its blurred copy, not cropped at render.
-    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL:
+    # replacement (or choice) is framed on its blurred copy, not cropped at render;
+    # with ARCHIVE_RESTORE an archive replacement is restored.
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE:
         try:
             upscale.upscale_assets([asset])
         except Exception as e:  # noqa: BLE001 - never fail a replacement over polish
@@ -2632,7 +2640,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "JUDGE_MEMORY",
                       # Living photos (src/living.py): stills drawn as depth layers (2.5D parallax).
                       "LIVING_PHOTOS", "LIVING_PHOTOS_SECONDS", "LIVING_PHOTOS_STRENGTH",
-                      "LIVING_PHOTOS_MIN_SECONDS", "LIVING_PHOTOS_MAX_LAYERS")
+                      "LIVING_PHOTOS_MIN_SECONDS", "LIVING_PHOTOS_MAX_LAYERS",
+                      # Old footage restore (src/archive_restore.py; off until the owner has seen it).
+                      "ARCHIVE_RESTORE", "ARCHIVE_RESTORE_SECONDS", "ARCHIVE_RESTORE_SMOOTH")
 
 
 def _apply_config(overrides) -> dict:
@@ -2990,6 +3000,8 @@ def handler(job):
                     "upscaler": upscale.available(),
                     # Living photos' depth model (src/living.py): baked in, and on for this worker or not.
                     "livingPhotos": living.status(),
+                    # Old footage restore (src/archive_restore.py): on for this worker or not.
+                    "archiveRestore": bool(config.ARCHIVE_RESTORE),
                     "r2": r2.enabled(),
                     # Script -> video: whether a script-only job can have its narration made here.
                     "freeVoice": tts.status(),

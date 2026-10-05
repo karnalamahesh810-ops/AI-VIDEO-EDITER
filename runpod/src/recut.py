@@ -1619,9 +1619,11 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
     say("Polishing the new shots", 80)
     assets = [f.asset for f in found.values() if f.asset is not None]
     left_s = deadline - time.time() - saving
-    if assets and (config.UPSCALE_ENABLED or config.ALLOW_VERTICAL) and left_s > 10:
+    if assets and (config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE) and left_s > 10:
         try:
-            upscale.upscale_assets(assets, deadline_seconds=min(float(config.UPSCALE_SECONDS), left_s))
+            polished = upscale.upscale_assets(assets, deadline_seconds=min(float(config.UPSCALE_SECONDS), left_s))
+            if config.ARCHIVE_RESTORE and (polished or {}).get("archiveRestore"):
+                out["archiveRestore"] = polished["archiveRestore"]      # old footage restored (src/archive_restore.py)
         except Exception as e:  # noqa: BLE001 - never fail a re-cut over polish
             print(f"[recut] polish skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     _finish(found, fps, deadline - saving)
