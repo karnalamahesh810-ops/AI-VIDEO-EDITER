@@ -1696,7 +1696,7 @@ def _build(segments: List[Segment], shots: List[dict],
         if teaser_info:
             hook_boost["teaser"] = teaser_info
 
-    return {
+    doc = {
         "schemaVersion": SCHEMA_VERSION,
         "fps": fps,
         "width": width,
@@ -1755,6 +1755,21 @@ def _build(segments: List[Segment], shots: List[dict],
             **({"dataGraphics": data_graphics} if data_graphics else {}),
         },
     }
+    if getattr(config, "DATA_LOOKS", True) and pack:
+        # Every date, time, year, percentage, multiplier and meaningful number on its word as a clean KT look,
+        # the retired looks rewritten, and every look its full animation in one lane (src/datalooks.py).
+        try:
+            from . import datalooks
+            report = datalooks.finish(doc)
+            doc["meta"]["overlayCount"] = len(doc["overlays"])
+            doc["meta"]["dataLooks"] = {k: report[k] for k in ("addedByLook", "shortBefore", "shortAfter")} | {
+                "dropped": len(report["dropped"]), "removed": len(report["removed"])}
+            print(f"[timeline] data looks: {report['addedByLook']}; {len(report['removed'])} old figure look(s) "
+                  f"replaced, {len(report['dropped'])} left out for room; short looks {report['shortBefore']} -> "
+                  f"{report['shortAfter']}", flush=True)
+        except Exception as e:  # noqa: BLE001 - the plan as it was is still a video
+            print(f"[timeline] data looks skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+    return doc
 
 
 # --------------------------------------------------------------------------- #

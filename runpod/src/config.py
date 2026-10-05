@@ -982,6 +982,12 @@ SOURCE_TAG_SECONDS = float(os.getenv("SOURCE_TAG_SECONDS", "3"))
 # the U.S. Drought Monitor, NOAA) with the source and the date of the data in its corner. On by default since the
 # owner switched it on 2026-10-05; a job turns it off with config {"DATA_GRAPHICS": false}.
 DATA_GRAPHICS = _flag("DATA_GRAPHICS", True)
+# Every date / time / year / percentage / multiplier / meaningful number the narration says gets a clean KT
+# look on its word, retired looks are rewritten, and no look ends before its animation (src/datalooks.py; the
+# owner, 2026-10-05). Also the "relook" action on a made timeline (src/relook.py).
+DATA_LOOKS = _flag("DATA_LOOKS", True)
+# Every picture a look shows is fetched, checked and re-hosted on R2 when the plan is saved (src/overlayimages.py).
+OVERLAY_IMAGES_CHECK = _flag("OVERLAY_IMAGES_CHECK", True)
 # At most one data graphic per this many seconds of video (the owner: one every 45-60 s at most).
 DATA_GRAPHICS_GAP = float(os.getenv("DATA_GRAPHICS_GAP", "50"))
 # None in the video's first seconds unless the line there states the number itself.

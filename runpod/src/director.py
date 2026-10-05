@@ -2642,7 +2642,10 @@ def _resolve_maps(segments: List[Segment], shots: List[dict],
                 or now - mapped_at.get(key, -1e9) < SAME_PLACE_GAP_SECONDS):
             shot["overlay"] = None
             continue
-        locations = geocode.resolve_all(overlay.pop("places", []))
+        # Biased to the story's region (the line and the brief), checked for points that cannot belong to one
+        # map (another country, too far apart): dropped rather than drawn wrong (geocode.resolve_all).
+        locations = geocode.resolve_all(overlay.pop("places", []), text=getattr(segments[i], "text", "") or "",
+                                        brief=brief)
         if not locations:
             warnings.append(
                 f"Could not verify a location at {segments[i].start:.0f}s; map dropped.")

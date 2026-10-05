@@ -1376,7 +1376,7 @@ class DirectorRules(unittest.TestCase):
     def test_unverifiable_place_never_becomes_a_map(self):
         """The gazetteer decides, not the text. A stubbed miss drops the map."""
         original = geocode.resolve_all
-        geocode.resolve_all = lambda names: []
+        geocode.resolve_all = lambda names, **kw: []
         try:
             segments = [seg("They regrouped in Wakanda Prime before dawn.", 0, 4)]
             shots, _, warnings = director.plan(segments, title="", allow_maps=True)
@@ -1386,7 +1386,7 @@ class DirectorRules(unittest.TestCase):
 
     def test_verified_place_becomes_a_map_labelled_by_the_gazetteer(self):
         original = geocode.resolve_all
-        geocode.resolve_all = lambda names: [
+        geocode.resolve_all = lambda names, **kw: [
             {"label": "San José del Palmar, Colombia", "lat": 4.8963,
              "lon": -76.2283, "kind": "town"}]
         try:
