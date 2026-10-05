@@ -87,7 +87,15 @@ EDGE_SOFT = 0.035
 # Where a cut crosses a smooth slope (the local depth range under WEAK_STEP)
 # instead of a jump, its edge is this soft and nothing is filled behind it.
 WEAK_STEP = 0.06
-SLOPE_SOFT = 0.12
+SLOPE_SOFT = 0.15
+# A near object is cut whole: what is connected to the cut's core down to this
+# much less deep belongs to it - within HOLD_STEPS x 2 depth-map px of the core
+# (a plateau's top, a ledge), never further (a continuous ramp of ground would
+# otherwise join the whole valley to a rock).
+HOLD_DEPTH = 0.1
+HOLD_STEPS = 4
+# The rim a near layer takes with it along a real depth edge (work-size px).
+RIM_PX = 2
 # The widest strip a move ever reveals beside a near object (a share of the
 # long side, with room): behind an occlusion edge all of it is filled. It grows
 # with LIVING_PHOTOS_STRENGTH (reveal_share()): livingPhoto.tsx parts the layers
@@ -104,7 +112,9 @@ MIRROR_LONG = 960
 # nearest layer is this much nearer than the farthest and at least this share of
 # the picture, the far part of the back layer is blurred by up to DOF_RADIUS px of
 # the frame - fading to none DOF_FREE (in depth) short of the foreground's depth.
-DOF_RADIUS = 2.4
+DOF_RADIUS = 1.2
+# A soft edge's solved colour moves at most this far from the picture's own (0-255).
+UNMIX_MAX = 70.0
 DOF_MIN_SEP = 0.45
 DOF_MIN_FRONT = 0.06
 DOF_FREE = 0.15
@@ -304,7 +314,16 @@ def push_pull(rgb, weight):
     return filled
 
 
-def mirror_fill(rgb, known, fallback, band: Optional[int] = None, stats: Optional[dict] = None):
+def _row_reach(mask):
+    """Per pixel, how far along its row the nearest pixel outside `mask` is (w where none)."""
+    h, w = mask.shape
+    idx = np.broadcast_to(np.arange(w, dtype=np.int32)[None, :], (h, w))
+    left = np.maximum.accumulate(np.where(mask, -1, idx), axis=1)
+    right = np.minimum.accumulate(np.where(mask, w, idx)[:, ::-1], axis=1)[:, ::-1]
+    return np.minimum(np.where(left >= 0, idx - left, w), np.where(right < w, right - idx, w))
+
+
+def mirror_fill(rgb, known, fallback, band: Optional[int] = None, stats: Optional[dict] = None, reveal=None):
     """
     Fill the unknown pixels of each row with the row's own picture mirrored
     across the nearest known edge (the texture of the background beside the
@@ -312,9 +331,9 @@ def mirror_fill(rgb, known, fallback, band: Optional[int] = None, stats: Optiona
     known pixel to mirror, the nearest known one; with none at all, `fallback`.
     The camera's parallax is mostly sideways, so what a move reveals is that
     row's background continued. Only the strip within `band` px of the known
-    edge is worked out (deeper in is never seen); `stats` gets "fallback": the
-    share of the hole within that reach that only `fallback` could fill.
-    rgb, fallback: float32 (h, w, 3); known: bool (h, w).
+    edge is worked out (deeper in is never seen). With `reveal` (bool: what a
+    move can uncover), `stats` gets "fallback": the share of it only the smooth
+    `fallback` could fill. rgb, fallback: float32 (h, w, 3); known: bool (h, w).
     """
     h, w = known.shape
     idx = np.broadcast_to(np.arange(w, dtype=np.int32)[None, :], (h, w))
@@ -323,12 +342,8 @@ def mirror_fill(rgb, known, fallback, band: Optional[int] = None, stats: Optiona
     out = np.where(known[..., None], rgb, fallback).astype(np.float32)
     band = int(band if band is not None else REVEAL_SHARE * max(h, w)) + 2
     strip = ~known & (((idx - left <= band) & (left >= 0)) | ((right - idx <= band) & (right < w)))
-    if stats is not None:
-        # The hole within reach of the background in any direction (on a quarter-size grid).
-        k = 4
-        small = known[::k, ::k].astype(np.float32)
-        near = _maxf(small, max(1, band // k)) > 0
-        zone = ~known & np.repeat(np.repeat(near, k, 0), k, 1)[:h, :w]
+    if stats is not None and reveal is not None:
+        zone = reveal & ~known
         n = int(zone.sum())
         stats["fallback"] = round(float((zone & ~strip).sum()) / n, 3) if n else 0.0
     hy, hx = np.nonzero(strip)
@@ -412,8 +427,21 @@ def plan_cuts(d, max_layers: int = 3) -> dict:
         depths.append(round(float(ds[band].mean()) if band.any() else (bounds[k] + bounds[k + 1]) / 2, 3))
     front = ds >= cuts[-1]
     ys, xs = np.nonzero(front)
-    focus = {"x": round(float((xs.mean() + 0.5) / w), 4), "y": round(float((ys.mean() + 0.5) / h), 4)} \
-        if len(xs) else {"x": 0.5, "y": 0.5}
+    # The camera turns about the deepest point inside the main near object (the last
+    # pixels an erosion leaves): a centroid between two near objects (a rock and a
+    # beach) put the pivot in the water, and a dolly then uncovered the rock's side.
+    core = front.astype(np.float32)
+    for _ in range(60):
+        nxt = _minf(core, 1)
+        if not (nxt > 0.5).any():
+            break
+        core = nxt
+    py, px = np.nonzero(core > 0.5)
+    if len(px):
+        k = int(np.argmin((px - px.mean()) ** 2 + (py - py.mean()) ** 2))    # one of them: inside an object
+        focus = {"x": round(float((px[k] + 0.5) / w), 4), "y": round(float((py[k] + 0.5) / h), 4)}
+    else:
+        focus = {"x": 0.5, "y": 0.5}
     quality = min(r["q"] for r in rows if r["t"] in cuts)
     # How intricate the nearest layer's outline is: its edge length against the
     # side of a square of its area (a disc ~3.5, a rock 5-8, a crane's lattice 20+).
@@ -453,7 +481,7 @@ def safety(plan: dict, info: Optional[dict] = None) -> Dict[str, float]:
     """
     info = info or {}
     q = float(plan.get("quality") or 0)
-    return {"edges": round(max(0.35, min(1.0, 0.35 + (q - 0.55) * 2.2)), 3),
+    return {"edges": round(max(0.6, min(1.0, 0.6 + (q - 0.55) * 1.6)), 3),
             "outline": round(max(0.6, min(1.0, 1.3 - float(plan.get("intricate") or 0) / 25.0)), 3),
             "fill": round(max(0.5, min(1.0, 1.15 - float(info.get("fallback") or 0))), 3),
             "front": round(max(0.6, min(1.0, 1.4 - float(plan.get("front") or 0))), 3)}
@@ -494,6 +522,20 @@ def _clean(alpha, r: int = 2):
     return alpha * _kept(alpha, r)
 
 
+def _grow(core, allowed, steps: int = 40):
+    """The part of `allowed` connected to `core` (bool maps): geodesic growth, 2 px a step."""
+    region = (core & allowed).astype(np.float32)
+    ok = allowed.astype(np.float32)
+    total = float(region.sum())
+    for _ in range(steps):
+        region = _maxf(region, 2) * ok
+        now = float(region.sum())
+        if now == total:
+            break
+        total = now
+    return region > 0.5
+
+
 def _unmix(layer, mask, behind, picture, nearer=None):
     """
     A layer's soft edge with its colours solved so the stack draws exactly the
@@ -513,21 +555,28 @@ def _unmix(layer, mask, behind, picture, nearer=None):
         return layer
     a = a8[ys, xs].astype(np.float32)[:, None] / 255.0
     rgb = np.array(layer)
+    own = rgb[ys, xs].astype(np.float32)
     under = np.asarray(behind)[ys, xs].astype(np.float32)
     want = picture[ys, xs].astype(np.float32)
-    rgb[ys, xs] = np.clip((want - (1.0 - a) * under) / np.maximum(a, 0.05) + 0.5, 0, 255).astype(np.uint8)
+    solved = (want - (1.0 - a) * under) / np.maximum(a, 0.05)
+    # The solve is trusted where the edge is mostly there; at a faint edge (where a
+    # wrong colour would show as a dark or bright fringe once the layers part) it
+    # moves the colour only a little - its share of the picture is as faint.
+    trust = _smoothstep((a - 0.1) / 0.35)
+    fixed = own + trust * np.clip(solved - own, -UNMIX_MAX, UNMIX_MAX)
+    rgb[ys, xs] = np.clip(fixed + 0.5, 0, 255).astype(np.uint8)
     return Image.fromarray(rgb, "RGB")
 
 
-def dof_radius(plan: dict, lw: int, lh: int, frame_w: int, frame_h: int) -> float:
+def dof_radius(plan: dict, lw: int, lh: int, frame_w: int, frame_h: int, zoom: float = 1.0) -> float:
     """The far layer's blur (px of the layer) when the foreground is close and big enough to be
-    the subject - DOF_RADIUS px of the frame - else 0."""
+    the subject - about DOF_RADIUS px of the frame however close the move brings it - else 0."""
     depths = plan.get("depths") or []
     if DOF_RADIUS <= 0 or len(depths) < 2 or depths[-1] - depths[0] < DOF_MIN_SEP \
             or float(plan.get("front") or 0) < DOF_MIN_FRONT:
         return 0.0
     per_frame_px = 1.0 / max(frame_w / float(lw), frame_h / float(lh))     # layer px per frame px (cover fit)
-    return round(DOF_RADIUS * per_frame_px, 2)
+    return round(DOF_RADIUS * per_frame_px / max(1.0, zoom / 1.1), 2)
 
 
 def make_layers(im, plan: dict, stem: str, frame_w: int, frame_h: int, zoom: float, d=None,
@@ -563,29 +612,32 @@ def make_layers(im, plan: dict, stem: str, frame_w: int, frame_h: int, zoom: flo
     sharp = np.clip(_box(_maxf(jump, reach), 2), 0.0, 1.0)
     soft = EDGE_SOFT + (SLOPE_SOFT - EDGE_SOFT) * (1.0 - sharp)
     # Each cut's alpha at the work size (the edges follow the picture's own, the
-    # specks gone); a nearer cut's region always lies inside a farther one's.
-    raw = [_smoothstep((q_lo - (t - soft)) / (2 * soft)) for t in cuts]
+    # specks gone); a nearer cut's region always lies inside a farther one's. A
+    # near object comes out whole: the cut grows from its solid core into what is
+    # connected to it down to HOLD_DEPTH less deep (hysteresis) - a cut at the
+    # object's mean depth sliced a rock's plateau top half away.
+    raw = []
+    for t in cuts:
+        whole = (_resize_f(_grow(ds >= t, ds >= t - HOLD_DEPTH, steps=HOLD_STEPS).astype(np.float32), sw, sh) > 0.5)
+        t_eff = np.where(whole, t - HOLD_DEPTH, t)
+        edge = _smoothstep((q_lo - (t_eff - soft)) / (2 * soft))
+        # Solid inside (never a half-transparent patch the background shows through);
+        # the guided edge decides only at the border.
+        raw.append(np.maximum(edge, _box(_minf(whole.astype(np.float32), 3), 1)))
     kept = [_kept(x) for x in raw]
     alphas = [x * k_ for x, k_ in zip(raw, kept)]
+    # Along a real depth edge the near layer takes a thin rim with it: the depth
+    # map's edge sits a pixel or two inside the object's, and the object's own
+    # edge left on the layer behind separated as a ghost line once the layers parted.
+    hard = (sharp > 0.5).astype(np.float32)
+    alphas = [np.maximum(x, _box(_maxf(x, RIM_PX), 1) * hard) for x in alphas]
     for k in range(len(alphas) - 1, 0, -1):
         alphas[k - 1] = np.maximum(alphas[k - 1], alphas[k])
-    # The same cuts at the picture's full size for the layers' own edges (He's fast
-    # guided filter: the work-size coefficients applied to the full-size picture), so a
-    # cut lies on the picture's own edge to the pixel - one cut 3 px off at the work
-    # size carried a sliver of the lake along with the rock.
-    g_full = np.asarray(pic.convert("L"), np.float32) / 255.0
-    q_full = _resize_f(a, lw, lh) * g_full + _resize_f(b, lw, lh)
-    del g_full
-    soft_full = _resize_f(soft, lw, lh)
-    edges = []
-    for t, k_ in zip(cuts, kept):
-        x = (q_full - (t - soft_full)) / (2.0 * soft_full)
-        edges.append(_smoothstep(x) * _resize_f(k_, lw, lh))
-    del q_full, soft_full
-    for k in range(len(edges) - 1, 0, -1):
-        edges[k - 1] = np.maximum(edges[k - 1], edges[k])
-    masks = [Image.fromarray(np.clip(x * 255.0 + 0.5, 0, 255).astype(np.uint8), "L") for x in edges]
-    del edges
+    # The layers' own edges: the work-size cuts, smoothly enlarged. (Applying the
+    # guided filter to the full-size picture instead made the cut follow the rock's
+    # own texture - a ragged, dark fringe once the layers parted.)
+    masks = [Image.fromarray(np.clip(x * 255.0 + 0.5, 0, 255).astype(np.uint8), "L").resize((lw, lh), Image.BILINEAR)
+             for x in alphas]
     f = min(1.0, FILL_LONG / float(max(lw, lh)))
     fw, fh = max(8, int(round(lw * f))), max(8, int(round(lh * f)))
     rgb_f = np.asarray(pic.resize((fw, fh), Image.BILINEAR, reducing_gap=2.0), np.float32)
@@ -609,7 +661,12 @@ def make_layers(im, plan: dict, stem: str, frame_w: int, frame_h: int, zoom: flo
         smooth_m = np.asarray(Image.fromarray(np.clip(smooth_fill + 0.5, 0, 255).astype(np.uint8), "RGB")
                               .resize((mw, mh), Image.BILINEAR), np.float32)
         st: dict = {}
-        fill = mirror_fill(rgb_m, keep > 0.5, smooth_m, band=margin + int(reveal_share() * max(mw, mh)), stats=st)
+        # What a sideways move uncovers: the nearer layer's pixels within the widest shift of its
+        # outside along the row.
+        inside = near_m > 0.5
+        shift = max(2, int(round(0.5 * float(config.LIVING_PHOTOS_STRENGTH) * mw)))
+        fill = mirror_fill(rgb_m, keep > 0.5, smooth_m, band=margin + int(reveal_share() * max(mw, mh)), stats=st,
+                           reveal=inside & (_row_reach(inside) <= shift))
         info["fallback"] = max(float(info.get("fallback") or 0), float(st.get("fallback") or 0))
         fill_img = Image.fromarray(np.clip(fill + 0.5, 0, 255).astype(np.uint8), "RGB").resize((lw, lh),
                                                                                                Image.BILINEAR)
@@ -623,7 +680,7 @@ def make_layers(im, plan: dict, stem: str, frame_w: int, frame_h: int, zoom: flo
     out: List[dict] = []
     depths = list(plan.get("depths") or [])
     back = filled(np.ones_like(alphas[0]), alphas[0])
-    dof = dof_radius(plan, lw, lh, frame_w, frame_h)
+    dof = dof_radius(plan, lw, lh, frame_w, frame_h, zoom)
     if dof > 0:
         # A gentle depth of field: the far part of the back layer (by depth: the
         # farther, the more) a touch out of focus when the foreground is close.
