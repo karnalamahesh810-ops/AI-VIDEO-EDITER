@@ -142,6 +142,14 @@ export interface MediaFocus {
   motion?: { moving?: boolean; pan?: number; panRate?: number; zoom?: number; shake?: number; cut?: boolean };
   /** Burned-in lettering or a station logo: such a clip is never cropped. */
   overlay?: boolean;
+  /** Corners holding a channel bug or watermark (source shares, src/reframe.py corner_logos). */
+  logos?: Box[];
+  /** Rows of burned-in lettering - a chyron, a ticker, captions - as source-share bands (y, h). */
+  bands?: { y: number; h: number }[];
+  /** The faces found, each [x, y, w, h] (source shares, brows to chin). */
+  faceBoxes?: number[][];
+  /** The source picture's width / height. */
+  aspect?: number;
   /** Real detail in lines (soft or upscaled pictures are pushed less, or not at all). */
   lines?: number;
   why?: string;
@@ -400,9 +408,27 @@ export interface Overlay {
   highlight?: string;
   /** Document body for article-zoom; only ever text taken from the plan. */
   body?: string;
-  /** Normalized frame positions, supplied after visual review, not guessed. */
-  anchor?: { x: number; y: number };
+  /**
+   * Normalized frame positions, supplied after visual review, not guessed
+   * (src/anchors.find_anchor: the thing's centre, its radius r as a share of
+   * the frame's shorter side, its box w / h as shares of the frame).
+   */
+  anchor?: { x: number; y: number; r?: number; w?: number; h?: number; confidence?: number };
   labelPosition?: { x: number; y: number };
+  /**
+   * The places a several-point look marks (an-multi-point), frame shares,
+   * each with its label and the second from the look's start it is said at;
+   * set by the editor or a vision pass - never guessed by the planner.
+   */
+  points?: { x: number; y: number; label?: string; at?: number }[];
+  /** A document look's callout: a complete short phrase of the narration (src/screentext.callout_of). */
+  callout?: string;
+  /**
+   * Somebody else's graphics on the picture under the look - a station logo,
+   * a watermark, a chyron or ticker band - as frame shares (Main.tsx fills it
+   * from the scene's media.focus): a look keeps its words out of them.
+   */
+  avoid?: Box[];
   /** Entrance move (MotionWrap.tsx): rise, drop, slide-left, zoom-in, glitch... */
   motion?: string;
   /** Colour theme replacing the brand accent: gold, red, teal, blue, white, amber; "accent2" = the brand's second colour. */
