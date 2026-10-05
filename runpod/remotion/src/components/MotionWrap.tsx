@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import { clamp01, cubicIn, cubicOut, expoOut } from "./motion/ease";
+import { clamp01, cubicIn, cubicOut, expoOut, sineInOut } from "./motion/ease";
 import type { MotionClass } from "./motion/lookClass";
 
 /**
@@ -150,9 +150,17 @@ export const MotionWrap: React.FC<{
   const placed: React.CSSProperties = (pos || scale !== 1 || opacity !== 1)
     ? { transform: `translate(${(pos?.[0] ?? 0) * width}px, ${(pos?.[1] ?? 0) * height}px) scale(${scale})`, opacity }
     : {};
+  // A gentle idle over the hold (entry landed -> exit start): a slow eased creep, never a loop or a jitter -
+  // a full-screen graphic or a panel pushes in a touch, words rise a few pixels, a drawn mark stays put.
+  const hold = sineInOut(clamp01((t - inLen) / Math.max(1, dur30 - outLen - inLen)));
+  const drift: Parts = klass === "full" ? { ...REST, s: 1 + 0.012 * hold }
+    : klass === "panel" ? { ...REST, s: 1 + 0.01 * hold }
+      : klass === "mark" ? REST : { ...REST, ty: -3 * k * hold };
   const inner = (
     <AbsoluteFill style={css(leave, k)}>
-      <AbsoluteFill style={css(entry, k)}>{children}</AbsoluteFill>
+      <AbsoluteFill style={css(drift, k)}>
+        <AbsoluteFill style={css(entry, k)}>{children}</AbsoluteFill>
+      </AbsoluteFill>
     </AbsoluteFill>
   );
   return Object.keys(placed).length ? <AbsoluteFill style={placed}>{inner}</AbsoluteFill> : inner;
