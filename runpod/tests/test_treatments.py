@@ -287,7 +287,7 @@ class TimelineIntegration(unittest.TestCase):
         self.assertIn("music", doc)
         self.assertIn("visualTreatment", doc["scenes"][0])
         self.assertIn("treatments", doc["meta"])
-        self.assertEqual(doc["captions"]["style"], "news")
+        self.assertEqual(doc["captions"]["style"], "netflix")     # the pack no longer picks the subtitle style
         self.assertEqual(doc["meta"]["stylePack"], "news")
         # Music: a bundled track by the story's kind when the job names none.
         with mock.patch.object(config, "TREATMENTS", True), mock.patch.object(config, "BGM_AUTO", True):

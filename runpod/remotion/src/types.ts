@@ -527,9 +527,15 @@ export interface TimelineProps {
   captions: {
     enabled: boolean;
     position: "bottom" | "center";
+    /** The brand accent: the graphics' colour, and the spoken word's tint in a highlighting subtitle style. */
     accent: string;
+    /** The brand font, kept for the graphics; the subtitles always use their style's own face. */
     fontFamily: string;
-    /** documentary | news | modern (templates/registry.json captionStyles). */
+    /**
+     * netflix | cinema_box | doc_serif | minimal | clean_highlight | news_bold | letterbox
+     * (templates/registry.json captionStyles); an older id (documentary, news, modern, case)
+     * draws as its closest new style, absent = netflix (templates.ts captionStyleId).
+     */
     style?: string;
   };
   scenes: Scene[];

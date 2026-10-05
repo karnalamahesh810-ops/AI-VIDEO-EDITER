@@ -83,7 +83,7 @@ class Parse(unittest.TestCase):
         self.assertEqual(k["accent"], "#FF4400")
         self.assertEqual(k["accent2"], "#F4A100")
         self.assertEqual(k["font"], "Oswald")
-        self.assertEqual(k["caption_style"], "news")
+        self.assertEqual(k["caption_style"], "news_bold")      # an older style id: its closest new style
         self.assertEqual(k["watermark"]["position"], "bottom-right")
 
     def test_odd_values_are_dropped_not_fatal(self):
@@ -259,7 +259,7 @@ class PicksHonoured(unittest.TestCase):
         doc = _build({"brand_kit": _kit()})
         self.assertEqual(doc["captions"]["accent"], "#F4A100")
         self.assertEqual(doc["captions"]["fontFamily"], "Oswald")
-        self.assertEqual(doc["captions"]["style"], "news")
+        self.assertEqual(doc["captions"]["style"], "news_bold")
         themed = {o.get("theme") for o in doc["overlays"]}
         self.assertFalse(themed & set(templates.load()["stylePacks"]["documentary"]["theme"].split()))
         seconds = 0
@@ -336,7 +336,7 @@ class PrepareInput(unittest.TestCase):
     def test_the_kit_fills_what_the_job_left_open(self):
         inp = {"brand_kit": _kit(picks={"sfx": False, "density": "minimal"}), "brand": {"accent": "#000000"}}
         brandkit.prepare_input(inp)
-        self.assertEqual((inp["graphics_density"], inp["sfx"], inp["caption_style"]), ("minimal", False, "news"))
+        self.assertEqual((inp["graphics_density"], inp["sfx"], inp["caption_style"]), ("minimal", False, "news_bold"))
         self.assertEqual(inp["brand"], {"accent": "#F4A100", "fontFamily": "Oswald"})
         self.assertTrue(inp["_brand_music"])
 

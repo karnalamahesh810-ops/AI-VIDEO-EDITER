@@ -1709,7 +1709,10 @@ def _build(segments: List[Segment], shots: List[dict],
             "position": brand.get("captionPosition", "bottom"),
             "accent": brand.get("accent", "#FFD400"),
             "fontFamily": brand.get("fontFamily", "Inter"),
-            "style": str(inp.get("caption_style") or (pack or {}).get("caption") or "documentary"),
+            # The subtitle style shown when the user switches captions on: theirs (an older id draws as
+            # its closest new style), else Netflix - the style pack no longer picks one (the owner,
+            # 2026-10-05: clean Netflix-like subtitles by default).
+            "style": templates.caption_style_id(inp.get("caption_style")),
         },
         "music": music,
         "scenes": scenes,
