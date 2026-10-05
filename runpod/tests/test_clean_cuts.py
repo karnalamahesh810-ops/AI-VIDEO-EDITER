@@ -55,6 +55,20 @@ def _video(path, parts, fps=25):
     return path
 
 
+def _swing(path, px_per_frame, onset=1.5, total=4.0, fps=30):
+    """One shot of a textured picture held still, then the camera swinging sideways at once at
+    `px_per_frame` (640 px wide; the picture wraps round) - one continuous shot, no cut."""
+    lum = "128+45*sin(X/53)*cos(Y/37)+35*sin((X+2*Y)/97)+25*cos(X/211)"
+    fc = (f"[0:v]geq=lum='{lum}':cb=128:cr=128,split=2[a][b];"
+          f"[a]trim=end={onset},setpts=PTS-STARTPTS[s];"
+          f"[b]trim=end={total - onset},setpts=PTS-STARTPTS,scroll=horizontal={px_per_frame / 640:.5f}[m];"
+          f"[s][m]concat=n=2:v=1:a=0,format=yuv420p[v]")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", f"nullsrc=s=640x360:r={fps}:d={total}",
+                    "-filter_complex", fc, "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast", path],
+                   check=True, timeout=120)
+    return path
+
+
 ACROSS = "128+40*sin(X/6)"           # the shot before: stripes across
 DOWN = "128+40*sin(Y/6)"             # the shot after: stripes down, the same grey (a cut ffmpeg scores ~0.32)
 
@@ -104,6 +118,30 @@ class ShotChanges(unittest.TestCase):
         other = np.stack([base] * 31 + [base.T.copy().reshape(27, 48)[::-1]] * 31)
         self.assertEqual(filters.shot_changes(rows, same), [])        # an old film's exposure jump (0.87 there)
         self.assertEqual(len(filters.shot_changes(rows, other)), 1)   # a different picture: a cut
+
+    def test_a_camera_starting_to_swing_is_not_a_cut(self):
+        # ffmpeg's score answers a change in motion: a swing that starts at once jumps it for one frame
+        # (0.3 against ~0.01), the two frames either side differ, and the picture keeps moving after it.
+        import numpy as np
+        scores = [0.0] + [0.01] * 40 + [0.3] + [0.01] * 40
+        rows = rows_of(scores)
+        still = _picture(1)
+        frames = np.stack([still] * 41 + [np.roll(still, 6 * (j + 1), axis=1) for j in range(41)])
+        self.assertEqual(filters.shot_changes(rows, frames), [])
+        # Too fast for the same picture to be found moved: the frames after it never hold steady.
+        fast = np.stack([still] * 41 + [np.roll(still, 13 * (j + 1), axis=1) for j in range(41)])
+        self.assertEqual(filters.shot_changes(rows, fast), [])
+        with mock.patch.multiple(config, SHOT_CUT_STEADY=0.0, SHOT_CUT_MOVED=0.0):
+            self.assertEqual(len(filters.shot_changes(rows, frames)), 1)   # unchecked: read as a cut
+
+    def test_a_cut_into_a_moving_shot_is_still_a_cut(self):
+        # Another picture after the jump, panning gently from there: a new shot that holds steady.
+        import numpy as np
+        scores = [0.0] + [0.01] * 40 + [0.3] + [0.01] * 40
+        rows = rows_of(scores)
+        other = _picture(4)
+        frames = np.stack([_picture(1)] * 41 + [np.roll(other, 2 * j, axis=1) for j in range(41)])
+        self.assertEqual(filters.shot_changes(rows, frames), [rows[41][1]])
 
     def test_steady_motion_never_reads_as_a_cut(self):
         rows = rows_of([0.0] + [0.25, 0.3, 0.27, 0.22] * 20)          # a fast pan: every frame changes alike
@@ -182,6 +220,17 @@ class CleanInPointsOnRealFiles(unittest.TestCase):
         cuts = filters.scene_cuts(gap)
         self.assertEqual(len(cuts), 1)
         self.assertAlmostEqual(cuts[0], 2.0, delta=0.05)
+
+    def test_a_fast_camera_swing_is_not_a_cut_and_keeps_the_in_point(self):
+        # Measured: the swing's first frame scores ~0.32, the frames either side differ (0.41), and the
+        # soft-cut path alone read it as a shot change - a clip from this section moved its in-point
+        # to the end of the swing, marked clean.
+        src = _swing(os.path.join(self.d, "swing.mp4"), 80)
+        rows, _pictures = filters._scan(src, frames=True)
+        self.assertTrue(any(s >= config.SHOT_CUT_SOFT_THRESHOLD for _n, _t, s in rows))  # the score did jump
+        self.assertEqual(filters.scene_cuts(src, threshold=0.4), [])
+        self.assertEqual(filters.scene_cuts(src), [])
+        self.assertEqual(filters.clean_window(4.0, filters.scene_cuts(src), 2.0, 1.4), (1.4, True, 0))
 
     def test_an_exposure_flicker_is_not_a_cut(self):
         src = _video(os.path.join(self.d, "flicker.mp4"), [(1.4, "118+40*sin(X/6)"), (3.0, "148+40*sin(X/6)")])

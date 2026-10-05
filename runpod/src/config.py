@@ -396,6 +396,17 @@ SHOT_CUT_THRESHOLD = float(os.getenv("SHOT_CUT_THRESHOLD", "0.4"))
 SHOT_CUT_SOFT_THRESHOLD = float(os.getenv("SHOT_CUT_SOFT_THRESHOLD", "0.2"))
 SHOT_CUT_RATIO = float(os.getenv("SHOT_CUT_RATIO", "4.0"))
 SHOT_CUT_SAME_PICTURE = float(os.getenv("SHOT_CUT_SAME_PICTURE", "0.75"))
+# ...and it must open a new shot (filters._new_shot): a handheld or eyewitness
+# camera that starts to swing jumps ffmpeg's score for one frame too (the score
+# answers a change in motion, not motion). Not a cut when the frame after the
+# jump is the one before it moved (their likeness over small shifts at least
+# SHOT_CUT_MOVED), or when the picture after it does not hold steady (the
+# median likeness, over small shifts, of its next few frames each to the one
+# after under SHOT_CUT_STEADY). Measured on 81 softer jumps in real downloads
+# (2026-10-05): swings and jolts 0.82-0.97 moved, real cuts 0.79 at most; the
+# new shot after a real cut 0.87-1.0 steady, inside a swing 0.53-0.83. 0 = off.
+SHOT_CUT_MOVED = float(os.getenv("SHOT_CUT_MOVED", "0.8"))
+SHOT_CUT_STEADY = float(os.getenv("SHOT_CUT_STEADY", "0.85"))
 # Every footage cut starts after a shot change, never on the last second of the
 # shot before it: a planned in-point under CUT_GUARD_SECONDS before a shot
 # change moves forward past it - CUT_SNAP_PAD past it, so no frame of the shot

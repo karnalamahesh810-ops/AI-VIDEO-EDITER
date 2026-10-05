@@ -324,6 +324,14 @@ _SCORE_RE = re.compile(r"lavfi\.scene_score=([0-9.]+)")
 _CMP_W, _CMP_H = 48, 27
 # The frames around a softer jump it must stand out from (seconds either side).
 _AROUND_SECONDS = 0.5
+# The frames after a softer jump whose steadiness is measured (shot_changes, SHOT_CUT_STEADY).
+_STEADY_FRAMES = 3
+# A small grey frame whose pixels vary less than this (standard deviation) has no structure to
+# correlate - black, a white flash, a flat sky (_alike).
+_FLAT = 3.0
+# How far the picture may move between two of those frames (pixels of the 48x27 copy: about an
+# eighth of the width, a sixth of the height) and still be the same picture moved (_moved).
+_MOVE_X, _MOVE_Y = 6, 3
 
 
 def _scan(path: str, timeout: int = 120, frames: bool = False) -> tuple:
@@ -394,6 +402,59 @@ def same_picture(a, b) -> float:
     return float((x * y).sum() / d) if d > 0 else 1.0
 
 
+def _alike(a, b) -> float:
+    """
+    same_picture, where a featureless frame (under _FLAT: black, a white
+    flash, a flat sky) has no structure to correlate: two of them are the same
+    picture when about as bright, one against a frame with structure never.
+    """
+    fa, fb = float(a.std()), float(b.std())
+    if fa < _FLAT or fb < _FLAT:
+        return 1.0 if fa < _FLAT and fb < _FLAT and abs(float(a.mean()) - float(b.mean())) < 24.0 else 0.0
+    return same_picture(a, b)
+
+
+def _moved(a, b) -> float:
+    """
+    _alike of two small frames allowing for the picture having moved between
+    them - a pan, a tilt, a handheld camera's jolt: the best over shifts of up
+    to _MOVE_X and _MOVE_Y pixels, each on the part both frames show.
+    """
+    h, w = a.shape
+    best = _alike(a, b)
+    for dy in range(-_MOVE_Y, _MOVE_Y + 1):
+        for dx in range(-_MOVE_X, _MOVE_X + 1):
+            if dx or dy:
+                best = max(best, _alike(a[max(0, dy):h + min(0, dy), max(0, dx):w + min(0, dx)],
+                                        b[max(0, -dy):h + min(0, -dy), max(0, -dx):w + min(0, -dx)]))
+    return best
+
+
+def _new_shot(pictures, n: int) -> bool:
+    """
+    Frame n opens a new shot, not a camera starting to move inside one: ffmpeg's
+    score answers a change in motion, not motion, so a handheld or eyewitness
+    camera that starts to swing jumps it for one frame as a cut does. Not a new
+    shot when frame n is frame n-1's picture moved (_moved at least
+    SHOT_CUT_MOVED), or when the picture after it does not hold steady - the
+    median _moved of each of its next _STEADY_FRAMES frames to the one after
+    under SHOT_CUT_STEADY: a swing too fast for _moved, a zoom, a spinning
+    transition. Measured on 81 softer jumps in real downloads (2026-10-05):
+    swings and jolts 0.82-0.97 moved, real cuts 0.79 at most; after a real cut
+    the new shot holds at 0.87-1.0, inside a swing 0.53-0.83.
+    """
+    import statistics
+    moved = float(getattr(config, "SHOT_CUT_MOVED", 0.0) or 0.0)
+    if moved > 0 and _moved(pictures[n - 1], pictures[n]) >= moved:
+        return False
+    steady = float(getattr(config, "SHOT_CUT_STEADY", 0.0) or 0.0)
+    if steady > 0:
+        pairs = [_moved(pictures[j], pictures[j + 1]) for j in range(n, min(n + _STEADY_FRAMES, len(pictures) - 1))]
+        if not pairs or statistics.median(pairs) < steady:
+            return False
+    return True
+
+
 def shot_changes(rows: List[tuple], pictures=None, hard: Optional[float] = None) -> List[float]:
     """
     Seconds of every shot change in `rows` ((frame, seconds, score) from _scan):
@@ -402,9 +463,11 @@ def shot_changes(rows: List[tuple], pictures=None, hard: Optional[float] = None)
     frames within half a second - whose two frames do not show the same picture
     (same_picture under SHOT_CUT_SAME_PICTURE): the Glen Canyon opening's cut
     between two grey shots scored 0.36 against ~0.02 around it, an old film's
-    exposure flicker 0.23 with the picture unchanged (0.87). The softer jumps
-    need the frames (`pictures`, one for every numbered frame): without them,
-    or when they do not line up with `rows`, only the fixed threshold counts.
+    exposure flicker 0.23 with the picture unchanged (0.87) - and that opens a
+    new shot (_new_shot: not the same picture moved, and steady after it - a
+    handheld camera starting to swing jumps the score too). The softer jumps need the
+    frames (`pictures`, one for every numbered frame): without them, or when
+    they do not line up with `rows`, only the fixed threshold counts.
     """
     import statistics
     hard = config.SHOT_CUT_THRESHOLD if hard is None else hard
@@ -424,6 +487,8 @@ def shot_changes(rows: List[tuple], pictures=None, hard: Optional[float] = None)
             continue
         if same_picture(pictures[n - 1], pictures[n]) >= alike:
             continue                    # the same picture brighter or darker: a flicker or a flash, not a cut
+        if not _new_shot(pictures, n):
+            continue                    # the same picture moved, or moving on: a camera starting to swing
         out.append(t)
     return sorted(out)
 
