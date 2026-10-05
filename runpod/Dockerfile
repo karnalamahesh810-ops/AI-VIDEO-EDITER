@@ -43,8 +43,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # --- local models ------------------------------------------------------------
-# CLIP (local vision checks, src/localvision.py) and Real-ESRGAN (photo
-# upscaling, src/upscale.py): pinned + checksummed, ~160 MB, own layer.
+# CLIP (local vision checks, src/localvision.py), Real-ESRGAN (photo
+# upscaling, src/upscale.py), YuNet + U2-Net-p (src/reframe.py) and
+# Depth-Anything-V2-Small (living photos, src/living.py; Apache-2.0):
+# pinned + checksummed, ~260 MB, own layer.
 COPY scripts/fetch_models.py /tmp/fetch_models.py
 RUN python /tmp/fetch_models.py /opt/models && rm /tmp/fetch_models.py
 
