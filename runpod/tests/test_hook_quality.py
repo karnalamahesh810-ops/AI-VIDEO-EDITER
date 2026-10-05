@@ -717,6 +717,40 @@ class RescueAndMomentsInTheHook(unittest.TestCase):
         self.assertEqual(got, {})                                     # turned down: never on the line
         self.assertEqual(len(judged), 2)                              # 30 s after the clip, then before it
 
+    def test_a_moment_turned_down_for_one_line_stays_open_to_the_others(self):
+        # Two empty scenes beside one donor compute the same candidate moments. The hook line's opening
+        # check turning one down against ITS intent used to bar it for the whole job: the line after the
+        # hook (no vision call there) then got nothing, in this pass and every later one.
+        from src import ledger
+        a = os.path.join(self.work, "donor.mp4")
+        with open(a, "wb") as fh:
+            fh.write(b"x")
+
+        def build():
+            return {"fps": FPS, "overlays": [], "meta": {}, "scenes": [
+                scene(0, {"type": "color", "url": "", "source": "none"}, 0.0, 3.0),
+                scene(1, {"type": "video", "url": a, "source": "youtube", "clipSeconds": 6.5}, 3.0, 6.0,
+                      assetId="yt:MIDL0000001@10", moment={"start": 100.0},
+                      sourceUrl="https://www.youtube.com/watch?v=MIDL0000001&t=100"),
+                scene(2, {"type": "color", "url": "", "source": "none"}, 9.0, 5.0)]}
+
+        def fetch(vid, work, at, need, title="", **kw):
+            p = os.path.join(work, f"yt_{vid}_{int(at * 1000)}_9000_abcdef0123_c00020.mp4")
+            with open(p, "wb") as fh:
+                fh.write(b"x")
+            return p, True, 0
+        for why, scene2_gets in ((dict(opening=False), True), (dict(has_text_or_watermark=True, score=0.0), False)):
+            doc = build()
+            gapfill.remember([{"index": i, "query": f"q{i}", "start": 3.0 * i} for i in range(3)], self.work)
+            self.addCleanup(gapfill.reset)
+            shotcap.FAILED_MOMENTS.clear()
+            with mock.patch.object(media, "fetch_clean_clip", side_effect=fetch),                     mock.patch.object(media, "_asset_ok", return_value=(True, "")),                     mock.patch.object(media, "motion_rejects", return_value=""),                     mock.patch.object(media, "slop_reason", return_value=""),                     mock.patch.object(ledger, "moment_used", return_value=False),                     mock.patch.object(timeline, "_clip_seconds", side_effect=lambda x: float(x.duration or 0)),                     mock.patch.multiple(config, HOOK_CUT_CHECK=True, HOOK_SECONDS=5.0, SHOT_MAX_SECONDS=7.0),                     mock.patch.object(vision, "enabled", return_value=True),                     mock.patch.object(vision, "judge", return_value=dict(VERDICT, frames=[0.3, 1.5, 2.7], span=3.0,
+                                                                         **why)):
+                t = __import__("time").time() + 30
+                self.assertEqual(shotcap.other_moments(doc, [0], gapfill.Used(), self.work, t), {})
+                got = shotcap.other_moments(doc, [2], gapfill.Used(), self.work, t)
+            self.assertEqual(bool(got), scene2_gets, why)
+
     def test_a_moment_after_the_hook_costs_no_vision_call(self):
         doc, got, judged = self._moment(120.0, dict(VERDICT))
         self.assertEqual(list(got), [1])
