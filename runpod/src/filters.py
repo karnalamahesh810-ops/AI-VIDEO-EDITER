@@ -332,6 +332,11 @@ _FLAT = 3.0
 # How far the picture may move between two of those frames (pixels of the 48x27 copy: about an
 # eighth of the width, a sixth of the height) and still be the same picture moved (_moved).
 _MOVE_X, _MOVE_Y = 6, 3
+# A jump whose picture is back within this long, either side, is a flash - lightning, a strobe,
+# a camera flash, a flash frame - not a shot change (_flash) ...
+_FLASH_SECONDS = 0.4
+# ... where the frames before it and after it, the flash itself left out, are this alike (_moved).
+_COMES_BACK = 0.9
 
 
 def _scan(path: str, timeout: int = 120, frames: bool = False) -> tuple:
@@ -418,16 +423,69 @@ def _moved(a, b) -> float:
     """
     _alike of two small frames allowing for the picture having moved between
     them - a pan, a tilt, a handheld camera's jolt: the best over shifts of up
-    to _MOVE_X and _MOVE_Y pixels, each on the part both frames show.
+    to _MOVE_X and _MOVE_Y pixels (a sixth of a smaller crop), each on the
+    part both frames show.
     """
     h, w = a.shape
+    rx, ry = min(_MOVE_X, w // 6), min(_MOVE_Y, h // 6)
     best = _alike(a, b)
-    for dy in range(-_MOVE_Y, _MOVE_Y + 1):
-        for dx in range(-_MOVE_X, _MOVE_X + 1):
+    for dy in range(-ry, ry + 1):
+        for dx in range(-rx, rx + 1):
             if dx or dy:
                 best = max(best, _alike(a[max(0, dy):h + min(0, dy), max(0, dx):w + min(0, dx)],
                                         b[max(0, -dy):h + min(0, -dy), max(0, -dx):w + min(0, -dx)]))
     return best
+
+
+def _flash(rows: List[tuple], k: int, pictures) -> bool:
+    """
+    The jump at rows[k] is a flash, not a cut: the picture is back within
+    _FLASH_SECONDS - a frame just before the jump and one shortly after it
+    (_moved at least _COMES_BACK) show the same picture. Lightning, a strobe or
+    a camera flash scores two hard jumps (on, then off) that otherwise read as
+    two shot changes - a storm clip with a few strikes in a row used to lose
+    its in-point to them, or be thrown away (clean_window).
+    """
+    t = rows[k][1]
+
+    def pick(js, targets):
+        got = []
+        for want in targets:
+            near = min(js, key=lambda j: abs(abs(rows[j][1] - t) - want), default=None)
+            if near is not None and near not in got:
+                got.append(near)
+        return [rows[j][0] for j in got]
+    before, after = [], []
+    for j in range(k - 1, -1, -1):
+        if t - rows[j][1] > _FLASH_SECONDS:
+            break
+        before.append(j)
+    for j in range(k + 1, len(rows)):
+        if rows[j][1] - t > _FLASH_SECONDS:
+            break
+        after.append(j)
+    if not before or not after:
+        return False
+    # Only the part of the frame the jump changed is compared: a news clip's pillarbox panels and
+    # channel bug stay put across a real cut and would make any two of its shots look alike.
+    box = _changed_box(pictures[rows[k][0] - 1], pictures[rows[k][0]]) if rows[k][0] > 0 else None
+    if box is None:
+        return False
+    ys, xs = box
+    b = pick(before, (0.0, _FLASH_SECONDS / 2, _FLASH_SECONDS))
+    a = pick(after, (_FLASH_SECONDS / 3, 2 * _FLASH_SECONDS / 3, _FLASH_SECONDS))
+    return any(_moved(pictures[x][ys, xs], pictures[y][ys, xs]) >= _COMES_BACK for x in b for y in a)
+
+
+def _changed_box(a, b):
+    """(rows, columns) slices of the part of two small frames that differs, or None when too little does."""
+    import numpy as np
+    diff = np.abs(a.astype("int16") - b.astype("int16")) > 12
+    rows = np.flatnonzero(diff.mean(axis=1) > 0.2)
+    cols = np.flatnonzero(diff.mean(axis=0) > 0.2)
+    if len(rows) < 8 or len(cols) < 12:
+        return None
+    return slice(int(rows[0]), int(rows[-1]) + 1), slice(int(cols[0]), int(cols[-1]) + 1)
 
 
 def _new_shot(pictures, n: int) -> bool:
@@ -465,9 +523,11 @@ def shot_changes(rows: List[tuple], pictures=None, hard: Optional[float] = None)
     between two grey shots scored 0.36 against ~0.02 around it, an old film's
     exposure flicker 0.23 with the picture unchanged (0.87) - and that opens a
     new shot (_new_shot: not the same picture moved, and steady after it - a
-    handheld camera starting to swing jumps the score too). The softer jumps need the
-    frames (`pictures`, one for every numbered frame): without them, or when
-    they do not line up with `rows`, only the fixed threshold counts.
+    handheld camera starting to swing jumps the score too). With the frames, no
+    jump whose picture is back within _FLASH_SECONDS counts, hard or soft
+    (_flash: lightning, a strobe). The softer jumps need the frames
+    (`pictures`, one for every numbered frame): without them, or when they do
+    not line up with `rows`, only the fixed threshold counts.
     """
     import statistics
     hard = config.SHOT_CUT_THRESHOLD if hard is None else hard
@@ -478,17 +538,20 @@ def shot_changes(rows: List[tuple], pictures=None, hard: Optional[float] = None)
     out = []
     for k, (n, t, s) in enumerate(rows):
         if s > hard:
-            out.append(t)
+            if not (seen and k and _flash(rows, k, pictures)):
+                out.append(t)
             continue
         if not seen or soft <= 0 or s < soft or k == 0 or n == 0:
             continue
         around = [x for (_m, u, x) in rows[max(0, k - 60):k + 61] if 0 < abs(u - t) <= _AROUND_SECONDS]
         if not around or s < ratio * max(statistics.median(around), 0.005):
             continue
-        if same_picture(pictures[n - 1], pictures[n]) >= alike:
+        if _alike(pictures[n - 1], pictures[n]) >= alike:
             continue                    # the same picture brighter or darker: a flicker or a flash, not a cut
         if not _new_shot(pictures, n):
             continue                    # the same picture moved, or moving on: a camera starting to swing
+        if _flash(rows, k, pictures):
+            continue                    # the picture is back a moment later: a flash
         out.append(t)
     return sorted(out)
 

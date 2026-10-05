@@ -29,11 +29,13 @@ def rows_of(scores, fps=30.0):
     return [(n, round(n / fps, 4), s) for n, s in enumerate(scores)]
 
 
-def _picture(seed):
-    """A small grey frame with structure (48x27, as _scan writes them): `seed` picks the picture."""
+def _picture(seed, at=0, width=48):
+    """A small grey frame with structure (48x27, as _scan writes them): `seed` picks the picture, `at`
+    how far the camera has moved sideways over it (pixels; it never repeats)."""
     import numpy as np
-    y, x = np.mgrid[0:27, 0:48]
-    return (128 + 60 * np.sin(x / (3.0 + seed) + seed) * np.cos(y / (2.0 + seed / 2.0))).astype("uint8")
+    y, x = np.mgrid[0:27, at:at + width]
+    return (128 + 40 * np.sin(x / (3.0 + seed) + seed) * np.cos(y / (2.0 + seed / 2.0))
+            + 30 * np.sin(x / 17.3 + y / 9.1 + seed) * np.sin(np.sqrt(x + 1.0))).astype("uint8")
 
 
 def pictures_of(*runs):
@@ -126,10 +128,10 @@ class ShotChanges(unittest.TestCase):
         scores = [0.0] + [0.01] * 40 + [0.3] + [0.01] * 40
         rows = rows_of(scores)
         still = _picture(1)
-        frames = np.stack([still] * 41 + [np.roll(still, 6 * (j + 1), axis=1) for j in range(41)])
+        frames = np.stack([still] * 41 + [_picture(1, at=6 * (j + 1)) for j in range(41)])
         self.assertEqual(filters.shot_changes(rows, frames), [])
         # Too fast for the same picture to be found moved: the frames after it never hold steady.
-        fast = np.stack([still] * 41 + [np.roll(still, 13 * (j + 1), axis=1) for j in range(41)])
+        fast = np.stack([still] * 41 + [_picture(1, at=13 * (j + 1)) for j in range(41)])
         self.assertEqual(filters.shot_changes(rows, fast), [])
         with mock.patch.multiple(config, SHOT_CUT_STEADY=0.0, SHOT_CUT_MOVED=0.0):
             self.assertEqual(len(filters.shot_changes(rows, frames)), 1)   # unchecked: read as a cut
@@ -139,8 +141,30 @@ class ShotChanges(unittest.TestCase):
         import numpy as np
         scores = [0.0] + [0.01] * 40 + [0.3] + [0.01] * 40
         rows = rows_of(scores)
-        other = _picture(4)
-        frames = np.stack([_picture(1)] * 41 + [np.roll(other, 2 * j, axis=1) for j in range(41)])
+        frames = np.stack([_picture(1)] * 41 + [_picture(4, at=2 * j) for j in range(41)])
+        self.assertEqual(filters.shot_changes(rows, frames), [rows[41][1]])
+
+    def test_a_flash_the_picture_comes_back_from_is_not_a_cut(self):
+        # Lightning: two hard jumps (on, then off 0.1 s later) and the same picture either side.
+        import numpy as np
+        scores = [0.0] + [0.01] * 40 + [1.0, 0.01, 0.01, 1.0] + [0.01] * 40
+        rows = rows_of(scores)
+        sky = _picture(1)
+        white = np.full_like(sky, 250)
+        frames = np.stack([sky] * 41 + [white] * 3 + [sky] * 41)
+        self.assertEqual(filters.shot_changes(rows, frames), [])
+        self.assertEqual(len(filters.shot_changes(rows)), 2)                # without the frames: as before
+
+    def test_a_hard_cut_inside_a_pillarbox_is_still_a_cut(self):
+        # A news clip's side panels and bug stay put across its cuts: only what changed is compared.
+        import numpy as np
+        scores = [0.0] + [0.01] * 40 + [0.6] + [0.01] * 40
+        rows = rows_of(scores)
+        a, b = _picture(1).copy(), _picture(4).copy()
+        for p in (a, b):
+            p[:, :12] = (np.arange(27 * 12).reshape(27, 12) % 9 * 20).astype("uint8")
+            p[:, 36:] = (np.arange(27 * 12).reshape(27, 12) % 7 * 25).astype("uint8")
+        frames = np.stack([a] * 41 + [b] * 41)
         self.assertEqual(filters.shot_changes(rows, frames), [rows[41][1]])
 
     def test_steady_motion_never_reads_as_a_cut(self):
@@ -231,6 +255,25 @@ class CleanInPointsOnRealFiles(unittest.TestCase):
         self.assertEqual(filters.scene_cuts(src, threshold=0.4), [])
         self.assertEqual(filters.scene_cuts(src), [])
         self.assertEqual(filters.clean_window(4.0, filters.scene_cuts(src), 2.0, 1.4), (1.4, True, 0))
+
+    def test_a_storm_clip_with_lightning_keeps_its_moment(self):
+        # Four 0.1 s strikes 0.7 s apart right after the moment: eight hard jumps (scored 1.0). Read as
+        # cuts, the in-point was snapped past each in turn until too little was left, and the clip
+        # was thrown away for every line.
+        lum = "128+45*sin(X/53)*cos(Y/37)+35*sin((X+2*Y)/97)+25*cos(X/211)"
+        on = "+".join(f"between(t,{a:.3f},{a + 0.099:.3f})" for a in (2.0, 2.7, 3.4, 4.1))
+        src = os.path.join(self.d, "storm.mp4")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "nullsrc=s=320x180:r=30:d=11.5",
+                        "-vf", f"geq=lum='{lum}':cb=128:cr=128,eq=brightness='0.8*gt({on},0)':eval=frame,"
+                               "format=yuv420p", "-c:v", "libx264", "-preset", "ultrafast", src],
+                       check=True, timeout=120)
+        self.assertEqual(len(filters.scene_cuts(src, threshold=0.4)), 8)
+        self.assertEqual(filters.scene_cuts(src), [])
+        with mock.patch.object(config, "CLEAN_CUTS", True):
+            out, clean, n = filters.tidy_clip(src, 7.5, prefer=2.0)
+        self.assertTrue(out and os.path.exists(out))
+        self.assertEqual((clean, n), (True, 0))
+        self.assertGreaterEqual(filters._video_seconds(out), 7.5)
 
     def test_an_exposure_flicker_is_not_a_cut(self):
         src = _video(os.path.join(self.d, "flicker.mp4"), [(1.4, "118+40*sin(X/6)"), (3.0, "148+40*sin(X/6)")])
