@@ -377,6 +377,39 @@ class TheHookCheck(unittest.TestCase):
             else:
                 self.assertEqual((trims, fetches), ([], []))               # neither move, nor the re-cut
 
+    def test_a_re_cut_is_framed_like_the_plan_frames_its_clips(self):
+        # A news style allows vertical clips and the plan framed this one on its blurred copy before the
+        # hook check ran; its re-cut is a raw download of the same vertical video.
+        from src import upscale
+        doc, first, second = self.glen_canyon()
+        refetched = self.file("yt_R_z4cbZu3Ok_186100_7500_0123456789_c00020.mp4")
+        framed = []
+
+        def judge(path, intent, context="", **kw):
+            v = dict(VERDICT, opening=False, score=0.8) if path == first else dict(VERDICT)
+            return dict(v, frames=vision.opening_times(kw["span"]), span=kw["span"])
+        with mock.patch.object(vision, "judge", side_effect=judge),                 mock.patch.object(config, "ALLOW_VERTICAL", True),                 mock.patch.object(upscale, "frame_vertical", side_effect=lambda p: framed.append(p) or True),                 mock.patch.object(filters, "_video_seconds", return_value=3.5),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(filters, "trim_clip", return_value=""),                 mock.patch.object(media, "fetch_clean_clip", return_value=(refetched, True, 0)):
+            out = hookcheck.check(doc, work=self.work)
+        self.assertEqual(out["moved"], 1)
+        self.assertEqual(framed, [refetched])
+
+    def test_a_start_moved_inside_a_framed_clip_stays_out_of_the_library(self):
+        from src import upscale
+        doc, first, second = self.glen_canyon()
+        doc["scenes"][0]["media"]["clipSeconds"] = 5.0
+        moved = self.file("moved_framed.mp4")
+        with upscale._LOCK:
+            upscale.FRAMED.add(os.path.abspath(first))
+        self.addCleanup(lambda: upscale.FRAMED.clear())
+
+        def judge(path, intent, context="", **kw):
+            v = dict(VERDICT, opening=False, score=0.8) if path == first else dict(VERDICT)
+            return dict(v, frames=vision.opening_times(kw["span"]), span=kw["span"])
+        with mock.patch.object(vision, "judge", side_effect=judge),                 mock.patch.object(filters, "_video_seconds", side_effect=lambda p: 5.0 if p == first else 3.4),                 mock.patch.object(filters, "scene_cuts", side_effect=lambda p, *a, **k: [1.467] if p == first else []),                 mock.patch.object(filters, "trim_clip", return_value=moved):
+            out = hookcheck.check(doc, work=self.work)
+        self.assertEqual(out["moved"], 1)
+        self.assertTrue(upscale.is_framed(moved))
+
     def test_a_moved_start_never_leaves_a_clip_the_renderer_would_slow(self):
         # A crossfade into the next scene plays this clip 0.5 s longer (quality.scene_need): a 4.0 s file
         # past its cut at 0.6 s would cover 3.3 s of the 3.5 s it must.

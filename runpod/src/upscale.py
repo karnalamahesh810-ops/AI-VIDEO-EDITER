@@ -63,6 +63,18 @@ def original_lines(path: str) -> int:
         return int(UPSCALED.get(os.path.abspath(path), 0))
 
 
+def carry(src: str, dst: str) -> None:
+    """`dst`, cut from `src` (a moved start), is framed or sharpened as `src` was in this job."""
+    if not src or not dst:
+        return
+    a, b = os.path.abspath(src), os.path.abspath(dst)
+    with _LOCK:
+        if a in FRAMED:
+            FRAMED.add(b)
+        if a in UPSCALED:
+            UPSCALED[b] = UPSCALED[a]
+
+
 def available() -> bool:
     """The upscaler model loads (checked once)."""
     if not config.UPSCALE_ENABLED:

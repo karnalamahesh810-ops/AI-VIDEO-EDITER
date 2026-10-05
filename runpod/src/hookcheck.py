@@ -315,6 +315,7 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
             out = filters.trim_clip(path, at, dur - at)
             if not out:
                 continue
+            _carry_framing(path, out)           # still the framed clip the plan made: never into the library
             keep, again = judge(out, job, span)
             if keep:
                 _vid, was = _source_point(scene, path)
@@ -365,7 +366,11 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
     if not keep:
         _remove(got)
         return False
-    _put_cut(scene, got, secs, was + shift)
+    # A new download, raw: a vertical clip framed on its blurred copy as the plan frames its own
+    # (shotcap._frame, where the style allows vertical clips) - else the renderer crops it to a strip.
+    from . import shotcap
+    shotcap._frame(got)
+    _put_cut(scene, got, filters._video_seconds(got) or secs, was + shift)
     record(scene, again, keep)
     scene["semanticMetadata"]["cutCheck"]["moved"] = round(shift, 2)
     return True
@@ -387,6 +392,14 @@ def _played(scenes: List[dict], i: int, fps: int) -> List[Tuple[str, float, floa
         if vid and start is not None:
             out.append((vid, float(start), float(start) + int(sc.get("durationInFrames") or 0) / fps))
     return out
+
+
+def _carry_framing(src: str, dst: str) -> None:
+    try:
+        from . import upscale
+        upscale.carry(src, dst)
+    except Exception:  # noqa: BLE001 - a record only
+        pass
 
 
 def _can_judge() -> bool:
