@@ -271,7 +271,7 @@ def _put_cut(scene: dict, path: str, seconds: float, start: Optional[float] = No
 
 
 def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional[dict], work: str = "",
-               cover: Optional[float] = None) -> bool:
+               cover: Optional[float] = None, until: float = 0.0) -> bool:
     """
     A clip whose opening was turned down, its start moved and the new cut judged
     (True when it passed and is on the scene): first inside its own file - past
@@ -283,10 +283,12 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
     is told to score 0 - so it says nothing about the middle). Never a cut
     shorter than `cover` (what the scene plays, a crossfade into the next
     included; `span` when not given): a clip is never slowed. Nothing is tried
-    that no verdict could follow (vision off, the calls spent).
+    that no verdict could follow (vision off, the calls spent). The download
+    keeps to FALLBACK_SCENE_SECONDS, and to `until` (epoch seconds, the whole
+    check's box; 0 = none): past it nothing is fetched.
     """
     from . import filters, media
-    if (scene.get("media") or {}).get("type") != "video" or not path:
+    if (scene.get("media") or {}).get("type") != "video" or not path or not _can_judge():
         return False
     v = verdict or {}
     cover = max(span, float(cover or 0.0))
@@ -326,12 +328,24 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
     from . import ledger
     if ledger.moment_used(vid, was + shift, was + shift + need):
         return False                            # an earlier video showed that moment
+    if not _can_judge():
+        return False                            # a download no verdict could follow
+    stop = time.time() + float(getattr(config, "FALLBACK_SCENE_SECONDS", 45.0) or 45.0)
+    if until:
+        if time.time() >= until:
+            print(f"[hook] {scene.get('id')}: no time left to cut it again", flush=True)
+            return False
+        stop = min(stop, until)
     title = str((scene.get("media") or {}).get("attribution") or "")
+    from . import ytdlp
+    token = ytdlp.STOP.set((None, stop))        # no retry starts past it (the plan's deadline is off by now)
     try:
         got, _clean, _cuts = media.fetch_clean_clip(vid, work, was + shift, need, title)
     except Exception as e:  # noqa: BLE001 - the next step
         print(f"[hook] {scene.get('id')}: moving its start failed: {type(e).__name__}: {str(e)[:80]}", flush=True)
         got = ""
+    finally:
+        ytdlp.STOP.reset(token)
     if not got:
         return False
     secs = filters._video_seconds(got)
@@ -346,6 +360,12 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
     record(scene, again, keep)
     scene["semanticMetadata"]["cutCheck"]["moved"] = round(shift, 2)
     return True
+
+
+def _can_judge() -> bool:
+    """A verdict could still come: the check on, vision on and calls left."""
+    from . import vision
+    return enabled() and vision.enabled() and not spent()
 
 
 def _remove(path: str) -> None:
@@ -517,6 +537,9 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
         out["visionOff"] = True                 # nothing can judge: the opening stays as the plan left it
         return out
     t0 = time.time()
+    # The downloads a moved start needs keep to one box for the whole check (other_moments and the
+    # ladder keep to their own): the plan's sourcing deadline is off by now.
+    until = t0 + float(getattr(config, "FALLBACK_SECONDS", 180.0) or 180.0)
     calls0 = vision.calls_made()
     work = work or str(gapfill.CONTEXT.get("work") or "") or str(media._WORK.get("dir") or "")
     seen: set = set()
@@ -558,7 +581,7 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
                                           "opening": verdict.get("opening") if verdict else None})
             print(f"[hook] {s.get('id')}: turned down - {reason}", flush=True)
             if m.get("type") == "video" and move_start(s, path, job, span, verdict, work,
-                                                       cover=_plays(scenes, i, fps)):
+                                                       cover=_plays(scenes, i, fps), until=until):
                 out["moved"] += 1
                 unmark(doc, s)
                 s["reviewRequired"] = True

@@ -290,6 +290,55 @@ class TheHookCheck(unittest.TestCase):
         self.assertEqual((out["moved"], out["cleared"]), (1, 0))
         self.assertEqual(doc["scenes"][0]["media"]["url"], refetched)
 
+    def _recut_case(self):
+        """The Glen Canyon clip turned down for its first frame, no room to move inside its file."""
+        doc, first, second = self.glen_canyon()
+        seen = []
+
+        def judge(path, intent, context="", **kw):
+            vision._counted()
+            v = dict(VERDICT, opening=False, score=0.8) if path == first else dict(VERDICT)
+            return dict(v, frames=vision.opening_times(kw["span"]), span=kw["span"])
+
+        def fetch(vid, work, at, need, title="", **kw):
+            from src import ytdlp
+            seen.append({"stop": ytdlp.STOP.get(), "stopped": ytdlp.stopped(), "spent": hookcheck.spent(),
+                         "vision": vision.enabled()})
+            return "", True, 0
+        return doc, first, judge, fetch, seen
+
+    def test_a_re_cut_is_never_downloaded_when_no_verdict_could_follow(self):
+        doc, first, judge, fetch, seen = self._recut_case()
+        # Its own check took the last call: nothing to judge a new cut with.
+        with mock.patch.object(config, "HOOK_CUT_MAX_CALLS", 1),                 mock.patch.object(vision, "judge", side_effect=judge),                 mock.patch.object(filters, "_video_seconds", return_value=3.2),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(media, "fetch_clean_clip", side_effect=fetch),                 mock.patch.object(gapfill, "hold_or_animate", return_value={}):
+            hookcheck.check(doc, work=self.work)
+        self.assertEqual(seen, [])
+        # Vision gone (out of credits) after the verdict: the same.
+        doc, first, judge, fetch, seen = self._recut_case()
+        verdict = dict(VERDICT, opening=False, score=0.8, frames=[0.3, 1.5, 2.7], span=3.0)
+        with mock.patch.object(vision, "enabled", return_value=False),                 mock.patch.object(filters, "_video_seconds", return_value=3.2),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(media, "fetch_clean_clip", side_effect=fetch):
+            self.assertFalse(hookcheck.move_start(doc["scenes"][0], first, {"intent": "x"}, 3.0, verdict,
+                                                  self.work, cover=3.0))
+        self.assertEqual(seen, [])
+
+    def test_a_re_cut_keeps_to_a_time_box(self):
+        import time as _time
+        doc, first, judge, fetch, seen = self._recut_case()
+        with mock.patch.object(vision, "judge", side_effect=judge),                 mock.patch.object(filters, "_video_seconds", return_value=3.2),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(media, "fetch_clean_clip", side_effect=fetch),                 mock.patch.object(gapfill, "hold_or_animate", return_value={}):
+            hookcheck.check(doc, work=self.work)
+        self.assertEqual(len(seen), 1)
+        box, own = seen[0]["stop"]
+        self.assertIsNone(box)
+        self.assertLessEqual(own, _time.time() + config.FALLBACK_SCENE_SECONDS)   # retries stop there
+        self.assertFalse(seen[0]["stopped"])
+        # The whole check's box already closed: not fetched.
+        doc, first, judge, fetch, seen = self._recut_case()
+        verdict = dict(VERDICT, opening=False, score=0.8, frames=[0.3, 1.5, 2.7], span=3.0)
+        with mock.patch.object(filters, "_video_seconds", return_value=3.2),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(media, "fetch_clean_clip", side_effect=fetch):
+            self.assertFalse(hookcheck.move_start(doc["scenes"][0], first, {"intent": "x"}, 3.0, verdict,
+                                                  self.work, cover=3.0, until=_time.time() - 1))
+        self.assertEqual(seen, [])
+
     def test_a_moved_start_never_leaves_a_clip_the_renderer_would_slow(self):
         # A crossfade into the next scene plays this clip 0.5 s longer (quality.scene_need): a 4.0 s file
         # past its cut at 0.6 s would cover 3.3 s of the 3.5 s it must.
