@@ -9,24 +9,29 @@ import { loadFont as loadOswald } from "@remotion/google-fonts/Oswald";
 import { loadFont as loadCaveat } from "@remotion/google-fonts/Caveat";
 import { loadFont as loadMarker } from "@remotion/google-fonts/PermanentMarker";
 import { loadFont as loadJetBrains } from "@remotion/google-fonts/JetBrainsMono";
+import { loadFont as loadAnton } from "@remotion/google-fonts/Anton";
+import { loadFont as loadBebas } from "@remotion/google-fonts/BebasNeue";
 import {
-  ANTON, CINZEL, DISPLAY, INTER, LABEL, SERIF_HEAVY, SUBLINE, TYPEWRITER,
+  CINZEL, INTER, LABEL, SERIF_HEAVY, SUBLINE, TYPEWRITER,
 } from "../fonts";
 
-// The looks no longer use these four faces (components/fonts.ts, 2026-10-05), but a brand kit
-// may still name them for its captions and cards: they load here, for the kit that asks.
+// The looks no longer use these six faces (components/fonts.ts, 2026-10-05: Anton and Bebas Neue
+// went with the poster style), but a brand kit may still name them for its captions and cards:
+// they load here, for the kit that asks.
 const latin = { subsets: ["latin" as const] };
 const OSWALD = `${loadOswald("normal", { ...latin, weights: ["500", "700"] }).fontFamily}, 'Arial Narrow', sans-serif`;
 const CAVEAT = `${loadCaveat("normal", { ...latin, weights: ["600", "700"] }).fontFamily}, cursive`;
 const PERMANENT_MARKER = `${loadMarker("normal", { ...latin, weights: ["400"] }).fontFamily}, cursive`;
+const ANTON_REAL = `${loadAnton("normal", { ...latin, weights: ["400"] }).fontFamily}, Impact, sans-serif`;
+const BEBAS = `${loadBebas("normal", { ...latin, weights: ["400"] }).fontFamily}, Impact, sans-serif`;
 const JETBRAINS = `${loadJetBrains("normal", { ...latin, weights: ["500", "700"] }).fontFamily}, monospace`;
 
 export const BRAND_FONTS: Record<string, string> = {
   "Inter": INTER,
   "Inter Tight": SUBLINE,
   "Oswald": OSWALD,
-  "Anton": ANTON,
-  "Bebas Neue": DISPLAY,
+  "Anton": ANTON_REAL,
+  "Bebas Neue": BEBAS,
   "Barlow Condensed": LABEL,
   "Playfair Display": SERIF_HEAVY,
   "Cinzel": CINZEL,

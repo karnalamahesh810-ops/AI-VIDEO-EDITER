@@ -1,0 +1,15 @@
+{
+  "_about": "The one size rule for on-screen type (the owner, 2026-10-05: numbers 'the perfect size - not big, not small'; text bold and clean). Shares of the FRAME HEIGHT for the visible height of the letters (cap height = digit height). Read by components/lib/typeKit.tsx and by the worker's tests (tests/test_type_system.py), so the rule has one home.",
+  "hero": { "share": 0.14, "least": 0.12, "most": 0.16 },
+  "year": { "share": 0.115, "least": 0.1, "most": 0.13 },
+  "unit": { "ofHero": 0.36 },
+  "context": { "share": 0.031 },
+  "kicker": { "share": 0.0205 },
+  "keyword": { "share": 0.05, "least": 0.036, "most": 0.058 },
+  "statement": { "share": 0.036, "least": 0.028, "most": 0.042 },
+  "date": { "share": 0.06, "least": 0.045, "most": 0.068 },
+  "name": { "share": 0.042, "least": 0.032, "most": 0.048 },
+  "label": { "share": 0.024, "least": 0.019, "most": 0.03 },
+  "safe": { "x": 0.068, "top": 0.09, "bottom": 0.14 },
+  "numberSeconds": { "least": 3.0, "most": 5.0, "landedHold": 2.5, "never": 6.0 }
+}
