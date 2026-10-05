@@ -105,7 +105,7 @@ REVEAL_SHARE = 0.025
 # long side away from it (the near object's fringe - mixed edge pixels - never
 # feeds the fill): the row's background mirrored in at MIRROR_LONG px, a smooth
 # push-pull fill at FILL_LONG px where a row has none. Only a strip ever shows.
-HIDE_MARGIN = 0.012
+HIDE_MARGIN = 0.006
 FILL_LONG = 384
 MIRROR_LONG = 960
 # A gentle depth of field (the owner, 2026-10-05: "even better"): when the
