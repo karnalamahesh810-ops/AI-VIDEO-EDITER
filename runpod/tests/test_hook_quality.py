@@ -381,8 +381,7 @@ class TheHookCheck(unittest.TestCase):
         hookcheck.reset()
 
         def a_call(*a, **k):
-            with vision._LOCK:
-                vision._CALLS["n"] += 1                                # what a real model call counts
+            vision._counted()                                          # what a real model call counts
             return dict(VERDICT, frames=[0.3, 1.5, 2.7], span=3.0)
         with mock.patch.object(config, "HOOK_CUT_MAX_CALLS", 1), \
                 mock.patch.object(vision, "judge", side_effect=a_call) as j:
@@ -390,6 +389,76 @@ class TheHookCheck(unittest.TestCase):
         self.assertEqual(j.call_count, 1)
         self.assertTrue(out.get("budgetSpent"))
         self.assertEqual(out["calls"], 1)
+
+    def many_clips(self, n):
+        """A hook of n 3-second clips nothing had checked."""
+        doc = {"fps": FPS, "overlays": [], "meta": {}, "scenes": []}
+        for k in range(n):
+            path = self.file(f"yt_CLIP{k:07d}_{10000 * (k + 1)}_7500_abcdef0123_c00020.mp4")
+            doc["scenes"].append(scene(k, {"type": "video", "url": path, "source": "youtube", "clipSeconds": 3.5},
+                                       3.0 * k, 3.0, assetId=f"yt:CLIP{k:07d}@1"))
+        return doc
+
+    def test_judges_side_by_side_count_only_their_own_calls(self):
+        # Each judge read its spend off the shared count of model calls, so four judging at once each
+        # counted the others' calls too: 12 clips, 12 calls, counted as ~40 - the cap of 30 "spent".
+        import time as _time
+        doc = self.many_clips(12)
+
+        def a_call(*a, **k):
+            _time.sleep(0.05)
+            vision._counted()
+            return dict(VERDICT, frames=[0.3, 1.5, 2.7], span=k.get("span"))
+        with mock.patch.object(vision, "judge", side_effect=a_call):
+            out = hookcheck.check(doc, work=self.work)
+        self.assertEqual((out["checked"], out["kept"]), (12, 12))
+        self.assertNotIn("budgetSpent", out)
+        self.assertEqual(hookcheck.left(), 30 - 12)
+        # A remembered verdict (no model call) costs nothing.
+        with mock.patch.object(vision, "judge", return_value=dict(VERDICT, frames=[0.3, 1.5, 2.7], span=3.0)):
+            hookcheck.judge(self.file("again.mp4"), {"intent": "x", "seconds": 3.0}, 3.0)
+        self.assertEqual(hookcheck.left(), 30 - 12)
+
+    def test_the_last_calls_are_never_handed_out_twice(self):
+        import threading
+        import time as _time
+        started = []
+
+        def a_call(*a, **k):
+            started.append(1)
+            _time.sleep(0.05)
+            vision._counted()
+            return dict(VERDICT, frames=[0.3, 1.5, 2.7], span=3.0)
+        path = self.file("one.mp4")
+        with mock.patch.object(config, "HOOK_CUT_MAX_CALLS", 3), mock.patch.object(vision, "judge", side_effect=a_call):
+            threads = [threading.Thread(target=hookcheck.judge, args=(path, {"intent": "x", "seconds": 3.0}, 3.0))
+                       for _ in range(8)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(len(started), 3)
+            self.assertTrue(hookcheck.spent())
+
+    def test_a_runner_up_nobody_could_judge_never_takes_the_opening(self):
+        doc, first, second = self.glen_canyon()
+        alt = self.file("alt_unjudged.mp4")
+        runner = {"assetId": "yt:ALTNONE0001@3", "url": "https://www.youtube.com/watch?v=ALTNONE0001&t=30",
+                  "score": 0.9, "localPath": alt, "seconds": 4.0, "moment": {"start": 30.0}, "source": "youtube"}
+        doc["scenes"][0]["semanticMetadata"]["alternatives"] = [runner]
+
+        def judge(path, intent, context="", **kw):
+            if path == alt:
+                return None                                            # no verdict (every model failing)
+            v = dict(VERDICT, has_text_or_watermark=True, score=0.0) if path == first else dict(VERDICT)
+            return dict(v, frames=vision.opening_times(kw["span"]), span=kw["span"])
+        with mock.patch.object(vision, "judge", side_effect=judge),                 mock.patch.object(filters, "_video_seconds", return_value=4.0),                 mock.patch.object(filters, "scene_cuts", return_value=[]),                 mock.patch.object(shotcap, "_probe", return_value=4.0),                 mock.patch.object(gapfill, "hold_or_animate", return_value={}):
+            out = hookcheck.check(doc, work=self.work)
+        self.assertEqual((out["swapped"], out["cleared"]), (0, 1))
+        s0 = doc["scenes"][0]
+        self.assertEqual(s0["media"]["type"], "color")                # not the unjudged runner-up
+        self.assertEqual(s0["semanticMetadata"]["hookCheck"]["turnedDown"]["assetId"], "yt:R_z4cbZu3Ok@23")
+        self.assertEqual([a["assetId"] for a in s0["semanticMetadata"]["alternatives"]], ["yt:ALTNONE0001@3"])
 
     def test_off_changes_nothing(self):
         doc, first, second = self.glen_canyon()

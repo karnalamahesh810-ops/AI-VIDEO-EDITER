@@ -37,6 +37,9 @@ from . import config, costs, events, intent as scene_intent
 _CACHE: Dict[str, dict] = {}
 _LOCK = threading.Lock()
 _CALLS = {"n": 0}
+# The same count for the calling thread alone (calls_here): a caller that wants its own model calls -
+# the hook check's budget - cannot read them off the shared count while other judges run beside it.
+_HERE = threading.local()
 # Why recent model calls failed. A failed call returns None and the clip is
 # kept unjudged, which is invisible in the timeline; the worker reports these
 # so a broken key or model shows up in the job result instead of as bad clips.
@@ -249,6 +252,18 @@ def enabled() -> bool:
 
 def calls_made() -> int:
     return _CALLS["n"]
+
+
+def calls_here() -> int:
+    """Model calls made on this thread (judge, the tile ratings), for a caller counting its own."""
+    return int(getattr(_HERE, "n", 0))
+
+
+def _counted() -> None:
+    """One model call made (the shared count and this thread's)."""
+    with _LOCK:
+        _CALLS["n"] += 1
+    _HERE.n = calls_here() + 1
 
 
 def reset() -> None:
@@ -928,8 +943,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     elif text:
         _fail(model, f"unparseable verdict: {text[:120]!r}")
 
-    with _LOCK:
-        _CALLS["n"] += 1
+    _counted()
     if text:
         costs.record("vision.judge")
     with _LOCK:
@@ -1097,8 +1111,7 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
     first = _tile_first(checked)
     text, model = _ask(messages, 900, first=first) if first else _ask(messages, 900)
     _note_tile_model(first, model)
-    with _LOCK:
-        _CALLS["n"] += 1
+    _counted()
     if not text:
         # Every model failed: the local CLIP pass rates the tiles instead, so
         # the video still gets its best moments rather than none.
@@ -1152,8 +1165,7 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "",
     first = _tile_first(checked)
     text, model = _ask(messages, 400, first=first) if first else _ask(messages, 400)
     _note_tile_model(first, model)
-    with _LOCK:
-        _CALLS["n"] += 1
+    _counted()
     if not text:
         # Every model failed: the best tile by the local CLIP pass, if any
         # clears the floor.

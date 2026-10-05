@@ -101,6 +101,21 @@ def left() -> Optional[int]:
         return max(0, cap - _SPENT["calls"])
 
 
+def _reserve() -> bool:
+    """
+    One call of the budget taken before the judge runs (judge settles it to
+    what the call cost), so checks running side by side - the prefetch, the
+    rescue pass, the shot cap's other moments - never all pass spent() at once.
+    False when none is left.
+    """
+    cap = int(getattr(config, "HOOK_CUT_MAX_CALLS", 0) or 0)
+    with _LOCK:
+        if cap > 0 and _SPENT["calls"] >= cap:
+            return False
+        _SPENT["calls"] += 1
+        return True
+
+
 def judge(path: str, job: Dict[str, Any], span: Optional[float] = None) -> Tuple[Optional[bool], Optional[dict]]:
     """
     (keep, verdict) for one cut of a hook line: the vision judge on the `span`
@@ -121,13 +136,20 @@ def judge(path: str, job: Dict[str, Any], span: Optional[float] = None) -> Tuple
         span = 0.0
     si = job.get("scene_intent") if isinstance(job.get("scene_intent"), dict) else None
     wants = media.wanted_kind(si or {})
-    before = vision.calls_made()
-    verdict = vision.judge(path, intent, str(job.get("context") or ""), event=bool(job.get("event_window")),
-                           **({"scene": si} if si else {}),
-                           **({"wants": wants} if wants in ("map", "chart") else {}),
-                           **({"span": span} if span > 0 else {}))
-    with _LOCK:
-        _SPENT["calls"] += max(0, vision.calls_made() - before)
+    if not _reserve():
+        return None, None                       # another check took the last call meanwhile
+    made = 0
+    try:
+        # This check's own calls - this thread's, not the shared count other judges add to meanwhile.
+        before = vision.calls_here()
+        verdict = vision.judge(path, intent, str(job.get("context") or ""), event=bool(job.get("event_window")),
+                               **({"scene": si} if si else {}),
+                               **({"wants": wants} if wants in ("map", "chart") else {}),
+                               **({"span": span} if span > 0 else {}))
+        made = max(0, vision.calls_here() - before)
+    finally:
+        with _LOCK:
+            _SPENT["calls"] += made - 1         # the reservation becomes what it cost (0: a remembered verdict)
     if verdict is None:
         return None, None
     keep = vision.acceptable(verdict, allow_people=job.get("subject_type") == "person")
@@ -376,6 +398,17 @@ def swap_runner_up(doc: dict, i: int, job: dict, span: float) -> bool:
                 return False
             path = _local((s.get("media") or {}).get("url"))
             keep, verdict = judge(path, job, span) if path else (None, None)
+            if keep is None:
+                # No verdict (the calls spent, vision gone, every model failing): an unjudged runner-up
+                # never takes the opening. It goes back to its choices; the caller keeps the clip as
+                # the best available or leaves the line to the last resort.
+                for k, was in lists.items():
+                    sem = scenes[k].setdefault("semanticMetadata", {})
+                    now = sem.get("alternatives") or []
+                    gone = [a for a in was if not any(a is b for b in now)]
+                    if gone:
+                        sem["alternatives"] = list(now) + gone
+                return False
             record(s, verdict, keep)
             if keep is False and not soft(verdict):
                 for k, was in lists.items():    # turned down too: the next runner-up
@@ -537,9 +570,14 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
                 unmark(doc, s)
                 print(f"[hook] {s.get('id')}: a runner-up took its place", flush=True)
                 continue
+            # No runner-up passed: the scene is its own clip again (a runner-up tried may still sit on
+            # it) - with the choices left after the tries.
+            left_over = (s.get("semanticMetadata") or {}).get("alternatives")
+            s["media"], s["semanticMetadata"], s["reviewRequired"], s["reviewReason"] = before
+            if left_over is not None and isinstance(s.get("semanticMetadata"), dict):
+                s["semanticMetadata"]["alternatives"] = left_over
             if soft(verdict):
                 # Nothing better: the clip it had stays, flagged - the hook search's "best available".
-                s["media"], s["semanticMetadata"], s["reviewRequired"], s["reviewReason"] = before
                 record(s, verdict, keep)
                 s["reviewRequired"] = True
                 s["reviewReason"] = (f"Best available at the start of the video: the hook check scored it "
