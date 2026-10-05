@@ -343,9 +343,17 @@ def _scan(path: str, timeout: int = 120, frames: bool = False) -> tuple:
     if np is not None:
         vf += f",scale={_CMP_W}:{_CMP_H},format=gray"
     cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-an", "-vf", vf]
-    cmd += ["-f", "rawvideo", "-"] if np is not None else ["-f", "null", "-"]
+    # The raw frames exactly as decoded: the rawvideo muxer is constant-rate by default, so on a
+    # variable-rate file (a phone clip, a webm) or one whose picture starts after its sound ffmpeg
+    # would duplicate or drop frames after the metadata filter numbered them, and picture n would
+    # no longer be frame n.
+    raw = ["-fps_mode", "passthrough", "-f", "rawvideo", "-"]
+    cmd += raw if np is not None else ["-f", "null", "-"]
     try:
         p = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        if np is not None and p.returncode != 0 and b"fps_mode" in (p.stderr or b""):
+            # An ffmpeg older than 5.0 has no -fps_mode: the frames as it writes them, checked below.
+            p = subprocess.run(cmd[:-len(raw)] + ["-f", "rawvideo", "-"], capture_output=True, timeout=timeout)
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return [], None
     rows, current = [], None
@@ -362,7 +370,9 @@ def _scan(path: str, timeout: int = 120, frames: bool = False) -> tuple:
     if np is not None and rows and p.stdout:
         size = _CMP_W * _CMP_H
         n = len(p.stdout) // size
-        if n and max(r[0] for r in rows) < n:
+        # One picture for every numbered frame, no more and no fewer: anything else means the
+        # pictures and the scores no longer line up, and shot_changes keeps to the hard threshold.
+        if n and n == max(r[0] for r in rows) + 1:
             pictures = np.frombuffer(p.stdout[:n * size], dtype=np.uint8).reshape(n, _CMP_H, _CMP_W)
     return rows, pictures
 
@@ -390,30 +400,40 @@ def shot_changes(rows: List[tuple], pictures=None, hard: Optional[float] = None)
     a score above SHOT_CUT_THRESHOLD (`hard`), as before; and a softer jump - at
     least SHOT_CUT_SOFT_THRESHOLD and SHOT_CUT_RATIO times the median of the
     frames within half a second - whose two frames do not show the same picture
-    (same_picture under SHOT_CUT_SAME_PICTURE, when the frames are there): the
-    Glen Canyon opening's cut between two grey shots scored 0.36 against
-    ~0.02 around it, an old film's exposure flicker 0.23 with the picture
-    unchanged (0.87).
+    (same_picture under SHOT_CUT_SAME_PICTURE): the Glen Canyon opening's cut
+    between two grey shots scored 0.36 against ~0.02 around it, an old film's
+    exposure flicker 0.23 with the picture unchanged (0.87). The softer jumps
+    need the frames (`pictures`, one for every numbered frame): without them,
+    or when they do not line up with `rows`, only the fixed threshold counts.
     """
     import statistics
     hard = config.SHOT_CUT_THRESHOLD if hard is None else hard
     soft = float(getattr(config, "SHOT_CUT_SOFT_THRESHOLD", 0.0) or 0.0)
     ratio = float(getattr(config, "SHOT_CUT_RATIO", 4.0) or 4.0)
     alike = float(getattr(config, "SHOT_CUT_SAME_PICTURE", 0.75) or 0.75)
+    seen = _lined_up(rows, pictures)
     out = []
     for k, (n, t, s) in enumerate(rows):
         if s > hard:
             out.append(t)
             continue
-        if soft <= 0 or s < soft or k == 0:
+        if not seen or soft <= 0 or s < soft or k == 0 or n == 0:
             continue
         around = [x for (_m, u, x) in rows[max(0, k - 60):k + 61] if 0 < abs(u - t) <= _AROUND_SECONDS]
         if not around or s < ratio * max(statistics.median(around), 0.005):
             continue
-        if pictures is not None and 0 < n < len(pictures) and same_picture(pictures[n - 1], pictures[n]) >= alike:
+        if same_picture(pictures[n - 1], pictures[n]) >= alike:
             continue                    # the same picture brighter or darker: a flicker or a flash, not a cut
         out.append(t)
     return sorted(out)
+
+
+def _lined_up(rows: List[tuple], pictures) -> bool:
+    """`pictures` holds exactly one frame for every frame `rows` numbers (_scan), so picture n is frame n."""
+    try:
+        return bool(rows) and pictures is not None and len(pictures) == max(r[0] for r in rows) + 1
+    except (TypeError, ValueError):
+        return False
 
 
 def scene_cuts(path: str, threshold: Optional[float] = None, timeout: int = 120) -> List[float]:

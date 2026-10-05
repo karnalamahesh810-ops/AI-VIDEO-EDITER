@@ -29,6 +29,19 @@ def rows_of(scores, fps=30.0):
     return [(n, round(n / fps, 4), s) for n, s in enumerate(scores)]
 
 
+def _picture(seed):
+    """A small grey frame with structure (48x27, as _scan writes them): `seed` picks the picture."""
+    import numpy as np
+    y, x = np.mgrid[0:27, 0:48]
+    return (128 + 60 * np.sin(x / (3.0 + seed) + seed) * np.cos(y / (2.0 + seed / 2.0))).astype("uint8")
+
+
+def pictures_of(*runs):
+    """One picture per frame from [(frames, picture)] runs - a shot holding still."""
+    import numpy as np
+    return np.stack([pic for count, pic in runs for _ in range(count)])
+
+
 def _video(path, parts, fps=25):
     """A test section from [(seconds, lum expression)] - static grey stripes, so the only
     change between frames is where one part meets the next."""
@@ -64,10 +77,23 @@ class ShotChanges(unittest.TestCase):
         # Measured on the published video: 0.365 at 1.467 s against ~0.02-0.08 around it.
         scores = [0.0] + [0.02, 0.06, 0.01, 0.05] * 10 + [0.06, 0.02, 0.365, 0.03, 0.05] + [0.02, 0.06] * 15
         rows = rows_of(scores)
-        cut = rows[scores.index(0.365)][1]
-        self.assertEqual(filters.shot_changes(rows), [cut])
+        at = scores.index(0.365)
+        cut = rows[at][1]
+        frames = pictures_of((at, _picture(1)), (len(scores) - at, _picture(4)))
+        self.assertEqual(filters.shot_changes(rows, frames), [cut])
         with mock.patch.object(config, "SHOT_CUT_SOFT_THRESHOLD", 0.0):
-            self.assertEqual(filters.shot_changes(rows), [])          # the fixed threshold alone: missed
+            self.assertEqual(filters.shot_changes(rows, frames), [])  # the fixed threshold alone: missed
+
+    def test_a_softer_jump_needs_frames_that_line_up(self):
+        # Without the frames - or with one picture too many or too few, a variable-rate file written
+        # at a constant rate - the flicker check cannot run: only the fixed threshold counts.
+        scores = [0.0] + [0.02] * 40 + [0.36] + [0.02] * 40
+        rows = rows_of(scores)
+        good = pictures_of((41, _picture(1)), (41, _picture(4)))
+        self.assertEqual(len(filters.shot_changes(rows, good)), 1)
+        self.assertEqual(filters.shot_changes(rows), [])
+        self.assertEqual(filters.shot_changes(rows, pictures_of((41, _picture(1)), (42, _picture(4)))), [])
+        self.assertEqual(filters.shot_changes(rows, pictures_of((40, _picture(1)), (41, _picture(4)))), [])
 
     def test_the_same_picture_brighter_is_a_flicker_not_a_cut(self):
         import numpy as np
@@ -140,6 +166,22 @@ class CleanInPointsOnRealFiles(unittest.TestCase):
         self.assertEqual(filters.scene_cuts(out), [])                         # no cut inside the clip
         self.assertGreater(_first_frame_like(out, ref, 5.0), 0.9)             # it opens on the shot after
         self.assertLess(_first_frame_like(out, ref, 1.0), 0.5)                # not on the shot before
+
+    def test_a_file_with_a_frame_missing_still_finds_its_softer_cut(self):
+        # A phone or web file's timing has gaps: written at a constant rate, ffmpeg filled the gap with
+        # a copy after the scores were numbered, every later picture was one frame late, and the cut
+        # at 2.0 s was compared across two copies of the same frame - missed.
+        src = _video(os.path.join(self.d, "steady.mp4"), [(2.0, ACROSS), (2.0, DOWN)])
+        gap = os.path.join(self.d, "gap.mp4")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-vf", r"select='not(eq(n\,20))'",
+                        "-fps_mode", "passthrough", "-c:v", "libx264", "-preset", "ultrafast", gap],
+                       check=True, timeout=120)
+        rows, pictures = filters._scan(gap, frames=True)
+        self.assertEqual(len(pictures), max(r[0] for r in rows) + 1)
+        self.assertEqual(filters.scene_cuts(gap, threshold=0.4), [])
+        cuts = filters.scene_cuts(gap)
+        self.assertEqual(len(cuts), 1)
+        self.assertAlmostEqual(cuts[0], 2.0, delta=0.05)
 
     def test_an_exposure_flicker_is_not_a_cut(self):
         src = _video(os.path.join(self.d, "flicker.mp4"), [(1.4, "118+40*sin(X/6)"), (3.0, "148+40*sin(X/6)")])
