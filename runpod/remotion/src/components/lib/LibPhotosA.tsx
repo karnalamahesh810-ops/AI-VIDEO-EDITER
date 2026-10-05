@@ -274,7 +274,10 @@ const TiltCard: Look = ({ overlay, accent }) => {
   const kicker = cap(overlay.label);
   const sub = str(overlay.subtitle);
   const tl = lines(title, 15).slice(0, 3);
-  const size = tl.length >= 3 ? 68 : 80;
+  // A line never breaks inside a word ("OUTLET WORK / S" on the Las Vegas video): the size fits the longest line
+  // in the 600 px column (display caps run about 0.7 em a letter).
+  const longest = Math.max(1, ...tl.map((l) => l.length));
+  const size = Math.min(tl.length >= 3 ? 68 : 80, Math.floor(600 / (longest * 0.7)));
   const E = Math.round(fps * 0.85);
   const e = ramp(frame, 0, E, Easing.bezier(0.2, 1.22, 0.36, 1));
   const t = frame / fps;
@@ -332,7 +335,7 @@ const TiltCard: Look = ({ overlay, accent }) => {
         ) : null}
         {tl.map((ln, i) => (
           <Letters key={i} text={ln} at={12 + i * 5} style={{ fontFamily: DISPLAY, fontSize: size * k, lineHeight: 0.98, color: "#fff",
-            letterSpacing: "0.02em", textShadow: "0 8px 30px rgba(0,0,0,.5)" }} />
+            letterSpacing: "0.02em", textShadow: "0 8px 30px rgba(0,0,0,.5)", whiteSpace: "nowrap" }} />
         ))}
         {sub ? (
           <div style={{ marginTop: 10 * k, display: "flex", flexDirection: "column", gap: 2 * k }}>

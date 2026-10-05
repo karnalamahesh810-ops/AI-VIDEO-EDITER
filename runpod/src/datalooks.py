@@ -993,6 +993,21 @@ def strip_private(ov: dict) -> dict:
     return {k: v for k, v in ov.items() if not k.startswith("_")}
 
 
+_TRAILING_NOTE = re.compile(r"\s*[\(\[][^\)\]]{1,60}[\)\]]\s*$")
+
+
+def caption_clean(text: Any) -> Optional[str]:
+    """
+    A look's caption without the planner's trailing note in brackets ("Hoover Dam outlet works (river releases)",
+    "Savings account deposit vs missed paycheck (metaphor)"): drawn, it wrapped to an unclosed "(RIVER" on the
+    Las Vegas video. None when there is nothing to take off.
+    """
+    if not isinstance(text, str) or not _TRAILING_NOTE.search(text):
+        return None
+    head = _TRAILING_NOTE.sub("", text).strip(" -,:;")
+    return head if len(head) >= 3 else None
+
+
 def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
     """
     Re-plan the data looks of a timeline in place and give every overlay its full animation:
@@ -1006,6 +1021,7 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
     total = int(doc.get("durationInFrames") or 0) or max(
         [int(s.get("startFrame") or 0) + int(s.get("durationInFrames") or 0) for s in doc.get("scenes") or []] + [0])
     before = [dict(o) for o in doc.get("overlays") or [] if isinstance(o, dict)]
+    short_before = short_overlays(before, fps)     # (before the lane changes any of them in place)
     new, log = plan(words_of(doc), fps) if plan_data else ([], [])
     # A brand kit that names its looks: only the KT looks it allows (another style of the same kind first).
     allowed = templates.allowed()
@@ -1081,6 +1097,10 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
                             "text": ov.get("text"), "why": "a new data look says the same"})
             continue
         kept.append(ov)
+    for i, ov in enumerate(kept):
+        cap = caption_clean(ov.get("text"))
+        if cap is not None:
+            kept[i] = {**ov, "text": cap}
     placed, dropped = schedule(kept + new, fps, total)
     doc["overlays"] = [strip_private(o) for o in placed]
     shown_ids = {id(o) for o in placed}
@@ -1103,7 +1123,6 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
             c[family_of(o)] = c.get(family_of(o), 0) + 1
         return dict(sorted(c.items()))
 
-    short_before = short_overlays(before, fps)
     return {
         "fps": fps, "overlaysBefore": len(before), "overlaysAfter": len(doc["overlays"]),
         "byFamilyBefore": fams(before), "byFamilyAfter": fams(doc["overlays"]),

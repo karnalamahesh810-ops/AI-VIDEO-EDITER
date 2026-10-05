@@ -33,7 +33,7 @@ import re
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from . import config, datalooks, geocode, overlayimages, r2, recut
+from . import config, datalooks, geocode, lookplace, overlayimages, r2, recut
 
 
 class RelookError(RuntimeError):
@@ -114,7 +114,15 @@ def replan(doc: dict, *, project_id: str = "", brief: Optional[dict] = None, fet
                                 fetch=fetch, put=put, public_base=public_base)
               if check_images else {"skipped": True})
     looks = datalooks.finish(doc)
-    return {"maps": maps, "images": images, "looks": looks}
+
+    def picture(url: str):
+        try:
+            return (fetch or overlayimages.default_fetch)(url)[0]
+        except Exception:  # noqa: BLE001 - an unread picture keeps the look's home place
+            return None
+    # 4. each KT look on the calm side of its picture, on a soft panel over a busy one (src/lookplace.py)
+    places = lookplace.place(doc["overlays"], doc.get("scenes") or [], fetch=picture, measure=check_images)
+    return {"maps": maps, "images": images, "looks": looks, "places": places}
 
 
 def _summary(diff: Dict[str, Any]) -> Dict[str, Any]:
@@ -140,6 +148,9 @@ def _summary(diff: Dict[str, Any]) -> Dict[str, Any]:
         "imagesWouldRehost": diff["images"].get("wouldRehost", 0), "imagesReplaced": diff["images"].get("replaced", 0),
         "imagesTextOnly": diff["images"].get("textOnly", 0), "imagesDropped": diff["images"].get("dropped", 0),
         "imagesUnchecked": diff["images"].get("unchecked", 0),
+        "lookPanels": (diff.get("places") or {}).get("panel", 0),
+        "lookFlipped": (diff.get("places") or {}).get("flipped", 0),
+        "lookUnmeasured": (diff.get("places") or {}).get("unmeasured", 0),
     }
 
 
