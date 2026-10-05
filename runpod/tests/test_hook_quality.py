@@ -339,6 +339,44 @@ class TheHookCheck(unittest.TestCase):
                                                   self.work, cover=3.0, until=_time.time() - 1))
         self.assertEqual(seen, [])
 
+    def test_a_moved_start_never_repeats_the_clip_chained_after_it(self):
+        # Scene 0 plays 100.0-105.3 s of its video and the planned chain after it 106.1-111.4 s. Moving
+        # scene 0 on 2.0 s inside its file, or cutting it again from its middle (102.65 s), would show
+        # ~1-2 s of the chain twice in a row - which the repeat checks let through as a chain.
+        def build(chain_vid):
+            head = self.file("yt_HEADVID0001_98000_9300_abcdef0123_c00020.mp4")
+            chain = self.file(f"yt_{chain_vid}_104100_9300_fedcba9876_c00020.mp4")
+            doc = {"fps": FPS, "overlays": [], "meta": {}, "scenes": [
+                scene(0, {"type": "video", "url": head, "source": "youtube", "clipSeconds": 7.3}, 0.0, 5.3,
+                      assetId="yt:HEADVID0001@10", judgedBy="library"),
+                scene(1, {"type": "video", "url": chain, "source": "youtube", "clipSeconds": 7.3}, 5.3, 5.3,
+                      assetId=f"yt:{chain_vid}@10", moment={"start": 106.1, "chain": True},
+                      cutCheck={"frames": [0.3, 2.65, 5.0], "opening": True, "ok": True, "score": 0.9})]}
+            return doc, head
+        for chain_vid, moved in (("HEADVID0001", 0), ("OTHERVID001", 1)):
+            doc, head = build(chain_vid)
+            trims, fetches = [], []
+
+            def judge(path, intent, context="", **kw):
+                v = dict(VERDICT, opening=False, score=0.8) if path == head else dict(VERDICT)
+                return dict(v, frames=vision.opening_times(kw["span"]), span=kw["span"])
+
+            def trim(path, offset, seconds, timeout=180):
+                trims.append(round(offset, 2))
+                out = self.file(f"trim{len(trims)}.mp4")
+                return out
+
+            def fetch(vid, work, at, need, title="", **kw):
+                fetches.append(round(at, 2))
+                return "", True, 0
+            with mock.patch.object(vision, "judge", side_effect=judge),                     mock.patch.object(filters, "_video_seconds", return_value=7.3),                     mock.patch.object(filters, "scene_cuts", return_value=[]),                     mock.patch.object(filters, "trim_clip", side_effect=trim),                     mock.patch.object(media, "fetch_clean_clip", side_effect=fetch),                     mock.patch.object(gapfill, "hold_or_animate", return_value={}):
+                out = hookcheck.check(doc, work=self.work)
+            self.assertEqual(out["moved"], moved, chain_vid)
+            if moved:
+                self.assertEqual(trims, [2.0])                             # another video beside it: moved
+            else:
+                self.assertEqual((trims, fetches), ([], []))               # neither move, nor the re-cut
+
     def test_a_moved_start_never_leaves_a_clip_the_renderer_would_slow(self):
         # A crossfade into the next scene plays this clip 0.5 s longer (quality.scene_need): a 4.0 s file
         # past its cut at 0.6 s would cover 3.3 s of the 3.5 s it must.

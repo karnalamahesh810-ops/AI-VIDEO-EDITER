@@ -49,7 +49,7 @@ import os
 import re
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from . import config
 
@@ -271,7 +271,8 @@ def _put_cut(scene: dict, path: str, seconds: float, start: Optional[float] = No
 
 
 def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional[dict], work: str = "",
-               cover: Optional[float] = None, until: float = 0.0) -> bool:
+               cover: Optional[float] = None, until: float = 0.0,
+               others: Sequence[Tuple[str, float, float]] = ()) -> bool:
     """
     A clip whose opening was turned down, its start moved and the new cut judged
     (True when it passed and is on the scene): first inside its own file - past
@@ -285,7 +286,10 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
     included; `span` when not given): a clip is never slowed. Nothing is tried
     that no verdict could follow (vision off, the calls spent). The download
     keeps to FALLBACK_SCENE_SECONDS, and to `until` (epoch seconds, the whole
-    check's box; 0 = none): past it nothing is fetched.
+    check's box; 0 = none): past it nothing is fetched. Never a start whose
+    footage another scene shows (`others`: (YouTube id, from, to) of what the
+    other scenes play - the chained next moment of this very clip above all,
+    which the repeat checks let through as a chain).
     """
     from . import filters, media
     if (scene.get("media") or {}).get("type") != "video" or not path or not _can_judge():
@@ -300,11 +304,14 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
         starts = [max(early) + pad] if early else []
         if v.get("opening") is False and dur - cover >= MIN_SHIFT:
             starts.append(dur - cover)          # as far as the file runs on past what the scene plays
+        vid0, was0 = _source_point(scene, path)
         for at in dict.fromkeys(round(a, 3) for a in starts):
             if dur - at < cover - 0.05:
                 continue                        # what is left would have to be slowed to fill the scene
             if any(at - pad / 2 < c <= at + float(config.CUT_GUARD_SECONDS) for c in cuts):
                 continue                        # it would open on the last moments of a shot again
+            if was0 is not None and _shown_elsewhere(others, vid0, was0 + at, was0 + at + span):
+                continue                        # another scene shows that footage (the clip chained after it)
             out = filters.trim_clip(path, at, dur - at)
             if not out:
                 continue
@@ -328,6 +335,8 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
     from . import ledger
     if ledger.moment_used(vid, was + shift, was + shift + need):
         return False                            # an earlier video showed that moment
+    if _shown_elsewhere(others, vid, was + shift, was + shift + span):
+        return False                            # another scene of this video shows it (the clip chained after it)
     if not _can_judge():
         return False                            # a download no verdict could follow
     stop = time.time() + float(getattr(config, "FALLBACK_SCENE_SECONDS", 45.0) or 45.0)
@@ -360,6 +369,24 @@ def move_start(scene: dict, path: str, job: dict, span: float, verdict: Optional
     record(scene, again, keep)
     scene["semanticMetadata"]["cutCheck"]["moved"] = round(shift, 2)
     return True
+
+
+def _shown_elsewhere(others: Sequence[Tuple[str, float, float]], vid: str, a: float, b: float) -> bool:
+    """Another scene plays part of [a, b) seconds of YouTube video `vid` (more than a frame or so)."""
+    return bool(vid) and any(v == vid and lo < b - 0.05 and a < hi - 0.05 for v, lo, hi in others or ())
+
+
+def _played(scenes: List[dict], i: int, fps: int) -> List[Tuple[str, float, float]]:
+    """(YouTube id, from, to) of the footage every scene but i plays, where its file or link says."""
+    out = []
+    for k, sc in enumerate(scenes):
+        m = sc.get("media") or {}
+        if k == i or m.get("type") != "video":
+            continue
+        vid, start = _source_point(sc, _local(m.get("url")) or str(m.get("url") or ""))
+        if vid and start is not None:
+            out.append((vid, float(start), float(start) + int(sc.get("durationInFrames") or 0) / fps))
+    return out
 
 
 def _can_judge() -> bool:
@@ -581,7 +608,8 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
                                           "opening": verdict.get("opening") if verdict else None})
             print(f"[hook] {s.get('id')}: turned down - {reason}", flush=True)
             if m.get("type") == "video" and move_start(s, path, job, span, verdict, work,
-                                                       cover=_plays(scenes, i, fps), until=until):
+                                                       cover=_plays(scenes, i, fps), until=until,
+                                                       others=_played(scenes, i, fps)):
                 out["moved"] += 1
                 unmark(doc, s)
                 s["reviewRequired"] = True
