@@ -404,7 +404,8 @@ SHOT_CUT_SAME_PICTURE = float(os.getenv("SHOT_CUT_SAME_PICTURE", "0.75"))
 # median likeness, over small shifts, of its next few frames each to the one
 # after under SHOT_CUT_STEADY). Measured on 81 softer jumps in real downloads
 # (2026-10-05): swings and jolts 0.82-0.97 moved, real cuts 0.79 at most; the
-# new shot after a real cut 0.87-1.0 steady, inside a swing 0.53-0.83. 0 = off.
+# new shot after a real cut 0.87-1.0 steady (one cut into a fast zoom, 0.58,
+# is missed, as by the fixed threshold), inside a swing 0.53-0.83. 0 = off.
 SHOT_CUT_MOVED = float(os.getenv("SHOT_CUT_MOVED", "0.8"))
 SHOT_CUT_STEADY = float(os.getenv("SHOT_CUT_STEADY", "0.85"))
 # Every footage cut starts after a shot change, never on the last second of the

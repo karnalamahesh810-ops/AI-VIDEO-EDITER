@@ -499,7 +499,8 @@ def _new_shot(pictures, n: int) -> bool:
     under SHOT_CUT_STEADY: a swing too fast for _moved, a zoom, a spinning
     transition. Measured on 81 softer jumps in real downloads (2026-10-05):
     swings and jolts 0.82-0.97 moved, real cuts 0.79 at most; after a real cut
-    the new shot holds at 0.87-1.0, inside a swing 0.53-0.83.
+    the new shot holds at 0.87-1.0 (one cut into a fast zoom, 0.58, is missed -
+    as the fixed threshold missed it), inside a swing 0.53-0.83.
     """
     import statistics
     moved = float(getattr(config, "SHOT_CUT_MOVED", 0.0) or 0.0)
