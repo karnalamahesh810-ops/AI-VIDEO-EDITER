@@ -1598,6 +1598,8 @@ def _build(segments: List[Segment], shots: List[dict],
     look_sounds: Optional[Dict[str, Any]] = None
     # The source tags the planner placed (src/sources.py, config.SOURCE_TAGS), for meta: which words named each.
     source_tags: List[dict] = []
+    # The real data graphics' report (src/datagraphics.py, config.DATA_GRAPHICS): every fact, shown or why not.
+    data_graphics: Optional[Dict[str, Any]] = None
     if pack:
         title_card = [o for o in overlays if o.get("type") == "title" and inp.get("title_overlay")
                       and o.get("text") == str(inp["title_overlay"])[:240]]
@@ -1615,6 +1617,11 @@ def _build(segments: List[Segment], shots: List[dict],
         treatment_counts = planned["counts"]
         look_sounds = planned.get("lookSounds")
         source_tags = list(planned.get("sources") or [])
+        data_graphics = planned.get("dataGraphics")
+        if data_graphics:
+            # A narration number the official data does not bear out: flagged, never "corrected".
+            from . import datagraphics
+            warnings.extend(datagraphics.warnings_for(data_graphics))
     # Every image look gets a real picture for every slot (the scene's own,
     # then nearby ones of the same subject, then the clip library), or a look
     # that needs fewer, or none (the owner's Lake Powell video: empty slots).
@@ -1736,6 +1743,8 @@ def _build(segments: List[Segment], shots: List[dict],
             **({"hookBoost": hook_boost} if hook_boost else {}),
             # On-screen sources: each tag with the narration's words that named its source (never invented).
             **({"sourceTags": {"placed": source_tags}} if source_tags else {}),
+            # Real data graphics: each fact the narration stated, its chart or why not, and its number checked.
+            **({"dataGraphics": data_graphics} if data_graphics else {}),
         },
     }
 

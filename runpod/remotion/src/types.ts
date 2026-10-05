@@ -320,10 +320,59 @@ export interface GeoDoc {
   river?: string;
 }
 
+/**
+ * The real numbers a data graphic draws (src/datagraphics.py from src/realdata.py: USBR, USGS, the U.S. Drought
+ * Monitor, NOAA) - never the narration's or a model's. Dates are ISO ("2026-10-03"); `points` run oldest first
+ * and end on the latest reading itself. Drawn by components/lib/LibRealData.tsx (rd-line, rd-number, rd-bars,
+ * rd-gauge); every field but `points` and `latest` is optional.
+ */
+export interface DataDoc {
+  v?: number;
+  look?: string;
+  /** elevation | percent_full | storage | flow | drought | temperature | precip | alerts */
+  metric?: string;
+  entity?: string;
+  /** "LAKE POWELL", "COLORADO RIVER AT LEES FERRY, AZ" (the overlay's text, when set, wins). */
+  title?: string;
+  /** "PERCENT OF LIVE CAPACITY" (the overlay's label, when set, wins). */
+  kicker?: string;
+  /** "FT", "%", "MAF", "CFS", "°F", "IN". */
+  unit?: string;
+  decimals?: number;
+  /** How far apart the points are: day | week | month | year. */
+  step?: string;
+  points?: [string, number][];
+  latest?: { date: string; value: number; label?: string };
+  /** The reading the line compares with (a year said, a year ago, the start of the window). */
+  compare?: { date: string; value: number; label?: string };
+  /** The change since `compare` as written by the planner: "−158.5 FT SINCE JAN 2001". */
+  delta?: { value?: number; text: string };
+  /** Levels the source itself states (full pool, minimum power pool, dead pool). */
+  refs?: { label: string; value: number }[];
+  /** A fixed axis ([0, 100] for a share). */
+  range?: [number, number];
+  /** rd-bars: the rows, the one the narration names highlighted. */
+  bars?: { label: string; value: number; highlight?: boolean }[];
+  /** rd-gauge: the storage behind the share, out of the capacity (million acre-feet). */
+  storage?: { value: number; capacity: number; unit?: string };
+  /** A record year: its value, rank and the word ("WARMEST OF 131 YEARS"). */
+  record?: { date: string; value: number; label: string; rank: number; of: number; word: string };
+  /** The short name shown ("USBR"), the agency in full, the official data URL (never "url": that is media). */
+  source?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  asOf?: string;
+  /** "OCT 3, 2026", "THROUGH 2025": the date of the data, shown in the corner. */
+  asOfLabel?: string;
+  week?: string;
+}
+
 export interface Overlay {
   type: OverlayType;
   /** An auto map's geometry (src/automaps.py). */
   geo?: GeoDoc;
+  /** A real data graphic's numbers (src/datagraphics.py). */
+  data?: DataDoc;
   text: string;
   subtitle?: string;
   label?: string;
