@@ -8,7 +8,7 @@ import { EffectLayer, TransitionLayer, effectFilter, entranceStyle } from "./Sce
 import { AnimationScene } from "./AnimationScene";
 import { useSceneGrade } from "./Grade";
 import { PlayerWindow } from "./pro/ProCase";
-import { StillPicture, TransitionFrame } from "../transitions";
+import { LivingPicture, StillPicture, TransitionFrame, resolveLiving } from "../transitions";
 import { reframeStyle, resolveAim, resolveMove } from "./reframe";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
 
@@ -180,6 +180,9 @@ export const SceneClip: React.FC<{
   const move = resolveMove(scene, width / height);
   const aim = media.type === "image" && !move ? resolveAim(scene, width / height) : undefined;
   const moved = move ? reframeStyle(move, frame, scene.durationInFrames, fps) : null;
+  // A still with depth layers (living photos, src/living.py): its own move, with parallax.
+  // Held still, or framed by hand in the editor: drawn flat as before.
+  const living = media.type === "image" && !move && stillMotion ? resolveLiving(scene) : null;
 
   return (
     <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
@@ -205,6 +208,10 @@ export const SceneClip: React.FC<{
             <AbsoluteFill style={moved}>
               <Img src={media.url} style={fill} />
             </AbsoluteFill>
+          ) : living ? (
+            <LivingPicture src={media.url} living={living} motion={stillMotion} frame={frame}
+              durationInFrames={durationInFrames} fps={fps} width={width} height={height}
+              filter={filters || undefined} subject={aim} />
           ) : (
             <StillPicture src={media.url} motion={stillMotion} frame={frame} durationInFrames={durationInFrames}
               fps={fps} width={width} filter={filters || undefined} subject={aim} />
