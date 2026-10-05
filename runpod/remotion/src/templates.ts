@@ -35,7 +35,11 @@ export interface Registry {
   transitions: { id: string; name: string; value: string; duration: number; use: string }[];
   sfx: Record<string, { file: string; volume: number }>;
   stylePacks: Record<string, Record<string, unknown>>;
-  captionStyles: Record<string, { name: string; weight: number; size: number; background: string; emphasis: string }>;
+  captionStyles: Record<string, CaptionStyleDef>;
+  /** The style a video's captions get until the user picks one. */
+  captionStyleDefault: string;
+  /** Older style ids (documentary, news, modern, case) -> the style each now draws as. */
+  captionStyleAliases: Record<string, string>;
   musicMoods: Record<string, number>;
   entrances: string[];
   exits: string[];
@@ -62,7 +66,50 @@ export const resolveOverlay = (ov: Overlay): Overlay => {
   return out;
 };
 
-export const captionStyle = (name?: string) =>
-  REGISTRY.captionStyles[name || "documentary"] || REGISTRY.captionStyles.documentary;
+/**
+ * A subtitle style (scripts/build_registry.py CAPTION_STYLES): every style is
+ * data, drawn by components/Captions.tsx. Sizes are pixels at 1080 lines.
+ */
+export interface CaptionStyleDef {
+  name: string;
+  description: string;
+  /** A key of components/captionStyle.ts CAPTION_FONTS. */
+  font: string;
+  weight: number;
+  size: number;
+  lineHeight: number;
+  /** em */
+  letterSpacing: number;
+  color: string;
+  shadow: "soft" | "subtle" | "none" | string;
+  /** A thin dark outline, pixels at 1080 lines (0: none). */
+  outline: number;
+  /** "box": a dark box behind each line; "band": a dark band along the bottom of the frame. */
+  background: "none" | "box" | "band" | string;
+  boxColor: string;
+  radius: number;
+  align: "center" | "left" | string;
+  /** "word": the word being spoken is brighter and tinted with the accent. */
+  highlight: "none" | "word" | string;
+  /** The other words' brightness when highlighting (1 = as bright). */
+  dim: number;
+  /** Characters per line. */
+  lineChars: number;
+  /** The face's average letter width (em), for the box estimate. */
+  charWidth: number;
+  /** The gap under the subtitle, a share of the frame height. */
+  bottom: number;
+}
+
+/** The style id a name draws as: a style as it is, an older id as its closest new style, else the default (Netflix). */
+export const captionStyleId = (name?: string): string => {
+  const key = String(name || "").trim().toLowerCase().replace(/[-\s]/g, "_");
+  if (REGISTRY.captionStyles[key]) return key;
+  const alias = REGISTRY.captionStyleAliases?.[key];
+  if (alias && REGISTRY.captionStyles[alias]) return alias;
+  return REGISTRY.captionStyleDefault;
+};
+
+export const captionStyle = (name?: string): CaptionStyleDef => REGISTRY.captionStyles[captionStyleId(name)];
 
 export const byCategory = (category: string) => REGISTRY.templates.filter((t) => t.category === category);

@@ -1,138 +1,126 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { useScale } from "./layout";
-import { INTER } from "./fonts";
-import { captionStyle } from "../templates";
-import type { Scene, SceneWord, TimelineProps } from "../types";
-
-// Words a caption style may emphasise: a number, or a capitalised name.
-const isNumber = (t: string) => /\d/.test(t);
-const isKeyword = (t: string, i: number) => isNumber(t) || (i > 0 && /^[A-Z][a-z]{2,}/.test(t));
+import type { TimelineProps } from "../types";
+import { cueAt } from "./captionCues";
+import { planCaptions, type CaptionPlan } from "./captionPlan";
+import { BOX_GAP, BOX_PAD, LEFT_EDGE, bandHeight, bandPad, unitFor } from "./captionLayout";
+import { highlightColor, rgba, textStyle } from "./captionStyle";
 
 /**
- * Word-synced captions, shown a few words at a time.
+ * The burned-in subtitles: one track over the whole narration (Main.tsx),
+ * drawn like professional subtitles - phrase cues of at most two lines
+ * (captionCues.ts), each shown whole and still, with a short fade only where
+ * a cue starts or ends after a pause, placed clear of the graphics on screen
+ * with it (captionPlan.ts, captionPlace.ts). Seven styles, all data
+ * (templates/registry.json captionStyles); an older document's style id
+ * draws as its closest new one (templates.ts captionStyleId).
  *
- * The earlier version put a whole scene's narration on screen as one
- * paragraph and swept a colour highlight through it — readable for a 3-word
- * beat, an unreadable wall of text for a 15-word one. Real caption styles
- * (VidRush included) show a short rolling phrase and replace it as the
- * narration moves on, so a viewer is never asked to read ahead of the voice.
+ * Until 2026-10-05 this was a CapCut-like five-word strip, every word
+ * popping up and scaling in. The owner: "Netflix kind of styles, clean ...
+ * not cartoonish" - nothing here pops, zooms or bounces.
  */
 
-interface Group {
-  start: number;
-  end: number;
-  words: SceneWord[];
-}
+/** Seconds a cue fades in or out where it starts or ends alone. */
+const FADE_SECONDS = 0.16;
+/** Seconds the spoken word takes to brighten in a highlighting style. */
+const HIGHLIGHT_SECONDS = 0.08;
 
-// A pause this long is a natural phrase break; group size is capped either
-// way so a long unbroken sentence still gets cut into readable chunks.
-const PAUSE_BREAK = 0.35;
-const MAX_WORDS = 5;
-const POP_MS = 140;
+const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
 
-function groupWords(words: SceneWord[]): Group[] {
-  const groups: Group[] = [];
-  let cur: SceneWord[] = [];
-  for (const w of words) {
-    const prev = cur[cur.length - 1];
-    const gap = prev ? w.start - prev.end : 0;
-    if (cur.length && (cur.length >= MAX_WORDS || gap > PAUSE_BREAK)) {
-      groups.push({ start: cur[0].start, end: cur[cur.length - 1].end, words: cur });
-      cur = [];
-    }
-    cur.push(w);
-  }
-  if (cur.length) groups.push({ start: cur[0].start, end: cur[cur.length - 1].end, words: cur });
-  return groups;
-}
+const Band: React.FC<{ plan: CaptionPlan; frame: number; fade: number }> = ({ plan, frame, fade }) => {
+  const { width, height } = useVideoConfig();
+  const run = plan.bands.find(([a, b]) => frame >= a && frame < b);
+  if (!run) return null;
+  const f = Math.min(fade, Math.max(1, Math.floor((run[1] - run[0]) / 3)));
+  const opacity = interpolate(frame, [run[0], run[0] + f, run[1] - f, run[1]], [0, 1, 1, 0], clamp);
+  return (
+    <AbsoluteFill style={{ justifyContent: "flex-end", pointerEvents: "none" }}>
+      <div style={{ height: bandHeight(plan.style, width, height), background: plan.style.boxColor, opacity }} />
+    </AbsoluteFill>
+  );
+};
 
-export const Captions: React.FC<{
-  scene: Scene;
-  style: TimelineProps["captions"];
-}> = ({ scene, style }) => {
+type TrackProps = Pick<TimelineProps, "scenes" | "overlays" | "overlaysEnabled" | "brand" | "captions">;
+
+export const CaptionTrack: React.FC<{ props: TrackProps }> = ({ props }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const s = useScale();
+  const { fps, width, height } = useVideoConfig();
+  const plan = useMemo(() => planCaptions(props, fps, width, height),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.scenes, props.overlays, props.overlaysEnabled, props.brand, props.captions?.style,
+      props.captions?.position, fps, width, height]);
+  const { style } = plan;
+  const fade = Math.max(1, Math.round(FADE_SECONDS * fps));
+  const band = style.background === "band" ? <Band plan={plan} frame={frame} fade={fade} /> : null;
+  const cue = cueAt(plan.cues, frame);
+  if (!cue) return band;
+  const place = plan.places[plan.cues.indexOf(cue)];
+  const unit = unitFor(width, height);
+  const fadeIn = cue.fadeIn ? Math.min(1, (frame - cue.from + 1) / fade) : 1;
+  const fadeOut = cue.fadeOut ? Math.min(1, (cue.to - frame) / fade) : 1;
+  const opacity = Math.max(0, Math.min(fadeIn, fadeOut));
+  // In the band only where it belongs; a cue moved clear of a graphic draws on line boxes instead.
+  const inBand = style.background === "band" && place.mode === "default";
+  const boxed = style.background === "box" || (style.background === "band" && !inBand);
+  const nowSec = frame / fps;
+  const hi = style.highlight === "word" ? highlightColor(props.captions?.accent || "#FFD400") : null;
+  const words = cue.lines.flat();
 
-  const sceneStartSec = scene.startFrame / fps;
-  const nowSec = sceneStartSec + frame / fps;
-
-  const hasWords = scene.words && scene.words.length > 0;
-  const groups = useMemo(() => (hasWords ? groupWords(scene.words) : []), [hasWords, scene.words]);
-
-  // The active phrase is the last one that has started; it stays on screen
-  // through any gap until the next phrase begins, rather than blanking.
-  let active: Group | null = null;
-  for (const g of groups) {
-    if (g.start <= nowSec) active = g;
-    else break;
-  }
-
-  const preset = captionStyle(style.style);
-  const emphasised = (t: string, i: number) =>
-    preset.emphasis === "numbers" ? isNumber(t) : preset.emphasis === "keywords" ? isKeyword(t, i) : false;
-
-  const body = active ? (
-    active.words.map((w, i) => {
-      const spoken = nowSec >= w.start;
-      const pop = interpolate(
-        (nowSec - w.start) * 1000, [0, POP_MS], [0, 1],
-        { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-      );
-      const strong = emphasised(w.text, i);
+  const lineNodes = cue.lines.map((line, li) => {
+    const content = hi ? line.map((w, wi) => {
+      // The spoken word brightens over 80 ms and settles back when the next one starts; nothing moves.
+      const next = words[words.indexOf(w) + 1];
+      const on = interpolate(nowSec - w.start, [0, HIGHLIGHT_SECONDS], [0, 1], clamp)
+        * (next ? 1 - interpolate(nowSec - next.start, [0, HIGHLIGHT_SECONDS], [0, 1], clamp) : 1);
+      const mix = (v: number) => Math.round(255 + (v - 255) * on);
       return (
-        <span
-          key={i}
-          style={{
-            color: (nowSec >= w.start && nowSec <= w.end) || strong ? style.accent : "#fff",
-            fontWeight: strong ? 900 : undefined,
-            marginRight: "0.32em",
-            display: "inline-block",
-            opacity: spoken ? 1 : 0.94,
-            transform: `translateY(${(1 - pop) * 10}px) scale(${0.92 + pop * 0.08})`,
-            transition: "color 60ms linear",
-          }}
-        >
-          {w.text}
+        <span key={wi} style={{ color: rgba([mix(hi[0]), mix(hi[1]), mix(hi[2])], style.dim + (1 - style.dim) * on) }}>
+          {wi ? " " : ""}{w.text}
         </span>
       );
-    })
-  ) : !hasWords ? (
-    <span style={{ color: "#fff" }}>{scene.text}</span>
-  ) : null;
-
-  if (!body) return null;
-
-  return (
-    <AbsoluteFill
-      style={{
-        justifyContent: style.position === "center" ? "center" : "flex-end",
-        alignItems: "center",
-        padding: `0 10% ${s(70)}px`,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: style.fontFamily && style.fontFamily !== "Inter"
-            ? `${style.fontFamily}, ${INTER}` : INTER,
-          fontSize: s(64 * preset.size),
-          fontWeight: preset.weight,
-          lineHeight: 1.18,
-          textAlign: "center",
-          maxWidth: "82%",
-          textShadow: preset.background === "bar" || preset.background === "box" ? "none"
-            : "0 4px 18px rgba(0,0,0,0.85), 0 2px 4px rgba(0,0,0,0.9)",
-          letterSpacing: "-0.01em",
-          // The news style sits on a dark bar; the others float on the picture.
-          // "box" (the case-file subtitle): white words on a solid black box.
-          background: preset.background === "bar" ? "rgba(8,8,10,0.72)" : preset.background === "box" ? "rgba(0,0,0,0.86)" : "transparent",
-          padding: preset.background === "bar" ? `${s(10)}px ${s(26)}px` : preset.background === "box" ? `${s(4)}px ${s(14)}px` : 0,
-          borderRadius: preset.background === "bar" ? s(8) : 0,
-        }}
-      >
-        {body}
+    }) : line.map((w) => w.text).join(" ");
+    return (
+      <div key={li} style={{ textAlign: style.align === "left" ? "left" : "center" }}>
+        <span style={boxed ? {
+          display: "inline-block",
+          background: style.boxColor || "rgba(12,12,14,0.72)",
+          padding: `${BOX_PAD[0]}em ${BOX_PAD[1]}em`,
+          borderRadius: style.radius * unit,
+          marginTop: li ? `${BOX_GAP}em` : 0,
+        } : undefined}>
+          {content}
+        </span>
       </div>
-    </AbsoluteFill>
+    );
+  });
+
+  // In the band: centred in it whatever the cue's lines; elsewhere: the planned bottom edge.
+  const textH = cue.lines.length * style.lineHeight * style.size * unit;
+  const bottom = inBand
+    ? bandPad(style, height) + Math.max(0, (bandHeight(style, width, height) - 2 * bandPad(style, height) - textH) / 2)
+    : Math.round((1 - place.y1) * height);
+  const left = style.align === "left";
+  return (
+    <>
+      {band}
+      <AbsoluteFill style={{ pointerEvents: "none" }}>
+        <div
+          style={{
+            position: "absolute",
+            bottom,
+            left: left ? Math.round(LEFT_EDGE * width) : "4%",
+            right: "4%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: left ? "flex-start" : "center",
+            opacity,
+            ...textStyle(style, unit),
+            ...(boxed ? { textShadow: "none" } : null),
+          }}
+        >
+          {lineNodes}
+        </div>
+      </AbsoluteFill>
+    </>
   );
 };

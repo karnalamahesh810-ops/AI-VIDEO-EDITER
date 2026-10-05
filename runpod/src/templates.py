@@ -229,6 +229,29 @@ def style_packs() -> Dict[str, dict]:
     return dict(load()["stylePacks"])
 
 
+def caption_styles() -> Dict[str, dict]:
+    """The subtitle styles the editor lists (registry captionStyles), by id."""
+    return dict(load()["captionStyles"])
+
+
+def caption_style_id(name, default: bool = True) -> str:
+    """
+    The caption style a name draws as: a style id as it is; an older id a
+    document, brand kit or saved setting may carry (documentary, news, modern,
+    case) as its closest new style (registry captionStyleAliases); anything
+    else the default style (Netflix) - or "" with default=False, for callers
+    that must tell an unknown name from a known one.
+    """
+    reg = load()
+    key = str(name or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if key in reg["captionStyles"]:
+        return key
+    alias = reg.get("captionStyleAliases", {}).get(key)
+    if alias in reg["captionStyles"]:
+        return alias
+    return reg["captionStyleDefault"] if default else ""
+
+
 def sfx(name: str) -> Optional[dict]:
     """A semantic sound ("MAP_PING") as {file, volume}."""
     return load()["sfx"].get(name)
@@ -352,8 +375,25 @@ def check() -> List[str]:
         for key in ("chapter", "map", "route", "region", "multi", "lowerThird"):
             if pack[key] not in seen:
                 problems.append(f"style pack {name}: {key} -> {pack[key]} missing")
-        if pack["caption"] not in reg["captionStyles"]:
+        # A pack's "caption" is its graphics' style variant (resolve) and, through the aliases, a caption style.
+        if not caption_style_id(pack["caption"], default=False):
             problems.append(f"style pack {name}: caption style")
         if pack["imageTreatment"] not in {i["id"] for i in reg["imageTreatments"]}:
             problems.append(f"style pack {name}: image treatment")
+    styles = reg["captionStyles"]
+    if reg.get("captionStyleDefault") not in styles:
+        problems.append("caption style default missing")
+    for old, new in reg.get("captionStyleAliases", {}).items():
+        if new not in styles or old in styles:
+            problems.append(f"caption style alias {old} -> {new}")
+    for sid, st in styles.items():
+        missing = CAPTION_STYLE_KEYS - set(st)
+        if missing:
+            problems.append(f"caption style {sid}: missing {sorted(missing)}")
     return problems
+
+
+# What every caption style defines (scripts/build_registry.py CAPTION_STYLES; the renderer reads them all).
+CAPTION_STYLE_KEYS = frozenset({
+    "name", "description", "font", "weight", "size", "lineHeight", "letterSpacing", "color", "shadow", "outline",
+    "background", "boxColor", "radius", "align", "highlight", "dim", "lineChars", "charWidth", "bottom"})

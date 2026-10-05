@@ -3,7 +3,7 @@ import { AbsoluteFill, Audio, Easing, Sequence, interpolate, staticFile, useCurr
 import { SceneClip } from "./components/SceneClip";
 import { BlurBackdrop } from "./components/AnimationScene";
 import { KScale } from "./components/pro/ProGraphics";
-import { Captions } from "./components/Captions";
+import { CaptionTrack } from "./components/Captions";
 import { CaptionsOn } from "./components/layout";
 import { MotionWrap } from "./components/MotionWrap";
 import { resolveOverlay, templateFor } from "./templates";
@@ -138,7 +138,7 @@ const planLookSounds = (props: TimelineProps, fps: number): Record<string, LookS
   return out;
 };
 
-const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scenes"], sound?: LookSound | null,
+export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProps["scenes"], sound?: LookSound | null,
   accent2?: string) => {
   // An overlay that names a template gets its unset fields from the
   // registry, so the editor's pick and the planner's draw the same way.
@@ -464,17 +464,9 @@ const Body: React.FC<TimelineProps> = (props) => {
         voiceLufs={(props.meta as { voiceLufs?: unknown } | undefined)?.voiceLufs}
         volume={props.sfxEnabled === false ? 0 : Math.min(1, Math.max(0, Number(props.sfxVolume ?? 1)))} />
 
-      {/* Caption track, burned in over the visuals but under the graphics */}
-      {captions.enabled &&
-        scenes.map((scene) => (
-          <Sequence
-            key={`cap-${scene.id}`}
-            from={scene.startFrame}
-            durationInFrames={scene.durationInFrames}
-          >
-            <Captions scene={scene} style={captions} />
-          </Sequence>
-        ))}
+      {/* Caption track, burned in over the visuals but under the graphics: one track over the
+          whole narration, so a phrase cue is never cut at a scene's edge (components/Captions.tsx) */}
+      {captions.enabled ? <CaptionTrack props={props} /> : null}
 
       {/* Overlay track — graphics sit on top of everything visual (a look in the
           bottom strip, the source tag, reads CaptionsOn to stay clear of the captions) */}

@@ -773,12 +773,50 @@ STYLE_PACKS = {
                        "sfxIntensity": 1.0, "imageTreatment": "IMAGE_SLOW_PUSH_V1"},
 }
 
+# The burned-in subtitles (remotion/src/components/Captions.tsx; the cues: components/captionCues.ts).
+# The owner, 2026-10-05: "Netflix kind of styles, clean ... not cartoonish" - the old four were
+# CapCut-like (a word-by-word pop and zoom). Every style shows the same phrase cues (Netflix timed-text
+# rules: at most 2 lines of ~42 characters, 1-7 s, a 2-frame gap between chained cues) with at most a
+# short fade; nothing pops, scales or bounces. Sizes are pixels at 1080 lines (scaled with the frame);
+# "font" is a key of the renderer's caption fonts (components/captionStyle.ts CAPTION_FONTS);
+# "charWidth" is the face's average letter width in em (the renderer's box estimate for keeping clear
+# of graphics); "bottom" is the gap under the text as a share of the frame height.
+_CAPTION_BASE = {"font": "inter", "weight": 500, "size": 50, "lineHeight": 1.24, "letterSpacing": 0.0,
+                 "color": "#FFFFFF", "shadow": "soft", "outline": 0, "background": "none", "boxColor": "",
+                 "radius": 0, "align": "center", "highlight": "none", "dim": 1.0, "lineChars": 42,
+                 "charWidth": 0.5, "bottom": 0.09}
 CAPTION_STYLES = {
-    "documentary": {"name": "Documentary", "weight": 600, "size": 1.0, "background": "none", "emphasis": "numbers"},
-    "news": {"name": "News", "weight": 700, "size": 0.95, "background": "bar", "emphasis": "keywords"},
-    "modern": {"name": "Modern", "weight": 800, "size": 1.15, "background": "none", "emphasis": "keywords"},
-    # Dr Insanity's subtitles: plain white words on a solid black box.
-    "case": {"name": "Case File", "weight": 700, "size": 0.9, "background": "box", "emphasis": "none"},
+    "netflix": {**_CAPTION_BASE, "name": "Netflix",
+                "description": "White medium sans with a soft drop shadow and no box - the streaming-service look."},
+    "cinema_box": {**_CAPTION_BASE, "name": "Cinema box", "font": "geist", "size": 46, "shadow": "none",
+                   "background": "box", "boxColor": "rgba(12,12,14,0.72)", "radius": 6, "charWidth": 0.52,
+                   "description": "White text on a subtle semi-transparent dark box behind each line."},
+    "doc_serif": {**_CAPTION_BASE, "name": "Documentary serif", "font": "source-serif", "size": 52,
+                  "lineHeight": 1.2, "letterSpacing": 0.004, "charWidth": 0.48,
+                  "description": "A refined serif in white with a soft shadow - the public-broadcast documentary feel."},
+    "minimal": {**_CAPTION_BASE, "name": "Minimal", "weight": 400, "size": 40, "letterSpacing": 0.03,
+                "color": "#F2F2F2", "shadow": "subtle", "align": "left", "charWidth": 0.53, "bottom": 0.085,
+                "description": "Smaller, lighter and letter-spaced, set lower left like a premium documentary."},
+    "clean_highlight": {**_CAPTION_BASE, "name": "Clean highlight", "weight": 600, "highlight": "word", "dim": 0.8,
+                        "charWidth": 0.52,
+                        "description": "The Netflix layout; the word being spoken is gently brighter and tinted. "
+                                       "Nothing moves or grows."},
+    "news_bold": {**_CAPTION_BASE, "name": "News bold", "font": "barlow-condensed", "weight": 700, "size": 58,
+                  "lineHeight": 1.16, "letterSpacing": 0.01, "shadow": "subtle", "outline": 2, "charWidth": 0.42,
+                  "description": "Bold condensed sans with a thin dark outline, for news and weather channels."},
+    "letterbox": {**_CAPTION_BASE, "name": "Letterbox", "size": 42, "lineHeight": 1.22, "letterSpacing": 0.015,
+                  "shadow": "none", "background": "band", "boxColor": "rgba(0,0,0,0.82)", "charWidth": 0.52,
+                  "bottom": 0.0,
+                  "description": "Centred in a thin dark band along the very bottom of the frame - cinematic."},
+}
+# The style a video gets until the user picks one (captions themselves stay off until they are switched on).
+CAPTION_STYLE_DEFAULT = "netflix"
+# Style ids that documents, brand kits and saved settings may still carry: each draws as its closest new style.
+CAPTION_STYLE_ALIASES = {
+    "documentary": "netflix",          # white sans with a shadow, no box
+    "news": "news_bold",               # the news and weather packs' style
+    "modern": "clean_highlight",       # the heavy word-highlight style, now a gentle one
+    "case": "cinema_box",              # white words on a black box
 }
 
 MUSIC_MOODS = {
@@ -864,6 +902,8 @@ def build() -> dict:
         "sfx": SFX,
         "stylePacks": STYLE_PACKS,
         "captionStyles": CAPTION_STYLES,
+        "captionStyleDefault": CAPTION_STYLE_DEFAULT,
+        "captionStyleAliases": CAPTION_STYLE_ALIASES,
         "musicMoods": MUSIC_MOODS,
         "entrances": ENTRANCES,
         "exits": EXITS,
