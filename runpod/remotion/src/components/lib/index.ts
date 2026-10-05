@@ -48,6 +48,7 @@ import { LOOKS as L_LibNumbersPro } from "./LibNumbersPro";
 import { LOOKS as L_LibTextPro } from "./LibTextPro";
 import { LOOKS as L_LibGeoMaps } from "./LibGeoMaps";
 import { LOOKS as L_LibSourceTag } from "./LibSourceTag";
+import { LOOKS as L_LibPremium } from "./LibPremium";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -143,4 +144,7 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibTextPro, ["tx-sentence-highlight", "tx-typewriter-lower", "tx-kicker-headline", "tx-word-kinetic",
     "tx-quote-serif", "tx-pull-quote", "tx-statement-card", "tx-name-card", "tx-question", "tx-contrast", "tx-ink-reveal",
     "tx-notice"]),
+  // Premium (LibPremium, 2026-10-05): a document spotlight with a drawn loop and callout, a photo focus with a ring,
+  // a chart that draws in, a map path between two places, a number reveal; the planner picks them where the line asks.
+  ...pick(L_LibPremium, ["pr-doc-spotlight", "pr-photo-focus", "pr-graph-build", "pr-map-path", "pr-number-reveal"]),
 };

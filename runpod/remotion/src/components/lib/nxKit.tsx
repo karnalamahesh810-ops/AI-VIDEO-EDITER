@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
+import { loadFont as loadSourceSerif } from "@remotion/google-fonts/SourceSerif4";
 import { ANTON, ANTON_CAP, SUBLINE, SUBLINE_CAP } from "../fonts";
 import type { Overlay } from "../../types";
 import { useK } from "../pro/ProGraphics";
@@ -34,13 +34,13 @@ export type CSS = React.CSSProperties;
 
 // ------------------------------------------------------------------ fonts
 const latin = { subsets: ["latin" as const] };
-/** Playfair Display: the regular and italic text faces (fonts.ts loads 400 and the 700 italic). */
-export const SERIF_TEXT = `${loadPlayfair("normal", { ...latin, weights: ["400", "500", "600", "700"] }).fontFamily}, Georgia, serif`;
-export const SERIF_ITAL = `${loadPlayfair("italic", { ...latin, weights: ["400", "500", "700"] }).fontFamily}, Georgia, serif`;
+/** Source Serif 4, the documentary serif of the type system (components/fonts.ts; was Playfair Display). */
+export const SERIF_TEXT = `${loadSourceSerif("normal", { ...latin, weights: ["400", "500", "600", "700"] }).fontFamily}, Georgia, serif`;
+export const SERIF_ITAL = `${loadSourceSerif("italic", { ...latin, weights: ["400", "500", "700"] }).fontFamily}, Georgia, serif`;
 export { ANTON, ANTON_CAP, SUBLINE, SUBLINE_CAP };
-/** Playfair Display's cap height and x-height (em), measured. */
-export const SERIF_CAP = 0.708;
-export const SERIF_X = 0.514;
+/** Source Serif 4's cap height and x-height (em). */
+export const SERIF_CAP = 0.670;
+export const SERIF_X = 0.475;
 
 // ------------------------------------------------------------------ numbers and words
 export const clamp01 = (x: number): number => (!Number.isFinite(x) ? 0 : x < 0 ? 0 : x > 1 ? 1 : x);
@@ -74,7 +74,7 @@ export const toRgb = (c: string): RGB => {
   else if (/^[0-9a-f]{3}$/i.test(s)) hex = s.split("").map((x) => x + x).join("");
   const m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec((c || "").trim());
   if (!hex && m) return [Number(m[1]), Number(m[2]), Number(m[3])];
-  const n = hex ? parseInt(hex, 16) : 0xd6a83c;
+  const n = hex ? parseInt(hex, 16) : 0xf2b544;
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 export const rgba = (c: string, a: number): string => {

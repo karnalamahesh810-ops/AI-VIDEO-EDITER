@@ -45,9 +45,15 @@ export const MotionWrap: React.FC<{
   const outF = Math.min(Math.round((fps * 0.35) / spd), Math.max(2, Math.floor(durationInFrames / 4)));
   const e = interpolate(frame, [0, inF], [0, 1], { ...clamp, easing: (t) => 1 - Math.pow(1 - t, 3) });
   const exitKind = exit || (motion && motion !== "fade" ? "same" : "fade");
-  // How far into the exit we are, 0..1; "none" never exits.
+  // How far into the exit we are, 0..1; "none" never moves out ...
   const x = exitKind === "none" ? 0
     : interpolate(frame, [durationInFrames - outF, durationInFrames], [0, 1], { ...clamp, easing: (t) => t * t });
+  // ... but never pops off on a hard cut either (the owner, 2026-10-05: "an animation going only a short
+  // time and then skipping"): a look with no exit of its own fades over its last few frames.
+  const tailF = Math.max(1, Math.min(6, Math.floor(durationInFrames / 6)));
+  const tail = exitKind === "none"
+    ? interpolate(frame, [durationInFrames - tailF, durationInFrames], [1, 0], { ...clamp, easing: (t) => t * t })
+    : 1;
 
   const entrance = motion && motion !== "fade" ? motion : "";
   const from = 1 - e;
@@ -107,6 +113,9 @@ export const MotionWrap: React.FC<{
     ? { transform: `translate(${(pos?.[0] ?? 0) * width}px, ${(pos?.[1] ?? 0) * height}px) scale(${scale})`, opacity }
     : {};
 
-  const inner = <AbsoluteFill style={exitStyle}><AbsoluteFill style={style}>{children}</AbsoluteFill></AbsoluteFill>;
+  const outer: React.CSSProperties = tail < 1
+    ? { ...exitStyle, opacity: (exitStyle.opacity === undefined ? 1 : Number(exitStyle.opacity)) * tail }
+    : exitStyle;
+  const inner = <AbsoluteFill style={outer}><AbsoluteFill style={style}>{children}</AbsoluteFill></AbsoluteFill>;
   return Object.keys(placed).length ? <AbsoluteFill style={placed}>{inner}</AbsoluteFill> : inner;
 };

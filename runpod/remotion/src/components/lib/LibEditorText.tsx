@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, interpolateColors, useCurrentFrame, useVideoConfig } from "remotion";
-import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
+import { loadFont as loadSourceSerif } from "@remotion/google-fonts/SourceSerif4";
 import { DISPLAY, HAND, INTER, LABEL, MONO, NARROW, SERIF } from "../fonts";
 import type { Overlay } from "../../types";
 import { ramp, useK } from "../pro/ProGraphics";
@@ -40,7 +40,8 @@ import { ramp, useK } from "../pro/ProGraphics";
 
 type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
-const PLAYFAIR_HEAVY = `${loadPlayfair("normal", { subsets: ["latin"], weights: ["800"] }).fontFamily}, Georgia, serif`;
+// The heavy documentary serif (Source Serif 4 800; was Playfair Display 800): headlines on newsprint, typed quotes.
+const PLAYFAIR_HEAVY = `${loadSourceSerif("normal", { subsets: ["latin"], weights: ["800"] }).fontFamily}, Georgia, serif`;
 
 const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
 const expoOut = Easing.bezier(0.16, 1, 0.3, 1);
@@ -464,8 +465,8 @@ const EdWordByWord: Look = ({ overlay, accent }) => {
                   transform: `translateY(${((1 - p) * size * 0.34 - out * size * 0.2).toFixed(2)}px) scale(${(0.86 + 0.14 * p).toFixed(4)})`,
                   filter: p < 0.98 ? `blur(${((1 - Math.min(1, p)) * 6).toFixed(2)}px)` : undefined,
                   color: isKey ? hot : "#fff",
-                  textShadow: isKey ? `0 0 ${size * 0.35}px ${alpha(hot, 0.5)}, 0 4px 6px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.5)`
-                    : "0 4px 6px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.5)" }}>{w}</span>
+                  // (no coloured glow round the key word: it smudged on busy footage - 2026-10-05)
+                  textShadow: "0 4px 6px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.5)" }}>{w}</span>
               );
             })}
           </div>

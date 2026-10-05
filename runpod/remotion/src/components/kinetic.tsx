@@ -39,7 +39,7 @@ export const Words: React.FC<{
   style?: React.CSSProperties;
   markStyle?: React.CSSProperties;
   rise?: number;
-}> = ({ text, at = 0, step = 3, mark, accent = "#d6a83c", boxColor, style, markStyle, rise = 28 }) => {
+}> = ({ text, at = 0, step = 3, mark, accent = "#F2B544", boxColor, style, markStyle, rise = 28 }) => {
   const frame = useCurrentFrame();
   const s = useScale();
   const words = text.split(/\s+/).filter(Boolean);

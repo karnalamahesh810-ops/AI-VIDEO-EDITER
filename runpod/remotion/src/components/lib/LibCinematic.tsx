@@ -67,7 +67,7 @@ const inOut = Easing.bezier(0.65, 0, 0.35, 1);
 const backOut = Easing.bezier(0.34, 1.56, 0.64, 1);
 const softOut = Easing.bezier(0.22, 1, 0.36, 1);
 const rollEase = Easing.bezier(0.35, 0, 0.35, 1);
-const GOLD = "#d6a83c";
+const GOLD = "#F2B544";
 const SHADOW = "0 6px 28px rgba(0,0,0,.55)";
 const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 /**
@@ -124,13 +124,13 @@ const safeAccent = (a: string): string => {
   return v ? hexOf(v) : GOLD;
 };
 const alpha = (c: string, a: number): string => {
-  const v: RGB = rgbOf(c) ?? [214, 168, 60];
+  const v: RGB = rgbOf(c) ?? [242, 181, 68];
   return `rgba(${byte(v[0])},${byte(v[1])},${byte(v[2])},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
 };
 /** a -> b by t (0..1), as rgb(). */
 const mix = (a: string, b: string, t: number): string => {
   const x: RGB = rgbOf(a) ?? [255, 255, 255];
-  const y: RGB = rgbOf(b) ?? [214, 168, 60];
+  const y: RGB = rgbOf(b) ?? [242, 181, 68];
   const u = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
   return `rgb(${byte(x[0] + (y[0] - x[0]) * u)},${byte(x[1] + (y[1] - x[1]) * u)},${byte(x[2] + (y[2] - x[2]) * u)})`;
 };

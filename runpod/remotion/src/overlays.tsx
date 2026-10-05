@@ -36,8 +36,11 @@ import { EdTypeClean } from "./components/lib/LibEditorText";
 import type { Overlay, OverlayType } from "./types";
 
 /** Colour themes an overlay can ask for instead of the brand accent. */
+// One accent per graphic, on white type and near-black panels (the owner, 2026-10-05: "some fonts, the
+// colours ... not great"): a clean warm gold for the documentary packs (was a dull ochre, #d6a83c), a
+// clear crimson, and the cool accents a step brighter so they read on dark footage.
 export const THEMES: Record<string, string> = {
-  gold: "#d6a83c", red: "#e63946", teal: "#2ec4b6", blue: "#2f80ed", white: "#f4f1ea", amber: "#f4a100",
+  gold: "#F2B544", red: "#E5484D", teal: "#2DD4BF", blue: "#4C9AFF", white: "#F5F3EE", amber: "#FFB224",
 };
 
 const PERSON_TAGS = new Set(["tag", "line", "serif", "chyron"]);

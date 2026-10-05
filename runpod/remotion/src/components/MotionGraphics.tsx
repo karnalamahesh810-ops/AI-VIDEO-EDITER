@@ -426,7 +426,7 @@ export const Counter: React.FC<P> = ({ overlay, accent }) => {
           textShadow: TEXT_SHADOW, letterSpacing: "-0.01em" }}>
           {formatNumber(target * g)}{sufOne}
         </div>
-        <div style={{ width: s(140 + 260 * g), height: s(5), background: accent || "#d6a83c" }} />
+        <div style={{ width: s(140 + 260 * g), height: s(5), background: accent || "#F2B544" }} />
         <Heading text={overlay.text} s={s} show={ease(frame, fps * 0.5, fps * 0.4)} size={52} />
       </AbsoluteFill>
     );

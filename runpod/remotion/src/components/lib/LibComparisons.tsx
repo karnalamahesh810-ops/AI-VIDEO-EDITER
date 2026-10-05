@@ -53,7 +53,7 @@ const RED = "#ff3b30";
 const GREEN = "#27d17f";
 const CYAN = "#53c8ff";
 const INK = "#0c0c0f";
-const GOLD = "#d6a83c";
+const GOLD = "#F2B544";
 
 // ------------------------------------------------------------------ data helpers
 /** Any planner field as a clean string (numbers spelled out, anything else ""). */
@@ -162,7 +162,7 @@ const hexOk = (c: string): string => {
   return rgbOf(s) ? (s[0] === "#" ? s : `#${s}`) : GOLD;
 };
 const alpha = (c: string, a: number): string => {
-  const v = rgbOf(c) || [214, 168, 60];
+  const v = rgbOf(c) || [242, 181, 68];
   return `rgba(${v[0]},${v[1]},${v[2]},${clamp01(a).toFixed(3)})`;
 };
 /** Near-black ink on a light accent (gold, teal, white, amber), white on a dark one (red, blue). */

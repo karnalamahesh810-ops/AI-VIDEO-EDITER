@@ -79,7 +79,7 @@ const wrapLon = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180;
 
 const hexRgb = (h: string): [number, number, number] => {
   const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec((h || "").trim());
-  if (!m) return [214, 168, 60];
+  if (!m) return [242, 181, 68];
   let s = m[1];
   if (s.length === 3) s = s.split("").map((c) => c + c).join("");
   return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];

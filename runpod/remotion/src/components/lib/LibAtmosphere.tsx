@@ -55,7 +55,7 @@ const TAU = Math.PI * 2;
 const CYAN = "#53c8ff";
 const INK = "#0a0b0e";
 const PAPER_INK = "#141518";
-const GOLD: [number, number, number] = [214, 168, 60];
+const GOLD: [number, number, number] = [242, 181, 68];
 
 const cap = (s?: string): string => (s || "").replace(/\s+/g, " ").trim().toUpperCase();
 const pad2 = (n: number): string => String(Math.max(0, Math.floor(n))).padStart(2, "0");

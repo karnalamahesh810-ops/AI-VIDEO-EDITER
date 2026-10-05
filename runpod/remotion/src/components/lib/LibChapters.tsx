@@ -60,13 +60,13 @@ const clip = (s: string, max: number): string => {
   return `${cut.replace(/[\s,;:·-]+$/, "")}…`;
 };
 
-/** "#d6a83c" / "rgb(214,168,60)" -> "rgba(214,168,60,a)"; anything else falls back to the house gold. */
+/** "#F2B544" / "rgb(242,181,68)" -> "rgba(242,181,68,a)"; anything else falls back to the house gold. */
 const withAlpha = (c: string, a: number): string => {
   const s = (c || "").trim();
   const rgb = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(s);
   if (rgb) return `rgba(${rgb[1]},${rgb[2]},${rgb[3]},${a})`;
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s);
-  if (!m) return `rgba(214,168,60,${a})`;
+  if (!m) return `rgba(242,181,68,${a})`;
   let h = m[1];
   if (h.length === 3) h = h.split("").map((x) => x + x).join("");
   const n = parseInt(h, 16);

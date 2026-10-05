@@ -332,7 +332,7 @@ export const Main: React.FC<TimelineProps> = (props) => {
   const brand = React.useMemo(() => brandOf(props), [props.brand]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!brand || !(brand.watermark || brand.intro?.frames || brand.outro?.frames)) return <Body {...props} />;
   const { intro, body, outro } = brandFrames(props);
-  const accent = brand.accent || props.captions?.accent || "#d6a83c";
+  const accent = brand.accent || props.captions?.accent || "#F2B544";
   const last = props.scenes[props.scenes.length - 1]?.media;
   const lastStill = last ? (last.type === "image" ? last.url : last.thumbnail || "") : "";
   return (

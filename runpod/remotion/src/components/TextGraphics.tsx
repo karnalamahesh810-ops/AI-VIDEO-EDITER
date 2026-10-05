@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, interpolateColors, useCurrentFrame, useVideoConfig } from "remotion";
 import { TEXT_SHADOW, useOverlayAnim, useScale } from "./layout";
-import { INTER, LABEL, NARROW, SERIF, SERIF_ITALIC, TYPEWRITER } from "./fonts";
+import { INTER, LABEL, MONO, NARROW, SERIF, SERIF_ITALIC, TYPEWRITER } from "./fonts";
 import { Rule, Shade, Words, run, useDrift } from "./kinetic";
 import { useK } from "./pro/ProGraphics";
 import { EASE, F, bright, fit, measure, outline, str, tween } from "./pro/Kit";
@@ -140,7 +140,7 @@ const TypedLines: React.FC<{ lines: string[]; shown: number; typing: boolean; ho
 
 /**
  * A typed note (TEXT_MEMO_V1), in the owner's text language: the line typed
- * in bold Courier with a black outline, low-left clear of the captions, a
+ * in Geist Mono 700 (was Courier: thin and cheap over footage, 2026-10-05) with a soft black shadow, low-left clear of the captions, a
  * block caret while it types (the sound planner's window: from 0.2 s over
  * 1.2 s, eased out); once typed its key words warm into the accent and a
  * short accent rule draws under the last line. The lines drop away at the end.
@@ -167,7 +167,7 @@ export const MemoBox: React.FC<{ overlay: Overlay; accent: string }> = ({ overla
       <div style={{ position: "absolute", left: 96 * k, top }}>
         <TypedLines lines={f.lines} shown={shown} typing={typing} hot={memoMarks(text, overlay.highlight)}
           hotP={tween(frame, doneAt, 12)} accent={hot} size={f.size} lineH={LINE} caretColor={hot} q={q}
-          style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: f.size, letterSpacing: "-0.01em", ...outline(f.size, "#fff", k) }} />
+          style={{ fontFamily: MONO, fontWeight: 700, fontSize: f.size, letterSpacing: "-0.02em", ...outline(f.size, "#fff", k) }} />
         <div style={{ marginTop: 10 * k, width: 180 * k * rule, height: 8 * k, borderRadius: 2 * k, background: hot,
           boxShadow: `0 0 0 ${2.5 * k}px #000, 0 0 ${16 * k}px ${hot}` }} />
       </div>

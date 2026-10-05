@@ -70,7 +70,7 @@ const toRgb = (c: string): RGB => {
   else if (/^[0-9a-f]{3}$/i.test(s)) hex = s.split("").map((x) => x + x).join("");
   const m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec((c || "").trim());
   if (!hex && m) return [Number(m[1]), Number(m[2]), Number(m[3])];
-  const n = hex ? parseInt(hex, 16) : 0xd6a83c;
+  const n = hex ? parseInt(hex, 16) : 0xf2b544;
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 const mix = (a: string, b: string, t: number) => {

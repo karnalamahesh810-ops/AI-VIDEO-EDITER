@@ -56,7 +56,7 @@ export const SceneClip: React.FC<{
     // The beat is a motion graphic, not a clip (VidRush's purple blocks).
     return (
       <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
-        <AnimationScene scene={scene} accent={accent || "#d6a83c"} accent2={accent2} backdrop={backdrop} />
+        <AnimationScene scene={scene} accent={accent || "#F2B544"} accent2={accent2} backdrop={backdrop} />
       </TransitionFrame>
     );
   }

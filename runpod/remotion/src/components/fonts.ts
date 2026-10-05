@@ -1,15 +1,13 @@
-import { loadFont as loadOswald } from "@remotion/google-fonts/Oswald";
 import { loadFont as loadCourierPrime } from "@remotion/google-fonts/CourierPrime";
 import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
 import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
 import { loadFont as loadBebas } from "@remotion/google-fonts/BebasNeue";
 import { loadFont as loadBarlowCondensed } from "@remotion/google-fonts/BarlowCondensed";
-import { loadFont as loadCaveat } from "@remotion/google-fonts/Caveat";
-import { loadFont as loadMarker } from "@remotion/google-fonts/PermanentMarker";
-import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
 import { loadFont as loadAnton } from "@remotion/google-fonts/Anton";
 import { loadFont as loadInterTight } from "@remotion/google-fonts/InterTight";
 import { loadFont as loadCinzel } from "@remotion/google-fonts/Cinzel";
+import { loadFont as loadSourceSerif } from "@remotion/google-fonts/SourceSerif4";
+import { loadFont as loadGeistMono } from "@remotion/google-fonts/GeistMono";
 
 /**
  * The composition's typefaces, loaded the same way in the RunPod render and in
@@ -17,22 +15,45 @@ import { loadFont as loadCinzel } from "@remotion/google-fonts/Cinzel";
  * picture. System fonts (Liberation, DejaVu) exist in the worker image but not
  * on a creator's machine, which made every preview a slightly different video.
  *
- * Chosen to match VidRush's exports: a condensed sans for sentence text and
- * date stamps, a typewriter face for document cards, an italic serif for the
- * highlighted words, Inter for captions.
+ * One type system for every text, number, date and name look (the owner,
+ * 2026-10-05: "the font is not great ... we need bold and clear and better
+ * fonts"). Five faces, each with one job:
+ *
+ *   ANTON            heavy condensed display: the words and figures that carry a line
+ *   DISPLAY          Bebas Neue: condensed caps for titles and big numbers on cards
+ *   LABEL / NARROW   Barlow Condensed 500-800: labels, kickers, tags, chart text
+ *   INTER / SUBLINE  Inter and Inter Tight 600-800: sentences and small tracked lines
+ *   SERIF            Source Serif 4: quotes, documents, the documentary voice
+ *   MONO             Geist Mono: timestamps, coordinates, records
+ *
+ * Retired (cheap-looking at 1080p over footage): Oswald 500 (now Barlow
+ * Condensed, NARROW), Caveat handwriting (HAND is Barlow Condensed italic),
+ * Permanent Marker (MARKER is Anton), JetBrains Mono (MONO is Geist Mono) and
+ * Playfair Display's thin roman for quotes (SERIF is Source Serif 4). The
+ * names stay, so every look that imported them changes with this file.
+ * Kept for their own looks: Courier Prime (typed documents), Cinzel and
+ * Playfair 700/900 (the VidRush date looks the owner approved).
  */
 const latin = { subsets: ["latin" as const] };
 
-export const NARROW = `${loadOswald("normal", { ...latin, weights: ["500", "700"] }).fontFamily}, 'Arial Narrow', sans-serif`;
+const BARLOW_C = loadBarlowCondensed("normal", { ...latin, weights: ["500", "600", "700", "800"] }).fontFamily;
+const BARLOW_C_ITALIC = loadBarlowCondensed("italic", { ...latin, weights: ["600", "700"] }).fontFamily;
+const SOURCE_SERIF = loadSourceSerif("normal", { ...latin, weights: ["400", "600", "700"] }).fontFamily;
+const SOURCE_SERIF_ITALIC = loadSourceSerif("italic", { ...latin, weights: ["400", "600", "700"] }).fontFamily;
+
+/** Labels, kickers and sentence text in condensed caps (was Oswald 500/700). */
+export const NARROW = `${BARLOW_C}, 'Arial Narrow', sans-serif`;
 export const TYPEWRITER = `${loadCourierPrime("normal", { ...latin, weights: ["400", "700"] }).fontFamily}, 'Courier New', monospace`;
-export const SERIF_ITALIC = `${loadPlayfair("italic", { ...latin, weights: ["700"] }).fontFamily}, Georgia, serif`;
-export const SERIF = `${loadPlayfair("normal", { ...latin, weights: ["400"] }).fontFamily}, Georgia, serif`;
-export const INTER = `${loadInter("normal", { ...latin, weights: ["400", "700", "800"] }).fontFamily}, system-ui, sans-serif`;
+/** The documentary serif's italic: highlighted words in a quote (was Playfair Display italic 700). */
+export const SERIF_ITALIC = `${SOURCE_SERIF_ITALIC}, Georgia, serif`;
+/** The documentary serif: quotes and documents (was Playfair Display 400). */
+export const SERIF = `${SOURCE_SERIF}, Georgia, serif`;
+export const INTER = `${loadInter("normal", { ...latin, weights: ["400", "600", "700", "800"] }).fontFamily}, system-ui, sans-serif`;
 
 // The "pro" graphics (components/pro): Bebas Neue for big numbers and titles,
 // Barlow Condensed for labels and tags.
 export const DISPLAY = `${loadBebas("normal", { ...latin, weights: ["400"] }).fontFamily}, Impact, sans-serif`;
-export const LABEL = `${loadBarlowCondensed("normal", { ...latin, weights: ["600", "700", "800"] }).fontFamily}, 'Arial Narrow', sans-serif`;
+export const LABEL = `${BARLOW_C}, 'Arial Narrow', sans-serif`;
 
 // The white text on footage (the owner, 2026-10-01: "use the font Anton ... cleaner,
 // not big, not small"; picked over Bebas Neue, Oswald, Barlow Condensed, Montserrat
@@ -52,10 +73,14 @@ export const SUBLINE_CAP = 0.728;
 // label, Inter 600 for the year that counts along the line.
 export const CINZEL = `${loadCinzel("normal", { ...latin, weights: ["400"] }).fontFamily}, ${SERIF}`;
 export const SERIF_HEAVY = `${loadPlayfair("normal", { ...latin, weights: ["700", "900"] }).fontFamily}, Georgia, serif`;
-export const INTER_SEMI = `${loadInter("normal", { ...latin, weights: ["600"] }).fontFamily}, system-ui, sans-serif`;
+export const INTER_SEMI = INTER;
 
-// The case-file graphics (components/pro/ProCase): handwriting for notes on a
-// board, a felt marker for the big words, a mono face for window chrome.
-export const HAND = `${loadCaveat("normal", { ...latin, weights: ["600", "700"] }).fontFamily}, cursive`;
-export const MARKER = `${loadMarker("normal", { ...latin, weights: ["400"] }).fontFamily}, cursive`;
-export const MONO = `${loadMono("normal", { ...latin, weights: ["500", "700"] }).fontFamily}, monospace`;
+// The case-file graphics (components/pro/ProCase) and the editor's notes: a clean
+// condensed italic for notes (was Caveat handwriting), the heavy display face for
+// the big words (was Permanent Marker), Geist Mono for window chrome and records.
+export const HAND = `${BARLOW_C_ITALIC}, ${BARLOW_C}, 'Arial Narrow', sans-serif`;
+export const MARKER = ANTON;
+export const MONO = `${loadGeistMono("normal", { ...latin, weights: ["500", "600", "700"] }).fontFamily}, ui-monospace, monospace`;
+
+/** Source Serif 4 at the weights the quote and document looks use (400 body, 600-700 headlines). */
+export const DOC_SERIF = SERIF;

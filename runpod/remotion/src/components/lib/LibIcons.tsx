@@ -75,7 +75,7 @@ const alpha = (c: string, a: number): string => {
   const byte = Math.round(clamp01(a) * 255).toString(16).padStart(2, "0");
   if (/^#[0-9a-f]{6}$/i.test(h)) return `${h}${byte}`;
   if (/^#[0-9a-f]{3}$/i.test(h)) return `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}${byte}`;
-  return h || "#d6a83c";
+  return h || "#F2B544";
 };
 /** A near-white accent (the "white" theme) needs the dark tag, or white text vanishes on it. */
 const isLight = (c: string): boolean => {

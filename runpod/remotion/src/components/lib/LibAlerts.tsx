@@ -53,7 +53,7 @@ const easeIn = Easing.bezier(0.7, 0, 0.84, 0);
 const RED = "#ff3b30";
 const CYAN = "#53c8ff";
 const INK = "#0c0c0f";
-const GOLD = "#d6a83c";
+const GOLD = "#F2B544";
 const STAMP_RED = "#d8262e";
 
 // ------------------------------------------------------------------ small helpers
@@ -102,12 +102,12 @@ const hexRgb = (c: string): [number, number, number] | null => {
 };
 const safeAccent = (c: string): string => (hexRgb(c) ? c.trim() : GOLD);
 const rgba = (c: string, a: number): string => {
-  const v = hexRgb(c) || [214, 168, 60];
+  const v = hexRgb(c) || [242, 181, 68];
   return `rgba(${v[0]},${v[1]},${v[2]},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
 };
 /** Ink that reads on a colour: near-black on light accents (gold), white on dark ones. */
 const inkOn = (c: string): string => {
-  const v = hexRgb(c) || [214, 168, 60];
+  const v = hexRgb(c) || [242, 181, 68];
   return (0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]) / 255 > 0.58 ? INK : "#ffffff";
 };
 

@@ -97,7 +97,7 @@ export const F = {
   interHeavy: { w: 1.03 } as Face,
   label: { w: 0.70 } as Face,        // Barlow Condensed 700-800 (calibrated on caps against the real font)
   display: { w: 0.62 } as Face,      // Bebas Neue (caps only)
-  narrow: { w: 0.81 } as Face,       // Oswald 700
+  narrow: { w: 0.72 } as Face,       // NARROW is Barlow Condensed 700 since 2026-10-05 (was Oswald 700, 0.81)
   serif: { w: 1.05 } as Face,
   mono: { w: 1, mono: 0.6 } as Face,
 };

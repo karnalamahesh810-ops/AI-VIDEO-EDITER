@@ -42,7 +42,7 @@ const backOut = Easing.bezier(0.34, 1.56, 0.64, 1);
 const flipEase = Easing.bezier(0.3, 1.32, 0.55, 1);
 const markerEase = Easing.bezier(0.45, 0, 0.3, 1);
 const INK = "#0c0c0f";
-const GOLD = "#d6a83c";
+const GOLD = "#F2B544";
 
 // ------------------------------------------------------------------ helpers
 const str = (s: unknown): string => (typeof s === "string" ? s.replace(/\s+/g, " ").trim() : "");
@@ -72,7 +72,7 @@ const safeAccent = (a: string): string => {
   return rgb(s) ? (s[0] === "#" ? s : `#${s}`) : GOLD;
 };
 const alpha = (hex: string, a: number): string => {
-  const c = rgb(hex) || ([214, 168, 60] as [number, number, number]);
+  const c = rgb(hex) || ([242, 181, 68] as [number, number, number]);
   return `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
 };
 /** Perceived lightness 0..1 of a #hex colour (0.5 when it is not one). */

@@ -77,13 +77,13 @@ const hashStr = (s: string): number => {
   return h;
 };
 
-/** "#d6a83c" + alpha -> rgba(); anything unparseable falls back to the house gold. */
+/** "#F2B544" + alpha -> rgba(); anything unparseable falls back to the house gold. */
 const withAlpha = (color: string, a: number): string => {
   const s = (color || "").trim().replace(/^#/, "");
   let hex = "";
   if (/^[0-9a-f]{6}$/i.test(s)) hex = s;
   else if (/^[0-9a-f]{3}$/i.test(s)) hex = s.split("").map((c) => c + c).join("");
-  const n = hex ? parseInt(hex, 16) : 0xd6a83c;
+  const n = hex ? parseInt(hex, 16) : 0xf2b544;
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
