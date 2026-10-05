@@ -2505,7 +2505,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             if ledger.moment_used(candidate["id"], point, point + grab):
                 continue                            # an earlier video showed this moment
             # With a margin, cut clean: never opening on the end of the shot before (filters.tidy_clip).
-            path, clean, cuts = fetch_clean_clip(candidate["id"], out_dir, point, grab, candidate["title"])
+            path, clean, cuts = fetch_clean_clip(candidate["id"], out_dir, point, grab, candidate["title"],
+                                                 least=_plays(seconds, grab))
             if not path:
                 continue
             # Burned-in subtitles only become visible after the download, and a
@@ -2724,7 +2725,7 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
                 pass
             continue
         if path and margin:
-            path = tidy_clip(path, grab, prefer=min(point, margin))[0]
+            path = tidy_clip(path, grab, prefer=min(point, margin), least=_plays(seconds, grab))[0]
         if not path:
             continue
         why = "burned-in text or UI" if has_burned_captions(path) else motion_rejects(path)
@@ -2837,7 +2838,7 @@ def web_video_clip(query: str, out_dir: str, seconds: float = 6.0, used: set = N
         margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
         path = _web_fetch(row["url"], out_dir, max(0.0, start - margin), grab + 2 * margin)
         if path and margin:
-            path = tidy_clip(path, grab, prefer=min(start, margin))[0]
+            path = tidy_clip(path, grab, prefer=min(start, margin), least=_plays(seconds, grab))[0]
         if not path:
             continue
         w, h = _video_dims(path)
@@ -3037,11 +3038,14 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             _release_inflight(c.id)
             continue
         mkey = f"yt:{c.id}@{int(point // 10)}"
-        if _is_bad(mkey):
+        least = _plays(seconds, grab)
+        if _is_bad(mkey) or _short_section(mkey, least):
             _release_inflight(c.id)
-            continue                        # another scene found this moment unusable
-        path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title)
+            continue                        # another scene found this moment unusable (or too short for it)
+        path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title, least=least)
         if not path:
+            if clean is False:
+                _note_short_section(mkey, least)    # downloaded, but no clean start long enough: not again
             _release_inflight(c.id)
             continue
         still = motion_rejects(path)
@@ -3158,8 +3162,13 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
 
 
 def fetch_clean_clip(video_id: str, out_dir: str, start: float, need: float,
-                     title: str = "") -> tuple:
-    """(path, clean, cuts): a YouTube section with margin, cut clean around `start`."""
+                     title: str = "", least: Optional[float] = None) -> tuple:
+    """
+    (path, clean, cuts): a YouTube section with margin, cut clean around
+    `start`. `least`: the shortest clip the caller can use (tidy_clip; `need`
+    when not given). ("", True, 0) when the download failed; ("", False, cuts)
+    when it came but no clean start leaves `least` (filters.tidy_clip).
+    """
     margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
     fetch_start = max(0.0, start - margin)
     path = _yt_fetch_retry(video_id, out_dir, fetch_start, need + 2 * margin, title)
@@ -3167,7 +3176,31 @@ def fetch_clean_clip(video_id: str, out_dir: str, start: float, need: float,
         return "", True, 0
     if not margin:
         return path, True, 0
-    return tidy_clip(path, need, prefer=start - fetch_start)
+    return tidy_clip(path, need, prefer=start - fetch_start, least=least)
+
+
+def _plays(seconds: float, grab: float) -> float:
+    """The shortest clip a line of `seconds` can use from a `grab`-second section: what its scene plays,
+    a crossfade into the next included (SEQ_SHOT_PAD) - the rest of the grab is only margin."""
+    return min(float(grab), max(1.0, float(seconds or 0.0)) + SEQ_SHOT_PAD)
+
+
+# Sections tidy_clip threw away (no clean start long enough), by moment key -> the shortest clip
+# a line asked for there: a line asking for as much or more skips the download.
+_SHORT_SECTIONS: Dict[str, float] = {}
+
+
+def _short_section(mkey: str, least: float) -> bool:
+    with _CACHE_LOCK:
+        got = _SHORT_SECTIONS.get(mkey)
+    return got is not None and least >= got - 0.01
+
+
+def _note_short_section(mkey: str, least: float) -> None:
+    with _CACHE_LOCK:
+        if len(_SHORT_SECTIONS) > 5000:
+            _SHORT_SECTIONS.clear()
+        _SHORT_SECTIONS[mkey] = min(float(least), _SHORT_SECTIONS.get(mkey, float(least)))
 
 
 # Fine passes already paid for in this job (JUDGE_MEMORY): video, coarse moment, clip
@@ -3408,6 +3441,7 @@ def reset_cache():
     SLOP_REJECTED.clear()
     with _CACHE_LOCK:
         _BAD.clear()                    # what was unusable is decided again per job
+        _SHORT_SECTIONS.clear()
     _LIBRARY_KEEP["on"] = False         # the job's Library.load turns it on
     from . import official
     official.reset()                    # each satellite sector once per video

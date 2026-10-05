@@ -595,36 +595,63 @@ def snap_past_cut(start: float, cuts: List[float], guard: Optional[float] = None
     return start
 
 
-def clean_window(total: float, cuts: List[float], need: float, prefer: float) -> tuple:
+# What a cut may come out short of what was asked: two frames, rounding (shotcap.TOLERANCE_FRAMES).
+_SHORT_OK = 2 / 30.0
+
+
+def clean_window(total: float, cuts: List[float], need: float, prefer: float,
+                 least: Optional[float] = None) -> tuple:
     """
     (offset, clean, cuts_inside): where to cut `need` seconds out of a file
     `total` seconds long whose shot changes are at `cuts`, preferring the
     stretch that holds the intended moment at `prefer`. A stretch that opens
     on a shot change starts CUT_SNAP_PAD past it, so no frame of the shot
-    before shows. `clean` is False when no stretch is long enough (rapid
-    cutting): the caller keeps the moment and scores the timing down - but
-    never opens on the last second of a shot (snap_past_cut: the start moves
-    past the change and the clip keeps its length from later in the file).
-    offset None: the moment sits just before a shot change and what follows
-    the change is too short for `need` - nothing usable here.
+    before shows. `least` (at most `need`, `need` when not given) is the
+    shortest clip the caller can still use - what its scene plays, a
+    crossfade included - and a stretch that long is clean too. `clean` is
+    False when no stretch is long enough (rapid cutting): the caller keeps the
+    moment and scores the timing down - but never opens on the last second of
+    a shot (snap_past_cut: the start moves past the change and the clip keeps
+    its length from later in the file); when that runs too far, the start just
+    after another shot change that still leaves `least` (the longest first
+    shot, then the nearest the moment). offset None: no start after a shot
+    change leaves `least` - nothing usable here.
     """
     inner = sorted(c for c in cuts if 0.2 < c < total - 0.2)
     if total <= 0:
         return 0.0, True, 0
+    least = need if least is None else max(0.0, min(need, float(least)))
     pad = config.CUT_SNAP_PAD
     edges = [0.0] + inner + [total]
     # (first usable second, end, where the stretch really starts) - a cut's own frames padded off.
     windows = [(a + (pad if k else 0.0), b, a) for k, (a, b) in enumerate(zip(edges, edges[1:]))]
-    for lo, b, a in windows:
-        if a <= prefer < b and b - lo >= need:
-            return max(lo, min(prefer, b - need)), True, len(inner)
-    lo, b, _a = max(windows, key=lambda w: w[1] - w[0])
-    if b - lo >= need:
-        return lo, True, len(inner)
-    start = snap_past_cut(max(0.0, min(prefer, total - need)), inner)
-    if total - start < need - 0.01:
-        return None, False, len(inner)
-    return start, False, len(inner)
+    longest = max(windows, key=lambda w: w[1] - w[0])
+    # The full length first, then two frames short of it (the snap pad alone must not cost a clean
+    # stretch), then what the line plays - each in the moment's own stretch first, else the longest.
+    for want, short in dict.fromkeys(((need, 0.0), (need, _SHORT_OK), (least, 0.0), (least, _SHORT_OK))):
+        for lo, b, a in windows:
+            if a <= prefer < b and b - lo >= want - short:
+                return max(lo, min(prefer, b - want)), True, len(inner)
+        lo, b, _a = longest
+        if b - lo >= want - short:
+            return lo, True, len(inner)
+    moment = max(0.0, min(prefer, total - need))
+    start = snap_past_cut(moment, inner)
+    if total - start >= least - _SHORT_OK:
+        return start, False, len(inner)
+    # The snap ran past what the file has left (a run of short shots): the start just after another
+    # shot change - a shot's first frame, never its last second - that still leaves enough: the
+    # longest first shot (up to CUT_GUARD_SECONDS), then the nearest the moment.
+    guard = float(config.CUT_GUARD_SECONDS)
+    after = []
+    for k, c in enumerate(inner):
+        x = c + pad
+        first = (inner[k + 1] if k + 1 < len(inner) else total) - x
+        if first >= pad and total - x >= least - _SHORT_OK:
+            after.append((round(min(guard, first), 3), -abs(x - moment), x))
+    if after:
+        return max(after)[2], False, len(inner)
+    return None, False, len(inner)
 
 
 def trim_clip(path: str, offset: float, seconds: float, timeout: int = 180) -> str:
@@ -650,14 +677,16 @@ def _drop(path: str, why: str, inner: int) -> tuple:
     return "", False, inner
 
 
-def tidy_clip(path: str, need: float, prefer: float) -> tuple:
+def tidy_clip(path: str, need: float, prefer: float, least: Optional[float] = None) -> tuple:
     """
     (path, clean, cuts) for a downloaded section: the `need` seconds cut from
     its cleanest stretch around `prefer`, never opening on the end of a shot
-    (clean_window). The original file is replaced. ("", False, cuts) when the
-    moment opens just before a shot change and what follows it is too short
-    to cover `need`: the file is gone and the caller tries its next candidate
-    or leaves the line to the fallback ladder - a clip is never slowed.
+    (clean_window). `least` (at most `need`; `need` when not given): the
+    shortest clip the caller can use - what its scene plays at real speed. The
+    original file is replaced. ("", False, cuts) when no start just after a
+    shot change leaves `least`: the file is gone and the caller tries its next
+    candidate or leaves the line to the fallback ladder - a clip is never
+    slowed.
     """
     if not path or not config.CLEAN_CUTS:
         return path, True, 0
@@ -672,9 +701,10 @@ def tidy_clip(path: str, need: float, prefer: float) -> tuple:
         clean = not any(start < c < min(total, start + need) - 0.2 for c in cuts)
         if not start:
             return path, clean, inner
-        if total - start < need - 0.01:
+        floor = need if least is None else min(need, float(least))
+        if total - start < floor - _SHORT_OK:
             return _drop(path, f"opens {start - config.CUT_SNAP_PAD:.2f}s before a shot change and the rest "
-                               f"is too short for {need:.1f}s", inner)
+                               f"is too short for {floor:.1f}s", inner)
         out = trim_clip(path, start, need + 0.5)
         if not out:
             return path, False, inner
@@ -684,10 +714,9 @@ def tidy_clip(path: str, need: float, prefer: float) -> tuple:
             pass
         print(f"[cut] {os.path.basename(out)}: clip from {start:.2f}s, past a shot change at its start", flush=True)
         return out, clean, inner
-    offset, clean, inner = clean_window(total, cuts, need, prefer)
+    offset, clean, inner = clean_window(total, cuts, need, prefer, least)
     if offset is None:
-        return _drop(path, f"the moment opens just before a shot change and what follows it is too short for "
-                           f"{need:.1f}s", inner)
+        return _drop(path, f"no start after a shot change leaves {need if least is None else least:.1f}s", inner)
     out = trim_clip(path, offset, need + 0.5)
     if not out:
         return path, clean, inner

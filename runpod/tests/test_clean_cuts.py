@@ -196,6 +196,32 @@ class CleanInPoints(unittest.TestCase):
     def test_a_remainder_too_short_is_not_used(self):
         self.assertEqual(filters.clean_window(6.0, [2.6, 3.3, 4.0], 3.5, 2.0), (None, False, 3))
 
+    def test_a_run_of_short_shots_opens_on_a_shot_never_drops_the_clip(self):
+        # Every shot under 1.1 s: snapping past each in turn ran off the end and the clip was thrown
+        # away, though a start just after a cut leaves plenty. It opens on a shot's first frame.
+        off, clean, n = filters.clean_window(10.0, [2.5, 3.4, 4.3, 5.2, 6.1, 7.0, 7.9, 8.8], 6.0, 2.0)
+        self.assertEqual((round(off, 3), clean, n), (2.6, False, 8))
+        off, clean, n = filters.clean_window(9.5, [2.6, 3.5, 4.4], 5.5, 2.0)
+        self.assertEqual((round(off, 3), clean, n), (2.7, False, 3))
+        # Lightning the frames could not tell apart (no frames: the fixed threshold) - between strikes.
+        flashes = [2.0, 2.1, 2.7, 2.8, 3.4, 3.5, 4.1, 4.2]
+        off, clean, n = filters.clean_window(11.5, flashes, 7.5, 2.0)
+        self.assertEqual((round(off, 3), clean, n), (2.2, False, 8))
+        self.assertGreaterEqual(11.5 - off, 7.5)
+
+    def test_the_snap_pad_alone_never_costs_a_clean_stretch(self):
+        # 6.55 s after the cut at 3.95 for 6.5 s wanted: clean before the pad, two frames short after.
+        off, clean, n = filters.clean_window(10.5, [2.9, 3.95], 6.5, 2.0)
+        self.assertEqual((round(off, 3), clean, n), (4.05, True, 2))
+
+    def test_a_stretch_covering_what_the_line_plays_is_enough(self):
+        # A grab of seconds + 1.5 for a 4 s line: 5.0 s after the last cut covers its 4.5 s (crossfade
+        # included) - a clean clip, not a rapid-cut one and not a dropped one.
+        self.assertEqual(filters.clean_window(9.5, [2.6, 3.5, 4.4], 5.5, 2.0, least=4.5)[:2], (4.5, True))
+        off, clean, _n = filters.clean_window(9.5, [2.9, 3.95], 5.5, 2.0, least=4.5)
+        self.assertEqual((round(off, 3), clean), (4.05, True))
+        self.assertEqual(filters.clean_window(7.5, [], 3.5, 2.0, least=3.0), (2.0, True, 0))   # unchanged
+
     def test_snapping_past_cuts(self):
         self.assertAlmostEqual(filters.snap_past_cut(2.0, [2.4, 2.9, 5.0]), 3.0)   # one after the other
         self.assertAlmostEqual(filters.snap_past_cut(2.0, [1.95]), 2.05)           # its frames still on screen
@@ -255,6 +281,18 @@ class CleanInPointsOnRealFiles(unittest.TestCase):
         self.assertEqual(filters.scene_cuts(src, threshold=0.4), [])
         self.assertEqual(filters.scene_cuts(src), [])
         self.assertEqual(filters.clean_window(4.0, filters.scene_cuts(src), 2.0, 1.4), (1.4, True, 0))
+
+    def test_a_short_section_is_measured_against_what_the_line_plays(self):
+        # A section cut short by the end of its video: 6.3 s, a cut at 0.5 s. Past the cut 5.7 s are left -
+        # short of the 6.0 s asked, enough for the 5.5 s the line plays.
+        src = _video(os.path.join(self.d, "end.mp4"), [(0.5, ACROSS), (5.8, DOWN)])
+        keep = os.path.join(self.d, "end_copy.mp4")
+        shutil.copy(src, keep)
+        with mock.patch.object(config, "CLEAN_CUTS", True):
+            out, _clean, _n = filters.tidy_clip(src, 6.0, prefer=0.0, least=5.5)
+            self.assertTrue(out and os.path.exists(out))
+            self.assertEqual(filters.scene_cuts(out), [])
+            self.assertEqual(filters.tidy_clip(keep, 6.0, prefer=0.0)[0], "")      # the padded need: not used
 
     def test_a_storm_clip_with_lightning_keeps_its_moment(self):
         # Four 0.1 s strikes 0.7 s apart right after the moment: eight hard jumps (scored 1.0). Read as

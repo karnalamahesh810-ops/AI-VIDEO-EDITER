@@ -410,9 +410,12 @@ SHOT_CUT_STEADY = float(os.getenv("SHOT_CUT_STEADY", "0.85"))
 # Every footage cut starts after a shot change, never on the last second of the
 # shot before it: a planned in-point under CUT_GUARD_SECONDS before a shot
 # change moves forward past it - CUT_SNAP_PAD past it, so no frame of the shot
-# before shows - and the clip keeps its length from later in the section; a
-# remainder too short to cover the line is not used (the caller's next
-# candidate or the fallback ladder takes the line - a clip is never slowed).
+# before shows - and the clip keeps its length from later in the section. When
+# that runs past what the section has left (a run of short shots), the clip
+# starts just after another shot change that leaves enough; only when none
+# does - measured against what the line plays, its crossfade included, not the
+# grab's margin - is the section not used (the caller's next candidate or the
+# fallback ladder takes the line - a clip is never slowed).
 CUT_GUARD_SECONDS = float(os.getenv("CUT_GUARD_SECONDS", "1.0"))
 CUT_SNAP_PAD = float(os.getenv("CUT_SNAP_PAD", "0.1"))
 # Candidate videos scouted in parallel per search. Each scout is one yt-dlp

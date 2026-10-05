@@ -67,6 +67,56 @@ class GoogleForThePlainQuery(unittest.TestCase):
         self.assertEqual(asked, ["Lake Powell"])
 
 
+class ASectionTooShortIsNotFetchedAgain(unittest.TestCase):
+    """A section tidy_clip threw away (no clean start long enough for the line) is remembered by moment:
+    another line asking for as much skips the download, a shorter line may still use it."""
+
+    def setUp(self):
+        media.reset_cache()
+        self.addCleanup(media.reset_cache)
+
+    def _scene(self, seconds, fetched):
+        from src import ledger
+        row = mock.Mock(id="SHORT000001", title="Lake Powell boat ramp", channel="", aspect=1.78, metadata=0.8,
+                        parts={})
+        row.row.return_value = {"id": row.id, "title": row.title, "duration": 600, "aspect": 1.78, "channel": ""}
+        pool = mock.Mock()
+        pool.ranked.return_value = [row]
+        pool.__len__ = lambda self: 1
+        pool.searches = 1
+
+        def fetch(vid, out_dir, point, grab, title="", least=None):
+            fetched.append((round(grab, 2), least))
+            return "", False, 3                     # downloaded, then no clean start long enough
+        tokens = [(media._SCENE_TRIED, media._SCENE_TRIED.set(set())),
+                  (media._SCENE_JUDGED, media._SCENE_JUDGED.set([0]))]
+        try:
+            with mock.patch.object(media.candidates, "CandidatePool", return_value=pool), \
+                    mock.patch.object(media, "_yt_candidates_cached", return_value=[]), \
+                    mock.patch.object(media, "_plan_grabs", return_value=[(row.row.return_value, 101.0, None)]), \
+                    mock.patch.object(media, "fetch_clean_clip", side_effect=fetch), \
+                    mock.patch.object(media, "_refine_moment", side_effect=lambda r, m, *a: m), \
+                    mock.patch.object(ledger, "moment_used", return_value=False):
+                return media._youtube_pool("Lake Powell boat ramp", tempfile.gettempdir(), seconds, 30.0, False,
+                                           0, set(), "Lake Powell boat ramp", "", "Lake Powell",
+                                           [("Lake Powell boat ramp", "plain", False)])
+        finally:
+            for var, token in reversed(tokens):
+                var.reset(token)
+
+    def test_the_next_line_skips_it_a_shorter_one_may_try(self):
+        fetched = []
+        self.assertIsNone(self._scene(5.0, fetched))
+        self.assertEqual(fetched, [(6.5, 5.5)])         # the line plays 5.5 s (its crossfade included)
+        self.assertIsNone(self._scene(5.0, fetched))
+        self.assertEqual(len(fetched), 1)               # not downloaded and thrown away again
+        self._scene(3.0, fetched)
+        self.assertEqual(fetched[-1], (4.5, 3.5))       # a shorter line may still fit
+        media.reset_cache()
+        self._scene(5.0, fetched)
+        self.assertEqual(len(fetched), 3)               # a new job decides again
+
+
 class UnusableOnceUnusableForAll(SceneScope):
     def test_what_is_remembered_and_for_how_much(self):
         media._mark_bad("yt:VIDEO000001", "yt:VIDEO000001@3", "an AI-generated or painted picture")
