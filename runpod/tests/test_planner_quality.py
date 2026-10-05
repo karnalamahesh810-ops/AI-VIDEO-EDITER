@@ -157,8 +157,9 @@ class SoundLevels(unittest.TestCase):
             self.assertGreaterEqual(max(s["volume"] for s in sounds if s["look"] == look), 0.2, look)
         # No punch anywhere, and a date or a number only ever ticks (the owner, 2026-10-01).
         self.assertFalse([s for s in sounds if s["name"] in ("date-slam", "impact-punch")])
+        # the dates and figures: the old bold looks, or (since 2026-10-05) the KT data looks (src/datalooks.py)
         texty = {i for i, o in enumerate(doc["overlays"])
-                 if o.get("template") in (treatments.TEXT_DATE_LOOK, treatments.BOLD_COUNT_LOOK)}
+                 if o.get("template") in (treatments.TEXT_DATE_LOOK, treatments.BOLD_COUNT_LOOK) or o.get("dataLook")}
         self.assertTrue(texty)
         for s in sounds:
             if s["look"] in texty:
@@ -692,7 +693,8 @@ class Maps(unittest.TestCase):
         geocode.reset_cache()
 
     def lookup(self, name, hits):
-        with mock.patch.object(geocode.requests, "get", return_value=_Reply(hits)) as get:
+        # the gazetteer's question (the built-in places answer without one: tests/test_relook.py)
+        with mock.patch.object(geocode.requests, "get", return_value=_Reply(hits)) as get,                 mock.patch.object(geocode, "_gazetteer", return_value=None):
             got = geocode.lookup(name)
         self.assertEqual(get.call_args.kwargs["params"]["limit"], 5)
         return got

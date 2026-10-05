@@ -167,7 +167,9 @@ class PicksHonoured(unittest.TestCase):
         self.assertEqual(brandkit.layout(doc), (0, doc["durationInFrames"], 0, doc["durationInFrames"]))
 
     def test_only_allowed_looks_are_planned(self):
-        every = _templates_of(_build({}))
+        # the planner's own looks (the KT data looks join them only when a kit allows them: datalooks.finish)
+        with mock.patch.object(config, "DATA_LOOKS", False):
+            every = _templates_of(_build({}))
         self.assertTrue(every)
         allowed = sorted(set(every))[: max(1, len(set(every)) // 2)]
         doc = _build({"brand_kit": _kit(picks={"looks": allowed})})
@@ -265,6 +267,8 @@ class PicksHonoured(unittest.TestCase):
         seconds = 0
         for o in doc["overlays"]:
             cat = (templates.get(o.get("template") or "") or {}).get("category")
+            if str(o.get("template") or "").startswith("KT_") and o.get("dataLook"):
+                cat = "NUMBERS"         # the narration's figures as kinetic looks (src/datalooks.py)
             if cat in brandkit.SECOND_COLOUR_CATEGORIES and o.get("template") not in treatments.VR_LOOKS:
                 # (The date looks keep their own lettering theme.)
                 self.assertEqual(o.get("theme"), "accent2", o.get("template"))

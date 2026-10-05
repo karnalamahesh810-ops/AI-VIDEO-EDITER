@@ -53,6 +53,14 @@ recut   : cut every shot of a sourced timeline that runs longer than the cap
           | "timeline_key", "apply", "cap", "seconds", "media_bucket"}. A dry
           run (the default) returns the plan and changes nothing; an apply
           keeps the old timeline on R2 first and writes the project once.
+relook  : new graphics on a made timeline (src/relook.py): {"project_id",
+          "timeline" | "timeline_url" | "timeline_key", "apply" (false = a
+          dry run, the default), "expect_fingerprint" (needed to apply)}.
+          Re-plans only the date / number / percent / multiplier / text /
+          annotation / chart / map looks (every shot, the music and the
+          voice stay), re-resolves map places, re-hosts or replaces broken
+          look pictures, rewrites retired looks; returns the new timeline and
+          a diff. No sourcing, no paid calls.
 
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
@@ -80,7 +88,7 @@ from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
 from src import brandkit, stockblock
-from src import recut, restore
+from src import recut, relook, restore
 from src import batch, sources
 from src import datagraphics
 from src import tts
@@ -566,11 +574,42 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
             scene["reviewReason"] = "Media could not be saved; re-source before rendering"
             failures += 1
     _publish_living(doc, project_id, job_id)
+    _publish_overlay_pictures(doc, project_id)
     doc["meta"]["publishedMedia"] = len(published)
     if failures:
         doc["meta"]["warnings"].append(
             f"{failures} scene(s) could not be saved to storage.")
     return len(published)
+
+
+def _publish_overlay_pictures(doc: dict, project_id: str) -> dict:
+    """
+    Every picture a look shows (overlay.media[]) is ours before the timeline is saved: a file on this
+    machine or a link elsewhere on the web is fetched, checked (decodes, big enough, not an error page)
+    and re-hosted under the project's R2 folder; a bad one is replaced by the next candidate or the look
+    becomes its text-only variant (src/overlayimages.py; the owner's Las Vegas video showed a hot-linked
+    portrait answering 403 and two pod file paths that were never uploaded). Never fails the job.
+    """
+    if not (config.OVERLAY_IMAGES_CHECK and project_id and r2.enabled()):
+        return {}
+    from src import overlayimages
+
+    def put(data: bytes, key: str, ctype: str) -> str:
+        return r2.upload_bytes(data, r2.tokened(key), content_type=ctype, deadline=time.time() + 120,
+                               cache_control=r2.IMMUTABLE)
+    try:
+        got = overlayimages.fix(doc.get("overlays") or [], project_id=project_id, scenes=doc.get("scenes") or [],
+                                fps=int(doc.get("fps") or 30), put=put, verify_ours=False,
+                                public_base=str(config.R2_PUBLIC_BASE or ""))
+    except Exception as e:  # noqa: BLE001 - the looks keep the links they had
+        print(f"[worker] overlay pictures not checked: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        return {}
+    if got.get("checked"):
+        print(f"[worker] overlay pictures: {got['checked']} checked, {got['rehosted']} re-hosted, {got['replaced']} "
+              f"replaced, {got['textOnly']} became text looks, {got['dropped']} left out", flush=True)
+        meta = doc.setdefault("meta", {})
+        meta["overlayPictures"] = {k: got[k] for k in ("checked", "rehosted", "replaced", "textOnly", "dropped")}
+    return got
 
 
 def _publish_living(doc: dict, project_id: str, job_id: str = "") -> dict:
@@ -2781,6 +2820,20 @@ def do_recut(inp: dict, work: str, report: Reporter) -> dict:
         _restore_config(previous)
 
 
+def do_relook(inp: dict, work: str, report: Reporter) -> dict:
+    """
+    New graphics on a made timeline (src/relook.py): the saved timeline from the input or storage, or the
+    project's own row (service key); a dry run unless apply. Writes nothing on a dry run or a failure.
+    """
+    if any(inp.get(k) for k in ("timeline", "timeline_url", "timeline_key")):
+        doc = restore.load_timeline(inp, work)
+    elif inp.get("project_id"):
+        doc = relook.read_project(str(inp["project_id"]))
+    else:
+        raise ValueError("relook needs the project_id or the saved timeline: timeline, timeline_url or timeline_key")
+    return relook.run(inp, doc, work, report)
+
+
 def handler(job):
     started = time.time()
     job_id = job.get("id") or uuid.uuid4().hex
@@ -2829,7 +2882,7 @@ def handler(job):
     # Project updates go through the broker as this job; parts and render
     # chunks are not the project's job and never write the row. (A re-cut
     # writes it once, at its very end, only on an apply: src/recut.py.)
-    storage.CURRENT_JOB[0] = job_id if action in ("plan", "build", "render", "resource", "recut") else ""
+    storage.CURRENT_JOB[0] = job_id if action in ("plan", "build", "render", "resource", "recut", "relook") else ""
     # Every job keeps its own ledger and event log; a fan-out child returns
     # both in its result and the parent absorbs them.
     costs.reset(inp.get("prices") if isinstance(inp.get("prices"), dict) else None)
@@ -2837,7 +2890,7 @@ def handler(job):
     # events stay with this job's own status and result, so nothing of it is
     # ever written to the app's database. Nor is a re-cut's (src/recut.py),
     # whose one write is the finished timeline.
-    reports_to = "" if action in ("restore_media", "recut") else project_id
+    reports_to = "" if action in ("restore_media", "recut", "relook") else project_id
     applying = action == "recut" and bool(inp.get("apply"))
     events.start_job(job_id, reports_to, part=("part" if action in ("source_part", "render_chunk") else ""))
     if action in ("plan", "build", "render", "resource") or applying:
@@ -3004,6 +3057,18 @@ def handler(job):
                 costs.measure_end()
             return {**out, "action": "recut", "costs": costs.summary(time.time() - started),
                     "events": events.summary(), "vision_stats": vision.stats(),
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action == "relook":
+            # New graphics on a made timeline (src/relook.py): no sourcing, no paid calls; a dry run
+            # writes nothing anywhere, an apply writes the row once, and a failure never marks it failed.
+            events.phase("relook")
+            try:
+                out = do_relook(inp, work, report)
+            except Exception as e:  # noqa: BLE001 - reported in the result, the project is not touched
+                traceback.print_exc()
+                out = {"ok": False, "error": str(e)[:800]}
+            return {**out, "action": "relook", "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "health":
@@ -3257,7 +3322,7 @@ def handler(job):
         # A restore is not the project's job: whatever breaks in it, the
         # project row is never written (never marked failed) - src/restore.py.
         # Nor a re-cut's: its one write is the finished timeline (src/recut.py).
-        if project_id and action not in ("restore_media", "recut"):
+        if project_id and action not in ("restore_media", "recut", "relook"):
             # The broker takes events only while the project is "rendering":
             # send them before the status changes, or a failed job has no log.
             try:

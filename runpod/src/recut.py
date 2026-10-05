@@ -1430,7 +1430,8 @@ def save_json(project_id: str, key: str, doc: dict) -> str:
     return key
 
 
-def write_project(project_id: str, doc: dict, say: Callable, wait: float = WRITE_WAIT) -> Tuple[bool, str]:
+def write_project(project_id: str, doc: dict, say: Callable, wait: float = WRITE_WAIT,
+                  step: str = "Long shots re-cut") -> Tuple[bool, str]:
     """
     The project row, once: the re-cut timeline, status "editing", "Long shots
     re-cut", progress 100. With the service key it is written straight away.
@@ -1441,7 +1442,7 @@ def write_project(project_id: str, doc: dict, say: Callable, wait: float = WRITE
     waits (awaitHandover, for scratchpad/recut_project.py), then writes the
     timeline; never anything else, nothing when it is not handed over.
     """
-    fields = {"scene_data": doc, "status": "editing", "current_step": "Long shots re-cut", "progress": 100}
+    fields = {"scene_data": doc, "status": "editing", "current_step": step, "progress": 100}
     if not storage.broker_enabled():
         if config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY:
             if storage.patch_project(project_id, fields, wait=True):
@@ -1453,7 +1454,8 @@ def write_project(project_id: str, doc: dict, say: Callable, wait: float = WRITE
     until = time.time() + max(0.0, float(wait))
     told = False
     while True:
-        if storage.patch_project(project_id, {"current_step": "Saving the re-cut timeline"}, wait=True):
+        saving = "Saving the re-cut timeline" if step == "Long shots re-cut" else f"Saving: {step}"
+        if storage.patch_project(project_id, {"current_step": saving}, wait=True):
             if storage.patch_project(project_id, fields, wait=True):
                 return True, ""
             return False, "the project was handed over but the app did not take the timeline (see the job log)"
