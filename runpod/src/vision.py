@@ -119,11 +119,15 @@ _SYSTEM = (
     "another creator's big word-by-word captions, or a TV weather map or forecast "
     "graphic? A reporter or official interviewed on location, a press conference, and "
     "field video carrying a small news banner are false.\n"
+    "And one more, answered whatever the line: music_or_vice: do the frames show a music "
+    "video or a music performance (a rapper or singer performing, music-video styling, a "
+    "concert stage), a club or party scene, or someone smoking, vaping, taking drugs or "
+    "drinking alcohol?\n"
     "Keep the description to one plain sentence of at most 25 words.\n"
     "Reply with one valid JSON object only. Do not wrap it in JSON.stringify(), "
     "JavaScript, markdown, or commentary: {\"description\": str, \"score\": number, \"quality\": number, "
     "\"has_text_or_watermark\": bool, \"is_talking_head\": bool, \"ai_generated\": bool, \"studio\": bool, "
-    "\"specificity\": \"event\"|\"location\"|\"generic\"}"
+    "\"music_or_vice\": bool, \"specificity\": \"event\"|\"location\"|\"generic\"}"
 )
 
 # News footage the GoMotion way (config.NEWS_FOOTAGE): the same judge, with the
@@ -806,6 +810,9 @@ def _parse(text: str) -> Optional[dict]:
         # reject each (acceptable). A string "false" is false.
         "ai_generated": _truthy(data.get("ai_generated")),
         "studio": _truthy(data.get("studio")),
+        # A music video or performance, a club, smoking / drugs / drinking (src/topics.py): a reject unless
+        # the story or the line is about it (acceptable's allow_vice).
+        "music_or_vice": _truthy(data.get("music_or_vice")),
         "specificity": (data.get("specificity")
                         if data.get("specificity") in scene_intent.SPECIFICITY else ""),
         # Only the opening check asks it (judge with `span`): whether the clip's
@@ -861,6 +868,9 @@ def set_story(brief: Optional[dict]) -> None:
              f"year: {b.get('year')}" if b.get("year") else "",
              f"kind: {b.get('kind')}" if b.get("kind") else ""]
     _STORY["line"] = " | ".join(p for p in parts if p)[:500]
+    # What the video is about, for the topic rules (music videos, smoking scenes: src/topics.py).
+    from . import topics
+    topics.set_story(b)
 
 
 def _scene_lines(scene: Optional[dict]) -> str:
@@ -883,6 +893,14 @@ def _wanted_line(wants: str) -> str:
             "text (has_text_or_watermark), an AI-made or fantasy picture (ai_generated), a stock watermark.\n")
 
 
+# The owner, 2026-10-06: rapper and music-video clips, people smoking, in a story about a politician's
+# brothers - "we don't want those clips in our videos". Told only when neither the story nor the line is
+# about music, nightlife, smoking, drugs or drinking (src/topics.py); a video about a rapper is judged as usual.
+_OFF_STORY_RULE = ("OFF-STORY: neither this story nor this line is about music, nightlife, smoking, drugs or "
+                   "drinking - a music video or performance, a club or party, or someone smoking, vaping, "
+                   "taking drugs or drinking is wrong for this line: score such a shot at most 0.2.\n")
+
+
 def judge(path: str, intent: str, context: str = "", event: bool = False,
           scene: Optional[dict] = None, wants: str = "", span: Optional[float] = None) -> Optional[dict]:
     """
@@ -903,9 +921,13 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
         return None
     still = os.path.splitext(path)[1].lower() in _STILL_EXT
     span = float(span) if span and not still and float(span) > 0 else None
+    # A story and a line not about music, nightlife, smoking, drugs or drinking (src/topics.py):
+    # the judge is told such a shot is wrong for the line. A story about a rapper is not told.
+    from . import topics
+    off_story = not topics.allows_vice(f"{intent} {context}")
     key = (f"{_fingerprint(path)}|{int(event)}|{intent}|{_STORY['line'][:80]}"
            f"|{_scene_lines(scene)[:160]}|{wants if wants in ('map', 'chart') else ''}"
-           + (f"|open{span:.2f}" if span else ""))
+           + (f"|open{span:.2f}" if span else "") + ("" if off_story else "|vice-ok"))
     with _LOCK:
         if key in _CACHE:
             return _CACHE[key]
@@ -923,6 +945,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     content = [{"type": "text", "text":
                 (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
                 + f"INTENT: {intent}\n" + _scene_lines(scene) + _wanted_line(wants) + f"NARRATION: {context}\n"
+                + (_OFF_STORY_RULE if off_story else "")
                 + (_OPENING_RULE.format(first=times[0]) if times else "")
                 + f"These are {len(frames)} frames from the candidate. "
                 "Answer with ONLY the JSON object described in your instructions - no prose."}]
@@ -970,7 +993,7 @@ def cut_record(verdict: Optional[dict]) -> dict:
     return out
 
 
-def acceptable(verdict: Optional[dict], allow_people: bool = False) -> bool:
+def acceptable(verdict: Optional[dict], allow_people: bool = False, allow_vice: bool = False) -> bool:
     """
     Pass/fail for a verdict. Unknown (None) passes — see judge().
 
@@ -978,7 +1001,13 @@ def acceptable(verdict: Optional[dict], allow_people: bool = False) -> bool:
     person speaking is the right shot, not a talking-head reject. The score
     still has to clear the floor, which is what checks it is the RIGHT person
     doing the right thing.
+
+    allow_vice: the story or the line is about music, nightlife, smoking, drugs
+    or drinking (src/topics.py), so a music performance or such a scene is not
+    off topic - still only on its score. Otherwise music_or_vice is a reject.
     """
+    if verdict is not None and verdict.get("music_or_vice") and not allow_vice:
+        return False
     if verdict is None:
         # Unjudged used to pass ("vision can only remove clips"). During a
         # model outage that let an off-topic, watermarked stock dolphin clip

@@ -152,8 +152,10 @@ def judge(path: str, job: Dict[str, Any], span: Optional[float] = None) -> Tuple
             _SPENT["calls"] += made - 1         # the reservation becomes what it cost (0: a remembered verdict)
     if verdict is None:
         return None, None
-    keep = vision.acceptable(verdict, allow_people=job.get("subject_type") == "person")
-    return keep, dict(verdict, accepted=keep)
+    # A music, club or smoking scene the story and the line are not about (src/topics.py): a clear no.
+    off = media.off_story(verdict, f"{intent} {job.get('context') or ''}")
+    keep = vision.acceptable(verdict, allow_people=job.get("subject_type") == "person", allow_vice=not off)
+    return keep, dict(verdict, accepted=keep, **({"off_topic": True} if off else {}))
 
 
 def why(verdict: Optional[dict]) -> str:
@@ -167,6 +169,8 @@ def why(verdict: Optional[dict]) -> str:
         return "text or a watermark on it"
     if v.get("ai_generated"):
         return "it looks AI-made"
+    if v.get("off_topic"):
+        return "a music, club or smoking scene the story is not about"
     if v.get("studio"):
         return "a studio, presenter or screen"
     if v.get("is_talking_head"):
@@ -181,7 +185,7 @@ def soft(verdict: Optional[dict]) -> bool:
     """Under the floor only on its score, but near it and with an opening that fits: the 'best available'."""
     v = verdict or {}
     if not v or v.get("opening") is False or v.get("has_text_or_watermark") or v.get("ai_generated") \
-            or v.get("studio") or v.get("is_talking_head"):
+            or v.get("studio") or v.get("is_talking_head") or v.get("off_topic"):
         return False
     q = v.get("quality")
     if q is not None and q < config.VISION_MIN_QUALITY:

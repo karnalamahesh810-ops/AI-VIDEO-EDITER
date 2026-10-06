@@ -953,6 +953,7 @@ class Gate:
         self.scenes_in = len(doc.get("scenes") or [])
         self.found: Counter = Counter()
         self.fixed: Counter = Counter()
+        self.borrowed: set = set()              # ids of scenes no_empty_scenes gave the still beside them
         self.repairs: List[dict] = []
         self.notes: List[str] = []
         self.unresolved: List[dict] = []
@@ -1497,7 +1498,10 @@ class Gate:
                                youtube_only=bool(plan.get("youtube_only")) or not allow_generated,
                                indices=order, used=used, keep_order=keep_order,
                                seconds=config.QUALITY_REPAIR_SECONDS if seconds is None else seconds,
-                               scene_seconds=config.QUALITY_REPAIR_SCENE_SECONDS, label="quality gate")
+                               scene_seconds=config.QUALITY_REPAIR_SCENE_SECONDS, label="quality gate",
+                               # another moment of a clip the timeline shows (results is empty here)
+                               donors=gapfill.donors_from_doc(self.doc)
+                               if getattr(config, "FALLBACK_MOMENTS", False) else None)
         except Exception as e:  # noqa: BLE001 - the last resort below
             print(f"[quality] the ladder failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {}
@@ -1574,16 +1578,20 @@ class Gate:
                                     else "a runner-up clip of the line beside it" if took == "alternative"
                                     else "another moment of the clip beside it" if took == "moment"
                                     else "a spare clip from the footage pools")
+        self.borrowed.clear()
         for sid in self.no_empty_scenes():
             if sid in info:
                 info[sid].setdefault("how", "its line as a full-screen text graphic")
+        for sid in self.borrowed:
+            if sid in info:
+                info[sid].setdefault("how", "held: the picture beside it stays on screen")
         for sid, rec in info.items():
             rec.setdefault("how", "not repaired")
             kind = _kind_of(rec["how"])
             if kind == "none":
                 self.unresolved.append({"kind": rec["problem"], "scene": sid, "at": rec["at"],
                                         "what": f"scene at {rec['at']}: {rec['detail']}"})
-            else:
+            elif sid not in self.borrowed:          # (no_empty_scenes counted its held stills)
                 self.fixed[kind] += 1
             self.repairs.append({k: v for k, v in rec.items() if k != "index"})
             self._event("repaired", f"scene {rec['index'] + 1} ({rec['at']}): {rec['problem']} - {rec['detail']} "
@@ -1813,11 +1821,15 @@ class Gate:
         beside it can go on showing (NO_TEXT_FILL: gapfill.borrow_still; no scene is removed here, the
         render's chunks are cut from this document). Returns the ids of the text scenes."""
         out = []
+        borrowed = getattr(self, "borrowed", None)
+        if borrowed is None:
+            borrowed = self.borrowed = set()
         for s in self.doc.get("scenes") or []:
             try:
                 if gapfill._empty(s):
                     if getattr(config, "NO_TEXT_FILL", False) and gapfill.borrow_still(self.doc, s):
-                        self.fixed["held"] = self.fixed.get("held", 0) + 1
+                        self.fixed["held"] += 1
+                        borrowed.add(str(s.get("id")))
                         continue
                     text_scene(self.doc, s)
                     out.append(str(s.get("id")))

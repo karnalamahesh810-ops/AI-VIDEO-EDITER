@@ -199,10 +199,29 @@ class TheMomentRung(unittest.TestCase):
         got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
         self.assertIsNone(got)                     # scene 4 is next to scene 5: the same video would play twice
         used = gapfill.Used()
-        used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=10.0))
+        used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=-150.0))
         donors = [{"index": 1, "vid": "AAAAAAAAAAA", "start": 100.0, "subject": "Hoover Dam", "title": "dam"}]
         got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
         self.assertGreaterEqual(abs(got.moment["start"] - 100.0), 30.0)
+
+    def test_the_variety_rules_hold_for_a_judged_moment(self):
+        # Its video plays 40 s before this line (under SAME_VIDEO_GAP_SECONDS), or twice already
+        # (MAX_MOMENTS_PER_VIDEO): another moment of it would look like the same shot again.
+        donors = [{"index": 1, "vid": "AAAAAAAAAAA", "start": 100.0, "subject": "Hoover Dam", "title": "dam"}]
+        with mock.patch.multiple(config, SAME_VIDEO_GAP_SECONDS=120.0, MAX_MOMENTS_PER_VIDEO=2):
+            used = gapfill.Used()
+            used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=10.0))
+            got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
+            self.assertIsNone(got)
+            used = gapfill.Used()
+            used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=-400.0))
+            used.add(9, gapfill.Shot(video="yt:AAAAAAAAAAA", start=300.0, at=400.0))
+            got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
+            self.assertIsNone(got)
+            used = gapfill.Used()
+            used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=-400.0))
+            got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
+            self.assertIsNotNone(got)
 
     def test_the_ladder_asks_it_before_its_picture(self):
         order = []
@@ -238,20 +257,37 @@ class PlacedPictures(unittest.TestCase):
 class TheGate(unittest.TestCase):
     def test_the_gates_last_step_keeps_a_still_beside_it_on_screen_without_removing_a_scene(self):
         doc = lay((photo("https://r2/a.jpg"), 4.0), (EMPTY, 3.0), (clip("https://r2/b.mp4", 3.0), 3.0))
+        doc["overlays"] = [{"type": "highlight", "text": "line 1", "startFrame": 4 * FPS, "durationInFrames": 3 * FPS}]
         gate = quality.Gate.__new__(quality.Gate)
         gate.doc = doc
         gate.fixed = quality.Counter()
-        with mock.patch.multiple(config, NO_TEXT_FILL=True):
+        with mock.patch.multiple(config, NO_TEXT_FILL=True, STILL_MOTION=""):
             texts = gate.no_empty_scenes()
         self.assertEqual(texts, [])
         self.assertEqual(len(doc["scenes"]), 3)
         self.assertEqual(doc["scenes"][1]["media"]["url"], "https://r2/a.jpg")
-        self.assertEqual(doc["scenes"][1]["motion"], "none")
+        self.assertEqual(doc["scenes"][1]["motion"], "zoom-in")             # a slow push-in, never frozen
         self.assertEqual(doc["scenes"][1]["semanticMetadata"]["borrowedFrom"], "s0")
+        self.assertEqual(doc["overlays"], [])                               # the text card over it is gone
+        self.assertEqual((gate.fixed["held"], gate.borrowed), (1, {"s1"}))
         doc = lay((clip("https://r2/a.mp4", 4.0), 4.0), (EMPTY, 3.0))
         gate.doc = doc
         with mock.patch.multiple(config, NO_TEXT_FILL=True):
             self.assertEqual(gate.no_empty_scenes(), ["s1"])           # nothing still beside it: its line as text
+
+
+class BorrowedStills(unittest.TestCase):
+    def test_never_a_chain_of_one_picture_down_empty_lines(self):
+        doc = lay((photo("https://r2/a.jpg"), 4.0), (EMPTY, 3.0), (EMPTY, 3.0), (EMPTY, 3.0))
+        with mock.patch.multiple(config, NO_TEXT_FILL=True, NO_TEXT_HOLD_MAX=18.0):
+            got = [gapfill.borrow_still(doc, s) for s in list(doc["scenes"][1:])]
+        self.assertEqual(got, [True, False, False])           # the second empty line never borrows a borrowed one
+
+    def test_the_neighbour_under_the_hold_cap_first(self):
+        doc = lay((photo("https://r2/long.jpg"), 16.0), (EMPTY, 4.0), (photo("https://r2/short.jpg"), 3.0))
+        with mock.patch.multiple(config, NO_TEXT_FILL=True, NO_TEXT_HOLD_MAX=18.0):
+            self.assertTrue(gapfill.borrow_still(doc, doc["scenes"][1]))
+        self.assertEqual(doc["scenes"][1]["media"]["url"], "https://r2/short.jpg")     # 7 s, not 20 s
 
 
 if __name__ == "__main__":

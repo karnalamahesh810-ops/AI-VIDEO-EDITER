@@ -273,10 +273,10 @@ class Used:
             self.add(i, shot)
             return True
 
-    def placed(self, video: str) -> List[Optional[float]]:
-        """Timeline starts of the scenes cut from `video` (for media.may_place)."""
+    def placed(self, video: str, skip: Optional[int] = None) -> List[Optional[float]]:
+        """Timeline starts of the scenes cut from `video` (for media.may_place) - scene `skip`'s own left out."""
         with self.lock:
-            return [s.at for shots in self.shots.values() for s in shots if s.video == video]
+            return [s.at for j, shots in self.shots.items() if j != skip for s in shots if s.video == video]
 
 
 # --------------------------------------------------------------------------- #
@@ -424,11 +424,20 @@ def _from_reserve(job: dict, used: Used, work: str, stop: float, require_cc: boo
 # the clips tried for one line, and the model calls it may spend on them.
 MOMENT_DONORS = 4
 MOMENT_JUDGES = 4
+# The share of a line's ladder time left that the moment step may use when a picture step follows it: the
+# picture keeps the rest (a slow moment used to spend the whole FALLBACK_SCENE_SECONDS).
+MOMENT_SHARE = 0.55
+
+
+def _share_of(stop: float, share: float) -> float:
+    """A stop time `share` of the way from now to `stop`."""
+    now = time.time()
+    return now + max(0.0, min(1.0, share)) * max(0.0, stop - now)
 
 
 def donors_from_results(jobs: List[dict], results) -> List[dict]:
     """The YouTube clips a sourced video shows, as donors of another moment (_from_moment)."""
-    from . import media
+    from . import media, topics
     by_index = {j["index"]: j for j in jobs or []}
     out = []
     items = results.items() if isinstance(results, dict) else enumerate(results or [])
@@ -438,6 +447,9 @@ def donors_from_results(jobs: List[dict], results) -> List[dict]:
         vid, start = media._yt_origin(a)
         if vid:
             job = by_index.get(k) or {}
+            if topics.scene_reason(f"{a.attribution or ''} {getattr(a, 'content_description', '') or ''}",
+                                   f"{job.get('intent') or ''} {job.get('context') or ''}"):
+                continue                            # a music video or a smoking scene: no more of it
             out.append({"index": k, "vid": vid, "start": float(start or 0.0),
                         "subject": str(job.get("subject") or job.get("place") or ""),
                         "title": str(a.attribution or ""), "license": str(a.license or ""), "ident": a.identity})
@@ -446,7 +458,7 @@ def donors_from_results(jobs: List[dict], results) -> List[dict]:
 
 def donors_from_doc(doc: dict) -> List[dict]:
     """The YouTube clips a timeline shows, as donors of another moment (_from_moment)."""
-    from . import shotcap
+    from . import shotcap, topics
     out = []
     for k, s in enumerate(doc.get("scenes") or []):
         if s.get("teaser"):
@@ -456,6 +468,9 @@ def donors_from_doc(doc: dict) -> List[dict]:
             continue
         sem = s.get("semanticMetadata") or {}
         m = s.get("media") or {}
+        if topics.scene_reason(f"{m.get('attribution') or ''} {sem.get('contentDescription') or ''}",
+                               str(s.get("text") or "")):
+            continue                                # a music video or a smoking scene: no more of it
         out.append({"index": k, "vid": vid, "start": float(start), "subject": str(sem.get("subject") or ""),
                     "title": str(m.get("attribution") or ""), "license": str(m.get("license") or ""),
                     "ident": str(sem.get("assetId") or "")})
@@ -469,8 +484,9 @@ def _from_moment(job: dict, used: Used, work: str, stop: float, donors: Optional
     nearest clip; MOMENT_DONORS clips, the offsets fresh_moments uses (30-95 s from the moment shown),
     never a moment another scene shows or one FALLBACK_MOMENT_GAP_SECONDS from it, never its video on the
     next scene (Used), never one an earlier video showed. Each passes the clip checks and - `judged` - the
-    vision judge as "shows the line's subject" (media.rung_judging; at most MOMENT_JUDGES calls). Not
-    `judged`: the last resort before a text card (hold_or_animate) - flagged for review.
+    vision judge as "shows the line's subject" (media.rung_judging; at most MOMENT_JUDGES calls) and the
+    variety rules (media.may_place: MAX_MOMENTS_PER_VIDEO, SAME_VIDEO_GAP_SECONDS). Not `judged`: the last
+    resort before a text card (hold_or_animate) - flagged for review.
     """
     from . import ledger, media
     if not donors or not work:
@@ -489,6 +505,11 @@ def _from_moment(job: dict, used: Used, work: str, stop: float, donors: Optional
         if vid in seen:
             continue
         seen.add(vid)
+        if judged and not media.may_place(used.placed(f"yt:{vid}", skip=i), job.get("start")):
+            # Its video already plays MAX_MOMENTS_PER_VIDEO times, or within SAME_VIDEO_GAP_SECONDS of this line
+            # (the owner's Texas review: other moments of one video still look like the same shot). The last
+            # resort (not `judged`) may still take it: what it stands in for is a long hold or a text card.
+            continue
         for off in media._FRESH_OFFSETS:
             if time.time() > stop:
                 return None
@@ -714,9 +735,11 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
                 ("library", lambda: _from_library(job, used, library, work, stop)),
                 ("reserve", lambda: _from_reserve(job, used, work, stop, require_cc, library)),
             ]
+            stills = config.FALLBACK_STILLS and job.get("visual_type", "footage") in ("footage", "image")
             if moments_on and donors and job.get("subject_type") != "document":
-                steps.append(("moment", lambda: _from_moment(job, used, work, stop, donors)))
-            if config.FALLBACK_STILLS and job.get("visual_type", "footage") in ("footage", "image"):
+                steps.append(("moment", lambda: _from_moment(
+                    job, used, work, _share_of(stop, MOMENT_SHARE) if stills else stop, donors)))
+            if stills:
                 steps.append(("still", lambda: _from_still(job, used, work, stop, allow_generated)))
             for name, step in steps:
                 if time.time() > stop:
@@ -986,13 +1009,19 @@ def _instead_of_hold(doc: dict, refused: List[dict], out: Dict[str, int], ladder
 def borrow_still(doc: dict, s: dict) -> bool:
     """
     (NO_TEXT_FILL, the quality gate's very last step) An empty scene goes on showing the still beside it,
-    held still - no scene is removed (a render's chunks may already be cut from this document). False
-    when neither neighbour is a still.
+    with a slow push-in - no scene is removed (a render's chunks may already be cut from this document).
+    Never a still that is itself borrowed (one picture must not run on down a row of empty lines), the
+    neighbour whose picture would then stay up the shorter time first, under NO_TEXT_HOLD_MAX when either
+    fits; a text card the last resort laid over the scene goes. False when neither neighbour is a still.
     """
     scenes = doc.get("scenes") or []
     i = next((n for n, x in enumerate(scenes) if x is s), None)
     if i is None:
         return False
+    fps = max(1, int(doc.get("fps") or 30))
+    own = int(s.get("durationInFrames") or 0)
+    cap = float(getattr(config, "NO_TEXT_HOLD_MAX", 0) or 0)
+    options = []
     for k in (i - 1, i + 1):
         if not 0 <= k < len(scenes):
             continue
@@ -1000,14 +1029,45 @@ def borrow_still(doc: dict, s: dict) -> bool:
         m = nb.get("media") or {}
         if m.get("type") != "image" or not m.get("url") or _empty(nb):
             continue
-        s["media"] = {key: val for key, val in m.items() if key != "living"}
-        s["motion"] = "none"
-        s["visualType"] = "image"
-        s.setdefault("semanticMetadata", {})["borrowedFrom"] = str(nb.get("id") or "")
-        s["reviewRequired"] = True
-        s["reviewReason"] = "Nothing was found for this line: the picture beside it stays on screen - replace or keep"
-        return True
-    return False
+        if (nb.get("semanticMetadata") or {}).get("borrowedFrom"):
+            continue                                # never a chain of one picture down empty lines
+        held = (int(nb.get("durationInFrames") or 0) + own) / float(fps)
+        options.append((bool(cap) and held > cap, held, k))
+    if not options:
+        return False
+    _over, _held, k = min(options)
+    nb = scenes[k]
+    m = nb.get("media") or {}
+    s["media"] = {key: val for key, val in m.items() if key != "living"}
+    s["motion"] = "zoom-in" if str(getattr(config, "STILL_MOTION", "") or "") != "none" else "none"
+    s["visualType"] = "image"
+    s.pop("animation", None)
+    s.setdefault("semanticMetadata", {})["borrowedFrom"] = str(nb.get("id") or "")
+    s["reviewRequired"] = True
+    s["reviewReason"] = "Nothing was found for this line: the picture beside it stays on screen - replace or keep"
+    drop_cards(doc, [s])
+    return True
+
+
+def drop_cards(doc: dict, scenes: List[dict]) -> int:
+    """The highlight text cards the last resort laid over these scenes' frames (_card): gone once the scene
+    shows a picture or a clip (the words would show twice, over a shot)."""
+    spans = {(int(x.get("startFrame") or 0), int(x.get("durationInFrames") or 0)) for x in scenes}
+    overlays = doc.get("overlays")
+    if not isinstance(overlays, list) or not spans:
+        return 0
+
+    def frame(v) -> int:
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return -1
+
+    before = len(overlays)
+    overlays[:] = [ov for ov in overlays if not (isinstance(ov, dict) and ov.get("type") == "highlight" and
+                                                 (frame(ov.get("startFrame")), frame(ov.get("durationInFrames")))
+                                                 in spans)]
+    return before - len(overlays)
 
 
 def _living(doc: dict, k: int, asset) -> None:
@@ -1388,7 +1448,8 @@ def final_check(doc: dict, *, label: str = "before publishing") -> Dict[str, int
         got = fill_empty(jobs, results, CONTEXT.get("work") or media._WORK.get("dir") or "",
                          library=CONTEXT.get("library"), require_cc=CONTEXT.get("require_cc", False),
                          youtube_only=CONTEXT.get("youtube_only", False), indices=empties, used=used,
-                         label=label)
+                         label=label,
+                         donors=donors_from_doc(doc) if getattr(config, "FALLBACK_MOMENTS", False) else None)
         for i, a in results.items():
             if a is not None:
                 apply_asset(scenes[i], a, "Replaced a repeat of another scene's shot")

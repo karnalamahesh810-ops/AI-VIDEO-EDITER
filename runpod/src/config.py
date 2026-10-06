@@ -345,6 +345,11 @@ CLIPS_FIRST_POOL_SCOUT = int(os.getenv("CLIPS_FIRST_POOL_SCOUT", "3"))
 # MIN_CLIP_HEIGHT lines, a vertical one or one that names another year never takes a scout, a model call
 # or a download (they were downloaded and then failed the real-detail check). 0 = scout as before.
 CLIP_PREQUALIFY = int(os.getenv("CLIP_PREQUALIFY", "8"))
+# The share of a clip-first line's own time its clip stages may use when pictures come after them: the
+# rest is kept for the pictures, so a line whose clip search runs long still gets a picture instead of
+# going empty (the review of 2026-10-06). A line with no picture stage (the opening seconds, the rescue
+# pass, reclip) gives its clips all of it. 1.0 = no reserve.
+CLIPS_FIRST_CLIP_SHARE = float(os.getenv("CLIPS_FIRST_CLIP_SHARE", "0.65"))
 
 
 def _json_env(name: str):

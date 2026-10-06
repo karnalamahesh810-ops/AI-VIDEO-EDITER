@@ -55,7 +55,7 @@ class WhichLines(unittest.TestCase):
 
 
 class TheOrder(unittest.TestCase):
-    def _run(self, found=None, **kw):
+    def _run(self, found=None, subject_type="person", **kw):
         calls = []
 
         def one(query, seconds, work_dir, stage=None, **k):
@@ -66,19 +66,23 @@ class TheOrder(unittest.TestCase):
             got = media.source_for_segment(
                 "Barack Obama Michelle Robinson wedding 1992 groom footage", 4.0, "/w", visual_type="footage",
                 fallbacks=["Barack Obama wedding", "Trinity United Church Chicago"],
-                subject="Barack Obama", subject_type="person",
+                subject="Barack Obama", subject_type=subject_type,
                 scene_intent={"entities": ["Barack Obama", "Michelle Robinson"], "locations": ["Chicago"],
                               "event_type": "wedding", "specificity": "event"}, **kw)
         return got, calls
 
     def test_youtube_on_every_own_wording_and_the_wider_rungs_before_any_picture(self):
-        _got, calls = self._run()
+        _got, calls = self._run(subject_type="event")
         stages = [s for s, _q, _r in calls]
         self.assertEqual(stages[:3], ["youtube"] * 3)
         rungs = [(q, r["label"]) for s, q, r in calls if r]
         self.assertTrue(rungs and all(s == "youtube" for s, _q, r in calls if r))
         self.assertIn(("Chicago wedding footage", "Chicago wedding"), rungs)       # the event where it happened
         self.assertIn(("Barack Obama footage", "Barack Obama"), rungs)              # then the subject
+        # A line about a named person: the person's own rung only (a place or event rung shows other people,
+        # and on that line any face reads as the person's).
+        _got, calls = self._run()
+        self.assertEqual([(q, r["label"]) for s, q, r in calls if r], [("Barack Obama footage", "Barack Obama")])
         first_picture = stages.index("pictures")
         self.assertTrue(all(s in ("youtube", "other_footage") for s in stages[:first_picture]))
         self.assertIn("other_footage", stages[:first_picture])
@@ -160,10 +164,13 @@ class Rungs(unittest.TestCase):
         intent, scene, event = media.rung_judging("the groom at his 1992 wedding", si, {"label": "Barack Obama"})
         self.assertIn("Clear real footage of Barack Obama", intent)
         self.assertIn("the groom at his 1992 wedding", intent)
+        # A line of a past era keeps its era (never today's footage for 1992); a present one lets it go.
         self.assertEqual((scene["specificity"], scene["generic_ok"], scene["time_context"]),
-                         ("generic", True, "unknown"))
+                         ("generic", True, "1992"))
         self.assertFalse(event)
         self.assertEqual(si["specificity"], "event")                                 # the line's own is untouched
+        _i, scene, _e = media.rung_judging("the lake today", dict(si, time_context="current"), {"label": "Lake Mead"})
+        self.assertEqual(scene["time_context"], "unknown")
 
     def test_the_gate_judges_a_rung_clip_with_the_relaxed_intent(self):
         seen = {}
@@ -309,7 +316,16 @@ class Prequalify(unittest.TestCase):
         self.assertNotIn("V0000000002", ids)
         self.assertEqual(ids[2:], ["V0000000004", "V0000000005"])            # the rest unread, in their place
         self.assertEqual(sorted(read), sorted(["V0000000000", "V0000000001", "V0000000002", "V0000000003"]))
-        self.assertTrue(media._is_bad("yt:V0000000000"))                      # no other line tries it again
+        # Not remembered for the job: a line of an old era may take a small upload (its metadata is cached).
+        self.assertFalse(media._is_bad("yt:V0000000000"))
+        with mock.patch.multiple(config, CLIP_PREQUALIFY=8, MIN_CLIP_HEIGHT=720, ALLOW_VERTICAL=False), \
+                mock.patch.object(media, "_yt_info", side_effect=info):
+            tok = media._CLIP_FIRST.set(True)
+            try:
+                got = media._prequalified(ranked, 2, "", 5.0, query="Kenya 1962 newsreel")
+            finally:
+                media._CLIP_FIRST.reset(tok)
+        self.assertEqual([c.id for c in got][:2], ["V0000000000", "V0000000001"])   # archive film may be small
 
 
 class Sources(unittest.TestCase):
@@ -444,6 +460,94 @@ class Rescue(unittest.TestCase):
                 mock.patch.object(media, "_cached_search", side_effect=AssertionError("no unjudged picture")):
             media.rescue_fill([self._job(0)], results, tempfile.mkdtemp())
         self.assertIsNone(results[0])
+
+
+
+class FreshSearches(unittest.TestCase):
+    """A later wording and a wider rung are new searches - also on the pool's own threads (the review of
+    2026-10-06: a pool thread starts with no context, so they read as the line's first search)."""
+
+    def test_a_later_wording_and_a_rung_search_anew_on_the_pool_threads(self):
+        searched = []
+
+        def yc(target, require_cc, limit=20, timeout=90):
+            searched.append(target)
+            return []
+        with mock.patch.object(media, "_yt_candidates", side_effect=yc), \
+                mock.patch.object(media, "_google_youtube_candidates", return_value=[]), \
+                mock.patch.multiple(config, **dict(ON, POOL_EXTRA_QUERIES=0)):
+            media.reset_cache()
+            tok = media._CLIP_FIRST.set(True)
+            try:
+                def pool(q, ctx=()):
+                    toks = [(var, var.set(val)) for var, val in ctx]
+                    try:
+                        media._youtube_pool(q, "/w", 4.0, 30.0, False, 0, set(), "the dam", "", "Lake Mead",
+                                            [(q, "plain", False)])
+                    finally:
+                        for var, t in reversed(toks):
+                            var.reset(t)
+                pool("Lake Mead drought")
+                pool("Lake Mead water level", [(media._WORDING, 1)])
+                pool("Hoover Dam footage", [(media._RUNG, {"label": "Hoover Dam"})])
+                pool("Lake Mead bathtub ring")                       # the first wording of another line: shared
+            finally:
+                media._CLIP_FIRST.reset(tok)
+        self.assertEqual(searched, ["ytsearch20:Lake Mead drought", "ytsearch20:Lake Mead water level",
+                                    "ytsearch20:Hoover Dam footage"])
+
+
+class PicturesKeepTheirTime(unittest.TestCase):
+    def test_the_clip_stages_stop_at_their_share_and_the_pictures_get_the_rest(self):
+        import time
+        calls = []
+
+        def one(query, seconds, work_dir, stage=None, **k):
+            calls.append((stage, round(time.time(), 2)))
+            if stage in ("youtube", "other_footage"):
+                while not ytdlp.stopped():
+                    time.sleep(0.01)
+                return None
+            return picture()
+        own = time.time() + 1.0
+        tok = ytdlp.STOP.set((None, own))
+        try:
+            with mock.patch.multiple(config, **dict(ON, CLIPS_FIRST_CLIP_SHARE=0.6)), \
+                    mock.patch.object(media, "_source_one", side_effect=one), \
+                    mock.patch.object(media, "_count_photo"), \
+                    mock.patch("src.director.relaxed_queries", return_value=[]):
+                got = media.source_for_segment("Lake Mead drought", 4.0, "/w", visual_type="footage",
+                                               subject="Lake Mead", subject_type="place")
+        finally:
+            ytdlp.STOP.reset(tok)
+        self.assertEqual(got.kind, "image")                       # the line got its picture, not an empty scene
+        stages = [s for s, _t in calls]
+        self.assertEqual(stages[-1], "pictures")
+        self.assertEqual(stages.count("youtube"), 1)              # the rest of the clip stages were let go
+        self.assertLess(calls[-1][1], own)                        # inside the line's own time
+        with media._CACHE_LOCK:
+            self.assertNotIn(media._searched_key("Lake Mead drought", "Lake Mead"), media._CLIP_SEARCHED)
+
+    def test_no_reserve_without_a_picture_stage(self):
+        with mock.patch.multiple(config, **dict(ON, CLIPS_FIRST_CLIP_SHARE=0.6)):
+            tok = ytdlp.STOP.set((None, 10 ** 12))
+            try:
+                self.assertIsNone(media._clip_stage_stop([("youtube", "q", None), ("other_footage", "q", None)]))
+                got = media._clip_stage_stop([("youtube", "q", None), ("pictures", "q", None)])
+                self.assertIsNotNone(got)
+                ytdlp.STOP.reset(got)
+            finally:
+                ytdlp.STOP.reset(tok)
+
+
+class Places(unittest.TestCase):
+    def test_two_places_are_never_joined_into_one(self):
+        got = media.clip_rungs("Obama Sr. Kenya Hawaii 1960s", subject="Barack Obama Sr.",
+                               scene_intent={"locations": ["Kenya", "Hawaii"]}, limit=5)
+        self.assertIn("Kenya", [r["label"] for r in got])
+        self.assertNotIn("Kenya Hawaii", [r["label"] for r in got])
+        got = media.clip_rungs("q", subject="x", scene_intent={"locations": ["Lake", "Mead"]}, limit=5)
+        self.assertIn("Lake Mead", [r["label"] for r in got])
 
 
 if __name__ == "__main__":

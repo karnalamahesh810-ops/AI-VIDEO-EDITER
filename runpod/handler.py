@@ -99,6 +99,7 @@ from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
 from src import brandkit, stockblock
 from src import recut, reclip, relook, restore
+from src import topics
 from src import batch, sources
 from src import datagraphics
 from src import tts
@@ -1095,6 +1096,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     packs.use_job(title=title, brief=brief, style=styles.resolve(inp.get("video_style")))
     # Every vision judgement sees the whole story, not just its own line.
     vision.set_story(brief)
+    # The topic rules read the title too: music videos and smoking scenes only in a story about them.
+    topics.set_story(brief, title)
     # And YouTube searches the archive or news channels for this kind of story.
     media.set_story_kind(brief.get("kind", ""))
     # Cut on names (src/mentions.py): a beat is split where it names one of the

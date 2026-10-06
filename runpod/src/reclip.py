@@ -256,7 +256,7 @@ def probe(doc: dict, targets: List[dict], seconds: float = 240.0, parallel: int 
                            "withCandidates": 0, "perTarget": {}}
     lock = threading.Lock()
 
-    def count(query: str, need: float, about: str) -> Optional[int]:
+    def count(query: str, need: float, about: str, line: str = "") -> Optional[int]:
         try:
             rows = media._yt_candidates(f"ytsearch12:{query}", False, limit=12, timeout=45)
         except Exception:  # noqa: BLE001 - not answered
@@ -264,7 +264,7 @@ def probe(doc: dict, targets: List[dict], seconds: float = 240.0, parallel: int 
         return sum(1 for c in rows if f"yt:{c.get('id')}" not in exclude
                    and float(c.get("duration") or 0) >= need
                    and media._usable_title(str(c.get("title") or ""), str(c.get("channel") or ""),
-                                           float(c.get("aspect") or 0))
+                                           float(c.get("aspect") or 0), line)
                    and media._title_fits(str(c.get("title") or ""), about))
 
     def one(t: dict) -> None:
@@ -273,7 +273,8 @@ def probe(doc: dict, targets: List[dict], seconds: float = 240.0, parallel: int 
         job = job_for(doc, t["index"])
         need = float(job["seconds"]) + 8.0
         about = job["subject"] or job["query"]
-        own = count(job["query"], need, about)
+        line = f"{job['intent']} {job['context']}"
+        own = count(job["query"], need, about, line)
         if own is None:
             return
         rung_n = 0
@@ -281,7 +282,7 @@ def probe(doc: dict, targets: List[dict], seconds: float = 240.0, parallel: int 
             rungs = media.clip_rungs(job["query"], job["subject"], job["scene_intent"], taken=[job["query"]],
                                      limit=1)
             if rungs:
-                rung_n = count(rungs[0]["query"], need, rungs[0]["label"]) or 0
+                rung_n = count(rungs[0]["query"], need, rungs[0]["label"], line) or 0
         with lock:
             out["answered"] += 1
             key = "own" if own >= 1 else ("rung" if rung_n >= 1 else "none")

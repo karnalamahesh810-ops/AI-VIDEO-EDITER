@@ -1144,6 +1144,10 @@ _CLIP_FIRST: contextvars.ContextVar = contextvars.ContextVar("clip_first", defau
 # rung names}. Its YouTube search is a fresh one (not the subject's cached list) and its candidates are
 # judged as "shows that subject" (_rung_judging) instead of "this exact moment".
 _RUNG: contextvars.ContextVar = contextvars.ContextVar("rung", default=None)
+# Which of a clip-first line's own wordings is searched (0 = its first): the second and third are NEW
+# searches of their own words - answered from the subject's cached list, they only re-ranked the first
+# wording's candidates (the review of 2026-10-06).
+_WORDING: contextvars.ContextVar = contextvars.ContextVar("wording", default=0)
 # (query, subject) of every line whose clip-first search ran all its clip stages in this job without
 # being stopped: the rescue pass's judged search asks it again only for the lines that ran out of time.
 _CLIP_SEARCHED: set = set()
@@ -1165,13 +1169,19 @@ _STOCK_SELLER = re.compile(
     re.IGNORECASE)
 
 
-def _usable_title(title: str, channel: str = "", aspect: float = 0.0) -> bool:
+def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: str = "") -> bool:
     """
     The one title-and-shape check every source applies before spending
     anything: not a stock seller's listing, not a talking head, not
     vertical. It was written five times with small drifts between them.
+    Not a music video, a lyric / audio upload or a rap performance either,
+    unless the story or the line (`context`) is about music (src/topics.py;
+    the owner, 2026-10-06: rapper clips in a story about his brothers).
     """
     if _stock_seller(title or "", channel or ""):
+        return False
+    from . import topics
+    if topics.off_topic_title(title or "", channel or "", line=context or ""):
         return False
     if _talking_head(title or ""):
         return False
@@ -1464,7 +1474,7 @@ def watermark_reason(path: str, where: str = "", bar: bool = True, stamp: bool =
     return why
 
 
-def judged_line_free(verdict: Optional[dict]) -> str:
+def judged_line_free(verdict: Optional[dict], allow_vice: bool = True) -> str:
     """
     Why a paid verdict turns its candidate down for EVERY line ("" = for this line
     only, or kept): what vision.acceptable rejects whatever the line and whoever it
@@ -1472,6 +1482,10 @@ def judged_line_free(verdict: Optional[dict]) -> str:
     to show (the judge rates quality "whatever the subject"). A studio or talking head
     is not here: a line about a named person may use it; nor a low score, which is
     about this line's intent.
+
+    A music performance, a club or a smoking / drugs / drinking scene (the judge's
+    music_or_vice) is here when the story and the line are not about it
+    (allow_vice False: src/topics.py): that moment is never judged again in this job.
     """
     if not verdict:
         return ""
@@ -1479,10 +1493,21 @@ def judged_line_free(verdict: Optional[dict]) -> str:
         return f"{_JUDGED_LINE_FREE}: text or watermark"
     if verdict.get("ai_generated"):
         return f"{_JUDGED_LINE_FREE}: AI-made"
+    if verdict.get("music_or_vice") and not allow_vice:
+        return f"{_JUDGED_LINE_FREE}: a music, club or smoking scene off the story"
     quality = verdict.get("quality")
     if quality is not None and quality < config.VISION_MIN_QUALITY:
         return f"{_JUDGED_LINE_FREE}: too poor to show"
     return ""
+
+
+def off_story(verdict: Optional[dict], line: str) -> bool:
+    """The judge saw a music performance, a club or a smoking / drugs / drinking scene, and neither the
+    story nor this line is about it (src/topics.py): a clear no, never the 'best available'."""
+    if not verdict or not verdict.get("music_or_vice"):
+        return False
+    from . import topics
+    return not topics.allows_vice(line)
 
 
 def _vision_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
@@ -1547,6 +1572,8 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         return True, None
     scene = _SCENE_INTENT.get()
     wants = wanted_kind()
+    # The line as written (before a rung rewrites the intent): what the topic rules read (src/topics.py).
+    line = f"{intent} {context}"
     # A clip in the hook: the judge looks at its first moment, middle and end, and says whether the
     # first frame itself fits (vision.judge `span`; src/hookcheck.py) - same one call.
     span = _opening_span(path)
@@ -1576,11 +1603,17 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         print(f"[vision] no verdict (models busy): {'keep' if keep else 'REJECT'} by title {label[:60]!r}",
               flush=True)
         return keep, None
-    keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person")
+    allow_vice = not off_story(verdict, line)
+    keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person", allow_vice=allow_vice)
+    if verdict is not None and not allow_vice:
+        # A music, club or smoking scene the story is not about: a clear no for the near-miss
+        # and opening checks too (a copy - the cached verdict stays as the model answered).
+        verdict = dict(verdict, off_topic=True)
+        print(f"[vision] REJECT a music, club or smoking scene off the story: {label[:60]!r}", flush=True)
     if not keep and verdict is not None and config.JUDGE_MEMORY:
         # Turned down for a reason no other line can change: every caller remembers it
         # (_mark_bad with the gate's reason), so no other scene pays for this answer again.
-        why = judged_line_free(verdict)
+        why = judged_line_free(verdict, allow_vice=allow_vice)
         if why:
             _GATE_SLOP.set(why)
     if verdict is not None and verdict.get("frames"):
@@ -2132,11 +2165,14 @@ def _yt_candidates_cached(target: str, require_cc: bool, subject: str = "",
     beat returned the first one's cached list, so the plain-query fallback
     never actually ran once a subject was known.
     """
-    # A clip-first line's wider rung (clip_rungs) is a NEW search: keyed (and cached for every other line
-    # that asks it) by its own words, not by the subject - keyed by subject, every rung got the line's
-    # first list back and never searched.
+    # A clip-first line's wider rung (clip_rungs) and its second and third wordings are NEW searches: keyed
+    # (and cached for every other line that asks them) by their own words, not by the subject - keyed by
+    # subject, they got the line's first list back and never searched. (Read here on the scene's thread;
+    # _youtube_pool runs this on pool threads in a copy of the scene's context.)
     if _RUNG.get():
         subject = f"rung::{target}"
+    elif _CLIP_FIRST.get() and _WORDING.get() > 0:
+        subject = f"wording::{target}"
     key = f"ytc::{require_cc}::{variant}::{(subject or target).strip().lower()}"
     if subject:
         with _CACHE_LOCK:
@@ -2232,7 +2268,8 @@ def _scout(candidate: dict, grab: float, intent: str, context: str) -> Optional[
     if not info:
         return None
     w, h = info.get("width") or 0, info.get("height") or 0
-    why = upload_conflict(info) or title_conflict(info.get("title") or "", context)
+    why = upload_conflict(info) or title_conflict(info.get("title") or "", context) or _music_upload(
+        info, f"{intent} {context}")
     if why:
         # An AI story, or an upload from before this story's year (the owner's
         # Texas test, 2026-09-30): dropped before any storyboard is read.
@@ -2522,7 +2559,8 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
             # documentary. No clip is better than the wrong clip - the caller
             # falls through to the next query, and the timeline holds the
             # previous shot.
-            if not _usable_title(candidate["title"], candidate.get("channel", ""), candidate["aspect"]):
+            if not _usable_title(candidate["title"], candidate.get("channel", ""), candidate["aspect"],
+                                 f"{intent} {context}"):
                 continue
             if title_conflict(candidate["title"], context):
                 continue                            # another state, storm, kind of weather or year
@@ -2735,7 +2773,8 @@ def dailymotion_clip(query: str, out_dir: str, seconds: float = 6.0,
         page = f"https://www.dailymotion.com/video/{c['id']}"
         if used and f"dailymotion:{page}" in used:
             continue
-        if not _usable_title(c["title"], c.get("channel", ""), c["aspect"]) or title_conflict(c["title"], context):
+        if (not _usable_title(c["title"], c.get("channel", ""), c["aspect"], f"{intent} {context}")
+                or title_conflict(c["title"], context)):
             continue
         if c["duration"] and c["duration"] < grab + 4:
             continue
@@ -2961,16 +3000,33 @@ def _better_pick(first: Optional[MediaAsset], later: Optional[MediaAsset]) -> Op
     return keep
 
 
-def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: float = 0.0) -> str:
+def _music_upload(info: Optional[dict], line: str = "") -> str:
+    """A music video or performance by its YouTube metadata (category Music, title, channel) in a story and
+    a line not about music (src/topics.py; "" = not one, or the story is about music)."""
+    if not info:
+        return ""
+    from . import topics
+    return topics.off_topic_title(str(info.get("title") or ""),
+                                  str(info.get("channel") or info.get("uploader") or ""),
+                                  info.get("categories") or [], line=line)
+
+
+def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: float = 0.0,
+                line: str = "", query: str = "") -> str:
     """
     Why a YouTube video can never be this line's clip, read from its metadata alone ("" = it may be):
     vertical (unless the style frames vertical video), an upload under MIN_CLIP_HEIGHT lines that is not
     archive film (clip_quality drops such a file after its download - and its judge call - anyway),
     shorter than the shot, or another year / place / storm by its upload date and title. Unknown
-    metadata never rejects.
+    metadata never rejects. A music video (YouTube's Music category) in a story and a `line` not about
+    music is turned down too (src/topics.py). Archive film by its title or by the line's `query` (an old
+    era's search) may be small, as _asset_ok lets it be.
     """
     if not info:
         return ""
+    music = _music_upload(info, line or context)
+    if music:
+        return music
     try:
         w, h = int(info.get("width") or 0), int(info.get("height") or 0)
     except (TypeError, ValueError):
@@ -2981,7 +3037,7 @@ def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: 
             return "vertical video"
         floor = int(config.MIN_CLIP_HEIGHT or 0)
         lines = min(w, h)
-        if floor and lines < floor and not _is_archive(name):
+        if floor and lines < floor and not _is_archive(f"{name} {query}"):
             return f"low detail: the upload is {lines}p (under {floor} lines)"
     try:
         dur = float(info.get("duration") or 0)
@@ -2992,7 +3048,7 @@ def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: 
     return upload_conflict(info) or title_conflict(name, context)
 
 
-def _prequalified(ranked: list, want: int, context: str, need: float) -> list:
+def _prequalified(ranked: list, want: int, context: str, need: float, line: str = "", query: str = "") -> list:
     """
     `ranked` (CandidatePool entries) with the ones meta_reject turns down left out - for a clip-first
     line only (config.CLIP_PREQUALIFY; anything else gets `ranked` back as it was). The metadata is
@@ -3011,10 +3067,11 @@ def _prequalified(ranked: list, want: int, context: str, need: float) -> list:
             infos = list(ex.map(lambda c: fetch(c.id), batch))
         for c, got in zip(batch, infos):
             info = got[0] if isinstance(got, tuple) else {}
-            why = meta_reject(info, c.title, context, need)
+            why = meta_reject(info, c.title, context, need, line, query)
             if why:
+                # Not remembered for the job: a line of an old era may take a small upload (the metadata
+                # is cached, so another line reads it again for free).
                 print(f"[pool] skip {c.id} before scouting: {why}", flush=True)
-                _mark_bad(f"yt:{c.id}", "", why)
                 continue
             keep.append(c)
     return keep + ranked[read:]
@@ -3061,12 +3118,16 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         return t, _yt_candidates_cached(_search_target(search, require_cc, this_year),
                                         require_cc, subject, variant), "search"
 
+    # Each search runs in a copy of this scene's context: a pool thread starts with none, and a rung's or
+    # a later wording's search read as the line's first one (the subject's cached list, never searched).
     with ThreadPoolExecutor(max_workers=max(1, min(4, len(targets)))) as ex:
-        for t, rows, via in ex.map(_ytdlp.with_stop(fetch_one), targets):
+        futures = [ex.submit(contextvars.copy_context().run, _ytdlp.with_stop(fetch_one), t) for t in targets]
+        for fut in futures:
+            t, rows, via = fut.result()
             pool.add(rows, query=t[0], variant=t[1], via=via)
 
     ranked = [c for c in pool.ranked()
-              if c.id not in tried and _usable_title(c.title, c.channel, c.aspect)
+              if c.id not in tried and _usable_title(c.title, c.channel, c.aspect, f"{intent_text} {context}")
               and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")]
     if config.EYEWITNESS_SEARCHES:
         # Phone, drone, chaser and helicopter titles first, compilations last
@@ -3086,7 +3147,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     n_scouts = max(1, min(limits["scouts"], left - 2))
     # A clip-first line reads its next candidates' metadata first (CLIP_PREQUALIFY): an upload under
     # MIN_CLIP_HEIGHT, a vertical one or one too short never takes a scout or a download.
-    ranked = _prequalified(ranked, n_scouts, context, max(2.0, seconds + 1.5))
+    ranked = _prequalified(ranked, n_scouts, context, max(2.0, seconds + 1.5), f"{intent_text} {context}", query)
     if not ranked:
         return None
     print(f"[pool] {len(pool)} candidates from {pool.searches} searches ({len(ranked)} new); "
@@ -3177,7 +3238,8 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             score = float(v.get("score") or 0.0)
             # (A hook clip that opens on something else is a clear no too: never the "best available".)
             clear_no = bool(v.get("has_text_or_watermark")) or bool(v.get("is_talking_head")) \
-                or bool(v.get("ai_generated")) or bool(v.get("studio")) or v.get("opening") is False
+                or bool(v.get("ai_generated")) or bool(v.get("studio")) or v.get("opening") is False \
+                or bool(v.get("off_topic"))
             if (score >= config.VISION_SOFT_MIN_SCORE and not clear_no
                     and (soft is None or score > soft["score"])):
                 # The best near-miss so far: kept in case nothing passes.
@@ -3907,6 +3969,14 @@ _RUNG_MEDIUM = re.compile(r"\b(?:footage|video|clips?|b-?roll|aerial|drone|archi
                           r"pictures?|images?|close[- ]?up|wide|shot|4k|hd)\b", re.I)
 
 
+# A place a planner split into words ("Portland", "Harbour", "Maine"; "Lake", "Mead"; "New", "York"): one of
+# its words is a feature noun or a name's first word. "Kenya", "Hawaii" are two places.
+_PLACE_PART = re.compile(r"^(?:harbou?r|bay|river|lake|county|city|valley|beach|island|islands|park|dam|canyon|"
+                         r"mountains?|mount|mt|falls|creek|port|coast|delta|basin|reservoir|desert|springs?|"
+                         r"new|san|santa|los|las|el|la|le|saint|st|fort|north|south|east|west|upper|lower|"
+                         r"great|little|grand)$", re.I)
+
+
 def _rung_label(text: str, words: int = 5) -> str:
     t = _RUNG_MEDIUM.sub(" ", _RUNG_NOISE.sub(" ", str(text or "")))
     t = " ".join(w for w in t.replace(",", " ").split() if w.strip("-'"))
@@ -3914,13 +3984,15 @@ def _rung_label(text: str, words: int = 5) -> str:
 
 
 def clip_rungs(query: str, subject: str = "", scene_intent: Optional[dict] = None,
-               taken=(), limit: Optional[int] = None) -> List[dict]:
+               taken=(), limit: Optional[int] = None, person: bool = False) -> List[dict]:
     """
     A clip-first line's wider rungs, after its own wordings found no clip: [{"query", "label"}], each a
     YouTube search for the thing the line is about - for a line about an event at a place, that event
     there ("Portland Maine coastal flooding footage"), then its subject ("Barack Obama footage"), its
     entities and its places - judged as "shows <label>" (rung_judging), not as the line's exact moment.
-    Never a wording the line already asked (`taken`); at most `limit` (config.CLIP_RUNGS).
+    Never a wording the line already asked (`taken`); at most `limit` (config.CLIP_RUNGS). A line about a
+    named `person` gets the person's own rung only: an entity or place rung shows other people, and on
+    that line any face reads as the person's.
     """
     limit = int(getattr(config, "CLIP_RUNGS", 0) or 0) if limit is None else int(limit)
     if limit <= 0:
@@ -3933,15 +4005,20 @@ def clip_rungs(query: str, subject: str = "", scene_intent: Optional[dict] = Non
         return [str(v) for v in vals if isinstance(v, str) and v.strip()][:n]
     entities = [_rung_label(e) for e in strs("entities", 2)]
     places = [_rung_label(p, 4) for p in strs("locations", 3)]
-    # "Portland", "Harbour", "Maine": a planner that split one place into words gets them joined back.
-    if len(places) > 1 and all(len(p.split()) == 1 for p in places):
+    # "Portland", "Harbour", "Maine": a planner that split one place into words gets them joined back -
+    # never two places ("Kenya", "Hawaii": no feature noun, no name's first word among them).
+    one_place = any(_PLACE_PART.match(p.strip(".")) for p in places)
+    if len(places) > 1 and all(len(p.split()) == 1 for p in places) and one_place:
         places = [" ".join(places)]
     event = _rung_label(si.get("event_type") or "", 3) if si.get("specificity") == "event" else ""
     labels: List[str] = []
-    if event and places:
-        labels.append(f"{places[0]} {event}")
-    labels.append(_rung_label(subject))
-    labels += entities + places
+    if person:
+        labels.append(_rung_label(subject))
+    else:
+        if event and places:
+            labels.append(f"{places[0]} {event}")
+        labels.append(_rung_label(subject))
+        labels += entities + places
     done = {str(t).strip().lower() for t in (taken or ())}
     out, seen = [], set()
     for label in labels:
@@ -3975,8 +4052,35 @@ def rung_judging(intent: str, scene: Optional[dict], rung: dict) -> tuple:
     if si is not None:
         si["specificity"] = "generic"
         si["generic_ok"] = True
-        si["time_context"] = "unknown"
+        # The line's era stays when it is in the past (a 1960s line never takes today's footage); a
+        # present or unknown time is let go (the subject as it looks, whenever it was filmed).
+        try:
+            from .intent import SceneIntent     # (`intent` is the line's text here)
+            past = SceneIntent.from_dict(scene).is_historical()
+        except Exception:  # noqa: BLE001 - an odd scene intent: no era
+            past = False
+        if not past:
+            si["time_context"] = "unknown"
     return text, si, False
+
+
+def _clip_stage_stop(plan: List[tuple]):
+    """
+    A token for a clip-first line's clip stages' own stop (CLIPS_FIRST_CLIP_SHARE of the line's time left),
+    set on this thread - None when no picture stage follows them (they get all of it), the line has no own
+    stop time, or the share is 1. The caller resets it before the first picture stage.
+    """
+    share = float(getattr(config, "CLIPS_FIRST_CLIP_SHARE", 1.0) or 1.0)
+    if share >= 1.0 or not any(stage not in ("youtube", "other_footage") for stage, _q, _r in plan):
+        return None
+    got = _ytdlp.STOP.get()
+    if not got:
+        return None
+    box, own = got
+    now = time.time()
+    if not own or own <= now:
+        return None
+    return _ytdlp.STOP.set((box, now + max(0.0, share) * (own - now)))
 
 
 def _clip_first_plan(query: str, attempts: List[str], subject: str, scene_intent: Optional[dict],
@@ -3988,7 +4092,7 @@ def _clip_first_plan(query: str, attempts: List[str], subject: str, scene_intent
     illustration (none when illustrations are asked for first: PREFER_GENERATED_IMAGES).
     """
     own = attempts[:max(1, int(getattr(config, "CLIP_WORDINGS", 1) or 1))]
-    rungs = clip_rungs(query, subject, scene_intent, taken=attempts)
+    rungs = clip_rungs(query, subject, scene_intent, taken=attempts, person=_SUBJECT_TYPE.get() == "person")
     plan = [("youtube", q, None) for q in own] + [("youtube", r["query"], r) for r in rungs]
     plan += [("other_footage", q, None) for q in attempts[:max(0, int(getattr(config, "CLIP_OTHER_WORDINGS", 0) or 0))]]
     if not no_stills:
@@ -4042,6 +4146,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     if hook and visual_type == "image" and subject_type != "document":
         visual_type = "footage"
     clip_first = clips_only or clips_first_for(visual_type, subject_type, scene_intent)
+    still_line = visual_type == "image"             # (a still line keeps its pictures under the photo cap)
     if clip_first:
         visual_type = "footage"                     # the clip stages ask the footage sources
     first_token = _CLIP_FIRST.set(bool(clip_first))
@@ -4058,9 +4163,10 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     # and an empty beat goes to the spare moments and the rescue pass.
     allowed = _ENABLED_PROVIDERS.get()
     providers_token = None
-    if visual_type == "footage" and not _photos_left():
+    if visual_type == "footage" and not still_line and not _photos_left():
         only = _footage_providers() if allowed is None else set(allowed) & _footage_providers()
         providers_token = _ENABLED_PROVIDERS.set(only)
+    clip_stop = None                                # the clip stages' own, earlier stop (_clip_stage_stop)
     try:
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
@@ -4084,17 +4190,37 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
         # picture, as a near-miss always has.
         soft: Optional[MediaAsset] = None
         clips_done = False
+        clips_cut = False                           # the clip stages' share ran out before they were done
+        wordings = 0                                # the line's own wordings YouTube was asked so far
+        # Pictures after the clips: the clip stages stop at CLIPS_FIRST_CLIP_SHARE of the line's own time,
+        # the rest is the pictures' (a long clip search used to leave the line empty).
+        clip_stop = _clip_stage_stop(plan) if clip_first else None
         for stage, attempt, rung in plan:
+            clip_stage = stage in ("youtube", "other_footage")
+            if clip_stop is not None and (not clip_stage or _ytdlp.stopped()):
+                _ytdlp.STOP.reset(clip_stop)
+                clip_stop = None
+                if clip_stage and not _ytdlp.stopped():
+                    # Only the clips' share is spent (not the line's own time): on to the pictures.
+                    clips_cut = True
+                    print(f"[media] clip stages out of their share: pictures for {query[:60]!r}", flush=True)
+            if clips_cut and clip_stage:
+                continue
             if _ytdlp.stopped():
                 break
-            if clip_first and not clips_done and stage not in ("youtube", "other_footage"):
+            if clip_first and not clips_done and not clip_stage:
                 clips_done = True
-                with _CACHE_LOCK:
-                    _CLIP_SEARCHED.add(_searched_key(query, subject))
+                if not clips_cut:
+                    with _CACHE_LOCK:
+                        _CLIP_SEARCHED.add(_searched_key(query, subject))
             if soft is not None and stage not in ("youtube", "other_footage"):
                 _count_photo(soft)
                 return soft
             rung_token = _RUNG.set(rung) if rung else None
+            wording_token = None
+            if clip_first and stage == "youtube" and not rung:
+                wording_token = _WORDING.set(wordings)
+                wordings += 1
             try:
                 got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
                                   nth=nth, used=used, prompt=prompt,
@@ -4103,6 +4229,8 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                                   intent=intent or query, context=context,
                                   subject=subject, **({"stage": stage} if stage else {}))
             finally:
+                if wording_token is not None:
+                    _WORDING.reset(wording_token)
                 if rung_token is not None:
                     _RUNG.reset(rung_token)
             if got and stage in ("youtube", "other_footage") and got.kind != "video":
@@ -4135,13 +4263,15 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                         pass
                 _count_photo(got)
                 return got
-        if clip_first and not clips_done and not _ytdlp.stopped():
+        if clip_first and not clips_done and not clips_cut and not _ytdlp.stopped():
             with _CACHE_LOCK:
                 _CLIP_SEARCHED.add(_searched_key(query, subject))     # a clips-only plan, run to its end
         if soft is not None:
             _count_photo(soft)
         return soft
     finally:
+        if clip_stop is not None:
+            _ytdlp.STOP.reset(clip_stop)
         _CLIP_FIRST.reset(first_token)
         if providers_token is not None:
             _ENABLED_PROVIDERS.reset(providers_token)
@@ -5343,12 +5473,15 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                                            **({"span": hook_span} if hook_span else {}))
                     if verdict is not None and (float(verdict.get("score") or 0) < config.VISION_SOFT_MIN_SCORE
                                                 or verdict.get("ai_generated") or verdict.get("studio")
-                                                or verdict.get("opening") is False):
+                                                or verdict.get("opening") is False
+                                                or off_story(verdict, f"{job.get('intent', '')} "
+                                                                      f"{job.get('context', '')}")):
                         continue
                     if verdict is not None:
                         asset.relevance_score = float(verdict.get("score") or 0)
                         asset.content_description = str(verdict.get("description") or "")[:300]
-                        asset.cut_check = vision.cut_record(dict(verdict, accepted=vision.acceptable(verdict)))
+                        asset.cut_check = vision.cut_record(dict(verdict, accepted=vision.acceptable(
+                            verdict, allow_vice=True)))     # off-story music / smoking was turned down above
                         asset.judged_by = "opening" if asset.cut_check else "frames"
                 return asset
             unreserve(vid, scene_at)
@@ -5430,7 +5563,8 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 found = [c for c in found if c.get("id") not in seen_ids
                          and float(c.get("duration") or 0) >= need + 8
                          and not _talking_head(c.get("title") or "")
-                         and _usable_title(c.get("title") or "", c.get("channel") or "", float(c.get("aspect") or 0))
+                         and _usable_title(c.get("title") or "", c.get("channel") or "", float(c.get("aspect") or 0),
+                                           f"{intent_text} {job.get('context') or ''}")
                          and not title_conflict(c.get("title") or "", job.get("context") or "")
                          and _title_fits(c.get("title") or "", intent_text)]
                 seen_ids.update(c.get("id") for c in found)
@@ -5557,14 +5691,20 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 done = _searched_key(q, job.get("subject") or "") in _CLIP_SEARCHED
             if done:
                 return None                     # its whole clip search already ran (not cut short): not again
-            own = min(until - 20.0, time.time() + float(getattr(config, "RESCUE_SCENE_SECONDS", 120) or 120))
+            # Its share of the pass: every line gets a turn (RESCUE_PARALLEL at a time) and its unjudged steps
+            # below keep ~30% of it - at 120 s a line, the 54th of 54 lines never started.
+            lanes = max(1, min(int(config.RESCUE_PARALLEL or 1), len(todo)))
+            per = min(float(getattr(config, "RESCUE_SCENE_SECONDS", 120) or 120),
+                      0.7 * float(config.RESCUE_SECONDS) * lanes / max(1, len(todo)))
+            own = min(until - 20.0, time.time() + per)
             if own <= time.time() + 5:
                 return None
             box = _ytdlp.Box(own)
             stop = _ytdlp.STOP.set((box, own))
             try:
                 with lock:
-                    exclude = set(taken)
+                    # (and every video the unjudged search below took since `taken` was made)
+                    exclude = set(taken) | {f"yt:{v}" for v in used}
                 got = source_for_segment(
                     q, float(job.get("seconds") or 0), work_dir, visual_type=job.get("visual_type") or "footage",
                     used=exclude, fallbacks=job.get("fallbacks"), intent=job.get("intent") or "",
@@ -5580,13 +5720,24 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 _ytdlp.STOP.reset(stop)
             if got is None:
                 return None
-            if not claim(got.identity, taken):
-                return None
-            if got.source == "youtube":
-                vid, _s = _yt_origin(got)
-                if vid:
-                    with lock:
+            vid = _yt_origin(got)[0] if got.source == "youtube" else ""
+            with lock:
+                # One video once: another line's judged or unjudged search may have taken it meanwhile.
+                if got.identity in taken or (vid and (vid in used or f"yt:{vid}" in taken)):
+                    clash = True
+                else:
+                    clash = False
+                    taken.add(got.identity)
+                    if vid:
+                        taken.add(f"yt:{vid}")
                         used.add(vid)           # the unjudged search below never takes its video again
+            if clash:
+                if got.local_path and os.path.exists(got.local_path):
+                    try:
+                        os.remove(got.local_path)
+                    except OSError:
+                        pass
+                return None
             got.review_required = True
             got.review_reason = "Found in the last pass (judged) - check it fits the line"
             return got
@@ -5789,7 +5940,7 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
     cands = _yt_candidates_cached(target, require_cc, "", variant=f"seq:{query}")
     eligible = [c for c in sorted(cands, key=lambda c: _score_candidate(
                     c["title"], c["duration"], c["aspect"], window), reverse=True)
-                if _usable_title(c["title"], c.get("channel", ""), c["aspect"])
+                if _usable_title(c["title"], c.get("channel", ""), c["aspect"], f"{intent} {context}")
                 and not (c["duration"] and c["duration"] < window + 10)
                 and f"yt:{c['id']}" not in used]
     shots: List[dict] = []

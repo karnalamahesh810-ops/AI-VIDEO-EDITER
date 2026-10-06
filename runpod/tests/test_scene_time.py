@@ -238,7 +238,9 @@ class FairShare(unittest.TestCase):
     def test_a_scene_that_finds_nothing_hands_its_thread_on(self):
         jobs = [{"index": i, "query": f"line{i}", "seconds": 3.0} for i in range(3)]
         started, _f, took = self._run(jobs, 1, SCENE_SECONDS_MIN=0.3, SCENE_SECONDS_MAX=0.3)
-        self.assertEqual(sorted(started), ["line0", "line1", "line2"])    # every scene got its turn
+        # Every scene got its turn (a clip-first line asks twice: its clip stages stop at their share of the
+        # line's time - CLIPS_FIRST_CLIP_SHARE - and its pictures get the rest).
+        self.assertEqual(sorted(set(started)), ["line0", "line1", "line2"])
         self.assertLess(took, 3.0)
         self.assertEqual(media.LAST_STATS["scene_seconds"], 0.3)
 

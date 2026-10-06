@@ -382,8 +382,8 @@ def candidates(subject: str, require_cc: bool, skip_ids: Set[str],
             continue
         seen.add(vid)
         title, chan = c.get("title") or "", c.get("channel") or ""
-        if not media._usable_title(title, chan, c.get("aspect") or 0.0):
-            continue
+        if not media._usable_title(title, chan, c.get("aspect") or 0.0, subject):
+            continue                    # a music video in a story not about music: never in the pool
         if media.title_conflict(title, subject):
             continue                    # another state, storm, kind of weather or year (the Texas test)
         news = event and _news_title(title, chan)
