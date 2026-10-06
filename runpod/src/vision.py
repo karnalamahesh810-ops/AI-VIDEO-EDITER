@@ -121,8 +121,9 @@ _SYSTEM = (
     "field video carrying a small news banner are false.\n"
     "And one more, answered whatever the line: music_or_vice: do the frames show a music "
     "video or a music performance (a rapper or singer performing, music-video styling, a "
-    "concert stage), a club or party scene, or someone smoking, vaping, taking drugs or "
-    "drinking alcohol?\n"
+    "concert), a nightclub or a party with dancing or drinking, or someone smoking, vaping, "
+    "taking drugs or drinking alcohol? A political rally, convention, debate, speech, hearing, "
+    "ceremony, wedding or state dinner is false.\n"
     "Keep the description to one plain sentence of at most 25 words.\n"
     "Reply with one valid JSON object only. Do not wrap it in JSON.stringify(), "
     "JavaScript, markdown, or commentary: {\"description\": str, \"score\": number, \"quality\": number, "
@@ -897,8 +898,9 @@ def _wanted_line(wants: str) -> str:
 # brothers - "we don't want those clips in our videos". Told only when neither the story nor the line is
 # about music, nightlife, smoking, drugs or drinking (src/topics.py); a video about a rapper is judged as usual.
 _OFF_STORY_RULE = ("OFF-STORY: neither this story nor this line is about music, nightlife, smoking, drugs or "
-                   "drinking - a music video or performance, a club or party, or someone smoking, vaping, "
-                   "taking drugs or drinking is wrong for this line: score such a shot at most 0.2.\n")
+                   "drinking - a music video or performance, a nightclub or a party with dancing or drinking, or "
+                   "someone smoking, vaping, taking drugs or drinking is wrong for this line: score such a shot "
+                   "at most 0.2 (a political rally, convention, debate, speech or ceremony is not such a shot).\n")
 
 
 def judge(path: str, intent: str, context: str = "", event: bool = False,

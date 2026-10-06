@@ -550,5 +550,51 @@ class Places(unittest.TestCase):
         self.assertIn("Lake Mead", [r["label"] for r in got])
 
 
+
+class PeriodFootage(unittest.TestCase):
+    """PERIOD_FOOTAGE_YEARS (off by default): a line about a year long past may take the era's broadcast video."""
+
+    def _scene(self, year):
+        return media._SCENE_INTENT.set({"time_context": year, "specificity": "event"})
+
+    def test_off_by_default_and_only_for_a_past_year(self):
+        tok = self._scene("2008")
+        try:
+            self.assertFalse(media._period_line())
+            with mock.patch.multiple(config, PERIOD_FOOTAGE_YEARS=8):
+                self.assertTrue(media._period_line())
+                self.assertEqual(media._period_lines(), float(config.PERIOD_REAL_LINES))
+        finally:
+            media._SCENE_INTENT.reset(tok)
+        tok = self._scene("2025")
+        try:
+            with mock.patch.multiple(config, PERIOD_FOOTAGE_YEARS=8):
+                self.assertFalse(media._period_line())                    # a recent line keeps the modern floor
+        finally:
+            media._SCENE_INTENT.reset(tok)
+
+    def test_a_480p_upload_of_a_2008_report_is_read_on(self):
+        info = {"width": 854, "height": 480, "duration": 300, "title": "Obama's brother in Huruma"}
+        tok = self._scene("2008")
+        try:
+            with mock.patch.multiple(config, MIN_CLIP_HEIGHT=720, ALLOW_VERTICAL=False):
+                self.assertIn("low detail", media.meta_reject(info))
+                with mock.patch.multiple(config, PERIOD_FOOTAGE_YEARS=8, PERIOD_MIN_HEIGHT=480):
+                    self.assertEqual(media.meta_reject(info), "")
+                    self.assertIn("low detail", media.meta_reject(dict(info, width=576, height=324)))
+        finally:
+            media._SCENE_INTENT.reset(tok)
+
+    def test_a_past_events_rung_asks_for_its_year(self):
+        si = {"locations": ["Las Vegas, Nevada"], "event_type": "presidential debate", "specificity": "event",
+              "time_context": "2016"}
+        got = media.clip_rungs("q", subject="Las Vegas debate hall", scene_intent=si, limit=3)
+        self.assertEqual(got[0]["query"], "Las Vegas Nevada presidential debate 2016 footage")
+        self.assertEqual(got[0]["label"], "Las Vegas Nevada presidential debate")     # judged without it
+        si["time_context"] = str(__import__("datetime").date.today().year)
+        self.assertEqual(media.clip_rungs("q", subject="x", scene_intent=si, limit=1)[0]["query"],
+                         "Las Vegas Nevada presidential debate footage")
+
+
 if __name__ == "__main__":
     unittest.main()

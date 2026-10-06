@@ -934,6 +934,16 @@ MIN_CLIP_HEIGHT = int(os.getenv("MIN_CLIP_HEIGHT", "720"))
 # Wikipedia "960px-" thumbnail passes). 0 turns the check off.
 MIN_IMAGE_LONG_SIDE = int(os.getenv("MIN_IMAGE_LONG_SIDE", "900"))
 MIN_ARCHIVE_HEIGHT = int(os.getenv("MIN_ARCHIVE_HEIGHT", "240"))
+# Period footage (off by default - the owner's 720p rule stands until he says otherwise): a line about a year
+# at least PERIOD_FOOTAGE_YEARS back (the scene intent's time_context) may take a clip uploaded at
+# PERIOD_MIN_HEIGHT lines and holding PERIOD_REAL_LINES of real detail - the era's own broadcast video. The
+# Obama re-clip (2026-10-07): every clip of the 2016 Las Vegas debate, of Malik at it and of George in
+# Huruma (2008) that named its event was an SD broadcast upload (489-548 real lines, or a 324p / 480p file)
+# and was turned down before the judge; the HD uploads left were other debates, other years. 8 = 2018 and
+# before, in 2026.
+PERIOD_FOOTAGE_YEARS = int(os.getenv("PERIOD_FOOTAGE_YEARS", "0"))
+PERIOD_MIN_HEIGHT = int(os.getenv("PERIOD_MIN_HEIGHT", "480"))
+PERIOD_REAL_LINES = int(os.getenv("PERIOD_REAL_LINES", "400"))
 # Real detail, not file size (src/sharpness.py; the owner, 2026-10-04: "fix blur
 # image issues", "images needed HD to 4K level"). The Lake Powell video showed
 # 40 of its 141 pictures blown up past 1.6x though most were stored 1920 px wide:

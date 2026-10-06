@@ -1148,6 +1148,33 @@ _RUNG: contextvars.ContextVar = contextvars.ContextVar("rung", default=None)
 # searches of their own words - answered from the subject's cached list, they only re-ranked the first
 # wording's candidates (the review of 2026-10-06).
 _WORDING: contextvars.ContextVar = contextvars.ContextVar("wording", default=0)
+# A list a scene's YouTube search reports to (src/reclip.py's per-scene trace: each search, each download,
+# filter and verdict - the Obama re-clip of 2026-10-07 found 8 clips in 110 lines and left no record of why).
+# None = off.
+_TRACE: contextvars.ContextVar = contextvars.ContextVar("trace", default=None)
+TRACE_ROWS = 60
+
+
+def _flags_of(verdict: Optional[dict]) -> str:
+    """The hard flags a verdict raised, in a few words ("" = none)."""
+    v = verdict or {}
+    names = (("has_text_or_watermark", "text/watermark"), ("is_talking_head", "talking head"),
+             ("ai_generated", "AI-made"), ("studio", "studio"), ("music_or_vice", "music/vice"),
+             ("off_topic", "off the story"))
+    flags = [label for key, label in names if v.get(key)]
+    if v.get("opening") is False:
+        flags.append("opening frame")
+    return ", ".join(flags)
+
+
+def _trace(**row) -> None:
+    """One row of this scene's trace (when a caller asked for one)."""
+    got = _TRACE.get()
+    if got is not None and len(got) < TRACE_ROWS:
+        got.append({k: (round(v, 3) if isinstance(v, float) else v) for k, v in row.items()
+                    if v is not None and v != ""})
+
+
 # (query, subject) of every line whose clip-first search ran all its clip stages in this job without
 # being stopped: the rescue pass's judged search asks it again only for the lines that ran out of time.
 _CLIP_SEARCHED: set = set()
@@ -1183,7 +1210,7 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: s
     from . import topics
     if topics.off_topic_title(title or "", channel or "", line=context or ""):
         return False
-    if _talking_head(title or ""):
+    if _talking_head(title or "", context or ""):
         return False
     if aspect and aspect < 1.2 and not config.ALLOW_VERTICAL:
         return False                        # vertical, unusable in 16:9
@@ -1201,7 +1228,14 @@ def _stock_seller(*texts: str) -> bool:
 _NEWS_WORDS = {"news", "interview", "press conference", "briefing"}
 
 
-def _talking_head(title: str) -> bool:
+# A named person's own appearances: on a line about that person, these words name the footage wanted, not a
+# creator talking about them (the vision judge still turns down an anchor desk or another face).
+_PERSON_WORDS = re.compile(r"^(?:interview|debate|panel|discussion|responds?|talks? about|sits? down with|"
+                           r"speaks? (?:out|to)|breaks? (?:down|silence)|on (?:cnn|fox|msnbc|abc|nbc|cbs)|"
+                           r"news|press conference|briefing)$", re.I)
+
+
+def _talking_head(title: str, line: str = "") -> bool:
     """
     True when the title disqualifies a candidate.
 
@@ -1209,6 +1243,12 @@ def _talking_head(title: str) -> bool:
     flooding in Davenport | WQAD News 8" is exactly the footage wanted. Anchors,
     press conferences, interviews and the rest still disqualify, and the vision
     judge still rejects an anchor desk or burned-in text on the actual frames.
+
+    Nor does a word the `line` itself uses: a line about the 2016 debate wants
+    "... Presidential Debate" uploads - every one of them was turned away on its
+    title, and the Obama re-clip's opening (two lines about that debate) had no
+    candidate left (2026-10-07). On a line about a named person, that person's own
+    appearances (an interview, a debate, a panel, "speaks out") are the footage.
     """
     hits = [m.group(1).lower() for m in _TALKING_HEAD.finditer(title or "")]
     if _EVENT_WINDOW.get():
@@ -1218,6 +1258,11 @@ def _talking_head(title: str) -> bool:
         # shows for the event a line names; the judge still rejects an anchor
         # at a studio desk on the actual frames.
         hits = [h for h in hits if h not in _NEWS_WORDS]
+    if hits and line:
+        said = f" {' '.join(re.findall(r'[a-z0-9&]+', line.lower()))} "
+        hits = [h for h in hits if f" {' '.join(re.findall(r'[a-z0-9&]+', h))} " not in said]
+    if hits and _SUBJECT_TYPE.get() == "person":
+        hits = [h for h in hits if not _PERSON_WORDS.match(h)]
     return bool(hits)
 
 
@@ -3037,6 +3082,8 @@ def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: 
             return "vertical video"
         floor = int(config.MIN_CLIP_HEIGHT or 0)
         lines = min(w, h)
+        if floor and _period_line():
+            floor = min(floor, int(getattr(config, "PERIOD_MIN_HEIGHT", 480) or 480))
         if floor and lines < floor and not _is_archive(f"{name} {query}"):
             return f"low detail: the upload is {lines}p (under {floor} lines)"
     try:
@@ -3148,6 +3195,8 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     # A clip-first line reads its next candidates' metadata first (CLIP_PREQUALIFY): an upload under
     # MIN_CLIP_HEIGHT, a vertical one or one too short never takes a scout or a download.
     ranked = _prequalified(ranked, n_scouts, context, max(2.0, seconds + 1.5), f"{intent_text} {context}", query)
+    _trace(step="search", query=query[:80], rung=str((_RUNG.get() or {}).get("label") or "")[:60],
+           candidates=len(pool), usable=len(ranked), scouts=min(n_scouts, len(ranked)))
     if not ranked:
         return None
     print(f"[pool] {len(pool)} candidates from {pool.searches} searches ({len(ranked)} new); "
@@ -3170,6 +3219,8 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         for _ in range(fresh):
             _count_judged()
     plan = _plan_grabs([c.row() for c in scouts], grab, start_at, seek, context)
+    _trace(step="scout", kept=len(plan), of=len(scouts),
+           titles=" | ".join(c.title[:40] for c in scouts)[:200])
     story_kind = _STORY_KIND["kind"]
     passed: List[MediaAsset] = []
     soft: Optional[dict] = None       # the best candidate under the floor, if any
@@ -3211,6 +3262,8 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         if not path:
             if clean is False:
                 _note_short_section(mkey, least)    # downloaded, but no clean start long enough: not again
+            _trace(step="download", video=c.id, title=c.title[:60],
+                   why="no clean stretch long enough" if clean is False else "download failed")
             _release_inflight(c.id)
             continue
         still = motion_rejects(path)
@@ -3221,6 +3274,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         if why:
             print(f"[media] {why if why != 'burned-in text or UI' else 'hardsubs'}, skipping: {c.title[:60]}",
                   flush=True)
+            _trace(step="filter", video=c.id, title=c.title[:60], why=str(why)[:90])
             _mark_bad(f"yt:{c.id}", mkey, why)
             try:
                 os.remove(path)
@@ -3232,6 +3286,9 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         _count_judged()
         _GATE_SLOP.set("")
         keep, verdict = _vision_gate(path, intent_text, context, c.title)
+        _trace(step="judge", video=c.id, title=c.title[:60], keep=bool(keep),
+               score=(verdict or {}).get("score"), why=_GATE_SLOP.get()[:90] or _flags_of(verdict),
+               saw=str((verdict or {}).get("description") or "")[:110])
         if not keep:
             _mark_bad(f"yt:{c.id}", mkey, _GATE_SLOP.get())
             v = verdict or {}
@@ -3800,11 +3857,31 @@ def _is_archive(title: str = "", source: str = "") -> bool:
     return source == "archive_org" or bool(_ARCHIVE_TITLE_RE.search(title or ""))
 
 
+def _period_line() -> bool:
+    """
+    This scene's line is about a year at least PERIOD_FOOTAGE_YEARS back (its scene intent's time_context;
+    config off = 0): its news footage only exists as the era's broadcast video, so a clip is held to
+    PERIOD_MIN_HEIGHT lines and PERIOD_REAL_LINES of real detail instead of the modern floors.
+    """
+    years = int(getattr(config, "PERIOD_FOOTAGE_YEARS", 0) or 0)
+    if years <= 0:
+        return False
+    si = _SCENE_INTENT.get() or {}
+    m = re.match(r"((?:19|20)\d\d)", str(si.get("time_context") or "").strip())
+    return bool(m) and int(m.group(1)) <= datetime.date.today().year - years
+
+
+def _period_lines() -> Optional[float]:
+    """The real-detail floor a period line's clip is held to (None = the modern one)."""
+    return float(getattr(config, "PERIOD_REAL_LINES", 400) or 400) if _period_line() else None
+
+
 def clip_detail_reason(path: str, title: str = "", source: str = "") -> str:
     """Why a downloaded clip is turned down on its real detail ("" = kept): a modern clip whose
     best frame holds under MIN_CLIP_REAL_HEIGHT lines (an upscaled upload). Archive film is
-    exempt; so is anything that cannot be measured."""
-    got = _sharpness.clip_check(path, archive=_is_archive(title, source))
+    exempt; so is anything that cannot be measured. A period line's clip (PERIOD_FOOTAGE_YEARS)
+    is held to PERIOD_REAL_LINES."""
+    got = _sharpness.clip_check(path, archive=_is_archive(title, source), need=_period_lines())
     return "" if got["ok"] else got["why"]
 
 
@@ -4011,12 +4088,19 @@ def clip_rungs(query: str, subject: str = "", scene_intent: Optional[dict] = Non
     if len(places) > 1 and all(len(p.split()) == 1 for p in places) and one_place:
         places = [" ".join(places)]
     event = _rung_label(si.get("event_type") or "", 3) if si.get("specificity") == "event" else ""
+    # A past event's year goes in its event-at-place search (never in its label): "Las Vegas presidential
+    # debate footage" answered the 2020 Democratic debates there, the 2016 one the line is about came last.
+    # A current event's is left out (its searches ask for recent uploads instead).
+    year_m = re.match(r"((?:19|20)\d\d)$", str(si.get("time_context") or "").strip())
+    past_year = year_m.group(1) if year_m and int(year_m.group(1)) <= datetime.date.today().year - 2 else ""
     labels: List[str] = []
+    event_label = ""
     if person:
         labels.append(_rung_label(subject))
     else:
         if event and places:
-            labels.append(f"{places[0]} {event}")
+            event_label = f"{places[0]} {event}"
+            labels.append(event_label)
         labels.append(_rung_label(subject))
         labels += entities + places
     done = {str(t).strip().lower() for t in (taken or ())}
@@ -4026,7 +4110,7 @@ def clip_rungs(query: str, subject: str = "", scene_intent: Optional[dict] = Non
         if len(key) < 4 or key in seen:
             continue
         seen.add(key)
-        q = f"{label} footage"
+        q = f"{label} {past_year} footage" if label == event_label and past_year else f"{label} footage"
         if q.lower() in done or label.lower() in done:
             continue
         out.append({"query": q, "label": label})
@@ -4343,10 +4427,13 @@ def _asset_ok(asset) -> tuple:
     # MIN_CLIP_HEIGHT lines (the owner: 1080p-quality clips).
     title = f"{getattr(asset, 'attribution', '') or ''} {getattr(asset, 'query', '') or ''}"
     archive = asset.source == "archive_org" or bool(_ARCHIVE_TITLE_RE.search(title))
+    # The era's own broadcast video for a line about a past year (PERIOD_FOOTAGE_YEARS, off by default).
+    period = asset.kind == "video" and not archive and _period_line()
     # A page of text (slide, screenshot, scan) only for a beat about a document.
     if asset.kind == "image" and _SUBJECT_TYPE.get() != "document" and _filters.text_page_still(path):
         return False, "a page of text, not a photo"
-    ok, why = clip_quality(path, config.MIN_ARCHIVE_HEIGHT if archive else config.MIN_CLIP_HEIGHT)
+    ok, why = clip_quality(path, config.MIN_ARCHIVE_HEIGHT if archive else (
+        int(getattr(config, "PERIOD_MIN_HEIGHT", 480) or 480) if period else config.MIN_CLIP_HEIGHT))
     if not ok:
         return ok, why
     # Real detail, not file size (src/sharpness.py): a picture the screen would blow up
@@ -4355,7 +4442,7 @@ def _asset_ok(asset) -> tuple:
     if asset.kind == "image":
         why = picture_blur_reason(path)
     elif asset.kind == "video":
-        got = _sharpness.clip_check(path, archive=archive)
+        got = _sharpness.clip_check(path, archive=archive, need=_period_lines() if period else None)
         why = "" if got["ok"] else got["why"]
     return (False, why) if why else (True, "")
 
@@ -5562,7 +5649,7 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                     found = []
                 found = [c for c in found if c.get("id") not in seen_ids
                          and float(c.get("duration") or 0) >= need + 8
-                         and not _talking_head(c.get("title") or "")
+                         and not _talking_head(c.get("title") or "", f"{intent_text} {job.get('context') or ''}")
                          and _usable_title(c.get("title") or "", c.get("channel") or "", float(c.get("aspect") or 0),
                                            f"{intent_text} {job.get('context') or ''}")
                          and not title_conflict(c.get("title") or "", job.get("context") or "")

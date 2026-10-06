@@ -2775,7 +2775,11 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "CLIPS_FIRST_JUDGE_MAX_PER_SCENE", "CLIPS_FIRST_POOL_SCOUT", "CLIP_PREQUALIFY",
                       "HOOK_NO_STILL_SECONDS", "HOOK_MOTION_WEIGHT", "FALLBACK_MOMENTS", "NO_TEXT_FILL",
                       "WHOLE_FILE_MAX_MB", "WHOLE_FILE_SECONDS", "RESCUE_SCENE_SECONDS", "NO_TEXT_HOLD_MAX",
-                      "PASS1_BUDGET_SECONDS", "SOURCE_BUDGET_PER_SCENE")
+                      "PASS1_BUDGET_SECONDS", "SOURCE_BUDGET_PER_SCENE", "CLIPS_FIRST_CLIP_SHARE",
+                      # A past era's broadcast video (off by default; the owner's 720p rule) and a re-clip's
+                      # narrower searches (src/reclip.py RECLIP_CONFIG).
+                      "PERIOD_FOOTAGE_YEARS", "PERIOD_MIN_HEIGHT", "PERIOD_REAL_LINES", "SCENE_SECONDS_MAX",
+                      "SCENE_SECONDS_MIN")
 
 
 def _apply_config(overrides) -> dict:

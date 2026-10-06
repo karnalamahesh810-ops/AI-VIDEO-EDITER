@@ -576,14 +576,15 @@ def same_detail(src: str, copies: Iterable[str]) -> None:
                 _CACHE[k] = hit
 
 
-def clip_check(path: str, archive: bool = False) -> dict:
+def clip_check(path: str, archive: bool = False, need: Optional[float] = None) -> dict:
     """
     {"ok", "lines", "detail": [w_eff, h_eff], "size": [w, h], "why"} for a
     clip shown full screen: a modern clip whose best frame holds fewer than
     CLIP_SLACK x MIN_CLIP_REAL_HEIGHT lines of real detail (an upscaled upload,
     whatever its file says) is not ok. Archive film is exempt (it only exists
     soft), as is anything that cannot be measured. Frames are read one at a
-    time and the first that holds enough ends the check.
+    time and the first that holds enough ends the check. `need`: the lines a
+    clip must hold instead (a period line's broadcast video, PERIOD_REAL_LINES).
     """
     out = {"ok": True, "lines": None, "detail": None, "size": None, "why": ""}
     if not clip_on() or archive or not path or min_clip_lines() <= 0:
@@ -591,7 +592,7 @@ def clip_check(path: str, archive: bool = False) -> dict:
     w, h, _secs = _probe(path)
     if not w or not h:
         return out
-    need = min_clip_lines() * CLIP_SLACK
+    need = float(need) if need else min_clip_lines() * CLIP_SLACK
     w_eff, h_eff = clip_detail(path, enough=need)
     if not w_eff:
         return out

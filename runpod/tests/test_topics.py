@@ -195,5 +195,35 @@ class TheDonors(unittest.TestCase):
         self.assertEqual([d["vid"] for d in gapfill.donors_from_doc(doc)], ["VID00000000"])
 
 
+class PoliticsFootage(unittest.TestCase):
+    """2026-10-07: the Obama re-clip's opening (two lines about the 2016 Las Vegas debate) had no candidate left:
+    every "... Presidential Debate" upload was turned away on its title, and the judge was asked whether a
+    convention stage was a "concert stage" or a "party scene"."""
+
+    def test_a_word_the_line_itself_uses_is_not_disqualifying(self):
+        title = "Third Presidential Debate: Clinton vs Trump (Full Debate)"
+        self.assertTrue(media._talking_head(title))
+        self.assertFalse(media._talking_head(title, "the same best man sat in a debate hall in Las Vegas"))
+        self.assertFalse(media._usable_title(title, "NBC News", 1.78, "the hall"))
+        self.assertTrue(media._usable_title(title, "NBC News", 1.78, "a debate hall in Las Vegas"))
+        self.assertTrue(media._talking_head("Lake Mead reaction", "the newspaper said"))     # whole words only
+
+    def test_a_named_persons_own_appearances_on_a_line_about_them(self):
+        tok = media._SUBJECT_TYPE.set("person")
+        try:
+            self.assertFalse(media._talking_head("Malik Obama speaks out about his brother"))
+            self.assertFalse(media._talking_head("Malik Obama interview on Fox"))
+            self.assertTrue(media._talking_head("Malik Obama reaction video"))               # a creator's reaction
+        finally:
+            media._SUBJECT_TYPE.reset(tok)
+        self.assertTrue(media._talking_head("Malik Obama speaks out about his brother"))
+
+    def test_the_judge_is_told_a_rally_or_a_convention_is_not_a_party_scene(self):
+        self.assertIn("political rally, convention, debate, speech, hearing, ceremony, wedding or state dinner is false",
+                      vision._SYSTEM)
+        self.assertIn("political rally, convention, debate, speech or ceremony is not such a shot",
+                      vision._OFF_STORY_RULE)
+
+
 if __name__ == "__main__":
     unittest.main()

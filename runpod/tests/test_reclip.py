@@ -118,6 +118,14 @@ class Rig(Bench):
         p = mock.patch.object(reclip.storage, "download", side_effect=fetch)
         p.start()
         self.addCleanup(p.stop)
+        # YouTube's free search (the apply's probe): one title naming the line's subject, unless a test says
+        # otherwise (self.flat_rows).
+        self.flat_rows = [{"id": "PROBEROW001", "duration": 300.0, "title": "Lake Powell boats drone",
+                           "channel": "", "aspect": 0}]
+        p = mock.patch.object(media, "_yt_candidates",
+                              side_effect=lambda *a, **k: copy.deepcopy(self.flat_rows))
+        p.start()
+        self.addCleanup(p.stop)
 
     def _search(self, query, seconds, work_dir, **kw):
         with self.lock:
@@ -402,6 +410,100 @@ class Cleaner(Rig):
         self.assertEqual(new["scenes"][1]["animation"], doc["scenes"][1]["animation"])   # the data look stays
         self.assertEqual(new["scenes"][0]["media"]["type"], "video")
         self.assertFalse(any(ov.get("type") == "highlight" for ov in new.get("overlays") or []))  # frame 0 too
+
+
+
+class AfterTheObamaApply(Rig):
+    """2026-10-07: the Obama apply found 8 clips for 110 lines, cleared 30 shots the check turned down (holds over
+    23 lines, 8 text cards) and left no record of why. A turned-down shot nothing replaces stays; a line YouTube's
+    free search names nothing for gets no paid search; every target says what was tried; a trial writes nothing."""
+
+    def test_a_turned_down_shot_nothing_replaces_stays_marked_for_review(self):
+        doc = doc_of(lay_out([(judged_clip, 4.0, {}), (clip_scene, 4.0, {}), (judged_clip, 4.0, {})], self.FPS),
+                     self.FPS)
+        self.judge_keep = False                                 # the check turns scene 1's clip down
+        self.found_for = lambda context, vt, n, seconds, used: None
+        with mock.patch.object(gapfill, "_from_moment", return_value=None), \
+                mock.patch.object(gapfill, "_from_still", return_value=None):
+            out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc)))
+        self.assertTrue(out["written"], out)
+        self.assertEqual(out["keptTurnedDown"], 1)
+        new = self.written[-1][1]["scene_data"]
+        self.assertEqual(len(new["scenes"]), 3)                                    # no line held away
+        self.assertEqual(new["scenes"][1]["media"]["url"], doc["scenes"][1]["media"]["url"])
+        self.assertTrue(new["scenes"][1]["reviewRequired"])
+        self.assertIn("turned this shot down", new["scenes"][1]["reviewReason"])
+        self.assertEqual(new["scenes"][1]["semanticMetadata"]["relevanceScore"], 0.3)
+        self.assertFalse(any(ov.get("type") == "highlight" for ov in new.get("overlays") or []))
+
+    def test_a_line_no_youtube_title_names_gets_no_paid_search(self):
+        doc = self.doc()
+        self.flat_rows = [{"id": "OTHERVIDEO1", "duration": 300.0, "title": "Cooking show", "channel": "",
+                           "aspect": 0}]
+        with mock.patch.object(gapfill, "_from_moment", return_value=None) as moment, \
+                mock.patch.object(gapfill, "_from_still", return_value=None):
+            out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc),
+                                           check=False))
+        self.assertEqual(self.searches, [])                     # not one paid search
+        self.assertEqual(out["noCandidates"], 5)
+        self.assertTrue(moment.called)                          # the cheap steps still ran
+        self.assertEqual(out["why"]["skippedNoCandidates"], 5)
+        rows = next(iter(out["trace"].values()))
+        self.assertTrue(any(r.get("step") == "search" and "skipped" in r.get("why", "") for r in rows))
+
+    def test_a_trial_writes_nothing_and_says_what_it_would_get(self):
+        doc = self.doc()
+        out = handler.handler(self.job(timeline=doc, trial=True, only=[0, 5], check=False))
+        self.assertTrue(out["ok"], out)
+        self.assertTrue(out["trial"])
+        self.assertEqual(self.r2.objects, {})
+        storage.patch_project.assert_not_called()
+        self.assertEqual([r["index"] for r in out["plan"]], [0, 5])
+        self.assertEqual(sorted(s["index"] for s in out["foundShots"]), [0, 5])
+        self.assertTrue(all(s["how"] == "clip" for s in out["foundShots"]))
+        self.assertEqual(out["budget"]["capUsd"], reclip.TRIAL_BUDGET_USD)
+        self.assertNotIn("timeline", out)
+
+    def test_the_why_summary_counts_the_traces(self):
+        traces = {1: [{"step": "search", "candidates": 12, "usable": 3, "scouts": 2},
+                      {"step": "scout", "kept": 2, "of": 2},
+                      {"step": "download", "why": "download failed"},
+                      {"step": "filter", "why": "low detail: about 496x279 real of 1280x720"},
+                      {"step": "judge", "keep": False, "score": 0.3, "why": ""},
+                      {"step": "judge", "keep": False, "score": 0.6, "why": ""},
+                      {"step": "judge", "keep": False, "score": 0.8, "why": "talking head"},
+                      {"step": "judge", "keep": True, "score": 0.8}],
+                  2: [{"step": "search", "why": "skipped: no YouTube title names this line (the free probe)"}]}
+        w = reclip.why_summary(traces)
+        self.assertEqual((w["searches"], w["scouted"], w["downloadsFailed"], w["judged"], w["passed"]),
+                         (1, 2, 1, 4, 1))
+        self.assertEqual(w["filtered"], {"low detail": 1})
+        self.assertEqual(w["nearMisses"], 1)
+        self.assertEqual(w["turnedDown"]["talking head"], 1)
+        self.assertEqual(w["skippedNoCandidates"], 1)
+
+    def test_the_estimate_gives_both_ends(self):
+        targets = reclip.plan_targets(self.doc())
+        est = reclip.estimate(targets, 16, {"answered": 5, "own": 5, "rung": 0, "none": 0, "withCandidates": 5})
+        self.assertLess(est["expectedClipsLow"], est["expectedClips"])
+        self.assertEqual(est["expectedClipsLow"], round(len(targets) * reclip.PASS_LOW))
+
+
+    def test_a_reclips_searches_are_narrower_and_the_config_comes_back(self):
+        seen = []
+
+        def found(context, vt, n, seconds, used):
+            seen.append((config.CLIP_WORDINGS, config.CLIP_OTHER_WORDINGS, config.SCENE_SECONDS_MAX))
+            return self.fresh("footage", n, seconds, used)
+        self.found_for = found
+        before = (config.CLIP_WORDINGS, config.CLIP_OTHER_WORDINGS, config.SCENE_SECONDS_MAX)
+        doc = self.doc()
+        handler.handler(self.job(timeline=doc, trial=True, only=[0], check=False))
+        self.assertEqual(seen, [(2, 0, 180.0)])
+        self.assertEqual((config.CLIP_WORDINGS, config.CLIP_OTHER_WORDINGS, config.SCENE_SECONDS_MAX), before)
+        seen.clear()
+        handler.handler(self.job(timeline=doc, trial=True, only=[0], check=False, config={"CLIP_WORDINGS": 3}))
+        self.assertEqual(seen[0][0], 3)                            # the job's own config wins
 
 
 if __name__ == "__main__":

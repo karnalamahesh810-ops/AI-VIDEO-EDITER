@@ -40,8 +40,10 @@ about music: "we don't want those clips in our videos").
             c  another moment of a clip the video shows (gapfill._from_moment:
                judged, the variety rules);
             d  the clip-first search (media.source_for_segment clips_only: the
-               line's own wordings, then wider rungs naming its subject, the
-               other clip sources), judged - only while the budget lasts;
+               line's own wordings, then wider rungs naming its subject), judged,
+               narrower than a plan's (RECLIP_CONFIG) - only while the budget
+               lasts, and never for a line YouTube's free search names nothing
+               for (probe, run first: those lines found nothing and cost most);
             e  an empty, text-filled or turned-down line: a picture
                (gapfill's picture rung, a push-in and depth layers).
           Never a video the timeline already shows (a moment excepted, under
@@ -49,9 +51,11 @@ about music: "we don't want those clips in our videos").
           (src/ledger.py); a picture is only ever replaced by a clip that
           passed the judge (never a near-miss).
   settle  a picture nothing better was found for stays as it was, and so does
-          a data look of a line's figure. An empty or text-filled scene, and a
-          clip that must go (off the story, or clearly turned down), nothing
-          was found for goes through the no-text last resort
+          a data look of a line's figure, and so does a shot the check turned
+          down (marked for review: clearing them held neighbours over 23 lines
+          and left 8 text cards on the Obama re-clip, 2026-10-07). An empty or
+          text-filled scene, and a shot off the story, nothing was found for
+          goes through the no-text last resort
           (gapfill.hold_or_animate, NO_TEXT_FILL): a data look of its figure,
           the shot beside it held, another moment of any clip, a still beside
           it held - never a text card while anything real can stand in, never
@@ -69,7 +73,14 @@ are counted (and how many of them have a title that does not name their
 line), and the music / smoking scenes the topic rules see are listed. With
 "probe": true it also asks YouTube's search (free: one flat search per
 target, no download, no model call) how many usable candidates each target
-has, so the estimate says how many clips to expect.
+has, so the estimate says how many clips to expect - from what the Obama
+re-clip measured (PASS_LOW) to what the water builds did (PROBE_HIT).
+
+A trial ("trial": true, best with "only": a few scene indices) runs the paid
+search on its targets under its own small cap (TRIAL_BUDGET_USD) and time box
+and writes nothing anywhere: what each would get, and - for every target of a
+trial or an apply - a trace of each search, download, filter and verdict
+(media._TRACE) and their sum ("why").
 """
 from __future__ import annotations
 
@@ -95,27 +106,38 @@ PAD = media.SEQ_SHOT_PAD
 ROWS = 600                 # plan / result rows kept in a job result
 # The owner's cap for one video's re-clip (RunPod + OpenRouter), 2026-10-06: "don't burn my credits".
 BUDGET_USD = 1.50
+# A trial (the paid search on a few lines, nothing written): its own small cap and time box.
+TRIAL_BUDGET_USD = 0.10
+TRIAL_SECONDS = 420.0
 CHECK_PARALLEL = 8
 CHECK_MAX_MB = 300         # a saved clip larger than this is not read for the check
 
-# The estimate, from the owner's own jobs. The 5-minute A/B build of 2026-10-05 (ab_A): 471 vision calls for
-# 60 scenes on google/gemini-2.5-flash for $0.298 (OpenRouter) - ~7.8 calls and $0.0049 a scene; a clip
-# search holds one thread ~1.6 min (2-4 YouTube sections through the proxies at ~12-16 s, the scouts and the
-# judge), another moment ~0.7 min, the check of a saved clip ~0.15 min (read from storage, one call); the
-# 16-core serverless worker costs $0.576 an hour; a new file is saved in ~4 s (8 at a time). PROBE_HIT: the
-# share of targets a clip-first search fills when the probe has not been asked (the owner's pod builds kept a
-# judged clip for ~45-60% of the footage lines whose first wording was searched; the clip-first search asks
-# 3 wordings and 3 wider rungs).
-VISION_PER_SEARCH = 7.8
+# The estimate, from the owner's own jobs - and from the Obama re-clip of 2026-10-07 (70bc06d2, 110 lines
+# searched): 864 vision calls for $0.827 on google/gemini-2.5-flash ($0.00096 a call: a storyboard pick sends
+# a 20-tile sheet), ~7.9 calls a line; a line's search held one thread ~5 min (YouTube sections at 34 s
+# through busy proxies, the gate at 28 s, every wording and rung walked when nothing passed) - narrower
+# under RECLIP_CONFIG, ~3 min; another moment ~0.7 min, the check of a saved shot ~0.15 min (read from
+# storage, one call); the 16-core serverless worker costs $0.576 an hour; a new file is saved in ~4 s (8 at a
+# time). PROBE_HIT: the share of targets the search fills when the probe has not been asked (the owner's
+# water builds: ~45-60% of footage lines). PASS_LOW: what the Obama re-clip measured - 8 clips for 110 lines
+# with YouTube candidates (the judge turns most news and interview footage down for a line about one person,
+# one paper or one feeling); the estimate gives both ends.
+VISION_PER_SEARCH = 7.9
 VISION_PER_MOMENT = 2.0
 VISION_PER_CHECK = 1.0
-VISION_USD = 0.00065
-SEARCH_MINUTES = 1.6
+VISION_USD = 0.00096
+SEARCH_MINUTES = 3.0
 MOMENT_MINUTES = 0.7
 CHECK_MINUTES = 0.15
 PUBLISH_SECONDS = 4.0
 WORKER_USD_PER_MINUTE = 0.576 / 60.0
 PROBE_HIT = 0.65
+PASS_LOW = 0.08
+# A re-clip's searches, narrower than a plan's (the job's own "config" wins): its own two wordings and two
+# wider rungs on YouTube, no other clip source (Dailymotion, web video and the archives found nothing in
+# the Obama re-clip and cost a third of its time), two scouts a search, 12 model calls and 3 minutes a line.
+RECLIP_CONFIG = {"CLIP_WORDINGS": 2, "CLIP_RUNGS": 2, "CLIP_OTHER_WORDINGS": 0, "CLIPS_FIRST_POOL_SCOUT": 2,
+                 "CLIPS_FIRST_JUDGE_MAX_PER_SCENE": 12, "SCENE_SECONDS_MAX": 180.0}
 # What the budget keeps back for a step while it runs (its worst case: a clip-first search's 20 model calls
 # and its share of the worker's time; a moment's or a picture's 4 calls; one call), and for the saving at
 # the end.
@@ -585,6 +607,9 @@ def estimate(targets: List[dict], workers: int, probed: Optional[dict] = None, *
     vision = n * VISION_PER_SEARCH + fill * VISION_PER_MOMENT + checks * VISION_PER_CHECK
     thread_minutes = n * SEARCH_MINUTES + fill * MOMENT_MINUTES + checks * CHECK_MINUTES
     clips = int(round(n * hit))
+    with_cands = (float(probed.get("withCandidates", 0)) / max(1.0, float(probed["answered"])) * n
+                  if probed and probed.get("answered") else float(n))
+    low = int(round(with_cands * PASS_LOW))
     minutes = thread_minutes / max(1, workers) + clips * PUBLISH_SECONDS / 8.0 / 60.0 + 2.0
     usd = vision * VISION_USD + minutes * WORKER_USD_PER_MINUTE
     per_target = (usd - checks * (VISION_PER_CHECK * VISION_USD)) / max(1, n)
@@ -592,7 +617,8 @@ def estimate(targets: List[dict], workers: int, probed: Optional[dict] = None, *
                                                               * VISION_USD) / max(1e-6, per_target)))
     return {"targets": n, "byTier": {str(k): sum(1 for t in targets if t["tier"] == k) for k in (0, 1, 2)},
             "fillers": fill, "checks": int(checks), "likelyTurnedDown": int(likely_bad),
-            "expectedClips": clips, "hitRate": round(hit, 2), "visionCalls": int(round(vision)),
+            "expectedClips": clips, "expectedClipsLow": min(low, clips), "hitRate": round(hit, 2),
+            "visionCalls": int(round(vision)),
             "minutes": round(minutes, 1), "usd": round(usd, 2), "workers": workers,
             "budgetUsd": round(float(budget), 2), "overBudget": bool(budget > 0 and usd > budget),
             "fits": min(n, fits)}
@@ -607,7 +633,7 @@ class Finder:
 
     def __init__(self, doc: dict, targets: List[dict], work: str, *, workers: int, deadline: float,
                  flags: Optional[dict] = None, say: Optional[Callable] = None, budget: Optional[Budget] = None,
-                 library=None, skip=()):
+                 library=None, skip=(), hopeless=()):
         self.doc = doc
         self.targets = targets
         self.work = work
@@ -624,6 +650,8 @@ class Finder:
         self.found: Dict[int, Found] = {}
         self.late: set = set()
         self.unpaid: set = set()                    # targets a paid step was refused for (the budget)
+        self.hopeless: set = set(hopeless or ())    # targets no YouTube title names (the free probe): no search
+        self.traces: Dict[int, List[dict]] = {}     # each target's trace (media._TRACE): what was tried, why not
         self.box: Optional[ytdlp.Box] = None
         self.share = 0.0
 
@@ -754,6 +782,8 @@ class Finder:
                         media._RUNG.reset(token)
             finally:
                 self.budget.done(hold)
+            media._trace(step=name, title=str(got.attribution or "")[:60], keep=bool(keep and verdict is not None),
+                         score=(verdict or {}).get("score"), why=media._flags_of(verdict))
             if not keep or verdict is None:
                 recut._remove(got.local_path)
                 continue
@@ -765,6 +795,21 @@ class Finder:
         return None
 
     def one(self, t: dict) -> Optional[Found]:
+        i = t["index"]
+        trace: List[dict] = []
+        self.traces[i] = trace
+        token = media._TRACE.set(trace)
+        try:
+            got = self._one(t)
+        finally:
+            media._TRACE.reset(token)
+        if got is not None:
+            trace.append({"step": "found", "how": got.how,
+                          "score": getattr(got.asset, "relevance_score", None) if got.asset is not None
+                          else (got.sem or {}).get("relevanceScore")})
+        return got
+
+    def _one(self, t: dict) -> Optional[Found]:
         i, kind = t["index"], t["kind"]
         job = job_for(self.doc, i)
         fill = kind in ("empty", "filler", "bad")
@@ -792,6 +837,7 @@ class Finder:
                                                           gapfill._share_of(stop, gapfill.MOMENT_SHARE), self.donors)
                         finally:
                             self.budget.done(hold)
+                        media._trace(step="moment", found=moment is not None)
                         if moment is not None and self._claim(moment, whole_video=False):
                             return Found(i, "moment", moment)
                     else:
@@ -799,32 +845,17 @@ class Finder:
             finally:
                 for var, tok in reversed(tokens):
                     var.reset(tok)
-            # d: the clip-first search, while the budget lasts
+            # d: the clip-first search, while the budget lasts - not for a line YouTube's own (free) search
+            # has no titled candidate for: such searches found nothing on the Obama re-clip but cost the most
+            # (scouts on every wording and rung).
             if ytdlp.stopped():
                 return None
-            hold = self._paid("search")
-            if not hold:
-                self.unpaid.add(i)
-                return None
-            with self.lock:
-                exclude = set(self.exclude)
-            try:
-                got = media.source_for_segment(
-                    job["query"], float(job["seconds"]), self.work, visual_type="footage", used=exclude,
-                    fallbacks=job["fallbacks"], intent=job["intent"], context=job["context"],
-                    subject_type=job["subject_type"], subject=job["subject"], event_window=job["event_window"],
-                    scene_intent=job["scene_intent"], hook=job["hook"], recency=job["recency"], start=job["start"],
-                    clips_only=True, **self.flags)
-            except Exception as e:  # noqa: BLE001 - the next step
-                print(f"[reclip] {t['id']}: clip search failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
-                got = None
-            finally:
-                self.budget.done(hold)
-            if got is not None and got.kind == "video" and not gapfill._too_short(got, job) \
-                    and (fill or not media._near_miss(got)) and self._claim(got):
-                return Found(i, "clip", got)
-            if got is not None:
-                recut._remove(got.local_path)
+            if i in self.hopeless:
+                media._trace(step="search", why="skipped: no YouTube title names this line (the free probe)")
+            else:
+                got = self._search(t, job, fill)
+                if got is not None:
+                    return got
             if not fill or ytdlp.stopped() or not config.FALLBACK_STILLS:
                 return None
             # e: an empty, text-filled or turned-down line: a picture
@@ -839,6 +870,7 @@ class Finder:
                     pic = gapfill._from_still(job, self.used, self.work, stop, allow_generated=False)
                 finally:
                     self.budget.done(hold)
+                media._trace(step="picture", found=pic is not None)
                 if pic is not None and self._claim(pic):
                     return Found(i, "picture", pic)
             finally:
@@ -847,6 +879,36 @@ class Finder:
             return None
         finally:
             ytdlp.STOP.reset(token)
+
+    def _search(self, t: dict, job: dict, fill: bool) -> Optional[Found]:
+        """(d) The clip-first search, clips only, judged; a near-miss only for a line that has nothing."""
+        i = t["index"]
+        hold = self._paid("search")
+        if not hold:
+            self.unpaid.add(i)
+            return None
+        with self.lock:
+            exclude = set(self.exclude)
+        try:
+            got = media.source_for_segment(
+                job["query"], float(job["seconds"]), self.work, visual_type="footage", used=exclude,
+                fallbacks=job["fallbacks"], intent=job["intent"], context=job["context"],
+                subject_type=job["subject_type"], subject=job["subject"], event_window=job["event_window"],
+                scene_intent=job["scene_intent"], hook=job["hook"], recency=job["recency"], start=job["start"],
+                clips_only=True, **self.flags)
+        except Exception as e:  # noqa: BLE001 - the next step
+            print(f"[reclip] {t['id']}: clip search failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
+            got = None
+        finally:
+            self.budget.done(hold)
+        if got is not None and got.kind == "video" and not gapfill._too_short(got, job) \
+                and (fill or not media._near_miss(got)) and self._claim(got):
+            return Found(i, "clip", got)
+        if got is not None:
+            if not fill and media._near_miss(got):
+                media._trace(step="search", why=f"a near-miss ({got.relevance_score}) never replaces a picture")
+            recut._remove(got.local_path)
+        return None
 
     def run(self) -> Dict[int, Found]:
         if not self.targets:
@@ -1020,26 +1082,95 @@ def scan(doc: dict, pictures: bool = True) -> dict:
 # The action
 # --------------------------------------------------------------------------- #
 
+def _only(inp: dict, doc: dict) -> Optional[set]:
+    """The scene indices "only" names (indices or scene ids), None when it names none."""
+    raw = inp.get("only")
+    if not raw:
+        return None
+    vals = raw if isinstance(raw, (list, tuple)) else str(raw).split(",")
+    ids = {str(s.get("id")): k for k, s in enumerate(doc.get("scenes") or []) if isinstance(s, dict)}
+    out = set()
+    for v in vals:
+        v = str(v).strip()
+        if v.isdigit():
+            out.add(int(v))
+        elif v in ids:
+            out.add(ids[v])
+    return out
+
+
+def why_summary(traces: Dict[int, List[dict]]) -> dict:
+    """What the traces say, counted: searches, scouts, downloads failed, filter reasons, the judge's verdicts."""
+    out: Dict[str, Any] = {"searches": 0, "noUsableTitle": 0, "scouted": 0, "downloadsFailed": 0, "filtered": {},
+                           "judged": 0, "passed": 0, "nearMisses": 0, "turnedDown": {}, "skippedNoCandidates": 0}
+    for rows in traces.values():
+        for r in rows:
+            step = r.get("step")
+            if step == "search":
+                if str(r.get("why") or "").startswith("skipped"):
+                    out["skippedNoCandidates"] += 1
+                    continue
+                if "candidates" in r:
+                    out["searches"] += 1
+                    out["noUsableTitle"] += 1 if not r.get("usable") else 0
+            elif step == "scout":
+                out["scouted"] += int(r.get("of") or 0)
+            elif step == "download":
+                out["downloadsFailed"] += 1
+            elif step == "filter":
+                why = str(r.get("why") or "")
+                key = why.split(":")[0][:40] or "?"
+                out["filtered"][key] = out["filtered"].get(key, 0) + 1
+            elif step == "judge":
+                out["judged"] += 1
+                if r.get("keep"):
+                    out["passed"] += 1
+                else:
+                    score = r.get("score")
+                    if score is not None and float(score) >= config.VISION_SOFT_MIN_SCORE and not r.get("why"):
+                        out["nearMisses"] += 1
+                    key = str(r.get("why") or "")[:40] or (
+                        f"scored {float(score):.1f}" if score is not None else "no verdict")
+                    out["turnedDown"][key] = out["turnedDown"].get(key, 0) + 1
+    out["turnedDown"] = dict(sorted(out["turnedDown"].items(), key=lambda kv: -kv[1])[:15])
+    return out
+
+
+def _with_config(overrides: dict, keep: dict):
+    """Set config values (the job's own `keep` win); returns what to put back."""
+    old = {}
+    for k, v in overrides.items():
+        if k in keep or not hasattr(config, k):
+            continue
+        old[k] = getattr(config, k)
+        setattr(config, k, v)
+    return old
+
+
 def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
         publish: Optional[Callable[[dict], int]] = None, choices: Optional[Callable[[dict], int]] = None,
         ready: Optional[Callable[[], None]] = None, library=None) -> dict:
     """
     {"project_id", "apply", "expect_fingerprint" (needed to apply), "seconds" (time box, 60-7200), "limit"
-    (targets at most), "pictures" (false: only the opening, the empty / text scenes and the clips that must
-    go), "check" (false: the clips nothing judged are not checked), "budget_usd" (the cap, BUDGET_USD; 0 = none),
-    "parallel", "probe" (a dry run asks YouTube's free search per target), "write_wait"}. Returns the plan,
-    the counts before (and after) and an estimate; an apply also what was found, the budget, the backup and
+    (targets at most), "only" (scene indices or ids: those scenes only), "pictures" (false: only the opening,
+    the empty / text scenes and the shots that must go), "check" (false: the shots nothing judged are not
+    checked), "budget_usd" (the cap, BUDGET_USD; 0 = none), "trial" (with apply false: the paid search on the
+    targets - with "only", a few of them - under budget_usd (TRIAL_BUDGET_USD by default), nothing written
+    anywhere: what each would get and why), "parallel", "probe" (a dry run asks YouTube's free search per
+    target), "write_wait"}. Returns the plan, the counts before (and after) and an estimate; a trial or an
+    apply also what was found, why the rest was not (trace, why), the budget; an apply also the backup and
     whether it was written.
     """
     started = time.time()
     say = report or (lambda *a, **k: None)
     apply = bool(inp.get("apply"))
+    trial = bool(inp.get("trial")) and not apply
     project_id = str(inp.get("project_id") or "").strip()
     job_id = str(inp.get("_job_id") or "")
-    seconds = min(7200.0, max(60.0, _num(inp.get("seconds")) or SECONDS))
+    seconds = min(7200.0, max(60.0, _num(inp.get("seconds")) or (TRIAL_SECONDS if trial else SECONDS)))
     workers = max(1, int(_num(inp.get("parallel")) or config.SOURCE_WORKERS))
     cap = _num(inp.get("budget_usd"))
-    cap = BUDGET_USD if cap is None else max(0.0, cap)
+    cap = (TRIAL_BUDGET_USD if trial else BUDGET_USD) if cap is None else max(0.0, cap)
     fps = recut._fps(doc)
     fp = recut.fingerprint(doc)
     expect = str(inp.get("expect_fingerprint") or "").strip().lower()
@@ -1050,18 +1181,29 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
     say("Re-clipping: reading the timeline", 2)
     pictures = inp.get("pictures") is not False
     limit = int(_num(inp.get("limit")) or 0)
+    only = _only(inp, doc)
     found_scan = scan(doc, pictures=pictures)
-    targets = plan_targets(doc, pictures=pictures, limit=limit)
+    if only is not None:
+        found_scan["uncheckedIndices"] = [i for i in found_scan["uncheckedIndices"] if i in only]
+        found_scan["unchecked"] = len(found_scan["uncheckedIndices"])
+
+    def planned(checked=None) -> List[dict]:
+        rows = plan_targets(doc, pictures=pictures, checked=checked)
+        if only is not None:
+            rows = [t for t in rows if t["index"] in only]
+        return rows[:limit] if limit > 0 else rows
+
+    targets = planned()
     before = counts_of(doc)
     checks = found_scan["unchecked"] if inp.get("check") is not False else 0
     probed = None
-    if not apply and inp.get("probe"):
+    if not apply and not trial and inp.get("probe"):
         say("Re-clipping: asking YouTube's search for each scene (free)", 5)
         probed = probe(doc, targets, seconds=min(600.0, max(30.0, _num(inp.get("probe_seconds")) or 240.0)))
     est = estimate(targets, workers, probed, checks=checks,
-                   likely_bad=found_scan["likelyNewTargets"] if checks else 0, budget=cap)
-    out: Dict[str, Any] = {"ok": True, "project_id": project_id, "dry_run": not apply, "fingerprint": fp, "fps": fps,
-                           "before": before, "estimate": est, "plan": targets[:ROWS],
+                   likely_bad=found_scan["likelyNewTargets"] if checks and only is None else 0, budget=cap)
+    out: Dict[str, Any] = {"ok": True, "project_id": project_id, "dry_run": not apply, "trial": trial,
+                           "fingerprint": fp, "fps": fps, "before": before, "estimate": est, "plan": targets[:ROWS],
                            "offStory": found_scan["offStory"][:ROWS], "unchecked": found_scan["unchecked"]}
     if probed is not None:
         out["probe"] = {k: v for k, v in probed.items() if k != "perTarget"}
@@ -1069,12 +1211,12 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
           f"{before['fillers']} empty or text; first minute {before['hookClips']}/{before['hookScenes']} clips; "
           f"{len(found_scan['offStory'])} off the story, {found_scan['unchecked']} clips and pictures nothing judged "
           f"({found_scan['uncheckedUnnamed']} whose title does not name their line). Targets {len(targets)} "
-          f"{est['byTier']}; expect ~{est['expectedClips']} clips, ~{est['visionCalls']} vision calls, "
-          f"~{est['minutes']} min, ~${est['usd']} (cap ${cap:.2f})", flush=True)
+          f"{est['byTier']}; expect ~{est['expectedClipsLow']}-{est['expectedClips']} clips, "
+          f"~{est['visionCalls']} vision calls, ~{est['minutes']} min, ~${est['usd']} (cap ${cap:.2f})", flush=True)
     for row in found_scan["offStory"]:
         print(f"[reclip] OFF STORY scene {row['index'] + 1} at {row['at']} s: {row['why']} - {row['title']!r}",
               flush=True)
-    if not apply:
+    if not apply and not trial:
         for row in targets[:ROWS]:
             n = (probed or {}).get("perTarget", {}).get(row["id"])
             print(f"[reclip] PLAN t{row['tier']} {row['id']:>8s} {row['start']:7.1f}s {row['kind']:6s} "
@@ -1085,50 +1227,100 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
         out["seconds"] = round(time.time() - started, 1)
         return out
 
-    # ------------------------------------------------------------------ apply
-    if not expect:
-        raise ReclipError("an apply needs expect_fingerprint (the read-only check query's answer)")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", project_id):
-        raise ReclipError("an apply needs the project_id")
-    if not r2.enabled():
-        raise ReclipError("Cloudflare R2 is not configured on this worker: there is nowhere to keep the backup "
-                          "and the new shots")
-    out.update(written=False, writeError="")
+    # ------------------------------------------------------------------ trial / apply
+    if apply:
+        if not expect:
+            raise ReclipError("an apply needs expect_fingerprint (the read-only check query's answer)")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", project_id):
+            raise ReclipError("an apply needs the project_id")
+        if not r2.enabled():
+            raise ReclipError("Cloudflare R2 is not configured on this worker: there is nowhere to keep the backup "
+                              "and the new shots")
+        out.update(written=False, writeError="")
     if not targets and not checks:
         out["writeError"] = "nothing to re-clip"
         out["seconds"] = round(time.time() - started, 1)
         return out
     if ready is not None:
-        ready()                         # no AI credit or no YouTube: refused before anything is written
-    say("Re-clipping: keeping the timeline as it was", 4)
-    out["backup"] = recut.save_json(project_id, recut.backup_key(project_id, job_id), doc)
-    print(f"[reclip] the timeline as it was: {out['backup']}", flush=True)
+        ready()                         # no AI credit or no YouTube: refused before anything is written or paid
+    if apply:
+        say("Re-clipping: keeping the timeline as it was", 4)
+        out["backup"] = recut.save_json(project_id, recut.backup_key(project_id, job_id), doc)
+        print(f"[reclip] the timeline as it was: {out['backup']}", flush=True)
     deadline = started + seconds
     budget = Budget(cap)
     media.reset_cache()
     media.limit_generation(0)           # never an AI-made picture in a real video
-
-    # The clips and pictures nothing judged: judged now (one call each), the turned-down ones become targets.
-    checked: Dict[int, dict] = {}
-    if checks:
-        events.phase("reclip-check")
-        checked = check_clips(doc, found_scan["uncheckedIndices"], work, budget=budget,
-                              deadline=min(deadline - 0.5 * seconds, time.time() + 0.2 * seconds), say=say)
-        targets = plan_targets(doc, pictures=pictures, limit=limit, checked=checked)
-        out["plan"] = targets[:ROWS]
-    out["checked"] = {"asked": checks, "answered": len(checked), "kept": sum(1 for r in checked.values() if r["keep"]),
-                      "turnedDown": sum(1 for r in checked.values() if not r["keep"])}
-    saving = 60.0 + len(targets) * PUBLISH_SECONDS / 8.0
-    reserve = min(0.35 * seconds, saving + 120.0)
-    gone = {t["index"] for t in targets if t["kind"] == "bad"}
-    finder = Finder(doc, targets, work, workers=workers, deadline=deadline - reserve,
-                    flags={"allow_youtube": inp.get("allow_youtube"), "allow_stock": inp.get("allow_stock"),
-                           "require_cc": inp.get("require_cc")}, say=say, budget=budget, library=library, skip=gone)
-    say("Re-clipping: finding clips", 8)
-    events.phase("reclip-source")
-    found = finder.run()
-    events.phase("reclip")
+    # A re-clip's searches are narrower than a plan's (RECLIP_CONFIG): the Obama re-clip asked every wording,
+    # every rung and the other clip sources of 110 lines, ~5 minutes and ~8 model calls each, for 8 clips.
+    restore_config = _with_config(RECLIP_CONFIG, inp.get("config") if isinstance(inp.get("config"), dict) else {})
+    try:
+        # The clips and pictures nothing judged: judged now (one call each), the turned-down ones become targets.
+        checked: Dict[int, dict] = {}
+        if checks:
+            events.phase("reclip-check")
+            checked = check_clips(doc, found_scan["uncheckedIndices"], work, budget=budget,
+                                  deadline=min(deadline - 0.5 * seconds, time.time() + 0.2 * seconds), say=say)
+            targets = planned(checked)
+            out["plan"] = targets[:ROWS]
+        out["checked"] = {"asked": checks, "answered": len(checked),
+                          "kept": sum(1 for r in checked.values() if r["keep"]),
+                          "turnedDown": sum(1 for r in checked.values() if not r["keep"])}
+        # YouTube's own search, free (a flat search per line, no download, no model call): a line no title
+        # names gets no paid search (its moment and picture steps still run), and the lines that have the
+        # most candidates go first in their tier.
+        hopeless: set = set()
+        if targets and inp.get("free_probe") is not False:
+            say("Re-clipping: asking YouTube's search for each scene (free)", 6)
+            probed = probe(doc, targets, seconds=min(300.0, 20.0 + 3.0 * len(targets)), parallel=8)
+            per = probed.get("perTarget") or {}
+            hopeless = {t["index"] for t in targets if per.get(t["id"]) == [0, 0]}
+            rank = {t["id"]: -(sum(per.get(t["id"]) or [0, 0])) for t in targets}
+            targets = sorted(targets, key=lambda t: (t["tier"], t["index"] in hopeless, rank[t["id"]],
+                                                     -t["weakness"] if t["tier"] == 2 else t["start"]))
+            out["probe"] = {k: v for k, v in probed.items() if k != "perTarget"}
+            out["noCandidates"] = len(hopeless)
+        saving = 60.0 + len(targets) * PUBLISH_SECONDS / 8.0
+        reserve = min(0.35 * seconds, saving + 120.0) if apply else 30.0
+        gone = {t["index"] for t in targets if t["kind"] == "bad" and off_story(doc["scenes"][t["index"]])}
+        finder = Finder(doc, targets, work, workers=workers, deadline=deadline - reserve,
+                        flags={"allow_youtube": inp.get("allow_youtube"), "allow_stock": inp.get("allow_stock"),
+                               "require_cc": inp.get("require_cc")}, say=say, budget=budget, library=library,
+                        skip=gone, hopeless=hopeless)
+        say("Re-clipping: finding clips", 8)
+        events.phase("reclip-source")
+        found = finder.run()
+        events.phase("reclip")
+    finally:
+        for k, v in restore_config.items():
+            setattr(config, k, v)
     out["stageSeconds"] = media.stage_seconds()
+    ids = {t["index"]: t["id"] for t in targets}
+    out["trace"] = {ids.get(i, str(i)): rows[:40] for i, rows in sorted(finder.traces.items())}
+    out["why"] = why_summary(finder.traces)
+    found_counts = {"clips": 0, "moments": 0, "pictures": 0, "runnerUps": 0, "library": 0}
+    for f in found.values():
+        key = {"clip": "clips", "moment": "moments", "picture": "pictures", "runner-up": "runnerUps"}.get(f.how, "library")
+        found_counts[key] += 1
+    out.update(found=found_counts, late=len(finder.late), budget=budget.report(), unpaid=len(finder.unpaid))
+    print(f"[reclip] why: {json.dumps(out['why'])[:900]}", flush=True)
+    if trial:
+        # Nothing is written anywhere: what each target would get, and why the rest would not.
+        out["foundShots"] = [{"index": i, "id": ids.get(i, ""), "how": f.how,
+                              "score": getattr(f.asset, "relevance_score", None) if f.asset is not None
+                              else (f.sem or {}).get("relevanceScore"),
+                              "title": str(getattr(f.asset, "attribution", "") or (f.media or {}).get("attribution")
+                                           or "")[:90],
+                              "saw": str(getattr(f.asset, "content_description", "") or (f.sem or {})
+                                         .get("contentDescription") or "")[:160],
+                              "url": str(getattr(f.asset, "url", "") or (f.sem or {}).get("sourceUrl") or "")}
+                             for i, f in sorted(found.items())]
+        for f in found.values():
+            if f.asset is not None:
+                recut._remove(getattr(f.asset, "local_path", ""))
+        out["seconds"] = round(time.time() - started, 1)
+        events.emit("reclip", "trial", data={"found": found_counts, "budget": out["budget"]})
+        return out
 
     new_doc = copy.deepcopy(doc)
     scenes = new_doc.get("scenes") or []
@@ -1149,9 +1341,13 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
             changed.append(scenes[i])
     if changed:
         _drop_cards(new_doc, changed)       # a text card laid over a line that now shows a shot
-    # What nothing was found for: a text card, an empty scene, a clip off the story or clearly turned down goes
-    # through the no-text last resort; a picture and a data look of the line's figure stay as they were.
+    # What nothing was found for. An empty or text-filled scene goes through the no-text last resort, and so
+    # does a music / smoking shot the story is not about. A shot the check only turned down STAYS (marked for
+    # review with the judge's reason): the Obama re-clip cleared 30 of them, and the last resort held their
+    # neighbours over 23 lines and put 8 text cards where real shots had been (2026-10-07). A picture and a
+    # data look of the line's figure stay as they were.
     rest = []
+    kept_bad = 0
     for t in targets:
         i = t["index"]
         if i in found or not 0 <= i < len(scenes):
@@ -1159,8 +1355,16 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
         s = scenes[i]
         if t["kind"] == "empty" or (t["kind"] == "filler" and not _data_look(s)):
             rest.append(s)
-        elif t["kind"] == "bad" and (off_story(s) or (checked.get(i) or {}).get("clear")):
+        elif t["kind"] == "bad" and off_story(s):
             rest.append(s)
+        elif t["kind"] == "bad":
+            row = checked.get(i) or {}
+            if row.get("verdict"):
+                _record_check(s, row)
+            s["reviewRequired"] = True
+            s["reviewReason"] = (f"The vision check turned this shot down ({row.get('why') or 'not for its line'}) "
+                                 "and nothing better was found - replace it if you can")[:240]
+            kept_bad += 1
     last: Dict[str, int] = {}
     if rest:
         _drop_cards(new_doc, rest)
@@ -1169,13 +1373,9 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
         last = gapfill.hold_or_animate(new_doc, label="re-clip", laddered=True, search=True, work=work, fresh=True,
                                        only=rest)
     after = counts_of(new_doc)
-    found_counts = {"clips": by_how.get("clip", 0), "moments": by_how.get("moment", 0),
-                    "pictures": by_how.get("picture", 0), "runnerUps": by_how.get("runner-up", 0),
-                    "library": by_how.get("library", 0) + by_how.get("pack", 0)}
-    out.update(found=found_counts, lastResort=last, after=after, late=len(finder.late), recorded=recorded,
-               budget=budget.report(), unpaid=len(finder.unpaid))
+    out.update(lastResort=last, after=after, recorded=recorded, keptTurnedDown=kept_bad)
     shown = any(int(v or 0) for k, v in last.items() if k not in ("card", "asked", "left", "seconds"))
-    if not found and not rest and not recorded and not shown:
+    if not found and not rest and not recorded and not shown and not kept_bad:
         out["writeError"] = "no new shot was found: nothing changed"
         out["seconds"] = round(time.time() - started, 1)
         return out
@@ -1225,7 +1425,7 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
     new_doc["meta"]["reclip"] = {
         "job": job_id, "backup": out.get("backup", ""), "fingerprintBefore": fp, "targets": len(targets),
         "found": out["found"], "checked": out["checked"], "offStory": len(found_scan["offStory"]),
-        "before": before, "after": out["after"], "budget": out["budget"],
+        "before": before, "after": out["after"], "budget": out["budget"], "why": out["why"],
         "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
     out["fingerprintAfter"] = recut.fingerprint(new_doc)
     out["reclipKey"] = recut.save_json(project_id, recut.backup_key(project_id, job_id, "-reclip"), new_doc)
