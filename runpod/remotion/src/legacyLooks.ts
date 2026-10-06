@@ -26,12 +26,33 @@ export const RETIRED_IDS = [
   "LIB_HL_LETTER_FLIP", "LIB_HL_OUTLINE_FILL", "LIB_HL_MARKER_SWEEP", "LIB_HL_CENTER_STACK", "LIB_HL_TICKER_SLIDE",
   "LIB_TXT_KEY_PHRASE", "LIB_TXT_QUOTE_LINE", "LIB_TXT_HEADLINE_WORDS", "LIB_TXT_QUESTION", "LIB_TXT_UNDERLINE_SWEEP",
   "LIB_TXT_KICKER_HEADLINE", "LIB_QS_ZOOM_WORD",
+  // the year and date looks with the same cheap feel (the owner, 2026-10-06, on the "Year Scroller Lens" of his
+  // Obama video - a big gold "2008" in a glowing lens over blurred footage: "not great, remove it"): gold glows
+  // and fills, condensed faces, full-screen takeovers. Drawn as the date family (LibKtDates.tsx).
+  "LIB_TL_YEAR_SCROLLER", "LIB_TL_DECADE_GRID", "LIB_TL_YEARS_LATER", "LIB_TL_TIME_PASSING", "LIB_TL_THEN_NOW_YEARS",
+  "LIB_TL_DATE_STAMP_CIRCLE", "LIB_TL_CALENDAR_FLIP", "TL_YEAR_ROLL_V1", "TL_DATE_TITLE_V1", "LIB_DT_DATE_SLAM",
+  "LIB_DT_CLEAN_CARD",
 ] as const;
 const RETIRED = new Set<string>(RETIRED_IDS);
 
 const TYPED = new Set(["LIB_ED_TYPE_CLEAN", "LIB_ED_TYPE_TERMINAL", "LIB_ED_QUOTE_TYPE", "LIB_ED_QUESTION",
   "TEXT_TYPEWRITER_V1", "TEXT_MEMO_V1", "TEXT_QUESTION_V1", "LIB_TXT_QUOTE_LINE", "LIB_TXT_QUESTION"]);
-const DATES = new Set(["LIB_DT_LETTER_DROP", "LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK"]);
+const DATES = new Set(["LIB_DT_LETTER_DROP", "LIB_DT_BOLD_HEADLINE", "LIB_DT_BIG_STACK", "LIB_TL_DATE_STAMP_CIRCLE",
+  "LIB_TL_CALENDAR_FLIP", "TL_DATE_TITLE_V1", "LIB_DT_DATE_SLAM", "LIB_DT_CLEAN_CARD"]);
+/** The year looks: a year (and the year the story came from) as the year counter, two years as the timeline. */
+const YEARS = new Set(["LIB_TL_YEAR_SCROLLER", "LIB_TL_DECADE_GRID", "TL_YEAR_ROLL_V1", "LIB_TL_THEN_NOW_YEARS"]);
+/** The time-jump cards ("30 YEARS LATER"): the year said with them as the year counter, else the span as a figure. */
+const JUMPS = new Set(["LIB_TL_YEARS_LATER", "LIB_TL_TIME_PASSING"]);
+const YEAR = /\b(1[5-9]\d\d|20\d\d)\b/;
+const yearIn = (v: unknown): number | null => {
+  if (typeof v === "number" && Number.isInteger(v) && v >= 1500 && v <= 2999) return v;
+  const m = YEAR.exec(String(v ?? ""));
+  return m ? Number(m[1]) : null;
+};
+const short = (s: unknown, n = 30) => {
+  const t = String(s ?? "").replace(/\s+/g, " ").trim();
+  return t.length <= n ? t.toUpperCase() : "";
+};
 
 const WORDNUM: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11,
@@ -56,11 +77,38 @@ export const remapRetired = (ov: Overlay): Overlay => {
   const text = String(ov.text || "").replace(/\s+/g, " ").trim();
   const value = typeof ov.value === "number" && Number.isFinite(ov.value) ? ov.value : null;
   const suffix = String(ov.suffix || "").trim();
+  if (YEARS.has(id)) {
+    const items = (Array.isArray(ov.items) ? ov.items : []).map((it) => yearIn(it?.value) ?? yearIn(it?.label))
+      .filter((y): y is number => y !== null);
+    const y = yearIn(ov.value) ?? items[items.length - 1] ?? yearIn(text);
+    if (id === "LIB_TL_THEN_NOW_YEARS" && items.length >= 2) {
+      return kt(ov, "kt-date-line", { text: "", value: items[items.length - 1], label: "",
+        items: items.slice(-2).map((v) => ({ label: String(v), value: v })) });
+    }
+    if (y !== null) {
+      const from = items.length >= 2 ? items[items.length - 2] : null;
+      return kt(ov, "kt-year", { text: "", value: y, label: short(ov.subtitle || (id === "TL_YEAR_ROLL_V1" ? ov.text : "")),
+        items: from !== null && from !== y ? [{ label: String(from), value: from }, { label: String(y), value: y }] : [] });
+    }
+    return kt(ov, "kt-keyword", { text, label: "" });
+  }
+  if (JUMPS.has(id)) {
+    const y = yearIn(text);
+    const said = [value !== null ? String(value) : "", suffix, String(ov.label || "")].filter(Boolean).join(" ");
+    if (y !== null) return kt(ov, "kt-year", { text: "", value: y, label: short(said), items: [] });
+    if (value !== null) return kt(ov, "kt-number", { value, suffix: suffix || "YEARS", label: "", subtitle: String(ov.label || "").toLowerCase() });
+    return kt(ov, "kt-keyword", { text: said || text, label: "" });
+  }
   if (DATES.has(id)) {
+    // the kicker the old look carried ("Completed", "Lake Mead, Nevada"), when it is short
+    const kick = id === "LIB_DT_CLEAN_CARD" || id === "LIB_TL_DATE_STAMP_CIRCLE" ? short(ov.label) : "";
+    const card = id === "LIB_DT_CLEAN_CARD" || id === "LIB_TL_CALENDAR_FLIP";
     const m = DATE.exec(text);
-    if (m) return kt(ov, "kt-date", { text: `${title(m[1])} ${Number(m[2])}`, subtitle: m[3] || "", label: "" });
+    if (m) return kt(ov, card ? "kt-date-card" : "kt-date", { text: `${title(m[1])} ${Number(m[2])}`, subtitle: m[3] || "", label: kick });
     const my = MONTH_YEAR.exec(text);
-    if (my) return kt(ov, "kt-date", { text: title(my[1]), subtitle: my[2], label: "" });
+    if (my) return kt(ov, "kt-date", { text: title(my[1]), subtitle: my[2], label: kick });
+    const y = yearIn(text) ?? yearIn(ov.value);
+    if (y !== null) return kt(ov, "kt-year", { text: "", value: y, label: kick, items: [] });
     return kt(ov, "kt-keyword", { text, label: "" });
   }
   if (value !== null && (id === "LIB_BT_COUNT" || id === "TEXT_LABEL_PILL_V1")) {

@@ -828,6 +828,10 @@ LOUDNESS_TRUE_PEAK = float(os.getenv("LOUDNESS_TRUE_PEAK", "-1.5"))
 VOICE_POLISH = _flag("VOICE_POLISH", True)
 # The whole polish (download, analysis, filters, checks) gives up after this.
 VOICE_POLISH_SECONDS = float(os.getenv("VOICE_POLISH_SECONDS", "240"))
+# The editor's voice level over 100% (doc.audio.boostDb, up to +6 dB): applied to
+# the narration before the render through a limiter that holds its true peak at
+# this ceiling (dBTP), so a boost never clips (src/voicepolish.py boost_for_render).
+VOICE_BOOST_CEILING_DBTP = float(os.getenv("VOICE_BOOST_CEILING_DBTP", "-1.0"))
 # One grade for the whole video (src/grade.py, drawn by the renderer's
 # gradeMath.ts on every scene picture, never on graphics): each clip pulled
 # toward the video's common exposure, saturation and colour cast

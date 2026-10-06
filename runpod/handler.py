@@ -1873,6 +1873,35 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
     return doc, candidates
 
 
+RESOURCE_FAILED_PREFIX = "Could not find a new shot for "
+
+
+def resource_failed(inp: dict, why: str) -> dict:
+    """
+    A Replace Clip job (action "resource") that could not give its scene a new
+    shot - nothing usable found, the AI or YouTube check refused, a save failed:
+    {"row": the project's fields, "result": the job's answer}. Only that request
+    failed. The project keeps its timeline as it was and goes back to
+    "editing", never "failed": a failed new shot used to mark the whole video
+    failed. The answer says so plainly: ok false, which scene, why, and that
+    nothing else changed (no timeline in it, so nothing is saved over the
+    project's).
+    """
+    idx = inp.get("scene_index")
+    scene = idx if isinstance(idx, int) and not isinstance(idx, bool) and idx >= 0 else None
+    where = f"scene {scene + 1}" if scene is not None else "this scene"
+    text = " ".join(str(why or "").split())
+    if not text.startswith(RESOURCE_FAILED_PREFIX):        # (a pod's caller passes the job's own error back)
+        text = f"{RESOURCE_FAILED_PREFIX}{where}: {text.rstrip('. ') or 'no reason was given'}. " \
+               "Nothing else in the video changed."
+    error = text[:800]
+    step = f"No new shot for {where}"
+    return {"row": {"status": "editing", "current_step": step, "progress": 100, "error_message": error},
+            "result": {"action": "resource", "error": error, "scene_index": scene,
+                       "mode": str(inp.get("mode") or "replace"), "project_status": "editing",
+                       "current_step": step, "timeline_unchanged": True}}
+
+
 def _sign_supabase_urls(doc: dict):
     """
     Re-sign any Supabase storage URLs inside the timeline.
@@ -2264,6 +2293,17 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # Any failure keeps the original.
     report("Polishing the narration", 69)
     voicepolish.for_render(doc, work, inp)
+    # The editor's voice level over 100% (doc.audio.boostDb): the gain and a
+    # true-peak limiter on the narration file, so the boost never clips; and no
+    # audio.volume over 1 reaches the renderer (a bare gain there clips). Before
+    # the draw, so a spread render publishes the boosted file to its workers
+    # (fanout.local_refs). Any failure keeps the narration as it was.
+    boosted = voicepolish.boost_for_render(doc, work, inp)
+    if boosted.get("db") or boosted.get("volumeClamped") is not None:
+        events.emit("render", "voice_boost", level="info" if boosted.get("applied") or not boosted.get("db")
+                    else "warning", message=str(boosted.get("why") or "")[:300],
+                    data={k: boosted.get(k) for k in ("applied", "db", "ceilingDbtp", "before", "after",
+                                                      "volumeClamped") if boosted.get(k) is not None})
     # The video's grade: the default when the document has none (GRADE), and
     # the tone of any scene without one (an older plan, a repaired scene) -
     # time-boxed; a scene left unmeasured keeps the shared look only.
@@ -2963,6 +3003,8 @@ def handler(job):
     # Every job keeps its own ledger and event log; a fan-out child returns
     # both in its result and the parent absorbs them.
     costs.reset(inp.get("prices") if isinstance(inp.get("prices"), dict) else None)
+    # A pod's start-up (scripts/pod_job.py: costs.use_pod) is billed too: the first job on it pays it.
+    costs.charge_machine_start()
     # A restore (src/restore.py) is not the project's job: its progress and its
     # events stay with this job's own status and result, so nothing of it is
     # ever written to the app's database. Nor is a re-cut's (src/recut.py),
@@ -3247,11 +3289,15 @@ def handler(job):
                 _publish_choices(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                                  job_id, work, report)
             library._strip_local_alternatives(doc)      # no work-dir path ever reaches the saved timeline
-            if project_id:
+            if project_id and not inp.get("_caller_writes_result"):
+                # (A pod writes the plan's final state itself, waited for and retried - scripts/pod_job.py.
+                # This queued write used to move the row to "editing" first; the broker then refused the
+                # pod's own writes for 15 minutes and the pod was left stopped instead of deleted.)
                 storage.patch_project(project_id, {
                     "scene_data": doc, "status": "editing",
                     "current_step": "Timeline ready", "progress": 68,
                 })
+            if project_id:
                 ledger.save(ledger_job, project_id)     # later videos never show these moments again
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "plan", "timeline": doc, "costs": summary,
@@ -3262,7 +3308,7 @@ def handler(job):
 
         if action == "resource":
             doc, candidates = do_resource(inp, work, report)
-            if project_id:
+            if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, {
                     "scene_data": doc, "status": "editing",
                     "current_step": "Scene re-sourced", "progress": 100,
@@ -3409,6 +3455,11 @@ def handler(job):
             # page (a storage 404 page was one, 2026-10-04).
             msg = renderer.plain_error(msg)
         msg = msg[:800]
+        # A new shot for one scene (Replace Clip) that could not be found or saved fails that
+        # request only: the project keeps its timeline and goes back to editing - never "failed".
+        scene_failed = resource_failed(inp, msg) if action == "resource" else None
+        if scene_failed:
+            msg = scene_failed["result"]["error"]
         # A render that failed still says what its quality check found and did.
         gate = quality.LAST.get("gate")
         checked = gate.finish() if gate is not None else None
@@ -3423,10 +3474,13 @@ def handler(job):
             except Exception:  # noqa: BLE001
                 pass
             if not inp.get("_caller_writes_result"):
-                storage.patch_project(project_id, {
+                storage.patch_project(project_id, scene_failed["row"] if scene_failed else {
                     "status": "failed", "error_message": msg, "current_step": "Failed",
                 })
         return {"ok": False, "error": msg, "elapsed": round(time.time() - started, 1),
+                **(scene_failed["result"] if scene_failed else {}),
+                # What the failed job cost all the same (machine time, AI calls already made).
+                "costs": costs.summary(time.time() - started),
                 **({"quality": checked} if checked else {}),
                 **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") and LAST_FRAMES else {}),
                 **({"timeline": dict(LAST_TIMELINE)} if inp.get("return_frames") and LAST_TIMELINE else {})}

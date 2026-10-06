@@ -19,8 +19,11 @@ import io
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
-KT_UPPER = {"KT_DATE", "KT_YEAR", "KT_TIME"}
-KT_FIXED_LOWER = {"KT_LOWER_THIRD", "KT_CHIP"}
+KT_UPPER = {"KT_DATE", "KT_YEAR", "KT_TIME", "KT_DATE_CARD", "KT_DATE_LINE", "KT_TIME_CLOCK"}
+KT_FIXED_LOWER = {"KT_LOWER_THIRD", "KT_CHIP", "KT_DATE_BADGE"}
+# The date family draws its own frosted glass (remotion LibKtDates.tsx): never the side panel, but it still
+# takes the calmer side of its picture.
+KT_SELF_BACKED = KT_UPPER | {"KT_DATE_BADGE"}
 BUSY_EDGE = 45.0        # mean edge strength (0-255) of the look's corner above which words get the panel
 CALMER = 0.7            # the mirrored corner is used when it is at most this share of the home corner's
 # the corners measured, as shares of the frame (x0, y0, x1, y1)
@@ -142,7 +145,7 @@ def place(overlays: List[dict], scenes: List[dict], *, fetch: Optional[Callable[
         if busy is None:
             busy = here is not None and here >= BUSY_EDGE
         out["measured"] += 1
-        if busy and tid not in KT_FIXED_LOWER:
+        if busy and tid not in KT_FIXED_LOWER and tid not in KT_SELF_BACKED:
             ov["backing"] = "panel"
             out["panel"] += 1
         if edges is not None and here is not None and here >= BUSY_EDGE * 0.8:

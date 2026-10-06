@@ -196,16 +196,17 @@ class TheLineAsSaid(unittest.TestCase):
         # It lands on its word, not before the line.
         self.assertLessEqual(o["startFrame"], int(round(0.3 * FPS)) + 1)
 
-    def test_years_later_in_2008_is_the_next_year_look(self):
-        # The first jump is the year line; the next one takes the next year look (the owner, 2026-10-02:
-        # not the year line every time), still with only the year and the words said.
+    def test_years_later_in_2008_is_the_year_line_again(self):
+        # The other year looks are retired (2026-10-06, the owner on the Year Scroller Lens: "not great, remove
+        # it"); the data planner turns each year said into the date family's rotating looks after the build
+        # (tests/test_year_looks.py). Still only the year and the words said.
         out = _plan(["In 1961 the dam was finished.", PLAIN] + [PLAIN] * 14 + ["Years later, in 2008, it was full.",
                                                                                PLAIN])
         dated = _dates(out)
         self.assertEqual([(o["template"], o.get("value"), o.get("total")) for o in dated],
                          [(treatments.VR_YEAR, 1961.0, float(treatments.NOW_YEAR)),
-                          ("LIB_TL_YEAR_SCROLLER", 2008.0, None)])
-        self.assertEqual(dated[1]["subtitle"], "YEARS LATER")
+                          (treatments.VR_YEAR, 2008.0, 1961.0)])
+        self.assertEqual(dated[1]["label"], "YEARS LATER")
 
 
 class NoBarsUnderTheWords(unittest.TestCase):

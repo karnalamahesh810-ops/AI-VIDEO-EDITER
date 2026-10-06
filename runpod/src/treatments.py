@@ -1529,9 +1529,16 @@ def vr_moment(text: str, shot: Optional[dict] = None, brief: Optional[dict] = No
 # rotation; a counted jump ("thirty years later") prefers the years-later
 # cards, a range as said or a year against today the then / now card. Each
 # look shows only what the line said (year_look_props), or is left out.
-YEAR_LOOKS = (VR_YEAR, "LIB_TL_YEAR_SCROLLER", "TL_YEAR_ROLL_V1", "LIB_TL_DECADE_GRID",
-              "LIB_TL_YEARS_LATER", "LIB_TL_TIME_PASSING", "LIB_TL_THEN_NOW_YEARS")
-YEAR_COUNT_LOOKS = ("LIB_TL_YEARS_LATER", "LIB_TL_TIME_PASSING")
+# Since 2026-10-06 the scroller, the year roll, the decade grid, the years-later and
+# time-passing cards and the then / now card are retired (the owner on the "Year Scroller
+# Lens" of his Obama video: "not great, remove it"; remotion legacyLooks.ts draws them as
+# the date family): a jump in years takes the year line here, and the data planner
+# (src/datalooks.py) puts every year said on the date family's year counter / timeline,
+# replacing it. year_look_props still reads the retired ids for older plans.
+YEAR_LOOKS = (VR_YEAR,)
+YEAR_COUNT_LOOKS: tuple = ()
+RETIRED_YEAR_LOOKS = ("LIB_TL_YEAR_SCROLLER", "TL_YEAR_ROLL_V1", "LIB_TL_DECADE_GRID", "LIB_TL_YEARS_LATER",
+                      "LIB_TL_TIME_PASSING", "LIB_TL_THEN_NOW_YEARS")
 _NOW_SAID = re.compile(r"\b(today|now|nowadays|these days|this year)\b", re.I)
 _JUMP_PARTS = re.compile(r"^(?:(?P<n>.+?)\s+)?(?P<unit>half\s+a\s+century|years?|decades?|centur(?:y|ies))\s+"
                          r"(?P<word>later|earlier|on|passed|went\s+by)$", re.I)
@@ -1869,8 +1876,10 @@ BOLD_COUNT_LOOK = "KT_NUMBER"
 BOLD_COUNT_CUES = {"big-number", "count", "percent", "money", "age"}
 BOLD_COUNT_RUN = 2
 # The KT date looks are the data planner's (src/datalooks.py: on the word, after the
-# build); the cue picker never takes them, so a date is never shown twice.
-KT_DATE_LOOKS = {"KT_DATE", "KT_YEAR", "KT_TIME"}
+# build); the cue picker never takes them, so a date is never shown twice. The date
+# family since 2026-10-06 (remotion LibKtDates.tsx): the stamp, the calendar card, the
+# timeline marker, the lower-third badge, the year counter, the time counter, the clock.
+KT_DATE_LOOKS = {"KT_DATE", "KT_YEAR", "KT_TIME", "KT_DATE_CARD", "KT_DATE_LINE", "KT_DATE_BADGE", "KT_TIME_CLOCK"}
 # The words a line puts on screen in the one clean type style (the owner, 2026-10-05: the outlined condensed
 # words, the typed boxes and the headline stacks are retired): a typed statement or a question, a key phrase.
 KT_TEXT_FIRST = {"question": "KT_STATEMENT", "statement": "KT_STATEMENT", "typewriter": "KT_STATEMENT",

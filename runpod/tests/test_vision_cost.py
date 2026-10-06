@@ -67,11 +67,13 @@ class CostLedger(unittest.TestCase):
         costs.reset({"kie.credit": 0.01, "vision.judge": 1.0})
         costs.record("vision.judge", 10)                 # estimate: 10 x 1 credit x $0.01 = $0.10
         self.assertAlmostEqual(costs.summary(1.0)["vision"], 0.10)
-        costs.record("vision.usd", 0.0069)
+        for _ in range(10):                              # each answer came with its own price (vision._note_usage)
+            costs.record("vision.usd", 0.00069)
         costs.record("vision.prompt_tokens", 24000)
         s = costs.summary(1.0)
         self.assertAlmostEqual(s["vision"], 0.0069)
         self.assertTrue(s["vision_measured"])
+        self.assertEqual(s["units"]["vision.measured"], 10)
         self.assertEqual(s["other"], 0.0)                # token counts are counts, not money
 
 
