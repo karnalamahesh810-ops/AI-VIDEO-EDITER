@@ -351,10 +351,11 @@ def _from_library(job: dict, used: Used, library, work: str, stop: float):
     """(a) An unused library clip of the line's subject or place (library.fetch runs the slop gates)."""
     if library is None or not getattr(library, "entries", None):
         return None
-    from . import media
+    from . import media, topics
     i = job["index"]
     seconds = float(job.get("seconds") or 6.0) + media.SEQ_SHOT_PAD
     taken = set(getattr(library, "used", set()) or set())
+    line = f"{job.get('intent') or ''} {job.get('context') or ''}"
     for name in _names(job):
         try:
             entries = library.find(name, exclude=taken, n=4, kind="video") or []
@@ -363,6 +364,8 @@ def _from_library(job: dict, used: Used, library, work: str, stop: float):
         for e in entries:
             if time.time() > stop:
                 return None
+            if topics.scene_reason(f"{e.get('attribution') or ''} {e.get('description') or ''}", line):
+                continue                            # a music video or a smoking scene this story is not about
             ident = str(e.get("id") or "")
             preview = Shot(files=tuple(_files_of(e.get("read_url") or "")),
                            video=_video_of(ident, e.get("url") or ""), at=job.get("start"))
@@ -1140,7 +1143,9 @@ def _no_text_last(doc: dict, cards: List[dict], out: Dict[str, int], *, fresh: b
                 job = job_for(s, k, fps, known)
                 stop = min(until, time.time() + float(config.FALLBACK_SCENE_SECONDS))
                 try:
-                    got = _from_moment(job, used, work, stop, donors, judged=False)
+                    # In the opening a moment is judged (and kept to the variety rules): the hook is what a
+                    # viewer stays for; elsewhere it is the last thing before a hold, unjudged and flagged.
+                    got = _from_moment(job, used, work, stop, donors, judged=_hook(s, fps))
                 except Exception as e:  # noqa: BLE001 - the hold below
                     print(f"[fill] scene {k + 1}: last moment skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
                     got = None

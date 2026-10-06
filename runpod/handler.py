@@ -2861,8 +2861,20 @@ def do_reclip(inp: dict, work: str, report: Reporter) -> dict:
     project_id = str(inp.get("project_id") or "")
     job_id = str(inp.get("_job_id") or "")
     bucket = inp.get("media_bucket") or config.MEDIA_BUCKET
+    title = str(inp.get("title") or meta.get("title") or story.get("event") or "")
     vision.set_story(story)
+    # The topic rules (music videos and smoking scenes only in a story about them) read the title too.
+    topics.set_story(story, title)
     media.set_story_kind(str(story.get("kind") or ""))
+    # The niche packs' shelves this story reads (a water story: the water and nature shelves).
+    packs.use_job(title=title, brief=story, style=style_inp["video_style"])
+    lib = None
+    if inp.get("apply") and project_id:
+        try:
+            # Clips kept from earlier videos about the same subjects: already on storage, judged for this line.
+            lib = library.Library.load(project_id, job_id, bucket)
+        except Exception as e:  # noqa: BLE001 - re-clipped without the library
+            print(f"[reclip] the clip library was not read: {type(e).__name__}: {str(e)[:100]}", flush=True)
 
     def ready() -> None:
         # The same refusals as a plan: no AI credit (nothing would judge the new clips), no YouTube.
@@ -2879,7 +2891,7 @@ def do_reclip(inp: dict, work: str, report: Reporter) -> dict:
         return _publish_choices(d, project_id, bucket, job_id, work, quality.floor(report, 92))
 
     try:
-        return reclip.run(inp, doc, work, report, publish=publish, choices=choices, ready=ready)
+        return reclip.run(inp, doc, work, report, publish=publish, choices=choices, ready=ready, library=lib)
     finally:
         _restore_config(previous)
 

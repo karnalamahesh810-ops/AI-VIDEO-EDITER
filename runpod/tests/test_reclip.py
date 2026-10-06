@@ -101,12 +101,21 @@ class Plan(unittest.TestCase):
         self.assertAlmostEqual(c["clipTimeShare"], 0.1, places=2)
 
 
-class Action(Bench):
+class Rig(Bench):
+    """The re-cut bench with a re-clip job, its stub search and the saved clips the check reads."""
     FPS = 30
 
     def setUp(self):
         super().setUp()
         p = mock.patch.object(config, "HOOK_SECONDS", 10.0)
+        p.start()
+        self.addCleanup(p.stop)
+
+        def fetch(url, path, **kw):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(f"clip|{url}|4.4")
+            return path
+        p = mock.patch.object(reclip.storage, "download", side_effect=fetch)
         p.start()
         self.addCleanup(p.stop)
 
@@ -128,6 +137,8 @@ class Action(Bench):
     def job(self, **inp):
         return {"id": JOB, "input": {"action": "reclip", "project_id": PID, **inp}}
 
+
+class Action(Rig):
     def test_a_dry_run_changes_nothing_and_pays_for_nothing(self):
         doc = self.doc()
         before = copy.deepcopy(doc)
@@ -142,7 +153,10 @@ class Action(Bench):
         self.assertEqual(out["fingerprint"], recut.fingerprint(before))
         self.assertEqual([r["index"] for r in out["plan"]], [0, 1, 5, 3, 6])
         est = out["estimate"]
-        self.assertEqual((est["targets"], est["fillers"]), (5, 2))
+        # The clip and the four pictures nothing judged are counted for the check; the clip (scene 2) and the
+        # portrait (scene 4) - not targets yet, their titles do not name their line - as likely new targets.
+        self.assertEqual((est["targets"], est["fillers"], est["checks"], est["likelyTurnedDown"]), (7, 4, 5, 2))
+        self.assertEqual(out["unchecked"], 5)
         self.assertGreater(est["usd"], 0)
         self.assertEqual(out["before"]["clips"], 1)
 
@@ -177,7 +191,9 @@ class Action(Bench):
         out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc)))
         self.assertTrue(out["ok"], out)
         self.assertTrue(out["written"], out)
-        self.assertEqual(out["found"], {"clips": 5, "moments": 0, "pictures": 0})
+        self.assertEqual({k: out["found"][k] for k in ("clips", "moments", "pictures")},
+                         {"clips": 5, "moments": 0, "pictures": 0})
+        self.assertEqual(out["checked"], {"asked": 5, "answered": 5, "kept": 5, "turnedDown": 0})
         backup = f"projects/{PID}/backups/scene_data-{JOB}.json"
         self.assertEqual(json.loads(self.r2.objects[(BUCKET, backup)].decode("utf-8")), before)
         self.assertEqual([k for k, _key in self.r2.order][0], "bytes")          # the backup first
@@ -187,7 +203,12 @@ class Action(Bench):
         new = fields["scene_data"]
         types = [s["media"]["type"] for s in new["scenes"]]
         self.assertEqual(types, ["video", "video", "video", "video", "image", "video", "video"])
-        self.assertEqual(new["scenes"][4], before["scenes"][4])                   # the portrait stays
+        # The portrait stays (the check kept it: its record now carries the judge's verdict).
+        kept = copy.deepcopy(new["scenes"][4])
+        self.assertEqual(kept["semanticMetadata"].pop("relevanceScore"), 0.81)
+        for k in ("qualityScore", "contentDescription", "judgedBy"):
+            kept["semanticMetadata"].pop(k, None)
+        self.assertEqual(kept, before["scenes"][4])
         for k in (0, 1, 3, 5, 6):
             s = new["scenes"][k]
             self.assertTrue(s["media"]["url"].startswith(BASE), s["media"]["url"])
@@ -244,6 +265,143 @@ class Action(Bench):
                 mock.patch.object(gapfill, "_from_still", return_value=None):
             out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc)))
         self.assertEqual(out["found"]["clips"], 1)
+
+
+
+def music_clip(n, start, frames, fps, **kw):
+    s = clip_scene(n, start, frames, fps, **kw)
+    s["media"]["attribution"] = "YouTube: Meek Mill - Early Mornings (Official Video)"
+    s["semanticMetadata"]["relevanceScore"] = 0.8
+    s["semanticMetadata"]["judgedBy"] = "frames"
+    return s
+
+
+def judged_clip(n, start, frames, fps, **kw):
+    s = clip_scene(n, start, frames, fps, **kw)
+    s["semanticMetadata"]["relevanceScore"] = 0.85
+    s["semanticMetadata"]["judgedBy"] = "frames"
+    return s
+
+
+class Cleaner(Rig):
+    """The second ask (2026-10-06): music videos and clips nobody judged replaced, and never a burnt budget."""
+
+    def setUp(self):
+        super().setUp()
+        from src import topics
+        topics.set_story({"summary": "Lake Powell is draining and the marinas are closing"}, "Lake Powell")
+        self.addCleanup(topics.set_story, {}, "")
+
+    def test_a_music_video_in_a_story_not_about_music_is_replaced(self):
+        doc = doc_of(lay_out([(judged_clip, 4.0, {}), (music_clip, 4.0, {}), (judged_clip, 4.0, {})], self.FPS),
+                     self.FPS)
+        with mock.patch.object(config, "HOOK_SECONDS", 10.0):
+            targets = reclip.plan_targets(doc)
+        self.assertEqual([(t["index"], t["kind"], t["tier"]) for t in targets], [(1, "bad", 0)])
+        self.assertIn("music", targets[0]["why"])
+        out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc)))
+        self.assertTrue(out["written"], out)
+        new = self.written[-1][1]["scene_data"]
+        self.assertNotIn("Official Video", new["scenes"][1]["media"].get("attribution") or "")
+        self.assertEqual(new["scenes"][1]["semanticMetadata"]["reclip"]["how"], "clip")
+
+    def test_a_music_video_nothing_replaces_still_goes(self):
+        doc = doc_of(lay_out([(judged_clip, 4.0, {}), (music_clip, 4.0, {}), (judged_clip, 4.0, {})], self.FPS),
+                     self.FPS)
+        self.found_for = lambda context, vt, n, seconds, used: None
+        with mock.patch.object(gapfill, "_from_moment", return_value=None), \
+                mock.patch.object(gapfill, "_from_still", return_value=None):
+            out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc)))
+        self.assertTrue(out["written"], out)
+        new = self.written[-1][1]["scene_data"]
+        self.assertFalse(any("Official Video" in str((s.get("media") or {}).get("attribution") or "")
+                             for s in new["scenes"]))
+        self.assertFalse(any(reclip.kind_of(s) == "empty" for s in new["scenes"]))   # never a scene left empty
+
+    def test_a_story_about_the_musician_keeps_it(self):
+        from src import topics
+        topics.set_story({"summary": "Meek Mill: how a Philadelphia rapper became a voice for reform"}, "Meek Mill")
+        doc = doc_of(lay_out([(judged_clip, 4.0, {}), (music_clip, 4.0, {})], self.FPS), self.FPS)
+        self.assertEqual(reclip.plan_targets(doc, pictures=False), [])
+
+    def test_a_clip_nobody_judged_is_checked_and_replaced_when_turned_down(self):
+        doc = doc_of(lay_out([(judged_clip, 4.0, {}), (clip_scene, 4.0, {}), (judged_clip, 4.0, {}),
+                              (clip_scene, 4.0, {})], self.FPS), self.FPS)
+
+        def judge(path, job):
+            # The check reads the saved copies (stub "clip|<url>|..."): scene 1's is turned down, scene 3's kept.
+            with open(path, encoding="utf-8") as fh:
+                return "s0001" not in fh.read()
+        self.judge_keep = judge
+        out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc)))
+        self.assertTrue(out["written"], out)
+        self.assertEqual(out["checked"], {"asked": 2, "answered": 2, "kept": 1, "turnedDown": 1})
+        new = self.written[-1][1]["scene_data"]
+        self.assertEqual(new["scenes"][1]["semanticMetadata"]["reclip"]["how"], "clip")
+        self.assertEqual(new["scenes"][3]["semanticMetadata"]["relevanceScore"], 0.81)      # its verdict recorded
+        self.assertEqual(new["scenes"][3]["semanticMetadata"]["judgedBy"], "frames")
+        self.assertEqual(new["scenes"][3]["media"]["url"], doc["scenes"][3]["media"]["url"])
+
+    def test_no_paid_step_past_the_budget(self):
+        doc = self.doc()
+        out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc),
+                                       budget_usd=0.01, check=False))
+        self.assertEqual(self.searches, [])                       # not one search was paid for
+        self.assertTrue(out["budget"]["stopped"])
+        self.assertGreater(out["unpaid"], 0)
+        if out.get("written"):
+            new = self.written[-1][1]["scene_data"]
+            self.assertFalse(any(reclip.kind_of(s) == "empty" for s in new["scenes"]))
+
+    def test_another_moment_of_a_clip_the_video_shows_is_taken(self):
+        # The moment step claims that moment only: its video is on the timeline already.
+        doc = doc_of(lay_out([(judged_clip, 4.0, {}), (empty_scene, 4.0, {}), (judged_clip, 4.0, {})], self.FPS),
+                     self.FPS)
+        moment = media.MediaAsset(kind="video", source="youtube",
+                                  url="https://www.youtube.com/watch?v=V0000000000&t=160", duration=5.0,
+                                  attribution="YouTube: clip 0", relevance_score=0.8, moment={"start": 160.0},
+                                  moment_key="yt:V0000000000@16", license="unverified — you must hold the rights")
+        moment.local_path = self._write("yt_moment.mp4", "clip|yt:V0000000000@160|4.5")
+        with mock.patch.object(gapfill, "_from_moment", return_value=moment):
+            out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc),
+                                           check=False))
+        self.assertEqual(out["found"]["moments"], 1)
+        self.assertEqual(self.searches, [])                       # before any fresh search
+
+    def test_a_published_runner_up_costs_nothing(self):
+        doc = doc_of(lay_out([(photo_scene, 4.0, {}), (judged_clip, 4.0, {})], self.FPS), self.FPS)
+        doc["scenes"][0]["semanticMetadata"]["alternatives"] = [{
+            "assetId": "yt:RUNNERUP001@1", "url": "https://www.youtube.com/watch?v=RUNNERUP001&t=12",
+            "title": "Lake Powell houseboats", "score": 0.82, "quality": 0.7, "description": "boats on mud",
+            "source": "youtube", "moment": {"start": 12.0}, "seconds": 6.0,
+            "media": {"type": "video", "url": BASE + "/projects/x/choices/a.mp4", "source": "youtube"}}]
+        with mock.patch.object(config, "HOOK_SECONDS", 10.0):
+            out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc),
+                                           check=False))
+        self.assertEqual(out["found"]["runnerUps"], 1)
+        self.assertEqual(self.searches, [])
+        new = self.written[-1][1]["scene_data"]
+        self.assertEqual(new["scenes"][0]["media"]["url"], BASE + "/projects/x/choices/a.mp4")
+        self.assertEqual(new["scenes"][0]["semanticMetadata"]["relevanceScore"], 0.82)
+
+    def test_a_data_look_nothing_replaces_stays_and_cards_over_new_shots_go(self):
+        doc = doc_of(lay_out([(filler_scene, 4.0, {}), (graphic_filler, 4.0, {}), (judged_clip, 4.0, {})], self.FPS),
+                     self.FPS)
+        doc["overlays"] = [{"type": "highlight", "text": "worst year", "startFrame": 0,
+                            "durationInFrames": doc["scenes"][0]["durationInFrames"]}]
+
+        def found(context, vt, n, seconds, used):
+            return None if context.startswith("Forty feet") else self.fresh("footage", n, seconds, used)
+        self.found_for = found
+        with mock.patch.object(gapfill, "_from_moment", return_value=None), \
+                mock.patch.object(gapfill, "_from_still", return_value=None):
+            out = handler.handler(self.job(timeline=doc, apply=True, expect_fingerprint=recut.fingerprint(doc),
+                                           check=False))
+        self.assertTrue(out["written"], out)
+        new = self.written[-1][1]["scene_data"]
+        self.assertEqual(new["scenes"][1]["animation"], doc["scenes"][1]["animation"])   # the data look stays
+        self.assertEqual(new["scenes"][0]["media"]["type"], "video")
+        self.assertFalse(any(ov.get("type") == "highlight" for ov in new.get("overlays") or []))  # frame 0 too
 
 
 if __name__ == "__main__":
