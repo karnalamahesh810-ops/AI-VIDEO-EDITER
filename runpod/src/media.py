@@ -3089,14 +3089,19 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     scouts = ranked[:n_scouts]
     tried.update(c.id for c in scouts)
     by_id = {c.id: c for c in scouts}
+    # A wider rung's storyboard moment is picked for what the rung names (rung_judging), as its judge
+    # reads it: picked against the line's exact moment, a rung's candidates scored under the floor and
+    # were dropped before any download.
+    seek = rung_judging(intent_text, _SCENE_INTENT.get(), _RUNG.get())[0] if _RUNG.get() and intent_text \
+        else intent_text
     # Scouting runs in pool threads, which do not see this scene's budget
     # counter, so the fresh (unmemoised) scouts are counted here first.
-    if config.MOMENT_SELECTION and intent_text and vision.enabled():
+    if config.MOMENT_SELECTION and seek and vision.enabled():
         with _SCENE_LOCK:
-            fresh = sum(1 for c in scouts if _scout_memo_key(c.id, grab, intent_text) not in _SCOUT_MEMO)
+            fresh = sum(1 for c in scouts if _scout_memo_key(c.id, grab, seek) not in _SCOUT_MEMO)
         for _ in range(fresh):
             _count_judged()
-    plan = _plan_grabs([c.row() for c in scouts], grab, start_at, intent_text, context)
+    plan = _plan_grabs([c.row() for c in scouts], grab, start_at, seek, context)
     story_kind = _STORY_KIND["kind"]
     passed: List[MediaAsset] = []
     soft: Optional[dict] = None       # the best candidate under the floor, if any
@@ -3120,7 +3125,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         if not fine_done and _vision_budget_left() >= 2:
             fine_done = True
             _count_judged()
-            moment = _refine_moment(row, moment, grab, intent_text, context)
+            moment = _refine_moment(row, moment, grab, seek, context)
         if moment and moment.get("fine"):
             point = moment["start"]
         if ledger.moment_used(c.id, point, point + grab):
@@ -4066,9 +4071,16 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                 stages = ["pictures", "footage"] + ([] if config.PREFER_GENERATED_IMAGES else ["generated"])
             plan = [(stage, attempt, None) for stage in stages
                     for attempt in (attempts[:1] if stage == "generated" else attempts)]
+        # A clip-first line keeps a near-miss clip (under the judge's floor: "Best available") only until
+        # its clip stages are done - a passing clip on a later wording or rung wins - and then before any
+        # picture, as a near-miss always has.
+        soft: Optional[MediaAsset] = None
         for stage, attempt, rung in plan:
             if _ytdlp.stopped():
                 break
+            if soft is not None and stage not in ("youtube", "other_footage"):
+                _count_photo(soft)
+                return soft
             rung_token = _RUNG.set(rung) if rung else None
             try:
                 got = _source_one(attempt, seconds, work_dir, visual_type=visual_type,
@@ -4088,13 +4100,31 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                     except OSError:
                         pass
                 got = None
+            if got and rung and got.kind == "video":
+                # Found on a wider rung: it shows the line's subject, not necessarily its moment.
+                got.score_parts = dict(got.score_parts or {}, rung=str(rung.get("label") or "")[:80])
+            if got and clip_first and stage in ("youtube", "other_footage") and _near_miss(got):
+                keep, drop = (got, soft) if soft is None or (got.relevance_score or 0) > (soft.relevance_score or 0) \
+                    else (soft, got)
+                if drop is not None and drop.local_path and drop.local_path != keep.local_path \
+                        and os.path.exists(drop.local_path):
+                    try:
+                        os.remove(drop.local_path)
+                    except OSError:
+                        pass
+                soft = keep
+                continue
             if got:
-                if rung and got.kind == "video":
-                    # Found on a wider rung: it shows the line's subject, not necessarily its moment.
-                    got.score_parts = dict(got.score_parts or {}, rung=str(rung.get("label") or "")[:80])
+                if soft is not None and soft.local_path and os.path.exists(soft.local_path):
+                    try:
+                        os.remove(soft.local_path)
+                    except OSError:
+                        pass
                 _count_photo(got)
                 return got
-        return None
+        if soft is not None:
+            _count_photo(soft)
+        return soft
     finally:
         _CLIP_FIRST.reset(first_token)
         if providers_token is not None:
@@ -5495,7 +5525,9 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                     return got
             return None
 
-        taken = {r.identity for r in results if r is not None}
+        # What the judged search below never takes: every asset on the timeline and every YouTube video it
+        # shows ("yt:<id>": youtube_clip skips a candidate by its video, never by one moment's identity).
+        taken = {r.identity for r in results if r is not None} | {f"yt:{v}" for v in used}
 
         def judged(job: dict, q: str) -> Optional[MediaAsset]:
             """

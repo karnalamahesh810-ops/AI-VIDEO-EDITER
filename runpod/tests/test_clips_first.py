@@ -91,6 +91,24 @@ class TheOrder(unittest.TestCase):
         self.assertEqual(got.score_parts.get("rung"), "Barack Obama")
         self.assertNotIn("pictures", [s for s, _q, _r in calls])
 
+    def test_a_near_miss_waits_for_the_rungs_and_still_comes_before_any_picture(self):
+        near = clip("NEARMISS000", relevance_score=0.6, review_required=True,
+                    review_reason="Best available: the vision check scored it 0.60, under the 0.70 floor")
+        good = clip("PASSINGCLIP", relevance_score=0.8)
+
+        def found(stage, q):
+            if stage == "youtube" and q.startswith("Barack Obama Michelle"):
+                return near
+            if q == "Barack Obama footage":
+                return good
+            return picture() if stage == "pictures" else None
+        got, calls = self._run(found=found)
+        self.assertIs(got, good)                                   # the rung's passing clip wins
+        got, calls = self._run(found=lambda stage, q: near if q.startswith("Barack Obama Michelle")
+                               else (picture() if stage == "pictures" else None))
+        self.assertIs(got, near)                                   # no passing clip: the near-miss, no picture
+        self.assertNotIn("pictures", [s for s, _q, _r in calls])
+
     def test_the_first_seconds_of_the_opening_take_no_picture_later_hook_lines_may(self):
         _got, calls = self._run(hook=True, start=3.0)
         self.assertNotIn("pictures", [s for s, _q, _r in calls])
@@ -173,6 +191,37 @@ class Rungs(unittest.TestCase):
         self.assertFalse(seen["event"])
         self.assertIn("Clear real footage of Kerrville", seen["intent"])
         self.assertEqual(seen["scene"]["specificity"], "generic")
+
+    def test_a_rungs_storyboard_moment_is_picked_for_what_the_rung_names(self):
+        rows = [{"id": "AAAAAAAAAAA", "duration": 300.0, "aspect": 1.78, "title": "Barack Obama speech 4k",
+                 "channel": "news"}]
+        seen = []
+
+        def plan(eligible, grab, start_at, intent, context):
+            seen.append(intent)
+            return []
+        toks = [(media._SCENE_TRIED, media._SCENE_TRIED.set(set())), (media._SCENE_JUDGED, media._SCENE_JUDGED.set([0])),
+                (media._SCENE_INTENT, media._SCENE_INTENT.set({"entities": ["Barack Obama"], "specificity": "event"}))]
+        try:
+            with mock.patch.object(media, "_yt_candidates_cached", return_value=rows), \
+                    mock.patch.object(media, "_plan_grabs", side_effect=plan), \
+                    mock.patch.object(media.vision, "enabled", return_value=True), \
+                    mock.patch.multiple(config, MOMENT_SELECTION=True, CLIP_PREQUALIFY=0):
+                media.reset_cache()
+                media._youtube_pool("q", "/tmp/x", 4.0, 30.0, False, 0, set(), "the groom at his 1992 wedding", "",
+                                    "Barack Obama", [("q", "plain", False)], expand=False)
+                media._SCENE_TRIED.set(set())
+                tok = media._RUNG.set({"label": "Barack Obama"})
+                try:
+                    media._youtube_pool("q", "/tmp/x", 4.0, 30.0, False, 0, set(), "the groom at his 1992 wedding",
+                                        "", "Barack Obama", [("q", "plain", False)], expand=False)
+                finally:
+                    media._RUNG.reset(tok)
+        finally:
+            for var, tok in reversed(toks):
+                var.reset(tok)
+        self.assertEqual(seen[0], "the groom at his 1992 wedding")
+        self.assertIn("Clear real footage of Barack Obama", seen[1])
 
     def test_a_rung_search_is_its_own_not_the_subjects_cached_list(self):
         asked = []
