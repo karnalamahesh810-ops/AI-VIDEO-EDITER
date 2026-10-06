@@ -83982,6 +83982,2218 @@
    ]
   },
   {
+   "id": "KT_QUOTE",
+   "name": "Pull Quote",
+   "category": "QUOTES",
+   "component": "motion",
+   "description": "Words in quotation marks with their speaker named as said: a serif quote mark in the accent, the quote in clean white grotesk coming into focus word by word (capitals 3.9 % of the frame height, three lines at most), its key phrase underlined in the accent as it lands, then the speaker - an accent bar, the name in tracked capitals, the role under it. Low left on the calm side; a slim blurred panel over busy footage.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-quote",
+    "sfx": {
+     "name": "swoosh-text",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "leastSeconds": 4.6,
+    "sample": {
+     "text": "We have never seen the lake this low, not in our lifetimes.",
+     "highlight": "never seen the lake this low",
+     "label": "Maria Ortiz",
+     "subtitle": "Park ranger, Glen Canyon"
+    },
+    "sounds": [
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 4,
+      "gain_db": -12
+     },
+     {
+      "name": "marker-underline",
+      "alt": [
+       "marker-draw",
+       "marker"
+      ],
+      "at": 30,
+      "gain_db": -9
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "pull-quote"
+   ],
+   "tags": [
+    "lib",
+    "ktp"
+   ]
+  },
+  {
+   "id": "KT_TERM",
+   "name": "Term Card",
+   "category": "TEXT",
+   "component": "motion",
+   "description": "A word the narration defines ('what engineers call dead pool - the level where ...'): a frosted glass card low left with an accent edge drawing down its side, a small kicker, the term rising letter by letter in bold white grotesk, a hairline, and its meaning as said in one or two lines coming into focus.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-term",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 24,
+    "types": false,
+    "leastSeconds": 4.5,
+    "sample": {
+     "text": "Dead Pool",
+     "subtitle": "The level at which water can no longer flow downstream past the dam.",
+     "label": "Definition"
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 2,
+      "gain_db": -12
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 24,
+      "gain_db": -8
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "term-definition"
+   ],
+   "tags": [
+    "lib",
+    "ktp"
+   ]
+  },
+  {
+   "id": "KT_LEVEL",
+   "name": "Level Gauge",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A reservoir's, a lake's or storage's share ('27 percent full'): a glass gauge low left (30 % of the frame height) whose water pours in to the level with its surface moving gently, an accent marker riding up its side, beside it the kicker, the share counting with the water and one line of context; FULL at its top.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-level",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 48,
+    "types": false,
+    "leastSeconds": 4.5,
+    "sample": {
+     "value": 22,
+     "suffix": "%",
+     "label": "Lake Powell",
+     "subtitle": "full - the lowest since it first filled"
+    },
+    "sounds": [
+     {
+      "name": "count-tick",
+      "alt": [
+       "count-roll",
+       "ui-tick"
+      ],
+      "at": 10,
+      "align": "start",
+      "until": 46,
+      "gain_db": -9,
+      "when": "value"
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 48,
+      "gain_db": -6
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "percent-full",
+    "level"
+   ],
+   "tags": [
+    "lib",
+    "ktp"
+   ]
+  },
+  {
+   "id": "KT_TREND",
+   "name": "Trend Line",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "Three or more years with their figures as a frosted card on the calm side of the footage (36 % of the width): the title and its unit, faint gridlines, the line drawing in left to right with its area filling and a dot riding its head, the value counting in a pill above it; once drawn the peak and the low are marked with triangles, their value and year, and the last point is ringed.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-trend",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 58,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "text": "Lake Powell elevation",
+     "subtitle": "Feet above sea level",
+     "suffix": "FT",
+     "items": [
+      {
+       "label": "1980",
+       "value": 3700
+      },
+      {
+       "label": "1999",
+       "value": 3690
+      },
+      {
+       "label": "2005",
+       "value": 3555
+      },
+      {
+       "label": "2011",
+       "value": 3610
+      },
+      {
+       "label": "2022",
+       "value": 3522
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 2,
+      "gain_db": -12
+     },
+     {
+      "name": "marker-draw",
+      "alt": [
+       "pen-scribble",
+       "marker"
+      ],
+      "at": 12,
+      "gain_db": -16
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 60,
+      "gain_db": -8
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "series"
+   ],
+   "tags": [
+    "lib",
+    "ktp"
+   ]
+  },
+  {
+   "id": "KT_MILESTONES",
+   "name": "Milestones",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "Three to five years said one after another as a frosted strip low in the frame: every year faint from the start, each point lighting when its year is said (items carry the second it is said at) - its dot filling with the accent and ringing once, its year turning white, its event coming into focus under it - the accent line running on from the point before; a soft tick on each.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-milestones",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 14,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "text": "How the lake emptied",
+     "items": [
+      {
+       "label": "1963",
+       "text": "Glen Canyon Dam closes"
+      },
+      {
+       "label": "1980",
+       "text": "Lake Powell fills",
+       "at": 1.8
+      },
+      {
+       "label": "2002",
+       "text": "The drought begins",
+       "at": 3.4
+      },
+      {
+       "label": "2022",
+       "text": "A record low",
+       "at": 5.0
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick",
+       "letter-tick"
+      ],
+      "at": 14,
+      "every": 24,
+      "count": "items",
+      "gain_db": -9
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "milestones"
+   ],
+   "tags": [
+    "lib",
+    "ktp"
+   ]
+  },
+  {
+   "id": "KT_POINTER",
+   "name": "Arrow Callout",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "On the playing footage, at the thing the line points at where vision found it (overlay.anchor; a still's own subject box): a ring in the accent draws round it and rings out once, a frosted label opens on the calm side (clear of the frame's edge, faces, logos and lettering) and a white arrow draws from it to the ring, its head a crisp triangle. Without a place to point at it draws nothing.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-pointer",
+    "sfx": {
+     "name": "marker-draw",
+     "volume": 0.3
+    },
+    "sfxAt": 32,
+    "types": false,
+    "leastSeconds": 3.0,
+    "sample": {
+     "text": "Power plant",
+     "label": "Hoover Dam",
+     "anchor": {
+      "x": 0.62,
+      "y": 0.58,
+      "w": 0.1,
+      "h": 0.2
+     }
+    },
+    "sounds": [
+     {
+      "name": "marker-draw",
+      "alt": [
+       "pen-scribble",
+       "marker"
+      ],
+      "at": 14,
+      "gain_db": -12
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 30,
+      "gain_db": -10
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "pointer"
+   ],
+   "tags": [
+    "lib",
+    "ktp"
+   ]
+  },
+  {
+   "id": "KT_CHAPTER",
+   "name": "Chapter Card",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "A section opens, a short designed full-frame moment: the footage softens and dims under it, one soft warm-white light leak crosses the frame (never a gold wash), an accent rule draws, the chapter's number rolls up in the accent and the title rises line by line from behind a mask low left (capitals 5 % of the height, two lines at most), a line under it; all of it slides back behind its mask at the end.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-chapter",
+    "sfx": {
+     "name": "whoosh-cinematic",
+     "volume": 0.3
+    },
+    "sfxAt": 12,
+    "types": false,
+    "leastSeconds": 3.2,
+    "sample": {
+     "text": "The River Runs Dry",
+     "label": "Chapter",
+     "value": 2,
+     "subtitle": "A century of promises comes due"
+    },
+    "sounds": [
+     {
+      "name": "whoosh-cinematic",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "align": "start",
+      "gain_db": -12
+     },
+     {
+      "name": "light-shimmer",
+      "alt": [
+       "riser-soft"
+      ],
+      "at": 6,
+      "gain_db": -16
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "chapter"
+   ],
+   "tags": [
+    "lib",
+    "ktp"
+   ]
+  },
+  {
+   "id": "KT_EVIDENCE",
+   "name": "Evidence Card",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "A photo of the place or thing the line names, as a print riding on the footage: it slides in from the side and turns toward the viewer as it settles (a 3D tilt, a long soft shadow), one light sweep crosses its gloss, and its caption comes up under it - a kicker in the accent, the words in bold grotesk, the source in small capitals. On the side clear of faces and lettering.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-evidence",
+    "sfx": {
+     "name": "paper-slide-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 26,
+    "types": false,
+    "leastSeconds": 4.5,
+    "sample": {
+     "text": "The Colorado River basin, as the survey drew it",
+     "label": "Archive map",
+     "subtitle": "U.S. Geological Survey"
+    },
+    "sounds": [
+     {
+      "name": "paper-slide-v2",
+      "alt": [
+       "paper-slide",
+       "swipe"
+      ],
+      "at": 2,
+      "gain_db": -9
+     },
+     {
+      "name": "frame-drop",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 26,
+      "gain_db": -12
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "subject-photo"
+   ],
+   "tags": [
+    "lib",
+    "ktp",
+    "still"
+   ]
+  },
+  {
+   "id": "KT_THEN_NOW",
+   "name": "Then / Now",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "Two pictures of one place, full frame: the earlier one first, its glass chip top left (THEN and its year), a divider sweeps in from the right and uncovers the later one, its chip top right (NOW), the divider's handle - a frosted disc with two triangles - easing a little left and back once; both pictures push in slowly.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-then-now",
+    "sfx": {
+     "name": "shutter-slide",
+     "volume": 0.3
+    },
+    "sfxAt": 46,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "text": "Lake Powell",
+     "items": [
+      {
+       "label": "1983"
+      },
+      {
+       "label": "2022"
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "shutter-slide",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 16,
+      "gain_db": -10
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 46,
+      "gain_db": -10
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "photo-then-now"
+   ],
+   "tags": [
+    "lib",
+    "ktp",
+    "own-backdrop",
+    "stills"
+   ]
+  },
+  {
+   "id": "KT_TWO_PLACES",
+   "name": "Two Places",
+   "category": "IMAGES",
+   "component": "motion",
+   "description": "Two places named together, full frame on a diagonal split: each picture slides in from its side, an accent divider draws down the split with a soft glow, each place's name rises on glass at its lower corner (its region in the accent) and the miles between them sit on the divider when both places are known.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-two-places",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 34,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "locations": [
+      {
+       "label": "Las Vegas, Nevada, United States",
+       "lat": 36.17,
+       "lon": -115.14
+      },
+      {
+       "label": "Phoenix, Arizona, United States",
+       "lat": 33.448,
+       "lon": -112.074
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "align": "start",
+      "gain_db": -10
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 34,
+      "gain_db": -10
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "two-places"
+   ],
+   "tags": [
+    "lib",
+    "ktp",
+    "own-backdrop",
+    "stills"
+   ]
+  },
+  {
+   "id": "KT_LOCATOR",
+   "name": "Locator Map",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "A place on a dark map, full frame: the camera starts on the country with a dot already on the place and eases in to a regional view (zoom and pan as one move), the state or country it is in lifting out with an accent edge; on the landing a ring draws round the place and two rings ping out, a leader draws to its glass tag (the kicker, the name, the region, the coordinates) and a scale bar measures the view.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-locator",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 54,
+    "types": false,
+    "leastSeconds": 6.0,
+    "sample": {
+     "locations": [
+      {
+       "label": "Lake Mead, Nevada, United States",
+       "lat": 36.145,
+       "lon": -114.414
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "map-whoosh",
+       "whoosh-soft"
+      ],
+      "at": 6,
+      "align": "start",
+      "gain_db": -9
+     },
+     {
+      "name": "pin-drop",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "at": 50,
+      "gain_db": -9
+     },
+     {
+      "name": "radar-ping",
+      "alt": [
+       "ui-tick"
+      ],
+      "at": 56,
+      "gain_db": -15
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place"
+   ],
+   "tags": [
+    "lib",
+    "ktp",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "KT_PLACE",
+   "name": "Place Tag",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "A place named on footage of it, as a frosted card low left: a small map of the state (or the country) it is in - the neighbours faint, its outline drawing on, the place's dot dropping in and rippling - beside the kicker, the name rising letter by letter and the region. Above any lettering across the bottom of the picture.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-place",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 26,
+    "types": false,
+    "leastSeconds": 4.0,
+    "sample": {
+     "text": "Las Vegas",
+     "subtitle": "Nevada",
+     "label": "The Strip",
+     "locations": [
+      {
+       "label": "Las Vegas, Nevada, United States",
+       "lat": 36.17,
+       "lon": -115.14
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 2,
+      "gain_db": -12
+     },
+     {
+      "name": "pin-drop",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "at": 26,
+      "gain_db": -10
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "place-tag"
+   ],
+   "tags": [
+    "lib",
+    "ktp"
+   ]
+  },
+  {
    "id": "LIB_NX_STAT_CONTEXT",
    "name": "Figure in Context",
    "category": "NUMBERS",

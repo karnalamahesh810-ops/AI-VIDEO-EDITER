@@ -54,9 +54,16 @@ KT_DATE_LINE = "KT_DATE_LINE"
 KT_DATE_BADGE = "KT_DATE_BADGE"
 KT_TIME_CLOCK = "KT_TIME_CLOCK"
 DATE_LOOKS = (KT_DATE, KT_DATE_CARD, KT_DATE_LINE, KT_DATE_BADGE, KT_YEAR, KT_TIME, KT_TIME_CLOCK)
+# The look pack's two data looks (remotion LibKtPack.tsx, 2026-10-07; src/lookpack.py): the level gauge for a
+# share of a reservoir, a lake, storage ("27 percent full"), and the milestones strip for three to five years said
+# one after another, each point lighting on its year.
+KT_LEVEL = "KT_LEVEL"
+KT_MILESTONES = "KT_MILESTONES"
 KT_IDS = (KT_NUMBER, KT_PERCENT, KT_MULTIPLIER, KT_DATE, KT_YEAR, KT_TIME, KT_CHIP, KT_COMPARE, KT_PROGRESS,
-          KT_KEYWORD, KT_STATEMENT, KT_LOWER_THIRD, KT_DATE_CARD, KT_DATE_LINE, KT_DATE_BADGE, KT_TIME_CLOCK)
-KT_DATA = {KT_NUMBER, KT_PERCENT, KT_MULTIPLIER, KT_CHIP, KT_COMPARE, KT_PROGRESS} | set(DATE_LOOKS)
+          KT_KEYWORD, KT_STATEMENT, KT_LOWER_THIRD, KT_DATE_CARD, KT_DATE_LINE, KT_DATE_BADGE, KT_TIME_CLOCK,
+          KT_LEVEL, KT_MILESTONES)
+KT_DATA = {KT_NUMBER, KT_PERCENT, KT_MULTIPLIER, KT_CHIP, KT_COMPARE, KT_PROGRESS, KT_LEVEL, KT_MILESTONES} \
+    | set(DATE_LOOKS)
 # The narration's kinds of moment the date family shows (the rest are figures).
 DATE_KINDS = frozenset({"date", "year", "time", "daypart"})
 
@@ -121,9 +128,10 @@ LANDING = {"number": 0.6, "ring": 0.8, "compare": 0.9, "date": 0.3, "chart": 0.5
 # The date family lands later than a plain date (LibKtDates: the stamp's bar runs to the day, the calendar riffles,
 # the counter's wheels roll): seconds from the look's first frame to its landing, entry included.
 DATE_LAND = {KT_DATE: 1.35, KT_DATE_CARD: 1.25, KT_DATE_LINE: 1.25, KT_DATE_BADGE: 1.35, KT_YEAR: 1.35,
-             KT_TIME: 1.35, KT_TIME_CLOCK: 1.35}
-# the timeline's dot slides on to a year said later in its look, the counter's wheels roll on to it, in this long
-DATE_LEG = {KT_DATE_LINE: 0.9, KT_YEAR: 1.2}
+             KT_TIME: 1.35, KT_TIME_CLOCK: 1.35, KT_MILESTONES: 1.0}
+# the timeline's dot slides on to a year said later in its look, the counter's wheels roll on to it, a milestone
+# lights on its year, in this long
+DATE_LEG = {KT_DATE_LINE: 0.9, KT_YEAR: 1.2, KT_MILESTONES: 0.8}
 # What a look is planned for when the lane has room (seconds, entry and exit included). A date: 3.5-5 s.
 WANT = {"map": 7.0, "document": 6.5, "chart": 6.5, "number": 4.5, "ring": 5.0, "compare": 6.5, "date": 5.0,
         "image": 5.0, "person": 5.0, "lower-third": 4.5, "text": 4.0, "annotation": 4.0, "other": 3.6}
@@ -139,7 +147,7 @@ _FAMILY_BY_CATEGORY = {"MAPS": "map", "DOCUMENTS": "document", "CHARTS": "chart"
                        "TEXT": "text", "QUOTES": "text", "CALLOUTS": "annotation", "LOWER_THIRDS": "lower-third"}
 _KT_FAMILY = {KT_NUMBER: "number", KT_CHIP: "number", KT_PERCENT: "ring", KT_PROGRESS: "ring",
               KT_MULTIPLIER: "ring", KT_COMPARE: "compare", KT_KEYWORD: "text", KT_STATEMENT: "text",
-              KT_LOWER_THIRD: "lower-third", **{t: "date" for t in DATE_LOOKS}}
+              KT_LOWER_THIRD: "lower-third", KT_LEVEL: "ring", KT_MILESTONES: "date", **{t: "date" for t in DATE_LOOKS}}
 
 
 def family_of(ov: dict) -> str:
@@ -776,8 +784,10 @@ def look_for(m: dict, nar: Narration, hero: bool) -> dict:
     hedge = _hedge_label(m.get("hedge", ""))
     word = str(m.get("word") or "")
     if k == "percent":
-        # "27 percent", and a half said in words ("more than half of" -> 50 %, "cut in half")
-        return {"template": KT_PERCENT, "value": _fmt_value(m["value"]), "suffix": "%",
+        # "27 percent", and a half said in words ("more than half of" -> 50 %, "cut in half"); a reservoir's,
+        # a lake's or storage's share ("Lake Mead is 27 percent full") fills the level gauge
+        level = 0 < float(m["value"]) <= 100 and bool(_LEVEL_WORDS.search(m.get("sentence") or ""))
+        return {"template": KT_LEVEL if level else KT_PERCENT, "value": _fmt_value(m["value"]), "suffix": "%",
                 "label": label or hedge or word, "subtitle": ctx}
     if k == "share":
         # "two-thirds", "a quarter of": the fraction in the ring ("2/3")
@@ -816,9 +826,12 @@ def look_for(m: dict, nar: Narration, hero: bool) -> dict:
 
 
 # The figures rotate between their two styles (so one style never shows twice in a row); dates take the date
-# family's rotation (_Styler).
+# family's rotation (_Styler). The level gauge gives way to the ring after itself (and within LEVEL_GAP).
 ALTERNATE = {KT_NUMBER: KT_CHIP, KT_CHIP: KT_NUMBER, KT_PERCENT: KT_PROGRESS, KT_PROGRESS: KT_PERCENT,
-             KT_MULTIPLIER: KT_COMPARE}
+             KT_MULTIPLIER: KT_COMPARE, KT_LEVEL: KT_PERCENT, KT_MILESTONES: KT_DATE_LINE}
+# A share is a reservoir's level when its sentence says so: full, capacity, storage, a lake, a reservoir.
+_LEVEL_WORDS = re.compile(r"\b(?:full|capacity|storage|reservoirs?|lakes?|water levels?|dead pool|power pool)\b", re.I)
+LEVEL_GAP = 60.0            # the gauge at most once a minute: another share this soon takes the ring
 
 
 def _alternate(props: dict) -> Optional[dict]:
@@ -834,6 +847,16 @@ def _alternate(props: dict) -> Optional[dict]:
     if t in (KT_NUMBER, KT_CHIP):
         p["template"] = alt
         return p
+    if t == KT_LEVEL:
+        p["template"] = KT_PERCENT
+        return p
+    if t == KT_MILESTONES:
+        # (a brand kit without the strip: the timeline marker with the last three years)
+        years = [int(it["label"]) for it in props.get("items") or [] if str(it.get("label") or "").isdigit()][-3:]
+        if not years:
+            return None
+        return {"template": KT_DATE_LINE, "text": "", "value": years[-1], "label": props.get("label") or "",
+                "items": [{"label": str(y), "value": y} for y in years]}
     if t == KT_PERCENT:
         if not props.get("total"):
             p.update(template=KT_PROGRESS, total=100)
@@ -1119,6 +1142,72 @@ def _compare_groups(ms: List[dict], nar: Narration) -> List[List[dict]]:
     return groups
 
 
+MILE_GAP = 7.0             # milestones: each year said within this of the one before ...
+MILE_SPAN = 16.0            # ... the run within this, first year to last ...
+MILE_MIN, MILE_MAX = 3, 5   # ... three to five of them, the years rising
+_EVENT_LEAD = re.compile(r"^[\s,;:\-–—]*(?:and\s+|then\s+|when\s+|as\s+)?", re.I)
+_EVENT_TAIL = re.compile(r"\s+(?:in|by|on|until|since|of|from|around|during|after|before|at)$", re.I)
+_EVENT_SKIP = re.compile(r"^(?:in|by|on|until|since|from|around|during|after|before|at|and|but|so|then)\s+", re.I)
+
+
+def _event_words(nar: "Narration", m: dict, limit: int = 26) -> str:
+    """What happened in a year as the narration says it, short: the clause after the year ("In 1963, Glen Canyon
+    Dam closed" -> "Glen Canyon Dam closed"), else the one before it ("The lake filled in 1980" -> "The lake
+    filled"); '' when neither reads as a short event."""
+    text = nar.text
+    after = _EVENT_LEAD.sub("", text[m["b"]:m["s1"]])
+    after = re.split(r"[.;:!?,]|\s[-–—]\s", after)[0]
+    words = after.split()
+    out = ""
+    for w in words[:6]:
+        cand = (out + " " + w).strip()
+        if len(cand) > limit:
+            break
+        out = cand
+    out = _clean(out)
+    while out and out.split()[-1].lower() in ("the", "a", "an", "of", "to", "its", "their", "and", "in", "on", "for"):
+        out = " ".join(out.split()[:-1])
+    if len(out.split()) >= 2:
+        return out[:1].upper() + out[1:]
+    before = re.split(r"[.;:!?,]|\s[-–—]\s", text[m["s0"]:m["a"]])[-1]
+    before = _EVENT_SKIP.sub("", _EVENT_TAIL.sub("", before.strip()))
+    bw = before.split()
+    if 2 <= len(bw) <= 5 and len(before) <= limit:
+        return before[:1].upper() + before[1:]
+    return ""
+
+
+def _milestone_runs(ms: List[dict], nar: "Narration") -> List[List[dict]]:
+    """Runs of MILE_MIN-MILE_MAX years (or dates with a year) said one after another, each within MILE_GAP of the
+    one before and all within MILE_SPAN, the years rising, each with its own event words."""
+    dated = [m for m in ms if (m["kind"] == "year" and not m.get("to")) or (m["kind"] == "date" and m.get("year"))]
+    runs: List[List[dict]] = []
+    i = 0
+    while i < len(dated):
+        run = [dated[i]]
+        j = i + 1
+        while j < len(dated) and len(run) < MILE_MAX:
+            n = dated[j]
+            if n["at"] - run[-1]["at"] > MILE_GAP or n["at"] - run[0]["at"] > MILE_SPAN \
+                    or _year_of(n) <= _year_of(run[-1]):
+                break
+            run.append(n)
+            j += 1
+        events = [_event_words(nar, m) for m in run]
+        if len(run) >= MILE_MIN and sum(1 for e in events if e) >= len(run) - 1:
+            for m, e in zip(run, events):
+                m["_event"] = e
+            runs.append(run)
+            i = j
+        else:
+            i += 1
+    return runs
+
+
+def _year_of(m: dict) -> int:
+    return int(m["value"]) if m["kind"] == "year" else int(m.get("year") or 0)
+
+
 def _year_after(m: dict) -> Optional[int]:
     """The year the story is in once this moment is said (its last year), else None."""
     if m.get("points"):
@@ -1144,6 +1233,13 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
     # comparisons first: a run of named values of one unit is one look
     grouped = set()
     looks: List[dict] = []
+    # milestones: three to five years said one after another are one strip, each point lighting on its year
+    for run in _milestone_runs(ms, nar):
+        for m in run:
+            grouped.add(id(m))
+        looks.append({"m": run[0], "run": run, "milestones": True, "score": max(x["score"] for x in run) + 1.0,
+                      "props": {"template": KT_MILESTONES, "text": "",
+                                "items": [{"label": str(_year_of(m)), "text": m.get("_event") or ""} for m in run]}})
     for run in _compare_groups(ms, nar):
         unit = run[0].get("unit") or ""
         items = []
@@ -1168,7 +1264,7 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
     # a date within DATE_MERGE_SECONDS (a timeline that slides on, a kicker) - see _merge
     merged: List[dict] = []
     for lk in looks:
-        if merged:
+        if merged and not lk.get("milestones") and not merged[-1].get("milestones"):
             prev = merged[-1]
             datey = prev["m"]["kind"] in DATE_KINDS or lk["m"]["kind"] in DATE_KINDS
             since = lk["m"]["at"] - (prev.get("last_at", prev["m"]["at"]) if datey else prev["m"]["at"])
@@ -1180,6 +1276,7 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
     seen: Dict[str, List[float]] = {k: [v] for k, v in (shown or {}).items()}
     out: List[dict] = []
     last_fig = ""
+    last_level = -1e9
     uses: Dict[str, int] = {}
     styler = _Styler()
     story_year: Optional[int] = None
@@ -1198,13 +1295,18 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
     for i, lk in enumerate(merged):
         m = lk["m"]
         datey = m["kind"] in DATE_KINDS
-        if m.get("points"):
+        if lk.get("milestones"):
+            key = "mi:" + "|".join(str(_year_of(x)) for x in lk["run"])
+        elif m.get("points"):
             key = "c:" + "|".join(str(pt[0]) for pt in m["points"])
         else:
             key = "c:" + "|".join(_key(x) for x in lk["run"]) if len(lk["run"]) > 1 else _key(m)
         times = seen.get(key, [])
         year_now = _year_after(m)
-        if datey:
+        if lk.get("milestones"):
+            props = dict(lk["props"])
+            story_year = _year_of(lk["run"][-1])
+        elif datey:
             if times and m["at"] - times[-1] < DATE_REPEAT_SECONDS:
                 log.append({"at": round(m["at"], 2), "said": m["said"], "kind": m["kind"], "look": None,
                             "why": f"shown {m['at'] - times[-1]:.0f} s before"})
@@ -1230,6 +1332,11 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
                             "why": f"said again ({len(times)} time(s) shown, last {m['at'] - times[-1]:.0f} s before)"})
                 continue
             props = lk["props"] or look_for(m, nar, hero=lk["score"] >= HERO_SCORE)
+            if props["template"] == KT_LEVEL and (m["at"] - last_level < LEVEL_GAP
+                                                  or not any(uses.get(t) for t in (KT_PERCENT, KT_PROGRESS, KT_LEVEL))):
+                # the video's first share is its ring (the owner's "27 percent" ring), a reservoir's share after it
+                # the gauge - at most once a minute
+                props = dict(props, template=KT_PERCENT)
             n_fig = max(1, sum(v for t, v in uses.items() if t not in DATE_LOOKS))
             if props["template"] == KT_NUMBER and uses.get(KT_NUMBER, 0) / n_fig > 0.4 and lk["score"] < 4.5:
                 props = dict(props, template=KT_CHIP)
@@ -1243,6 +1350,8 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
                 both = f"{lab} · {lk['kicker_date']}" if lab else lk["kicker_date"]
                 props = dict(props, label=both if len(both) <= 30 else (lab or lk["kicker_date"]))
             last_fig = props["template"]
+            if props["template"] == KT_LEVEL:
+                last_level = m["at"]
         seen.setdefault(key, []).append(m["at"])
         tid = props["template"]
         uses[tid] = uses.get(tid, 0) + 1
@@ -1255,11 +1364,18 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
               "_at": m["at"], "_end": end, "_score": round(lk["score"], 2)}
         if m.get("points"):
             ov["_points"] = [(int(pt[0]), float(pt[1])) for pt in m["points"]]
+        if lk.get("milestones"):
+            # each point lights on its year: the second it is said, from the look's start (finish re-times them)
+            ov["_points"] = [(_year_of(x), float(x["at"])) for x in lk["run"]]
+            t0 = lk["run"][0]["at"] - MAX_LEAD_S
+            for it, x in zip(ov["items"][1:], lk["run"][1:]):
+                it["at"] = round(max(0.0, x["at"] - t0), 2)
         if m["kind"] == "daypart":
             ov["_daypart"] = True
         ov = {k: v for k, v in ov.items() if v not in (None,)}
         out.append(ov)
-        log.append({"at": round(m["at"], 2), "said": ov["said"], "kind": "compare" if len(lk["run"]) > 1 else m["kind"],
+        log.append({"at": round(m["at"], 2), "said": ov["said"],
+                    "kind": "milestones" if lk.get("milestones") else "compare" if len(lk["run"]) > 1 else m["kind"],
                     "look": tid, "score": round(lk["score"], 2)})
     return out, log
 

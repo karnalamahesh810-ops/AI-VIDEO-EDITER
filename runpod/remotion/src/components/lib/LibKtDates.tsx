@@ -145,22 +145,22 @@ const maxBlockW = (W: number, H: number) => (W >= H ? BLOCK.maxW : 0.64) * W;
 const minBlockW = (W: number, H: number) => (W >= H ? BLOCK.minW : 0.4) * W;
 
 /** The width a RiseLine draws: each character on its own (no kerning pairs), its own width, tracking after each. */
-const riseWidth = (text: string, font: string, size: number, weight: number, tracking = -0.012) =>
+export const riseWidth = (text: string, font: string, size: number, weight: number, tracking = -0.012) =>
   Array.from(text).reduce((a, ch) => a + widthOf(ch, font, size, weight) + tracking * size, 0);
 
 // ------------------------------------------------------------------ surfaces
 const GLASS_TOP = "rgba(26,29,36,0.74)";
 const GLASS_BOTTOM = "rgba(10,12,16,0.82)";
-const HAIRLINE = "rgba(255,255,255,0.12)";
-const SOFT = "rgba(250,250,247,0.86)";
-const DIM = "rgba(250,250,247,0.62)";
+export const HAIRLINE = "rgba(255,255,255,0.12)";
+export const SOFT = "rgba(250,250,247,0.86)";
+export const DIM = "rgba(250,250,247,0.62)";
 
 /**
  * Frosted glass: the footage under it blurred and darkened, a hairline edge, a
  * soft drop shadow - never an outline or a yellow fill. It opens from its
  * anchored side (p 0..1) and closes back into it on the exit.
  */
-const Glass: React.FC<{ x: number; y: number; w: number; h: number; k: number; p: number; out: number;
+export const Glass: React.FC<{ x: number; y: number; w: number; h: number; k: number; p: number; out: number;
   right?: boolean; radius?: number; edge?: string; edgeP?: number; children?: React.ReactNode }> =
   ({ x, y, w, h, k, p, out, right = false, radius = 16, edge, edgeP = 1, children }) => {
     const open = clamp01(p) * (1 - cubicIn(clamp01(out * 1.25 - 0.2)));
@@ -193,7 +193,7 @@ const Glass: React.FC<{ x: number; y: number; w: number; h: number; k: number; p
   };
 
 /** Small tracked capitals (a kicker, a month on a band, a year at a bar's end), tracking in from wide. */
-const Caps: React.FC<{ text: string; size: number; color: string; at: number; out: number; align?: "left" | "right" | "center";
+export const Caps: React.FC<{ text: string; size: number; color: string; at: number; out: number; align?: "left" | "right" | "center";
   tracking?: number; weight?: number; k: number; shadow?: boolean }> =
   ({ text, size, color, at, out, align = "left", tracking = 0.2, weight = 700, k, shadow = true }) => {
     const f = useCurrentFrame();
@@ -208,7 +208,7 @@ const Caps: React.FC<{ text: string; size: number; color: string; at: number; ou
         textShadow: shadow ? softShadow(k, 0.45) : undefined }}>{text}</div>
     );
   };
-const capsWidth = (text: string, size: number, tracking = 0.2, weight = 700) => widthOf(text.toUpperCase(), SUBLINE, size, weight, tracking);
+export const capsWidth = (text: string, size: number, tracking = 0.2, weight = 700) => widthOf(text.toUpperCase(), SUBLINE, size, weight, tracking);
 
 // ------------------------------------------------------------------ rolling figures
 /**
@@ -269,7 +269,7 @@ export const wheelSteps = (from: string, to: string): number[] => {
 };
 
 /** A line of type whose letters rise out of a mask one after another, its figures rolling in on wheels. */
-const RiseLine: React.FC<{ text: string; size: number; font: string; weight: number; color?: string; at: number; out: number;
+export const RiseLine: React.FC<{ text: string; size: number; font: string; weight: number; color?: string; at: number; out: number;
   tracking?: number; k: number; gap?: number; colorOf?: (i: number) => string | undefined; roll?: boolean }> =
   ({ text, size, font, weight, color = WHITE, at, out, tracking = -0.012, k, gap = 1.1, colorOf, roll = true }) => {
     const f = useCurrentFrame();

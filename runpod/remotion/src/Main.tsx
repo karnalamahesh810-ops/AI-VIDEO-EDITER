@@ -8,7 +8,7 @@ import { CaptionsOn } from "./components/layout";
 import { MotionWrap } from "./components/MotionWrap";
 import { motionClass } from "./components/motion/lookClass";
 import { StageFx, stageWindows } from "./components/motion/stage";
-import { sceneAvoid, sceneBusy } from "./components/motion/avoid";
+import { sceneAvoid, sceneBusy, sceneSubject } from "./components/motion/avoid";
 import { PictureGuard } from "./components/motion/pictureGuard";
 import { resolveOverlay, templateFor } from "./templates";
 import { OVERLAYS, accentFor } from "./overlays";
@@ -161,6 +161,11 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
   if (!ov.avoid) {
     const avoid = sceneAvoid(ov, scenes);
     if (avoid.length) ov = { ...ov, avoid };
+  }
+  // The look pack's arrow callout with no vision anchor points at the still's own subject when reframing found one.
+  if (ov.variant === "kt-pointer" && !ov.anchor) {
+    const sub = sceneSubject(ov, scenes);
+    if (sub) ov = { ...ov, anchor: sub };
   }
   // Words over busy footage (a detailed map, lettering in the picture) sit on a slim blurred panel instead of
   // a soft shade (the kinetic type looks read overlay.backing; the planner's choice wins when it made one).

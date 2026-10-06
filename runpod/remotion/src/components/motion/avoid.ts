@@ -68,6 +68,26 @@ export const sceneAvoid = (ov: Overlay, scenes: Scene[] | undefined): Box[] => {
 };
 
 /**
+ * Where the subject of the still under an overlay is, for a look that points at it (the look pack's arrow
+ * callout, kt-pointer, when the planner gave it no vision anchor): the box smart reframing found in the picture
+ * (media.focus.box: a face, the main object, an action - never a weak saliency guess), as a point and a box on
+ * the frame; null when the scene is a clip (it moves) or nothing was found - a pointer then draws nothing.
+ */
+export const sceneSubject = (ov: Overlay, scenes: Scene[] | undefined, frameAspect = 16 / 9):
+  { x: number; y: number; w: number; h: number } | null => {
+  const at = ov.startFrame;
+  const sc = (scenes || []).find((s) => at >= s.startFrame && at < s.startFrame + s.durationInFrames);
+  const m = sc?.media;
+  const focus = m?.focus;
+  if (!m || m.type !== "image" || !focus || typeof focus !== "object" || !focus.box) return null;
+  if (!["face", "object", "action"].includes(String(focus.kind || ""))) return null;
+  if (num(focus.confidence) && (focus.confidence as number) < 0.5) return null;
+  const b = coverShare(focus.box, num(focus.aspect) ? focus.aspect as number : frameAspect, frameAspect);
+  if (!b || b.w * b.h > 0.5) return null;
+  return { x: b.x + b.w / 2, y: b.y + b.h / 2, w: b.w, h: b.h };
+};
+
+/**
  * Footage too busy for words on a soft shade (the owner, 2026-10-05, on the "ALMOST 15" boxes over a detailed
  * map: "over busy footage like detailed maps, use a soft blurred or dimmed backing panel"): the worker's
  * measure when it has one (media.focus.busy, 0..1 edge density or true), else lettering burned into the
