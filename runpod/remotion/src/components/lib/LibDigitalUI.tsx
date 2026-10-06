@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, INTER, LABEL, MONO } from "../fonts";
 import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { LetterLine, Odometer, Scrim, lines, ramp, useHold, useK } from "../pro/ProGraphics";
@@ -479,7 +480,7 @@ const SocialPost: Look = ({ overlay, accent: acc }) => {
           {pic ? (
             <div style={{ marginTop: 24 * k, height: 330 * k, borderRadius: 22 * k, overflow: "hidden", background: "#23252c",
               clipPath: `inset(0 0 ${(1 - img) * 100}% 0 round ${22 * k}px)` }}>
-              <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover",
+              <SafeImg src={pic} style={{ width: "100%", height: "100%", objectFit: "cover",
                 transform: `scale(${1.14 - 0.08 * img + 0.05 * (frame / dur)})` }} />
             </div>
           ) : null}
@@ -1271,7 +1272,7 @@ const PhoneScreen: Look = ({ overlay, accent: acc }) => {
             {pic ? (
               <div style={{ marginTop: 18 * k, height: 214 * k, borderRadius: 16 * k, overflow: "hidden", background: "#d9dce1",
                 clipPath: `inset(0 ${(1 - ramp(frame, c0 + 12 + hls.length * 3, T(0.6), inOut)) * 100}% 0 0 round ${16 * k}px)` }}>
-                <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover",
+                <SafeImg src={pic} style={{ width: "100%", height: "100%", objectFit: "cover",
                   transform: `scale(${1.08 + 0.06 * (frame / dur)})` }} />
               </div>
             ) : (
@@ -1631,7 +1632,7 @@ const VideoPlayer: Look = ({ overlay, accent: acc }) => {
           <div style={{ position: "relative", marginTop: 8 * k, height: 168 * k, borderRadius: 12 * k, overflow: "hidden",
             border: `${2.5 * k}px solid #fff`, boxShadow: `0 ${16 * k}px ${36 * k}px rgba(0,0,0,.5)`,
             background: `linear-gradient(135deg, ${shade(accent, 0.35)} 0%, #101116 100%)` }}>
-            {pic ? <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "saturate(.9)" }} /> : null}
+            {pic ? <SafeImg src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "saturate(.9)" }} /> : null}
             <div style={{ position: "absolute", left: "50%", bottom: 10 * k, transform: "translateX(-50%)", padding: `${2 * k}px ${12 * k}px`,
               borderRadius: 8 * k, background: "rgba(0,0,0,.72)", fontFamily: MONO, fontWeight: 700, fontSize: 24 * k, color: "#fff" }}>
               {mmss(now)}</div>

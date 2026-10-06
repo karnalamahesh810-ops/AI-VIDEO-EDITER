@@ -126,6 +126,11 @@ STILL_CLIP_SECONDS = 3.0
 STILL_CLIP_SHARE = 0.9
 # Events rows of findings and repairs per job (the summary row always goes).
 EVENT_ROWS = 60
+# The pictures the check itself put on screen are fetched and decoded before the render, all of them
+# within VERIFY_SECONDS, each download waiting at most VERIFY_FETCH_SECONDS for bytes (_verify_pictures).
+VERIFY_SECONDS = 45.0
+VERIFY_FETCH_SECONDS = 20.0
+VERIFY_MIN_SIDE = 32
 
 # The job's context for repairs, set by the handler before do_render:
 #   ladder: repairs may search (gapfill.fill_empty) - off, only the last resort;
@@ -954,6 +959,11 @@ class Gate:
         self.found: Counter = Counter()
         self.fixed: Counter = Counter()
         self.borrowed: set = set()              # ids of scenes no_empty_scenes gave the still beside them
+        # Each scene's own picture when the check began: any other picture on it later is one the check put
+        # there, fetched and decoded before the render (_verify_pictures).
+        self._start_urls: Dict[str, str] = {
+            str(s.get("id") or ""): str((s.get("media") or {}).get("url") or "")
+            for s in doc.get("scenes") or [] if isinstance(s, dict)}
         self.repairs: List[dict] = []
         self.notes: List[str] = []
         self.unresolved: List[dict] = []
@@ -1052,6 +1062,7 @@ class Gate:
         self._local_stills()
         self._look_sources()
         self.no_empty_scenes()
+        self._verify_pictures()
         from . import timeline
         timeline.drop_invalid_overlays(self.doc)
         self.seconds["repairs"] = round(time.time() - t1, 1)
@@ -1838,6 +1849,141 @@ class Gate:
                 self._broke(f"scene {s.get('id')} as text", e)
         return out
 
+    # ---- the pictures this check put on screen -----------------------------------
+    def _verify_pictures(self, seconds: float = VERIFY_SECONDS) -> int:
+        """
+        Every picture this check put on screen - a repair, a sharper shot, a still held over an empty line -
+        is fetched and decoded here, before the render starts, all of them within `seconds`: the render then
+        draws that copy (handler._sanitize_stills takes it from self.fetched and re-encodes it; a split
+        render publishes it to R2 with the other local files, fanout.local_refs), never the far host. One
+        that cannot be had in time or does not decode is let go: its scene holds the shot beside it, else
+        shows its line as text. Each one kept gets the shot before it as media.fallbackStill: what the
+        renderer draws, blurred, should it still not draw the picture (remotion/.../motion/safePicture.tsx).
+        2026-10-07: the Obama video's first chunk failed three renders in a row on a picture load that never
+        ended. Never raises; returns how many pictures were let go.
+        """
+        try:
+            return self._verify(seconds)
+        except Exception as e:  # noqa: BLE001 - the renderer's own fallback still holds
+            self._broke("the check of the new pictures", e)
+            return 0
+
+    def _verify(self, seconds: float) -> int:
+        scenes = self.doc.get("scenes") or []
+        start = getattr(self, "_start_urls", None) or {}
+        borrowed = getattr(self, "borrowed", None)
+        if borrowed is None:
+            borrowed = self.borrowed = set()
+        todo: Dict[str, List[int]] = {}
+        for i, s in enumerate(scenes):
+            m = s.get("media") if isinstance(s, dict) else None
+            if not isinstance(m, dict) or m.get("type") != "image" or not m.get("url"):
+                continue
+            sid = str(s.get("id") or "")
+            url = str(m["url"])
+            if sid not in borrowed and start.get(sid) == url:
+                continue                    # the scene's own picture: read and decoded with the others
+            todo.setdefault(url, []).append(i)
+        if not todo:
+            return 0
+        self._say(f"Checking {_n(len(todo), 'new picture')} before the render")
+        pool = ThreadPoolExecutor(max_workers=min(8, len(todo)))
+        futures = {pool.submit(self._picture_ready, url): url for url in todo}
+        done, late = _wait(futures, timeout=seconds)
+        pool.shutdown(wait=False, cancel_futures=True)
+        why: Dict[str, str] = {}            # a picture let go -> why
+        for f in done:
+            try:
+                said = f.result()
+            except Exception as e:  # noqa: BLE001 - unreadable is let go
+                said = f"it could not be read ({type(e).__name__})"
+            if said:
+                why[futures[f]] = said
+        for f in late:
+            why[futures[f]] = f"it did not arrive within {seconds:.0f} s"
+        cleared: List[Tuple[int, str]] = []
+        for url, idx in todo.items():
+            for i in idx:
+                s = scenes[i]
+                sid = str(s.get("id") or "")
+                if url not in why:
+                    hold = self._still_before(i, url, set(why))
+                    if hold:
+                        s["media"]["fallbackStill"] = hold
+                    continue
+                if sid in borrowed:
+                    borrowed.discard(sid)
+                    self.fixed["held"] = max(0, self.fixed["held"] - 1)     # (counted again if held anew)
+                    (s.get("semanticMetadata") or {}).pop("borrowedFrom", None)
+                s["media"] = {"type": "color", "url": "", "source": "none"}
+                cleared.append((i, url))
+        if not cleared:
+            return 0
+        texts = set(self.no_empty_scenes())
+        for i, url in cleared:
+            s = scenes[i]
+            sid = str(s.get("id") or "")
+            held = str((s.get("media") or {}).get("url") or "")
+            if sid in borrowed and held in why:
+                borrowed.discard(sid)           # the same picture again, from the scene beside it
+                self.fixed["held"] = max(0, self.fixed["held"] - 1)
+                (s.get("semanticMetadata") or {}).pop("borrowedFrom", None)
+                text_scene(self.doc, s)
+                texts.add(sid)
+            if sid in texts:
+                self.fixed["text"] += 1
+                how = "its line as a full-screen text graphic"
+            elif sid in borrowed:
+                how = "held: the picture beside it stays on screen"
+            else:
+                how = "not repaired"
+            self.found["picture"] += 1
+            self.repairs.append({"scene": sid, "at": _clock(int(s.get("startFrame") or 0) / self.fps),
+                                 "problem": "picture", "detail": f"its new picture ({short(url)}) cannot be used: "
+                                                                 f"{why[url]}", "how": how,
+                                 "stage": "before the render"})
+            self._event("repaired", f"scene {i + 1}: its new picture ({short(url)}) cannot be used: {why[url]} "
+                                    f"- {how}", scene=i, data={"problem": "picture", "how": how})
+        print(f"[quality] {_n(len(why), 'new picture')} let go before the render: "
+              + "; ".join(f"{short(u)} ({w})" for u, w in list(why.items())[:5]), flush=True)
+        return len(why)
+
+    def _picture_ready(self, url: str) -> str:
+        """"" when this disk holds a decoded copy of `url` (downloaded now when it is a link), else why not."""
+        path = local_path(url)
+        if path:
+            if not os.path.isfile(path):
+                return "its file is not on this disk"
+        else:
+            with self._lock:
+                path = self.fetched.get(url) or ""
+            if not (path and os.path.isfile(path)):
+                ext = os.path.splitext(urllib.parse.urlparse(url).path)[1][:6] or ".img"
+                dest = os.path.join(self.work, "qa", "pictures",
+                                    hashlib.sha1(url.encode("utf-8")).hexdigest()[:16] + ext)
+                path = _fetch(url, dest, VERIFY_FETCH_SECONDS)
+                if not path:
+                    return "it could not be downloaded"
+        ok, w, h, why = decode_image(path)
+        if not ok:
+            return why or "the picture cannot be decoded"
+        if min(w, h) < VERIFY_MIN_SIDE:
+            return f"the picture is tiny ({w}x{h})"
+        if not local_path(url):
+            with self._lock:
+                self.fetched[url] = path
+        return ""
+
+    def _still_before(self, i: int, url: str, bad: set) -> str:
+        """The shot before scene i (else the one after it), as a still: what its picture falls back to."""
+        scenes = self.doc.get("scenes") or []
+        for k in [i - d for d in range(1, 4)] + [i + d for d in range(1, 4)]:
+            if 0 <= k < len(scenes) and isinstance(scenes[k], dict):
+                still = _still_of(scenes[k].get("media"))
+                if still and still != url and still not in bad:
+                    return still
+        return ""
+
     def _look_sources(self) -> None:
         """
         Every look that shows pictures gets at least one it can load: scenes it
@@ -1943,6 +2089,7 @@ class Gate:
         self._replace(problems, "after the render")
         self._look_sources()
         self.no_empty_scenes()
+        self._verify_pictures()
         from . import timeline
         timeline.drop_invalid_overlays(self.doc)
         self.render["rerendered"] = True
@@ -2085,6 +2232,7 @@ class Gate:
             self._local_stills()
             self._look_sources()
             self.no_empty_scenes()
+            self._verify_pictures()
             from . import timeline
             timeline.drop_invalid_overlays(self.doc)
         except Exception as e:  # noqa: BLE001 - the first render stands
@@ -2305,6 +2453,7 @@ class Gate:
             self.fixed["overlay"] += changed
         self._look_sources()
         self.no_empty_scenes()
+        self._verify_pictures()
         from . import timeline
         timeline.drop_invalid_overlays(self.doc)
         self.render["rerendered"] = True

@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { AbsoluteFill, Easing, Img, interpolate } from "remotion";
+import { AbsoluteFill, Easing, interpolate } from "remotion";
 import type { Box, MediaLiving, Motion, Scene } from "../types";
 import { hashStr } from "./timing";
 import { StillPicture, stillTransform } from "./stillMotion";
 import { aimGlide } from "../components/reframe";
+import { usePicturesLoad } from "../components/motion/pictureProbe";
+import { SafeImg } from "../components/motion/safePicture";
 
 /**
  * Living photos: a still drawn with real depth (src/living.py cuts it into 2-3
@@ -255,7 +257,9 @@ export const overscan = (moves: LayerMove[][], corners: [number, number][][], pi
 /**
  * A still with depth: the scene's move on the stack, each layer moved
  * against it by its depth. `src` is the flat picture: the move is seeded by
- * it exactly as the flat still's, and drawn instead when a layer fails.
+ * it exactly as the flat still's, and drawn instead when a layer fails (every
+ * layer is loaded first, pictureProbe: one that cannot load never reaches the
+ * frame, and never holds up the render).
  */
 export const LivingPicture: React.FC<{
   src: string;
@@ -268,12 +272,16 @@ export const LivingPicture: React.FC<{
   height: number;
   filter?: string;
   subject?: Box;
-}> = ({ src, living, motion, frame, durationInFrames, fps, width, height, filter, subject }) => {
+  /** Drawn blurred instead when even the flat picture cannot be drawn (the shot before it). */
+  fallbackStill?: string | string[];
+}> = ({ src, living, motion, frame, durationInFrames, fps, width, height, filter, subject, fallbackStill }) => {
   const [failed, setFailed] = useState(false);
-  if (failed) {
+  const layersLoad = usePicturesLoad(living.layers.map((l) => l.url));
+  if (failed || layersLoad === false) {
     return <StillPicture src={src} motion={motion} frame={frame} durationInFrames={durationInFrames} fps={fps}
-      width={width} filter={filter} subject={subject} />;
+      width={width} filter={filter} subject={subject} fallbackStill={fallbackStill} />;
   }
+  if (layersLoad === null) return null;
   const move = livingMotion(motion, src);
   const outer = stillTransform(move, frame, durationInFrames, fps, src, subject);
   const frameAspect = width / Math.max(1, height);
@@ -306,7 +314,7 @@ export const LivingPicture: React.FC<{
           + `scale(${(pad * mv.s).toFixed(5)})`;
         if (!layer.box) {
           return (
-            <Img key={i} src={layer.url} onError={fail} maxRetries={1}
+            <SafeImg key={i} src={layer.url} onFail={fail} fallback={null} maxRetries={1}
               style={{ position: "absolute", width: "100%", height: "100%", objectFit: "cover", transform,
                 transformOrigin: origin }} />
           );
@@ -314,7 +322,7 @@ export const LivingPicture: React.FC<{
         const [x0, y0, x1, y1] = layer.box;
         return (
           <AbsoluteFill key={i} style={{ transform, transformOrigin: origin }}>
-            <Img src={layer.url} onError={fail} maxRetries={1}
+            <SafeImg src={layer.url} onFail={fail} fallback={null} maxRetries={1}
               style={{ position: "absolute", left: `${((cl + x0 * cw) * 100).toFixed(4)}%`,
                 top: `${((ct + y0 * ch) * 100).toFixed(4)}%`, width: `${((x1 - x0) * cw * 100).toFixed(4)}%`,
                 height: `${((y1 - y0) * ch * 100).toFixed(4)}%`, objectFit: "fill" }} />

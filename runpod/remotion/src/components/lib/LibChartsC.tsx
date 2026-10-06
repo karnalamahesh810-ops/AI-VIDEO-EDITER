@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Audio, Easing, Img, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Easing, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, LABEL, MONO } from "../fonts";
 import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { Odometer, Scrim, formatValue, lines, ramp, useHold, useK } from "../pro/ProGraphics";
@@ -1710,7 +1711,7 @@ const NetworkTree: Look = ({ overlay, accent }) => {
                 position: "relative", background: "#0a1020", transform: `scale(${pop})`, transformOrigin: "50% 0",
                 boxShadow: `0 ${14 * k}px ${34 * k}px rgba(0,0,0,.55)` }}>
                 {pic ? (
-                  <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  <SafeImg src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 ) : (
                   <>
                     <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",

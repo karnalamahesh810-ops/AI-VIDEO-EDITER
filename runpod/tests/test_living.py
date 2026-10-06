@@ -617,7 +617,11 @@ class Renderer(unittest.TestCase):
         self.assertIn("resolveLiving(scene)", clip)
         self.assertIn("<LivingPicture", clip)
         tsx = self._src("transitions", "livingPhoto.tsx")
-        self.assertIn("onError={fail}", tsx)
+        # Every layer is loaded first (a load that always settles); one that fails, then or while it draws,
+        # puts the flat still up instead (components/motion/safePicture.tsx).
+        self.assertIn("usePicturesLoad(living.layers.map", tsx)
+        self.assertIn("onFail={fail}", tsx)
+        self.assertNotIn("<Img ", tsx)
         self.assertIn("<StillPicture", tsx)                     # what a failed layer falls back to
         self.assertIn("stillTransform(move", tsx)               # the scene's own move on the stack
         self.assertEqual(float(re.search(r"LIVING_MAX_STRENGTH = ([0-9.]+)", tsx).group(1)), living.MAX_STRENGTH)

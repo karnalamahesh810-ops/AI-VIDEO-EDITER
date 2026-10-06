@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Img, OffthreadVideo, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, OffthreadVideo, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, LABEL } from "../fonts";
 import { MaskLine, ramp, useK } from "./ProGraphics";
 import type { Overlay, SceneMedia } from "../../types";
@@ -17,7 +18,7 @@ const Half: React.FC<{ m: SceneMedia; drift: number; dir: 1 | -1 }> = ({ m, drif
     width: "100%", height: "100%", objectFit: "cover",
     transform: `scale(${1.1 + drift * 0.06}) translateX(${dir * drift * 1.5}%)`,
   };
-  return m.type === "video" ? <OffthreadVideo src={m.url} muted style={style} /> : <Img src={m.url} style={style} />;
+  return m.type === "video" ? <OffthreadVideo src={m.url} muted style={style} /> : <SafeImg src={m.url} style={style} />;
 };
 
 export const ProSplit: React.FC<{ overlay: Overlay; accent: string }> = ({ overlay, accent }) => {

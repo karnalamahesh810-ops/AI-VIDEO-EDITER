@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, HAND, INTER, LABEL, MONO, NARROW } from "../fonts";
 import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { LetterLine, Odometer, lines, ramp, useHold, useK } from "../pro/ProGraphics";
@@ -344,7 +345,7 @@ const EvidenceBag: Look = ({ overlay, accent }) => {
             <div style={{ position: "absolute", left: 64 * k, top: 108 * k, width: 530 * k, height: 640 * k, padding: 14 * k,
               boxSizing: "border-box", background: "#efede6", boxShadow: `0 ${14 * k}px ${30 * k}px rgba(0,0,0,.42)`,
               transform: `rotate(${-2.5 + Math.sin(frame / (fps * 2.2)) * 0.25}deg)` }}>
-              <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block",
+              <SafeImg src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block",
                 filter: "grayscale(.3) contrast(1.06) brightness(.94)" }} />
             </div>
           ) : null}
@@ -1280,7 +1281,7 @@ const MarkerPhoto: Look = ({ overlay, accent }) => {
   const panelIn = ramp(frame, T(0.15), 16);
   return (
     <AbsoluteFill style={{ background: "#050506", overflow: "hidden" }}>
-      <Img src={pic} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
+      <SafeImg src={pic} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
         transform: `scale(${push})`, transformOrigin: "62% 68%", filter: "saturate(.78) contrast(1.08) brightness(.9)" }} />
       <AbsoluteFill style={{ background: panel
         ? "linear-gradient(90deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.18) 36%, rgba(0,0,0,0) 55%), linear-gradient(0deg, rgba(0,0,0,.4) 0%, rgba(0,0,0,0) 38%)"

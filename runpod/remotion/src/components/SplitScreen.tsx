@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Img, OffthreadVideo, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, OffthreadVideo, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "./motion/safePicture";
 import { fadeRange } from "./layout";
 import type { SceneMedia } from "../types";
 
@@ -49,7 +50,7 @@ export const SplitScreen: React.FC<{
     ) : m.type === "video" ? (
       <OffthreadVideo src={m.url} style={fill} muted />
     ) : (
-      <Img src={m.url} style={fill} />
+      <SafeImg src={m.url} style={fill} />
     );
 
   return (

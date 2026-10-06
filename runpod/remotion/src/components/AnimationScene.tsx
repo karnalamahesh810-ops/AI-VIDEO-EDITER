@@ -1,9 +1,10 @@
 import React from "react";
-import { AbsoluteFill, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { OVERLAYS, accentFor } from "../overlays";
 import { resolveOverlay, templateFor } from "../templates";
 import { MotionWrap } from "./MotionWrap";
 import { TransitionLayer } from "./SceneEffects";
+import { SafeImg } from "./motion/safePicture";
 import type { Overlay, Scene, SceneMedia } from "../types";
 
 /**
@@ -17,6 +18,8 @@ import type { Overlay, Scene, SceneMedia } from "../types";
  * their own full-frame look and skip it.
  */
 const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
+/** The charcoal field a graphic sits on when there is no still to blur (or it cannot be drawn). */
+const FIELD = "radial-gradient(ellipse at 50% 42%, #1b1c21 0%, #0e0e12 60%, #08080a 100%)";
 
 /**
  * A still of the story's own footage, blurred, darkened and slowly pushing,
@@ -32,11 +35,12 @@ export const BlurBackdrop: React.FC<{ still: string; frames: number }> = ({ stil
     <AbsoluteFill style={{ backgroundColor: "#08080a", overflow: "hidden" }}>
       {still ? (
         <AbsoluteFill>
-          <Img src={still} onError={() => undefined} maxRetries={1} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.18 + drift * 0.06})`,
+          <SafeImg src={still} fallback={<AbsoluteFill style={{ background: FIELD }} />} maxRetries={1}
+            style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.18 + drift * 0.06})`,
             filter: "blur(16px) grayscale(0.4) brightness(0.55) contrast(1.05)" }} />
         </AbsoluteFill>
       ) : (
-        <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 42%, #1b1c21 0%, #0e0e12 60%, #08080a 100%)" }} />
+        <AbsoluteFill style={{ background: FIELD }} />
       )}
       <AbsoluteFill style={{ opacity: still ? 0.07 : 0.1,
         backgroundImage: "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
@@ -95,10 +99,10 @@ export const AnimationScene: React.FC<{ scene: Scene; accent: string; accent2?: 
           <>
             {still ? (
               <AbsoluteFill>
-                <Img src={still} style={blurStyle} />
+                <SafeImg src={still} style={blurStyle} fallback={<AbsoluteFill style={{ background: FIELD }} />} />
               </AbsoluteFill>
             ) : (
-              <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 42%, #1b1c21 0%, #0e0e12 60%, #08080a 100%)" }} />
+              <AbsoluteFill style={{ background: FIELD }} />
             )}
             {/* A fine grid (VidRush's dark chart cards), fading toward the edges. */}
             <AbsoluteFill style={{ opacity: still ? 0.07 : 0.1,

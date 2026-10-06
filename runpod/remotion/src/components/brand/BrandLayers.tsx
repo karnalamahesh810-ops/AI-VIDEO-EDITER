@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Img, OffthreadVideo, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, OffthreadVideo, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { BlurBackdrop } from "../AnimationScene";
 import { brandFont } from "./brandFonts";
 import type { BrandClip, BrandOutroCard, BrandWatermark } from "../../types";
@@ -40,7 +41,7 @@ export const Watermark: React.FC<{ mark: BrandWatermark }> = ({ mark }) => {
         opacity,
         filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.45))",
       }}>
-        <Img src={mark.url} style={{
+        <SafeImg src={mark.url} style={{
           width: "100%", height: "100%", objectFit: "contain",
           objectPosition: `${left ? "left" : "right"} ${top ? "top" : "bottom"}`,
         }} />
@@ -101,7 +102,7 @@ export const EndCard: React.FC<{
         {pic ? (
           <div style={{ height: Math.round(0.13 * height), opacity: pLogo, transform: `scale(${0.85 + 0.15 * pLogo})`,
             transformOrigin: "left center" }}>
-            <Img src={pic} style={{ height: "100%", maxWidth: "100%", objectFit: "contain", objectPosition: "left center" }} />
+            <SafeImg src={pic} style={{ height: "100%", maxWidth: "100%", objectFit: "contain", objectPosition: "left center" }} />
           </div>
         ) : null}
         {title ? (

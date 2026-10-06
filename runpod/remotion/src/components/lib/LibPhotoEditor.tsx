@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { HAND, INTER, LABEL, SERIF, SERIF_ITALIC, TYPEWRITER } from "../fonts";
 import type { Overlay, SceneMedia } from "../../types";
 import { lines, ramp, useK } from "../pro/ProGraphics";
@@ -175,7 +176,7 @@ const Rise: React.FC<{ at: number; q: number; children: React.ReactNode; style?:
   };
 
 const Photo: React.FC<{ src: string; style?: React.CSSProperties }> = ({ src, style }) => (
-  <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover", ...style }} />
+  <SafeImg src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover", ...style }} />
 );
 
 /** Film grain: animated fractal noise at half resolution, overlaid. */
@@ -455,7 +456,7 @@ const SplitPanels: Look = ({ overlay, accent }) => {
             <div key={i} style={{ position: "absolute", top: 0, height: H, left: i * PW + (i - 1) * gap, width: PW + (i < 2 ? 1 : 0),
               overflow: "hidden", transform: `translateY(${((1 - e) * from * 104).toFixed(2)}%)`,
               boxShadow: merge < 1 ? `0 ${20 * k}px ${50 * k}px rgba(0,0,0,${(0.5 * (1 - merge)).toFixed(3)})` : undefined }}>
-              <Img src={src} style={{ position: "absolute", top: 0, left: -i * PW, width: W, height: H, objectFit: "cover",
+              <SafeImg src={src} style={{ position: "absolute", top: 0, left: -i * PW, width: W, height: H, objectFit: "cover",
                 filter: `brightness(${(0.82 + 0.18 * e).toFixed(3)})` }} />
             </div>
           );
@@ -570,7 +571,7 @@ const Parallax: Look = ({ overlay, accent }) => {
 const Halftone: React.FC<{ src: string; w: number; h: number; cell: number; ink: string }> = ({ src, w, h, cell, ink }) => (
   <div style={{ position: "relative", width: w, height: h, mixBlendMode: "multiply", opacity: 0.94 }}>
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: "#fff", filter: "contrast(14)" }}>
-      <Img src={src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+      <SafeImg src={src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
         filter: `grayscale(1) brightness(.74) contrast(1.35) blur(${(cell * 0.14).toFixed(2)}px)` }} />
       <div style={{ position: "absolute", inset: "-40%", backgroundImage: "radial-gradient(circle at center, #000 0%, #fff 86%)",
         backgroundSize: `${cell}px ${cell}px`, mixBlendMode: "screen", transform: "rotate(15deg)" }} />

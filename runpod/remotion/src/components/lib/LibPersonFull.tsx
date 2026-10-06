@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { INTER, LABEL, SERIF, TYPEWRITER } from "../fonts";
 import type { Overlay, SceneMedia } from "../../types";
 import { lines, ramp, useK } from "../pro/ProGraphics";
@@ -149,7 +150,7 @@ const Rise: React.FC<{ at: number; q: number; children: React.ReactNode; style?:
   };
 
 const Photo: React.FC<{ src: string; style?: React.CSSProperties }> = ({ src, style }) => (
-  <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
+  <SafeImg src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
     objectPosition: "50% 28%", ...style }} />
 );
 

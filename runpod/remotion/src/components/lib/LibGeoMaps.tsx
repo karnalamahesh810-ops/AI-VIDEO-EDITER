@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Img } from "remotion";
+import { AbsoluteFill } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { feature } from "topojson-client";
 import statesTopology from "../../data/us-states.json";
 import type { GeoDoc, Overlay } from "../../types";
@@ -84,7 +85,7 @@ const Tiles: React.FC<{ cam: Cam; us: boolean; grade: string }> = ({ cam, us, gr
       for (let tx = Math.floor(left / TILE); tx <= Math.floor(right / TILE); tx++) {
         const wx = ((tx % n) + n) % n;
         out.push(
-          <Img key={`${gibs ? "g" : "u"}${z}-${tx}-${ty}`} src={tileUrl(z, wx, ty, us && !gibs)} onError={() => undefined}
+          <SafeImg key={`${gibs ? "g" : "u"}${z}-${tx}-${ty}`} src={tileUrl(z, wx, ty, us && !gibs)} onError={() => undefined}
             maxRetries={3} delayRenderTimeoutInMilliseconds={60000}
             style={{ position: "absolute", left: width / 2 + (tx * TILE - cx) * scale, top: height / 2 + (ty * TILE - cy) * scale,
               width: Math.ceil(size) + 1, height: Math.ceil(size) + 1, opacity: o,

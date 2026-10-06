@@ -1,8 +1,9 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate } from "remotion";
+import { AbsoluteFill, Easing, interpolate } from "remotion";
 import type { Box, Motion } from "../types";
 import { hashStr } from "./timing";
 import { aimGlide, aimOrigin, centreRange } from "../components/reframe";
+import { BlurredHold, SafeImg } from "../components/motion/safePicture";
 
 /**
  * How a still photograph moves while it is on screen: the moves a
@@ -142,6 +143,8 @@ export const stillTransform = (
 /**
  * A still photo filling the frame with its motion. `filter` is the scene's
  * grade + effect (+ nothing else), applied to every layer of the picture.
+ * A picture that cannot be drawn never stops the render: `fallbackStill` (the
+ * shot before it) is drawn blurred instead (components/motion/safePicture.tsx).
  */
 export const StillPicture: React.FC<{
   src: string;
@@ -153,9 +156,12 @@ export const StillPicture: React.FC<{
   filter?: string;
   /** The picture's subject (frame shares, components/reframe.ts resolveAim): the motion is aimed at it. */
   subject?: Box;
-}> = ({ src, motion, frame, durationInFrames, fps, width, filter, subject }) => {
+  /** Drawn blurred instead when `src` cannot be drawn (the shot before it; the first of several that can be). */
+  fallbackStill?: string | string[];
+}> = ({ src, motion, frame, durationInFrames, fps, width, filter, subject, fallbackStill }) => {
   const k = width / 1920;
   const move = stillTransform(motion, frame, durationInFrames, fps, src, subject);
+  const hold = <BlurredHold still={fallbackStill} />;
   if (motion === "parallax") {
     const p = interpolate(frame, [0, Math.max(1, durationInFrames)], [0, 1], clamp);
     const sp = smooth(p);
@@ -165,17 +171,17 @@ export const StillPicture: React.FC<{
     const front = `translateX(${(dir * interpolate(sp, [0, 1], [-1.6, 1.6])).toFixed(3)}%) scale(${(0.99 + sp * 0.05).toFixed(4)})`;
     return (
       <AbsoluteFill>
-        <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: move.transform,
+        <SafeImg src={src} fallback={hold} style={{ width: "100%", height: "100%", objectFit: "cover", transform: move.transform,
           filter: [filter, `blur(${(26 * k).toFixed(1)}px) brightness(0.62) saturate(1.1)`].filter(Boolean).join(" ") }} />
         <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
-          <Img src={src} style={{ width: "84%", height: "84%", objectFit: "contain", transform: front,
+          <SafeImg src={src} fallback={null} style={{ width: "84%", height: "84%", objectFit: "contain", transform: front,
             filter: [filter, `drop-shadow(0 ${(22 * k).toFixed(1)}px ${(36 * k).toFixed(1)}px rgba(0,0,0,0.55))`].filter(Boolean).join(" ") }} />
         </AbsoluteFill>
       </AbsoluteFill>
     );
   }
   return (
-    <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover",
+    <SafeImg src={src} fallback={hold} style={{ width: "100%", height: "100%", objectFit: "cover",
       transform: move.transform, transformOrigin: move.transformOrigin, filter: filter || undefined }} />
   );
 };

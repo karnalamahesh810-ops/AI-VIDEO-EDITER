@@ -1285,7 +1285,7 @@ def local_refs(doc: dict) -> List[Tuple[dict, str, str]]:
     seen = set()
 
     def take(m: dict) -> None:
-        for field in ("url", "thumbnail"):
+        for field in ("url", "thumbnail", "fallbackStill"):
             if (id(m), field) in seen:
                 continue
             path = _local_file(m.get(field)) if isinstance(m.get(field), str) else ""
@@ -1396,7 +1396,7 @@ def _localize(doc: dict, a: int, b: int, work: str) -> dict:
     needed: set = set()
     for i in on:
         m = scenes[i].get("media") or {}
-        wanted += [(m, "url"), (m, "thumbnail")]
+        wanted += [(m, "url"), (m, "thumbnail"), (m, "fallbackStill")]
         if m.get("type") in ("video", "image") and str(m.get("url") or "").startswith(("http://", "https://")):
             needed.add(str(m["url"]))
         # A living photo's depth layers (src/living.py): through the S3 API like the still itself.

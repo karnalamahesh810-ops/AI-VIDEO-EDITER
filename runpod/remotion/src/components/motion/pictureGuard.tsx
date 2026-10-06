@@ -1,8 +1,10 @@
 import React from "react";
-import { AbsoluteFill, Img, continueRender, delayRender, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, continueRender, delayRender, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Overlay, SceneMedia } from "../../types";
 import { GROTESK, GROTESK_CAP, SUBLINE } from "../fonts";
 import { clamp01, cubicOut, expoOut, idle, prog } from "./ease";
+import { PICTURE_PROBE_MS, pictureUsable, probePicture } from "./pictureProbe";
+import { SafeImg } from "./safePicture";
 
 /**
  * A picture look never shows an empty box (the owner, 2026-10-05: "some
@@ -14,55 +16,25 @@ import { clamp01, cubicOut, expoOut, idle, prog } from "./ease";
  * drawn as the fallback: the scene's own picture, blurred and dimmed, with the
  * look's words on it in the kinetic type (a kicker and a line), so the moment
  * still reads and nothing is blank. A failed picture also never reaches a
- * remotion <Img> without an error handler (which would stop the render).
+ * remotion <Img> (which would stop the render): the load is pictureProbe's,
+ * which always settles, and every picture is drawn through SafeImg.
  */
-const MIN_SIDE = 32;
-const PROBE_TIMEOUT_MS = 25000;
-const known = new Map<string, boolean>();
-const pending = new Map<string, Promise<boolean>>();
-
-const probe = (url: string): Promise<boolean> => {
-  if (known.has(url)) return Promise.resolve(Boolean(known.get(url)));
-  const had = pending.get(url);
-  if (had) return had;
-  const p = new Promise<boolean>((resolve) => {
-    let done = false;
-    const finish = (ok: boolean) => {
-      if (done) return;
-      done = true;
-      known.set(url, ok);
-      pending.delete(url);
-      resolve(ok);
-    };
-    try {
-      const im = new Image();
-      im.onload = () => finish(im.naturalWidth >= MIN_SIDE && im.naturalHeight >= MIN_SIDE);
-      im.onerror = () => finish(false);
-      im.src = url;
-    } catch {
-      finish(false);
-    }
-    setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
-  });
-  pending.set(url, p);
-  return p;
-};
 
 /** The usable pictures of `media` once known (null while any is still loading). */
 const settled = (media: SceneMedia[]): SceneMedia[] | null => {
-  if (!media.every((m) => known.has(m.url))) return null;
-  return media.filter((m) => known.get(m.url));
+  if (!media.every((m) => pictureUsable(m.url) !== undefined)) return null;
+  return media.filter((m) => pictureUsable(m.url));
 };
 
 export const usePictures = (media: SceneMedia[] | null): SceneMedia[] | null => {
   const urls = (media || []).map((m) => m.url).join("\n");
   const [ok, setOk] = React.useState<SceneMedia[] | null>(() => (media && media.length ? settled(media) : media));
   const [handle] = React.useState(() => (media && media.length && !settled(media)
-    ? delayRender(`Checking ${media.length} overlay picture(s)`, { timeoutInMilliseconds: PROBE_TIMEOUT_MS + 15000 }) : null));
+    ? delayRender(`Checking ${media.length} overlay picture(s)`, { timeoutInMilliseconds: PICTURE_PROBE_MS + 15000 }) : null));
   React.useEffect(() => {
     if (!media || !media.length) return;
     let live = true;
-    Promise.all(media.map((m) => probe(m.url))).then(() => {
+    Promise.all(media.map((m) => probePicture(m.url))).then(() => {
       if (live) setOk(settled(media) || []);
       if (handle !== null) continueRender(handle);
     });
@@ -82,6 +54,8 @@ const wordsOf = (ov: Overlay): { kicker: string; line: string } => {
   return { kicker: kicker.length <= 40 ? kicker : "", line: line.length <= 90 ? line : `${line.slice(0, 87).replace(/\s+\S*$/, "")}...` };
 };
 
+const FIELD = "radial-gradient(ellipse at 40% 45%, #1d2026 0%, #101216 60%, #0b0d11 100%)";
+
 /**
  * The fallback for a picture look whose pictures all failed: the scene's own
  * picture (its still, or its clip's thumbnail) blurred and dimmed - the clip
@@ -93,7 +67,6 @@ export const PictureFallback: React.FC<{ overlay: Overlay; still: string; accent
   const S = fps / 30;
   const k = W / 1920;
   const { kicker, line } = wordsOf(overlay);
-  const [stillOk, setStillOk] = React.useState(true);
   const p = prog(f, 0, 14, S, cubicOut);
   const drift = idle(f, 0, dur);
   const kSize = (0.0175 * H) / GROTESK_CAP;
@@ -101,12 +74,12 @@ export const PictureFallback: React.FC<{ overlay: Overlay; still: string; accent
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <AbsoluteFill style={{ opacity: 0.92 * p, background: "#0b0d11" }}>
-        {still && stillOk ? (
-          <Img src={still} onError={() => setStillOk(false)} maxRetries={1}
+        {still ? (
+          <SafeImg src={still} maxRetries={1} fallback={<AbsoluteFill style={{ background: FIELD }} />}
             style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${(1.12 + 0.04 * drift).toFixed(4)})`,
               filter: "blur(22px) brightness(0.55) saturate(0.85)" }} />
         ) : (
-          <AbsoluteFill style={{ background: "radial-gradient(ellipse at 40% 45%, #1d2026 0%, #101216 60%, #0b0d11 100%)" }} />
+          <AbsoluteFill style={{ background: FIELD }} />
         )}
         <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(8,10,14,.55) 0%, rgba(8,10,14,.1) 60%, transparent 100%)" }} />
       </AbsoluteFill>
