@@ -95,17 +95,24 @@ export const yearShare = (d: DateParts): number | null => {
   return clamp01((before + inMonth) / total);
 };
 
-/** The years of a timeline / a roll in the order said - items [{label, value, at?}], else total (from) + value. */
-const yearsOf = (ov: Overlay): { years: number[]; at: number[] } => {
+/**
+ * The years of a timeline / a counter in the order said - items [{label, value, at?}], else total (from) + value.
+ * `at`: the second (from the look's start) each later year is said - the look moves on to it then (NaN: at once);
+ * `labels`: what is written under each point ("Aug 4, 1961" for a date said, else the year).
+ */
+const yearsOf = (ov: Overlay): { years: number[]; at: number[]; labels: string[] } => {
   const items = Array.isArray(ov.items) ? ov.items : [];
   const years: number[] = [];
   const at: number[] = [];
+  const labels: string[] = [];
   for (const it of items) {
     const y = yearOf(it?.value) ?? yearOf(it?.label);
     if (y === null) continue;
     years.push(y);
     const a = num((it as { at?: unknown })?.at);
     at.push(a !== null && a >= 0 ? a : NaN);
+    const lab = str(it?.label);
+    labels.push(lab && lab.length <= 16 ? lab.toUpperCase() : String(y));
   }
   if (!years.length) {
     const y = yearOf(ov.value) ?? dateParts(ov).year;
@@ -113,13 +120,17 @@ const yearsOf = (ov: Overlay): { years: number[]; at: number[] } => {
     if (from !== null && y !== null && from !== y) {
       years.push(from, y);
       at.push(NaN, NaN);
+      labels.push(String(from), String(y));
     } else if (y !== null) {
       years.push(y);
       at.push(NaN);
+      labels.push(String(y));
     }
   }
-  return { years: years.slice(-3), at: at.slice(-3) };
+  return { years: years.slice(-3), at: at.slice(-3), labels: labels.slice(-3) };
 };
+/** A year said a beat later moves the look on when it is said (an item with its own second). */
+const phased = (at: number[]) => at.length > 1 && Number.isFinite(at[at.length - 1]);
 
 // ------------------------------------------------------------------ sizes
 /** The size unit: the frame height, or the width's 16:9 height on a tall frame (a short keeps the proportions). */
@@ -133,9 +144,9 @@ const BLOCK = scale.dateBlock;
 const maxBlockW = (W: number, H: number) => (W >= H ? BLOCK.maxW : 0.64) * W;
 const minBlockW = (W: number, H: number) => (W >= H ? BLOCK.minW : 0.4) * W;
 
-/** The width a RiseLine draws: each character on its own (no kerning pairs), the figures tabular, tracking after each. */
+/** The width a RiseLine draws: each character on its own (no kerning pairs), its own width, tracking after each. */
 const riseWidth = (text: string, font: string, size: number, weight: number, tracking = -0.012) =>
-  Array.from(text).reduce((a, ch) => a + widthOf(/\d/.test(ch) ? "0" : ch, font, size, weight) + tracking * size, 0);
+  Array.from(text).reduce((a, ch) => a + widthOf(ch, font, size, weight) + tracking * size, 0);
 
 // ------------------------------------------------------------------ surfaces
 const GLASS_TOP = "rgba(26,29,36,0.74)";
@@ -205,7 +216,8 @@ const capsWidth = (text: string, size: number, tracking = 0.2, weight = 700) => 
  * thousands one) and lands on `to`, with a touch of motion blur while it runs and a small settle.
  */
 const Wheel: React.FC<{ to: number; steps: number; at: number; len: number; size: number; h: number; font: string;
-  weight: number; color: string; k: number; out: number }> = ({ to, steps, at, len, size, h, font, weight, color, k, out }) => {
+  weight: number; color: string; k: number; out: number; fade?: boolean; tabular?: boolean }> =
+  ({ to, steps, at, len, size, h, font, weight, color, k, out, fade = true, tabular = true }) => {
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
   const S = fps / 30;
@@ -230,9 +242,9 @@ const Wheel: React.FC<{ to: number; steps: number; at: number; len: number; size
   );
   return (
     <div style={{ position: "relative", width: "100%", height: h, overflow: "hidden", fontFamily: font, fontWeight: weight,
-      fontSize: size, lineHeight: 1, color, fontVariantNumeric: "tabular-nums", fontFeatureSettings: '"tnum" 1',
-      filter: blur ? `blur(${(blur * 0.7).toFixed(2)}px)` : undefined,
-      opacity: prog(f, at - 3, 8, S, cubicOut) * (1 - clamp01(out * 1.4)),
+      fontSize: size, lineHeight: 1, color, fontVariantNumeric: tabular ? "tabular-nums" : "normal",
+      fontFeatureSettings: tabular ? '"tnum" 1' : '"tnum" 0', filter: blur ? `blur(${(blur * 0.7).toFixed(2)}px)` : undefined,
+      opacity: (fade ? prog(f, at - 3, 8, S, cubicOut) : 1) * (1 - clamp01(out * 1.4)),
       transform: `translateY(${(out * 0.18 * h - settle).toFixed(2)}px)` }}>
       {/* rolling up (forward) the next digit comes from below; backward, from above */}
       {cell(base, -frac * h * dirn)}
@@ -276,12 +288,13 @@ const RiseLine: React.FC<{ text: string; size: number; font: string; weight: num
           const t0 = at + i * gap;
           const x = clamp01(out * 1.3 - ((n - 1 - i) / Math.max(1, n)) * 0.3);
           if (roll && /\d/.test(ch)) {
+            // a figure in a line of words keeps its own width ("21", never "2 1"): its wheel rolls in that slot
             digitRun += 1;
-            const w = widthOf("0", font, size, weight) + tracking * size;
+            const w = widthOf(ch, font, size, weight) + tracking * size;
             return (
               <div key={i} style={{ position: "relative", width: w, height: h, color: c }}>
                 <Wheel to={Number(ch)} steps={2 + digitRun} at={t0} len={16 + digitRun * 2} size={size} h={h} font={font}
-                  weight={weight} color={c} k={k} out={x} />
+                  weight={weight} color={c} k={k} out={x} tabular={false} />
               </div>
             );
           }
@@ -347,7 +360,8 @@ const Stamp: Look = (props) => {
   const h = padT + head + lineH + 0.28 * size + barRow + padB;
   const zone = zoneFor(overlay, "upper-left", w, h, W, H) as Zone;
   const r = blockAt(zone, w, h, W, H);
-  const right = isRight(zone);
+  const right = false;                    // the inside reads left to right on either side
+  const anchor = isRight(zone);
   const open = prog(f, 0, 14, S, expoOut);
   // the bar: its track draws, then the fill and the dot run to the day
   const track = prog(f, 12, 14, S, expoOut) * (1 - clamp01(out * 1.5));
@@ -360,7 +374,7 @@ const Stamp: Look = (props) => {
   const along = (share ?? 0) * barW * run;
   return (
     <AbsoluteFill>
-      <Glass x={r.x} y={r.y} w={w} h={h} k={k} p={open} out={out} right={right}>
+      <Glass x={r.x} y={r.y} w={w} h={h} k={k} p={open} out={out} right={anchor}>
         <div style={{ position: "absolute", left: padX, right: padX, top: padT, display: "flex", flexDirection: "column",
           alignItems: right ? "flex-end" : "flex-start" }}>
           {kicker ? (
@@ -445,7 +459,8 @@ const Card: Look = (props) => {
   const w = cw + tabPadL + colW + tabPadR;
   const zone = zoneFor(overlay, "upper-left", w, ch, W, H) as Zone;
   const r = blockAt(zone, w, ch, W, H);
-  const right = isRight(zone);
+  const right = false;                    // the inside reads left to right on either side
+  const anchor = isRight(zone);
   const cardX = right ? r.x + r.w - cw : r.x;
   const tabX = right ? r.x : cardX + cw * 0.55;
   const tabW = w - cw * 0.55;
@@ -453,12 +468,11 @@ const Card: Look = (props) => {
   // the card drops into place, two pages riffle over the binding, the day lands; the tab slides out after
   const enter = prog(f, 0, 14, S, (u) => backOut(u, 1.2));
   const o = prog(f, 0, 8, S, cubicOut) * (1 - clamp01(out * 1.4));
-  // the page on top (two days before) flips first, then the one under it (the day before)
-  const pages = [{ n: 1, p: prog(f, 12, 9, S, cubicIn) }, { n: 2, p: prog(f, 7, 9, S, cubicIn) }];
-  const land = 12 + 9;
+  // two blank pages riffle away over the binding (never a day the narration did not say), the day under them
+  const pages = [{ n: 1, p: prog(f, 8, 8, S, cubicIn) }, { n: 2, p: prog(f, 4, 8, S, cubicIn) }];
+  const land = 8 + 8;
   const settleS = 1 + 0.03 * Math.sin(clamp01((f / S - land) / 10) * Math.PI);
   const tabOpen = prog(f, 8, 16, S, expoOut);
-  const prevDay = (n: number) => ((((d.day ?? 1) - 1 - n) % 31) + 31) % 31 + 1;
   const ringW = 8 * k, ringH = 20 * k;
   const colLeft = right ? r.x + tabPadR : cardX + cw + tabPadL;
   return (
@@ -491,7 +505,7 @@ const Card: Look = (props) => {
             {pages.map(({ n, p }) => (p >= 1 ? null : (
               <div key={n} style={{ position: "absolute", inset: 0, transformOrigin: "50% 0%", backfaceVisibility: "hidden",
                 transform: `rotateX(${(p * 100).toFixed(2)}deg)` }}>
-                <PageBody day={prevDay(n)} w={cw} h={body} size={dSize} shade={0.35 * p} />
+                <PageBody day="" w={cw} h={body} size={dSize} shade={0.12 + 0.35 * p} />
               </div>
             )))}
             {/* the crease under the binding */}
@@ -515,7 +529,7 @@ const niceStep = (span: number) => (span <= 14 ? 1 : span <= 40 ? 5 : span <= 14
 
 const TimelineLook: Look = ({ overlay, accent }) => {
   const { f, S, k, W, H, U, dir, hot, out, ks } = useDates(overlay, accent);
-  const { years, at } = yearsOf(overlay);
+  const { years, at, labels } = yearsOf(overlay);
   if (!years.length) return null;
   const d = dateParts(overlay);
   const target = years[years.length - 1];
@@ -541,7 +555,8 @@ const TimelineLook: Look = ({ overlay, accent }) => {
   const cardH = padT + head + yearH + 0.22 * yearSize + tickH + under + padB;
   const zone = zoneFor(overlay, "upper-left", cardW, cardH, W, H) as Zone;
   const r = blockAt(zone, cardW, cardH, W, H);
-  const right = isRight(zone);
+  const right = false;                    // the inside reads left to right on either side
+  const anchor = isRight(zone);
   const open = prog(f, 0, 14, S, expoOut);
   const draw = prog(f, 4, 18, S, expoOut) * (1 - clamp01(out * 1.4));
   const xOf = (y: number) => ((y - lo) / Math.max(1, hi - lo)) * axisW;
@@ -579,7 +594,7 @@ const TimelineLook: Look = ({ overlay, accent }) => {
   const mirror = (v: number) => (right ? axisW - v : v);
   return (
     <AbsoluteFill>
-      <Glass x={r.x} y={r.y} w={cardW} h={cardH} k={k} p={open} out={out} right={right}>
+      <Glass x={r.x} y={r.y} w={cardW} h={cardH} k={k} p={open} out={out} right={anchor}>
         <div style={{ position: "absolute", left: padX, top: 0, width: axisW, height: cardH }}>
           <div style={{ position: "absolute", top: padT, left: 0, right: 0, display: "flex", flexDirection: "column",
             alignItems: right ? "flex-end" : "flex-start" }}>
@@ -633,18 +648,32 @@ const TimelineLook: Look = ({ overlay, accent }) => {
               opacity: prog(f, 9, 6, S, cubicOut) * (1 - clamp01(out * 1.6)), transform: `scale(${(1 + 0.3 * pulse).toFixed(4)})` }} />
           </div>
           {/* the years under the axis: where the story came from (said), and the year the dot lands on */}
-          {first !== null ? (
-            <div style={{ position: "absolute", top: axisY + tickH + 8 * k, left: mirror(startX) - 150 * k, width: 300 * k,
-              display: "flex", justifyContent: "center" }}>
-              <Caps text={String(first)} size={sSize} color={DIM} at={12} out={out} k={k} tracking={0.04} weight={700} align="center" />
-            </div>
-          ) : null}
-          {first !== null ? (
-            <div style={{ position: "absolute", top: axisY + tickH + 8 * k, left: Math.min(axisW - 60 * k, Math.max(60 * k, mirror(xOf(target)))) - 150 * k,
-              width: 300 * k, display: "flex", justifyContent: "center", opacity: clamp01((f / S - land + 4) / 8) }}>
-              <Caps text={String(target)} size={sSize} color={WHITE} at={land - 4} out={out} k={k} tracking={0.04} weight={800} align="center" />
-            </div>
-          ) : null}
+          {first !== null ? (() => {
+            // each point's label under it ("AUG 4, 1961" for a date said, else the year), kept inside the card
+            const lab = (i: number) => labels[i] || String(years[i]);
+            const place = (x0: number, text: string) => {
+              const w = capsWidth(text, sSize, 0.04, 800);
+              return Math.max(0, Math.min(axisW - w, x0 - w / 2));
+            };
+            const firstLab = lab(0);
+            const lastLab = lab(years.length - 1);
+            return (
+              <>
+                <div style={{ position: "absolute", top: axisY + tickH + 8 * k, left: place(mirror(startX), firstLab) }}>
+                  <Caps text={firstLab} size={sSize} color={DIM} at={12} out={out} k={k} tracking={0.04} weight={700} />
+                </div>
+                {years.slice(1, -1).map((y, i) => (reached > i ? (
+                  <div key={`l${i}`} style={{ position: "absolute", top: axisY + tickH + 8 * k, left: place(mirror(xOf(y)), lab(i + 1)) }}>
+                    <Caps text={lab(i + 1)} size={sSize} color={DIM} at={0} out={out} k={k} tracking={0.04} weight={700} />
+                  </div>
+                ) : null))}
+                <div style={{ position: "absolute", top: axisY + tickH + 8 * k, left: place(mirror(xOf(target)), lastLab),
+                  opacity: clamp01((f / S - land + 4) / 8) }}>
+                  <Caps text={lastLab} size={sSize} color={WHITE} at={land - 4} out={out} k={k} tracking={0.04} weight={800} />
+                </div>
+              </>
+            );
+          })() : null}
         </div>
       </Glass>
     </AbsoluteFill>
@@ -678,7 +707,8 @@ const Badge: Look = ({ overlay, accent }) => {
   const h = padT + head2 + lineH + padB;
   const zone = zoneFor(overlay, "lower-left", w, h, W, H) as Zone;
   const r = blockAt(zone, w, h, W, H);
-  const right = isRight(zone);
+  const right = false;                    // the inside reads left to right on either side
+  const anchor = isRight(zone);
   const edgeP = prog(f, 0, 10, S, expoOut) * (1 - clamp01(out * 1.5));
   const open = prog(f, 3, 15, S, expoOut);
   return (
@@ -700,15 +730,23 @@ const Badge: Look = ({ overlay, accent }) => {
 };
 
 // ================================================================== counters: kt-year, kt-time
-/** Glass slots with a wheel in each: a year (from the year the story was in) or a clock time. */
+/**
+ * Glass slots with a wheel in each: a year (from the year the story was in) or a clock time. `later`: years said
+ * a beat after it - the wheels roll on to each when it is said (its frame), the slots flashing as they land.
+ */
 const Slots: React.FC<{ chars: string; from?: string; size: number; font: string; at: number; out: number; k: number;
-  hot: string; tail?: string }> = ({ chars, from, size, font, at, out, k, hot, tail = "" }) => {
+  hot: string; tail?: string; later?: { chars: string; at: number }[] }> =
+  ({ chars, from, size, font, at, out, k, hot, tail = "", later = [] }) => {
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
   const S = fps / 30;
   const list = Array.from(chars);
   const digits = list.filter((c) => /\d/.test(c)).join("");
   const steps = from && from.length === digits.length ? wheelSteps(from, digits) : Array.from(digits, (_c, i) => 2 + i);
+  // the later phases: each digit's steps from the year before it, and when its wheel starts
+  const phases = later.filter((p) => p.chars.length === digits.length).map((p, n, arr) => ({
+    digits: p.chars, at: p.at, steps: wheelSteps(n === 0 ? digits : arr[n - 1].chars, p.chars),
+  }));
   const slotW = widthOf("0", font, size, 800) * 1.34;
   const slotH = size * 1.3;
   const gap = 0.09 * size;
@@ -741,19 +779,31 @@ const Slots: React.FC<{ chars: string; from?: string; size: number; font: string
           );
         }
         di += 1;
-        const s = steps[di] ?? 2 + di;
-        const t0 = at + 2 + di * 2;
-        const len = 24 + Math.min(10, Math.abs(s) * 0.3) + di * 2;
+        // the phase this wheel is in: the first roll, else the last later year whose roll has begun
+        let s = steps[di] ?? 2 + di;
+        let t0 = at + 2 + di * 1.5;
+        let to = Number(c);
+        let first = true;
+        for (const p of phases) {
+          const pt = p.at + di * 1.5;
+          if (f / S >= pt - 1) {
+            s = p.steps[di];
+            t0 = pt;
+            to = Number(p.digits[di]);
+            first = false;
+          }
+        }
+        const len = 20 + Math.min(6, Math.abs(s) * 0.2) + di * 1.5;
         const landF = t0 + len;
-        const flash = clamp01((f / S - landF) / 4) * (1 - clamp01((f / S - landF - 4) / 16));
+        const flash = s === 0 && !first ? 0 : clamp01((f / S - landF) / 4) * (1 - clamp01((f / S - landF - 4) / 16));
         const xo = clamp01(out * 1.3 - ((n - 1 - i) / Math.max(1, n)) * 0.3);
         return slot(i, i, slotW, (
           <>
             {/* the wheel's window: a crease across the middle like a mechanical counter */}
             <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: Math.max(1, k), background: "rgba(0,0,0,0.35)", zIndex: 2 }} />
             <div style={{ position: "absolute", left: 0, right: 0, top: (slotH - size * 1.12) / 2 + size * 0.02, height: size * 1.12 }}>
-              <Wheel to={Number(c)} steps={s} at={t0} len={len} size={size} h={size * 1.12} font={font} weight={800}
-                color={WHITE} k={k} out={xo} />
+              <Wheel key={first ? "w0" : `w${t0}`} to={to} steps={s} at={t0} len={len} size={size} h={size * 1.12} font={font}
+                weight={800} color={WHITE} k={k} out={xo} fade={first} />
             </div>
             <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: "34%", background: "linear-gradient(180deg, rgba(8,9,12,0.55), rgba(8,9,12,0))", zIndex: 1 }} />
             <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "34%", background: "linear-gradient(0deg, rgba(8,9,12,0.55), rgba(8,9,12,0))", zIndex: 1 }} />
@@ -801,10 +851,14 @@ const KickerTab: React.FC<{ parts: { text: string; color: string }[]; size: numb
 
 const YearCounter: Look = ({ overlay, accent }) => {
   const { k, W, H, U, dir, hot, out, ks } = useDates(overlay, accent);
-  const { years } = yearsOf(overlay);
+  const { years, at } = yearsOf(overlay);
   if (!years.length) return null;
-  const year = String(years[years.length - 1]);
-  const from = years.length > 1 ? String(years[years.length - 2]) : "";
+  // two (or three) years said a beat apart: the first rolls in, the wheels roll on to each later one as it is said;
+  // else a jump: from the year the story was in to the year said
+  const steps = phased(at);
+  const year = String(steps ? years[0] : years[years.length - 1]);
+  const later = steps ? years.slice(1).map((y, i) => ({ chars: String(y), at: (Number.isFinite(at[i + 1]) ? at[i + 1] : 1) * 30 })) : [];
+  const from = !steps && years.length > 1 ? String(years[years.length - 2]) : "";
   const kicker = kickerOf(overlay);
   const kSize = fontFor("dateKicker", U, ks);
   const size = fontFor("counter", U, ks);
@@ -818,13 +872,14 @@ const YearCounter: Look = ({ overlay, accent }) => {
   const h = tabH + size * 1.3;
   const zone = zoneFor(overlay, "upper-left", w, h, W, H) as Zone;
   const r = blockAt(zone, w, h, W, H);
-  const right = isRight(zone);
+  const right = false;                    // the inside reads left to right on either side
+  const anchor = isRight(zone);
   return (
     <AbsoluteFill>
       <div style={{ position: "absolute", left: r.x, top: r.y, width: r.w, display: "flex", flexDirection: "column",
         alignItems: right ? "flex-end" : "flex-start", gap: 0.14 * size }}>
         {parts.length ? <KickerTab parts={parts} size={kSize} k={k} out={out} at={0} right={right} /> : null}
-        <Slots chars={year} from={from} size={size} font={font} at={4} out={out} k={k} hot={hot} />
+        <Slots chars={year} from={from} size={size} font={font} at={4} out={out} k={k} hot={hot} later={later} />
       </div>
     </AbsoluteFill>
   );
@@ -861,7 +916,8 @@ const TimeCounter: Look = ({ overlay, accent }) => {
     const chh = padT + head + fit.size * 1.2 + 0.3 * fit.size;
     const zone = zoneFor(overlay, "upper-left", cw, chh, W, H) as Zone;
     const r = blockAt(zone, cw, chh, W, H);
-    const right = isRight(zone);
+    const right = false;                    // the inside reads left to right on either side
+  const anchor = isRight(zone);
     const open = prog(f, 0, 14, S, expoOut);
     return (
       <AbsoluteFill>
@@ -886,7 +942,8 @@ const TimeCounter: Look = ({ overlay, accent }) => {
   const h = tabH + size * 1.3;
   const zone = zoneFor(overlay, "upper-left", w, h, W, H) as Zone;
   const r = blockAt(zone, w, h, W, H);
-  const right = isRight(zone);
+  const right = false;                    // the inside reads left to right on either side
+  const anchor = isRight(zone);
   return (
     <AbsoluteFill>
       <div style={{ position: "absolute", left: r.x, top: r.y, width: r.w, display: "flex", flexDirection: "column",
@@ -919,7 +976,8 @@ const ClockLook: Look = (props) => {
   const w = D + tabPadL + colW + tabPadR;
   const zone = zoneFor(overlay, "upper-left", w, D, W, H) as Zone;
   const r = blockAt(zone, w, D, W, H);
-  const right = isRight(zone);
+  const right = false;                    // the inside reads left to right on either side
+  const anchor = isRight(zone);
   const faceX = right ? r.x + r.w - D : r.x;
   const tabX = right ? r.x : faceX + D * 0.5;
   const tabW = w - D * 0.5;

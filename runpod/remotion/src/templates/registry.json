@@ -82858,7 +82858,7 @@
    "name": "Calendar Card",
    "category": "TIMELINES",
    "component": "motion",
-   "description": "A date with its day: a desk-calendar page top left (the month on its charcoal band, the day big on warm paper) that riffles two pages over its accent binding and lands on the day, the kicker and the year rolling in on a glass tab beside it.",
+   "description": "A date with its day: a desk-calendar page top left (the month on its charcoal band, the day big on warm paper) that riffles two blank pages over its accent binding and lands on the day, the kicker and the year rolling in on a glass tab beside it.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -82959,7 +82959,7 @@
      "name": "ui-tick",
      "volume": 0.3
     },
-    "sfxAt": 21,
+    "sfxAt": 16,
     "types": false,
     "leastSeconds": 4.75,
     "sounds": [
@@ -82969,9 +82969,7 @@
        "tick",
        "letter-tick"
       ],
-      "at": 11,
-      "every": 5,
-      "count": 2,
+      "at": 12,
       "gain_db": -10
      },
      {
@@ -82980,7 +82978,7 @@
        "ui-tick",
        "tick"
       ],
-      "at": 21,
+      "at": 16,
       "gain_db": -6
      }
     ]

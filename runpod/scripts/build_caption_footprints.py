@@ -122,7 +122,10 @@ def library_samples() -> dict:
     for path in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "library_looks*.json"))):
         with open(path, encoding="utf-8") as fh:
             for look in json.load(fh):
-                out["LIB_" + look["id"].upper().replace("-", "_")] = dict(look.get("sample") or {})
+                # a family that names its registry ids itself (the kinetic type: KT_NUMBER, KT_DATE, ...) is keyed
+                # by them - keyed LIB_KT_* they were never found, drew "Glen Canyon Dam" and went unmeasured
+                tid = look.get("template") or "LIB_" + look["id"].upper().replace("-", "_")
+                out[tid] = dict(look.get("sample") or {})
     return out
 
 

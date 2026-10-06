@@ -122,7 +122,8 @@ LANDING = {"number": 0.6, "ring": 0.8, "compare": 0.9, "date": 0.3, "chart": 0.5
 # the counter's wheels roll): seconds from the look's first frame to its landing, entry included.
 DATE_LAND = {KT_DATE: 1.35, KT_DATE_CARD: 1.25, KT_DATE_LINE: 1.25, KT_DATE_BADGE: 1.35, KT_YEAR: 1.35,
              KT_TIME: 1.35, KT_TIME_CLOCK: 1.35}
-DATE_LEG = 0.9          # the timeline's dot takes this long to slide on to a point said later in its look
+# the timeline's dot slides on to a year said later in its look, the counter's wheels roll on to it, in this long
+DATE_LEG = {KT_DATE_LINE: 0.9, KT_YEAR: 1.2}
 # What a look is planned for when the lane has room (seconds, entry and exit included). A date: 3.5-5 s.
 WANT = {"map": 7.0, "document": 6.5, "chart": 6.5, "number": 4.5, "ring": 5.0, "compare": 6.5, "date": 5.0,
         "image": 5.0, "person": 5.0, "lower-third": 4.5, "text": 4.0, "annotation": 4.0, "other": 3.6}
@@ -195,8 +196,8 @@ def landing_seconds(ov: dict) -> float:
     text = str(ov.get("text") or "")
     tid = str(ov.get("template") or "")
     if tid in DATE_LAND:
-        # a timeline whose dot slides on to a year said later in its run lands when that leg lands
-        return max(DATE_LAND[tid], _item_at(ov) + DATE_LEG) if tid == KT_DATE_LINE else DATE_LAND[tid]
+        # a timeline (a counter) that moves on to a year said later in its run lands when that leg (roll) lands
+        return max(DATE_LAND[tid], _item_at(ov) + DATE_LEG[tid]) if tid in DATE_LEG else DATE_LAND[tid]
     land = ENTRY + LANDING.get(fam, 0.0)
     if fam == "text":
         if _types(ov):
@@ -314,7 +315,7 @@ _SPELL_WORD = "|".join(sorted(list(_SPELL_UNITS) + list(_SPELL_TENS), key=len, r
 # A figure: digits ("760,000", "2.8", "$1.25") or spelled ("two and a half", "a billion", "ninety"), then a scale.
 _FIGURE = re.compile(
     r"(?<![\w.,$])(\$\s?)?(?:(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?|((?:a|an|one|two|three|four|five|six|seven|eight|"
-    r"nine|ten)\s+and\s+a\s+half|a|an|" + _SPELL_WORD + r"(?:[\s-](?:one|two|three|four|five|six|seven|eight|nine))?))"
+    r"nine|ten)\s+and\s+a\s+half|a|an|(?:" + _SPELL_WORD + r")(?:[\s-](?:one|two|three|four|five|six|seven|eight|nine))?))"
     r"(?:\s+(hundred))?(?:\s+(thousand|million|billion|trillion))?(?![\w])", re.I)
 _PERCENT_TAIL = re.compile(r"\s*(?:%|percent\b|per\s*cent\b)", re.I)
 _TIMES_TAIL = re.compile(r"\s+times\b", re.I)
@@ -351,7 +352,7 @@ _SHARE_HEDGE = re.compile(r"\b(?:more than|nearly|almost|about|over|roughly|arou
 _HALF = re.compile(r"\bhalf\b(?![\s-]+(?:brother|sister|sibling|brothers|sisters|siblings|time|way|hearted|life|"
                    r"past|an?\s+(?:hour|mile|minute|second|century|decade|dozen|day|year|week|month|inch|foot|step|"
                    r"cup|pound|percent))\b)(?!-)", re.I)
-_HALF_OF = re.compile(r"^\s+(?:of\s+)?(?:the|its|their|his|her|our|all|those|these|every|a|an|that|this|them|it|us)\b", re.I)
+_HALF_OF = re.compile(r"\s+(?:of\s+)?(?:the|its|their|his|her|our|all|those|these|every|a|an|that|this|them|it|us)\b", re.I)
 # "one in three", "three out of four", "three of every four", "1 in 4" (never "one of three sons": a member, not a share)
 _X_OF_Y = re.compile(r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s+(out of|in|of)\s+(every\s+)?"
                      r"(\d{1,3}|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty)\b", re.I)
@@ -366,7 +367,7 @@ _TITLED = re.compile(r"\b(?:called|titled|entitled|named)\s+$", re.I)
 _DAYPART_BEFORE = re.compile(r"\b(?:on\s+|in\s+|during\s+)?the\s+(night|morning|evening|afternoon|eve)\s+of\s*$", re.I)
 _SEASON_BEFORE = re.compile(r"\b(?:in\s+|during\s+|by\s+)?the\s+((?:early\s+|late\s+)?(?:spring|summer|fall|autumn|winter))"
                             r"\s+of\s*$", re.I)
-_DAYPART_AFTER = re.compile(r"^\s*,?\s*((?:that|this|the next|the following)\s+(?:morning|afternoon|evening|night))\b", re.I)
+_DAYPART_AFTER = re.compile(r"\s*,?\s*((?:that|this|the next|the following)\s+(?:morning|afternoon|evening|night))\b", re.I)
 _PLACE_BEFORE = re.compile(r"\b(?:in|at|near|outside|inside|across|throughout|to)\s+(?:the\s+)?"
                            r"((?:[A-Z][\w'’.-]+)(?:(?:\s+|,\s+)(?:of\s+)?[A-Z][\w'’.-]+){0,3})\s*,?\s+(?:in|on|during|by)\s+"
                            r"(?:the\s+)?$")
@@ -791,8 +792,9 @@ def look_for(m: dict, nar: Narration, hero: bool) -> dict:
         sub = ctx
         if m.get("ratio"):
             sub = sub or "for every 1"
+        # "doubled", "tenfold": the word said is the kicker (a capital at the start of the line is not a name)
         return {"template": KT_MULTIPLIER, "value": _fmt_value(m["value"]), "suffix": "×",
-                "label": label or hedge or word, "subtitle": sub}
+                "label": word or label or hedge, "subtitle": sub}
     if k in DATE_KINDS:
         return _date_props(KT_YEAR if k == "year" else KT_TIME if k in ("time", "daypart") else KT_DATE, m, None)
     # numbers
@@ -871,7 +873,7 @@ DATE_STYLES = {
     "month": (KT_DATE, KT_DATE_BADGE, KT_DATE_LINE),                 # a month and a year ("November 1982")
     "year": (KT_YEAR, KT_DATE_LINE, KT_DATE_BADGE),                  # a year on its own
     "jump": (KT_YEAR, KT_DATE_LINE),                                 # a year far from the one the story was in
-    "points": (KT_DATE_LINE,),                                       # two or three years said a beat apart, a range
+    "points": (KT_DATE_LINE, KT_YEAR),                               # two or three years said a beat apart, a range
     "time": (KT_TIME, KT_TIME_CLOCK),                                # a clock time ("3 AM", "7:00 PM")
     "words": (KT_TIME,),                                             # a time in words ("That evening", "Noon")
 }
@@ -904,6 +906,8 @@ def _fits(tid: str, m: dict) -> bool:
         return k == "year" or (k == "date" and bool(m.get("year"))) or len(m.get("points") or []) > 1
     if tid == KT_TIME_CLOCK:
         return k == "time" and bool(re.match(r"^\d", str(m.get("label") or "")))
+    if tid == KT_YEAR and len(m.get("points") or []) > 1:
+        return not any(len(pt) > 2 and pt[2] for pt in m["points"])      # the counter shows years, not a day said
     return True
 
 
@@ -939,13 +943,22 @@ def _short_date(m: dict) -> str:
     return str(m.get("label") or "").upper()
 
 
-def _points_items(points: List[Tuple[int, float]], start: Optional[float] = None) -> List[dict]:
-    """Timeline points as the look's items: each year and the second (from the look's start) it is said at."""
+def _point_label(m: dict) -> str:
+    """What a timeline writes under a point that was a date said ("Aug 4, 1961", "Nov 1982"); '' for a year."""
+    if m["kind"] != "date" or not m.get("year"):
+        return ""
+    mon = str(m.get("month") or "")[:3].title()
+    return f"{mon} {m['day']}, {m['year']}" if m.get("day") else f"{mon} {m['year']}"
+
+
+def _points_items(points: List[tuple], start: Optional[float] = None) -> List[dict]:
+    """Timeline points as the look's items: each year (its label) and the second from the look's start it is said."""
     # (the look starts MAX_LEAD_S before its first word: a point's second counts from there)
     t0 = (points[0][1] if start is None else start) - MAX_LEAD_S
     out = []
-    for i, (y, at) in enumerate(points):
-        item = {"label": str(int(y)), "value": int(y)}
+    for i, pt in enumerate(points):
+        y, at = pt[0], pt[1]
+        item = {"label": (pt[2] if len(pt) > 2 and pt[2] else str(int(y))), "value": int(y)}
         if i > 0 and at is not None:
             item["at"] = round(max(0.0, float(at) - float(t0)), 2)
         out.append(item)
@@ -961,8 +974,8 @@ def _date_props(tid: str, m: dict, story_year: Optional[int]) -> dict:
     points = m.get("points") or []
     if len(points) > 1:
         last = int(points[-1][0])
-        return {"template": KT_DATE_LINE, "text": "", "value": last, "items": _points_items(points),
-                "label": kick}
+        return {"template": tid if tid in (KT_DATE_LINE, KT_YEAR) else KT_DATE_LINE, "text": "", "value": last,
+                "items": _points_items(points), "label": kick}
     if k == "year" and m.get("to"):
         pts = [(int(m["value"]), m["at"]), (int(m["to"]), m.get("to_at", m["at"]))]
         if tid == KT_DATE_LINE:
@@ -1054,10 +1067,10 @@ def _merge(prev: dict, lk: dict, log: List[dict]) -> dict:
         # dates and years: one timeline when their years differ, else the more specific
         def year_of(m: dict) -> Optional[int]:
             return int(m["value"]) if m["kind"] == "year" else (int(m["year"]) if m.get("year") else None)
-        pts = list(pm.get("points") or ([(year_of(pm), pm["at"])] if year_of(pm) else []))
+        pts = list(pm.get("points") or ([(year_of(pm), pm["at"], _point_label(pm))] if year_of(pm) else []))
         ny = year_of(nm)
         if ny is not None and pts and ny != pts[-1][0] and len(pts) < MAX_POINTS:
-            pm["points"] = pts + [(ny, nm["at"])]
+            pm["points"] = pts + [(ny, nm["at"], _point_label(nm))]
             if not pm.get("kicker") and nm.get("kicker"):
                 pm["kicker"] = nm["kicker"]
             prev["score"] = max(prev["score"], lk["score"])
@@ -1186,7 +1199,7 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
         m = lk["m"]
         datey = m["kind"] in DATE_KINDS
         if m.get("points"):
-            key = "c:" + "|".join(str(y) for y, _ in m["points"])
+            key = "c:" + "|".join(str(pt[0]) for pt in m["points"])
         else:
             key = "c:" + "|".join(_key(x) for x in lk["run"]) if len(lk["run"]) > 1 else _key(m)
         times = seen.get(key, [])
@@ -1241,7 +1254,7 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) 
               "dataLook": True, "said": _clean(nar.text[first_a:last_b])[:120],
               "_at": m["at"], "_end": end, "_score": round(lk["score"], 2)}
         if m.get("points"):
-            ov["_points"] = [(int(y), float(at)) for y, at in m["points"]]
+            ov["_points"] = [(int(pt[0]), float(pt[1])) for pt in m["points"]]
         if m["kind"] == "daypart":
             ov["_daypart"] = True
         ov = {k: v for k, v in ov.items() if v not in (None,)}
