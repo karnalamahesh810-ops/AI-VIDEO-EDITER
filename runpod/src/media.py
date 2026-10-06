@@ -1144,6 +1144,13 @@ _CLIP_FIRST: contextvars.ContextVar = contextvars.ContextVar("clip_first", defau
 # rung names}. Its YouTube search is a fresh one (not the subject's cached list) and its candidates are
 # judged as "shows that subject" (_rung_judging) instead of "this exact moment".
 _RUNG: contextvars.ContextVar = contextvars.ContextVar("rung", default=None)
+# (query, subject) of every line whose clip-first search ran all its clip stages in this job without
+# being stopped: the rescue pass's judged search asks it again only for the lines that ran out of time.
+_CLIP_SEARCHED: set = set()
+
+
+def _searched_key(query: str, subject: str = "") -> tuple:
+    return (" ".join(str(query or "").split()).lower(), " ".join(str(subject or "").split()).lower())
 
 
 
@@ -3539,6 +3546,7 @@ def reset_cache():
     with _CACHE_LOCK:
         _BAD.clear()                    # what was unusable is decided again per job
         _SHORT_SECTIONS.clear()
+        _CLIP_SEARCHED.clear()          # which lines' clip searches ran to their end
     _LIBRARY_KEEP["on"] = False         # the job's Library.load turns it on
     from . import official
     official.reset()                    # each satellite sector once per video
@@ -4075,9 +4083,14 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
         # its clip stages are done - a passing clip on a later wording or rung wins - and then before any
         # picture, as a near-miss always has.
         soft: Optional[MediaAsset] = None
+        clips_done = False
         for stage, attempt, rung in plan:
             if _ytdlp.stopped():
                 break
+            if clip_first and not clips_done and stage not in ("youtube", "other_footage"):
+                clips_done = True
+                with _CACHE_LOCK:
+                    _CLIP_SEARCHED.add(_searched_key(query, subject))
             if soft is not None and stage not in ("youtube", "other_footage"):
                 _count_photo(soft)
                 return soft
@@ -4122,6 +4135,9 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                         pass
                 _count_photo(got)
                 return got
+        if clip_first and not clips_done and not _ytdlp.stopped():
+            with _CACHE_LOCK:
+                _CLIP_SEARCHED.add(_searched_key(query, subject))     # a clips-only plan, run to its end
         if soft is not None:
             _count_photo(soft)
         return soft
@@ -5537,6 +5553,10 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
             """
             if not getattr(config, "CLIPS_FIRST", False) or youtube_only:
                 return None
+            with _CACHE_LOCK:
+                done = _searched_key(q, job.get("subject") or "") in _CLIP_SEARCHED
+            if done:
+                return None                     # its whole clip search already ran (not cut short): not again
             own = min(until - 20.0, time.time() + float(getattr(config, "RESCUE_SCENE_SECONDS", 120) or 120))
             if own <= time.time() + 5:
                 return None

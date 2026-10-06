@@ -418,6 +418,23 @@ class Rescue(unittest.TestCase):
         self.assertIn("judged", results[0].review_reason)
         self.assertEqual(out["search"], 1)
 
+    def test_a_line_whose_whole_clip_search_already_ran_is_not_searched_again(self):
+        asked = []
+        with mock.patch.multiple(config, CLIPS_FIRST=True, FRESH_MOMENTS=False, RESCUE_SECONDS=60,
+                                 ALLOW_WEB_IMAGES=False), \
+                mock.patch.object(media, "_yt_candidates", return_value=[]), \
+                mock.patch.object(media, "_source_one", side_effect=lambda *a, **k: asked.append(k.get("stage"))):
+            media.reset_cache()
+            media.source_for_segment("Malik Obama interview", 4.0, "/w", visual_type="footage", subject="Malik Obama",
+                                     clips_only=True)                                  # pass 1: ran to its end
+            n = len(asked)
+            with mock.patch.object(media, "source_for_segment", wraps=media.source_for_segment) as again:
+                media.rescue_fill([self._job(0, subject_type="place")], [None], tempfile.mkdtemp())
+        self.assertGreater(n, 0)
+        again.assert_not_called()
+        media.reset_cache()
+        self.assertEqual(media._CLIP_SEARCHED, set())
+
     def test_a_person_line_the_judged_search_misses_stays_for_the_ladder(self):
         results = [None]
         with mock.patch.multiple(config, CLIPS_FIRST=True, FRESH_MOMENTS=False, RESCUE_SECONDS=60,
