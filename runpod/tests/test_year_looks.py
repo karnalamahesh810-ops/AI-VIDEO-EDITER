@@ -1,20 +1,24 @@
 """
-Years said on a line rotate through the year looks (the owner, 2026-10-02:
-"when we said years it only using year one ... on previous video we got lot of
-different ones on timeline"). Lake Powell showed the year line five times. Now
-the date pass picks the least used year look that can show what the line said:
-the year line, the year scroller (the ruler under a lens), the year roll, the
-decade grid, the years-later and time-passing cards for a counted jump, the
-then / now card for a range as said or a year against today. They keep the
-date looks' room (one per VR_GAP) and show nothing the line did not say.
+Years said on a line (the owner, 2026-10-02: "when we said years it only using year one ... on previous video we
+got lot of different ones on timeline"; 2026-10-06, on the "Year Scroller Lens" of his Obama video - a big gold
+"2008" in a glowing lens over blurred footage: "not great, remove it").
+
+The scroller, the year roll, the decade grid, the years-later and time-passing cards and the then / now card are
+retired (remotion/src/legacyLooks.ts draws them as the date family; the registry hides them). The build's date
+pass keeps the year line for a jump in years; the data planner (src/datalooks.py) puts every year said on the
+date family - the year counter rolling from the year the story was in, the timeline sliding to it, the badge -
+never the same look twice in a row and never a year the narration did not say.
 """
+import os
 import re
 import unittest
 
+from src import datalooks as dl
 from src import templates, treatments
 from tests.test_vidrush_dates import FPS, PLAIN, _plan
 
-YEARS = set(treatments.YEAR_LOOKS)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+YEARS = set(treatments.YEAR_LOOKS) | set(treatments.RETIRED_YEAR_LOOKS)
 
 
 def _years(out):
@@ -35,29 +39,54 @@ MANY = _story("In 1961 the dam was finished.", "Years later, in 2008, it was ful
               "In 1700 nobody lived here.", "Two decades later, in 1720, a fort stood here.")
 
 
-class TheLooks(unittest.TestCase):
-    def test_every_year_look_is_registered_switched_on_and_not_banned(self):
-        for tid in treatments.YEAR_LOOKS:
-            self.assertIsNotNone(templates.get(tid), tid)
-            self.assertFalse(templates.banned(tid), tid)
-            self.assertTrue(treatments.auto_ok(tid), tid)
-
-    def test_the_year_roll_keeps_its_two_years(self):
-        # It rolls from items[0] to items[1]; the registry dropped "items" and the look drew nothing.
-        r = templates.resolve("TL_YEAR_ROLL_V1", props={"items": [{"label": "1961"}, {"label": "2008"}], "value": 2008})
-        self.assertEqual([i["label"] for i in r["items"]], ["1961", "2008"])
+def _words(lines, secs=5.0):
+    out = []
+    for i, text in enumerate(lines):
+        for j, w in enumerate(text.split()):
+            out.append({"text": w, "start": i * secs + j * 0.3, "end": i * secs + j * 0.3 + 0.25})
+    return out
 
 
-class ARotation(unittest.TestCase):
-    def test_a_video_with_eight_jumps_shows_seven_looks_the_year_line_first(self):
+class TheRetiredLooks(unittest.TestCase):
+    def test_they_are_retired_in_the_registry_and_the_renderer_and_never_picked(self):
+        with open(os.path.join(ROOT, "remotion", "src", "legacyLooks.ts"), encoding="utf-8") as fh:
+            ts = fh.read()
+        for tid in treatments.RETIRED_YEAR_LOOKS:
+            t = templates.get(tid)
+            self.assertIsNotNone(t, tid)
+            self.assertTrue(t.get("retired"), tid)
+            self.assertFalse(templates.auto_pick(t), tid)
+            self.assertFalse(treatments.auto_ok(tid), tid)
+            self.assertIn(f'"{tid}"', ts, tid)
+            self.assertIn(tid, dl.RETIRED_IDS, tid)
+        self.assertEqual(treatments.YEAR_LOOKS, (treatments.VR_YEAR,))
+
+    def test_an_older_plan_draws_them_as_the_date_family(self):
+        got = dl.remap_retired({"template": "LIB_TL_YEAR_SCROLLER", "value": 2008, "subtitle": "YEARS LATER",
+                                "startFrame": 30, "durationInFrames": 131})
+        self.assertEqual((got["template"], got["value"], got["label"], got["startFrame"]),
+                         (dl.KT_YEAR, 2008, "YEARS LATER", 30))
+        roll = dl.remap_retired({"template": "TL_YEAR_ROLL_V1", "items": [{"label": "1961"}, {"label": "2008"}],
+                                 "value": 2008})
+        self.assertEqual([i["value"] for i in roll["items"]], [1961, 2008])
+        then_now = dl.remap_retired({"template": "LIB_TL_THEN_NOW_YEARS",
+                                     "items": [{"label": "FROM", "value": 1961}, {"label": "TO", "value": 2008}]})
+        self.assertEqual((then_now["template"], [i["value"] for i in then_now["items"]]), (dl.KT_DATE_LINE, [1961, 2008]))
+        later = dl.remap_retired({"template": "LIB_TL_YEARS_LATER", "value": 30, "suffix": "YEARS", "label": "LATER",
+                                  "text": "1998"})
+        self.assertEqual((later["template"], later["value"], later["label"]), (dl.KT_YEAR, 1998, "30 YEARS LATER"))
+        card = dl.remap_retired({"template": "LIB_DT_CLEAN_CARD", "text": "SEPTEMBER 25, 2026", "label": "Lake Mead"})
+        self.assertEqual((card["template"], card["text"], card["subtitle"], card["label"]),
+                         (dl.KT_DATE_CARD, "September 25", "2026", "LAKE MEAD"))
+
+
+class TheBuildsDatePass(unittest.TestCase):
+    def test_a_jump_takes_the_year_line_never_a_retired_look(self):
         shown = [o["template"] for o in _years(_plan(MANY))]
-        self.assertEqual(len(shown), 8, shown)
-        self.assertEqual(shown[0], treatments.VR_YEAR)
-        self.assertGreaterEqual(len(set(shown)), 7, shown)
-        self.assertFalse([a for a, b in zip(shown, shown[1:]) if a == b], shown)
+        self.assertTrue(shown)
+        self.assertEqual(set(shown), {treatments.VR_YEAR})
 
     def test_the_year_looks_keep_the_date_looks_room(self):
-        # Two jumps 30 s apart: one graphic (VR_GAP), however different the second look would be.
         out = _plan(_story("In 1961 the dam was finished.", "Years later, in 2008, it was full.", gap=6))
         self.assertEqual(len(_years(out)), 1)
         at = [o["startFrame"] / FPS for o in _years(_plan(MANY))]
@@ -70,47 +99,40 @@ class ARotation(unittest.TestCase):
         self.assertAlmostEqual(second["startFrame"] / FPS, 85.9, delta=0.2)
 
 
-class WhatEachShows(unittest.TestCase):
-    def _one(self, text, story_year=None):
-        m, _now = treatments.vr_moment(text, {}, {}, story_year)
-        return m
+class TheDataPlanner(unittest.TestCase):
+    def setUp(self):
+        self.looks, self.log = dl.plan(_words(MANY), FPS)
+        self.years = [o for o in self.looks if o["template"] in dl.DATE_LOOKS]
 
-    def test_thirty_years_later_is_the_years_later_card_with_the_year_under_it(self):
-        [o] = _years(_plan(["Thirty years later, in 1998, it was dry.", PLAIN, PLAIN]))
-        self.assertEqual((o["template"], o["value"], o["suffix"], o["label"], o["text"]),
-                         ("LIB_TL_YEARS_LATER", 30.0, "YEARS", "LATER", "1998"))
+    def test_every_year_said_has_a_look_and_no_look_repeats_back_to_back(self):
+        said = sorted({int(y) for y in re.findall(r"\b(1[5-9]\d\d|20\d\d)\b", " ".join(MANY))})
+        shown = set()
+        for o in self.years:
+            shown.add(int(o.get("value") or o.get("subtitle")))
+            shown.update(int(i["value"]) for i in o.get("items") or [])
+        self.assertTrue(set(said) <= shown, (said, shown))
+        ids = [o["template"] for o in self.years]
+        self.assertFalse([a for a, b in zip(ids, ids[1:]) if a == b], ids)
+        self.assertGreaterEqual(len(set(ids)), 2, ids)            # a jump: the counter and the timeline in turn
+        self.assertTrue(set(ids) <= {dl.KT_YEAR, dl.KT_DATE_LINE, dl.KT_DATE_BADGE, dl.KT_DATE}, ids)
 
-    def test_a_range_as_said_is_from_and_to(self):
-        [o] = _years(_plan(["From 1961 to 2008 the lake rose.", PLAIN, PLAIN]))
-        self.assertEqual(o["template"], "LIB_TL_THEN_NOW_YEARS")
-        self.assertEqual([(i["label"], i["value"]) for i in o["items"]], [("FROM", 1961), ("TO", 2008)])
+    def test_a_jump_rolls_from_the_year_the_story_was_in(self):
+        later = next(o for o in self.years if o.get("value") == 2008 and o["template"] in (dl.KT_YEAR, dl.KT_DATE_LINE))
+        self.assertEqual([i["value"] for i in later["items"]], [1961, 2008])
 
-    def test_then_and_now_only_when_today_is_said(self):
-        m = self._one("Back in 1936, the dam was finished. Today it is drying up.")
-        self.assertEqual(treatments.year_look_props("LIB_TL_THEN_NOW_YEARS", m["years"])["items"],
-                         [{"label": "THEN", "value": 1936}, {"label": "NOW", "value": treatments.NOW_YEAR}])
-        m = self._one("Back in 1936, the dam was finished.")
-        self.assertIsNone(treatments.year_look_props("LIB_TL_THEN_NOW_YEARS", m["years"]))
+    def test_a_range_as_said_is_one_timeline(self):
+        looks, _ = dl.plan(_words(["From 1961 to 2008 the lake rose.", PLAIN, PLAIN]), FPS)
+        [o] = looks
+        self.assertEqual(o["template"], dl.KT_DATE_LINE)
+        self.assertEqual([i["value"] for i in o["items"]], [1961, 2008])
+        self.assertGreater(o["items"][1]["at"], 0.0)              # the dot slides on when "2008" is said
 
-    def test_the_counted_cards_only_for_a_jump_said_with_its_number(self):
-        for text in ("Years later, in 2008, it was full.", "A few decades later, in 2008, it was full.",
-                     "In 1890 the river ran free."):
-            m = self._one(text, 1961)
-            for tid in treatments.YEAR_COUNT_LOOKS:
-                self.assertIsNone(treatments.year_look_props(tid, m["years"]), (tid, text))
-        m = self._one("Half a century later, in 2011, it was full.", 1961)
-        self.assertEqual(treatments.year_look_props("LIB_TL_TIME_PASSING", m["years"]),
-                         {"value": 50, "suffix": "YEARS", "label": "LATER", "text": "2011"})
-
-    def test_no_look_shows_a_number_the_story_did_not_say(self):
-        out = _plan(MANY)
-        said = {int(n) for n in re.findall(r"\b\d{4}\b", " ".join(MANY))} | {treatments.NOW_YEAR, 30, 2}
-        for o in _years(out):
-            nums = [o.get("value"), o.get("total")] + [i.get("value") for i in o.get("items") or []] \
-                + [i.get("label") for i in o.get("items") or []] + [o.get("text")]
-            for n in nums:
-                if n not in (None, "") and re.fullmatch(r"\d+(\.0)?", str(n)):
-                    self.assertIn(int(float(n)), said, (o["template"], n))
+    def test_no_look_shows_a_year_the_story_did_not_say(self):
+        said = {int(n) for n in re.findall(r"\b\d{4}\b", " ".join(MANY))}
+        for o in self.years:
+            for n in [o.get("value")] + [i.get("value") for i in o.get("items") or []]:
+                if n is not None:
+                    self.assertIn(int(n), said, o)
 
     def test_the_jump_as_said(self):
         cases = {"thirty years later": (30, "YEARS", "LATER"), "two decades later": (2, "DECADES", "LATER"),
@@ -119,26 +141,6 @@ class WhatEachShows(unittest.TestCase):
                  "years later": None, "a few decades later": None, "several years later": None, "fast forward": None}
         for said, want in cases.items():
             self.assertEqual(treatments._jump_count(said), want, said)
-
-
-class ALookAtItsLeastTime(unittest.TestCase):
-    def test_the_slow_cards_stay_until_their_years_have_landed(self):
-        # At 2.5 s the then / now card's second year still rolled when it flipped away (registry leastSeconds).
-        want = {"LIB_TL_THEN_NOW_YEARS": 4.0, "LIB_TL_DECADE_GRID": 4.0, "LIB_TL_YEARS_LATER": 3.2,
-                "TL_YEAR_ROLL_V1": 3.0}
-        got = {o["template"]: o["durationInFrames"] / FPS for o in _years(_plan(MANY)) if o["template"] in want}
-        self.assertEqual(set(got), set(want))
-        for tid, least in want.items():
-            self.assertGreaterEqual(got[tid], least - 1.0 / FPS, tid)
-            self.assertEqual(templates.get(tid)["defaults"]["leastSeconds"], least, tid)
-
-    def test_a_window_of_exactly_its_least_time_is_placed(self):
-        # 2.7666 < 2.7667: float error left out every look whose animation sets its least time.
-        out = _plan(_story("In 1961 the dam was finished.", "Years later, in 2008, it was full."))
-        scroller = [o for o in _years(out) if o["template"] == "LIB_TL_YEAR_SCROLLER"]
-        self.assertEqual(len(scroller), 1)
-        least = treatments.animation_seconds(templates.get("LIB_TL_YEAR_SCROLLER"))
-        self.assertGreaterEqual(scroller[0]["durationInFrames"], int(least * FPS) - 1)
 
 
 if __name__ == "__main__":

@@ -6684,7 +6684,9 @@
    "cues": [
     "years"
    ],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TL_SPAN_V1",
@@ -7422,7 +7424,9 @@
    "cues": [
     "date"
    ],
-   "tags": []
+   "tags": [],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "TL_AGE_TAG_V1",
@@ -30893,7 +30897,9 @@
    "tags": [
     "lib",
     "tl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TL_VERTICAL_MILESTONES",
@@ -31375,7 +31381,9 @@
    "tags": [
     "lib",
     "tl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TL_TIME_PASSING",
@@ -31567,7 +31575,9 @@
    "tags": [
     "lib",
     "tl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TL_DECADE_GRID",
@@ -31744,7 +31754,9 @@
    "tags": [
     "lib",
     "tl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TL_CURVED_PATH",
@@ -32075,7 +32087,9 @@
     "lib",
     "tl",
     "own-backdrop"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TL_DATE_STAMP_CIRCLE",
@@ -32237,7 +32251,9 @@
    "tags": [
     "lib",
     "tl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_TL_THEN_NOW_YEARS",
@@ -32408,7 +32424,9 @@
    "tags": [
     "lib",
     "tl"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_CB_TWIN_LINES",
@@ -59395,7 +59413,9 @@
    "tags": [
     "lib",
     "dt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_DT_CALENDAR_PAGE",
@@ -60173,7 +60193,9 @@
    "tags": [
     "lib",
     "dt"
-   ]
+   ],
+   "retired": true,
+   "autoPick": false
   },
   {
    "id": "LIB_DT_TIMELINE_TICK",
@@ -81438,23 +81460,10 @@
    "name": "Percent Ring",
    "category": "NUMBERS",
    "component": "motion",
-   "description": "A ring that fills to the share while the number counts up to it (27%), an accent kicker and a one-line context beside it; for a percent or a share of a whole.",
+   "description": "A share said (\"27 percent\", \"more than half\", \"two-thirds\" as 2/3): a ring 18 % of the frame height fills to the share while the number inside it counts, a kicker and ONE line of context beside it (cut at a natural break, never mid-thought).",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
-    "value": {
-     "type": "number",
-     "label": "Value"
-    },
-    "total": {
-     "type": "number",
-     "label": "Out of"
-    },
-    "suffix": {
-     "type": "string",
-     "label": "Unit",
-     "max": 12
-    },
     "label": {
      "type": "string",
      "label": "Label",
@@ -81465,10 +81474,23 @@
      "label": "Subtitle",
      "max": 200
     },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
     "text": {
      "type": "string",
      "label": "Text",
      "max": 240
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
     },
     "position": {
      "type": "enum",
@@ -81623,7 +81645,7 @@
    "name": "Multiplier",
    "category": "NUMBERS",
    "component": "motion",
-   "description": "\"15 times\": the count climbs to 15x inside a ring of ticks that light one by one and close on the landing, with a one-line context; for times / twice / triple / half lines.",
+   "description": "\"15 times\", \"doubled\", \"tenfold\": the count climbs inside a ring 18 % of the frame height - a tick a unit for 5-24 times, lighting one by one, a fine ring otherwise - that closes on the landing, with one line of context.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -82145,7 +82167,7 @@
    "name": "Progress Bar",
    "category": "NUMBERS",
    "component": "motion",
-   "description": "A bar that fills for \"3 of 4\" or a share of a whole while the figure counts, with a kicker and one line of context.",
+   "description": "\"one in three\", \"three out of four\": that many dots with the share lit one by one (\"1 in 3\", the words joined as said), else a bar that fills for a share of a whole; a kicker and one line of context.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -82320,10 +82342,10 @@
   },
   {
    "id": "KT_DATE",
-   "name": "Date",
+   "name": "Date Stamp",
    "category": "TIMELINES",
    "component": "motion",
-   "description": "A date said (\"August 21\" and its year rolling in like an odometer) top left, a small kicker and an accent rule that draws on.",
+   "description": "A date said, in a frosted glass chip top left: the kicker (the weekday or the place said) over the date as said (\"August 21\", a headline - capitals 6 % of the frame height), its letters rising and its figures rolling into place, a thin bar of the year under it filling to the day with the year at its end. A year said alone is drawn as the year counter.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -82416,25 +82438,37 @@
     }
    },
    "defaults": {
-    "duration": 3.8,
+    "duration": 5.0,
     "entrance": "fade",
     "exit": "fade",
     "variant": "kt-date",
     "sfx": {
-     "name": "letter-tick",
+     "name": "count-tick",
      "volume": 0.3
     },
+    "sfxAt": 40,
     "types": false,
-    "leastSeconds": 3.0,
+    "leastSeconds": 4.75,
     "sounds": [
+     {
+      "name": "count-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 8,
+      "align": "start",
+      "until": 24,
+      "gain_db": -12
+     },
      {
       "name": "letter-tick",
       "alt": [
        "ui-tick",
        "tick"
       ],
-      "at": 8,
-      "gain_db": -2.0
+      "at": 40,
+      "gain_db": -6
      }
     ]
    },
@@ -82479,10 +82513,10 @@
   },
   {
    "id": "KT_YEAR",
-   "name": "Year",
+   "name": "Year Counter",
    "category": "TIMELINES",
    "component": "motion",
-   "description": "A year said, its digits rolling into place like an odometer, top left, a kicker and a context line.",
+   "description": "A year said, in four glass slots top left like a mechanical counter: each digit rolls on its wheel from the year the story was in (\"FROM 1982\" on a small glass tab with the kicker) or a few steps below, and lands with a small settle and an accent edge.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -82500,10 +82534,13 @@
      "label": "Label",
      "max": 120
     },
-    "subtitle": {
-     "type": "string",
-     "label": "Subtitle",
-     "max": 200
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
     },
     "position": {
      "type": "enum",
@@ -82579,25 +82616,37 @@
     }
    },
    "defaults": {
-    "duration": 3.8,
+    "duration": 5.0,
     "entrance": "fade",
     "exit": "fade",
     "variant": "kt-year",
     "sfx": {
-     "name": "letter-tick",
+     "name": "count-tick",
      "volume": 0.3
     },
+    "sfxAt": 40,
     "types": false,
-    "leastSeconds": 3.0,
+    "leastSeconds": 4.75,
     "sounds": [
+     {
+      "name": "count-tick",
+      "alt": [
+       "count-roll",
+       "ui-tick"
+      ],
+      "at": 6,
+      "align": "start",
+      "until": 38,
+      "gain_db": -9
+     },
      {
       "name": "letter-tick",
       "alt": [
        "ui-tick",
        "tick"
       ],
-      "at": 8,
-      "gain_db": -2.0
+      "at": 40,
+      "gain_db": -6
      }
     ]
    },
@@ -82641,10 +82690,10 @@
   },
   {
    "id": "KT_TIME",
-   "name": "Time of Day",
+   "name": "Time Counter",
    "category": "TIMELINES",
    "component": "motion",
-   "description": "A time of day said (\"3 AM\") top left with a small kicker and an accent rule.",
+   "description": "A clock time said (\"3 AM\" -> 3:00 and its AM in the accent) in the year counter's glass slots top left, the kicker (\"THAT NIGHT\", the date said with it) on a small glass tab; a time said in words (\"That evening\") on a glass chip.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -82732,17 +82781,721 @@
     }
    },
    "defaults": {
-    "duration": 3.5,
+    "duration": 5.0,
     "entrance": "fade",
     "exit": "fade",
     "variant": "kt-time",
     "sfx": {
-     "name": "none",
-     "volume": 0.0
+     "name": "count-tick",
+     "volume": 0.3
     },
+    "sfxAt": 40,
     "types": false,
-    "leastSeconds": 3.0,
-    "sounds": []
+    "leastSeconds": 4.75,
+    "sounds": [
+     {
+      "name": "count-tick",
+      "alt": [
+       "count-roll",
+       "ui-tick"
+      ],
+      "at": 6,
+      "align": "start",
+      "until": 34,
+      "gain_db": -10
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 40,
+      "gain_db": -6
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "time-of-day"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_DATE_CARD",
+   "name": "Calendar Card",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A date with its day: a desk-calendar page top left (the month on its charcoal band, the day big on warm paper) that riffles two pages over its accent binding and lands on the day, the kicker and the year rolling in on a glass tab beside it.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-date-card",
+    "sfx": {
+     "name": "ui-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 21,
+    "types": false,
+    "leastSeconds": 4.75,
+    "sounds": [
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick",
+       "letter-tick"
+      ],
+      "at": 11,
+      "every": 5,
+      "count": 2,
+      "gain_db": -10
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 21,
+      "gain_db": -6
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_DATE_LINE",
+   "name": "Timeline Marker",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A year on a short timeline in a glass card top left: the year counts while a glowing dot slides from the year the story was in (or in from the left) to the year said, the travelled part in the accent; a second year said a beat later slides it on (items carry each year and the second it is said at).",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-date-line",
+    "sfx": {
+     "name": "count-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 36,
+    "types": false,
+    "leastSeconds": 4.75,
+    "sounds": [
+     {
+      "name": "count-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 10,
+      "align": "start",
+      "until": 34,
+      "gain_db": -12
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 36,
+      "gain_db": -6
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_DATE_BADGE",
+   "name": "Date Badge",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A date as a lower third, low left: a frosted glass bar with an accent edge, the kicker (\"THE NIGHT OF\", a weekday, the place) over \"Nov 24, 1982\" - the year in the accent.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-date-badge",
+    "sfx": {
+     "name": "letter-tick",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "leastSeconds": 4.75,
+    "sounds": [
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 30,
+      "gain_db": -6
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "date",
+    "datetime"
+   ],
+   "tags": [
+    "lib",
+    "kt"
+   ]
+  },
+  {
+   "id": "KT_TIME_CLOCK",
+   "name": "Clock Face",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "A clock time said, as a glass clock face top left whose hands sweep round to the time, the time set beside it on a glass tab with its kicker.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-time-clock",
+    "sfx": {
+     "name": "tick",
+     "volume": 0.3
+    },
+    "sfxAt": 40,
+    "types": false,
+    "leastSeconds": 4.75,
+    "sounds": [
+     {
+      "name": "tick",
+      "alt": [
+       "ui-tick",
+       "letter-tick"
+      ],
+      "at": 10,
+      "every": 4,
+      "count": 7,
+      "gain_db": -15
+     },
+     {
+      "name": "letter-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 40,
+      "gain_db": -6
+     }
+    ]
    },
    "variants": {
     "style": [

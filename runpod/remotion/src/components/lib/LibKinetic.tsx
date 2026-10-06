@@ -3,7 +3,7 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Overlay } from "../../types";
 import { GROTESK, GROTESK_CAP, INTER, SUBLINE } from "../fonts";
 import { THEMES } from "../themes";
-import { exitProg, idle, motionBlur, sineInOut } from "../motion/ease";
+import { backOut, exitProg, idle, motionBlur, sineInOut } from "../motion/ease";
 import { guard, hash, rgba, type Look } from "./proKit";
 import { num, str } from "./proFormat";
 import {
@@ -30,9 +30,7 @@ import { typedAt, typingEnds } from "./LibEditorText";
  *                  by one, the ring closes on the landing
  *   kt-compare     two (or three) values as bars that grow ("1x vs 15x",
  *                  "50,000 vs 760,000"), the larger in the accent
- *   kt-date        a date said ("August 21" + "2026"), the year rolling in, top left
- *   kt-year        a year said, its digits rolling like an odometer, top left
- *   kt-time        a time of day said ("3 AM"), top left
+ *   kt-date ...    the dates, years and times said: LibKtDates.tsx (the date family, 2026-10-06)
  *   kt-lower-third a name and role, low left
  *
  * Every one: a direction (editorial / doc / kinetic), its home place (mirrored
@@ -42,7 +40,7 @@ import { typedAt, typingEnds } from "./LibEditorText";
  * Only the plan's words are set; a look that cannot set them whole draws nothing.
  */
 
-const useLook = (overlay: Overlay, accent: string) => {
+export const useLook = (overlay: Overlay, accent: string) => {
   const f = useCurrentFrame();
   const { fps, width: W, height: H, durationInFrames: dur } = useVideoConfig();
   const S = fps / 30;
@@ -61,7 +59,7 @@ const useLook = (overlay: Overlay, accent: string) => {
 };
 
 /** The backing behind a block: the slim panel, the kinetic box (drawn per line by the look) or the soft shade. */
-const Backing: React.FC<{ panel: boolean; dir: DirSpec; rect: { x: number; y: number; w: number; h: number };
+export const Backing: React.FC<{ panel: boolean; dir: DirSpec; rect: { x: number; y: number; w: number; h: number };
   right: boolean; p: number; out: number; boxed?: boolean }> = ({ panel, dir, rect, right, p, out, boxed = false }) => {
   if (panel) return <PanelBacking right={right} p={p * (1 - out)} />;
   if (boxed && dir.backing === "box") return null;
@@ -321,12 +319,25 @@ const arcPath = (cx: number, cy: number, r: number, a0: number, a1: number) => {
   return `M${p(a0)} A${r.toFixed(2)},${r.toFixed(2)} 0 ${large} 1 ${p(a1)}`;
 };
 
-/** The side column of a ring look: kicker and a line of context (two lines at most), beside the ring. */
+/** The size unit: the frame height, or the 16:9 height of a tall frame's width (a short keeps the proportions). */
+const unitOf = (W: number, H: number) => Math.min(H, (W * 9) / 16);
+/** A ring's diameter (typeScale "ringD": 18 % of the height, 16-20 %) and the share of the frame its context may take. */
+const ringD = (W: number, H: number, ks: number) => scale.ringD.share * unitOf(W, H) * ks;
+const SIDE_W = 0.28;
+
+/** The largest font (from `size` down to 60 %) at which `text` fits `maxW`. */
+const fitSize = (text: string, font: string, weight: number, size: number, maxW: number, tracking = -0.02) => {
+  let s = size;
+  while (s > size * 0.6 && widthOf(text, font, s, weight, tracking) > maxW) s *= 0.96;
+  return s;
+};
+
+/** The side column of a ring look: the kicker and ONE line of context, beside the ring. */
 const SideText: React.FC<{ kicker: string; context: string; hot: string; dir: DirSpec; k: number; H: number; W: number;
   ks: number; out: number; align: "left" | "right"; at: number }> = ({ kicker, context, hot, dir, k, H, W, ks, out, align, at }) => {
   const kSize = sizeFor("kicker", H, GROTESK_CAP, ks);
   const cSize = sizeFor("context", H, GROTESK_CAP, ks) * 1.12;
-  const ctx = context ? fitLines(context, INTER, 600, cSize, cSize * 0.82, 0.32 * W, 2) : null;
+  const ctx = context ? fitLines(context, INTER, 600, cSize, cSize * 0.8, SIDE_W * W, 1) : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: align === "right" ? "flex-end" : "flex-start" }}>
       {kicker ? (
@@ -335,18 +346,36 @@ const SideText: React.FC<{ kicker: string; context: string; hot: string; dir: Di
             color={dir.id === "doc" ? SOFT_WHITE : hot} preset="track" timing={{ at }} out={out} align={align} shadow={softShadow(k, 0.5)} />
         </div>
       ) : null}
-      {ctx ? ctx.lines.map((ln, i) => (
-        <KineticLine key={i} text={ln} font={INTER} weight={600} size={ctx.size} color={WHITE} preset="focus"
-          timing={{ at: at + 6 + i * 4, gap: 2 }} out={out} align={align} shadow={softShadow(k, 0.55)} />
-      )) : null}
+      {ctx ? (
+        <KineticLine text={ctx.lines[0]} font={INTER} weight={600} size={ctx.size} color={WHITE} preset="focus"
+          timing={{ at: at + 6, gap: 2 }} out={out} align={align} shadow={softShadow(k, 0.55)} />
+      ) : null}
     </div>
   );
+};
+
+/**
+ * One line of context beside a ring: the whole phrase when it fits (the type may shrink a little), else the
+ * phrase up to a natural break ("full - the lowest since..." -> "full"), else nothing - never a phrase cut
+ * off mid-thought ("the lowest since it first").
+ */
+const oneLine = (context: string, W: number, H: number, ks: number) => {
+  if (!context) return "";
+  const cSize = sizeFor("context", H, GROTESK_CAP, ks) * 1.12;
+  const fits = (s: string) => Boolean(fitLines(s, INTER, 600, cSize, cSize * 0.78, SIDE_W * W, 1));
+  if (fits(context)) return context;
+  const parts = context.split(/\s+[-–—:]\s+|[,;]\s+|\s+\(/);
+  for (let n = parts.length - 1; n >= 1; n--) {
+    const head = parts.slice(0, n).join(", ").trim();
+    if (head.length >= 3 && fits(head)) return head;
+  }
+  return "";
 };
 
 const sideWidth = (kicker: string, context: string, k: number, H: number, W: number, ks: number) => {
   const kSize = sizeFor("kicker", H, GROTESK_CAP, ks);
   const cSize = sizeFor("context", H, GROTESK_CAP, ks) * 1.12;
-  const ctx = context ? fitLines(context, INTER, 600, cSize, cSize * 0.82, 0.32 * W, 2) : null;
+  const ctx = context ? fitLines(context, INTER, 600, cSize, cSize * 0.8, SIDE_W * W, 1) : null;
   return Math.max(kicker ? widthOf(kicker.toUpperCase(), SUBLINE, kSize, 700, 0.2) : 0, ctx ? ctx.width : 0);
 };
 
@@ -356,12 +385,13 @@ const Percent: Look = ({ overlay, accent }) => {
   if (value === null) return null;
   const total = num(overlay.total);
   const share = clamp01(total && total > 0 ? value / total : value / 100);
-  const kicker = str(overlay.label) || str(overlay.text);
-  const context = str(overlay.subtitle);
-  const D = 0.29 * H * ks;
-  const stroke = (dir.id === "kinetic" ? 0.03 : 0.022) * H * ks;
-  const R = D / 2 - stroke / 2;
-  const gap = 40 * k;
+  const kicker = str(overlay.label) || (str(overlay.text).length <= 28 ? str(overlay.text) : "");
+  const context = oneLine(str(overlay.subtitle), W, H, ks);
+  const U = unitOf(W, H);
+  const D = ringD(W, H, ks);
+  const stroke = (dir.id === "kinetic" ? 0.022 : 0.016) * U * ks;
+  const R = D / 2 - stroke / 2 - 2 * k;
+  const gap = 32 * k;
   const sideW = sideWidth(kicker, context, k, H, W, ks);
   const w = D + (sideW ? gap + sideW : 0);
   const h = D;
@@ -376,7 +406,10 @@ const Percent: Look = ({ overlay, accent }) => {
   const a0 = -Math.PI / 2;
   const a1 = a0 + Math.PI * 2 * share * fill;
   const head = [D / 2 + R * Math.cos(a1), D / 2 + R * Math.sin(a1)];
-  const numSize = sizeFor("ring", H, dir.cap, ks);
+  // the number inside the ring: as large as fits inside it (typeScale "ringNumber", capitals 5 % of the height)
+  const finalText = total ? `${formatFigure(value).main}/${formatFigure(total).main}` : `${formatFigure(value).main}%`;
+  const inner = D - 2 * stroke - 14 * k;
+  const numSize = fitSize(finalText, dir.font, 800, (scale.ringNumber.share * U * ks) / dir.cap, inner * 0.78);
   const fg: Fig = { pre: "", value, glued: total ? "" : "%", unit: "" };
   const shown = `${figureAt(value, fill)}${fg.glued}`;
   const drift = idle(f, 40 * S, dur);
@@ -384,18 +417,18 @@ const Percent: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill>
       <Backing panel={panel} dir={dir} rect={r} right={right} p={enter} out={out} />
-      <div style={{ position: "absolute", left: ringX, top: r.y - drift * 5 * k, width: D, height: D, opacity: enter * (1 - out),
+      <div style={{ position: "absolute", left: ringX, top: r.y - drift * 4 * k, width: D, height: D, opacity: enter * (1 - out),
         transform: `scale(${(0.86 + 0.14 * enter + out * 0.03).toFixed(4)}) rotate(${(drift * 2).toFixed(3)}deg)` }}>
         <svg width={D} height={D} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
           {dir.id === "kinetic" ? <circle cx={D / 2} cy={D / 2} r={D / 2 + 2 * k} fill={CHARCOAL} /> : (
-            <circle cx={D / 2} cy={D / 2} r={R + stroke} fill="rgba(6,8,11,0.42)" />
+            <circle cx={D / 2} cy={D / 2} r={R + stroke * 0.5} fill="rgba(6,8,11,0.5)" />
           )}
-          <circle cx={D / 2} cy={D / 2} r={R} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth={stroke}
+          <circle cx={D / 2} cy={D / 2} r={R} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={stroke}
             pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - track} transform={`rotate(-90 ${D / 2} ${D / 2})`} />
           {fill > 0.001 ? (
             <>
               <path d={arcPath(D / 2, D / 2, R, a0, Math.max(a0 + 0.001, a1))} fill="none" stroke={hot} strokeWidth={stroke * 1.9}
-                strokeLinecap="round" opacity={glow * 0.5} style={{ filter: `blur(${(10 * k).toFixed(1)}px)` }} />
+                strokeLinecap="round" opacity={glow * 0.5} style={{ filter: `blur(${(8 * k).toFixed(1)}px)` }} />
               <path d={arcPath(D / 2, D / 2, R, a0, Math.max(a0 + 0.001, a1))} fill="none" stroke={hot} strokeWidth={stroke}
                 strokeLinecap="round" />
               <circle cx={head[0]} cy={head[1]} r={stroke * 0.32} fill="#fff" opacity={fill < 1 ? 0.95 : 0.6} />
@@ -405,14 +438,14 @@ const Percent: Look = ({ overlay, accent }) => {
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ fontFamily: dir.font, fontWeight: 800, fontSize: numSize, color: WHITE, letterSpacing: "-0.02em",
             fontVariantNumeric: "tabular-nums", fontFeatureSettings: '"tnum" 1', lineHeight: 1, textShadow: softShadow(k, 0.5),
-            transform: `scale(${settle(f, land, S).toFixed(4)})`, opacity: prog(f, 4, 10, S, cubicOut) }}>
+            transform: `scale(${settle(f, land, S).toFixed(4)})`, opacity: prog(f, 4, 10, S, cubicOut), whiteSpace: "nowrap" }}>
             {total ? `${figureAt(value, fill)}` : shown}
-            {total ? <span style={{ fontSize: numSize * 0.42, color: SOFT_WHITE, fontWeight: 700 }}>{` /${figureAt(total, 1)}`}</span> : null}
+            {total ? <span style={{ fontSize: numSize * 0.55, color: SOFT_WHITE, fontWeight: 700 }}>{`/${figureAt(total, 1)}`}</span> : null}
           </div>
         </div>
       </div>
       {sideW ? (
-        <div style={{ position: "absolute", top: r.y + D / 2 - drift * 5 * k, transform: "translateY(-50%)",
+        <div style={{ position: "absolute", top: r.y + D / 2 - drift * 4 * k, transform: "translateY(-50%)",
           [right ? "right" : "left"]: right ? W - (ringX - gap) : ringX + D + gap }}>
           <SideText kicker={kicker} context={context} hot={hot} dir={dir} k={k} H={H} W={W} ks={ks} out={out}
             align={right ? "right" : "left"} at={10} />
@@ -422,27 +455,44 @@ const Percent: Look = ({ overlay, accent }) => {
   );
 };
 
+/** "1 in 3", "3 of 4", "2 out of 5": the words the narration joined the two figures with (overlay.text), else "of". */
+const joinerOf = (ov: Overlay) => {
+  const t = str(ov.text).toLowerCase();
+  return t === "in" || t === "out of" || t === "of" ? t : "of";
+};
+
 const Progress: Look = ({ overlay, accent }) => {
   const { f, S, k, W, H, dur, dir, hot, out, ks, panel } = useLook(overlay, accent);
   const value = num(overlay.value);
   if (value === null) return null;
   const total = num(overlay.total);
   const share = clamp01(total && total > 0 ? value / total : value / 100);
-  const kicker = str(overlay.label) || str(overlay.text);
-  const context = str(overlay.subtitle);
-  const size = sizeFor("ring", H, dir.cap, ks) * 1.1;
-  const barW = 0.36 * W, barH = 0.016 * H * ks;
+  const kicker = str(overlay.label);
+  const context = oneLine(str(overlay.subtitle), W, H, ks);
+  const U = unitOf(W, H);
+  const size = (scale.ringNumber.share * 1.15 * U * ks) / dir.cap;
+  const joiner = joinerOf(overlay);
+  // "1 in 3" / "3 of 4" of a few (at most 10): that many dots, the share lit one by one; else a bar
+  const dots = total !== null && Number.isInteger(total) && total >= 2 && total <= 10 && Number.isInteger(value) && value >= 1
+    && value < total;
+  const barW = 0.26 * W, barH = 0.016 * U * ks;
+  const dotD = dots ? Math.min(0.062 * U * ks, (barW - (total! - 1) * 14 * k) / total!) : 0;
+  const dotGap = dots ? Math.min(18 * k, (barW - total! * dotD) / Math.max(1, total! - 1)) : 0;
+  const rowW = dots ? total! * dotD + (total! - 1) * dotGap : barW;
   const kSize = sizeFor("kicker", H, GROTESK_CAP, ks);
-  const cSize = sizeFor("context", H, GROTESK_CAP, ks);
-  const w = barW;
-  const h = (kicker ? kSize + 16 * k : 0) + size + 20 * k + barH + (context ? cSize * 1.6 : 0);
+  const cSize = sizeFor("context", H, GROTESK_CAP, ks) * 1.08;
+  const finalLabel = total ? `${formatFigure(value).main} ${joiner} ${formatFigure(total).main}` : `${formatFigure(value).main}%`;
+  const labelW = widthOf(finalLabel, dir.font, size, 800, -0.015);
+  const w = Math.max(rowW, labelW, kicker ? widthOf(kicker.toUpperCase(), SUBLINE, kSize, 700, 0.2) : 0);
+  const rowH = dots ? dotD : barH;
+  const h = (kicker ? kSize + 16 * k : 0) + size + 20 * k + rowH + (context ? cSize * 1.6 : 0);
   const zone = zoneFor(overlay, panel ? "left-panel" : "lower-left", w, h, W, H);
   const r = blockAt(zone, w, h, W, H);
   const right = isRight(zone);
   const align = right ? "right" : "left";
   const fill = prog(f, 10, 32, S, cubicInOut);
   const drift = idle(f, 40 * S, dur) * 5 * k;
-  const label = total ? `${figureAt(value, fill)} of ${figureAt(total, 1)}` : `${figureAt(value, fill)}%`;
+  const label = total ? `${figureAt(value, fill)} ${joiner} ${figureAt(total, 1)}` : `${figureAt(value, fill)}%`;
   return (
     <AbsoluteFill>
       <Backing panel={panel} dir={dir} rect={r} right={right} p={prog(f, 0, 14, S, cubicOut)} out={out} />
@@ -456,15 +506,33 @@ const Progress: Look = ({ overlay, accent }) => {
         ) : null}
         <div style={{ fontFamily: dir.font, fontWeight: 800, fontSize: size, color: WHITE, lineHeight: 1, letterSpacing: "-0.015em",
           fontVariantNumeric: "tabular-nums", textShadow: softShadow(k, 0.55), opacity: prog(f, 4, 10, S, cubicOut) * (1 - out),
-          transform: `scale(${settle(f, 42, S).toFixed(4)})`, transformOrigin: right ? "right bottom" : "left bottom" }}>{label}</div>
-        <div style={{ position: "relative", marginTop: 20 * k, width: barW, height: barH, borderRadius: barH,
-          background: "rgba(255,255,255,0.16)", overflow: "hidden", opacity: 1 - out,
-          clipPath: `inset(0 ${((1 - prog(f, 2, 14, S, expoOut)) * 100).toFixed(1)}% 0 0)` }}>
-          <div style={{ position: "absolute", top: 0, bottom: 0, [right ? "right" : "left"]: 0, width: `${(share * fill * 100).toFixed(2)}%`,
-            background: `linear-gradient(90deg, ${rgba(hot, 0.85)}, ${hot})`, borderRadius: barH, overflow: "hidden" }}>
-            <Glint p={(f / S - 42) / 22} />
+          transform: `scale(${settle(f, 42, S).toFixed(4)})`, transformOrigin: right ? "right bottom" : "left bottom",
+          whiteSpace: "nowrap" }}>{label}</div>
+        {dots ? (
+          <div style={{ marginTop: 20 * k, display: "flex", gap: dotGap, flexDirection: right ? "row-reverse" : "row" }}>
+            {Array.from({ length: total! }, (_, i) => {
+              const on = i < value;
+              const pop = prog(f, 4 + i * 2, 12, S, (u) => backOut(u, 1.5)) * (1 - clamp01(out * 1.4 - (i / total!) * 0.4));
+              const lit = on ? prog(f, 16 + i * 5, 10, S, cubicOut) : 0;
+              return (
+                <div key={i} style={{ width: dotD, height: dotD, borderRadius: "50%", boxSizing: "border-box",
+                  border: `${(2.5 * k).toFixed(1)}px solid ${on && lit > 0 ? hot : "rgba(255,255,255,0.42)"}`,
+                  background: on ? rgba(hot, 0.92 * lit) : "rgba(10,12,16,0.35)", opacity: pop,
+                  transform: `scale(${(0.6 + 0.4 * pop + 0.08 * Math.sin(clamp01((f / S - 16 - i * 5) / 10) * Math.PI) * (on ? 1 : 0)).toFixed(4)})`,
+                  boxShadow: on && lit > 0 ? `0 0 ${(14 * lit * k).toFixed(1)}px ${rgba(hot, 0.5 * lit)}` : undefined }} />
+              );
+            })}
           </div>
-        </div>
+        ) : (
+          <div style={{ position: "relative", marginTop: 20 * k, width: barW, height: barH, borderRadius: barH,
+            background: "rgba(255,255,255,0.16)", overflow: "hidden", opacity: 1 - out,
+            clipPath: `inset(0 ${((1 - prog(f, 2, 14, S, expoOut)) * 100).toFixed(1)}% 0 0)` }}>
+            <div style={{ position: "absolute", top: 0, bottom: 0, [right ? "right" : "left"]: 0, width: `${(share * fill * 100).toFixed(2)}%`,
+              background: `linear-gradient(90deg, ${rgba(hot, 0.85)}, ${hot})`, borderRadius: barH, overflow: "hidden" }}>
+              <Glint p={(f / S - 42) / 22} />
+            </div>
+          </div>
+        )}
         {context ? (
           <div style={{ marginTop: 14 * k }}>
             <KineticLine text={context} font={INTER} weight={600} size={cSize} color={SOFT_WHITE} preset="focus"
@@ -481,11 +549,13 @@ const Multiplier: Look = ({ overlay, accent }) => {
   const { f, S, k, W, H, dur, dir, hot, out, ks, panel } = useLook(overlay, accent);
   const value = num(overlay.value);
   if (value === null || value <= 0) return null;
-  const kicker = str(overlay.label) || str(overlay.text);
-  const context = str(overlay.subtitle);
-  const D = 0.3 * H * ks;
-  const R = D / 2 - 0.02 * H;
-  const gap = 40 * k;
+  const kicker = str(overlay.label) || (str(overlay.text).length <= 28 ? str(overlay.text) : "");
+  const context = oneLine(str(overlay.subtitle), W, H, ks);
+  const U = unitOf(W, H);
+  const D = ringD(W, H, ks);
+  const tickLen = 0.022 * U * ks;
+  const R = D / 2 - tickLen - 6 * k;
+  const gap = 32 * k;
   const sideW = sideWidth(kicker, context, k, H, W, ks);
   const w = D + (sideW ? gap + sideW : 0);
   const zone = zoneFor(overlay, panel ? "left-panel" : "lower-left", w, D, W, H);
@@ -494,45 +564,46 @@ const Multiplier: Look = ({ overlay, accent }) => {
   const enter = prog(f, 0, 14, S, cubicOut);
   const count = prog(f, 8, 34, S, cubicInOut);
   const land = 42;
-  const n = value <= 24 && Math.abs(value - Math.round(value)) < 1e-6 ? Math.round(value) : 0;
+  // one tick a unit for 5x-24x (15 ticks light for "15 times"); a smaller or a larger figure fills a fine ring
+  const n = value >= 5 && value <= 24 && Math.abs(value - Math.round(value)) < 1e-6 ? Math.round(value) : 0;
   const lit = n ? count * n : 0;
   const close = prog(f, land - 2, 14, S, cubicInOut);
-  const numSize = sizeFor("ring", H, dir.cap, ks) * (value >= 100 ? 0.8 : 1);
   const shown = value < 10 && !Number.isInteger(value) ? (value * count).toFixed(1) : figureAt(value, count);
+  const finalText = `${value < 10 && !Number.isInteger(value) ? value.toFixed(1) : formatFigure(value).main}×`;
+  const numSize = fitSize(finalText, dir.font, 800, (scale.ringNumber.share * U * ks) / dir.cap, (2 * R - 16 * k) * 0.8);
   const drift = idle(f, 40 * S, dur);
   const ringX = right ? r.x + r.w - D : r.x;
   const ticks = n || 36;
-  const seed = hash(String(value));
   return (
     <AbsoluteFill>
       <Backing panel={panel} dir={dir} rect={r} right={right} p={enter} out={out} />
-      <div style={{ position: "absolute", left: ringX, top: r.y - drift * 5 * k, width: D, height: D, opacity: enter * (1 - out),
+      <div style={{ position: "absolute", left: ringX, top: r.y - drift * 4 * k, width: D, height: D, opacity: enter * (1 - out),
         transform: `scale(${(0.86 + 0.14 * enter + 0.03 * out).toFixed(4)})` }}>
         <svg width={D} height={D} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-          <circle cx={D / 2} cy={D / 2} r={R + 0.03 * H} fill={dir.id === "kinetic" ? CHARCOAL : "rgba(6,8,11,0.42)"} />
+          <circle cx={D / 2} cy={D / 2} r={D / 2 - 2 * k} fill={dir.id === "kinetic" ? CHARCOAL : "rgba(6,8,11,0.5)"} />
           {Array.from({ length: ticks }, (_, i) => {
-            const a = -Math.PI / 2 + (i / ticks) * Math.PI * 2 + (seed % 7) * 0;
+            const a = -Math.PI / 2 + (i / ticks) * Math.PI * 2;
             const on = n ? clamp01(lit - i) : clamp01(count * ticks - i);
-            const r0 = R - 0.018 * H, r1 = R + 0.012 * H;
+            const r0 = R, r1 = R + tickLen;
             return (
               <line key={i} x1={D / 2 + r0 * Math.cos(a)} y1={D / 2 + r0 * Math.sin(a)} x2={D / 2 + r1 * Math.cos(a)}
-                y2={D / 2 + r1 * Math.sin(a)} stroke={on > 0 ? hot : "rgba(255,255,255,0.2)"} strokeWidth={(n ? 7 : 4) * k}
+                y2={D / 2 + r1 * Math.sin(a)} stroke={on > 0 ? hot : "rgba(255,255,255,0.22)"} strokeWidth={(n ? 6 : 3.5) * k}
                 strokeLinecap="round" opacity={0.35 + 0.65 * on} />
             );
           })}
-          <circle cx={D / 2} cy={D / 2} r={R + 0.026 * H} fill="none" stroke={hot} strokeWidth={2.5 * k} pathLength={1}
+          <circle cx={D / 2} cy={D / 2} r={D / 2 - 2.5 * k} fill="none" stroke={hot} strokeWidth={2.5 * k} pathLength={1}
             strokeDasharray="1 1" strokeDashoffset={1 - close} transform={`rotate(-90 ${D / 2} ${D / 2})`} opacity={0.9} />
         </svg>
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ fontFamily: dir.font, fontWeight: 800, fontSize: numSize, color: WHITE, letterSpacing: "-0.02em", lineHeight: 1,
             fontVariantNumeric: "tabular-nums", textShadow: softShadow(k, 0.5), transform: `scale(${settle(f, land, S).toFixed(4)})`,
-            opacity: prog(f, 4, 10, S, cubicOut) }}>
+            opacity: prog(f, 4, 10, S, cubicOut), whiteSpace: "nowrap" }}>
             {shown}<span style={{ color: hot, fontWeight: 700, marginLeft: 2 * k }}>×</span>
           </div>
         </div>
       </div>
       {sideW ? (
-        <div style={{ position: "absolute", top: r.y + D / 2 - drift * 5 * k, transform: "translateY(-50%)",
+        <div style={{ position: "absolute", top: r.y + D / 2 - drift * 4 * k, transform: "translateY(-50%)",
           [right ? "right" : "left"]: right ? W - (ringX - gap) : ringX + D + gap }}>
           <SideText kicker={kicker} context={context} hot={hot} dir={dir} k={k} H={H} W={W} ks={ks} out={out}
             align={right ? "right" : "left"} at={10} />
@@ -612,170 +683,8 @@ const Compare: Look = ({ overlay, accent }) => {
 };
 
 // ================================================================== dates, years, times
-/** An odometer: each digit of `text` rolls up into place from a few steps below, the last digit last. */
-const Odometer: React.FC<{ text: string; size: number; font: string; weight: number; color: string; at: number; out: number;
-  k: number }> = ({ text, size, font, weight, color, at, out, k }) => {
-  const f = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const S = fps / 30;
-  const chars = Array.from(text);
-  return (
-    <div style={{ display: "flex", fontFamily: font, fontWeight: weight, fontSize: size, color, lineHeight: 1,
-      fontVariantNumeric: "tabular-nums", fontFeatureSettings: '"tnum" 1', letterSpacing: "-0.01em", textShadow: softShadow(k, 0.55),
-      opacity: 1 - out }}>
-      {chars.map((ch, i) => {
-        if (!/\d/.test(ch)) return <span key={i}>{ch}</span>;
-        const d = Number(ch);
-        const steps = 3 + i;
-        const e = prog(f, at + i * 2.5, 18 + i * 2, S, expoOut);
-        const pos = (1 - e) * steps;
-        const blur = motionBlur((prog(f + S, at + i * 2.5, 18 + i * 2, S, expoOut) - e) * steps * size, k, 3);
-        return (
-          <span key={i} style={{ display: "inline-block", height: size * 1.0, overflow: "hidden", position: "relative",
-            width: `${0.62}em` }}>
-            <span style={{ position: "absolute", left: 0, right: 0, top: 0, transform: `translateY(${(-(steps - pos) * 100 / (steps + 1)).toFixed(3)}%)`,
-              filter: blur ? `blur(${blur.toFixed(2)}px)` : undefined, display: "flex", flexDirection: "column-reverse" }}>
-              {Array.from({ length: steps + 1 }, (_, s) => (
-                <span key={s} style={{ height: size * 1.0, display: "block", textAlign: "center" }}>{(d - s + 100) % 10}</span>
-              ))}
-            </span>
-          </span>
-        );
-      })}
-    </div>
-  );
-};
-
-const DateLook: Look = ({ overlay, accent }) => {
-  const { f, S, k, W, H, dur, dir, hot, out, ks, panel } = useLook(overlay, accent);
-  const main = caseOf(dir, str(overlay.text));
-  const year = str(overlay.subtitle).match(/^\d{4}$/) ? str(overlay.subtitle) : "";
-  const kicker = str(overlay.label);
-  if (!main && !year) return null;
-  const size = sizeFor("date", H, dir.cap, ks);
-  const kSize = sizeFor("kicker", H, GROTESK_CAP, ks);
-  const fit = main ? fitLines(main, dir.font, dir.weight, size, size * 0.8, 0.44 * W, 1, dir.tracking) : null;
-  if (main && !fit) return null;
-  const yW = year ? widthOf(year, dir.font, size, 500) + 22 * k : 0;
-  const w = Math.max((fit ? fit.width : 0) + yW, kicker ? widthOf(kicker.toUpperCase(), SUBLINE, kSize, 700, 0.2) : 0);
-  const h = (kicker ? kSize + 16 * k : 0) + size * 1.06 + 20 * k;
-  const zone = zoneFor(overlay, "upper-left", w, h, W, H);
-  const r = blockAt(zone, w, h, W, H);
-  const right = isRight(zone);
-  const align = right ? "right" : "left";
-  const drift = idle(f, 30 * S, dur) * 4 * k;
-  return (
-    <AbsoluteFill>
-      <Backing panel={panel} dir={dir} rect={r} right={right} p={prog(f, 0, 14, S, cubicOut)} out={out} />
-      <div style={{ position: "absolute", left: r.x, top: r.y + drift, width: r.w, display: "flex", flexDirection: "column",
-        alignItems: right ? "flex-end" : "flex-start" }}>
-        {kicker ? (
-          <div style={{ height: kSize, marginBottom: 16 * k }}>
-            <KineticLine text={kicker.toUpperCase()} font={SUBLINE} weight={700} size={kSize} tracking={0.2}
-              color={dir.id === "doc" ? SOFT_WHITE : hot} preset="track" timing={{ at: 0 }} out={out} align={align} />
-          </div>
-        ) : null}
-        <div style={{ display: "flex", alignItems: "baseline", gap: 22 * k, flexDirection: right ? "row-reverse" : "row", position: "relative" }}>
-          {fit ? (
-            <div style={{ position: "relative" }}>
-              {dir.id === "kinetic" ? (
-                <div style={{ position: "absolute", top: -10 * k, bottom: -8 * k, left: -14 * k, opacity: 1 - out,
-                  width: (fit.width + 28 * k) * prog(f, 2, 12, S, expoOut), background: CHARCOAL }} />
-              ) : null}
-              <KineticLine text={fit.lines[0]} font={dir.font} weight={dir.weight} size={fit.size} tracking={dir.tracking}
-                preset={dir.reveal} timing={{ at: 4 }} out={out} align={align} accent={hot}
-                shadow={dir.id === "kinetic" ? undefined : softShadow(k, 0.55)} />
-            </div>
-          ) : null}
-          {year ? <Odometer text={year} size={size} font={dir.font} weight={500} color={hot} at={10} out={out} k={k} /> : null}
-        </div>
-        <div style={{ position: "relative", marginTop: 16 * k, height: 3 * k, width: Math.min(w, 220 * k), background: hot,
-          borderRadius: 2 * k, overflow: "hidden", transformOrigin: right ? "right" : "left",
-          transform: `scaleX(${(prog(f, 12, 18, S, expoOut) * (1 - out)).toFixed(4)})`, opacity: dir.id === "kinetic" ? 0 : 1 }}>
-          <Glint p={(f / S - 26) / 20} />
-        </div>
-      </div>
-    </AbsoluteFill>
-  );
-};
-
-const YearLook: Look = ({ overlay, accent }) => {
-  const { f, S, k, W, H, dur, dir, hot, out, ks, panel } = useLook(overlay, accent);
-  const v = num(overlay.value);
-  const year = v !== null ? String(Math.round(v)) : (str(overlay.text).match(/\b(1[5-9]\d\d|20\d\d)\b/) || [])[1] || "";
-  if (!year) return null;
-  const kicker = str(overlay.label);
-  const context = str(overlay.subtitle);
-  const size = sizeFor("year", H, dir.cap, ks);
-  const kSize = sizeFor("kicker", H, GROTESK_CAP, ks);
-  const cSize = sizeFor("context", H, GROTESK_CAP, ks);
-  const yW = widthOf(year, dir.font, size, 800) * 1.05;
-  const w = Math.max(yW, kicker ? widthOf(kicker.toUpperCase(), SUBLINE, kSize, 700, 0.2) : 0,
-    context ? widthOf(context, INTER, cSize, 600) : 0);
-  const h = (kicker ? kSize + 16 * k : 0) + size + 18 * k + (context ? cSize * 1.4 : 0);
-  const zone = zoneFor(overlay, "upper-left", w, h, W, H);
-  const r = blockAt(zone, w, h, W, H);
-  const right = isRight(zone);
-  const align = right ? "right" : "left";
-  const drift = idle(f, 30 * S, dur) * 4 * k;
-  return (
-    <AbsoluteFill>
-      <Backing panel={panel} dir={dir} rect={r} right={right} p={prog(f, 0, 14, S, cubicOut)} out={out} />
-      <div style={{ position: "absolute", left: r.x, top: r.y + drift, width: r.w, display: "flex", flexDirection: "column",
-        alignItems: right ? "flex-end" : "flex-start" }}>
-        {kicker ? (
-          <div style={{ height: kSize, marginBottom: 16 * k }}>
-            <KineticLine text={kicker.toUpperCase()} font={SUBLINE} weight={700} size={kSize} tracking={0.2}
-              color={dir.id === "doc" ? SOFT_WHITE : hot} preset="track" timing={{ at: 0 }} out={out} align={align} />
-          </div>
-        ) : null}
-        <Odometer text={year} size={size} font={dir.font} weight={800} color={WHITE} at={4} out={out} k={k} />
-        <div style={{ position: "relative", marginTop: 14 * k, height: (dir.id === "kinetic" ? 7 : 4) * k, width: yW * 0.4,
-          background: hot, borderRadius: 2 * k, overflow: "hidden", transformOrigin: right ? "right" : "left",
-          transform: `scaleX(${(prog(f, 16, 18, S, expoOut) * (1 - out)).toFixed(4)})` }}>
-          <Glint p={(f / S - 32) / 20} />
-        </div>
-        {context ? (
-          <div style={{ marginTop: 12 * k }}>
-            <KineticLine text={context} font={INTER} weight={600} size={cSize} color={SOFT_WHITE} preset="focus"
-              timing={{ at: 22, gap: 2 }} out={out} align={align} shadow={softShadow(k, 0.55)} />
-          </div>
-        ) : null}
-      </div>
-    </AbsoluteFill>
-  );
-};
-
-const TimeLook: Look = ({ overlay, accent }) => {
-  const { f, S, k, W, H, dur, dir, hot, out, ks, panel } = useLook(overlay, accent);
-  const t = str(overlay.text).toUpperCase();
-  if (!t) return null;
-  const kicker = str(overlay.label);
-  const size = sizeFor("date", H, dir.cap, ks);
-  const kSize = sizeFor("kicker", H, GROTESK_CAP, ks);
-  const w = Math.max(widthOf(t, dir.font, size, 800), kicker ? widthOf(kicker.toUpperCase(), SUBLINE, kSize, 700, 0.2) : 0);
-  const h = (kicker ? kSize + 16 * k : 0) + size * 1.1;
-  const zone = zoneFor(overlay, "upper-left", w, h, W, H);
-  const r = blockAt(zone, w, h, W, H);
-  const right = isRight(zone);
-  const align = right ? "right" : "left";
-  const drift = idle(f, 30 * S, dur) * 4 * k;
-  return (
-    <AbsoluteFill>
-      <Backing panel={panel} dir={dir} rect={r} right={right} p={prog(f, 0, 14, S, cubicOut)} out={out} />
-      <div style={{ position: "absolute", left: r.x, top: r.y + drift, width: r.w, textAlign: align }}>
-        {kicker ? (
-          <div style={{ height: kSize, marginBottom: 16 * k }}>
-            <KineticLine text={kicker.toUpperCase()} font={SUBLINE} weight={700} size={kSize} tracking={0.2}
-              color={dir.id === "doc" ? SOFT_WHITE : hot} preset="track" timing={{ at: 0 }} out={out} align={align} />
-          </div>
-        ) : null}
-        <KineticLine text={t} font={dir.font} weight={800} size={size} preset="chars" timing={{ at: 4 }} out={out} align={align}
-          tabular shadow={softShadow(k, 0.55)} />
-      </div>
-    </AbsoluteFill>
-  );
-};
+// The date family (kt-date, kt-date-card, kt-date-line, kt-date-badge, kt-year, kt-time, kt-time-clock)
+// lives in LibKtDates.tsx since 2026-10-06 (the owner: "when dates are mentioned it barely shows them").
 
 // ================================================================== kt-lower-third
 const LowerThird: Look = ({ overlay, accent }) => {
@@ -902,9 +811,6 @@ export const LOOKS: Record<string, Look> = {
   "kt-progress": guard(Progress),
   "kt-multiplier": guard(Multiplier),
   "kt-compare": guard(Compare),
-  "kt-date": guard(DateLook),
-  "kt-year": guard(YearLook),
-  "kt-time": guard(TimeLook),
   "kt-lower-third": guard(LowerThird),
   "kt-statement": guard(Statement),
 };

@@ -51,6 +51,7 @@ import { LOOKS as L_LibSourceTag } from "./LibSourceTag";
 import { LOOKS as L_LibRealData } from "./LibRealData";
 import { LOOKS as L_LibPremium } from "./LibPremium";
 import { LOOKS as L_LibKinetic } from "./LibKinetic";
+import { LOOKS as L_LibKtDates } from "./LibKtDates";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -156,5 +157,9 @@ export const LIBRARY: Record<string, Look> = {
   // Kinetic type (LibKinetic, 2026-10-05): the words, figures, shares, multipliers, dates and names the narration says,
   // in one editorial type system with three directions (typeKit.tsx) - the replacement of the outlined condensed words.
   ...pick(L_LibKinetic, ["kt-keyword", "kt-number", "kt-chip", "kt-percent", "kt-progress", "kt-multiplier", "kt-compare",
-    "kt-date", "kt-year", "kt-time", "kt-lower-third", "kt-statement"]),
+    "kt-lower-third", "kt-statement"]),
+  // The date family (LibKtDates, 2026-10-06: "when dates are mentioned it barely shows them"): a date stamp, a
+  // calendar card, a timeline marker, a lower-third badge, a year counter, a time counter and a clock face - one
+  // headline size (capitals 6 % of the height), frosted glass, one accent; the data planner rotates them.
+  ...pick(L_LibKtDates, ["kt-date", "kt-date-card", "kt-date-line", "kt-date-badge", "kt-year", "kt-time", "kt-time-clock"]),
 };

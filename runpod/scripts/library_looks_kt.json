@@ -68,17 +68,17 @@
   "template": "KT_PERCENT",
   "name": "Percent Ring",
   "category": "NUMBERS",
-  "description": "A ring that fills to the share while the number counts up to it (27%), an accent kicker and a one-line context beside it; for a percent or a share of a whole.",
+  "description": "A share said (\"27 percent\", \"more than half\", \"two-thirds\" as 2/3): a ring 18 % of the frame height fills to the share while the number inside it counts, a kicker and ONE line of context beside it (cut at a natural break, never mid-thought).",
   "kind": "tag",
   "own_backdrop": false,
   "needs_media": 0,
   "props": [
-   "value",
-   "total",
-   "suffix",
    "label",
    "subtitle",
-   "text"
+   "suffix",
+   "text",
+   "total",
+   "value"
   ],
   "cues": [
    "percent",
@@ -128,7 +128,7 @@
   "template": "KT_MULTIPLIER",
   "name": "Multiplier",
   "category": "NUMBERS",
-  "description": "\"15 times\": the count climbs to 15x inside a ring of ticks that light one by one and close on the landing, with a one-line context; for times / twice / triple / half lines.",
+  "description": "\"15 times\", \"doubled\", \"tenfold\": the count climbs inside a ring 18 % of the frame height - a tick a unit for 5-24 times, lighting one by one, a fine ring otherwise - that closes on the landing, with one line of context.",
   "kind": "tag",
   "own_backdrop": false,
   "needs_media": 0,
@@ -149,7 +149,7 @@
   "types": false,
   "sample": {
    "value": 15,
-   "suffix": "\u00d7",
+   "suffix": "×",
    "label": "Arizona loses",
    "subtitle": "as much water as the place everyone blames"
   },
@@ -287,7 +287,7 @@
   "template": "KT_PROGRESS",
   "name": "Progress Bar",
   "category": "NUMBERS",
-  "description": "A bar that fills for \"3 of 4\" or a share of a whole while the figure counts, with a kicker and one line of context.",
+  "description": "\"one in three\", \"three out of four\": that many dots with the share lit one by one (\"1 in 3\", the words joined as said), else a bar that fills for a share of a whole; a kicker and one line of context.",
   "kind": "tag",
   "own_backdrop": false,
   "needs_media": 0,
@@ -342,9 +342,9 @@
  {
   "id": "kt-date",
   "template": "KT_DATE",
-  "name": "Date",
+  "name": "Date Stamp",
   "category": "TIMELINES",
-  "description": "A date said (\"August 21\" and its year rolling in like an odometer) top left, a small kicker and an accent rule that draws on.",
+  "description": "A date said, in a frosted glass chip top left: the kicker (the weekday or the place said) over the date as said (\"August 21\", a headline - capitals 6 % of the frame height), its letters rising and its figures rolling into place, a thin bar of the year under it filling to the day with the year at its end. A year said alone is drawn as the year counter.",
   "kind": "tag",
   "own_backdrop": false,
   "needs_media": 0,
@@ -357,8 +357,8 @@
    "date",
    "datetime"
   ],
-  "duration": 3.8,
-  "least": 3.0,
+  "duration": 5.0,
+  "least": 4.75,
   "sfx": "none",
   "types": false,
   "sample": {
@@ -367,16 +367,39 @@
    "label": "Friday"
   },
   "family": "kt",
-  "file": "LibKinetic",
+  "file": "LibKtDates",
   "exit": "fade",
-  "auto_pick": true
+  "auto_pick": true,
+  "sfx_at": 40,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 8,
+    "align": "start",
+    "until": 24,
+    "gain_db": -12
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 40,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-year",
   "template": "KT_YEAR",
-  "name": "Year",
+  "name": "Year Counter",
   "category": "TIMELINES",
-  "description": "A year said, its digits rolling into place like an odometer, top left, a kicker and a context line.",
+  "description": "A year said, in four glass slots top left like a mechanical counter: each digit rolls on its wheel from the year the story was in (\"FROM 1982\" on a small glass tab with the kicker) or a few steps below, and lands with a small settle and an accent edge.",
   "kind": "tag",
   "own_backdrop": false,
   "needs_media": 0,
@@ -384,31 +407,62 @@
    "value",
    "text",
    "label",
-   "subtitle"
+   "items"
   ],
   "cues": [
    "date"
   ],
-  "duration": 3.8,
-  "least": 3.0,
+  "duration": 5.0,
+  "least": 4.75,
   "sfx": "none",
   "types": false,
   "sample": {
-   "value": 2007,
-   "label": "The rules were written",
-   "subtitle": "and they expire this year"
+   "value": 2008,
+   "items": [
+    {
+     "label": "1982",
+     "value": 1982
+    },
+    {
+     "label": "2008",
+     "value": 2008
+    }
+   ]
   },
   "family": "kt",
-  "file": "LibKinetic",
+  "file": "LibKtDates",
   "exit": "fade",
-  "auto_pick": true
+  "auto_pick": true,
+  "sfx_at": 40,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "count-roll",
+     "ui-tick"
+    ],
+    "at": 6,
+    "align": "start",
+    "until": 38,
+    "gain_db": -9
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 40,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-time",
   "template": "KT_TIME",
-  "name": "Time of Day",
+  "name": "Time Counter",
   "category": "TIMELINES",
-  "description": "A time of day said (\"3 AM\") top left with a small kicker and an accent rule.",
+  "description": "A clock time said (\"3 AM\" -> 3:00 and its AM in the accent) in the year counter's glass slots top left, the kicker (\"THAT NIGHT\", the date said with it) on a small glass tab; a time said in words (\"That evening\") on a glass chip.",
   "kind": "tag",
   "own_backdrop": false,
   "needs_media": 0,
@@ -419,18 +473,257 @@
   "cues": [
    "time-of-day"
   ],
-  "duration": 3.5,
-  "least": 3.0,
+  "duration": 5.0,
+  "least": 4.75,
   "sfx": "none",
   "types": false,
   "sample": {
    "text": "3 AM",
-   "label": "The call came"
+   "label": "That night"
   },
   "family": "kt",
-  "file": "LibKinetic",
+  "file": "LibKtDates",
   "exit": "fade",
-  "auto_pick": true
+  "auto_pick": true,
+  "sfx_at": 40,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "count-roll",
+     "ui-tick"
+    ],
+    "at": 6,
+    "align": "start",
+    "until": 34,
+    "gain_db": -10
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 40,
+    "gain_db": -6
+   }
+  ]
+ },
+ {
+  "id": "kt-date-card",
+  "template": "KT_DATE_CARD",
+  "name": "Calendar Card",
+  "category": "TIMELINES",
+  "description": "A date with its day: a desk-calendar page top left (the month on its charcoal band, the day big on warm paper) that riffles two pages over its accent binding and lands on the day, the kicker and the year rolling in on a glass tab beside it.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 5.0,
+  "least": 4.75,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "August 4",
+   "subtitle": "1961",
+   "label": "Honolulu"
+  },
+  "family": "kt",
+  "file": "LibKtDates",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 21,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick",
+     "letter-tick"
+    ],
+    "at": 11,
+    "every": 5,
+    "count": 2,
+    "gain_db": -10
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 21,
+    "gain_db": -6
+   }
+  ]
+ },
+ {
+  "id": "kt-date-line",
+  "template": "KT_DATE_LINE",
+  "name": "Timeline Marker",
+  "category": "TIMELINES",
+  "description": "A year on a short timeline in a glass card top left: the year counts while a glowing dot slides from the year the story was in (or in from the left) to the year said, the travelled part in the accent; a second year said a beat later slides it on (items carry each year and the second it is said at).",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value",
+   "items"
+  ],
+  "cues": [
+   "date"
+  ],
+  "duration": 5.0,
+  "least": 4.75,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "items": [
+    {
+     "label": "1982",
+     "value": 1982
+    },
+    {
+     "label": "2008",
+     "value": 2008
+    }
+   ],
+   "value": 2008
+  },
+  "family": "kt",
+  "file": "LibKtDates",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 36,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 10,
+    "align": "start",
+    "until": 34,
+    "gain_db": -12
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 36,
+    "gain_db": -6
+   }
+  ]
+ },
+ {
+  "id": "kt-date-badge",
+  "template": "KT_DATE_BADGE",
+  "name": "Date Badge",
+  "category": "TIMELINES",
+  "description": "A date as a lower third, low left: a frosted glass bar with an accent edge, the kicker (\"THE NIGHT OF\", a weekday, the place) over \"Nov 24, 1982\" - the year in the accent.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label",
+   "value"
+  ],
+  "cues": [
+   "date",
+   "datetime"
+  ],
+  "duration": 5.0,
+  "least": 4.75,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "November 24",
+   "subtitle": "1982",
+   "label": "The night of"
+  },
+  "family": "kt",
+  "file": "LibKtDates",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 30,
+  "sounds": [
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 30,
+    "gain_db": -6
+   }
+  ]
+ },
+ {
+  "id": "kt-time-clock",
+  "template": "KT_TIME_CLOCK",
+  "name": "Clock Face",
+  "category": "TIMELINES",
+  "description": "A clock time said, as a glass clock face top left whose hands sweep round to the time, the time set beside it on a glass tab with its kicker.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "time-of-day"
+  ],
+  "duration": 5.0,
+  "least": 4.75,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "7:00 PM",
+   "label": "That evening"
+  },
+  "family": "kt",
+  "file": "LibKtDates",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 40,
+  "sounds": [
+   {
+    "name": "tick",
+    "alt": [
+     "ui-tick",
+     "letter-tick"
+    ],
+    "at": 10,
+    "every": 4,
+    "count": 7,
+    "gain_db": -15
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 40,
+    "gain_db": -6
+   }
+  ]
  },
  {
   "id": "kt-keyword",

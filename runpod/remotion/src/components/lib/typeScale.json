@@ -14,5 +14,16 @@
   "chip": { "share": 0.045, "least": 0.038, "most": 0.05 },
   "label": { "share": 0.019, "least": 0.016, "most": 0.024 },
   "safe": { "x": 0.068, "top": 0.09, "bottom": 0.14 },
-  "numberSeconds": { "least": 3.0, "most": 5.0, "landedHold": 2.5, "never": 6.0 }
+  "numberSeconds": { "least": 3.0, "most": 5.0, "landedHold": 2.5, "never": 6.0 },
+  "_dates": "The date family (the owner, 2026-10-06: 'when dates are mentioned it barely shows them ... a PERFECT SIZE - not big, not small'): the main date line is a headline (capitals 6 % of the height = a font of 8.2 % of the height, 89 px at 1080p), its kicker 2.5 % (font), the whole block 17-30 % of the frame width, never a full-screen takeover. components/lib/LibKtDates.tsx; tests/test_dates_v2.py checks the numbers.",
+  "dateLine": { "share": 0.06, "least": 0.048, "most": 0.068 },
+  "dateKicker": { "share": 0.0185 },
+  "dateSmall": { "share": 0.026 },
+  "dateDay": { "share": 0.088, "least": 0.075 },
+  "counter": { "share": 0.074, "least": 0.06, "most": 0.085 },
+  "dateBlock": { "minW": 0.17, "maxW": 0.30, "least": 3.5, "most": 5.0 },
+  "clock": { "diameter": 0.165 },
+  "_rings": "A share's ring and a multiplier's ring (the owner, 2026-10-06: 'perfect ones, not full-screen ones'): the diameter 18 % of the frame height (16-20 %), the number inside it, one line of context beside it.",
+  "ringD": { "share": 0.18, "least": 0.16, "most": 0.2 },
+  "ringNumber": { "share": 0.05, "least": 0.036 }
 }
