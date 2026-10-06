@@ -512,6 +512,42 @@ class AfterTheObamaApply(Rig):
         self.assertEqual(len(self.searches), 4)              # a trial keeps nothing back for a save
         self.assertFalse(out["budget"]["stopped"])
 
+    def _finder_run(self, targets, workers, seconds=0.6):
+        """reclip.Finder.run over `targets`, each taking `seconds`, its loop looking every 50 ms (not 5 s)."""
+        import time
+        from concurrent.futures import wait as real_wait
+        doc = self.doc()
+        finder = reclip.Finder(doc, targets, self.work, workers=workers, deadline=time.time() + 30.0)
+        seen = {}
+
+        def slow(t):
+            time.sleep(seconds)
+            seen[t["index"]] = finder.box.closed()          # the box its next search would stop at
+            return reclip.Found(t["index"], "picture", None, media={"type": "image", "url": f"/w/p{t['index']}.jpg"})
+        with mock.patch.object(reclip, "STRAGGLER_GRACE", 0.1), mock.patch.object(finder, "one", side_effect=slow), \
+                mock.patch.object(reclip, "wait", side_effect=lambda fs, timeout=None, return_when=None:
+                                  real_wait(fs, timeout=min(timeout or 0.05, 0.05), return_when=return_when)):
+            got = finder.run()
+        return finder, got, seen
+
+    def test_a_lone_target_runs_its_whole_ladder_inside_the_box(self):
+        # 2026-10-07, the Obama opening: with fewer targets than threads the straggler grace began at once on
+        # the last one still out - a re-clip of scene 1 alone was cut 120 s in, at its clip search, and its
+        # picture rung never ran (twice). Without a share of its own a target is waited for to the box.
+        targets = [t for t in reclip.plan_targets(self.doc()) if t["kind"] in ("empty", "filler")][:1]
+        finder, got, seen = self._finder_run(targets, workers=8)
+        self.assertEqual(finder.share, 0.0)
+        self.assertIn(targets[0]["index"], got)
+        self.assertEqual(finder.late, set())
+        self.assertFalse(seen[targets[0]["index"]])
+
+    def test_with_more_targets_than_threads_the_last_one_still_gets_only_the_grace(self):
+        targets = reclip.plan_targets(self.doc())[:3]
+        finder, got, seen = self._finder_run(targets, workers=1, seconds=0.25)
+        self.assertGreater(finder.share, 0.0)
+        self.assertEqual(len(got) + len(finder.late), 3)
+        self.assertTrue(finder.late)                         # the last one out was let go after the grace
+
 
 if __name__ == "__main__":
     unittest.main()

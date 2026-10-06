@@ -941,7 +941,12 @@ class Finder:
                 if finished:
                     self.say(f"Re-clipping: {done_n}/{len(futures)} scenes searched, {len(self.found)} new shots",
                              8 + int(70 * done_n / max(1, len(futures))))
-                if pending and len(pending) <= max(1, len(futures) // 10):
+                # The last few still out once the rest are in get STRAGGLER_GRACE more - only when the
+                # targets outnumber the threads (each then has a share of its own, recut.Finder's rule too).
+                # With fewer targets than threads every one runs its whole ladder inside the box: the grace
+                # used to start at once on a single target (or on the last of a few), cut its clip search
+                # and its picture never got tried (the Obama re-clip, 2026-10-07: scene 1 stayed text twice).
+                if self.share and pending and len(pending) <= max(1, len(futures) // 10):
                     self.deadline = min(self.deadline, time.time() + STRAGGLER_GRACE)
                     self.box.shorten(self.deadline)
                 if self.budget.stopped and pending:
