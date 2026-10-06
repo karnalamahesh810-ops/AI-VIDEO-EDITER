@@ -944,6 +944,9 @@ MIN_ARCHIVE_HEIGHT = int(os.getenv("MIN_ARCHIVE_HEIGHT", "240"))
 PERIOD_FOOTAGE_YEARS = int(os.getenv("PERIOD_FOOTAGE_YEARS", "0"))
 PERIOD_MIN_HEIGHT = int(os.getenv("PERIOD_MIN_HEIGHT", "480"))
 PERIOD_REAL_LINES = int(os.getenv("PERIOD_REAL_LINES", "400"))
+# The judge rates the era's broadcast video soft ("blurry, blocky compression"): a period line's quality floor
+# (with PERIOD_FOOTAGE_YEARS on), under VISION_MIN_QUALITY.
+PERIOD_MIN_QUALITY = float(os.getenv("PERIOD_MIN_QUALITY", "0.15"))
 # Real detail, not file size (src/sharpness.py; the owner, 2026-10-04: "fix blur
 # image issues", "images needed HD to 4K level"). The Lake Powell video showed
 # 40 of its 141 pictures blown up past 1.6x though most were stored 1920 px wide:

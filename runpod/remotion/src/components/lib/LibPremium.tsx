@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Img } from "remotion";
+import { AbsoluteFill } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { geoCentroid, geoInterpolate, geoMercator, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import worldTopology from "world-atlas/countries-110m.json";
@@ -162,7 +163,7 @@ const PhotoFocus: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ background: DARK, opacity: enter * (1 - out) }}>
       <AbsoluteFill style={{ transform: `scale(${scale.toFixed(4)})`, transformOrigin: `${(fx * 100).toFixed(2)}% ${(fy * 100).toFixed(2)}%` }}>
-        <Img src={pic.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <SafeImg src={pic.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </AbsoluteFill>
       <AbsoluteFill style={{ opacity: dim, background: `radial-gradient(ellipse ${(R * 1.7).toFixed(0)}px ${(RY * 1.75).toFixed(0)}px `
         + `at ${cx.toFixed(0)}px ${cy.toFixed(0)}px, rgba(0,0,0,0) 52%, rgba(3,4,6,.66) 100%)` }} />

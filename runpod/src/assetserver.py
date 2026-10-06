@@ -223,5 +223,6 @@ def localise(doc: dict, server: AssetServer) -> dict:
     return doc
 
 
-# The document fields that hold a file the renderer loads.
-MEDIA_FIELDS = frozenset({"url", "thumbnail", "previewUrl"})
+# The document fields that hold a file the renderer loads (fallbackStill: what a scene's picture falls back
+# to, blurred, when it cannot be drawn - src/quality.py _verify_pictures).
+MEDIA_FIELDS = frozenset({"url", "thumbnail", "previewUrl", "fallbackStill"})

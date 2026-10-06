@@ -233,6 +233,11 @@ export interface SceneMedia {
   reframe?: MediaReframe;
   /** A still's depth layers (living photos); absent = drawn flat. */
   living?: MediaLiving;
+  /**
+   * What a picture that does not load is replaced by, blurred (the shot before it, set by the check before
+   * the render, src/quality.py): a scene picture never stops a render (components/motion/safePicture.tsx).
+   */
+  fallbackStill?: string;
 }
 
 export interface Scene {

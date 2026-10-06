@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, HAND, INTER, LABEL, MONO } from "../fonts";
 import type { MapLocation, Overlay, OverlayItem, SceneMedia } from "../../types";
 import { LetterLine, Odometer, formatValue, lines, ramp, useHold, useK } from "../pro/ProGraphics";
@@ -226,7 +227,7 @@ const PolaroidDrop: Look = ({ overlay }) => {
             transform: `translate(${((1 - ba) * 70 + bq * 160) * k}px, ${-bq * 1300 * k}px) rotate(${8 + (1 - ba) * 5 - bq * 10}deg)` }}>
             <div style={{ position: "absolute", left: B * 0.84, top: B * 0.84, width: PW * 0.84, height: PH * 0.84, overflow: "hidden",
               background: "#222" }}>
-              <Img src={back} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "brightness(.8) saturate(.75) sepia(.18)" }} />
+              <SafeImg src={back} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "brightness(.8) saturate(.75) sepia(.18)" }} />
             </div>
           </div>
         ) : null}
@@ -234,7 +235,7 @@ const PolaroidDrop: Look = ({ overlay }) => {
           background: "linear-gradient(172deg, #fcfbf7 0%, #f0ece2 100%)", borderRadius: 3 * k, boxShadow: shadow,
           opacity: ramp(frame, 0, 4), transform: `translate(${x}px, ${y}px) rotate(${rot}deg) scale(${scale})` }}>
           <div style={{ position: "absolute", left: B, top: B, width: PW, height: PH, overflow: "hidden", background: "#2b312d" }}>
-            <Img src={pics[0]} style={{ width: "100%", height: "100%", objectFit: "cover",
+            <SafeImg src={pics[0]} style={{ width: "100%", height: "100%", objectFit: "cover",
               filter: `brightness(${(0.3 + 0.7 * dev).toFixed(3)}) saturate(${(0.1 + 0.9 * dev).toFixed(3)}) contrast(${(1.3 - 0.26 * dev).toFixed(3)}) sepia(${(0.4 * (1 - dev)).toFixed(3)})` }} />
             {/* the undeveloped emulsion: grey-green, clearing as the picture comes up */}
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, #6a786d 0%, #3a443f 100%)", opacity: 0.88 * (1 - dev) }} />
@@ -312,12 +313,12 @@ const TiltCard: Look = ({ overlay, accent }) => {
           {/* reflection on the glossy floor */}
           <div style={{ position: "absolute", left: 0, top: CH + D + 10 * k, width: CW, height: CH * 0.42, overflow: "hidden", opacity: 0.28,
             maskImage: "linear-gradient(180deg, #000 0%, rgba(0,0,0,0) 100%)", WebkitMaskImage: "linear-gradient(180deg, #000 0%, rgba(0,0,0,0) 100%)" }}>
-            <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: CW, height: CH, objectFit: "cover", transform: "scaleY(-1)" }} />
+            <SafeImg src={src} style={{ position: "absolute", left: 0, top: 0, width: CW, height: CH, objectFit: "cover", transform: "scaleY(-1)" }} />
           </div>
           {/* the face: photo with parallax, gloss sweep, hairline edge */}
           <div style={{ position: "absolute", inset: 0, overflow: "hidden", borderRadius: 5 * k, background: "#0b0d12",
             boxShadow: `0 ${50 * k}px ${110 * k}px rgba(0,0,0,.6)`, backfaceVisibility: "hidden" }}>
-            <Img src={src} style={{ position: "absolute", left: -0.08 * CW, top: -0.08 * CH, width: CW * 1.16, height: CH * 1.16,
+            <SafeImg src={src} style={{ position: "absolute", left: -0.08 * CW, top: -0.08 * CH, width: CW * 1.16, height: CH * 1.16,
               objectFit: "cover", maxWidth: "none", transform: `translate(${par.x}px, ${par.y}px)` }} />
             <div style={{ position: "absolute", inset: 0, background: `linear-gradient(115deg, rgba(255,255,255,0) ${shine - 20}%, rgba(255,255,255,.24) ${shine}%, rgba(255,255,255,0) ${shine + 20}%)` }} />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 60%, rgba(0,0,0,.28) 100%)" }} />
@@ -372,7 +373,7 @@ const BlindsReveal: Look = ({ overlay, accent }) => {
   const hasCap = tl.length > 0 || sub.length > 0;
   return (
     <AbsoluteFill style={{ background: "#07080a", overflow: "hidden" }}>
-      <Img src={pics[0]} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
+      <SafeImg src={pics[0]} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
         transform: `scale(${push})`, filter: `brightness(${(0.5 + 0.5 * lit).toFixed(3)}) saturate(${(0.8 + 0.15 * lit).toFixed(3)})` }} />
       {hasCap ? (
         <AbsoluteFill style={{ background: "linear-gradient(0deg, rgba(0,0,0,.62) 0%, rgba(0,0,0,.18) 34%, rgba(0,0,0,0) 55%)", opacity: bar }} />
@@ -501,11 +502,11 @@ const SpotlightFocus: Look = ({ overlay, accent }) => {
     <AbsoluteFill style={{ background: "#030304", overflow: "hidden" }}>
       <AbsoluteFill style={{ transform: `scale(${hold})` }}>
         {/* the picture in the dark, out of focus (scaled past its blurred edges) */}
-        <Img src={src} style={{ ...full, opacity: house, transform: "scale(1.06)",
+        <SafeImg src={src} style={{ ...full, opacity: house, transform: "scale(1.06)",
           filter: `blur(${f1(9 * k)}px) grayscale(.6) brightness(.22) contrast(1.08)` }} />
         {/* the pool: the same picture lit, racking into focus as the spot locks */}
         <AbsoluteFill style={{ maskImage: mask, WebkitMaskImage: mask, opacity: lamp }}>
-          <Img src={src} style={{ ...full,
+          <SafeImg src={src} style={{ ...full,
             filter: `${soft > 0.05 ? `blur(${soft.toFixed(2)}px) ` : ""}brightness(${(1.04 + 0.24 * flash).toFixed(3)}) contrast(1.05)` }} />
           <AbsoluteFill style={{ background: `radial-gradient(${pool}, rgba(255,238,205,.14) 0%, rgba(255,238,205,0) 72%)` }} />
         </AbsoluteFill>
@@ -629,7 +630,7 @@ const FilmStrip: Look = ({ overlay, accent }) => {
               <div style={{ position: "absolute", left: fx, top: BAND, width: FW, height: FH, background: "#050404", overflow: "hidden",
                 boxShadow: "inset 0 0 0 1px rgba(255,255,255,.07)" }}>
                 {s !== HERO ? (
-                  <Img src={pics[wrap(s - HERO, pics.length)]} style={{ width: "100%", height: "100%", objectFit: "cover",
+                  <SafeImg src={pics[wrap(s - HERO, pics.length)]} style={{ width: "100%", height: "100%", objectFit: "cover",
                     filter: "sepia(.2) contrast(1.06) saturate(.9)" }} />
                 ) : null}
               </div>
@@ -643,7 +644,7 @@ const FilmStrip: Look = ({ overlay, accent }) => {
         border: `${12 * k * pull}px solid #f2eee5`, background: "#050404", overflow: "hidden", filter: heroFilter,
         transform: `translate(-50%, -50%) scale(${hs}) rotate(${-1.6 * pull}deg)`,
         boxShadow: `0 ${40 * pull * k}px ${90 * pull * k}px rgba(0,0,0,${(0.65 * pull).toFixed(3)})` }}>
-        <Img src={pics[0]} style={{ width: "100%", height: "100%", objectFit: "cover", filter: `sepia(${(0.2 * (1 - pull)).toFixed(3)}) contrast(1.05)` }} />
+        <SafeImg src={pics[0]} style={{ width: "100%", height: "100%", objectFit: "cover", filter: `sepia(${(0.2 * (1 - pull)).toFixed(3)}) contrast(1.05)` }} />
       </div>
       <AbsoluteFill style={{ boxShadow: `inset 0 0 ${300 * k}px rgba(0,0,0,.7)` }} />
       {tl.length || sub ? (
@@ -693,7 +694,7 @@ const MosaicAssemble: Look = ({ overlay, accent }) => {
   const M = 14 * k;
   return (
     <AbsoluteFill style={{ background: "#08090b", overflow: "hidden" }}>
-      <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
+      <SafeImg src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
         transform: `scale(${bgPush})`, filter: `blur(${36 * k}px) brightness(.34) saturate(.8)` }} />
       <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 45%, rgba(0,0,0,.1) 0%, rgba(0,0,0,.65) 100%)" }} />
       <div style={{ position: "absolute", left: L, top: T, width: PW, height: PH, perspective: 1500 * k, transform: `scale(${hold})` }}>
@@ -717,7 +718,7 @@ const MosaicAssemble: Look = ({ overlay, accent }) => {
               opacity: o * (1 - g),
               transform: `translate3d(${dx * m}px, ${dy * m}px, ${dz * (f + g * 1.1)}px) rotateX(${rxx * (f + g)}deg) rotateY(${ryy * (f + g)}deg) rotateZ(${rz * (f + g)}deg)`,
               boxShadow: f > 0.02 ? `0 ${10 * k}px ${24 * k}px rgba(0,0,0,${(0.5 * f).toFixed(3)})` : undefined }}>
-              <Img src={src} style={{ position: "absolute", left: -l, top: -tp, width: PW, height: PH, objectFit: "cover", maxWidth: "none" }} />
+              <SafeImg src={src} style={{ position: "absolute", left: -l, top: -tp, width: PW, height: PH, objectFit: "cover", maxWidth: "none" }} />
               {shade > 0.01 ? <div style={{ position: "absolute", inset: 0, background: "#000", opacity: shade }} /> : null}
             </div>
           );
@@ -808,7 +809,7 @@ const TornReveal: Look = ({ overlay, accent }) => {
   const titleEnd = 16 + tl.length * 4;
   return (
     <AbsoluteFill style={{ background: "#0a0a0b", overflow: "hidden" }}>
-      <Img src={pics[0]} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
+      <SafeImg src={pics[0]} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
         transform: `translateX(${shift}px) scale(${push})`, filter: "saturate(.95) contrast(1.04)" }} />
       <AbsoluteFill style={{ boxShadow: `inset 0 0 ${260 * k}px rgba(0,0,0,.45)` }} />
       <AbsoluteFill style={{ transform: `translateX(${tx}px)` }}>
@@ -898,7 +899,7 @@ const LoupeZoom: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ background: "#07080a", overflow: "hidden" }}>
       <AbsoluteFill style={{ transform: `scale(${hold})` }}>
-        <Img src={src} style={{ position: "absolute", left: 0, top: 0, width, height, objectFit: "cover", filter: "brightness(.72) saturate(.85)" }} />
+        <SafeImg src={src} style={{ position: "absolute", left: 0, top: 0, width, height, objectFit: "cover", filter: "brightness(.72) saturate(.85)" }} />
         <AbsoluteFill style={{ boxShadow: `inset 0 0 ${320 * k}px rgba(0,0,0,.7)` }} />
         {hasLabel ? (
           <>
@@ -917,7 +918,7 @@ const LoupeZoom: Look = ({ overlay, accent }) => {
         ) : null}
         <div style={{ position: "absolute", left: cx - R, top: cy - R, width: 2 * R, height: 2 * R }}>
           <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden", background: "#111" }}>
-            <Img src={src} style={{ position: "absolute", left: R - cx * z, top: R - cy * z, width: width * z, height: height * z,
+            <SafeImg src={src} style={{ position: "absolute", left: R - cx * z, top: R - cy * z, width: width * z, height: height * z,
               objectFit: "cover", maxWidth: "none", filter: "brightness(1.08) contrast(1.06)" }} />
             <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.42) 100%)" }} />
             <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "radial-gradient(circle at 32% 26%, rgba(255,255,255,.34) 0%, rgba(255,255,255,0) 32%)" }} />
@@ -1023,10 +1024,10 @@ const ScanID: Look = ({ overlay }) => {
         filter: c1 > 0.001 ? `brightness(${(1 + 2.2 * c1).toFixed(3)})` : undefined }}>
         <div style={{ position: "absolute", left: PX, top: PY, width: PW, height: PH, overflow: "hidden", background: "#050a10",
           boxShadow: `0 0 0 ${Math.max(1, k)}px rgba(83,200,255,.28), 0 ${30 * k}px ${80 * k}px rgba(0,0,0,.6)` }}>
-          <Img src={src} style={{ ...imgStyle, filter: "grayscale(1) contrast(1.35) brightness(.5)" }} />
+          <SafeImg src={src} style={{ ...imgStyle, filter: "grayscale(1) contrast(1.35) brightness(.5)" }} />
           <div style={{ position: "absolute", inset: 0, background: CYAN, mixBlendMode: "color", opacity: 0.75 }} />
           <div style={{ position: "absolute", inset: 0, clipPath: `inset(0 0 ${((1 - scan) * 100).toFixed(2)}% 0)` }}>
-            <Img src={src} style={{ ...imgStyle, filter: "contrast(1.06) saturate(.92)" }} />
+            <SafeImg src={src} style={{ ...imgStyle, filter: "contrast(1.06) saturate(.92)" }} />
           </div>
           <div style={{ position: "absolute", inset: 0, backgroundImage: `repeating-linear-gradient(0deg, rgba(0,0,0,.2) 0px, rgba(0,0,0,.2) ${2 * k}px, rgba(0,0,0,0) ${2 * k}px, rgba(0,0,0,0) ${5 * k}px)` }} />
           <div style={{ position: "absolute", left: 0, right: 0, top: lineY - 120 * k, height: 120 * k, opacity: lineOp,
@@ -1146,7 +1147,7 @@ const KenBurns: Look = ({ overlay, accent }) => {
   const hasCap = tl.length > 0 || kick.length > 0 || meta.length > 0;
   return (
     <AbsoluteFill style={{ background: "#000", overflow: "hidden" }}>
-      <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
+      <SafeImg src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
         transform: `scale(${sc}) translate(${px}%, ${py}%)`, filter: "saturate(.9) contrast(1.07)" }} />
       <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(18,42,64,.55) 0%, rgba(0,0,0,0) 45%, rgba(70,40,12,.45) 100%)",
         mixBlendMode: "soft-light" }} />

@@ -995,7 +995,8 @@ def cut_record(verdict: Optional[dict]) -> dict:
     return out
 
 
-def acceptable(verdict: Optional[dict], allow_people: bool = False, allow_vice: bool = False) -> bool:
+def acceptable(verdict: Optional[dict], allow_people: bool = False, allow_vice: bool = False,
+               min_quality: Optional[float] = None) -> bool:
     """
     Pass/fail for a verdict. Unknown (None) passes — see judge().
 
@@ -1033,7 +1034,8 @@ def acceptable(verdict: Optional[dict], allow_people: bool = False, allow_vice: 
     if verdict["is_talking_head"] and not allow_people:
         return False
     quality = verdict.get("quality")
-    if quality is not None and quality < config.VISION_MIN_QUALITY:
+    floor = config.VISION_MIN_QUALITY if min_quality is None else float(min_quality)
+    if quality is not None and quality < floor:
         return False
     return verdict["score"] >= config.VISION_MIN_SCORE
 

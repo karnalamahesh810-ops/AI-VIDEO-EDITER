@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, continueRender, delayRender, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, continueRender, delayRender, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { ANTON, ANTON_CAP, HAND, LABEL, SERIF, SERIF_ITALIC, SUBLINE } from "../fonts";
 import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { ramp, useK } from "../pro/ProGraphics";
@@ -270,7 +271,7 @@ export const printAspect = (ar: number): number =>
 
 /** A picture cover-cropped to its box (never stretched), held about `pos`. */
 export const Cover: React.FC<{ src: string; pos?: string; style?: CSS }> = ({ src, pos = "50% 50%", style }) => (
-  <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
+  <SafeImg src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
     objectPosition: pos, ...style }} />
 );
 

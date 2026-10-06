@@ -141,7 +141,7 @@ RECLIP_CONFIG = {"CLIP_WORDINGS": 2, "CLIP_RUNGS": 2, "CLIP_OTHER_WORDINGS": 0, 
 # What the budget keeps back for a step while it runs (its worst case: a clip-first search's 20 model calls
 # and its share of the worker's time; a moment's or a picture's 4 calls; one call), and for the saving at
 # the end.
-STEP_USD = {"search": 0.02, "moment": 0.005, "picture": 0.005, "shelf": 0.002, "check": 0.002}
+STEP_USD = {"search": 0.012, "moment": 0.005, "picture": 0.005, "shelf": 0.002, "check": 0.002}
 SAVE_USD = 0.05
 
 # The last resort's own looks on a line nothing was found for (gapfill._card, quality.text_scene,
@@ -395,8 +395,9 @@ class Budget:
     may still spend (STEP_USD each) and the saving at the end (SAVE_USD) stay under it. cap 0 = no cap.
     """
 
-    def __init__(self, cap: float):
+    def __init__(self, cap: float, save: float = SAVE_USD):
         self.cap = max(0.0, float(cap or 0.0))
+        self.save = max(0.0, float(save))           # what the saving at the end keeps back (a trial saves nothing)
         self.lock = threading.Lock()
         self.held = 0.0
         self.stopped = False
@@ -416,7 +417,7 @@ class Budget:
             if self.cap <= 0:
                 self.held += hold
                 return hold
-            if self.stopped or self.spent() + self.held + hold + SAVE_USD > self.cap:
+            if self.stopped or self.spent() + self.held + hold + self.save > self.cap:
                 self.stopped = True
                 self.refused += 1
                 return 0.0
@@ -1248,7 +1249,9 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
         out["backup"] = recut.save_json(project_id, recut.backup_key(project_id, job_id), doc)
         print(f"[reclip] the timeline as it was: {out['backup']}", flush=True)
     deadline = started + seconds
-    budget = Budget(cap)
+    # (A trial saves nothing: no reserve for it. The Obama trials of 2026-10-07 lost three of their four
+    # lines to reserves at a $0.10 cap: 4 searches x $0.02 + $0.05 for a save that never comes.)
+    budget = Budget(cap, save=0.0 if trial else SAVE_USD)
     media.reset_cache()
     media.limit_generation(0)           # never an AI-made picture in a real video
     # A re-clip's searches are narrower than a plan's (RECLIP_CONFIG): the Obama re-clip asked every wording,

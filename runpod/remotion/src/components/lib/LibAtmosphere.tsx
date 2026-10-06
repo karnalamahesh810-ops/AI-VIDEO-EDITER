@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, LABEL, MONO } from "../fonts";
 import type { MapLocation, Overlay, SceneMedia } from "../../types";
 import { LetterLine, lines, ramp, useHold, useK } from "../pro/ProGraphics";
@@ -1161,14 +1162,14 @@ const GlitchSlice: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       {burst && pic && g > 0.45 ? (
-        <Img src={pic} onError={() => undefined} style={{ position: "absolute", left: jit * 1.6, top: 0, width: W, height: H,
+        <SafeImg src={pic} onError={() => undefined} style={{ position: "absolute", left: jit * 1.6, top: 0, width: W, height: H,
           objectFit: "cover", opacity: 0.22 * g, mixBlendMode: "screen" }} />
       ) : null}
       {slices.map((s, i) => (
         <div key={i} style={{ position: "absolute", left: 0, top: `${s.y}%`, width: W, height: `${s.h}%`, overflow: "hidden" }}>
           {pic ? (
             <>
-              <Img src={pic} onError={() => undefined} style={{ position: "absolute", left: s.dx, top: -(s.y / 100) * H, width: W,
+              <SafeImg src={pic} onError={() => undefined} style={{ position: "absolute", left: s.dx, top: -(s.y / 100) * H, width: W,
                 height: H, objectFit: "cover" }} />
               {s.tinted ? (
                 <div style={{ position: "absolute", left: 0, top: 0, right: 0, bottom: 0, background: withAlpha(s.tint, 0.32),
@@ -1461,7 +1462,7 @@ const PaperTear: Look = ({ overlay, accent }) => {
       {full ? (
         pic ? (
           <AbsoluteFill>
-            <Img src={pic} onError={() => undefined} style={{ width: "100%", height: "100%", objectFit: "cover",
+            <SafeImg src={pic} onError={() => undefined} style={{ width: "100%", height: "100%", objectFit: "cover",
               transform: `scale(${(1.05 + 0.06 * pr).toFixed(4)})` }} />
           </AbsoluteFill>
         ) : (

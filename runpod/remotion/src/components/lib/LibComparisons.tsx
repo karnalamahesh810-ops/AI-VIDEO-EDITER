@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, INTER, LABEL, MONO } from "../fonts";
 import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { LetterLine, Odometer, Scrim, formatValue, lines, ramp, useHold, useK } from "../pro/ProGraphics";
@@ -1970,7 +1971,7 @@ const PhotoVersus: Look = ({ overlay, accent: accentIn }) => {
         borderRadius: 14 * k, overflow: "hidden", background: INK, boxSizing: "border-box",
         border: `${2.5 * k}px solid ${right ? accent : "rgba(255,255,255,.85)"}`,
         boxShadow: `0 ${40 * k}px ${90 * k}px rgba(0,0,0,.6)` }}>
-        <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
+        <SafeImg src={src} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover",
           objectPosition: same ? (right ? "74% 50%" : "26% 50%") : "50% 50%",
           transform: `scale(${(1.08 + 0.06 * life).toFixed(4)}) translateX(${((right ? -1 : 1) * (life - 0.5) * 16 * k).toFixed(2)}px)`,
           filter: right ? "saturate(1.06) contrast(1.05)" : "grayscale(.3) contrast(1.06) brightness(.93)" }} />

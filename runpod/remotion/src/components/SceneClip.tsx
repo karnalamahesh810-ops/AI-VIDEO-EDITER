@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  AbsoluteFill, Img, OffthreadVideo,
+  AbsoluteFill, OffthreadVideo,
   useCurrentFrame, useVideoConfig,
 } from "remotion";
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
@@ -10,6 +10,7 @@ import { useSceneGrade } from "./Grade";
 import { PlayerWindow } from "./pro/ProCase";
 import { LivingPicture, StillPicture, TransitionFrame, resolveLiving } from "../transitions";
 import { reframeStyle, resolveAim, resolveMove } from "./reframe";
+import { BlurredHold, SafeImg } from "./motion/safePicture";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
 
 /**
@@ -77,6 +78,13 @@ export const SceneClip: React.FC<{
     );
   }
 
+  // What a picture that cannot be drawn is replaced by, blurred - the first of these that can be: the shot
+  // the check before the render chose (media.fallbackStill), the shot beside it, its own small copy (a
+  // picture never stops a render: ./motion/safePicture.tsx).
+  const near = backdrop && backdrop.url ? (backdrop.type === "image" ? backdrop.url : backdrop.thumbnail || "") : "";
+  const holdStill = [media.fallbackStill || "", near, media.thumbnail || ""].filter((u) => u && u !== media.url);
+  const hold = <BlurredHold still={holdStill} />;
+
   const entrance = entranceStyle(transition, frame);
   // A clip shorter than its scene used to run out and leave the rest of the
   // scene black (a real job: 3.48 s of footage in a 5.10 s scene). Slow it
@@ -112,7 +120,7 @@ export const SceneClip: React.FC<{
             {media.type === "video" ? (
               <OffthreadVideo src={media.url} style={media100} muted playbackRate={rate} />
             ) : (
-              <Img src={media.url} style={media100} />
+              <SafeImg src={media.url} style={media100} fallback={hold} />
             )}
             <FilmLayer treatment={treatment} />
           </PlayerWindow>
@@ -164,7 +172,7 @@ export const SceneClip: React.FC<{
             {media.type === "video" ? (
               <OffthreadVideo src={media.url} style={inset} muted playbackRate={rate} />
             ) : (
-              <Img src={media.url} style={inset} />
+              <SafeImg src={media.url} style={inset} fallback={hold} />
             )}
           </AbsoluteFill>
           <FilmLayer treatment={treatment} />
@@ -206,15 +214,15 @@ export const SceneClip: React.FC<{
           ) : moved ? (
             // A still the editor framed by hand: the boxes replace its motion.
             <AbsoluteFill style={moved}>
-              <Img src={media.url} style={fill} />
+              <SafeImg src={media.url} style={fill} fallback={hold} />
             </AbsoluteFill>
           ) : living ? (
             <LivingPicture src={media.url} living={living} motion={stillMotion} frame={frame}
               durationInFrames={durationInFrames} fps={fps} width={width} height={height}
-              filter={filters || undefined} subject={aim} />
+              filter={filters || undefined} subject={aim} fallbackStill={holdStill} />
           ) : (
             <StillPicture src={media.url} motion={stillMotion} frame={frame} durationInFrames={durationInFrames}
-              fps={fps} width={width} filter={filters || undefined} subject={aim} />
+              fps={fps} width={width} filter={filters || undefined} subject={aim} fallbackStill={holdStill} />
           )}
         </AbsoluteFill>
         <EffectLayer effect={effect} durationInFrames={durationInFrames} />

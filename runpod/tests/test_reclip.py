@@ -506,5 +506,12 @@ class AfterTheObamaApply(Rig):
         self.assertEqual(seen[0][0], 3)                            # the job's own config wins
 
 
+    def test_a_trials_small_cap_searches_every_line(self):
+        doc = self.doc()
+        out = handler.handler(self.job(timeline=doc, trial=True, only=[0, 1, 3, 5], check=False, budget_usd=0.10))
+        self.assertEqual(len(self.searches), 4)              # a trial keeps nothing back for a save
+        self.assertFalse(out["budget"]["stopped"])
+
+
 if __name__ == "__main__":
     unittest.main()

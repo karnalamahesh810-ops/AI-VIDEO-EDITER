@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, LABEL, TYPEWRITER } from "../fonts";
 import { MaskLine, Tag, ramp, useK } from "./ProGraphics";
 import type { MapLocation, Overlay } from "../../types";
@@ -31,7 +32,7 @@ const Blurred: React.FC<{ src: string; brightness?: number }> = ({ src, brightne
   const drift = interpolate(frame, [0, Math.max(1, durationInFrames)], [0, 1], clamp);
   return (
     <AbsoluteFill>
-      <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.2 + drift * 0.05})`,
+      <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.2 + drift * 0.05})`,
         filter: `blur(26px) brightness(${brightness}) saturate(0.9)` }} />
     </AbsoluteFill>
   );
@@ -60,7 +61,7 @@ export const ProPhoto: React.FC<{ overlay: Overlay; accent: string; variant?: st
         <div style={{ position: "absolute", left: `${-6 + 21 * slide}%`, top: "50%", width: D, height: D,
           transform: `translateY(-50%) scale(${1 + hold * 0.04})`, borderRadius: "50%", overflow: "hidden",
           border: `${10 * k}px solid #fff`, boxShadow: "0 30px 80px rgba(0,0,0,.6)" }}>
-          <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 22%" }} />
+          <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 22%" }} />
         </div>
         <div style={{ position: "absolute", left: "52%", right: "6%", top: "50%", transform: "translateY(-50%)",
           display: "flex", flexDirection: "column", gap: 18 * k }}>
@@ -86,7 +87,7 @@ export const ProPhoto: React.FC<{ overlay: Overlay; accent: string; variant?: st
     const pin = ramp(frame, Math.round(fps * 0.5), 14);
     return (
       <AbsoluteFill style={{ background: "#0d0d10", overflow: "hidden" }}>
-        <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover",
+        <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover",
           transform: `scale(${1.12 - 0.06 * drop + hold * 0.05})`, filter: "brightness(.9)" }} />
         <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(0,0,0,.72) 0%, rgba(0,0,0,.35) 45%, rgba(0,0,0,0) 70%)" }} />
         <div style={{ position: "absolute", left: 110 * k, bottom: 170 * k, display: "flex", flexDirection: "column", gap: 12 * k }}>
@@ -118,7 +119,7 @@ export const ProPhoto: React.FC<{ overlay: Overlay; accent: string; variant?: st
           background: `radial-gradient(circle, ${accent}33 0%, transparent 65%)`, opacity: drop }} />
         <div style={{ width: W, height: H, transform: `rotateY(${turn}deg) scale(${0.9 + 0.1 * drop})`, opacity: drop,
           boxShadow: "0 40px 90px rgba(0,0,0,.7)", borderRadius: 14 * k, overflow: "hidden" }}>
-          <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
         {caption ? (
           <div style={{ position: "absolute", right: 150 * k, top: 190 * k, display: "flex", alignItems: "center" }}>
@@ -145,7 +146,7 @@ export const ProPhoto: React.FC<{ overlay: Overlay; accent: string; variant?: st
             <div key={i} style={{ position: "absolute", width: 900 * k, height: 600 * k, padding: 16 * k, background: "#f4f1ea",
               boxShadow: "0 30px 70px rgba(0,0,0,.55)", opacity: d,
               transform: `translate(${(i - 1) * 60 * k}px, ${(1 - d) * -220 * k}px) rotate(${rot + (1 - d) * 8}deg) scale(${1.08 - 0.08 * d})` }}>
-              <Img src={p} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <SafeImg src={p} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           );
         })}
@@ -168,7 +169,7 @@ export const ProPhoto: React.FC<{ overlay: Overlay; accent: string; variant?: st
         outline: paper ? `${3 * k}px dashed ${accent}` : "none", outlineOffset: 10 * k,
         boxShadow: paper ? "none" : "0 40px 90px rgba(0,0,0,.6)",
         transform: `translateY(${(1 - drop) * 120 * k}px) rotate(${turn}deg) scale(${0.94 + 0.06 * drop + hold * 0.03})`, opacity: drop }}>
-        <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </div>
       {caption ? (
         <div style={{ position: "absolute", bottom: 90 * k, left: 0, right: 0, display: "flex", justifyContent: "center" }}>

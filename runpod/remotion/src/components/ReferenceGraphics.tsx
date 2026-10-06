@@ -1,5 +1,6 @@
 import React from 'react';
-import {AbsoluteFill, Img, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import { SafeImg } from './motion/safePicture';
 import type {Overlay} from '../types';
 import {INTER, TYPEWRITER, NARROW} from './fonts';
 
@@ -12,7 +13,7 @@ export const PhotoCard: React.FC<{overlay:Overlay;accent:string}>=({overlay,acce
  const media=(overlay.media||[]).filter(m=>m.type==='image'&&m.url).slice(0,2);
  const pair=media.length>1; const paper=overlay.variant==='grid';
  return <AbsoluteFill style={{background:paper?'#eeeade':'#153e34',backgroundImage:paper?'linear-gradient(#7775 1px, transparent 1px),linear-gradient(90deg,#7775 1px,transparent 1px)':'radial-gradient(ellipse,#286a53,#0c2520)',backgroundSize:paper?`${50*s}px ${50*s}px`:'cover',alignItems:'center',justifyContent:'center',flexDirection:'row',gap:'5%'}}>
-  {media.map((m,i)=>{const p=progress(f,i*fps*.8,i*fps*.8+fps*.5);return <div key={i} style={{width:pair?'40%':'70%',height:'72%',opacity:p,transform:`translateY(${(1-p)*55*s}px) scale(${.96+.04*p})`,display:'flex',alignItems:'center',justifyContent:'center'}}><Img src={m.url} style={{maxWidth:'100%',maxHeight:'100%',objectFit:'contain',boxShadow:paper?'none':'0 18px 50px #0009',outline:paper?`2px dashed ${accent}`:'none',outlineOffset:4*s}}/></div>;})}
+  {media.map((m,i)=>{const p=progress(f,i*fps*.8,i*fps*.8+fps*.5);return <div key={i} style={{width:pair?'40%':'70%',height:'72%',opacity:p,transform:`translateY(${(1-p)*55*s}px) scale(${.96+.04*p})`,display:'flex',alignItems:'center',justifyContent:'center'}}><SafeImg src={m.url} style={{maxWidth:'100%',maxHeight:'100%',objectFit:'contain',boxShadow:paper?'none':'0 18px 50px #0009',outline:paper?`2px dashed ${accent}`:'none',outlineOffset:4*s}}/></div>;})}
   {overlay.text&&<div style={{position:'absolute',bottom:'6%',fontFamily:TYPEWRITER,fontSize:40*s,color:paper?'#272522':'#eee',opacity:progress(f,fps,fps*1.6)}}>{overlay.text}</div>}
  </AbsoluteFill>;
 };
@@ -23,7 +24,7 @@ export const NameCard: React.FC<{overlay:Overlay;accent:string}>=({overlay,accen
  const media=overlay.media?.find(m=>m.type==='image'&&m.url);const p=progress(f,0,fps*1.1);
  return <AbsoluteFill style={{background:'#202020',overflow:'hidden'}}>
   <div style={{position:'absolute',left:`${33-25*p}%`,top:'37%',width:'24%',aspectRatio:'1',borderRadius:'50%',background:accent,boxShadow:`0 0 ${90*s}px ${accent}55`}}/>
-  {media&&<Img src={media.url} style={{position:'absolute',left:`${35-27*p}%`,bottom:'10%',width:'25%',height:'80%',objectFit:'contain',opacity:progress(f,0,fps*.3)}}/>}
+  {media&&<SafeImg src={media.url} style={{position:'absolute',left:`${35-27*p}%`,bottom:'10%',width:'25%',height:'80%',objectFit:'contain',opacity:progress(f,0,fps*.3)}}/>}
   <div style={{position:'absolute',left:'43%',right:'6%',top:'39%',opacity:progress(f,fps*.8,fps*1.5)}}>
    <div style={{fontFamily:TYPEWRITER,fontSize:31*s,color:'#ccc',marginBottom:20*s}}>{overlay.subtitle}</div>
    <div style={{fontFamily:TYPEWRITER,fontSize:64*s,color:accent,textTransform:'uppercase'}}>{overlay.text}</div>

@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, HAND, INTER, LABEL, MARKER, MONO } from "../fonts";
 import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { LetterLine, Odometer, Tag, lines, ramp, useHold, useK } from "../pro/ProGraphics";
@@ -266,11 +267,11 @@ const WipeCompare: Look = ({ overlay, accent }) => {
           <div style={{ position: "absolute", inset: 0, boxShadow: "0 40px 110px rgba(0,0,0,.75)", opacity: open * (1 - q) }} />
           <div style={{ position: "absolute", inset: 0, overflow: "hidden", borderRadius: 4 * k, background: INK,
             clipPath: `inset(${ins}% 0 ${ins}% 0)` }}>
-            <Img src={A} style={{ ...cover, transform: `scale(${1.07 + 0.03 * drift}) translateX(${(drift - 0.5) * 18 * k}px)`,
+            <SafeImg src={A} style={{ ...cover, transform: `scale(${1.07 + 0.03 * drift}) translateX(${(drift - 0.5) * 18 * k}px)`,
               filter: same ? "grayscale(1) sepia(.35) contrast(1.1) brightness(.88)"
                 : "grayscale(.5) sepia(.18) contrast(1.06) brightness(.92)" }} />
             <div style={{ position: "absolute", inset: 0, clipPath: `inset(0 0 0 ${d * 100}%)` }}>
-              <Img src={B} style={{ ...cover, transform: `scale(${1.07 + 0.03 * drift}) translateX(${(0.5 - drift) * 18 * k}px)`,
+              <SafeImg src={B} style={{ ...cover, transform: `scale(${1.07 + 0.03 * drift}) translateX(${(0.5 - drift) * 18 * k}px)`,
                 filter: "saturate(1.08) contrast(1.04)" }} />
             </div>
             <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: "26%",
@@ -343,10 +344,10 @@ const Triptych: Look = ({ overlay, accent }) => {
           <div key={i} style={{ position: "absolute", left: left0 + i * (PW + G), top: y, width: PW, height: PH,
             overflow: "hidden", background: INK, clipPath: `inset(${insTop}% 0 ${insBot}% 0)` }}>
             {sliced ? (
-              <Img src={pics[0]} style={{ position: "absolute", top: 0, left: -i * (PW + G), width: total, height: PH,
+              <SafeImg src={pics[0]} style={{ position: "absolute", top: 0, left: -i * (PW + G), width: total, height: PH,
                 objectFit: "cover", transform: `translateY(${counter}px) scale(${1.12 + 0.05 * t + zoomIn})` }} />
             ) : (
-              <Img src={pick(pics, i)} style={{ ...cover,
+              <SafeImg src={pick(pics, i)} style={{ ...cover,
                 transform: `translate(${pan[i] * k * (t - 0.5)}px, ${counter}px) scale(${1.24 - 0.1 * p + 0.05 * t + zoomIn})` }} />
             )}
             {lab ? (
@@ -435,7 +436,7 @@ const Carousel: Look = ({ overlay, accent }) => {
             opacity: appear * (1 - q), borderRadius: 6 * k, overflow: "hidden", background: INK,
             WebkitBoxReflect: `below ${8 * k}px linear-gradient(rgba(0,0,0,0) 62%, rgba(255,255,255,.22))`,
             boxShadow: "0 24px 60px rgba(0,0,0,.55)" }}>
-            <Img src={pick(pics, c.i)} style={{ ...cover, filter: `brightness(${c.light.toFixed(3)})` }} />
+            <SafeImg src={pick(pics, c.i)} style={{ ...cover, filter: `brightness(${c.light.toFixed(3)})` }} />
             <div style={{ position: "absolute", inset: 0,
               boxShadow: `inset 0 0 0 ${2 * k}px rgba(255,255,255,${(0.08 + 0.3 * c.face).toFixed(3)})` }} />
           </div>
@@ -541,7 +542,7 @@ const PinnedPrint: React.FC<{ src: string; slot: Slot; at: number; index: number
         transformOrigin: `50% ${24 * k}px`, opacity: Math.min(1, pe * 4),
         boxShadow: `${(3 + swing * 2 + air * 26) * k}px ${(12 + air * 46) * k}px ${(22 + air * 40) * k}px rgba(0,0,0,${(0.5 - air * 0.22).toFixed(3)})` }}>
         <div style={{ width: "100%", height: ph, overflow: "hidden", background: "#222" }}>
-          <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "contrast(1.05) saturate(.9)" }} />
+          <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "contrast(1.05) saturate(.9)" }} />
         </div>
         {caption ? (
           <div style={{ height: 66 * k, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -668,9 +669,9 @@ const DoubleExposure: Look = ({ overlay, accent }) => {
   const ft = fitTitle(title, 78, 24);
   return (
     <AbsoluteFill style={{ background: "#060608", overflow: "hidden", opacity: fadeAll }}>
-      <Img src={A} style={{ ...cover, opacity: e, transform: `scale(${1.16 - 0.06 * e + 0.06 * t}) translateX(${-24 * k * t}px)`,
+      <SafeImg src={A} style={{ ...cover, opacity: e, transform: `scale(${1.16 - 0.06 * e + 0.06 * t}) translateX(${-24 * k * t}px)`,
         filter: "grayscale(.45) contrast(1.14) brightness(.78)" }} />
-      <Img src={B} style={{ ...cover, opacity: 0.92 * mix, mixBlendMode: "screen",
+      <SafeImg src={B} style={{ ...cover, opacity: 0.92 * mix, mixBlendMode: "screen",
         transform: `${mirror ? "scaleX(-1) " : ""}scale(${1.3 - 0.14 * t}) translateX(${(40 - 70 * t) * k}px)`,
         filter: "grayscale(.25) contrast(1.25) brightness(.95)", WebkitMaskImage: mask, maskImage: mask }} />
       <AbsoluteFill style={{ mixBlendMode: "screen", opacity: flick * ramp(frame, 6, 24) * (1 + 0.6 * flash),
@@ -750,7 +751,7 @@ const ZoomThrough: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ background: INK, overflow: "hidden", opacity: 1 - ramp(frame, durationInFrames - 5, 4) }}>
       {z < 0.999 ? (
-        <Img src={A} style={{ ...cover, opacity: e, transform: `scale(${s1})`,
+        <SafeImg src={A} style={{ ...cover, opacity: e, transform: `scale(${s1})`,
           filter: `${blur > 0.05 ? `blur(${blur.toFixed(2)}px) ` : ""}brightness(${(0.92 - 0.22 * Math.min(1, w) * (1 - z)).toFixed(3)})` }} />
       ) : null}
       {w > 0.001 ? (
@@ -758,7 +759,7 @@ const ZoomThrough: Look = ({ overlay, accent }) => {
           transform: `scale(${sB})`, outline: `${(3 * k) / sBs}px solid rgba(255,255,255,${(0.95 * border).toFixed(3)})`,
           boxShadow: `0 ${(30 * k) / sBs}px ${(80 * k) / sBs}px rgba(0,0,0,${(0.6 * (1 - z)).toFixed(3)})`,
           opacity: 1 - q }}>
-          <Img src={B} style={{ ...cover }} />
+          <SafeImg src={B} style={{ ...cover }} />
         </div>
       ) : null}
       {br > 0.01 ? (
@@ -877,7 +878,7 @@ const Annotated: Look = ({ overlay, accent }) => {
   });
   return (
     <AbsoluteFill style={{ background: INK, overflow: "hidden", opacity: fadeAll }}>
-      <Img src={pics[0]} style={{ ...cover, opacity: Math.min(1, e * 2),
+      <SafeImg src={pics[0]} style={{ ...cover, opacity: Math.min(1, e * 2),
         transform: `scale(${1.16 - 0.08 * e + 0.04 * t + 0.03 * q})`,
         filter: `${soft > 0.05 ? `blur(${(soft * k).toFixed(2)}px) ` : ""}brightness(${(0.52 + 0.26 * focus - 0.16 * q).toFixed(3)}) contrast(1.06) saturate(.92)` }} />
       <AbsoluteFill style={{ boxShadow: `inset 0 0 ${260 * k}px rgba(0,0,0,.7)` }} />
@@ -1001,7 +1002,7 @@ const GridPop: Look = ({ overlay, accent }) => {
             overflow: "hidden", background: INK, opacity: Math.min(1, pe * 3),
             transform: `perspective(${1500 * k}px) rotateY(${qi * 90 * flipDir}deg) rotate(${tilt}deg) scale(${0.55 + 0.45 * p})`,
             boxShadow: `0 ${24 * k * (1 - m)}px ${60 * k * (1 - m)}px rgba(0,0,0,.55)` }}>
-            <Img src={src} style={{ ...cover, transformOrigin: single ? CROPS[idx % CROPS.length] : "50% 50%",
+            <SafeImg src={src} style={{ ...cover, transformOrigin: single ? CROPS[idx % CROPS.length] : "50% 50%",
               transform: `translate(${px}px, ${py}px) scale(${(single ? 1.62 : 1.28) - 0.12 * pe + 0.06 * t})` }} />
             {flash > 0.01 ? <AbsoluteFill style={{ background: "#fff", opacity: flash }} /> : null}
           </div>
@@ -1060,7 +1061,7 @@ const ParallaxStack: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ background: "#08080b", overflow: "hidden" }}>
       <AbsoluteFill style={{ opacity: eb * (1 - qb) }}>
-        <Img src={back} style={{ ...cover,
+        <SafeImg src={back} style={{ ...cover,
           transform: `scale(${1.22 - 0.06 * eb + 0.05 * t + 0.1 * qb}) translateX(${-30 * k * t}px)`,
           filter: `blur(${12 * k}px) brightness(.42) saturate(.85)` }} />
       </AbsoluteFill>
@@ -1071,7 +1072,7 @@ const ParallaxStack: Look = ({ overlay, accent }) => {
         overflow: "hidden", background: INK, opacity: Math.min(1, pm * 2.5) * (1 - qm),
         transform: `translate(${((1 - pm) * 170 - 90 * t) * k}px, ${-10 * k * t}px) scale(${(0.95 + 0.05 * pm + 0.05 * t) * (1 + 0.25 * qm)})`,
         boxShadow: "0 40px 100px rgba(0,0,0,.7)" }}>
-        <Img src={mid} style={{ ...cover, transform: `scale(${1.12 - 0.05 * pm}) translateX(${20 * k * t}px)` }} />
+        <SafeImg src={mid} style={{ ...cover, transform: `scale(${1.12 - 0.05 * pm}) translateX(${20 * k * t}px)` }} />
         <div style={{ position: "absolute", inset: 0, boxShadow: "inset 0 0 0 1px rgba(255,255,255,.14)" }} />
       </div>
       <div style={{ position: "absolute", left: 1140 * k, top: 450 * k, width: 600 * k, height: 400 * k, borderRadius: 6 * k,
@@ -1079,7 +1080,7 @@ const ParallaxStack: Look = ({ overlay, accent }) => {
         opacity: Math.min(1, pf * 2.5) * (1 - qf),
         transform: `translate(${((1 - pf) * 460 - 210 * t + qf * 520) * k}px, ${((1 - pf) * 80 - 30 * t) * k}px) rotate(${-2.2 - (1 - pf) * 7}deg) scale(${(1.45 - 0.45 * pf + 0.08 * t) * (1 + 0.7 * qf)})`,
         boxShadow: "0 50px 110px rgba(0,0,0,.75)" }}>
-        <Img src={front} style={{ ...cover, objectPosition: crop ? "35% 40%" : "50% 50%",
+        <SafeImg src={front} style={{ ...cover, objectPosition: crop ? "35% 40%" : "50% 50%",
           transform: `scale(${crop ? 1.8 : 1.06})` }} />
       </div>
       {motes.map((mo) => (
@@ -1153,7 +1154,7 @@ const DatePlate: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ background: INK, overflow: "hidden" }}>
       <AbsoluteFill style={{ clipPath: `inset(0 ${(1 - rev) * 100}% 0 ${qW * 100}%)` }}>
-        <Img src={pics[0]} style={{ ...cover, transform: `scale(${1.1 - 0.04 * rev + 0.05 * t})`,
+        <SafeImg src={pics[0]} style={{ ...cover, transform: `scale(${1.1 - 0.04 * rev + 0.05 * t})`,
           filter: old ? "grayscale(.85) sepia(.3) contrast(1.1) brightness(.92)" : "contrast(1.05) saturate(.95) brightness(.95)" }} />
         <AbsoluteFill style={{ background: "linear-gradient(0deg, rgba(0,0,0,.62) 0%, rgba(0,0,0,.15) 38%, rgba(0,0,0,0) 60%)" }} />
         <AbsoluteFill style={{ boxShadow: `inset 0 0 ${240 * k}px rgba(0,0,0,.6)` }} />

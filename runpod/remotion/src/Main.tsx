@@ -401,7 +401,8 @@ const Body: React.FC<TimelineProps> = (props) => {
   // fresh download. Rendering ignores premounting.
   const { fps, durationInFrames: bodyFrames } = useVideoConfig();
   const premount = Math.round(fps * 2);
-  // An animation scene's backdrop: the nearest clip of the story, blurred.
+  // An animation scene's backdrop: the nearest clip of the story, blurred. A picture's: the shot beside it
+  // (the one before first), drawn blurred only if the picture itself cannot be (SceneClip's hold).
   const backdrops = React.useMemo(() => {
     const out: Record<string, SceneMedia | null> = {};
     const real = (i: number) => {
@@ -409,7 +410,7 @@ const Body: React.FC<TimelineProps> = (props) => {
       return m && m.url && (m.type === "video" || m.type === "image") ? m : null;
     };
     scenes.forEach((sc, i) => {
-      if (sc.media?.type !== "animation") return;
+      if (sc.media?.type !== "animation" && sc.media?.type !== "image") return;
       let pick: SceneMedia | null = null;
       for (let d = 1; d < scenes.length && !pick; d++) pick = real(i - d) || real(i + d);
       out[sc.id] = pick;

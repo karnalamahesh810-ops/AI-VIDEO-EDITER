@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, HAND, INTER, LABEL, MARKER, MONO, NARROW } from "../fonts";
 import type { Overlay, SceneMedia } from "../../types";
 import { LetterLine, MaskLine, ramp, useK } from "./ProGraphics";
@@ -147,7 +148,7 @@ const Photo: React.FC<{ src: string; push?: number; gray?: boolean }> = ({ src, 
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const pr = interpolate(frame, [0, Math.max(1, durationInFrames)], [0, 1], clamp);
-  return <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.03 + push * pr})`,
+  return <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${1.03 + push * pr})`,
     filter: gray ? "grayscale(1) contrast(1.15)" : "saturate(.92) contrast(1.04)" }} />;
 };
 
@@ -399,7 +400,7 @@ const Print: React.FC<{ src: string; x: number; y: number; w: number; h: number;
       <div style={{ position: "absolute", left: x, top: y, width: w, height: h, padding: 12 * k, background: "#fff",
         boxShadow: `0 ${14 * k}px ${34 * k}px rgba(0,0,0,.28)`, transform: `rotate(${rot}deg) scale(${1.12 - 0.12 * p})`,
         opacity: p, boxSizing: "border-box" }}>
-        <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "grayscale(.25) contrast(1.05)" }} />
+        <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "grayscale(.25) contrast(1.05)" }} />
         <div style={{ position: "absolute", left: "38%", top: -14 * k, width: "24%", height: 30 * k,
           background: "rgba(235,225,190,.75)", transform: "rotate(-3deg)" }} />
       </div>
@@ -561,7 +562,7 @@ export const ProClipping: React.FC<{ overlay: Overlay; accent: string }> = ({ ov
           {pic ? (
             <div style={{ width: 640 * k, flexShrink: 0 }}>
               <div style={{ width: 640 * k, height: 440 * k, overflow: "hidden", background: "#999" }}>
-                <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "grayscale(1) contrast(1.25) brightness(.95)" }} />
+                <SafeImg src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "grayscale(1) contrast(1.25) brightness(.95)" }} />
               </div>
               {grey(70, 0)}
             </div>
@@ -627,7 +628,7 @@ const FactsCard: React.FC<{ overlay: Overlay; accent: string; pic: string }> = (
         <div style={{ position: "absolute", right: 0, top: 0, width: width * 0.62, height, opacity: picIn * (1 - q * 0.6),
           maskImage: "linear-gradient(to left, #000 50%, rgba(0,0,0,.35) 78%, transparent 100%)",
           WebkitMaskImage: "linear-gradient(to left, #000 50%, rgba(0,0,0,.35) 78%, transparent 100%)" }}>
-          <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
+          <SafeImg src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
             filter: "saturate(.85) contrast(1.08) brightness(.82)" }} />
           <AbsoluteFill style={{ background: "linear-gradient(0deg, rgba(5,7,10,.7) 0%, transparent 38%, transparent 70%, rgba(5,7,10,.45) 100%)" }} />
         </div>
@@ -735,7 +736,7 @@ export const ProFile: React.FC<{ overlay: Overlay; accent: string }> = ({ overla
           {pic ? (
             <div style={{ position: "relative", width: 440 * k, height: 560 * k, flexShrink: 0, overflow: "hidden",
               border: `${2 * k}px solid rgba(255,255,255,.4)` }}>
-              <Img src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", clipPath: `inset(0 0 ${(1 - scan) * 100}% 0)`,
+              <SafeImg src={pic} style={{ width: "100%", height: "100%", objectFit: "cover", clipPath: `inset(0 0 ${(1 - scan) * 100}% 0)`,
                 filter: "contrast(1.05) saturate(.85)" }} />
               <div style={{ position: "absolute", left: 0, right: 0, top: `${scan * 100}%`, height: 4 * k, background: "#fff",
                 boxShadow: `0 0 ${20 * k}px #fff`, opacity: scan < 1 ? 1 : 0 }} />
@@ -840,7 +841,7 @@ export const ProEvidence: React.FC<{ overlay: Overlay; accent: string }> = ({ ov
   const typed = (overlay.text || "").toUpperCase().slice(0, Math.max(0, Math.floor((frame - fps * 0.5) * 1.4)));
   return (
     <AbsoluteFill style={{ background: "#050505", overflow: "hidden" }}>
-      <Img src={pic} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+      <SafeImg src={pic} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
         transform: `scale(${push})`, filter: "grayscale(1) contrast(1.22) brightness(.92)" }} />
       <svg width={width} height={height} style={{ position: "absolute", inset: 0, opacity: 0.18, mixBlendMode: "overlay" }}>
         <filter id="evGrain"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed={frame % 9} /></filter>

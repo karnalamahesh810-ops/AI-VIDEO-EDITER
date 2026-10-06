@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Img } from "remotion";
+import { AbsoluteFill } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import type { Overlay, SceneMedia } from "../../types";
 import { useLookSound } from "./LookSounds";
 import type { SoundCue } from "./lookSoundPlan";
@@ -229,7 +230,7 @@ const ArticleZoom: Look = ({ overlay, accent }) => {
               {photo ? (
                 <div style={{ position: "absolute", left: col2X, top: y + 6 * k, width: col2W, height: photoH, overflow: "hidden",
                   filter: `blur(${(dof * 0.9).toFixed(2)}px) grayscale(0.25)` }}>
-                  <Img src={photo} onError={() => undefined} maxRetries={2}
+                  <SafeImg src={photo} onError={() => undefined} maxRetries={2}
                     style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </div>
               ) : null}
@@ -672,7 +673,7 @@ const QuotePortrait: Look = ({ overlay, accent }) => {
           <div style={{ position: "absolute", left: px, top: (height - ph) / 2, width: pw, height: ph, overflow: "hidden",
             opacity: enter, transform: `translateX(${((1 - enter) * -40) * k}px)`,
             boxShadow: `0 ${30 * k}px ${70 * k}px rgba(0,0,0,.55)` }}>
-            <Img src={photo} onError={() => undefined} maxRetries={2} style={{ width: "100%", height: "100%", objectFit: "cover",
+            <SafeImg src={photo} onError={() => undefined} maxRetries={2} style={{ width: "100%", height: "100%", objectFit: "cover",
               filter: "grayscale(1) contrast(1.12) brightness(0.92)", transform: `scale(${pushPhoto.toFixed(4)})` }} />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%)" }} />
             <Grain opacity={0.1} seed={17} />
@@ -969,7 +970,7 @@ const SocialPost: Look = ({ overlay, accent }) => {
           {photo ? (
             <div style={{ position: "absolute", left: pad, right: pad, top: pad + headH + 30 * k + lines.length * lineH + 32 * k, height: photoH,
               borderRadius: 20 * k, overflow: "hidden", opacity: inOf(f, 4 * S, 12 * S) }}>
-              <Img src={photo} onError={() => undefined} maxRetries={2} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <SafeImg src={photo} onError={() => undefined} maxRetries={2} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           ) : null}
         </div>

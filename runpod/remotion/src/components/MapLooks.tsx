@@ -1,5 +1,6 @@
 import React from 'react';
-import {AbsoluteFill, Img, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import { SafeImg } from './motion/safePicture';
 import {geoContains, geoMercator, geoPath} from 'd3-geo';
 import {feature} from 'topojson-client';
 import topology from 'world-atlas/countries-110m.json';
@@ -141,7 +142,7 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
       for (let tx = Math.floor(left / TILE); tx <= Math.floor(right / TILE); tx++) {
         const wx = ((tx % n) + n) % n;
         out.push(
-          <Img key={`${gibs ? 'g' : ''}${z}-${tx}-${ty}`} src={tileUrl(z, wx, ty, us && !gibs)} onError={() => undefined}
+          <SafeImg key={`${gibs ? 'g' : ''}${z}-${tx}-${ty}`} src={tileUrl(z, wx, ty, us && !gibs)} onError={() => undefined}
             delayRenderTimeoutInMilliseconds={60000} maxRetries={3}
             style={{position: 'absolute', left: width / 2 + (tx * TILE - cx) * scale, top: height / 2 + (ty * TILE - cy) * scale,
               width: Math.ceil(size) + 1, height: Math.ceil(size) + 1, opacity,
@@ -301,7 +302,7 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
             <div style={{position: 'absolute', left: cx0, top: cy0, width: cw, height: ch, padding: 8 * k, background: '#fff',
               boxShadow: '0 18px 40px rgba(0,0,0,.5)', opacity: pop, transform: `scale(${0.85 + 0.15 * pop}) rotate(${right ? 1.5 : -1.5}deg)`,
               transformOrigin: right ? '0% 100%' : '100% 100%', boxSizing: 'border-box'}}>
-              <Img src={src} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+              <SafeImg src={src} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
             </div>
           </>
         );

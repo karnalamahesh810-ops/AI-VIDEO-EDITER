@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Audio, Easing, Img, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Easing, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import { DISPLAY, INTER, LABEL, SERIF, SERIF_ITALIC } from "../fonts";
 import type { Overlay, OverlayItem, SceneMedia } from "../../types";
 import { Scrim, lines, ramp, useHold, useK } from "../pro/ProGraphics";
@@ -225,7 +226,7 @@ const Portrait: React.FC<{ src: string; name: string; accent: string; w: number;
     <div style={{ width: w, height: h, borderRadius: radius, overflow: "hidden", position: "relative",
       background: "radial-gradient(ellipse at 40% 30%, #2a3140 0%, #12161e 60%, #080a0e 100%)" }}>
       {src ? (
-        <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${(1.04 + push * pr).toFixed(4)})`,
+        <SafeImg src={src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${(1.04 + push * pr).toFixed(4)})`,
           filter: gray ? "grayscale(1) contrast(1.1)" : "saturate(.95) contrast(1.05)" }} />
       ) : (
         <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
