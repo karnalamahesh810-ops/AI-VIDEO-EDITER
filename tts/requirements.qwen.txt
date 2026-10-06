@@ -7,6 +7,8 @@ librosa==0.11.0
 soundfile
 einops
 onnxruntime
+# imported by qwen_tts (its 25 Hz tokenizer module) even when the 12 Hz model is used
+sox
 pyloudnorm==0.1.1
 # Worker
 runpod==1.7.7

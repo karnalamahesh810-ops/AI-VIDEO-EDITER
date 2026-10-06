@@ -15,7 +15,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TTS_DEFAULT_MODEL=qwen \
     TTS_REPLICAS=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg sox ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
