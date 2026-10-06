@@ -61,6 +61,16 @@ relook  : new graphics on a made timeline (src/relook.py): {"project_id",
           voice stay), re-resolves map places, re-hosts or replaces broken
           look pictures, rewrites retired looks; returns the new timeline and
           a diff. No sourcing, no paid calls.
+reclip  : real clips on a made timeline (src/reclip.py): {"project_id",
+          "timeline" | "timeline_url" | "timeline_key", "apply" (false = a
+          dry run, the default), "expect_fingerprint" (needed to apply),
+          "seconds", "limit", "pictures", "probe"}. The first minute, every
+          empty or text-filled scene and the weakest pictures get a judged
+          clip (the clip-first search); an empty line nothing is found for
+          gets the no-text last resort. Words, timing, graphics, music and
+          voice stay. A dry run returns the plan and an estimate (with
+          "probe": true, YouTube's free search per scene); an apply keeps
+          the old timeline on R2 first and writes the project once.
 
 Every action returns {"ok": bool, ...}; errors never raise out of the handler
 so the caller always gets a structured result instead of a RunPod stack trace.
@@ -88,7 +98,7 @@ from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
 from src import brandkit, stockblock
-from src import recut, relook, restore
+from src import recut, reclip, relook, restore
 from src import batch, sources
 from src import datagraphics
 from src import tts
@@ -2829,6 +2839,48 @@ def do_recut(inp: dict, work: str, report: Reporter) -> dict:
         _restore_config(previous)
 
 
+def do_reclip(inp: dict, work: str, report: Reporter) -> dict:
+    """
+    Real clips on a made timeline (src/reclip.py): the saved timeline from the input or storage, the video
+    style it was planned with in force, its story steering the judge. A dry run (the default) only plans and
+    estimates; an apply saves the new files like a plan (publish_media, _publish_choices) and writes the
+    project once (recut.write_project) - never anything on a failure.
+    """
+    if not any(inp.get(k) for k in ("timeline", "timeline_url", "timeline_key")):
+        raise ValueError("reclip needs the saved timeline: timeline, timeline_url or timeline_key")
+    doc = restore.load_timeline(inp, work)
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    style_inp = {"video_style": inp.get("video_style") or meta.get("videoStyle") or "",
+                 "config": dict(inp["config"]) if isinstance(inp.get("config"), dict) else None}
+    styles.apply(style_inp)
+    previous = _apply_config(style_inp.get("config"))
+    story = meta.get("story") if isinstance(meta.get("story"), dict) else {}
+    project_id = str(inp.get("project_id") or "")
+    job_id = str(inp.get("_job_id") or "")
+    bucket = inp.get("media_bucket") or config.MEDIA_BUCKET
+    vision.set_story(story)
+    media.set_story_kind(str(story.get("kind") or ""))
+
+    def ready() -> None:
+        # The same refusals as a plan: no AI credit (nothing would judge the new clips), no YouTube.
+        _require_ai_credit()
+        if inp.get("allow_youtube") is not False:
+            report("Checking the YouTube connection", 3)
+            _require_youtube()
+        media.set_youtube_only(bool(inp.get("youtube_only")))
+
+    def publish(d: dict) -> int:
+        return publish_media(d, project_id, bucket, report, job_id=job_id, band=(84, 92))
+
+    def choices(d: dict) -> int:
+        return _publish_choices(d, project_id, bucket, job_id, work, quality.floor(report, 92))
+
+    try:
+        return reclip.run(inp, doc, work, report, publish=publish, choices=choices, ready=ready)
+    finally:
+        _restore_config(previous)
+
+
 def do_relook(inp: dict, work: str, report: Reporter) -> dict:
     """
     New graphics on a made timeline (src/relook.py): the saved timeline from the input or storage, or the
@@ -2891,7 +2943,8 @@ def handler(job):
     # Project updates go through the broker as this job; parts and render
     # chunks are not the project's job and never write the row. (A re-cut
     # writes it once, at its very end, only on an apply: src/recut.py.)
-    storage.CURRENT_JOB[0] = job_id if action in ("plan", "build", "render", "resource", "recut", "relook") else ""
+    storage.CURRENT_JOB[0] = job_id if action in ("plan", "build", "render", "resource", "recut", "relook",
+                                                  "reclip") else ""
     # Every job keeps its own ledger and event log; a fan-out child returns
     # both in its result and the parent absorbs them.
     costs.reset(inp.get("prices") if isinstance(inp.get("prices"), dict) else None)
@@ -2899,8 +2952,8 @@ def handler(job):
     # events stay with this job's own status and result, so nothing of it is
     # ever written to the app's database. Nor is a re-cut's (src/recut.py),
     # whose one write is the finished timeline.
-    reports_to = "" if action in ("restore_media", "recut", "relook") else project_id
-    applying = action == "recut" and bool(inp.get("apply"))
+    reports_to = "" if action in ("restore_media", "recut", "relook", "reclip") else project_id
+    applying = action in ("recut", "reclip") and bool(inp.get("apply"))
     events.start_job(job_id, reports_to, part=("part" if action in ("source_part", "render_chunk") else ""))
     if action in ("plan", "build", "render", "resource") or applying:
         costs.measure_start()
@@ -3065,6 +3118,22 @@ def handler(job):
             if applying:
                 costs.measure_end()
             return {**out, "action": "recut", "costs": costs.summary(time.time() - started),
+                    "events": events.summary(), "vision_stats": vision.stats(),
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action == "reclip":
+            # Real clips on a made timeline (src/reclip.py): the opening, the empty or text-filled lines
+            # and the weakest pictures. A dry run writes nothing anywhere; an apply writes the row once, at
+            # its end; a failure never marks the project failed.
+            events.phase("reclip")
+            try:
+                out = do_reclip(inp, work, report)
+            except Exception as e:  # noqa: BLE001 - reported in the result, the project is not touched
+                traceback.print_exc()
+                out = {"ok": False, "error": str(e)[:800]}
+            if applying:
+                costs.measure_end()
+            return {**out, "action": "reclip", "costs": costs.summary(time.time() - started),
                     "events": events.summary(), "vision_stats": vision.stats(),
                     "elapsed": round(time.time() - started, 1)}
 
@@ -3331,7 +3400,7 @@ def handler(job):
         # A restore is not the project's job: whatever breaks in it, the
         # project row is never written (never marked failed) - src/restore.py.
         # Nor a re-cut's: its one write is the finished timeline (src/recut.py).
-        if project_id and action not in ("restore_media", "recut", "relook"):
+        if project_id and action not in ("restore_media", "recut", "relook", "reclip"):
             # The broker takes events only while the project is "rendering":
             # send them before the status changes, or a failed job has no log.
             try:
