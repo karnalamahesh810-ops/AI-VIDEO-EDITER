@@ -16,7 +16,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from src import config, media, providers, storage, ytdlp
+from src import config, media, providers, storage, vision, ytdlp
 from src.media import MediaAsset
 from src.providers import SourceContext
 
@@ -594,6 +594,27 @@ class PeriodFootage(unittest.TestCase):
         si["time_context"] = str(__import__("datetime").date.today().year)
         self.assertEqual(media.clip_rungs("q", subject="x", scene_intent=si, limit=1)[0]["query"],
                          "Las Vegas Nevada presidential debate footage")
+
+
+class PeriodQuality(unittest.TestCase):
+    """The Obama apply (2026-10-07): the debate's own broadcast clips scored 0.8 and were still turned down,
+    with no reason in the trace - the judge's quality floor. A period line has its own, softer floor, and the
+    trace says when the floor turned a clip down."""
+
+    def test_a_period_line_has_its_own_quality_floor(self):
+        v = {"score": 0.8, "quality": 0.2, "has_text_or_watermark": False, "is_talking_head": False}
+        self.assertFalse(vision.acceptable(v))
+        self.assertTrue(vision.acceptable(v, min_quality=0.15))
+        tok = media._SCENE_INTENT.set({"time_context": "2016"})
+        try:
+            self.assertEqual(media._quality_floor(), config.VISION_MIN_QUALITY)          # off by default
+            with mock.patch.multiple(config, PERIOD_FOOTAGE_YEARS=8, PERIOD_MIN_QUALITY=0.15):
+                self.assertEqual(media._quality_floor(), 0.15)
+                self.assertEqual(media._flags_of(dict(v, quality=0.1)), "quality 0.10")
+                self.assertEqual(media._flags_of(v), "")
+        finally:
+            media._SCENE_INTENT.reset(tok)
+        self.assertEqual(media._flags_of(v), "quality 0.20")
 
 
 if __name__ == "__main__":

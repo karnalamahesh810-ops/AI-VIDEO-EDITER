@@ -1164,7 +1164,20 @@ def _flags_of(verdict: Optional[dict]) -> str:
     flags = [label for key, label in names if v.get(key)]
     if v.get("opening") is False:
         flags.append("opening frame")
+    # The quality floor turned a well-scored shot down too (the Obama apply: 0.8 and 0.9 verdicts gone with
+    # no reason in the trace).
+    q = v.get("quality")
+    if isinstance(q, (int, float)) and q < _quality_floor():
+        flags.append(f"quality {q:.2f}")
     return ", ".join(flags)
+
+
+def _quality_floor() -> float:
+    """The judge's quality floor for this line: a period line's (PERIOD_MIN_QUALITY) - the era's broadcast
+    video reads soft to the judge - else VISION_MIN_QUALITY."""
+    if _period_line():
+        return float(getattr(config, "PERIOD_MIN_QUALITY", config.VISION_MIN_QUALITY))
+    return float(config.VISION_MIN_QUALITY)
 
 
 def _trace(**row) -> None:
@@ -1649,7 +1662,8 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
               flush=True)
         return keep, None
     allow_vice = not off_story(verdict, line)
-    keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person", allow_vice=allow_vice)
+    keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person", allow_vice=allow_vice,
+                             min_quality=_quality_floor())
     if verdict is not None and not allow_vice:
         # A music, club or smoking scene the story is not about: a clear no for the near-miss
         # and opening checks too (a copy - the cached verdict stays as the model answered).
@@ -3287,7 +3301,8 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         _GATE_SLOP.set("")
         keep, verdict = _vision_gate(path, intent_text, context, c.title)
         _trace(step="judge", video=c.id, title=c.title[:60], keep=bool(keep),
-               score=(verdict or {}).get("score"), why=_GATE_SLOP.get()[:90] or _flags_of(verdict),
+               score=(verdict or {}).get("score"), quality=(verdict or {}).get("quality"),
+               why=_GATE_SLOP.get()[:90] or _flags_of(verdict),
                saw=str((verdict or {}).get("description") or "")[:110])
         if not keep:
             _mark_bad(f"yt:{c.id}", mkey, _GATE_SLOP.get())
