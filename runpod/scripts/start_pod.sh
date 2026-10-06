@@ -23,5 +23,26 @@ elif [ -f "$mark" ]; then
 else
   touch "$mark"
   python -u scripts/pod_job.py 2>&1 | tee "$dir/pod_job.log"
+  # pod_job.py deletes this pod itself (POD_EXIT=terminate; a pod started by
+  # hand is stopped) once its result is saved. When it could not - it died
+  # before getting there (an import error, a broken image) or RunPod refused
+  # its request - the pod would sit here billing: ask again from here. A
+  # request for a pod already going is harmless. The key is never printed.
+  key="${POD_STOP_KEY:-${FANOUT_API_KEY:-${RUNPOD_API_KEY:-}}}"
+  if [ -n "${RUNPOD_POD_ID:-}" ] && [ -n "$key" ]; then
+    sleep 60
+    for attempt in 1 2 3; do
+      if [ "${POD_EXIT:-}" = "terminate" ]; then
+        code=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $key" \
+          "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID") || code=000
+      else
+        code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Authorization: Bearer $key" \
+          "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID/stop") || code=000
+      fi
+      echo "[pod] still here after the job: ${POD_EXIT:-stop} requested again (HTTP $code)"
+      case "$code" in 2??) break ;; esac
+      sleep 30
+    done
+  fi
 fi
 sleep infinity

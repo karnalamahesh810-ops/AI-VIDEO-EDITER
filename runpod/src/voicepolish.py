@@ -658,3 +658,246 @@ def for_render(doc: Dict[str, Any], work: str, inp: Optional[Dict[str, Any]] = N
     print(f"[voice] polish {'applied' if report.get('applied') else 'skipped'} ({report.get('why', '')}); "
           f"steps: {steps}", flush=True)
     return report
+
+
+# --------------------------------------------------------------------------- #
+# The editor's voice boost (doc.audio.boostDb)
+# --------------------------------------------------------------------------- #
+#
+# The editor's Voice slider goes to 200%. Up to 100% it is audio.volume (0-1,
+# a plain gain in Remotion, in the preview and the render); over 100% the app
+# keeps the volume at 1 and writes audio.boostDb = 20*log10(level), up to
+# +6.02 dB (the app's src/lib/voiceLevel.ts). Remotion's <Audio volume> over 1
+# is a gain with no limiter - loud syllables clip in the mix before the
+# render's loudness step - so the boost is applied here, to the narration
+# file: the gain, then a limiter holding the true peak at
+# config.VOICE_BOOST_CEILING_DBTP. The limiter runs oversampled (at least 4x
+# the narration's rate and at least BOOST_OVERSAMPLE_HZ), so it holds the peaks
+# between the samples too: at the narration's own rate the bench voice's true
+# peak still reached -0.8 dBTP behind a -1 dBFS limit; oversampled, -1.0.
+#
+# meta.voiceLufs is left as measured: every sound and the music stay levelled
+# against the voice as it was, so the boost lifts the voice over them - what
+# the owner asked for ("if the voiceover sounds low the user needs an option
+# to increase it"). The render's finalize then sets the whole mix to -14 LUFS.
+
+BOOST_MAX_DB = 6.03                # the slider's 200% is +6.02 dB
+BOOST_MIN_DB = 0.05                # under this a boost changes nothing anyone hears
+BOOST_OVERSAMPLE_HZ = 176400       # the limiter's rate: at least this and at least 4x the narration's
+BOOST_PEAK_TOLERANCE_DB = 0.3      # the boosted file's true peak may sit this far over the ceiling
+
+
+def boost_db(audio: Any) -> float:
+    """The boost (dB) a document's narration asks for: audio.boostDb held to 0..BOOST_MAX_DB; 0 when none."""
+    if not isinstance(audio, dict):
+        return 0.0
+    v = audio.get("boostDb")
+    if v is None or isinstance(v, bool):
+        return 0.0
+    try:
+        db = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(BOOST_MAX_DB, db)) if math.isfinite(db) else 0.0
+
+
+def _clamp_volume(audio: Dict[str, Any]) -> Any:
+    """
+    audio.volume held to 0..1 for the renderer (Remotion plays more than 1 as a
+    bare gain, which clips; an older or another client may write one). A value
+    that is not a number is dropped (the renderer then plays at 1). Returns the
+    value it had when it was changed, else None.
+    """
+    v = audio.get("volume")
+    if v is None:
+        return None
+    try:
+        f = float(v)
+        usable = not isinstance(v, bool) and math.isfinite(f)
+    except (TypeError, ValueError):
+        usable = False
+    if not usable:
+        audio.pop("volume", None)
+        return v
+    held = max(0.0, min(1.0, f))
+    if held != f or not isinstance(v, (int, float)):
+        audio["volume"] = held
+        return v
+    return None
+
+
+def boost(src: str, dst: str, db: float, *, ceiling: Optional[float] = None,
+          timeout: Optional[float] = None) -> Dict[str, Any]:
+    """
+    `src` made `db` louder into `dst` (FLAC: the same rate, channels, length
+    and timing), through a limiter that holds its true peak at `ceiling` dBTP
+    (config.VOICE_BOOST_CEILING_DBTP). Returns the report {"applied", "db",
+    "ceilingDbtp", "before", "after", "gainLu", "why", "seconds"}; `dst` exists
+    only when applied. Never raises.
+    """
+    started = time.time()
+    budget = float(timeout if timeout is not None else config.VOICE_POLISH_SECONDS)
+    ceiling = float(config.VOICE_BOOST_CEILING_DBTP if ceiling is None else ceiling)
+
+    def left() -> float:
+        return max(5.0, budget - (time.time() - started))
+    report: Dict[str, Any] = {"applied": False, "db": round(float(db), 2), "ceilingDbtp": ceiling}
+    tmp = dst + ".work.flac"
+    try:
+        info = probe(src, timeout=left())
+        rate, channels, seconds = int(info.get("rate") or 0), int(info.get("channels") or 0), \
+            float(info.get("seconds") or 0.0)
+        if not rate or not channels or seconds <= 0:
+            report["why"] = "the narration could not be read"
+            return report
+        before = loudness(src, left())
+        if before.get("lufs") is None:
+            report["why"] = "the narration could not be measured"
+            return report
+        report["before"] = {"lufs": before["lufs"], "tp": before["tp"]}
+        up = rate * max(4, int(math.ceil(BOOST_OVERSAMPLE_HZ / rate)))
+        limit = max(0.0625, min(1.0, _lin(ceiling)))
+        fmt = ["-ar", str(rate), "-ac", str(channels), "-c:a", "flac", "-sample_fmt", "s16"]
+
+        def run(compensated: bool) -> Tuple[bool, str]:
+            limiter = f"alimiter=limit={limit:.6f}:attack=5:release=50:level=disabled" + \
+                (":latency=1" if compensated else "")
+            chain = [f"aresample={up}", f"volume={db:.2f}dB", limiter, f"aresample={rate}", FRAMING]
+            return _ffmpeg_ok([_FFMPEG, "-hide_banner", "-v", "error", "-y", "-i", src, "-vn",
+                               "-af", ",".join(chain), *fmt, tmp], left())
+        for leftover in (tmp, dst):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+        ok, err = run(True)
+        delayed = False
+        if not ok and "latency" in (err or "").lower():
+            # An ffmpeg without the limiter's delay compensation (alimiter's latency
+            # option, FFmpeg 5.1+): its look-ahead delay is measured and taken out below.
+            ok, err = run(False)
+            delayed = True
+        if not ok or not os.path.isfile(tmp):
+            report["why"] = f"the boost failed: {(err or '').strip()[-160:]}"
+            return report
+        if delayed:
+            lag = latency(src, tmp, left())
+            if lag is None:
+                report["why"] = "the timing of the boosted narration could not be measured"
+                return report
+            shift = int(round(lag * rate)) if abs(lag) > ALIGN_TOLERANCE_S / 2 else 0
+            if shift < 0:
+                report["why"] = f"the boosted narration plays {-lag * 1000:.1f} ms early"
+                return report
+            if shift > 0:
+                ok, err = _ffmpeg_ok([_FFMPEG, "-hide_banner", "-v", "error", "-y", "-i", tmp, "-af",
+                                      f"atrim=start_sample={shift},asetpts=N/SR/TB,apad=pad_len={shift},{FRAMING}",
+                                      *fmt, dst], left())
+                if not ok or not os.path.isfile(dst):
+                    report["why"] = f"the boost's timing fix failed: {(err or '').strip()[-160:]}"
+                    return report
+            else:
+                os.replace(tmp, dst)
+        else:
+            os.replace(tmp, dst)
+        why = _verify_boost(src, dst, info, before, ceiling, report, left())
+        if why:
+            report["why"] = why
+            if os.path.exists(dst):
+                os.remove(dst)
+            return report
+        report["applied"] = True
+        report["why"] = f"+{db:.2f} dB, true peak held at {ceiling:g} dBTP"
+        return report
+    except Exception as e:  # noqa: BLE001 - the narration stays as it was
+        report["why"] = f"failed ({type(e).__name__}: {str(e)[:120]})"
+        if os.path.exists(dst):
+            try:
+                os.remove(dst)
+            except OSError:
+                pass
+        return report
+    finally:
+        report["seconds"] = round(time.time() - started, 1)
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def _verify_boost(src: str, dst: str, info: Dict[str, Any], before: Dict[str, Optional[float]],
+                  ceiling: float, report: Dict[str, Any], timeout: float) -> str:
+    """'' when the boosted narration can stand in for the original (and its levels into `report`), else why not."""
+    got = probe(dst)
+    if not got.get("seconds"):
+        return "the boosted narration does not read back"
+    if int(got.get("rate") or 0) != int(info["rate"]) or int(got.get("channels") or 0) != int(info["channels"]):
+        return f"the format changed ({got.get('rate')} Hz x {got.get('channels')})"
+    if abs(float(got["seconds"]) - float(info["seconds"])) > 0.05:
+        return f"the length changed ({info['seconds']:.2f} s -> {got['seconds']:.2f} s)"
+    after = loudness(dst, timeout)
+    if after.get("lufs") is None or after.get("tp") is None:
+        return "the boosted narration could not be measured"
+    report["after"] = {"lufs": after["lufs"], "tp": after["tp"]}
+    report["gainLu"] = round(float(after["lufs"]) - float(before["lufs"]), 2)
+    if float(after["tp"]) > ceiling + BOOST_PEAK_TOLERANCE_DB:
+        return f"the peaks reach {after['tp']} dBTP"
+    if report["gainLu"] <= 0:
+        return f"no louder under the {ceiling:g} dBTP ceiling (its peaks are already there)"
+    lag = alignment(src, dst, timeout)
+    if lag is None and float(info["seconds"]) >= 6.0:
+        return "the timing could not be checked"
+    if lag is not None and lag > ALIGN_TOLERANCE_S:
+        return f"the voice moved {lag * 1000:.1f} ms"
+    return ""
+
+
+def boost_for_render(doc: Dict[str, Any], work: str, inp: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Before the render, after for_render: the editor's voice boost
+    (doc.audio.boostDb) applied to the narration file (boost) and the document
+    pointed at the boosted copy (doc.audio.url, a file in `work` - a spread
+    render publishes it to its workers with the other local files); its
+    boostDb is then taken out, so nothing applies it twice. audio.volume is
+    held to 0..1 either way. The report lands in doc.meta.voiceBoost when a
+    boost was asked for or the volume changed. Never raises; any failure keeps
+    the narration as it was.
+    """
+    audio = doc.get("audio") if isinstance(doc.get("audio"), dict) else None
+    report: Dict[str, Any] = {"applied": False, "db": 0.0}
+    if audio is None:
+        report["why"] = "no narration"
+        return report
+    clamped = _clamp_volume(audio)
+    db = boost_db(audio)
+    report["db"] = round(db, 2)
+    if db < BOOST_MIN_DB:
+        report["why"] = "no boost asked for"
+    elif not audio.get("url"):
+        report["why"] = "no narration"
+    elif not shutil.which(_FFMPEG):
+        report["why"] = "ffmpeg is missing"
+    else:
+        try:
+            src = _source(doc, work, inp)
+        except Exception as e:  # noqa: BLE001 - the render reads the narration as it is
+            src = ""
+            report["why"] = f"the narration could not be fetched ({type(e).__name__})"
+        if src:
+            dst = os.path.join(work, "narration.boosted.flac")
+            report = boost(src, dst, db)
+            if report.get("applied") and os.path.isfile(dst):
+                audio["url"] = dst
+                audio.pop("boostDb", None)
+        elif "why" not in report:
+            report["why"] = "the narration is not a file or a link"
+    if clamped is not None:
+        report["volumeClamped"] = clamped
+        report["volume"] = audio.get("volume", 1.0)
+    if db >= BOOST_MIN_DB or clamped is not None:
+        if isinstance(doc.get("meta"), dict):
+            doc["meta"]["voiceBoost"] = report
+        print(f"[voice] boost {'applied' if report.get('applied') else 'not applied'} "
+              f"({report.get('why', '')})"
+              + (f"; volume {clamped!r} held to {audio.get('volume', 1.0)}" if clamped is not None else ""),
+              flush=True)
+    return report

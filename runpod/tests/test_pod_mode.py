@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
 class Batch(unittest.TestCase):
     """A batch on a pod (src/batch.py writes each video's row itself): the pod never stays up for a video of it
-    that failed, and is deleted only when every video is done and saved."""
+    that failed, and is deleted when the batch is over, whatever its videos' outcome."""
 
     def _main(self, out):
         import tempfile
@@ -102,7 +102,8 @@ class Batch(unittest.TestCase):
     def test_a_failed_video_of_a_batch_keeps_no_pod_up(self):
         stop = self._main({"ok": False, "action": "batch", "total": 2, "done": [{"project": "p1", "saved": True}],
                            "failed": [{"project": "p2", "error": "no footage", "saved": True}]})
-        stop.assert_called_once_with(terminate=False)               # stopped (its log kept), never left running
+        # Deleted, not left EXITED: a stopped pod keeps nothing (its disk is wiped) and sat in the account.
+        stop.assert_called_once_with(terminate=True)
 
     def test_a_batch_with_every_video_done_and_saved_deletes_the_pod(self):
         stop = self._main({"ok": True, "action": "batch", "total": 2, "failed": [],

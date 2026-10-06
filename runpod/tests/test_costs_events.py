@@ -5,7 +5,14 @@ from src import costs, events
 
 
 class LedgerTests(unittest.TestCase):
+    def tearDown(self):
+        costs.use_serverless()
+        costs.reset()
+
     def test_units_are_priced_by_category_from_the_table(self):
+        # The app's table (the job input's prices) sets what it may; the machine's rate and the retired
+        # SERP call are the worker's own (costs._WORKER_OWNED): its $0.000136 a second and $0.0015 a call
+        # were not what anything was billed.
         costs.reset({"vision.judge": 1.0, "kie.credit": 0.01, "runpod.worker_second": 0.001, "serp.call": 0.002})
         for _ in range(10):
             costs.record("vision.judge")
@@ -16,14 +23,25 @@ class LedgerTests(unittest.TestCase):
         s = costs.summary(worker_seconds=50)
         self.assertAlmostEqual(s["vision"], 15 * 1.0 * 0.01)
         self.assertAlmostEqual(s["llm"], 2 * 1.0 * 0.01)
-        self.assertAlmostEqual(s["serp"], 0.006)
-        self.assertAlmostEqual(s["runpod"], 150 * 0.001)
+        self.assertEqual(s["serp"], 0.0)                       # no provider charges a SERP call now
+        self.assertAlmostEqual(s["runpod"], round(150 * 0.576 / 3600, 4))      # a serverless worker's $0.576/h
+        self.assertEqual(s["machine"], "serverless")
+        self.assertEqual(s["machine_usd_per_hour"], 0.576)
         self.assertEqual(s["proxy"], 0.0)                      # ISP proxies are flat rate by default
         self.assertEqual(s["worker_seconds"], 150.0)
         self.assertEqual(s["children"], 1)
         self.assertEqual(s["units"]["vision.judge"], 15)
+        self.assertEqual(s["units"]["serp.call"], 3)           # still counted
         self.assertAlmostEqual(s["credits_estimated"], 17.0)
         self.assertAlmostEqual(s["total"], s["vision"] + s["llm"] + s["serp"] + s["runpod"])
+
+    def test_the_environment_still_sets_the_workers_own_prices(self):
+        with mock.patch.dict("os.environ", {"PRICES": '{"runpod.worker_second": 0.001, "serp.call": 0.002}'}):
+            costs.reset({"runpod.worker_second": 0.5})         # the table still cannot
+            costs.record("serp.call", 3)
+            s = costs.summary(worker_seconds=100)
+        self.assertAlmostEqual(s["runpod"], 0.1)
+        self.assertAlmostEqual(s["serp"], 0.006)
 
     def test_measured_credits_come_from_the_balance_delta(self):
         costs.reset()
