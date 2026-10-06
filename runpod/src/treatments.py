@@ -45,7 +45,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, hookboost, numwords, templates
 from . import automaps, config, numwords, templates
-from . import datagraphics, screentext, sources
+from . import datagraphics, lookpack, screentext, sources
 from .transcribe import Segment
 
 # Read off VidRush's own timelines (an animation block every 8-10 s through
@@ -761,7 +761,8 @@ _RHETORICAL = re.compile(r"^(?:but|and yet|yet|here'?s the thing|the truth is|no
 _RECORD = re.compile(r"\b(on record|ever recorded|record[- ](?:low|high|breaking)|in (?:recorded )?history|"
                      r"for the first time|never before|lowest (?:level|point) ever|highest (?:level|point) ever)\b", re.I)
 _TERM = re.compile(r"\b(?:(?:call|calls|called)\s+(?:it|this|that|them)|called|known as|dubbed|nicknamed|termed|"
-                   r"so-called|what(?:'s| is) called)\s+"
+                   r"so-called|what(?:'s| is) called|what\s+(?:engineers|scientists|experts|officials|hydrologists|"
+                   r"people|they|we|you)\s+calls?)\s+"
                    r"(?:the\s+|a\s+|an\s+)?[\"“']?([A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*){0,3})", re.I)
 _SUPERLATIVE = re.compile(r"\b(?:the\s+)?((?:largest|biggest|worst|lowest|highest|deepest|driest|hottest|wettest|"
                           r"longest|oldest|fastest|deadliest|costliest|first|last|only)(?:\s+[a-z][\w-]*){1,3})", re.I)
@@ -1712,6 +1713,10 @@ def _place_maps(pack: dict, still: bool = False, n_maps: int = 0) -> List[str]:
     """The looks a single mapped place rotates through: the pack's own first when it is a satellite look."""
     own = pack.get("map", "")
     out = ([own] if _is_satellite(own) else []) + [m for m in SATELLITE_PLACE_MAPS if m != own]
+    if n_maps % VECTOR_MAP_EVERY == 1:
+        # The look pack's locator map (a dark vector map, a zoom in to a ring round the place) is the second map of
+        # a video and one in four after it: the places keep rotating over the satellite looks.
+        out.append(lookpack.LOCATOR)
     if still:
         out.append("MAP_PHOTO_PIN_V1")
     if own and not _is_satellite(own) and n_maps % VECTOR_MAP_EVERY == VECTOR_MAP_EVERY - 1:
@@ -2742,6 +2747,9 @@ class _Planner:
         # Photo captions shown, by name: the same name is not captioned again within CAPTION_REPEAT_GAP.
         self.captions: Dict[str, float] = {}
         self.last_premium = -1e9
+        # The look pack (src/lookpack.py): when each of its looks landed (its spacing and density), the last map.
+        self.pack_pace = lookpack.Pace()
+        self.last_map = -1e9
         self.skip_next_still = False
         self.n_maps = 0
         # Auto maps (src/automaps.py): (feature id, section) already mapped - one per feature per section.
@@ -3196,8 +3204,12 @@ class _Planner:
         #    rhetorical line or a term, less often.
         typed_hint = bool(hint) and HINT_CUES.get(hint.get("type") or "") == "typewriter"
         if not placed:
-            for c in cues:
-                if c["cue"] in STRONG_LINE_CUES and not (typed_hint and c["cue"] == "question"):
+            # (A term the line defines - "what engineers call dead pool, the level where ..." - gets its term card
+            # before the line's other words: the look pack, src/lookpack.py.)
+            defined = [c for c in cues if c["cue"] == "term" and auto_ok(lookpack.TERM)
+                       and lookpack.term_props(text, str((c.get("props") or {}).get("text") or ""))]
+            for c in defined + [x for x in cues if x not in defined]:
+                if c in defined or (c["cue"] in STRONG_LINE_CUES and not (typed_hint and c["cue"] == "question")):
                     # (A line the director wanted typed is typed or left alone, never a static title.)
                     got = self._request(self._cue_request(c, seg), seg, scene, "normal")
                     if got:
@@ -3230,6 +3242,12 @@ class _Planner:
             if pip:
                 req = {"ids": ["PHOTO_PIP_V1"] + _lib_looks("subject-photo"), "prefer": ["PHOTO_PIP_V1"],
                        "props": pip, "group": "pip", "emphasis": "medium"}
+                if auto_ok(lookpack.EVIDENCE) and lookpack.EVIDENCE in req["ids"] \
+                        and self.use_count.get("PHOTO_PIP_V1", 0) > self.use_count.get(lookpack.EVIDENCE, 0):
+                    # (the look pack's evidence card - the photo searched for the thing named, as a print - in turn
+                    # with the photo window: the window first, the card the next time)
+                    req["prefer"] = [lookpack.EVIDENCE, "PHOTO_PIP_V1"]
+                    req["first"] = lookpack.EVIDENCE
                 got = self._request(req, seg, scene, "normal")
                 if got:
                     placed.append(got)
@@ -3620,8 +3638,57 @@ class _Planner:
             if not want:
                 req.setdefault("first", tid)
             by_id[tid] = {**props, **extra}
+        pack = self._pack_pick(c, seg, props)
+        if pack and auto_ok(pack[0]):
+            tid, extra = pack
+            req["prefer"] = list(req.get("prefer") or []) + [tid]
+            if tid == lookpack.TREND or not want:
+                # (the trend line takes the series' turn from the premium graph: tried first while fresh)
+                req["first"] = tid if tid == lookpack.TREND else req.get("first") or tid
+            by_id[tid] = {**props, **extra}
         if by_id:
             req["props_by_id"] = {**req.get("props_by_id", {}), **by_id}
+
+    def _pack_pick(self, c: dict, seg, props: dict) -> Optional[Tuple[str, dict]]:
+        """
+        The look pack's look for this line's cue (src/lookpack.py), with the line's own words: a pull quote for
+        words in quotation marks whose speaker the line (or the story's cast) names; a term card for a term the
+        line defines; the trend line for a series of three or more years - in turn with the premium graph (the
+        graph first, the trend the next time, and whenever two premium looks would come too close). None.
+        """
+        text = seg.text or ""
+        cue = c.get("cue")
+        if cue == "quote":
+            # (in turn with the quote looks of the pro sets drawn for this line - a letter, the speaker's portrait -
+            # once the owner switches them on)
+            shot = self.shots[self.i] if 0 <= self.i < len(self.shots) else {}
+            pro = [t["id"] for t in templates.for_cue("quote") if str(t["id"]).startswith(("LIB_KX_", "LIB_TX_"))
+                   and auto_ok(t["id"]) and look_fits(t["id"], text) and pro_props(t, "quote", props, text, shot) is not None]
+            if pro and sum(self.use_count.get(x, 0) for x in pro) <= self.use_count.get(lookpack.QUOTE, 0):
+                return None
+            said = quote_line_props(text)
+            speaker = str(said.get("label") or "")
+            role = ""
+            if speaker and _real_person(speaker):
+                role = _role_of(speaker, self.cast)
+            elif not speaker or not _is_org_or_place(speaker):
+                person = _named_person(text, self.shots[self.i] if 0 <= self.i < len(self.shots) else {}, self.brief)
+                if person:
+                    speaker, role = person[0], person[1]
+            got = lookpack.quote_props(text, speaker, role or str(said.get("subtitle") or ""))
+            return (lookpack.QUOTE, got) if got else None
+        if cue == "term":
+            # (in turn with the definition look of the pro set, once the owner switches that one on)
+            if auto_ok("LIB_KX_DEFINITION") and self.use_count.get("LIB_KX_DEFINITION", 0) <= self.use_count.get(lookpack.TERM, 0):
+                return None
+            got = lookpack.term_props(text, str(props.get("text") or ""))
+            return (lookpack.TERM, got) if got else None
+        if cue == "series" and lookpack.trend_fits(props.get("items")):
+            graph_turn = self.use_count.get(PR_GRAPH, 0) <= self.use_count.get(lookpack.TREND, 0)
+            if graph_turn and auto_ok(PR_GRAPH) and float(seg.start) - self.last_premium >= PREMIUM_GAP:
+                return None
+            return lookpack.TREND, {}
+        return None
 
     def _fact_request(self, seg, repeated: dict) -> Optional[dict]:
         sentence = (seg.text or "").strip()
@@ -3642,9 +3709,16 @@ class _Planner:
         if hint.get("motion"):
             props["_motion"] = hint["motion"]
         if kind == "map":
+            pack = self._pack_place(i, seg, shot, scene, hint)
+            if pack:
+                return pack
             still = _still_of(scene.get("media"))
             ids, by_variant = _map_ids(hint, self.pack, bool(still), self.n_maps)
-            return {"ids": ids, "first": by_variant, "prefer": [self.pack.get("map", "")], "props": props,
+            # (the locator map leads on its turn - the second map of a video, one in four after it - unless the
+            # director named a map look)
+            prefer = [self.pack.get("map", "")] + ([lookpack.LOCATOR] if lookpack.LOCATOR in ids else [])
+            first = by_variant or (lookpack.LOCATOR if lookpack.LOCATOR in ids else "")
+            return {"ids": ids, "first": first, "prefer": prefer, "props": props,
                     "mode": "director", "group": "map", "emphasis": "high",
                     "media_for": {"MAP_PHOTO_PIN_V1": still} if still else {}}
         if kind == "lower-third":
@@ -3678,8 +3752,18 @@ class _Planner:
                     t["id"] for t in templates.for_cue("chapter", self.style)
                     if t.get("component") not in ("banner",) and not ({"still", "stills"} & set(t.get("tags") or []))
                     and t.get("category") in ("HEADLINES", "TEXT")]
-                return {"ids": ids, "prefer": [own] if own else [], "cue": "chapter", "mode": "director",
-                        "group": "text", "emphasis": "high", "props": {**props, "text": title}}
+                req = {"ids": ids, "prefer": [own] if own else [], "cue": "chapter", "mode": "director",
+                       "group": "text", "emphasis": "high", "props": {**props, "text": title}}
+                # The look pack's chapter card (a short designed full-frame moment) takes every other section, in
+                # turn with the pack's own card (the pack's first), its number the section's place in the brief.
+                starts = sorted(self.section_starts)
+                card = lookpack.chapter_props(title, starts.index(i) + 1 if len(starts) >= 2 else None)
+                turn = not own or self.use_count.get(own, 0) > self.use_count.get(lookpack.CHAPTER, 0)
+                if card and turn and auto_ok(lookpack.CHAPTER):
+                    req["ids"] = [lookpack.CHAPTER] + [x for x in ids if x != lookpack.CHAPTER]
+                    req["first"] = lookpack.CHAPTER
+                    req["props_by_id"] = {lookpack.CHAPTER: {**props, **card}}
+                return req
         if kind == "motion" and variant:
             if _hint_date_cue(hint):
                 return None         # a date look by name: the must-show pass showed it in bold type
@@ -3704,6 +3788,40 @@ class _Planner:
         first = next((t["id"] for t in options if variant and (t.get("defaults") or {}).get("variant") == variant), "")
         return {"ids": [t["id"] for t in options], "first": first, "props": props, "mode": "director",
                 "group": kind, "emphasis": options[0].get("emphasis", "medium")}
+
+    def _pack_place(self, i: int, seg, shot: dict, scene: dict, hint: dict) -> Optional[dict]:
+        """
+        A map hint the look pack draws better (src/lookpack.py): one place named again within MAP_REST of a
+        map, on footage of it - its place tag, not another map; two places named together while this scene and
+        the next show them - the two places side by side, each on its own picture. None otherwise.
+        """
+        locs = [x for x in (hint.get("locations") or []) if isinstance(x, dict)]
+        at = float(seg.start)
+        subject = str(shot.get("subject") or (scene.get("semanticMetadata") or {}).get("subject") or "")
+        if len(locs) == 1 and at - self.last_map < lookpack.MAP_REST and auto_ok(lookpack.PLACE) \
+                and lookpack.shows_place(lookpack.place_name(locs[0].get("label") or ""), subject):
+            props = lookpack.place_tag_props(locs[0])
+            if props:
+                return {"ids": [lookpack.PLACE], "first": lookpack.PLACE, "props": props, "mode": "director",
+                        "group": "place", "emphasis": "low", "own_words": True}
+        if len(locs) == 2 and auto_ok(lookpack.TWO_PLACES) and i + 1 < len(self.scenes):
+            nxt = self.scenes[i + 1]
+            pics = [_scene_picture(scene), _scene_picture(nxt)]
+            nxt_shot = (self.shots[i + 1] if i + 1 < len(self.shots) else {}) or {}
+            subs = [subject, str(nxt_shot.get("subject") or (nxt.get("semanticMetadata") or {}).get("subject") or "")]
+            names = [lookpack.place_name(x.get("label") or "") for x in locs]
+            if all(pics) and pics[0] != pics[1]:
+                order = None
+                if lookpack.shows_place(names[0], subs[0]) and lookpack.shows_place(names[1], subs[1]):
+                    order = [0, 1]
+                elif lookpack.shows_place(names[1], subs[0]) and lookpack.shows_place(names[0], subs[1]):
+                    order = [1, 0]
+                if order:
+                    return {"ids": [lookpack.TWO_PLACES], "first": lookpack.TWO_PLACES, "mode": "director",
+                            "group": "map", "emphasis": "high", "own_words": True,
+                            "props": {"locations": [locs[order[0]], locs[order[1]]]},
+                            "media_from": [scene.get("id"), nxt.get("id")]}
+        return None
 
     def _text_hint(self, kind: str, cue: str, hint: dict, props: dict, seg, shot: dict, cues: List[dict]) -> Optional[dict]:
         """A text overlay the director proposed, as a headline, key phrase, quote or typed line."""
@@ -3780,7 +3898,7 @@ class _Planner:
                     continue
                 if not (t.get("component") in ("photo-card", "name-card") or "still" in tags or "stills" in tags):
                     continue
-                if "stills" in tags and not many:
+                if "stills" in tags and not many and look_slots(t)[0] >= 3:
                     continue
                 if t["id"] in {x["id"] for x in pool}:
                     continue
@@ -3823,6 +3941,10 @@ class _Planner:
         for t in pool:
             if said and str((t.get("defaults") or {}).get("variant") or "").startswith("px-"):
                 by_id[t["id"]] = {**props, **said}
+        if "photo-then-now" in line and lookpack.THEN_NOW in exact and self.looks.fresh(lookpack.THEN_NOW, float(seg.start)):
+            # (then and now said over a still: the two pictures side by side beat a push-in on one of them)
+            specific = [lookpack.THEN_NOW] + [x for x in specific if x != lookpack.THEN_NOW]
+            premium_first = lookpack.THEN_NOW
         req = {"ids": [t["id"] for t in pool], "prefer": specific, "props": props, "props_by_id": by_id,
                "mode": "director", "group": "photo", "emphasis": "medium", "never_again": True,
                **({"first": premium_first} if premium_first else {})}
@@ -4058,6 +4180,8 @@ class _Planner:
             return None
         if str(t.get("id") or "").startswith("LIB_PR_") and t_in - self.last_premium < PREMIUM_GAP:
             return None             # two premium looks never come close together: another look, or none
+        if not self.pack_pace.allows(t["id"], t_in):
+            return None             # the look pack's spacing and density (src/lookpack.py): another look, or none
         # Never into a full-screen scene or a span already taken ahead (the job's title card).
         t_out = min(t_out, self._clear_until(t_in))
         if mode in ("normal", "director") and not dated:
@@ -4092,10 +4216,15 @@ class _Planner:
         media = req.get("media") or (req.get("media_for") or {}).get(t["id"])
         if media:
             overlay["media"] = [media]
+        if req.get("media_from") and t["id"] == lookpack.TWO_PLACES:
+            overlay["mediaFrom"] = [x for x in req["media_from"] if x]
         idx = len(self.overlays)
         self.overlays.append(overlay)
         if str(t.get("id") or "").startswith("LIB_PR_"):
             self.last_premium = o_start / fps
+        self.pack_pace.note(t["id"], o_start / fps)
+        if t.get("category") == "MAPS" or t.get("kind") == "map":
+            self.last_map = o_start / fps
         tr_idx = len(self.treatments)
         if klass in _PERSIST_CLASSES:
             self.persisting.append((idx, tr_idx, klass))
@@ -4871,6 +5000,7 @@ def animation_for(seg, shot: dict, pack: dict, brief: Optional[dict],
                 options = [t for t in templates.for_cue(name, pack.get("id", ""))
                            if t["kind"] in CARD_KINDS and look_fits(t["id"], seg.text or "")
                            and not _needs_places(t, cue["props"]) and auto_ok(t["id"])
+                           and t["id"] not in lookpack.IDS          # (the pack's looks ride on the footage)
                            and pro_props(t, name, cue["props"], seg.text or "", shot) is not None]
                 if options:
                     break
@@ -4946,12 +5076,12 @@ def note_figure(seen: dict, seg, animation: Optional[dict]) -> None:
 LOOK_SLOTS = {"pa-polaroid-drop": 2, "pa-film-strip": 3, "pb-wipe-compare": 2, "pb-triptych": 3, "pb-carousel": 3,
               "pb-corkboard": 3, "pb-double-exposure": 2, "pb-zoom-through": 2, "pb-grid-pop": 4,
               "pb-parallax-stack": 3, "cp-photo-versus": 2, "collage": 3,
-              "px-dated-cascade": 2, "px-then-now": 2}
+              "px-dated-cascade": 2, "px-then-now": 2, "kt-then-now": 2, "kt-two-places": 2}
 # ... and the most it shows.
 LOOK_MOST = {"pa-polaroid-drop": 2, "pa-film-strip": 4, "pb-wipe-compare": 2, "pb-triptych": 3, "pb-carousel": 6,
              "pb-corkboard": 4, "pb-double-exposure": 2, "pb-zoom-through": 2, "pb-grid-pop": 6,
              "pb-parallax-stack": 3, "cp-photo-versus": 2, "collage": 6,
-             "px-dated-cascade": 3, "px-then-now": 2}
+             "px-dated-cascade": 3, "px-then-now": 2, "kt-then-now": 2, "kt-two-places": 2}
 PICTURE_NEAR = 8          # scenes either side searched for pictures of the same subject
 # The one-picture looks a multi-picture look becomes when the story has too
 # few pictures of its subject: each draws one still full frame, any subject.

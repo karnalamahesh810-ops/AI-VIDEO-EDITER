@@ -1,0 +1,734 @@
+[
+ {
+  "id": "kt-quote",
+  "template": "KT_QUOTE",
+  "name": "Pull Quote",
+  "category": "QUOTES",
+  "description": "Words in quotation marks with their speaker named as said: a serif quote mark in the accent, the quote in clean white grotesk coming into focus word by word (capitals 3.9 % of the frame height, three lines at most), its key phrase underlined in the accent as it lands, then the speaker - an accent bar, the name in tracked capitals, the role under it. Low left on the calm side; a slim blurred panel over busy footage.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "highlight",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "pull-quote"
+  ],
+  "duration": 5.5,
+  "least": 4.6,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "We have never seen the lake this low, not in our lifetimes.",
+   "highlight": "never seen the lake this low",
+   "label": "Maria Ortiz",
+   "subtitle": "Park ranger, Glen Canyon"
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPack",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 30,
+  "sounds": [
+   {
+    "name": "swoosh-text",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 4,
+    "gain_db": -12
+   },
+   {
+    "name": "marker-underline",
+    "alt": [
+     "marker-draw",
+     "marker"
+    ],
+    "at": 30,
+    "gain_db": -9
+   }
+  ]
+ },
+ {
+  "id": "kt-term",
+  "template": "KT_TERM",
+  "name": "Term Card",
+  "category": "TEXT",
+  "description": "A word the narration defines ('what engineers call dead pool - the level where ...'): a frosted glass card low left with an accent edge drawing down its side, a small kicker, the term rising letter by letter in bold white grotesk, a hairline, and its meaning as said in one or two lines coming into focus.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "label"
+  ],
+  "cues": [
+   "term-definition"
+  ],
+  "duration": 5.0,
+  "least": 4.5,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "Dead Pool",
+   "subtitle": "The level at which water can no longer flow downstream past the dam.",
+   "label": "Definition"
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPack",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 24,
+  "sounds": [
+   {
+    "name": "ui-swipe",
+    "alt": [
+     "swipe",
+     "whoosh-soft"
+    ],
+    "at": 2,
+    "gain_db": -12
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 24,
+    "gain_db": -8
+   }
+  ]
+ },
+ {
+  "id": "kt-level",
+  "template": "KT_LEVEL",
+  "name": "Level Gauge",
+  "category": "NUMBERS",
+  "description": "A reservoir's, a lake's or storage's share ('27 percent full'): a glass gauge low left (30 % of the frame height) whose water pours in to the level with its surface moving gently, an accent marker riding up its side, beside it the kicker, the share counting with the water and one line of context; FULL at its top.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "value",
+   "total",
+   "suffix",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "percent-full",
+   "level"
+  ],
+  "duration": 5.0,
+  "least": 4.5,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "value": 22,
+   "suffix": "%",
+   "label": "Lake Powell",
+   "subtitle": "full - the lowest since it first filled"
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPack",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 48,
+  "sounds": [
+   {
+    "name": "count-tick",
+    "alt": [
+     "count-roll",
+     "ui-tick"
+    ],
+    "at": 10,
+    "align": "start",
+    "until": 46,
+    "gain_db": -9,
+    "when": "value"
+   },
+   {
+    "name": "letter-tick",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 48,
+    "gain_db": -6
+   }
+  ]
+ },
+ {
+  "id": "kt-trend",
+  "template": "KT_TREND",
+  "name": "Trend Line",
+  "category": "CHARTS",
+  "description": "Three or more years with their figures as a frosted card on the calm side of the footage (36 % of the width): the title and its unit, faint gridlines, the line drawing in left to right with its area filling and a dot riding its head, the value counting in a pill above it; once drawn the peak and the low are marked with triangles, their value and year, and the last point is ringed.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "subtitle",
+   "items",
+   "suffix",
+   "prefix"
+  ],
+  "cues": [
+   "series"
+  ],
+  "duration": 6.5,
+  "least": 5.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "Lake Powell elevation",
+   "subtitle": "Feet above sea level",
+   "suffix": "FT",
+   "items": [
+    {
+     "label": "1980",
+     "value": 3700
+    },
+    {
+     "label": "1999",
+     "value": 3690
+    },
+    {
+     "label": "2005",
+     "value": 3555
+    },
+    {
+     "label": "2011",
+     "value": 3610
+    },
+    {
+     "label": "2022",
+     "value": 3522
+    }
+   ]
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPack",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 58,
+  "sounds": [
+   {
+    "name": "ui-swipe",
+    "alt": [
+     "swipe",
+     "whoosh-soft"
+    ],
+    "at": 2,
+    "gain_db": -12
+   },
+   {
+    "name": "marker-draw",
+    "alt": [
+     "pen-scribble",
+     "marker"
+    ],
+    "at": 12,
+    "gain_db": -16
+   },
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick"
+    ],
+    "at": 60,
+    "gain_db": -8
+   }
+  ]
+ },
+ {
+  "id": "kt-milestones",
+  "template": "KT_MILESTONES",
+  "name": "Milestones",
+  "category": "TIMELINES",
+  "description": "Three to five years said one after another as a frosted strip low in the frame: every year faint from the start, each point lighting when its year is said (items carry the second it is said at) - its dot filling with the accent and ringing once, its year turning white, its event coming into focus under it - the accent line running on from the point before; a soft tick on each.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "items"
+  ],
+  "cues": [
+   "milestones"
+  ],
+  "duration": 7.0,
+  "least": 5.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "How the lake emptied",
+   "items": [
+    {
+     "label": "1963",
+     "text": "Glen Canyon Dam closes"
+    },
+    {
+     "label": "1980",
+     "text": "Lake Powell fills",
+     "at": 1.8
+    },
+    {
+     "label": "2002",
+     "text": "The drought begins",
+     "at": 3.4
+    },
+    {
+     "label": "2022",
+     "text": "A record low",
+     "at": 5.0
+    }
+   ]
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPack",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 14,
+  "sounds": [
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick",
+     "letter-tick"
+    ],
+    "at": 14,
+    "every": 24,
+    "count": "items",
+    "gain_db": -9
+   }
+  ],
+  "sound_timing": "look"
+ },
+ {
+  "id": "kt-pointer",
+  "template": "KT_POINTER",
+  "name": "Arrow Callout",
+  "category": "CALLOUTS",
+  "description": "On the playing footage, at the thing the line points at where vision found it (overlay.anchor; a still's own subject box): a ring in the accent draws round it and rings out once, a frosted label opens on the calm side (clear of the frame's edge, faces, logos and lettering) and a white arrow draws from it to the ring, its head a crisp triangle. Without a place to point at it draws nothing.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label"
+  ],
+  "cues": [
+   "pointer"
+  ],
+  "duration": 3.5,
+  "least": 3.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "Power plant",
+   "label": "Hoover Dam",
+   "anchor": {
+    "x": 0.62,
+    "y": 0.58,
+    "w": 0.1,
+    "h": 0.2
+   }
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPack",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 32,
+  "sounds": [
+   {
+    "name": "marker-draw",
+    "alt": [
+     "pen-scribble",
+     "marker"
+    ],
+    "at": 14,
+    "gain_db": -12
+   },
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop",
+     "ui-tick"
+    ],
+    "at": 30,
+    "gain_db": -10
+   }
+  ]
+ },
+ {
+  "id": "kt-chapter",
+  "template": "KT_CHAPTER",
+  "name": "Chapter Card",
+  "category": "HEADLINES",
+  "description": "A section opens, a short designed full-frame moment: the footage softens and dims under it, one soft warm-white light leak crosses the frame (never a gold wash), an accent rule draws, the chapter's number rolls up in the accent and the title rises line by line from behind a mask low left (capitals 5 % of the height, two lines at most), a line under it; all of it slides back behind its mask at the end.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "value"
+  ],
+  "cues": [
+   "chapter"
+  ],
+  "duration": 3.5,
+  "least": 3.2,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "The River Runs Dry",
+   "label": "Chapter",
+   "value": 2,
+   "subtitle": "A century of promises comes due"
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPack",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 12,
+  "sounds": [
+   {
+    "name": "whoosh-cinematic",
+    "alt": [
+     "whoosh-soft-v2",
+     "whoosh-soft"
+    ],
+    "at": 0,
+    "align": "start",
+    "gain_db": -12
+   },
+   {
+    "name": "light-shimmer",
+    "alt": [
+     "riser-soft"
+    ],
+    "at": 6,
+    "gain_db": -16
+   }
+  ]
+ },
+ {
+  "id": "kt-evidence",
+  "template": "KT_EVIDENCE",
+  "name": "Evidence Card",
+  "category": "IMAGES",
+  "description": "A photo of the place or thing the line names, as a print riding on the footage: it slides in from the side and turns toward the viewer as it settles (a 3D tilt, a long soft shadow), one light sweep crosses its gloss, and its caption comes up under it - a kicker in the accent, the words in bold grotesk, the source in small capitals. On the side clear of faces and lettering.",
+  "kind": "card",
+  "own_backdrop": false,
+  "needs_media": 1,
+  "props": [
+   "text",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "subject-photo"
+  ],
+  "duration": 5.0,
+  "least": 4.5,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "The Colorado River basin, as the survey drew it",
+   "label": "Archive map",
+   "subtitle": "U.S. Geological Survey"
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPictures",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 26,
+  "sounds": [
+   {
+    "name": "paper-slide-v2",
+    "alt": [
+     "paper-slide",
+     "swipe"
+    ],
+    "at": 2,
+    "gain_db": -9
+   },
+   {
+    "name": "frame-drop",
+    "alt": [
+     "ui-tick",
+     "tick"
+    ],
+    "at": 26,
+    "gain_db": -12
+   }
+  ]
+ },
+ {
+  "id": "kt-then-now",
+  "template": "KT_THEN_NOW",
+  "name": "Then / Now",
+  "category": "IMAGES",
+  "description": "Two pictures of one place, full frame: the earlier one first, its glass chip top left (THEN and its year), a divider sweeps in from the right and uncovers the later one, its chip top right (NOW), the divider's handle - a frosted disc with two triangles - easing a little left and back once; both pictures push in slowly.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 2,
+  "props": [
+   "text",
+   "items",
+   "label",
+   "subtitle"
+  ],
+  "cues": [
+   "photo-then-now"
+  ],
+  "duration": 6.0,
+  "least": 5.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "Lake Powell",
+   "items": [
+    {
+     "label": "1983"
+    },
+    {
+     "label": "2022"
+    }
+   ]
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPictures",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 46,
+  "sounds": [
+   {
+    "name": "shutter-slide",
+    "alt": [
+     "swipe",
+     "whoosh-soft"
+    ],
+    "at": 16,
+    "gain_db": -10
+   },
+   {
+    "name": "ui-tick",
+    "alt": [
+     "tick"
+    ],
+    "at": 46,
+    "gain_db": -10
+   }
+  ]
+ },
+ {
+  "id": "kt-two-places",
+  "template": "KT_TWO_PLACES",
+  "name": "Two Places",
+  "category": "IMAGES",
+  "description": "Two places named together, full frame on a diagonal split: each picture slides in from its side, an accent divider draws down the split with a soft glow, each place's name rises on glass at its lower corner (its region in the accent) and the miles between them sit on the divider when both places are known.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 2,
+  "props": [
+   "items",
+   "locations",
+   "text"
+  ],
+  "cues": [
+   "two-places"
+  ],
+  "duration": 6.0,
+  "least": 5.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "locations": [
+    {
+     "label": "Las Vegas, Nevada, United States",
+     "lat": 36.17,
+     "lon": -115.14
+    },
+    {
+     "label": "Phoenix, Arizona, United States",
+     "lat": 33.448,
+     "lon": -112.074
+    }
+   ]
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtPictures",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 34,
+  "sounds": [
+   {
+    "name": "whoosh-soft-v2",
+    "alt": [
+     "whoosh-soft"
+    ],
+    "at": 0,
+    "align": "start",
+    "gain_db": -10
+   },
+   {
+    "name": "ui-pop",
+    "alt": [
+     "pop",
+     "ui-tick"
+    ],
+    "at": 34,
+    "gain_db": -10
+   }
+  ]
+ },
+ {
+  "id": "kt-locator",
+  "template": "KT_LOCATOR",
+  "name": "Locator Map",
+  "category": "MAPS",
+  "description": "A place on a dark map, full frame: the camera starts on the country with a dot already on the place and eases in to a regional view (zoom and pan as one move), the state or country it is in lifting out with an accent edge; on the landing a ring draws round the place and two rings ping out, a leader draws to its glass tag (the kicker, the name, the region, the coordinates) and a scale bar measures the view.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "place"
+  ],
+  "duration": 7.0,
+  "least": 6.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "locations": [
+    {
+     "label": "Lake Mead, Nevada, United States",
+     "lat": 36.145,
+     "lon": -114.414
+    }
+   ]
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtMaps",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 54,
+  "sounds": [
+   {
+    "name": "map-swoop",
+    "alt": [
+     "map-whoosh",
+     "whoosh-soft"
+    ],
+    "at": 6,
+    "align": "start",
+    "gain_db": -9
+   },
+   {
+    "name": "pin-drop",
+    "alt": [
+     "ui-pop",
+     "pop"
+    ],
+    "at": 50,
+    "gain_db": -9
+   },
+   {
+    "name": "radar-ping",
+    "alt": [
+     "ui-tick"
+    ],
+    "at": 56,
+    "gain_db": -15
+   }
+  ]
+ },
+ {
+  "id": "kt-place",
+  "template": "KT_PLACE",
+  "name": "Place Tag",
+  "category": "LOWER_THIRDS",
+  "description": "A place named on footage of it, as a frosted card low left: a small map of the state (or the country) it is in - the neighbours faint, its outline drawing on, the place's dot dropping in and rippling - beside the kicker, the name rising letter by letter and the region. Above any lettering across the bottom of the picture.",
+  "kind": "tag",
+  "own_backdrop": false,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "subtitle",
+   "locations"
+  ],
+  "cues": [
+   "place-tag"
+  ],
+  "duration": 4.5,
+  "least": 4.0,
+  "sfx": "none",
+  "types": false,
+  "sample": {
+   "text": "Las Vegas",
+   "subtitle": "Nevada",
+   "label": "The Strip",
+   "locations": [
+    {
+     "label": "Las Vegas, Nevada, United States",
+     "lat": 36.17,
+     "lon": -115.14
+    }
+   ]
+  },
+  "registry_sample": true,
+  "family": "ktp",
+  "file": "LibKtMaps",
+  "exit": "fade",
+  "auto_pick": true,
+  "sfx_at": 26,
+  "sounds": [
+   {
+    "name": "ui-swipe",
+    "alt": [
+     "swipe",
+     "whoosh-soft"
+    ],
+    "at": 2,
+    "gain_db": -12
+   },
+   {
+    "name": "pin-drop",
+    "alt": [
+     "ui-pop",
+     "pop"
+    ],
+    "at": 26,
+    "gain_db": -10
+   }
+  ]
+ }
+]

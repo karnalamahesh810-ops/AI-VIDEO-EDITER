@@ -24,6 +24,12 @@ KT_FIXED_LOWER = {"KT_LOWER_THIRD", "KT_CHIP", "KT_DATE_BADGE"}
 # The date family draws its own frosted glass (remotion LibKtDates.tsx): never the side panel, but it still
 # takes the calmer side of its picture.
 KT_SELF_BACKED = KT_UPPER | {"KT_DATE_BADGE"}
+# The look pack (remotion LibKtPack / LibKtPictures / LibKtMaps, src/lookpack.py) places itself: its cards bring their
+# own glass and side (the term, the gauge, the trend, the milestones, the place tag, the evidence print), the arrow
+# keeps to the calm side of the thing it points at, the full-frame ones cover the picture. Only its pull quote is
+# words on the footage like the kinetic words above (home low left, the panel over a busy picture).
+KT_PACK_OWN_PLACE = {"KT_TERM", "KT_LEVEL", "KT_TREND", "KT_MILESTONES", "KT_POINTER", "KT_CHAPTER", "KT_EVIDENCE",
+                     "KT_THEN_NOW", "KT_TWO_PLACES", "KT_LOCATOR", "KT_PLACE"}
 BUSY_EDGE = 45.0        # mean edge strength (0-255) of the look's corner above which words get the panel
 CALMER = 0.7            # the mirrored corner is used when it is at most this share of the home corner's
 # the corners measured, as shares of the frame (x0, y0, x1, y1)
@@ -119,7 +125,7 @@ def place(overlays: List[dict], scenes: List[dict], *, fetch: Optional[Callable[
     todo = []
     for ov in overlays or []:
         tid = str(ov.get("template") or "")
-        if not tid.startswith("KT_") or ov.get("backing") or ov.get("zone"):
+        if not tid.startswith("KT_") or tid in KT_PACK_OWN_PLACE or ov.get("backing") or ov.get("zone"):
             continue
         sc = scene_at(int(ov.get("startFrame") or 0))
         if sc is not None:

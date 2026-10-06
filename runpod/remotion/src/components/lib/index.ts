@@ -52,6 +52,9 @@ import { LOOKS as L_LibRealData } from "./LibRealData";
 import { LOOKS as L_LibPremium } from "./LibPremium";
 import { LOOKS as L_LibKinetic } from "./LibKinetic";
 import { LOOKS as L_LibKtDates } from "./LibKtDates";
+import { LOOKS as L_LibKtPack } from "./LibKtPack";
+import { LOOKS as L_LibKtPictures } from "./LibKtPictures";
+import { LOOKS as L_LibKtMaps } from "./LibKtMaps";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -162,4 +165,11 @@ export const LIBRARY: Record<string, Look> = {
   // calendar card, a timeline marker, a lower-third badge, a year counter, a time counter and a clock face - one
   // headline size (capitals 6 % of the height), frosted glass, one accent; the data planner rotates them.
   ...pick(L_LibKtDates, ["kt-date", "kt-date-card", "kt-date-line", "kt-date-badge", "kt-year", "kt-time", "kt-time-clock"]),
+  // The look pack (LibKtPack / LibKtPictures / LibKtMaps, 2026-10-07: "best quality ones, Premiere Pro / After Effects kind,
+  // perfect size"): a pull quote, a term card, a level gauge, a trend line, milestones, an arrow callout, a chapter card,
+  // an evidence card, then / now, two places, a locator map and a place tag - the kinetic-type system, the planner's rules
+  // in src/lookpack.py (src/datalooks.py for the level and the milestones, src/marks.py for the arrow).
+  ...pick(L_LibKtPack, ["kt-quote", "kt-term", "kt-level", "kt-trend", "kt-milestones", "kt-pointer", "kt-chapter"]),
+  ...pick(L_LibKtPictures, ["kt-evidence", "kt-then-now", "kt-two-places"]),
+  ...pick(L_LibKtMaps, ["kt-locator", "kt-place"]),
 };

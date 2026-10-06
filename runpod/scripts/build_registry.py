@@ -886,6 +886,11 @@ def _library() -> list:
         # true means the planner may pick it as before (only false is written to the registry).
         if look.get("autoPick", look.get("auto_pick")) is False:
             t["autoPick"] = False
+        # The editor's preview content for a look that asks for it ("registry_sample": the look pack's): its own
+        # sample props (a quote and its speaker, a term and its meaning, a series, a place, a pointer's anchor), so
+        # the picker shows what the look is for instead of a generic sample of its category.
+        if look.get("registry_sample") and isinstance(look.get("sample"), dict):
+            t["defaults"]["sample"] = copy.deepcopy(look["sample"])
         out.append(with_sound(t, look, design["looks"].get(t["id"]), design["replace"]))
     return out
 

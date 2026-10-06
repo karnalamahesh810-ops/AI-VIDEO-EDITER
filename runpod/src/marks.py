@@ -31,7 +31,7 @@ POINTING_PHOTO = {"LIB_PE_RED_ARROW", "LIB_PE_CIRCLE_SPOTLIGHT"}
 # (the photo focus, LibPremium: its push-in and ring centre on the anchor found; the frame's centre without one)
 DETAIL_PHOTO = {"LIB_PE_MAGNIFY", "LIB_PE_CASE_FILE", "LIB_PR_PHOTO_FOCUS"}
 PHOTO_FALLBACK = "LIB_PE_CASE_FILE"
-VIDEO_MARKS = ("LIB_VM_ARROW", "LIB_VM_CIRCLE", "LIB_VM_BOX")
+VIDEO_MARKS = ("LIB_VM_ARROW", "LIB_VM_CIRCLE", "LIB_VM_BOX", "KT_POINTER")
 MARK_SECONDS = 3.0          # a mark does not track motion: short, on a steady moment
 BREATH = 0.3                # seconds kept clear around other graphics
 
@@ -161,19 +161,26 @@ def _sfx_cue(template_id: str, start: int, frames: int, fps: int, voice_lufs) ->
     return cue
 
 
+# The look pack's arrow callout (remotion LibKtPack.tsx kt-pointer, src/lookpack.py): a ring drawing round the
+# thing, an arrow drawing to it from a frosted label on the calm side - the arrow's turn, the red marker arrow
+# behind it (when the brand kit or the owner's switch leaves the pointer out).
+POINTER = "KT_POINTER"
+
+
 def _pick_mark(anchor: dict, n: int) -> str:
     """
-    Circle a small round thing, box a wide one, else the arrow; alternate for
-    variety. Only the marks the brand kit allows (the next best of the three
-    when the first is left out); "" when it allows none.
+    Circle a small round thing, box a wide one, else the arrow (the look pack's arrow callout first, then the
+    marker arrow); alternate for variety. Only the marks the brand kit allows (the next best when the first is
+    left out); "" when it allows none.
     """
     w, h = float(anchor.get("w") or 0), float(anchor.get("h") or 0)
+    arrow = ([POINTER] if templates.auto_pick(POINTER) else []) + ["LIB_VM_ARROW"]
     if w and h and w / max(h, 1e-3) > 2.2:
-        order = ["LIB_VM_BOX", "LIB_VM_ARROW", "LIB_VM_CIRCLE"]
+        order = ["LIB_VM_BOX"] + arrow + ["LIB_VM_CIRCLE"]
     elif float(anchor.get("r") or 1) < 0.12:
-        order = ["LIB_VM_CIRCLE", "LIB_VM_ARROW"] if n % 2 == 0 else ["LIB_VM_ARROW", "LIB_VM_CIRCLE"]
+        order = ["LIB_VM_CIRCLE"] + arrow if n % 2 == 0 else arrow + ["LIB_VM_CIRCLE"]
     else:
-        order = ["LIB_VM_ARROW", "LIB_VM_CIRCLE"] if n % 2 == 0 else ["LIB_VM_CIRCLE", "LIB_VM_ARROW"]
+        order = arrow + ["LIB_VM_CIRCLE"] if n % 2 == 0 else ["LIB_VM_CIRCLE"] + arrow
     return next((t for t in order if not templates.banned(t)), "")
 
 
