@@ -608,13 +608,10 @@ def text_scene(doc: dict, s: dict) -> None:
     s["reviewRequired"] = True
     s["reviewReason"] = ("Nothing usable was found for this line, so it is shown as text - "
                          "use Find footage to give it a clip")
-    # The text card the last resort laid over the scene would show the words twice.
-    start, length = int(s.get("startFrame") or 0), int(s.get("durationInFrames") or 0)
-    overlays = doc.get("overlays")
-    if isinstance(overlays, list):
-        overlays[:] = [ov for ov in overlays if not (isinstance(ov, dict) and ov.get("type") == "highlight"
-                                                     and int(ov.get("startFrame") or -1) == start
-                                                     and int(ov.get("durationInFrames") or -1) == length)]
+    # The text card the last resort laid over the scene would show the words twice. (gapfill.drop_cards: the
+    # filter here read a card at frame 0 as frame -1 - "0 or -1" - so the video's very first line kept its
+    # card and showed its sentence twice, the Obama render of 2026-10-07.)
+    gapfill.drop_cards(doc, [s])
 
 
 def _how(asset) -> str:

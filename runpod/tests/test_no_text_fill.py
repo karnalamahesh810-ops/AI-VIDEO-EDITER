@@ -290,5 +290,23 @@ class BorrowedStills(unittest.TestCase):
         self.assertEqual(doc["scenes"][1]["media"]["url"], "https://r2/short.jpg")     # 7 s, not 20 s
 
 
+class TheFirstLineAsText(unittest.TestCase):
+    def test_the_card_over_the_videos_first_line_goes_when_the_line_becomes_text(self):
+        # 2026-10-07, the Obama render: the check before the render showed the empty first line as its text
+        # look but kept the card the last resort had laid over it (frame 0 was read as -1: "0 or -1") - the
+        # opening sentence showed twice in the video's first seconds.
+        doc = lay((EMPTY, 6.0), (clip("/w/b.mp4", 6.0), 6.0), (EMPTY, 4.0))
+        first, last = doc["scenes"][0], doc["scenes"][2]
+        card = lambda s: {"type": "highlight", "text": s["text"], "startFrame": s["startFrame"],  # noqa: E731
+                          "durationInFrames": s["durationInFrames"]}
+        date = {"type": "motion", "template": "KT_DATE", "startFrame": 27, "durationInFrames": 150}
+        doc["overlays"] = [card(first), date, card(last)]
+        quality.text_scene(doc, first)
+        self.assertEqual(first["media"]["type"], "animation")
+        self.assertEqual(doc["overlays"], [date, card(last)])        # its own card only; the date look stays
+        quality.text_scene(doc, last)
+        self.assertEqual(doc["overlays"], [date])
+
+
 if __name__ == "__main__":
     unittest.main()
