@@ -69,6 +69,11 @@ REQUIRE_CC = _flag("REQUIRE_CC", False)
 ALLOW_DAILYMOTION = _flag("ALLOW_DAILYMOTION", True)
 # Internet Archive public-domain / CC-BY film (see search_archive_org_video).
 ALLOW_ARCHIVE_ORG = _flag("ALLOW_ARCHIVE_ORG", True)
+# The archives' footage (archive.org, NASA, Wikimedia Commons video) is a whole file, not a section: one
+# download is bounded to WHOLE_FILE_MAX_MB and WHOLE_FILE_SECONDS (the four latest videos: 15-45 s a file,
+# 21 of one video's tries cut at ~194 s, 1-3 clips kept a video). 0 = no bound.
+WHOLE_FILE_MAX_MB = float(os.getenv("WHOLE_FILE_MAX_MB", "250"))
+WHOLE_FILE_SECONDS = float(os.getenv("WHOLE_FILE_SECONDS", "75"))
 
 # Optional residential/ISP proxy for yt-dlp. Datacenter addresses may be
 # challenged by YouTube, but a proxy alone does not guarantee downloads.
@@ -312,6 +317,34 @@ POOL_EXTRA_QUERIES = int(os.getenv("POOL_EXTRA_QUERIES", "2"))
 # Three, not five: a scout is a model call, and the first benchmark of the
 # pool showed scenes spending their budget on scouting before a download.
 POOL_SCOUT = int(os.getenv("POOL_SCOUT", "2"))
+# Clips first (the owner, 2026-10-06: "video clips are the main part of what we make ... the amount of
+# video right now is super low"). Measured on his six latest videos (clips 43% -> 11-15% of scenes): a
+# footage line took a web picture as soon as its FIRST wording's YouTube search (2 scouted candidates, a
+# third to two thirds of the downloads then turned down on real detail) found nothing, because the
+# provider registry walks the picture sources right after the clip sources for each wording - the
+# broader wordings, which usually do have footage, were only ever asked for pictures (Las Vegas: 126 of
+# its 182 footage lines ended on a picture; the web picture search answers 99.6% of its searches).
+# On: a footage line asks YouTube on CLIP_WORDINGS of its own wordings, then on CLIP_RUNGS wider rungs
+# (its named subject, entity or place, judged as "shows that subject" instead of "this exact moment"),
+# then the other footage sources, and only then pictures and an illustration. CLIPS_FIRST_STILLS: a
+# still line does the same unless it is a document, a named person's portrait or a map / chart line,
+# which keep pictures first (STILLS_ALL_WORDINGS_FIRST). Off = exactly as before.
+CLIPS_FIRST = _flag("CLIPS_FIRST", True)
+CLIPS_FIRST_STILLS = _flag("CLIPS_FIRST_STILLS", True)
+CLIP_WORDINGS = int(os.getenv("CLIP_WORDINGS", "3"))
+CLIP_RUNGS = int(os.getenv("CLIP_RUNGS", "3"))
+# The other footage sources (Dailymotion, web video, NASA / Wikimedia / archive.org video) on this many
+# of the line's wordings. archive.org never for a line of a story about now: its whole-file downloads
+# took 15-45 s each and gave 1 usable clip for ~2,000 searches over the four latest videos.
+CLIP_OTHER_WORDINGS = int(os.getenv("CLIP_OTHER_WORDINGS", "2"))
+# A clip-first line's own vision budget (scouts, the fine pass, judgements) and scouts per search,
+# raised from JUDGE_MAX_PER_SCENE / POOL_SCOUT: the line no longer settles for a picture after two tries.
+CLIPS_FIRST_JUDGE_MAX_PER_SCENE = int(os.getenv("CLIPS_FIRST_JUDGE_MAX_PER_SCENE", "20"))
+CLIPS_FIRST_POOL_SCOUT = int(os.getenv("CLIPS_FIRST_POOL_SCOUT", "3"))
+# Candidates whose metadata (yt-dlp info, cached for the job) is read before scouting, so an upload under
+# MIN_CLIP_HEIGHT lines, a vertical one or one that names another year never takes a scout, a model call
+# or a download (they were downloaded and then failed the real-detail check). 0 = scout as before.
+CLIP_PREQUALIFY = int(os.getenv("CLIP_PREQUALIFY", "8"))
 
 
 def _json_env(name: str):
@@ -520,7 +553,10 @@ REMOTION_DIR = os.getenv("REMOTION_DIR", "/app/remotion")
 # Sourcing pass 1: a whole-pass budget, and once 90% of scenes are in, a
 # short grace for the rest. One stalled download used to hold a job for
 # 10+ minutes; unfinished scenes fall through to the recheck and fill steps.
-PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "420"))
+# 540 since 2026-10-06 (clips first: a line asks YouTube on its wordings and
+# wider rungs before any picture; a serverless part's whole pass is this box).
+# A pod sets its own (1800).
+PASS1_BUDGET_SECONDS = float(os.getenv("PASS1_BUDGET_SECONDS", "540"))
 # Each scene's own share of pass 1 when there are more scenes than threads:
 # the pass's seconds x threads / scenes, kept between these. The owner's Lake
 # Powell pod (2026-10-01, 130 scenes on 28 threads, 1800 s) finished 49 scenes:
@@ -574,6 +610,9 @@ REFETCH_PARALLEL = int(os.getenv("REFETCH_PARALLEL", "12"))
 # repeated: another moment of a same-subject video, then the best-titled
 # search result nobody uses (no vision call), then a web picture. Time boxed.
 RESCUE_SECONDS = float(os.getenv("RESCUE_SECONDS", "300"))
+# One line's share of the rescue pass for its judged clip-first search (CLIPS_FIRST), before the
+# unjudged title search and the picture.
+RESCUE_SCENE_SECONDS = float(os.getenv("RESCUE_SCENE_SECONDS", "120"))
 RESCUE_PARALLEL = int(os.getenv("RESCUE_PARALLEL", "12"))
 # Fresh footage before repeats: per-scene sourcing leaves a beat empty rather
 # than reusing a shot, the job's rescue pass looks for new footage, and only
@@ -605,7 +644,15 @@ REUSE_MIN_GAP_SECONDS = float(os.getenv("REUSE_MIN_GAP_SECONDS", "60"))
 # one with a wider search and a best-of-HOOK_JUDGE_BEST_OF judgement instead
 # of from a subject pool, retried for footage after sourcing if it ended on a
 # still, and never given a generated image unless GENERATED_IMAGES_IN_HOOK.
-HOOK_SECONDS = float(os.getenv("HOOK_SECONDS", "45"))
+# 60 since 2026-10-06 (the owner: the first minute must be clips).
+HOOK_SECONDS = float(os.getenv("HOOK_SECONDS", "60"))
+# The first HOOK_NO_STILL_SECONDS take no picture while a clip may still be found: a line there whose clip
+# searches fail stays empty for the rescue pass (footage first) and the fallback ladder (another moment of a
+# clip in the video); a picture only when nothing moving can be found at all.
+HOOK_NO_STILL_SECONDS = float(os.getenv("HOOK_NO_STILL_SECONDS", "10"))
+# The opening prefers footage that moves (relevance still leads): the motion weight a hook clip's rank gets
+# even with MOTION_PREFERENCE 0 (media._motion_weight; doubled in the hook, a frozen shot the full penalty).
+HOOK_MOTION_WEIGHT = float(os.getenv("HOOK_MOTION_WEIGHT", "0.04"))
 # The hook's own check (src/hookcheck.py; the owner, 2026-10-05: in a 5-minute
 # Glen Canyon test "the first second or two didn't match"): every clip of the
 # first HOOK_SECONDS is judged on its actual cut - frames at its first moment,
@@ -657,9 +704,12 @@ STILL_MOTION = os.getenv("STILL_MOTION", "").strip().lower()
 # owner's 22-minute Glen Canyon video (167 lines) got 514 s and its parts
 # delivered 3-6 clips each; at 4 s (~14 min) its parts were still busy at the
 # deadline. 6 s per scene gives it ~20 minutes (GoMotion's own screen shows
-# 24+ minutes on this step).
+# 24+ minutes on this step). 9 s since 2026-10-06 (clips first): the owner's
+# serverless Obama video (192 lines, 1332 s) ran two rounds of parts and left
+# 107 lines to the parent's own last pass inside what was left of the box -
+# 54 of them never started and 11 became text cards. A pod sets its own (20 s).
 SOURCE_BUDGET_BASE_SECONDS = float(os.getenv("SOURCE_BUDGET_BASE_SECONDS", "180"))
-SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "6"))
+SOURCE_BUDGET_PER_SCENE = float(os.getenv("SOURCE_BUDGET_PER_SCENE", "9"))
 SOURCE_BUDGET_MAX_SECONDS = float(os.getenv("SOURCE_BUDGET_MAX_SECONDS", "1500"))
 # The cap grows with the video (fanout.source_budget): never below
 # SOURCE_BUDGET_MAX_PER_SCENE seconds a scene, never past the ceiling. The
@@ -694,6 +744,19 @@ FALLBACK_MAX_SECONDS = float(os.getenv("FALLBACK_MAX_SECONDS", "900"))
 FALLBACK_SCENE_SECONDS = float(os.getenv("FALLBACK_SCENE_SECONDS", "45"))
 FALLBACK_PARALLEL = int(os.getenv("FALLBACK_PARALLEL", "16"))
 FALLBACK_STILLS = _flag("FALLBACK_STILLS", True)
+# The ladder's rung before its picture (gapfill._from_moment): another moment of a clip the video already
+# shows, the line's own subject first, judged as "shows that subject" - real footage before a still.
+FALLBACK_MOMENTS = _flag("FALLBACK_MOMENTS", True)
+# Never a text card as filler (the owner, 2026-10-06: a text animation on an empty spot is "not great"): an
+# empty line gets, in order, a runner-up, another moment of a clip beside it, the ladder (library, spare
+# pool moments, another moment of any clip the video shows, a picture), a data look for a figure in the
+# line, the shot beside it held (up to shotcap.CEILING), then another moment of the video's clips without
+# a judge, then a still beside it held as long as needed - a text card only when the video has nothing to
+# show at all. Off = the old last resort (graphic first, then the hold, then the text card).
+NO_TEXT_FILL = _flag("NO_TEXT_FILL", True)
+# The longest a still beside an empty line may stay on screen in the no-text last resort (past the shot
+# cap and shotcap.CEILING: a documentary holds a photo that long; a text card is what it replaces).
+NO_TEXT_HOLD_MAX = float(os.getenv("NO_TEXT_HOLD_MAX", "18"))
 # The last resort for a scene nothing filled (never in the hook while
 # anything else is possible): the planner's own number/map graphic for the
 # line, else the neighbouring shot held over it (the scenes merge) while the

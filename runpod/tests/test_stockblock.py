@@ -295,7 +295,7 @@ class EveryPath(unittest.TestCase):
         results = [None]
         local_ok = patches.pop("local_ok", lambda path, intent: True)
         with mock.patch.object(config, "FRESH_MOMENTS", False), mock.patch.object(config, "ALLOW_WEB_IMAGES", True), \
-                mock.patch.object(config, "RESCUE_SECONDS", 60.0), \
+                mock.patch.object(config, "RESCUE_SECONDS", 60.0), mock.patch.object(config, "CLIPS_FIRST", False), \
                 mock.patch.object(media, "_cached_search", return_value=cands), \
                 mock.patch.object(media, "_download", side_effect=download), \
                 mock.patch.object(media, "_asset_ok", return_value=(True, "")), \

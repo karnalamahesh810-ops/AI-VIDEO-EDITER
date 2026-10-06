@@ -317,15 +317,22 @@ def pot_provider_log(lines: int = 8) -> List[str]:
         return ["(no /tmp/bgutil.log - server never started)"]
 
 
-def probe_youtube(video_id: str = "ka2S39HhLsM") -> List[dict]:
+def probe_youtube(video_id: str = "ka2S39HhLsM", first_ok: bool = False) -> List[dict]:
     """
     Can this worker actually download from YouTube, directly and per proxy?
 
     Metadata for one known video (the step that gets refused - searches keep
     working from flagged IPs, which hid the block). Routes are reported by
     number only; a proxy URL carries credentials.
+
+    `first_ok` (a fan-out part: the parent has just checked every route): the
+    proxies first, a few at once, stopping at the first that works - each part
+    used to ask YouTube once per route (14 player requests a part, 20 parts a
+    video) before finding a single clip.
     """
     routes = [("direct", "")] + [(f"proxy#{i + 1}", p) for i, p in enumerate(config.YTDLP_PROXIES)]
+    if first_ok:
+        routes = routes[1:] + routes[:1]
 
     def one(route):
         name, proxy = route
@@ -348,6 +355,16 @@ def probe_youtube(video_id: str = "ka2S39HhLsM") -> List[dict]:
         with _NET_SEM:                  # the probe used to start one process per route at once
             return one(route)
 
+    if first_ok:
+        out: List[dict] = []
+        step = max(1, min(3, config.NETWORK_CONCURRENCY))
+        with ThreadPoolExecutor(max_workers=step) as ex:
+            for n in range(0, len(routes), step):
+                got = list(ex.map(guarded, routes[n:n + step]))
+                out += got
+                if any(r["ok"] for r in got):
+                    break
+        return out
     with ThreadPoolExecutor(max_workers=max(1, min(len(routes), config.NETWORK_CONCURRENCY))) as ex:
         return list(ex.map(guarded, routes))
 

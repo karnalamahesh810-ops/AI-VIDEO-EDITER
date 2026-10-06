@@ -260,8 +260,13 @@ class TheHooksPicks(unittest.TestCase):
     def test_the_hook_prefers_footage_that_moves_even_without_the_global_preference(self):
         token = media._IN_HOOK.set(True)
         try:
-            with mock.patch.object(config, "MOTION_PREFERENCE", 0.0), mock.patch.object(config, "HOOK_BOOST", False):
+            with mock.patch.object(config, "MOTION_PREFERENCE", 0.0), mock.patch.object(config, "HOOK_BOOST", False), \
+                    mock.patch.object(config, "HOOK_MOTION_WEIGHT", 0.0):
                 self.assertEqual(media._motion_weight(), 0.0)
+            # The opening's own preference (HOOK_MOTION_WEIGHT, 2026-10-06) with the booster off.
+            with mock.patch.object(config, "MOTION_PREFERENCE", 0.0), mock.patch.object(config, "HOOK_BOOST", False), \
+                    mock.patch.object(config, "HOOK_MOTION_WEIGHT", 0.04):
+                self.assertAlmostEqual(media._motion_weight(), 0.08)
             with boosted(MOTION_PREFERENCE=0.0, HOOK_BOOST_MOTION=0.04):
                 self.assertAlmostEqual(media._motion_weight(), 0.08)         # doubled in the hook, as MOTION_PREFERENCE is
                 moving, frozen = video(1, final_score=0.6), video(2, final_score=0.6)

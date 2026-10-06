@@ -419,6 +419,135 @@ def _from_reserve(job: dict, used: Used, work: str, stop: float, require_cc: boo
     return None
 
 
+# Another moment of a clip the video already shows (the owner, 2026-10-06: "first fill every such scene with a
+# REAL clip ... then a fresh moment from a clip already in the video, not a repeat of the neighbouring shot"):
+# the clips tried for one line, and the model calls it may spend on them.
+MOMENT_DONORS = 4
+MOMENT_JUDGES = 4
+
+
+def donors_from_results(jobs: List[dict], results) -> List[dict]:
+    """The YouTube clips a sourced video shows, as donors of another moment (_from_moment)."""
+    from . import media
+    by_index = {j["index"]: j for j in jobs or []}
+    out = []
+    items = results.items() if isinstance(results, dict) else enumerate(results or [])
+    for k, a in items:
+        if a is None or getattr(a, "source", "") != "youtube" or getattr(a, "kind", "") != "video":
+            continue
+        vid, start = media._yt_origin(a)
+        if vid:
+            job = by_index.get(k) or {}
+            out.append({"index": k, "vid": vid, "start": float(start or 0.0),
+                        "subject": str(job.get("subject") or job.get("place") or ""),
+                        "title": str(a.attribution or ""), "license": str(a.license or ""), "ident": a.identity})
+    return out
+
+
+def donors_from_doc(doc: dict) -> List[dict]:
+    """The YouTube clips a timeline shows, as donors of another moment (_from_moment)."""
+    from . import shotcap
+    out = []
+    for k, s in enumerate(doc.get("scenes") or []):
+        if s.get("teaser"):
+            continue
+        vid, start = shotcap._yt_of(s)
+        if not vid or start is None:
+            continue
+        sem = s.get("semanticMetadata") or {}
+        m = s.get("media") or {}
+        out.append({"index": k, "vid": vid, "start": float(start), "subject": str(sem.get("subject") or ""),
+                    "title": str(m.get("attribution") or ""), "license": str(m.get("license") or ""),
+                    "ident": str(sem.get("assetId") or "")})
+    return out
+
+
+def _from_moment(job: dict, used: Used, work: str, stop: float, donors: Optional[List[dict]],
+                 judged: bool = True):
+    """
+    (moment) Another moment of a clip this video already shows: the line's own subject first, then the
+    nearest clip; MOMENT_DONORS clips, the offsets fresh_moments uses (30-95 s from the moment shown),
+    never a moment another scene shows or one FALLBACK_MOMENT_GAP_SECONDS from it, never its video on the
+    next scene (Used), never one an earlier video showed. Each passes the clip checks and - `judged` - the
+    vision judge as "shows the line's subject" (media.rung_judging; at most MOMENT_JUDGES calls). Not
+    `judged`: the last resort before a text card (hold_or_animate) - flagged for review.
+    """
+    from . import ledger, media
+    if not donors or not work:
+        return None
+    i = job["index"]
+    need = round(float(job.get("seconds") or 5.0) + media.SEQ_SHOT_PAD, 2)
+    subject = str(job.get("subject") or job.get("place") or "").strip()
+    ordered = sorted((d for d in donors if d.get("index") != i and d.get("vid")),
+                     key=lambda d: (0 if subject and media.same_subject(subject, d.get("subject") or "") else 1,
+                                    abs(int(d.get("index") or 0) - i)))
+    seen, calls = set(), 0
+    for d in ordered:
+        if time.time() > stop or len(seen) >= MOMENT_DONORS:
+            return None
+        vid = d["vid"]
+        if vid in seen:
+            continue
+        seen.add(vid)
+        for off in media._FRESH_OFFSETS:
+            if time.time() > stop:
+                return None
+            at = float(d.get("start") or 0.0) + off
+            if at < 3:
+                continue
+            if ledger.moment_used(vid, at, at + need):
+                continue                            # shown in an earlier video
+            shot = Shot(video=f"yt:{vid}", start=at, at=job.get("start"))
+            if not used.claim(i, shot):
+                continue
+            title = str(d.get("title") or "")
+            try:
+                path, clean, cuts = media.fetch_clean_clip(vid, work, at, need, title)
+            except Exception:  # noqa: BLE001 - the next moment
+                path, clean, cuts = "", True, 0
+            asset = None
+            if path:
+                asset = media.MediaAsset(
+                    kind="video", source="youtube", url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
+                    local_path=path, license=str(d.get("license") or ""), attribution=title,
+                    query=str(job.get("query") or ""), moment_key=f"yt:{vid}@{int(at // 10)}",
+                    moment={"start": round(at, 1), "fresh_from": str(d.get("ident") or ""), "clean": clean,
+                            "cuts": cuts}, judged_by="none")
+                ok = media._asset_ok_for(job, asset)[0] and not media.motion_rejects(path) \
+                    and not media.slop_reason(path, title) and not _too_short(asset, job)
+                if ok and judged:
+                    if calls >= MOMENT_JUDGES:
+                        ok = False
+                    else:
+                        calls += 1
+                        label = subject or str(d.get("subject") or "")
+                        token = media._RUNG.set({"label": label}) if label else None
+                        try:
+                            ok, verdict = media.judge_clip(path, job, title, source_url=asset.url)
+                        finally:
+                            if token is not None:
+                                media._RUNG.reset(token)
+                        if ok:
+                            asset.apply_verdict(verdict, str(job.get("intent") or ""))
+                if not ok:
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+                    asset = None
+            if asset is None:
+                used.release(i, shot)
+                if judged and calls >= MOMENT_JUDGES:
+                    return None
+                continue
+            asset.review_required = True
+            asset.review_reason = ("Another moment of a clip this video shows: nothing new was found for this "
+                                   "line" + ("" if judged else " and nothing checked it against the line")
+                                   + " - check it fits")
+            return asset
+    return None
+
+
 def _from_still(job: dict, used: Used, work: str, stop: float, allow_generated: bool):
     """(c) One picture search for the line's subject (web, then Wikimedia), judged like any still."""
     from . import imagefix, ledger, media, slop
@@ -539,12 +668,14 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
                youtube_only: bool = False, indices: Optional[List[int]] = None,
                used: Optional[Used] = None, seconds: Optional[float] = None,
                scene_seconds: Optional[float] = None, label: str = "",
-               keep_order: bool = False) -> Dict[str, int]:
+               keep_order: bool = False, donors: Optional[List[dict]] = None) -> Dict[str, int]:
     """
     Fill every empty line of `results` (a list by index, or a dict) - or just
     `indices` - in place through the ladder: (pack) a niche pack clip that
     fits the line (PACKS_FILL), (a) library, (b) the pools' spare moments,
-    (c) a picture. Nothing another scene shows is ever taken (Used). Runs
+    (moment) another moment of a clip the video shows (FALLBACK_MOMENTS;
+    `donors`, else the clips of `results`), (c) a picture. Nothing another
+    scene shows is ever taken (Used). Runs
     FALLBACK_PARALLEL scenes at once under its own time box, with a download
     window of its own (the sourcing deadline may be long past) and
     FALLBACK_SCENE_SECONDS a scene. The scenes start in coverage order, or in
@@ -556,14 +687,17 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
     by_index = {j["index"]: j for j in jobs or []}
     want = sorted(by_index) if indices is None else [i for i in indices if i in by_index]
     todo = [i for i in want if _at(results, i) is None]
-    out = {"asked": len(todo), "pack": 0, "library": 0, "reserve": 0, "still": 0, "generated": 0, "left": 0,
-           "seconds": 0.0}
+    out = {"asked": len(todo), "pack": 0, "library": 0, "reserve": 0, "moment": 0, "still": 0, "generated": 0,
+           "left": 0, "seconds": 0.0}
     if not todo or not config.FALLBACK_FILL or not work:
         out["left"] = len(todo)
         return out
     t0 = time.time()
     if used is None:
         used = Used.of_results(results, media.scene_starts(jobs))
+    moments_on = bool(getattr(config, "FALLBACK_MOMENTS", False))
+    if moments_on and donors is None:
+        donors = donors_from_results(jobs, results)
     total = _budget(len(todo)) if seconds is None else float(seconds)
     per_scene = config.FALLBACK_SCENE_SECONDS if scene_seconds is None else float(scene_seconds)
     deadline = t0 + total
@@ -580,6 +714,8 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
                 ("library", lambda: _from_library(job, used, library, work, stop)),
                 ("reserve", lambda: _from_reserve(job, used, work, stop, require_cc, library)),
             ]
+            if moments_on and donors and job.get("subject_type") != "document":
+                steps.append(("moment", lambda: _from_moment(job, used, work, stop, donors)))
             if config.FALLBACK_STILLS and job.get("visual_type", "footage") in ("footage", "image"):
                 steps.append(("still", lambda: _from_still(job, used, work, stop, allow_generated)))
             for name, step in steps:
@@ -627,7 +763,7 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
     filled = out["asked"] - out["left"]
     print(f"[fill] {label or 'fallback'}: filled {filled} of {out['asked']} empty scene(s) - "
           f"{out['pack']} from the niche packs, {out['library']} from the library, "
-          f"{out['reserve']} from spare pool moments, "
+          f"{out['reserve']} from spare pool moments, {out['moment']} other moments of the video's clips, "
           f"{out['still']} stills, {out['generated']} generated; {out['left']} left for hold/graphic "
           f"({out['seconds']:.0f}s)", flush=True)
     return out
@@ -685,13 +821,14 @@ def _room(scene: dict, fps: int, rate: float, ceiling: bool = False) -> float:
     return shotcap.room(scene, fps, max(0.0, clip_s * fps / max(0.05, rate) - dur), ceiling)
 
 
-def _hold(doc: dict, i: int, rate: Optional[float], ceiling: bool = False) -> bool:
+def _hold(doc: dict, i: int, rate: Optional[float], ceiling: bool = False, stills_any: bool = False) -> bool:
     """
     Merge empty scene i into its neighbours: the previous scene runs longer
     and/or the next starts earlier, each only while its clip covers its longer
     scene at `rate` (None = no limit) and the shot stays within
     SHOT_MAX_SECONDS - with `ceiling`, within shotcap.CEILING (src/shotcap.py).
-    The line's words go with the frames.
+    `stills_any`: a still beside it may hold for as long as the line needs (the
+    last step before a text card, NO_TEXT_FILL). The line's words go with the frames.
     """
     scenes = doc["scenes"]
     fps = max(1, int(doc.get("fps") or 30))
@@ -710,6 +847,17 @@ def _hold(doc: dict, i: int, rate: Optional[float], ceiling: bool = False) -> bo
     else:
         rp = _room(prev, fps, rate, ceiling) if prev is not None else 0.0
         rn = _room(nxt, fps, rate, ceiling) if nxt is not None else 0.0
+    if stills_any:
+        # A still may hold past the cap and the ceiling - up to NO_TEXT_HOLD_MAX seconds on screen in all.
+        top = float(getattr(config, "NO_TEXT_HOLD_MAX", 0.0) or 0.0) * fps
+        for nb, side in ((prev, "p"), (nxt, "n")):
+            if nb is None or (nb.get("media") or {}).get("type") != "image":
+                continue
+            room = float(need) if top <= 0 else max(0.0, min(float(need), top - int(nb.get("durationInFrames") or 0)))
+            if side == "p":
+                rp = max(rp, room)
+            else:
+                rn = max(rn, room)
     a = int(min(rp, need // 2 if nxt is not None else need))
     b = int(min(rn, need - a))
     a = int(min(rp, need - b))
@@ -821,16 +969,140 @@ def _instead_of_hold(doc: dict, refused: List[dict], out: Dict[str, int], ladder
         try:
             fill_empty(jobs, results, work, library=CONTEXT.get("library"),
                        require_cc=CONTEXT.get("require_cc", False), youtube_only=CONTEXT.get("youtube_only", False),
-                       indices=todo, used=used, label=label or "instead of a long hold")
+                       indices=todo, used=used, label=label or "instead of a long hold",
+                       donors=donors_from_doc(doc) if getattr(config, "FALLBACK_MOMENTS", False) else None)
         except Exception as e:  # noqa: BLE001 - the text card below
             print(f"[fill] the ladder failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
         for k, a in results.items():
             if a is not None and 0 <= k < len(scenes) and _empty(scenes[k]):
                 apply_asset(scenes[k], a, "Found when holding the shot beside it would have run too long - "
                                           "check it fits")
+                _living(doc, k, a)
                 out["ladder"] = out.get("ladder", 0) + 1
                 shotcap.note("ladder")
     return [scenes[k] for k in todo if _empty(scenes[k])]
+
+
+def borrow_still(doc: dict, s: dict) -> bool:
+    """
+    (NO_TEXT_FILL, the quality gate's very last step) An empty scene goes on showing the still beside it,
+    held still - no scene is removed (a render's chunks may already be cut from this document). False
+    when neither neighbour is a still.
+    """
+    scenes = doc.get("scenes") or []
+    i = next((n for n, x in enumerate(scenes) if x is s), None)
+    if i is None:
+        return False
+    for k in (i - 1, i + 1):
+        if not 0 <= k < len(scenes):
+            continue
+        nb = scenes[k]
+        m = nb.get("media") or {}
+        if m.get("type") != "image" or not m.get("url") or _empty(nb):
+            continue
+        s["media"] = {key: val for key, val in m.items() if key != "living"}
+        s["motion"] = "none"
+        s["visualType"] = "image"
+        s.setdefault("semanticMetadata", {})["borrowedFrom"] = str(nb.get("id") or "")
+        s["reviewRequired"] = True
+        s["reviewReason"] = "Nothing was found for this line: the picture beside it stays on screen - replace or keep"
+        return True
+    return False
+
+
+def _living(doc: dict, k: int, asset) -> None:
+    """A picture placed after the plan gets the depth layers a plan's stills get (src/living.py)."""
+    if getattr(asset, "kind", "") != "image" or not getattr(config, "LIVING_PHOTOS", False):
+        return
+    try:
+        from . import living
+        living.place_one(doc, k)
+    except Exception as e:  # noqa: BLE001 - drawn flat, with its push-in
+        print(f"[fill] scene {k + 1}: living photo skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
+
+
+def _data_looks(doc: dict, cards: List[dict], out: Dict[str, int]) -> List[dict]:
+    """
+    (NO_TEXT_FILL) The lines nothing real was found for that state a figure: the planner's own full-screen
+    data look of it (graphic_for: a number, money, a share - never a line of plain text). `cards` and the
+    result in the walk's order (from the end).
+    """
+    scenes = doc.get("scenes") or []
+    left = []
+    for s in cards:
+        if not _empty(s) or not any(s is x for x in scenes):
+            continue
+        anim = graphic_for(doc, s)
+        if not anim:
+            left.append(s)
+            continue
+        s["media"] = {"type": "animation", "url": "", "source": "template"}
+        s["animation"] = anim
+        s["visualType"] = "animation"
+        s["reviewRequired"] = True
+        s["reviewReason"] = "No footage found - a data look of the line's figure fills this beat (keep it or replace it)"
+        out["graphic"] += 1
+    return left
+
+
+def _no_text_last(doc: dict, cards: List[dict], out: Dict[str, int], *, fresh: bool, search: Optional[bool],
+                  work: str, banned: Sequence[Shot]) -> List[dict]:
+    """
+    (NO_TEXT_FILL) After every hold: another moment of any clip the video shows, with no judge (it is the
+    last thing before a text card - flagged for review; where this job may fetch), then a still beside the
+    line held for as long as the line needs. Returns the scenes still empty, in the walk's order (from the end).
+    """
+    from . import media, shotcap
+    scenes = doc.get("scenes") or []
+    fps = max(1, int(doc.get("fps") or 30))
+    todo = [s for s in cards if _empty(s) and any(s is x for x in scenes)]
+    work = work or CONTEXT.get("work") or media._WORK.get("dir") or ""
+    may_fetch = fresh and bool(work) and (bool(search) if search is not None else bool(CONTEXT.get("jobs")))
+    donors = donors_from_doc(doc) if may_fetch and todo else []
+    if donors:
+        used = Used()
+        for k, sc in enumerate(scenes):
+            shot = Shot.of_scene(sc, fps)
+            if shot is not None:
+                used.add(k, shot)
+        for n, shot in enumerate(banned or ()):
+            used.add(-1 - n, shot)
+        known = known_jobs(doc)
+        window = min(float(config.FALLBACK_SECONDS), float(config.FALLBACK_SCENE_SECONDS) * max(1, len(todo)))
+        until = time.time() + max(10.0, window)
+        old = ytdlp.DEADLINE[0]
+        ytdlp.set_deadline(until)
+        try:
+            for s in list(reversed(todo)):           # story order
+                k = next((n for n, x in enumerate(scenes) if x is s), None)
+                if k is None or time.time() > until:
+                    continue
+                job = job_for(s, k, fps, known)
+                stop = min(until, time.time() + float(config.FALLBACK_SCENE_SECONDS))
+                try:
+                    got = _from_moment(job, used, work, stop, donors, judged=False)
+                except Exception as e:  # noqa: BLE001 - the hold below
+                    print(f"[fill] scene {k + 1}: last moment skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
+                    got = None
+                if got is not None and _empty(s):
+                    apply_asset(s, got, got.review_reason)
+                    out["moment"] = out.get("moment", 0) + 1
+                    shotcap.note("moment")
+        finally:
+            ytdlp.set_deadline(old)
+    left = []
+    for s in todo:                                   # from the end, as the walk goes
+        i = next((n for n, x in enumerate(scenes) if x is s), None)
+        if i is None or not _empty(s):
+            continue
+        # A clip beside it only at real speed within the ceiling (never slowed, never frozen); a still
+        # beside it as long as the line needs, up to NO_TEXT_HOLD_MAX.
+        if _hold(doc, i, 1.0, ceiling=True, stills_any=True):
+            out["held"] += 1
+            out["long"] = out.get("long", 0) + 1
+            continue
+        left.append(s)
+    return left
 
 
 def _hold_long(doc: dict, cards: List[dict], out: Dict[str, int]) -> List[dict]:
@@ -905,6 +1177,8 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     out = {"graphic": 0, "held": 0, "card": 0, "hook": 0}
     capped = shotcap.enabled()
     rates = shotcap.hold_rates()
+    # NO_TEXT_FILL: real footage first - a graphic only for a line's figure, after every fresh shot.
+    no_text = bool(getattr(config, "NO_TEXT_FILL", False))
     cards: List[dict] = []
     for i in range(len(scenes) - 1, -1, -1):
         s = scenes[i]
@@ -914,7 +1188,7 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
             continue
         if _hook(s, fps):
             out["hook"] += 1
-        anim = graphic_for(doc, s)
+        anim = None if no_text else graphic_for(doc, s)
         if anim:
             s["media"] = {"type": "animation", "url": "", "source": "template"}
             s["animation"] = anim
@@ -941,9 +1215,16 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
         shotcap.note("refused", len(cards))
         if fresh:
             cards = list(reversed(_instead_of_hold(doc, cards, out, laddered, search, label, work, banned)))
+        if no_text:
+            cards = _data_looks(doc, cards, out)
         # Nothing fresh: real footage beats a text card - the shot beside it held past the cap, never
         # past shotcap.CEILING and never slowed.
         cards = _hold_long(doc, cards, out)
+    elif no_text and cards:
+        cards = _data_looks(doc, cards, out)
+    if no_text and cards:
+        # Never a text card while anything real can stand in (the owner, 2026-10-06).
+        cards = _no_text_last(doc, cards, out, fresh=fresh, search=search, work=work, banned=banned)
     for s in reversed(cards):                   # story order
         if _card(doc, s):
             out["card"] += 1
@@ -1058,7 +1339,14 @@ def apply_asset(scene: dict, asset, why: str = "") -> None:
     if getattr(asset, "cut_check", None):
         sem["cutCheck"] = dict(asset.cut_check)
     if asset.kind == "image":
-        scene["motion"] = scene.get("motion") or "none"
+        # A picture placed after the plan (the last resort, the check before publishing, the quality gate)
+        # gets the slow push-in a plan gives a still (the owner: never a still that just sits there),
+        # unless the style holds stills still (STILL_MOTION "none").
+        held_still = str(getattr(config, "STILL_MOTION", "") or "").strip().lower() == "none"
+        if (scene.get("motion") or "none") == "none" and not held_still and getattr(config, "NO_TEXT_FILL", False):
+            scene["motion"] = "zoom-in"
+        else:
+            scene["motion"] = scene.get("motion") or "none"
     scene["reviewRequired"] = True
     scene["reviewReason"] = asset.review_reason or why or "A fallback shot - check it fits"
 

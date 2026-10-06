@@ -25,7 +25,7 @@ class _Cut(StorageError):
 
 def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None, proxy: str = "",
              attempts: int = 3, connect_timeout: float = 20.0, max_seconds: float = 0.0,
-             stop=None) -> str:
+             stop=None, max_bytes: int = 0) -> str:
     """
     Stream any http(s) URL to disk. Returns the local path.
 
@@ -43,6 +43,8 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
     attempt's whole transfer, and `stop` (a callable) ends it when the caller's
     time is up - a picture download used to hold a sourcing thread for as long
     as its host kept the connection alive. Both are read every 64 KB.
+    `max_bytes` (0 = none): a file bigger than this is not fetched (its stated
+    length) or is cut off when it passes it (an archive's whole film).
     """
     if os.path.isfile(url):
         return url
@@ -54,7 +56,7 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
     # they must never truncate one another's partial bytes.
     temp_path = f"{dest_path}.{uuid.uuid4().hex}.part"
     last_error = None
-    bounded = bool(max_seconds and max_seconds > 0) or stop is not None
+    bounded = bool(max_seconds and max_seconds > 0) or stop is not None or bool(max_bytes and max_bytes > 0)
     for attempt in range(1, max(1, attempts) + 1):
         try:
             if stop is not None and stop():
@@ -68,6 +70,8 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
                 content_type = (r.headers.get("Content-Type") or "").lower()
                 if "text/html" in content_type:
                     raise StorageError(f"download returned an HTML error page ({r.status_code})")
+                if max_bytes and max_bytes > 0 and expected > max_bytes:
+                    raise _Cut(f"file too big to fetch whole ({expected // (1 << 20)} MB)")
                 written = 0
                 with open(temp_path, "wb") as f:
                     for chunk in r.iter_content(chunk_size=(1 << 16) if bounded else (1 << 20)):
@@ -76,6 +80,8 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
                             written += len(chunk)
                         if stop is not None and stop():
                             raise _Cut(f"{STOPPED}: the time for it is up")
+                        if max_bytes and max_bytes > 0 and written > max_bytes:
+                            raise _Cut(f"file too big to fetch whole (over {max_bytes // (1 << 20)} MB)")
                         if bounded and max_seconds and time.time() - started > max_seconds:
                             raise _Cut(f"download took longer than {max_seconds:.0f} s ({written} bytes so far)")
                 if written <= 0:

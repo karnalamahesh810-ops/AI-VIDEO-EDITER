@@ -413,7 +413,7 @@ def _require_ai_credit() -> None:
             "would be random footage. Top up at kie.ai, then run this again.")
 
 
-def _require_youtube() -> None:
+def _require_youtube(quick: bool = False) -> None:
     """
     Refuse to start when no connection this worker has can download from YouTube.
 
@@ -421,12 +421,14 @@ def _require_youtube() -> None:
     with every download refused and the empty scenes filled with paid AI
     images: two real videos came out with 0 YouTube clips out of 51 scenes.
     Checked before any AI is spent. REQUIRE_YOUTUBE=0 turns this off.
+    `quick` (a fan-out part): stop at the first route that works.
     """
     if not config.REQUIRE_YOUTUBE:
         return
-    routes = media.probe_youtube()
+    probe = (lambda: media.probe_youtube(first_ok=True)) if quick else media.probe_youtube
+    routes = probe()
     if not any(r["ok"] for r in routes):
-        routes = media.probe_youtube()          # one retry: a single slow answer is not a block
+        routes = probe()                        # one retry: a single slow answer is not a block
     ok = [r["route"] for r in routes if r["ok"]]
     print(f"[worker] YouTube reachable via: {', '.join(ok) or 'nothing'}", flush=True)
     if not ok:
@@ -2713,7 +2715,14 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "SHOT_CUT_THRESHOLD", "SHOT_CUT_SOFT_THRESHOLD", "SHOT_CUT_RATIO", "SHOT_CUT_SAME_PICTURE",
                       "CUT_GUARD_SECONDS", "CUT_SNAP_PAD",
                       # The hook's own check (src/hookcheck.py, the same test).
-                      "HOOK_CUT_CHECK", "HOOK_CUT_TRIES", "HOOK_CUT_MAX_CALLS")
+                      "HOOK_CUT_CHECK", "HOOK_CUT_TRIES", "HOOK_CUT_MAX_CALLS",
+                      # Clips first and never a text card (the owner, 2026-10-06): A/B one job, and the
+                      # styles (src/styles.py) ride on these.
+                      "CLIPS_FIRST", "CLIPS_FIRST_STILLS", "CLIP_WORDINGS", "CLIP_RUNGS", "CLIP_OTHER_WORDINGS",
+                      "CLIPS_FIRST_JUDGE_MAX_PER_SCENE", "CLIPS_FIRST_POOL_SCOUT", "CLIP_PREQUALIFY",
+                      "HOOK_NO_STILL_SECONDS", "HOOK_MOTION_WEIGHT", "FALLBACK_MOMENTS", "NO_TEXT_FILL",
+                      "WHOLE_FILE_MAX_MB", "WHOLE_FILE_SECONDS", "RESCUE_SCENE_SECONDS", "NO_TEXT_HOLD_MAX",
+                      "PASS1_BUDGET_SECONDS", "SOURCE_BUDGET_PER_SCENE")
 
 
 def _apply_config(overrides) -> dict:
@@ -2935,7 +2944,7 @@ def handler(job):
             media.reset_cache()
             media.set_youtube_only(bool(inp.get("youtube_only")))
             if inp.get("allow_youtube") is not False:
-                _require_youtube()      # a blocked machine fails fast; the parent redoes its part
+                _require_youtube(quick=True)    # a blocked machine fails fast; the parent redoes its part
             media.limit_generation(inp.get("image_budget", config.IMAGE_MAX_PER_VIDEO))
 
             def source_part(jobs, w, seqs, exclude):

@@ -26,3 +26,8 @@ os.environ.setdefault("GRADE_MEASURE_SECONDS", "0")
 # switches them on around its own pictures and clips.
 os.environ.setdefault("PICTURE_SHARPNESS_CHECK", "0")
 os.environ.setdefault("CLIP_SHARPNESS_CHECK", "0")
+# A clip-first line reads its candidates' YouTube metadata before scouting
+# (media._prequalified, CLIP_PREQUALIFY): a full yt-dlp extraction per
+# candidate, which an unmocked sourcing test would run against YouTube. Off
+# here; tests/test_clips_first.py switches it on around its own stubs.
+os.environ.setdefault("CLIP_PREQUALIFY", "0")

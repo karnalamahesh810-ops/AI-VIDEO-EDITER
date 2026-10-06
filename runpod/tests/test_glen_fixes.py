@@ -240,7 +240,8 @@ class RescuePass(unittest.TestCase):
         results = [None]
         cands = [{"id": "aaaaaaaaaaa", "title": "Cat videos", "duration": 300.0},
                  {"id": "bbbbbbbbbbb", "title": "Arizona Golf Course Drone Tour", "duration": 240.0}]
-        with mock.patch.object(config, "FRESH_MOMENTS", False), \
+        # The unjudged title search (the judged clip-first search before it: tests/test_clips_first.py).
+        with mock.patch.object(config, "FRESH_MOMENTS", False), mock.patch.object(config, "CLIPS_FIRST", False), \
                 mock.patch.object(media, "_yt_candidates", return_value=cands), \
                 mock.patch.object(media, "fetch_clean_clip", return_value=(path, True, 0)) as fetch, \
                 mock.patch.object(media._filters, "has_burned_captions", return_value=False), \
@@ -257,10 +258,19 @@ class RescuePass(unittest.TestCase):
                  "subject_type": "person"},
                 {"index": 1, "query": "map", "seconds": 5.0, "visual_type": "animation"}]
         results = [None, None]
-        with mock.patch.object(config, "FRESH_MOMENTS", False), \
+        with mock.patch.object(config, "FRESH_MOMENTS", False), mock.patch.object(config, "CLIPS_FIRST", False), \
                 mock.patch.object(media, "_yt_candidates") as search:
             media.rescue_fill(jobs, results, tempfile.mkdtemp())
         search.assert_not_called()
+        # Clips first: the person's line gets the judged search (never the unjudged one); the graphic stays.
+        asked = []
+        with mock.patch.object(config, "FRESH_MOMENTS", False), mock.patch.object(config, "CLIPS_FIRST", True), \
+                mock.patch.object(media, "source_for_segment",
+                                  side_effect=lambda q, s, w, **kw: asked.append((q, kw.get("clips_only")))), \
+                mock.patch.object(media, "_yt_candidates") as search:
+            media.rescue_fill(jobs, [None, None], tempfile.mkdtemp())
+        search.assert_not_called()
+        self.assertEqual(asked, [("Jared Polis", True)])
 
 
 class ReuseComesLastAndIsCapped(unittest.TestCase):

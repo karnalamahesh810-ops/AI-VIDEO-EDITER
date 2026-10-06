@@ -1809,11 +1809,16 @@ class Gate:
         return made
 
     def no_empty_scenes(self) -> List[str]:
-        """Every scene still without a picture becomes its line as a full-screen text graphic. Returns their ids."""
+        """Every scene still without a picture becomes its line as a full-screen text graphic - unless a still
+        beside it can go on showing (NO_TEXT_FILL: gapfill.borrow_still; no scene is removed here, the
+        render's chunks are cut from this document). Returns the ids of the text scenes."""
         out = []
         for s in self.doc.get("scenes") or []:
             try:
                 if gapfill._empty(s):
+                    if getattr(config, "NO_TEXT_FILL", False) and gapfill.borrow_still(self.doc, s):
+                        self.fixed["held"] = self.fixed.get("held", 0) + 1
+                        continue
                     text_scene(self.doc, s)
                     out.append(str(s.get("id")))
             except Exception as e:  # noqa: BLE001 - one odd scene never stops the others

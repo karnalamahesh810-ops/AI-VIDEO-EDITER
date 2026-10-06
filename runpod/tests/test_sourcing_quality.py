@@ -195,7 +195,8 @@ class HookIsFootage(_Rules):
                 mock.patch.object(config, "JUDGE_BEST_OF", 2), mock.patch.object(config, "HOOK_JUDGE_BEST_OF", 3), \
                 mock.patch.object(config, "POOL_SCOUT", 2), mock.patch.object(config, "HOOK_POOL_SCOUT", 4), \
                 mock.patch.object(config, "JUDGE_MAX_PER_SCENE", 12), \
-                mock.patch.object(config, "HOOK_JUDGE_MAX_PER_SCENE", 16):
+                mock.patch.object(config, "HOOK_JUDGE_MAX_PER_SCENE", 16), \
+                mock.patch.object(config, "CLIPS_FIRST", False):
             media.source_for_segment("Kerrville flood", 3.0, "/tmp", visual_type="image", hook=True)
             hook = seen[0]
             seen.clear()
@@ -206,6 +207,36 @@ class HookIsFootage(_Rules):
         self.assertEqual(later[0], "image")
         self.assertEqual((later[1]["best_of"], later[1]["scouts"], later[1]["per_scene"]), (2, 2, 12))
         self.assertFalse(media._IN_HOOK.get())                    # reset after the scene
+
+    def test_with_clips_first_the_hook_and_a_place_still_line_look_further_for_a_clip(self):
+        seen = []
+
+        def one(ctx):
+            seen.append((ctx.visual_type, ctx.stage, media._judge_limits()))
+            return None
+        with mock.patch.object(media.providers, "source_one", side_effect=one), \
+                mock.patch.object(config, "JUDGE_BEST_OF", 2), mock.patch.object(config, "HOOK_JUDGE_BEST_OF", 3), \
+                mock.patch.object(config, "POOL_SCOUT", 2), mock.patch.object(config, "HOOK_POOL_SCOUT", 4), \
+                mock.patch.object(config, "JUDGE_MAX_PER_SCENE", 12), \
+                mock.patch.object(config, "HOOK_JUDGE_MAX_PER_SCENE", 16), \
+                mock.patch.object(config, "CLIPS_FIRST", True), mock.patch.object(config, "CLIPS_FIRST_STILLS", True), \
+                mock.patch.object(config, "CLIPS_FIRST_JUDGE_MAX_PER_SCENE", 20), \
+                mock.patch.object(config, "CLIPS_FIRST_POOL_SCOUT", 3):
+            media.source_for_segment("Kerrville flood", 3.0, "/tmp", visual_type="image", hook=True)
+            hook = seen[0]
+            seen.clear()
+            media.source_for_segment("Kerrville flood", 3.0, "/tmp", visual_type="image", subject_type="place")
+            later = seen[0]
+            seen.clear()
+            media.source_for_segment("The 1922 Compact", 3.0, "/tmp", visual_type="image", subject_type="document")
+            document = seen[0]
+        self.assertEqual(hook[:2], ("footage", "youtube"))
+        self.assertEqual((hook[2]["best_of"], hook[2]["scouts"], hook[2]["per_scene"]), (3, 4, 24))
+        self.assertEqual(later[:2], ("footage", "youtube"))       # a place still asks for a clip first
+        self.assertEqual((later[2]["best_of"], later[2]["scouts"], later[2]["per_scene"]), (2, 3, 20))
+        self.assertEqual(document[:2], ("image", "pictures"))     # a document keeps its scan first
+        self.assertEqual(document[2]["per_scene"], 12)
+        self.assertFalse(media._CLIP_FIRST.get())                 # reset after the scene
 
     def test_best_of_waits_for_more_passing_clips_in_the_hook(self):
         passed = [MediaAsset(kind="video", source="youtube", url="u", relevance_score=0.75) for _ in range(2)]
@@ -585,7 +616,9 @@ class RecentUploadsFirst(_Rules):
                 return [{"id": "NEWFLOOD000", "title": "Kerrville flooding today", "duration": 240.0}]
             return [{"id": "OLDFLOOD000", "title": "Kerrville flood aerial drone footage 4k", "duration": 240.0}]
         results = [None]
-        with mock.patch.object(config, "FRESH_MOMENTS", False), mock.patch.object(config, "ALLOW_WEB_IMAGES", False), \
+        # The unjudged title search (the judged clip-first search before it is its own test).
+        with mock.patch.object(config, "CLIPS_FIRST", False), \
+                mock.patch.object(config, "FRESH_MOMENTS", False), mock.patch.object(config, "ALLOW_WEB_IMAGES", False), \
                 mock.patch.object(media, "_yt_candidates", side_effect=cands), \
                 mock.patch.object(media, "fetch_clean_clip", return_value=(path, True, 0)), \
                 mock.patch.object(media._filters, "has_burned_captions", return_value=False), \
@@ -600,7 +633,8 @@ class RecentUploadsFirst(_Rules):
         def cands(target, cc, limit=8, timeout=40):
             targets.append(target)
             return []
-        with mock.patch.object(config, "FRESH_MOMENTS", False), mock.patch.object(config, "ALLOW_WEB_IMAGES", False), \
+        with mock.patch.object(config, "CLIPS_FIRST", False), \
+                mock.patch.object(config, "FRESH_MOMENTS", False), mock.patch.object(config, "ALLOW_WEB_IMAGES", False), \
                 mock.patch.object(media, "_yt_candidates", side_effect=cands):
             media.rescue_fill([job(0, 100, recency="month")], [None], tempfile.mkdtemp())
         self.assertIn("EgIIBA", targets[0])

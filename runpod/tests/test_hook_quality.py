@@ -707,7 +707,7 @@ class RescueAndMomentsInTheHook(unittest.TestCase):
         cands = [{"id": "aaaaaaaaaaa", "title": "Glen Canyon Dam spillway 1983 crisis", "duration": 600.0},
                  {"id": "bbbbbbbbbbb", "title": "Glen Canyon Dam spillway 1983 footage", "duration": 500.0}]
         results = [None]
-        with mock.patch.multiple(config, FRESH_MOMENTS=False, HOOK_CUT_CHECK=True), \
+        with mock.patch.multiple(config, FRESH_MOMENTS=False, HOOK_CUT_CHECK=True, CLIPS_FIRST=False), \
                 mock.patch.object(media, "_yt_candidates", return_value=cands), \
                 mock.patch.object(media, "fetch_clean_clip", side_effect=fetch), \
                 mock.patch.object(media._filters, "has_burned_captions", return_value=False), \

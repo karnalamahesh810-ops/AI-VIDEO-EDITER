@@ -73,6 +73,9 @@ class EveryWordingFirst(unittest.TestCase):
     """source_for_segment for a still line: every wording's pictures, then footage, then one illustration."""
 
     def _run(self, flags, found=None, visual_type="image", **kw):
+        # A still line that keeps pictures first under CLIPS_FIRST: a document's scan (clips_first_for).
+        if visual_type == "image":
+            kw.setdefault("subject_type", "document")
         calls = []
 
         def one(query, seconds, work_dir, stage=None, **k):
@@ -112,11 +115,18 @@ class EveryWordingFirst(unittest.TestCase):
                                                      "Biscuit Basin eruption column", "Biscuit Basin"])
 
     def test_footage_lines_and_youtube_only_jobs_keep_their_order(self):
-        _got, calls = self._run(ON, visual_type="footage")
+        _got, calls = self._run(dict(ON, CLIPS_FIRST=False), visual_type="footage")
         self.assertEqual({s for s, _q in calls}, {None})
         with mock.patch.object(media, "youtube_only", return_value=True):
             _got, calls = self._run(ON)
         self.assertEqual({s for s, _q in calls}, {None})
+
+    def test_with_clips_first_a_footage_line_asks_youtube_before_any_picture(self):
+        _got, calls = self._run(dict(ON, CLIPS_FIRST=True), visual_type="footage")
+        stages = [s for s, _q in calls]
+        self.assertEqual(stages[0], "youtube")
+        self.assertLess(max(i for i, s in enumerate(stages) if s in ("youtube", "other_footage")),
+                        stages.index("pictures"))
 
     def test_with_illustrations_asked_first_there_is_no_second_one_at_the_end(self):
         calls = []
@@ -126,7 +136,7 @@ class EveryWordingFirst(unittest.TestCase):
             return None
         with mock.patch.multiple(config, PREFER_GENERATED_IMAGES=True, **ON), \
                 mock.patch.object(media, "_source_one", side_effect=one):
-            media.source_for_segment("q", 5.0, "/w", visual_type="image", fallbacks=["r"])
+            media.source_for_segment("q", 5.0, "/w", visual_type="image", fallbacks=["r"], subject_type="document")
         self.assertNotIn("generated", calls)
 
     def test_through_the_registry_youtube_waits_for_every_wording(self):
@@ -146,7 +156,7 @@ class EveryWordingFirst(unittest.TestCase):
                 mock.patch.object(media, "_count_photo"):
             got = media.source_for_segment("Biscuit Basin plume animation footage", 5.0, "/w",
                                            visual_type="image", allow_youtube=True,
-                                           fallbacks=["Biscuit Basin"])
+                                           fallbacks=["Biscuit Basin"], subject_type="document")
         self.assertIs(got, picture)
         self.assertEqual(yt, [])
         with mock.patch.multiple(config, ALLOW_DAILYMOTION=False, PREFER_GENERATED_IMAGES=False, **OLD), \
@@ -156,7 +166,7 @@ class EveryWordingFirst(unittest.TestCase):
                 mock.patch.object(media, "_count_photo"):
             got = media.source_for_segment("Biscuit Basin plume animation footage", 5.0, "/w",
                                            visual_type="image", allow_youtube=True,
-                                           fallbacks=["Biscuit Basin"])
+                                           fallbacks=["Biscuit Basin"], subject_type="document")
         self.assertIs(got, picture)
         self.assertEqual(yt, ["Biscuit Basin plume animation footage"])        # the old walk asked it first
 

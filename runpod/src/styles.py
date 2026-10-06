@@ -71,7 +71,12 @@ STYLES: Dict[str, dict] = {
                    "EYEWITNESS_SEARCHES": True, "REGION_BLOCKS": True, "CHAIN_SHOTS": True,
                    "MOTION_PREFERENCE": 0.08, "RECENT_FOOTAGE_FIRST": True, "POOL_JUDGE_CLIPS": True,
                    # News clips as shot: never pushed or cropped (the owner, src/reframe.py).
-                   "REFRAME_CLIPS": False},
+                   "REFRAME_CLIPS": False,
+                   # A news compilation is clips (the owner, 2026-10-06: ~85%+): every line but a
+                   # document's asks for a clip on all its wordings and one more wider rung first, and
+                   # real photos stay a few per 10 minutes.
+                   "CLIPS_FIRST": True, "CLIPS_FIRST_STILLS": True, "CLIP_RUNGS": 4,
+                   "PHOTO_MAX_PER_10MIN": 8.0},
     },
     "nature_weather": {
         "label": "Nature & Weather",

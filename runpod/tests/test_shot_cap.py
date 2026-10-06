@@ -285,8 +285,9 @@ def seconds_of(doc):
 
 
 def quiet():
-    """No planner graphic, no hook: the hold is what is under test."""
-    return mock.patch.multiple(config, ANIMATION_FILL=False, HOOK_SECONDS=0.0)
+    """No planner graphic, no hook: the hold is what is under test - and the ladder as the shot cap left it,
+    with its text card last (the no-text last resort, NO_TEXT_FILL, is tests/test_no_text_fill.py)."""
+    return mock.patch.multiple(config, ANIMATION_FILL=False, HOOK_SECONDS=0.0, NO_TEXT_FILL=False)
 
 
 def runner_up(vid, start, path="", seconds=7.0, score=0.8, **more):

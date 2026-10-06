@@ -39,9 +39,12 @@ class SourceContext:
     youtube_only: bool = False
     tried_generation: bool = False
     enabled_names: Optional[set] = None  # a job's allow-list, or None for all
-    # A still line's search in stages (media.source_for_segment, STILLS_ALL_WORDINGS_FIRST):
-    # "pictures", "footage" (standing in for a still) or "generated"; None = the whole list.
+    # A line's search in stages (media.source_for_segment): "pictures", "footage" (all the clip sources),
+    # "youtube" / "other_footage" (its two halves, CLIPS_FIRST) or "generated"; None = the whole list.
     stage: Optional[str] = None
+    # A line of a story about now (recency "month"/"week", or an event of this year): the archives'
+    # old film is never its shot, so archive.org is not asked (CLIPS_FIRST).
+    current: bool = False
 
     @property
     def person(self) -> bool:
@@ -180,7 +183,9 @@ REGISTRY: List[Provider] = [
     Provider("nasa_video", "footage", "public-domain", _footage, _archive_video("search_nasa_video")),
     Provider("wikimedia_video", "footage", "cc", _footage, _archive_video("search_wikimedia_video")),
     Provider("archive_org_video", "footage", "public-domain",
-             lambda c: c.wants_footage and config.ALLOW_ARCHIVE_ORG, _archive_video("search_archive_org_video")),
+             lambda c: c.wants_footage and config.ALLOW_ARCHIVE_ORG
+             and not (c.current and getattr(config, "CLIPS_FIRST", False)),
+             _archive_video("search_archive_org_video")),
     Provider("pexels_video", "footage", "stock",
              lambda c: c.wants_footage and c.allow_stock, _stock("search_pexels", "video")),
     Provider("pixabay_video", "footage", "stock",
@@ -222,6 +227,28 @@ def still_stage(p: Provider) -> str:
     return "pictures"
 
 
+# YouTube (and the live satellite loop, the shot for a line about the storm itself): the half of
+# the clip sources a clip-first line asks on every wording (CLIPS_FIRST); the rest are "other_footage".
+_YOUTUBE_STAGE = ("noaa_satellite", "youtube", "youtube_for_stills")
+
+
+def clip_stage(p: Provider) -> str:
+    """still_stage with the clip sources split in two: "youtube" or "other_footage" (CLIPS_FIRST)."""
+    stage = still_stage(p)
+    if stage != "footage":
+        return stage
+    return "youtube" if p.name in _YOUTUBE_STAGE else "other_footage"
+
+
+def in_stage(p: Provider, stage: Optional[str]) -> bool:
+    """Whether provider `p` belongs to the asked part of the list (None = the whole list)."""
+    if stage is None:
+        return True
+    if stage in ("youtube", "other_footage"):
+        return clip_stage(p) == stage
+    return still_stage(p) == stage
+
+
 def walk() -> List[Provider]:
     """The registry in the order a scene asks it: Wikimedia Commons before Yandex
     (COMMONS_BEFORE_YANDEX; three of four Commons pictures pass the checks, one of four
@@ -241,7 +268,7 @@ def _skipped(p: Provider, ctx: SourceContext) -> bool:
         return True
     if ctx.youtube_only and p.name != "youtube":
         return True
-    return ctx.stage is not None and still_stage(p) != ctx.stage
+    return not in_stage(p, ctx.stage)
 
 
 def ordered(ctx: SourceContext) -> List[Provider]:
