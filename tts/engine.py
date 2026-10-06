@@ -238,14 +238,22 @@ class ModelHost:
 # ---------------------------------------------------------------------------------------------
 # Several copies on one GPU
 
+def make_host(device: str, want_asr: bool):
+    """The engine this image runs: TTS_ENGINE=qwen (Qwen3-TTS) or chatterbox (default)."""
+    if os.environ.get("TTS_ENGINE", "chatterbox").lower() == "qwen":
+        from engine_qwen import QwenHost
+        return QwenHost(device, want_asr)
+    return ModelHost(device, want_asr)
+
+
 def _replica_main(idx: int, tasks, results, device: str, want_asr: bool, preload: Optional[str]) -> None:
     os.environ["TTS_REPLICA"] = str(idx)
-    host = ModelHost(device, want_asr)
+    host = make_host(device, want_asr)
     try:
         if preload:
             host.load(preload)
             if want_asr:
-                host.transcribe(np.zeros(SR, dtype=np.float32), SR)
+                host.transcribe(np.zeros(SR, dtype=np.float32), SR)  # loads the speech recognizer too
         results.put(("ready", idx, {"load_seconds": host.load_seconds}))
     except Exception as e:  # noqa: BLE001
         results.put(("broken", idx, f"{type(e).__name__}: {e}\n{traceback.format_exc()[-2000:]}"))
@@ -304,7 +312,7 @@ class ReplicaPool:
         self.procs: List = []
         self.ready: Dict[int, dict] = {}
         self.broken: Dict[int, str] = {}
-        self.local = ModelHost(device, want_asr) if n == 0 else None
+        self.local = make_host(device, want_asr) if n == 0 else None
         self.started_at = time.time()
         self.ready_seconds = None
         self._tid = 0

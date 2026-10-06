@@ -1,0 +1,13 @@
+# Qwen3-TTS runtime (qwen-tts itself is installed --no-deps: its gradio/sox demo extras are not needed).
+# torch 2.6.0 / torchaudio 2.6.0 come from the base image; constraints.txt keeps pip from swapping them.
+transformers==4.57.3
+accelerate==1.12.0
+huggingface_hub>=0.34,<1.0
+librosa==0.11.0
+soundfile
+einops
+onnxruntime
+pyloudnorm==0.1.1
+# Worker
+runpod==1.7.7
+requests

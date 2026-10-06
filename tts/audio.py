@@ -159,12 +159,17 @@ def gain_to(x: np.ndarray, sr: int, target_lufs: float, max_gain_db: float = 24.
     return (x * (10 ** (g / 20))).astype(np.float32)
 
 
-def clean_reference(src, out_path: str, sr: int = 24000, max_seconds: float = 40.0) -> dict:
-    """A voice sample ready for cloning, written to `out_path` (16-bit WAV). Returns facts about it."""
+def clean_reference(src, out_path: str, sr: int = 24000, max_seconds: float = 40.0, shorten: bool = True) -> dict:
+    """
+    A voice sample ready for cloning, written to `out_path` (16-bit WAV). Returns facts about it.
+    `shorten` cuts long pauses (Chatterbox conditions on the first seconds, so they should be
+    speech); in-context cloning (Qwen3-TTS) keeps the speaker's own rhythm instead.
+    """
     x = load_any(src, sr=sr, max_seconds=180)
     raw_seconds = len(x) / sr
     x = trim(x, sr, rel_db=40.0, keep_head=0.02, keep_tail=0.05)
-    x = shorten_pauses(x, sr)
+    if shorten:
+        x = shorten_pauses(x, sr)
     x = x[: int(max_seconds * sr)]
     if len(x) < sr * 3:
         raise ValueError("The voice sample has less than 3 seconds of speech.")

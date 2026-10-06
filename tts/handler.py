@@ -45,6 +45,9 @@ VOICE_DIR = os.environ.get("TTS_VOICE_DIR", "/tmp/tts_voices")
 MAX_TEXT = int(os.environ.get("TTS_MAX_TEXT", "8000"))
 MAX_SAMPLE_BYTES = 25 * 1024 * 1024
 DEFAULT_MODEL = os.environ.get("TTS_DEFAULT_MODEL", "en")
+# chatterbox (engine.ModelHost: en / mtl / turbo) or qwen (engine_qwen.QwenHost: Qwen3-TTS 1.7B Base)
+ENGINE = os.environ.get("TTS_ENGINE", "chatterbox").lower()
+QWEN_LANGS = {"en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"}
 POOL: ReplicaPool = None  # type: ignore
 _voice_info: dict = {}
 
@@ -59,13 +62,19 @@ def _clamp(v, lo, hi, d):
 
 def pick_model(name, lang: str) -> str:
     lang = (lang or "en").lower()
+    if ENGINE == "qwen":
+        return "qwen"
     if not lang.startswith("en"):
         return "mtl"
     return name if name in MODEL_NAMES else DEFAULT_MODEL
 
 
 def resolve_voice(v: dict):
-    """(cache key, cleaned sample path or None for the built-in voice, facts)."""
+    """
+    (cache key, cleaned sample path or None for the built-in voice, facts). A preset may also carry
+    "text" (its transcript); Qwen3-TTS clones in-context and needs it (clones are transcribed by the
+    engine instead).
+    """
     v = v or {}
     data = None
     if v.get("b64"):
@@ -92,7 +101,10 @@ def resolve_voice(v: dict):
     os.makedirs(VOICE_DIR, exist_ok=True)
     path = os.path.join(VOICE_DIR, f"{sha}.wav")
     if not os.path.exists(path):
-        _voice_info[sha] = audio.clean_reference(data, path)
+        if ENGINE == "qwen":
+            _voice_info[sha] = audio.clean_reference(data, path, max_seconds=30.0, shorten=False)
+        else:
+            _voice_info[sha] = audio.clean_reference(data, path)
     return key, path, _voice_info.get(sha, {})
 
 
@@ -104,12 +116,14 @@ def tts(inp: dict, job_id: str, progress) -> dict:
     if len(text) > MAX_TEXT:
         return {"ok": False, "error": f"text is over {MAX_TEXT} characters; send it in parts"}
     lang = str(inp.get("language") or "en").lower()[:5]
+    if ENGINE == "qwen" and lang not in QWEN_LANGS:
+        return {"ok": False, "error": f"language {lang!r} is not supported by this voice model"}
     model = pick_model(inp.get("model"), lang)
-    params = dict(DEFAULTS[model])
+    params = dict(DEFAULTS[model]) if model in DEFAULTS else {}
     for k in ("exaggeration", "cfg", "temperature"):
-        if k in inp and k in params:
+        if k in inp and (k in params or (model == "qwen" and k == "temperature")):
             lo, hi = {"exaggeration": (0.0, 2.0), "cfg": (0.0, 1.0), "temperature": (0.05, 1.5)}[k]
-            params[k] = _clamp(inp[k], lo, hi, params[k])
+            params[k] = _clamp(inp[k], lo, hi, params.get(k, 0.9))
     speed = _clamp(inp.get("speed", 1.0), 0.7, 1.3, 1.0)
     pause = inp.get("pause", 1.0)
     pause = {"tight": 0.75, "natural": 1.0, "relaxed": 1.3}.get(pause, pause) if isinstance(pause, str) else pause
@@ -119,16 +133,17 @@ def tts(inp: dict, job_id: str, progress) -> dict:
     attempts = int(_clamp(inp.get("max_attempts", 3), 1, 4, 3))
     fmt = "wav" if inp.get("format") == "wav" else "mp3"
 
-    voice_key, ref_path, ref_info = resolve_voice(inp.get("voice") or {})
+    voice = inp.get("voice") or {}
+    voice_key, ref_path, ref_info = resolve_voice(voice)
+    if ENGINE == "qwen" and not ref_path:
+        return {"ok": False, "error": "this voice model needs a voice sample (preset or clone)"}
     t_voice = time.time() - t0
 
     spoken = normalize(text, lang)
-    chunks = plan_chunks(spoken, max_chars=int(_clamp(inp.get("chunk_chars", 280), 120, 400, 280)), pause_scale=pause)
+    default_chars = 360 if ENGINE == "qwen" else 280
+    chunks = plan_chunks(spoken, max_chars=int(_clamp(inp.get("chunk_chars", default_chars), 120, 420, default_chars)), pause_scale=pause)
     if not chunks:
         return {"ok": False, "error": "nothing to read after cleaning the text"}
-    tasks = [{"op": "chunk", "model": model, "voice_key": voice_key, "ref_path": ref_path, "text": c.text,
-              "params": params, "seed": seed + i * 101, "validate": validate, "max_attempts": attempts, "lang": lang}
-             for i, c in enumerate(chunks)]
 
     def on_done(done, total):
         try:
@@ -138,7 +153,21 @@ def tts(inp: dict, job_id: str, progress) -> dict:
 
     POOL.heal()
     t_gen = time.time()
-    results = POOL.run(tasks, on_done)
+    sr = SR
+    if ENGINE == "qwen":
+        # The whole part in one batch (see engine_qwen): one task, per-piece results back.
+        part = POOL.run([{"op": "part", "voice_key": voice_key, "ref_path": ref_path, "ref_text": voice.get("text"),
+                          "texts": [c.text for c in chunks], "params": params, "seed": seed, "validate": validate,
+                          "max_attempts": attempts, "lang": lang}], on_done)[0]
+        sr = part["sr"]
+        share = part["gen_seconds"] / max(1, len(chunks))
+        results = [{"wav": w, "check": c, "attempts": a, "gen_seconds": share}
+                   for w, c, a in zip(part["wavs"], part["checks"], part["attempts"])]
+    else:
+        tasks = [{"op": "chunk", "model": model, "voice_key": voice_key, "ref_path": ref_path, "text": c.text,
+                  "params": params, "seed": seed + i * 101, "validate": validate, "max_attempts": attempts, "lang": lang}
+                 for i, c in enumerate(chunks)]
+        results = POOL.run(tasks, on_done)
     t_gen = time.time() - t_gen
 
     rng = random.Random(seed)
@@ -148,10 +177,10 @@ def tts(inp: dict, job_id: str, progress) -> dict:
         if i == len(chunks) - 1 and inp.get("tail_pause") is not None:
             gap = _clamp(inp.get("tail_pause"), 0.0, 3.0, gap)
         pieces.append((r["wav"], gap))
-    track = audio.stitch(pieces, SR)
+    track = audio.stitch(pieces, sr)
 
     out_path = audio.temp_path("." + fmt)
-    fin = audio.finish(track, SR, out_path, fmt=fmt, speed=speed)
+    fin = audio.finish(track, sr, out_path, fmt=fmt, speed=speed)
     answer = {
         "ok": True, "format": fmt, "seconds": fin["seconds"], "bytes": fin["bytes"], "model": model,
         "language": lang, "voice_key": voice_key.split(":")[0], "chunks": len(chunks),
@@ -166,7 +195,7 @@ def tts(inp: dict, job_id: str, progress) -> dict:
     if inp.get("analyze"):
         answer["heard"] = [r["check"].get("heard") for r in results]
         answer["texts"] = [c.text for c in chunks]
-        answer["f0_hz"] = audio.f0_median(track, SR)
+        answer["f0_hz"] = audio.f0_median(track, sr)
         if ref_path:
             sim = POOL.run([{"op": "similarity", "model": model, "ref_path": ref_path, "wav": track}])[0]
             answer["similarity"] = sim.get("similarity")

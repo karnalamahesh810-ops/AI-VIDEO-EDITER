@@ -69,3 +69,48 @@ jobs:
           echo "### TTS image built" >> $GITHUB_STEP_SUMMARY
           echo "\`${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:tts-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           df -h / >> $GITHUB_STEP_SUMMARY
+
+  # The Qwen3-TTS engine (the bake-off winner, 2026-10-07): same handler, tts/Dockerfile.qwen.
+  build-qwen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/local/share/powershell /usr/share/swift /opt/microsoft || true
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase image name
+        id: img
+        run: echo "name=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./tts
+          file: ./tts/Dockerfile.qwen
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:tts-qwen-latest
+            ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:tts-qwen-${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:tts-qwen-latest
+          cache-to: type=inline

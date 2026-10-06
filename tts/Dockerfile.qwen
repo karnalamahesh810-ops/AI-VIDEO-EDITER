@@ -1,0 +1,43 @@
+# ThumbGenius voice - RunPod serverless GPU worker, Qwen3-TTS engine
+# (Qwen/Qwen3-TTS-12Hz-1.7B-Base, Apache-2.0; Whisper large-v3-turbo, MIT, for transcripts and the
+# read-back check). Same handler and contract as the Chatterbox image (Dockerfile); TTS_ENGINE=qwen.
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HUB_DISABLE_XET=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    TQDM_DISABLE=1 \
+    TOKENIZERS_PARALLELISM=false \
+    TTS_MODELS_DIR=/models \
+    TTS_ENGINE=qwen \
+    TTS_DEFAULT_MODEL=qwen \
+    TTS_REPLICAS=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Weights first (own layers): ~4.5 GB Qwen3-TTS (with its speech tokenizer) + 1.6 GB Whisper turbo.
+RUN pip install "huggingface_hub>=0.34,<1.0"
+COPY download_models.py ./
+RUN python download_models.py qwen
+RUN python download_models.py asr-turbo
+
+COPY requirements.qwen.txt constraints.txt ./
+RUN pip install -c constraints.txt torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124 \
+    && pip install -c constraints.txt -r requirements.qwen.txt \
+    && pip install --no-deps -c constraints.txt qwen-tts==0.1.1 \
+    && python -c "import torch, transformers, librosa, runpod; from qwen_tts import Qwen3TTSModel; \
+print('torch', torch.__version__, 'transformers', transformers.__version__, 'imports ok')"
+
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
+COPY *.py ./
+COPY tests/ tests/
+RUN python -m unittest discover -s tests -t . -v
+
+CMD ["python", "-u", "/app/handler.py"]
