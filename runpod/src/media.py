@@ -4459,7 +4459,32 @@ def _asset_ok(asset) -> tuple:
     elif asset.kind == "video":
         got = _sharpness.clip_check(path, archive=archive, need=_period_lines() if period else None)
         why = "" if got["ok"] else got["why"]
+        if not why and period:
+            # Taken as the era's own video: the scene says so (semanticMetadata.scoreParts.period), so the
+            # check before the render holds it to the same floor (quality.Gate._soft_scenes, period_need).
+            asset.score_parts = dict(asset.score_parts or {}, period=True)
     return (False, why) if why else (True, "")
+
+
+def period_need(sem: Optional[dict]) -> Optional[float]:
+    """
+    The real-detail floor a placed clip is held to before the render: PERIOD_REAL_LINES for a clip taken as
+    the era's own video (scoreParts.period, or - PERIOD_FOOTAGE_YEARS on - a line about a year long past),
+    None (the modern floor) for every other. The Obama render of 2026-10-07 swapped two such clips the
+    re-clip had placed for pictures, as "low detail".
+    """
+    sem = sem if isinstance(sem, dict) else {}
+    parts = sem.get("scoreParts") if isinstance(sem.get("scoreParts"), dict) else {}
+    if parts.get("period"):
+        return float(getattr(config, "PERIOD_REAL_LINES", 400) or 400)
+    si = sem.get("sceneIntent") if isinstance(sem.get("sceneIntent"), dict) else None
+    if si is None:
+        return None
+    token = _SCENE_INTENT.set(si)
+    try:
+        return _period_lines()
+    finally:
+        _SCENE_INTENT.reset(token)
 
 
 _ARCHIVE_TITLE_RE = re.compile(r"\b(newsreel|archive|archival|pathe|path\u00e9|periscope|movietone|travelogue|"

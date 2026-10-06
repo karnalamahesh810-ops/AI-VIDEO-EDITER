@@ -617,5 +617,19 @@ class PeriodQuality(unittest.TestCase):
         self.assertEqual(media._flags_of(v), "quality 0.20")
 
 
+class PeriodClipsBeforeTheRender(unittest.TestCase):
+    """The check before the render holds a clip taken as its era's own video to that era's floor (the Obama
+    render of 2026-10-07 swapped two of them for pictures as "low detail")."""
+
+    def test_the_floor_follows_the_scene(self):
+        self.assertEqual(media.period_need({"scoreParts": {"period": True}}), float(config.PERIOD_REAL_LINES))
+        sem = {"sceneIntent": {"time_context": "2016"}}
+        self.assertIsNone(media.period_need(sem))                                  # off by default
+        with mock.patch.multiple(config, PERIOD_FOOTAGE_YEARS=8):
+            self.assertEqual(media.period_need(sem), float(config.PERIOD_REAL_LINES))
+            self.assertIsNone(media.period_need({"sceneIntent": {"time_context": "unknown"}}))
+        self.assertIsNone(media.period_need({}))
+
+
 if __name__ == "__main__":
     unittest.main()

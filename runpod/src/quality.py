@@ -1632,7 +1632,8 @@ class Gate:
                 got = checks.get(url)
                 if got is not None and not got.ok:
                     continue                # broken: _replace's business
-                todo.append((i, "video", local_path(url) or _probe_source(url), None))
+                # (A clip taken as its era's own video is held to that era's floor: media.period_need.)
+                todo.append((i, "video", local_path(url) or _probe_source(url), media.period_need(sem)))
         if not todo:
             return {}
 
@@ -1642,7 +1643,7 @@ class Gate:
                 got = sharpness.picture_check(src, zoom=zoom)
                 return i, ({"kind": "image", "why": got["why"], "before": got["magnification"],
                             "detail": got["detail"], "zoom": zoom} if not got["ok"] else None)
-            got = sharpness.clip_check(src)
+            got = sharpness.clip_check(src, need=zoom)          # (for a clip: its floor, None = the modern one)
             return i, ({"kind": "video", "why": got["why"], "before": got["lines"], "detail": got["detail"]}
                        if not got["ok"] else None)
 
