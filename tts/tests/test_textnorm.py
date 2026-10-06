@@ -42,6 +42,12 @@ class Normalize(unittest.TestCase):
         self.assertIn("one thousand fifty feet", self.n("The lake dropped to 1,050 feet."))
         self.assertIn("one thousand fifty feet", self.n("The lake dropped to 1050 feet."))
 
+    def test_round_hundreds_read_like_a_narrator(self):
+        self.assertIn("twelve hundred acre-feet", self.n("It lost 1,200 acre-feet a day."))
+        self.assertIn("one thousand fifty feet", self.n("The lake dropped to 1,050 feet."))
+        self.assertIn("two thousand people", self.n("About 2,000 people left."))
+        self.assertIn("twenty twenty-six", self.n("By 2026 the cuts begin."))
+
     def test_years_in_text(self):
         self.assertEqual(self.n("In 1987, the dam opened."), "In nineteen eighty-seven, the dam opened.")
         self.assertEqual(self.n("By 2030 it may be gone."), "By twenty thirty it may be gone.")

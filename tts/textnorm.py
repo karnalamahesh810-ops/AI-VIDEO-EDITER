@@ -288,12 +288,21 @@ def _initialism(m: re.Match) -> str:
     return " ".join(ch for ch in m.group(1) if ch.isalpha())
 
 
+def hundreds_words(n: int) -> Optional[str]:
+    """1200 -> 'twelve hundred': how American narrators say round hundreds from 1,100 to 9,900."""
+    if 1100 <= n <= 9900 and n % 100 == 0 and n % 1000 != 0:
+        return _under_100(n // 100) + " hundred"
+    return None
+
+
 def _bare_number(text: str, start: int, end: int, raw: str) -> str:
     """A number with nothing special around it: a year or a quantity."""
     plain = raw.replace(",", "")
     if "." in plain:
         return decimal_words(raw)
     n = int(plain)
+    if "," in raw and hundreds_words(n):
+        return hundreds_words(n)
     if "," not in raw and len(plain) == 4 and 1100 <= n <= 2099:
         after = re.match(r"\s*([A-Za-z][A-Za-z\-]*)", text[end:])
         nxt = after.group(1).lower() if after else ""
