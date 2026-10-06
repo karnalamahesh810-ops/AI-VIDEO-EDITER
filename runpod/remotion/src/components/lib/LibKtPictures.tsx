@@ -1,5 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Img, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import { SafeImg } from "../motion/safePicture";
 import type { Overlay, SceneMedia } from "../../types";
 import { GROTESK, GROTESK_CAP } from "../fonts";
 import { backOut, clamp01, cubicIn, cubicInOut, cubicOut, expoOut, idle, lerp, prog, sineInOut } from "../motion/ease";
@@ -125,7 +126,7 @@ const Evidence: Look = ({ overlay, accent }) => {
             boxShadow: `0 ${(2 * k).toFixed(1)}px ${(6 * k).toFixed(1)}px rgba(0,0,0,0.35)` }} />
           <div style={{ position: "absolute", left: border, top: border, width: photoW, height: photoH, overflow: "hidden",
             background: "#14161b" }}>
-            <Img src={pic.url} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "saturate(0.9) contrast(1.05)",
+            <SafeImg src={pic.url} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "saturate(0.9) contrast(1.05)",
               transform: `scale(${(1.02 + 0.03 * hold).toFixed(4)})` }} />
             {/* the print's gloss: one light sweep on landing */}
             {glint > 0 && glint < 1 ? (
@@ -255,7 +256,7 @@ const ThenNow: Look = ({ overlay, accent }) => {
     return (
       <AbsoluteFill style={{ background: "#07090c" }}>
         <AbsoluteFill style={{ overflow: "hidden" }}>
-          <Img src={pics[0].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})` }} />
+          <SafeImg src={pics[0].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})` }} />
         </AbsoluteFill>
         <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(4,5,8,0) 62%, rgba(4,5,8,0.42) 100%)",
           opacity: prog(f, 0, 14, S, cubicOut) * xo }} />
@@ -266,11 +267,11 @@ const ThenNow: Look = ({ overlay, accent }) => {
   return (
     <AbsoluteFill style={{ background: "#07090c" }}>
       <AbsoluteFill style={{ overflow: "hidden" }}>
-        <Img src={pics[0].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
+        <SafeImg src={pics[0].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
           filter: "saturate(0.8) contrast(1.04) brightness(0.96)" }} />
       </AbsoluteFill>
       <AbsoluteFill style={{ overflow: "hidden", clipPath: `inset(0 0 0 ${Math.max(0, divX).toFixed(1)}px)` }}>
-        <Img src={pics[1].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})` }} />
+        <SafeImg src={pics[1].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})` }} />
       </AbsoluteFill>
       {/* a soft shade at the top for the chips, at the bottom for the title */}
       <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(4,5,8,0.45) 0%, rgba(4,5,8,0) 26%, rgba(4,5,8,0) 72%, rgba(4,5,8,0.42) 100%)",
@@ -336,7 +337,7 @@ const TwoPlaces: Look = ({ overlay, accent }) => {
     return (
       <AbsoluteFill>
         <AbsoluteFill style={{ overflow: "hidden" }}>
-          <Img src={pics[0].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})` }} />
+          <SafeImg src={pics[0].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})` }} />
         </AbsoluteFill>
         <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(4,5,8,0) 60%, rgba(4,5,8,0.45) 100%)",
           opacity: prog(f, 6, 16, S, cubicOut) * (1 - x) }} />
@@ -381,11 +382,11 @@ const TwoPlaces: Look = ({ overlay, accent }) => {
     <AbsoluteFill>
       {/* (no backdrop: while the two halves slide in, the softened footage shows between them) */}
       <AbsoluteFill style={{ clipPath: clipA, transform: `translateX(${offA.toFixed(1)}px)` }}>
-        <Img src={pics[0].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
+        <SafeImg src={pics[0].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
           transformOrigin: "30% 50%" }} />
       </AbsoluteFill>
       <AbsoluteFill style={{ clipPath: clipB, transform: `translateX(${offB.toFixed(1)}px)` }}>
-        <Img src={pics[1].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
+        <SafeImg src={pics[1].url} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${push})`,
           transformOrigin: "70% 50%" }} />
       </AbsoluteFill>
       <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(4,5,8,0) 55%, rgba(4,5,8,0.5) 100%)",
