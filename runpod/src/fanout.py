@@ -1630,6 +1630,15 @@ def _pod_cancel(job_id: str) -> None:
         pass
 
 
+def _ran_seconds(st: Optional[dict]) -> float:
+    """How long RunPod says a finished worker job ran (its status's executionTime, ms), in seconds; 0 if unsaid."""
+    try:
+        ms = float((st or {}).get("executionTime") or 0.0)
+    except (TypeError, ValueError, AttributeError):
+        return 0.0
+    return ms / 1000.0 if math.isfinite(ms) and ms > 0 else 0.0
+
+
 class _Chunk:
     """One frame range of a spread render and who is drawing it."""
 
@@ -1692,8 +1701,39 @@ class _PodRender:
         # or that no worker took, is a break of the machines: render_pod
         # returns False and the whole video renders on one machine, as before.
         self.content = False
+        # The worker jobs already put into this job's cost ledger (_bill), and their seconds.
+        self.billed: set = set()
+        self.worker_seconds = 0.0
 
     # ---- worker jobs
+    def _bill(self, c: _Chunk, st: Optional[dict] = None, out: Any = None) -> None:
+        """
+        What chunk c's worker job cost, into this job's cost ledger (src/costs.py),
+        once (caller holds the lock): the chunk's own summary (out["costs"]) and
+        how long RunPod says its job ran (executionTime) - or, for a job dropped
+        while it ran (cancelled: the pod drew the chunk first, the worker took
+        too long, the spread render ended), from when it was seen starting until
+        now. A job that never started cost nothing. The render's helper workers
+        were missing from the ledger: on a long video they cost as much as the
+        machine that sent them their chunks.
+        """
+        jid = c.job
+        if not jid or jid in self.billed:
+            return
+        self.billed.add(jid)
+        child = out.get("costs") if isinstance(out, dict) and isinstance(out.get("costs"), dict) else None
+        seconds = _ran_seconds(st)
+        if not seconds and c.started_at:
+            seconds = max(0.0, time.time() - c.started_at)      # RunPod did not say: from when it was seen running
+        if child is None and seconds <= 0:
+            return
+        costs.absorb(child, billed_seconds=seconds)
+        try:
+            own = float((child or {}).get("worker_seconds") or 0.0)
+        except (TypeError, ValueError):
+            own = 0.0
+        self.worker_seconds += max(seconds, own)
+
     def _payload(self, c: _Chunk) -> dict:
         body = {"input": {"action": "render_chunk", "upload": "r2", "parent_job_id": self.job_id,
                           "chunk": c.i, "frames": [c.a, c.b], "timeline_key": self.tl_key,
@@ -1727,6 +1767,7 @@ class _PodRender:
         """No worker will deliver this chunk (caller holds the lock)."""
         if c.job:
             if cancel:
+                self._bill(c)                 # the time it ran before it was cancelled
                 threading.Thread(target=_pod_cancel, args=(c.job,), daemon=True).start()
             else:
                 _unregister(c.job)
@@ -1779,6 +1820,7 @@ class _PodRender:
                         self.counts["timedOut"] += 1
                         self._drop_worker(c, "the worker took too long")
                 elif state == "COMPLETED":
+                    self._bill(c, st, out)          # a chunk the worker could not draw was billed too
                     if isinstance(out, dict) and out.get("ok") and out.get("video_key") and out.get("audio_key"):
                         c.fetching = True
                         c.keys = [str(out["video_key"]), str(out["audio_key"])]
@@ -1794,6 +1836,7 @@ class _PodRender:
                             continue
                         self._drop_worker(c, f"the worker could not render it ({_plain(err, 300)})", cancel=False)
                 elif state in ("FAILED", "CANCELLED", "TIMED_OUT"):
+                    self._bill(c, st, out)
                     self.counts["workerFailed"] += 1
                     err = (out.get("error") if isinstance(out, dict) else out) or st.get("error") or state
                     self._drop_worker(c, f"worker job {state.lower()} ({_plain(err, 300)})", cancel=False)
@@ -2013,6 +2056,8 @@ class _PodRender:
         return {"chunks": len(self.chunks), "onWorkers": sum(1 for c in self.chunks if c.source == "worker"),
                 "onPod": sum(1 for c in self.chunks if c.source == "pod"), **self.counts,
                 "podFps": round(self.local_fps, 1), "seconds": round(time.time() - self.started, 1),
+                # The helper workers' time, as billed into the job's cost ledger (_bill).
+                "workerSeconds": round(self.worker_seconds, 1),
                 "errors": list(self.errors[:6])}
 
     # ---- joining

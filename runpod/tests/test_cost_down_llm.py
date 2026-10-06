@@ -86,7 +86,8 @@ class PlanningCallsMeasured(_Director):
         self.assertAlmostEqual(costs.summary(1.0)["units"]["llm.usd"], 0.0412)
 
     def test_vision_and_planning_are_measured_apart(self):
-        costs.record("vision.usd", 0.30)
+        for _ in range(10):                                            # ten judged calls, each priced
+            costs.record("vision.usd", 0.03)
         costs.record("vision.judge", 10)
         self.ask(usage=USAGE)
         s = costs.summary(1.0)
