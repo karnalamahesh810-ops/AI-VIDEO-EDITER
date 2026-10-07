@@ -31,3 +31,12 @@ os.environ.setdefault("CLIP_SHARPNESS_CHECK", "0")
 # candidate, which an unmocked sourcing test would run against YouTube. Off
 # here; tests/test_clips_first.py switches it on around its own stubs.
 os.environ.setdefault("CLIP_PREQUALIFY", "0")
+# Vision's base when nothing names one is OpenRouter since Kie was turned off (2026-10-07), and an OpenRouter
+# base reads the account's balance before it hedges (credit.openrouter_left: a real request). The suite's model
+# calls are mocked: a neutral base keeps it offline, as Kie's old default did. Tests about OpenRouter or Kie set
+# their own base (and KIE_ENABLED for Kie).
+os.environ.setdefault("VISION_API_BASE", "https://vision.invalid/v1")
+# A plan or build refuses to start under OPENROUTER_MIN_CREDIT (handler._require_openrouter_credit): a real request
+# for the balance. Off here; tests/test_cost_quality_2026_10_07.py sets its own floor around a mocked balance.
+os.environ.setdefault("OPENROUTER_MIN_CREDIT", "0")
+os.environ.setdefault("OPENROUTER_MIN_CREDIT_SMALL", "0")

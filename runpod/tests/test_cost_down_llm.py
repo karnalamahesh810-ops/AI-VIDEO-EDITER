@@ -99,7 +99,8 @@ class KieUnchanged(_Director):
     base = KIE
 
     def test_another_provider_gets_the_request_it_always_got(self):
-        with mock.patch.object(config, "DIRECTOR_MODEL", "gemini-3-pro"):
+        # Kie is off by default since 2026-10-07 (config.KIE_ENABLED); turned on, it gets what it always got.
+        with mock.patch.object(config, "DIRECTOR_MODEL", "gemini-3-pro"),                 mock.patch.object(config, "KIE_ENABLED", True):
             self.ask()
         url, body = self.sent[0]
         self.assertEqual(set(body), {"model", "messages", "response_format"})

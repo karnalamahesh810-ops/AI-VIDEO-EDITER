@@ -10,7 +10,9 @@ class HedgedDirectorCalls(unittest.TestCase):
 
     def setUp(self):
         vision.reset()
-        self.patches = [mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"),
+        # Kie is off by default since 2026-10-07 (config.KIE_ENABLED): these hedging tests keep its address.
+        self.patches = [mock.patch.object(config, "KIE_ENABLED", True),
+                        mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"),
                         mock.patch.object(config, "DIRECTOR_API_KEY", "k"),
                         mock.patch.object(config, "DIRECTOR_MODEL", "slow"),
                         mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", ["fast"]),

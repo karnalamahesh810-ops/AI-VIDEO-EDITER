@@ -87,7 +87,7 @@ import threading
 import time
 import traceback
 import uuid
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import runpod
 
@@ -394,8 +394,8 @@ def _kie_credit() -> float:
     """
     base = (config.DIRECTOR_API_BASE or "") + (config.VISION_API_BASE or "")
     key = config.DIRECTOR_API_KEY or config.VISION_API_KEY
-    if "kie.ai" not in base or not key:
-        return float("inf")
+    if "kie.ai" not in base or not key or not config.KIE_ENABLED:
+        return float("inf")             # not Kie - or Kie, which is off for good (never asked)
     try:
         import requests
         r = requests.get("https://api.kie.ai/api/v1/chat/credit",
@@ -423,6 +423,28 @@ def _require_ai_credit() -> None:
             f"The AI account (Kie) is out of credit (balance {credit:.2f}). Without it the "
             "director cannot read the story and nothing checks the clips, so the video "
             "would be random footage. Top up at kie.ai, then run this again.")
+
+
+def _require_openrouter_credit(floor: Optional[float] = None) -> None:
+    """
+    Refuse to start with less on the OpenRouter account (the director and vision since 2026-10-02) than a
+    video needs (OPENROUTER_MIN_CREDIT; `floor` for a smaller job). The Yellowstone build of 2026-10-07 ran it
+    dry mid-way: 109 of 253 lines planned without the model, 152 of 182 clips never judged, thousands of
+    refused calls - a video nobody would publish, and its RunPod time paid all the same. An unknown balance
+    (no OpenRouter key, the endpoint not answering) never blocks a job.
+    """
+    need = float(config.OPENROUTER_MIN_CREDIT if floor is None else floor)
+    if need <= 0:
+        return
+    from src import credit as _credit
+    if not _credit.uses_openrouter():
+        return
+    left = _credit.openrouter_left(max_age=0)
+    if left is not None and left < need:
+        raise RuntimeError(
+            f"The OpenRouter account has ${left:.2f} left; a video needs about ${need:.2f} of planning and "
+            "clip checks. Without it the director cannot read the story and nothing checks the clips, so "
+            "the video would be random footage. Top up at openrouter.ai, then run this again. Nothing was spent.")
 
 
 def _require_youtube(quick: bool = False) -> None:
@@ -1209,8 +1231,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         for j in jobs:
             j["visual_type"] = "footage"
 
-    def local(some_jobs, exclude, seqs=None, progress=True):
-        """Source some jobs on this worker; results aligned to their order."""
+    def local(some_jobs, exclude, seqs=None, progress=True, single=False):
+        """Source some jobs on this worker; results aligned to their order. `single`: the whole video on this
+        one machine (no parts): pass 1 gets its time by the line count (SINGLE_PASS1_PER_SCENE)."""
         ordered_jobs = sorted(some_jobs, key=lambda j: j["index"])
         re_index = {j["index"]: k for k, j in enumerate(ordered_jobs)}
         local_jobs = [dict(j, index=re_index[j["index"]]) for j in ordered_jobs]
@@ -1240,6 +1263,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             sequences=local_seqs or None,
             assign=lambda lines, pool: director.assign_shots(lines, pool, story=brief),
             on_pool=on_pool if progress else None,
+            pass1_per_scene=config.SINGLE_PASS1_PER_SCENE if single else None,
             exclude=exclude, **{k: v for k, v in flags.items() if k != "youtube_only"})
 
     project_id = inp.get("project_id") or ""
@@ -1252,8 +1276,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Clips kept from earlier videos about the same subjects come first.
     # One sourcing budget for the whole job (every worker shares it).
     from src import ytdlp as _ytdlp_mod
-    _ytdlp_mod.set_deadline(time.time() + fanout.source_budget(len(jobs)))
-    print(f"[worker] sourcing budget {fanout.source_budget(len(jobs)):.0f}s for {len(jobs)} scenes", flush=True)
+    # One machine per build unless BUILD_FANOUT: its sourcing deadline covers a pass 1 sized by the line count.
+    budget_s = (fanout.source_budget(len(jobs)) if fanout.enabled_for(len(jobs), project_id or "")
+                else fanout.single_machine_deadline(len(jobs)))
+    _ytdlp_mod.set_deadline(time.time() + budget_s)
+    print(f"[worker] sourcing budget {budget_s:.0f}s for {len(jobs)} scenes"
+          f"{'' if fanout.enabled_for(len(jobs), project_id or '') else ' on this one machine'}", flush=True)
     lib = library.Library.load(project_id, (report.job or {}).get("id", ""),
                                inp.get("media_bucket") or config.MEDIA_BUCKET)
     LAST_LIBRARY["lib"] = lib
@@ -1311,7 +1339,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         for j in rest:
             assets[j["index"]] = got[j["index"]] if j["index"] < len(got) else None
     elif rest:
-        got = local(rest, set(taken), seqs=sequences)
+        got = local(rest, set(taken), seqs=sequences, single=True)
         for j, a in zip(sorted(rest, key=lambda j: j["index"]), got):
             assets[j["index"]] = a
     # Lines the per-scene path left empty, or filled with a clip already on the
@@ -2780,7 +2808,13 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # A past era's broadcast video (off by default; the owner's 720p rule) and a re-clip's
                       # narrower searches (src/reclip.py RECLIP_CONFIG).
                       "PERIOD_FOOTAGE_YEARS", "PERIOD_MIN_HEIGHT", "PERIOD_REAL_LINES", "SCENE_SECONDS_MAX",
-                      "SCENE_SECONDS_MIN")
+                      "SCENE_SECONDS_MIN",
+                      # The cost and quality pass (2026-10-07): storyboard sheets as several images, compact tile
+                      # answers, the two-strike video memory, one machine per build (BUILD_FANOUT 1 = the old
+                      # parts) and its pass-1 time - each can be A/B'd on one job.
+                      "VISION_SHEET_IMAGES", "VISION_COMPACT_TILES", "JUDGE_MEMORY_VIDEO_STRIKES", "BUILD_FANOUT",
+                      "VISION_NEWS_OVERLAYS_OK",
+                      "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS")
 
 
 def _apply_config(overrides) -> dict:
@@ -2868,6 +2902,7 @@ def do_recut(inp: dict, work: str, report: Reporter) -> dict:
     def ready() -> None:
         # The same refusals as a plan: no AI credit (nothing would judge the new shots), no YouTube.
         _require_ai_credit()
+        _require_openrouter_credit(config.OPENROUTER_MIN_CREDIT_SMALL)
         if inp.get("allow_youtube") is not False:
             report("Checking the YouTube connection", 3)
             _require_youtube()
@@ -2924,6 +2959,7 @@ def do_reclip(inp: dict, work: str, report: Reporter) -> dict:
     def ready() -> None:
         # The same refusals as a plan: no AI credit (nothing would judge the new clips), no YouTube.
         _require_ai_credit()
+        _require_openrouter_credit(config.OPENROUTER_MIN_CREDIT_SMALL)
         if inp.get("allow_youtube") is not False:
             report("Checking the YouTube connection", 3)
             _require_youtube()
@@ -3240,6 +3276,9 @@ def handler(job):
                     "storage": store,
                     "readyToRender": store.get("ok", False),
                     "parallelWorkers": fanout.readiness(config.FANOUT_MIN_SCENES),
+                    # One machine per build unless BUILD_FANOUT (renders still spread: parallelWorkers);
+                    # Kie is never called unless KIE_ENABLED (2026-10-07).
+                    "buildFanout": bool(config.BUILD_FANOUT), "kieEnabled": bool(config.KIE_ENABLED),
                     # A pod's render spread over these workers (POD_RENDER_FANOUT) and the
                     # renderer version a chunk must match (render.renderer_fingerprint).
                     "podRender": fanout.pod_render_ready(),
@@ -3288,6 +3327,8 @@ def handler(job):
 
         if action in ("plan", "build", "resource"):
             _require_ai_credit()
+            # A scene's new shot (resource) needs cents, a whole video dollars (OPENROUTER_MIN_CREDIT).
+            _require_openrouter_credit(config.OPENROUTER_MIN_CREDIT_SMALL if action == "resource" else None)
             if inp.get("allow_youtube") is not False:
                 report("Checking the YouTube connection", 2)
                 _require_youtube()
