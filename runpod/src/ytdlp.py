@@ -690,6 +690,87 @@ def fit_start(start_at: float, seconds: float, duration: float) -> float:
     return start_at
 
 
+def _fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float) -> List[str]:
+    """The section download's yt-dlp command, before its network arguments."""
+    return [
+        "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
+        "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
+        "--force-keyframes-at-cuts",
+        # Direct https formats first: HLS sections go through ffmpeg's HLS
+        # demuxer and its connection reuse (see _HLS_REUSE).
+        "-f", (_VERTICAL_FIRST if config.ALLOW_VERTICAL else "")
+        + ("bv*[height<=1080][ext=mp4][protocol^=https]/bv*[height<=1080][ext=mp4]"
+           "/bv*[height<=1080]/b[height<=1080]"),
+        *best_bitrate(),
+        "--no-playlist", "--no-warnings",
+        "--merge-output-format", "mp4",
+        "-o", out_tpl, "--print", "after_move:filepath",
+        # The video's length and the format taken, printed before the download
+        # starts (so a failed one still says them): see _dlinfo.
+        "--print", "before_dl:DLINFO %(duration)s|%(format_id)s",
+    ]
+
+
+def probe_download(video_id: str = "ka2S39HhLsM", start: float = 30.0, seconds: float = 3.0,
+                   which: str = "all") -> List[dict]:
+    """
+    A real section download per route, made exactly as _yt_fetch makes one:
+    the metadata probe (probe_youtube) passes on addresses whose streams
+    YouTube still refuses, and the direct route was never tried this way.
+    `which`: "all" (direct and every proxy), "direct" or "proxies". Routes by
+    name only - a proxy URL carries credentials; the files are deleted. Three
+    at a time, behind the job's network slots.
+    """
+    import shutil
+    import tempfile
+    routes = []
+    if which in ("all", "direct"):
+        routes.append(("direct", ""))
+    if which in ("all", "proxies"):
+        routes += [(f"proxy#{i + 1}", p) for i, p in enumerate(config.YTDLP_PROXIES)]
+
+    def one(route):
+        name, proxy = route
+        d = tempfile.mkdtemp(prefix="probe_dl_")
+        cmd = _fetch_cmd(video_id, os.path.join(d, "probe.%(ext)s"), start, seconds) + _yt_network_args(proxy)
+        t = time.time()
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=180)
+            rc, out, err = p.returncode, p.stdout or "", p.stderr or ""
+        except subprocess.TimeoutExpired:
+            rc, out, err = -9, "", "timed out"
+        files = [os.path.join(d, f) for f in os.listdir(d) if f.endswith(".mp4")]
+        ok = rc == 0 and bool(files) and playable_video(files[0])
+        size = os.path.getsize(files[0]) if files else 0
+        shutil.rmtree(d, ignore_errors=True)
+        _dur, fmt = _dlinfo(out)
+        row = {"route": name, "ok": ok, "seconds": round(time.time() - t, 1), "kb": size // 1024,
+               "format": fmt}
+        if not ok:
+            cls = classify_ytdlp(err, rc, timed_out=(rc == -9), empty=(rc == 0))
+            # Never echo anything that could contain the proxy URL.
+            row["why"] = f"{cls.value}: " + re.sub(r"https?://\S+", "<url>", ytdlp_reason(err, 100))
+        return row
+
+    def guarded(route):
+        with _NET_SEM:
+            return one(route)
+
+    with ThreadPoolExecutor(max_workers=max(1, min(3, len(routes)))) as ex:
+        return list(ex.map(guarded, routes))
+
+
+def direct_exit() -> dict:
+    """Where this worker's own traffic leaves from (country / network), for the direct route."""
+    try:
+        j = requests.get("https://ipinfo.io/json", timeout=10).json()
+        return {"country": j.get("country"), "region": j.get("region"), "org": (j.get("org") or "")[:60],
+                "datacenter": os.getenv("RUNPOD_DC_ID", "")}
+    except (requests.RequestException, ValueError) as e:
+        return {"error": type(e).__name__}
+
+
 def _dlinfo(stdout: str) -> tuple:
     """(duration, format id) from the DLINFO line a download prints before it starts."""
     for line in (stdout or "").splitlines():
@@ -715,23 +796,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     # source/time range; yt-dlp otherwise races over one partial output file.
     fetch_id = uuid.uuid4().hex[:10]
     out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}_{fetch_id}.%(ext)s")
-    cmd = [
-        "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
-        "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
-        "--force-keyframes-at-cuts",
-        # Direct https formats first: HLS sections go through ffmpeg's HLS
-        # demuxer and its connection reuse (see _HLS_REUSE).
-        "-f", (_VERTICAL_FIRST if config.ALLOW_VERTICAL else "")
-        + ("bv*[height<=1080][ext=mp4][protocol^=https]/bv*[height<=1080][ext=mp4]"
-           "/bv*[height<=1080]/b[height<=1080]"),
-        *best_bitrate(),
-        "--no-playlist", "--no-warnings",
-        "--merge-output-format", "mp4",
-        "-o", out_tpl, "--print", "after_move:filepath",
-        # The video's length and the format taken, printed before the download
-        # starts (so a failed one still says them): see _dlinfo.
-        "--print", "before_dl:DLINFO %(duration)s|%(format_id)s",
-    ]
+    cmd = _fetch_cmd(video_id, out_tpl, start_at, seconds)
     if _video_unavailable(video_id):
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""

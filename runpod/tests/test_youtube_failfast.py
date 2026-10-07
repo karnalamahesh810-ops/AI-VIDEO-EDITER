@@ -233,5 +233,28 @@ class SectionInsideTheVideo(unittest.TestCase):
             self.assertFalse(ytdlp._video_unavailable("SHORTVID001"))
 
 
+class DownloadProbe(unittest.TestCase):
+    def test_every_route_by_name_and_no_credentials(self):
+        secret = "http://user:pass@isp.example:10001"
+
+        def fake_run(cmd, **kw):
+            out_dir = os.path.dirname(cmd[cmd.index("-o") + 1])
+            if "--proxy" in cmd:
+                return SimpleNamespace(returncode=1, stdout="DLINFO 600|137\n", stderr=(
+                    f"ERROR: [youtube] x: Sign in to confirm you’re not a bot via {secret}" + _ADVICE))
+            with open(os.path.join(out_dir, "probe.mp4"), "wb") as fh:
+                fh.write(b"x" * 4096)
+            return SimpleNamespace(returncode=0, stdout="DLINFO 600|399\n", stderr="")
+        with mock.patch.object(ytdlp.config, "YTDLP_PROXIES", [secret]), \
+                mock.patch.object(ytdlp.subprocess, "run", fake_run), \
+                mock.patch.object(ytdlp, "playable_video", return_value=True):
+            rows = ytdlp.probe_download("ka2S39HhLsM")
+        self.assertEqual([(r["route"], r["ok"], r["format"]) for r in rows],
+                         [("direct", True, "399"), ("proxy#1", False, "137")])
+        self.assertTrue(rows[1]["why"].startswith("BOT_CHECK"))
+        self.assertNotIn("pass", str(rows))
+        self.assertNotIn("isp.example", str(rows))
+
+
 if __name__ == "__main__":
     unittest.main()

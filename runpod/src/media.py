@@ -52,7 +52,7 @@ from .storage import download
 from .filters import (  # noqa: F401
     _STILL_EXTS, _is_still, _video_seconds, _gray_frames, has_burned_captions, _texty_rows, _longest_run, playable_video, clip_quality, _video_dims, _blurry, _corner_watermark, _PTS_RE, scene_cuts, clean_window, trim_clip, tidy_clip)
 from .ytdlp import (  # noqa: F401
-    _PROXIES, PROXY_MANAGER, _UNAVAILABLE_VIDEOS, _DENIED_ON, _FAIL_LOCK, _LAST_FAILURE, _NET_SEM, _next_proxy, _acquire_proxy, _release_proxy, _proxy_index, proxy_snapshot, _note_failure, _video_unavailable, pot_provider_alive, pot_provider_log, probe_youtube, _bench_proxy, _yt_network_args, BLOCK_SIGNS, BOT_CHECK, looks_blocked, _YT_THIS_YEAR, _yt_candidates, _yt_info, _yt_fetch)
+    _PROXIES, PROXY_MANAGER, _UNAVAILABLE_VIDEOS, _DENIED_ON, _FAIL_LOCK, _LAST_FAILURE, _NET_SEM, _next_proxy, _acquire_proxy, _release_proxy, _proxy_index, proxy_snapshot, _note_failure, _video_unavailable, pot_provider_alive, pot_provider_log, probe_youtube, probe_download, direct_exit, _bench_proxy, _yt_network_args, BLOCK_SIGNS, BOT_CHECK, looks_blocked, _YT_THIS_YEAR, _yt_candidates, _yt_info, _yt_fetch)
 from . import ytdlp as _ytdlp  # noqa: F401
 from . import filters as _filters  # noqa: F401
 

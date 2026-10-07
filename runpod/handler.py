@@ -3253,6 +3253,14 @@ def handler(job):
                     # Real download check per route: {"probe_youtube": true}.
                     "proxies": media.proxy_snapshot(),
                     **({"youtube": media.probe_youtube()} if inp.get("probe_youtube") else {}),
+                    # A real section download per route, the way sourcing makes one (the metadata probe
+                    # passes on addresses whose streams are refused): {"probe_download": "all" | "direct" |
+                    # "proxies"}, optionally {"probe_video": id}. With where the direct route leaves from.
+                    **({"youtubeDownload": media.probe_download(
+                        str(inp.get("probe_video") or "ka2S39HhLsM"),
+                        which=str(inp.get("probe_download")) if inp.get("probe_download") in (
+                            "all", "direct", "proxies") else "all"),
+                        "directExit": media.direct_exit()} if inp.get("probe_download") else {}),
                     # One real model call, so only on request: {"probe": true}.
                     **({"vision": vision.probe()} if inp.get("probe") else {})}
 
