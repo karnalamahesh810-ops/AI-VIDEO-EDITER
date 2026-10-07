@@ -1,0 +1,5 @@
+{
+ "version": 1,
+ "note": "Kits are not shipped in this public repository. The worker reads them from PRESENTER_KITS_URL (an https JSON catalogue), PRESENTER_KITS_FILE (a local path), or the job's own presenter_kit (src/presenter/kits.py).",
+ "kits": []
+}

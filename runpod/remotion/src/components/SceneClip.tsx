@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  AbsoluteFill, OffthreadVideo,
+  AbsoluteFill, OffthreadVideo, Video,
   useCurrentFrame, useVideoConfig,
 } from "remotion";
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
@@ -12,6 +12,16 @@ import { LivingPicture, StillPicture, TransitionFrame, resolveLiving } from "../
 import { reframeStyle, resolveAim, resolveMove } from "./reframe";
 import { BlurredHold, SafeImg } from "./motion/safePicture";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
+
+/**
+ * A scene's clip: Remotion's OffthreadVideo (frame-exact, decoded by Remotion's own compositor), or with
+ * `html5` the browser's own video element - for a machine whose security blocks Remotion's unsigned compositor
+ * (Windows Smart App Control on the owner's laptop, 2026-10-07). Sound always off: the narration is the sound.
+ */
+const ClipVideo: React.FC<{ src: string; style?: React.CSSProperties; playbackRate?: number; html5?: boolean }> = (
+  { src, style, playbackRate, html5 }) => (html5
+  ? <Video src={src} style={style} muted playbackRate={playbackRate} />
+  : <OffthreadVideo src={src} style={style} muted playbackRate={playbackRate} />);
 
 /**
  * One visual for one spoken clause.
@@ -105,6 +115,35 @@ export const SceneClip: React.FC<{
     filter: filters || undefined,
   };
 
+  const split = media.split;
+  if (scene.frame === "split" && media.type === "video" && split && split.url) {
+    // The AI presenter style's split screen (the owner's reference channels: about a third of the
+    // presenter's appearances): the presenter on the left, cropped on the face (focusX), the line's own
+    // picture on the right with its slow move. Both full height, no border; the seam is the cut.
+    const half: React.CSSProperties = { position: "relative", width: "50%", height: "100%", overflow: "hidden" };
+    return (
+      <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
+        <AbsoluteFill style={{ backgroundColor: "#000", flexDirection: "row" }}>
+          {grade?.defs}
+          <div style={half}>
+            <ClipVideo src={media.url} playbackRate={rate} html5={media.html5}
+              style={{ ...fill, objectPosition: `${split.focusX ?? 50}% 50%` }} />
+          </div>
+          <div style={half}>
+            {split.type === "video" ? (
+              <ClipVideo src={split.url} style={fill} html5={split.html5} />
+            ) : (
+              <StillPicture src={split.url} motion={split.motion || "zoom-in"} frame={frame}
+                durationInFrames={durationInFrames} fps={fps} width={width / 2} filter={filters || undefined}
+                fallbackStill={holdStill} />
+            )}
+          </div>
+        </AbsoluteFill>
+        <TransitionLayer transition={transition} />
+      </TransitionFrame>
+    );
+  }
+
   if (scene.frame === "window") {
     // The case-file look: the footage plays inside a player window on the
     // desk (a recording, an interview, archive film shown as footage).
@@ -118,7 +157,7 @@ export const SceneClip: React.FC<{
           <PlayerWindow tone={tone} seed={scene.startFrame % 7}
             title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
             {media.type === "video" ? (
-              <OffthreadVideo src={media.url} style={media100} muted playbackRate={rate} />
+              <ClipVideo src={media.url} style={media100} playbackRate={rate} html5={media.html5} />
             ) : (
               <SafeImg src={media.url} style={media100} fallback={hold} />
             )}
@@ -170,7 +209,7 @@ export const SceneClip: React.FC<{
             }}
           >
             {media.type === "video" ? (
-              <OffthreadVideo src={media.url} style={inset} muted playbackRate={rate} />
+              <ClipVideo src={media.url} style={inset} playbackRate={rate} html5={media.html5} />
             ) : (
               <SafeImg src={media.url} style={inset} fallback={hold} />
             )}
@@ -206,10 +245,10 @@ export const SceneClip: React.FC<{
           {media.type === "video" ? (
             moved ? (
               <AbsoluteFill style={moved}>
-                <OffthreadVideo src={media.url} style={fill} muted playbackRate={rate} />
+                <ClipVideo src={media.url} style={fill} playbackRate={rate} html5={media.html5} />
               </AbsoluteFill>
             ) : (
-              <OffthreadVideo src={media.url} style={fill} muted playbackRate={rate} />
+              <ClipVideo src={media.url} style={fill} playbackRate={rate} html5={media.html5} />
             )
           ) : moved ? (
             // A still the editor framed by hand: the boxes replace its motion.
