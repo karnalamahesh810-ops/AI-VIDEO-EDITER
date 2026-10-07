@@ -5,7 +5,7 @@ import { BlurredHold, SafeImg } from "../components/motion/safePicture";
 import type { SceneMedia } from "../types";
 import { HookTitle } from "./HookTitle";
 import { ShortCaptions } from "./ShortCaptions";
-import { STAGE_H, STAGE_W, bandRect, scenesIn, viewAt, type FrameSpan, type ShortProps } from "./shortLayout";
+import { STAGE_H, STAGE_W, scenesIn, viewAt, type FrameSpan, type ShortProps } from "./shortLayout";
 
 /**
  * A 9:16 Short (src/shorts.py makes the props): the long video's own picture - its "stage", the document
@@ -26,34 +26,29 @@ const clipRate = (m: { type?: string; clipSeconds?: number }, frames: number, fp
   return clip > 0 && clip < need ? Math.max(0.6, clip / need) : 1;
 };
 
-type ShortMedia = SceneMedia & { previewUrl?: string | null; backdropStill?: boolean };
+type ShortMedia = SceneMedia & { previewUrl?: string | null };
 
 /**
  * Behind the fitted band: the shot itself, blurred and dimmed, filling the frame. Drawn small and scaled
- * up (the same look as a wide blur at a sixteenth of the work). A clip's backdrop plays its own file
- * (media.previewUrl: the light preview, or a copy - src/shorts.py _backdrop_copies), never the one the
- * stage draws on the same frame; without one it is the clip's still.
+ * up (the same look as a wide blur at a sixteenth of the work). A clip's backdrop is a still of it
+ * (media.previewUrl, made by src/shorts.py _backdrop_copies; else its thumbnail): a second video per frame
+ * filled Remotion's frame cache and failed renders ("No frame found at position").
  */
-const Backdrop: React.FC<{ media: ShortMedia; frames: number; opacity: number }> = ({ media, frames, opacity }) => {
-  const { fps, width, height } = useVideoConfig();
+const Backdrop: React.FC<{ media: ShortMedia; opacity: number }> = ({ media, opacity }) => {
+  const { width, height } = useVideoConfig();
   if (opacity <= 0.002 || !media || !media.url) return null;
   const k = 4;
   const w = Math.ceil(width / k) + 8;
   const h = Math.ceil(height / k) + 8;
   const fill: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
-  const still = media.type === "image" ? media.url : media.thumbnail || "";
-  const own = media.type === "video" && !media.backdropStill && media.previewUrl ? media.previewUrl : "";
+  const still = media.type === "image" ? media.url : media.previewUrl || media.thumbnail || "";
   return (
     <AbsoluteFill style={{ opacity, overflow: "hidden", backgroundColor: "#0b0c0f" }}>
       <div style={{
         position: "absolute", left: -16, top: -16, width: w, height: h, transformOrigin: "0 0",
         transform: `scale(${(width + 32) / (w - 8)})`, filter: "blur(7px) brightness(0.5) saturate(1.12)",
       }}>
-        {own ? (
-          <OffthreadVideo src={own} muted style={fill} playbackRate={clipRate(media, frames, fps)} />
-        ) : still ? (
-          <SafeImg src={still} style={fill} fallback={null} />
-        ) : null}
+        {still ? <SafeImg src={still} style={fill} fallback={null} /> : null}
       </div>
       <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.35) 100%)" }} />
     </AbsoluteFill>
@@ -95,14 +90,16 @@ export const Short: React.FC<ShortProps> = (props) => {
   }, [framing]);
   const view = viewAt(framing, frame, width, height);
   const { rect } = view;
-  const band = bandRect(width, height);
+  const [clipTop, clipBottom] = view.clip;
+  // The band as drawn: the stage's own box, less a letterboxed shot's bars.
+  const shown = { y: rect.y + clipTop * rect.h, h: rect.h * Math.max(0.05, 1 - clipTop - clipBottom) };
   const accent = props.accent || props.captions?.accent || "#F2B544";
   return (
     <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
       {/* The blurred shot behind the band, for the shots that are ever fitted. */}
       {scenes.map((sc, i) => (fitScenes.has(i) ? (
         <Sequence key={`bg-${sc.id}-${i}`} from={sc.startFrame} durationInFrames={sc.durationInFrames} layout="none">
-          <Backdrop media={sc.media} frames={sc.durationInFrames} opacity={view.fit} />
+          <Backdrop media={sc.media} opacity={view.fit} />
         </Sequence>
       ) : null))}
 
@@ -111,6 +108,8 @@ export const Short: React.FC<ShortProps> = (props) => {
         position: "absolute", left: 0, top: 0, width: STAGE_W, height: STAGE_H, transformOrigin: "0 0",
         transform: `translate(${rect.x.toFixed(2)}px, ${rect.y.toFixed(2)}px) scale(${(rect.w / STAGE_W).toFixed(5)})`,
         overflow: "hidden",
+        clipPath: clipTop > 0.0005 || clipBottom > 0.0005
+          ? `inset(${(clipTop * 100).toFixed(3)}% 0 ${(clipBottom * 100).toFixed(3)}% 0)` : undefined,
       }}>
         <Sequence width={STAGE_W} height={STAGE_H} durationInFrames={stage.durationInFrames} name="Stage">
           <Main {...stage} />
@@ -119,7 +118,7 @@ export const Short: React.FC<ShortProps> = (props) => {
       {view.fit > 0.002 ? (
         // The band sits on the backdrop with a soft shadow, not a hard cut-out.
         <div style={{
-          position: "absolute", left: 0, top: band.y, width: band.w, height: band.h, pointerEvents: "none",
+          position: "absolute", left: rect.x, top: shown.y, width: rect.w, height: shown.h, pointerEvents: "none",
           boxShadow: `0 ${Math.round(24 * view.fit)}px ${Math.round(70 * view.fit)}px rgba(0,0,0,${(0.55 * view.fit).toFixed(3)})`,
         }} />
       ) : null}

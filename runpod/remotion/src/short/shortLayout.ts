@@ -30,6 +30,8 @@ export interface FrameSpan {
   why?: string;
   /** NATIVE: the shot's own file, drawn straight into the frame (the stage plays a copy of it). */
   media?: { type: "video" | "image"; url: string; clipSeconds?: number; thumbnail?: string } | null;
+  /** FIT of a letterboxed shot: its black bars (top, bottom: shares of the stage) trimmed off the band. */
+  clip?: [number, number] | null;
 }
 
 export interface ShortHook {
@@ -85,9 +87,25 @@ export const bandRect = (W: number, H: number): Rect => {
   return { x: 0, y: Math.round(BAND_CENTER * H - h / 2), w: W, h };
 };
 
-/** Where the whole stage is drawn (px of the frame) for one framing. Native draws the stage as a crop. */
-export const stageRect = (mode: FrameMode, cx: number, W: number, H: number): Rect => {
-  if (mode === "fit") return bandRect(W, H);
+const clipOf = (clip: unknown): [number, number] => {
+  if (!Array.isArray(clip) || clip.length !== 2) return [0, 0];
+  const top = clamp(Number(clip[0]) || 0, 0, 0.4);
+  const bottom = clamp(Number(clip[1]) || 0, 0, 0.4);
+  return [top, bottom];
+};
+
+/**
+ * Where the whole stage is drawn (px of the frame) for one framing. Native draws the stage as a crop.
+ * A fitted letterboxed shot (`clip`: its bars) is placed so its picture, bars left out, is centred on the band.
+ */
+export const stageRect = (mode: FrameMode, cx: number, W: number, H: number, clip?: [number, number] | null): Rect => {
+  if (mode === "fit") {
+    const band = bandRect(W, H);
+    const [top, bottom] = clipOf(clip);
+    if (!top && !bottom) return band;
+    const shown = band.h * Math.max(0.05, 1 - top - bottom);
+    return { x: band.x, y: Math.round(BAND_CENTER * H - shown / 2 - top * band.h), w: band.w, h: band.h };
+  }
   const h = H;
   const w = (H * STAGE_W) / STAGE_H;
   const x = clamp(W / 2 - clamp(cx, 0, 1) * w, W - w, 0);
@@ -106,6 +124,8 @@ export interface View {
   fit: number;
   /** 0-1: how far a native shot covers the frame. */
   native: number;
+  /** The stage's rows left out (top, bottom shares): a letterboxed shot's bars. */
+  clip: [number, number];
   /** The span at this frame (null before the first). */
   span: FrameSpan | null;
   index: number;
@@ -130,20 +150,23 @@ export const spanIndexAt = (spans: FrameSpan[], frame: number): number => {
 export const viewAt = (spans: FrameSpan[], frame: number, W: number, H: number): View => {
   const i = Math.max(0, spanIndexAt(spans, frame));
   const span = spans[i] || null;
-  if (!span) return { rect: stageRect("crop", 0.5, W, H), fit: 0, native: 0, span: null, index: -1 };
-  const own = stageRect(span.mode, span.cx, W, H);
+  if (!span) return { rect: stageRect("crop", 0.5, W, H), fit: 0, native: 0, clip: [0, 0], span: null, index: -1 };
+  const ownClip = span.mode === "fit" ? clipOf(span.clip) : ([0, 0] as [number, number]);
+  const own = stageRect(span.mode, span.cx, W, H, ownClip);
   const fit = span.mode === "fit" ? 1 : 0;
   const native = span.mode === "native" ? 1 : 0;
   const ease = Math.max(0, Math.round(span.ease || 0));
   const prev = i > 0 ? spans[i - 1] : null;
   const into = frame - span.from;
-  if (!prev || ease <= 0 || into >= ease) return { rect: own, fit, native, span, index: i };
+  if (!prev || ease <= 0 || into >= ease) return { rect: own, fit, native, clip: ownClip, span, index: i };
   const t = easeInOut((into + 1) / (ease + 1));
-  const before = stageRect(prev.mode, prev.cx, W, H);
+  const prevClip = prev.mode === "fit" ? clipOf(prev.clip) : ([0, 0] as [number, number]);
+  const before = stageRect(prev.mode, prev.cx, W, H, prevClip);
   return {
     rect: { x: lerp(before.x, own.x, t), y: lerp(before.y, own.y, t), w: lerp(before.w, own.w, t), h: lerp(before.h, own.h, t) },
     fit: lerp(prev.mode === "fit" ? 1 : 0, fit, t),
     native: lerp(prev.mode === "native" ? 1 : 0, native, t),
+    clip: [lerp(prevClip[0], ownClip[0], t), lerp(prevClip[1], ownClip[1], t)],
     span,
     index: i,
   };

@@ -299,6 +299,35 @@ class Framing(unittest.TestCase):
         self.assertLessEqual(shorts.scene_framing(self.scene(clip), edge)["cx"], 1 - shorts.WINDOW / 2 + 1e-9)
         self.assertEqual(shorts.scene_framing(self.scene(clip), None), {"mode": "crop", "cx": 0.5, "why": "centre"})
 
+    def test_a_letterboxed_shot_is_fitted_with_its_bars_left_out(self):
+        clip = {"type": "video", "url": "/a.mp4"}
+        boxed = {"kind": "none", "aspect": 16 / 9, "why": "letterbox bars",
+                 "bars": {"top": 0.12, "bottom": 0.12, "left": 0.0, "right": 0.0}}
+        f = shorts.scene_framing(self.scene(clip), boxed)
+        self.assertEqual((f["mode"], f["clip"]), ("fit", [0.12, 0.12]))
+        # A 4:3 source cover-fitted to 16:9 loses part of its bars to the fit.
+        four3 = {"kind": "none", "aspect": 4 / 3, "bars": {"top": 0.2, "bottom": 0.2}}
+        f = shorts.scene_framing(self.scene(clip), four3)
+        self.assertAlmostEqual(f["clip"][0], (0.2 - 0.125) / 0.75, places=3)
+        stage = {"fps": 30, "durationInFrames": 300,
+                 "scenes": [{"id": "a", "startFrame": 0, "durationInFrames": 300, "media": clip}],
+                 "overlays": [{"startFrame": 120, "durationInFrames": 60}]}
+        spans = shorts.plan_framing(stage, {"a": boxed})
+        self.assertEqual(spans[0]["clip"], [0.12, 0.12])
+        self.assertNotIn("clip", next(s for s in spans if s["why"] == "graphic on screen" or s["from"] >= 115))
+
+    def test_looks_that_only_say_the_words_stay_out_of_a_short(self):
+        self.assertTrue(shorts.says_words({"type": "motion", "variant": "kt-statement", "template": "KT_STATEMENT"}))
+        self.assertTrue(shorts.says_words({"type": "chapter", "variant": "editorial"}))
+        self.assertFalse(shorts.says_words({"type": "motion", "variant": "kt-number", "template": "KT_NUMBER"}))
+        self.assertFalse(shorts.says_words({"type": "map"}))
+        doc = doc_for(STORY, overlays=[
+            {"type": "motion", "variant": "kt-statement", "template": "KT_STATEMENT", "startFrame": 12 * FPS, "durationInFrames": 120},
+            {"type": "motion", "variant": "kt-number", "template": "KT_NUMBER", "startFrame": 14 * FPS, "durationInFrames": 120}])
+        kept = shorts.stage_doc(doc, 10.0, 30.0, drop_text_looks=True)["overlays"]
+        self.assertEqual([o["variant"] for o in kept], ["kt-number"])
+        self.assertEqual(len(shorts.stage_doc(doc, 10.0, 30.0)["overlays"]), 2)   # the hook preview keeps its look
+
     def test_a_vertical_source_fills_the_frame_itself(self):
         clip = {"type": "video", "url": "/a.mp4"}
         tall = {"kind": "none", "aspect": 0.5625}
@@ -448,13 +477,14 @@ class Run(unittest.TestCase):
             self.assertTrue(os.path.isfile(m["url"]))
             self.assertTrue(os.path.isfile(m["previewUrl"]))
             self.assertNotEqual(os.path.normcase(m["url"]), os.path.normcase(m["previewUrl"]))
-        # A vertical shot plays its own file in the frame; the stage plays the copy, its backdrop the still.
+            self.assertTrue(m["previewUrl"].endswith("-backdrop.jpg"))      # a still: one video per frame
+        # A vertical shot plays its own file in the frame; the stage shows its still under it.
         spans = [{"from": 0, "to": stage["durationInFrames"], "mode": "native", "cx": 0.5, "scene": 0, "ease": 0}]
         own = stage["scenes"][0]["media"]["url"]
         shorts.native_media(stage, spans)
         self.assertEqual(spans[0]["media"]["url"], own)
-        self.assertNotEqual(stage["scenes"][0]["media"]["url"], own)
-        self.assertTrue(stage["scenes"][0]["media"]["backdropStill"])
+        self.assertEqual(stage["scenes"][0]["media"]["type"], "image")
+        self.assertTrue(stage["scenes"][0]["media"]["url"].endswith("-backdrop.jpg"))
 
     def test_the_handler_runs_it_and_never_writes_the_project(self):
         import handler
@@ -514,7 +544,7 @@ const input = JSON.parse(fs.readFileSync(0, "utf-8"));
 const out = input.map((c: any) => {
   switch (c.op) {
     case "view": return layout.viewAt(c.spans, c.frame, 1080, 1920);
-    case "rect": return layout.stageRect(c.mode, c.cx, 1080, 1920);
+    case "rect": return layout.stageRect(c.mode, c.cx, 1080, 1920, c.clip);
     case "band": return layout.bandRect(1080, 1920);
     case "cues": return shortCues(c.words, 30).map((q: any) => ({ from: q.from, to: q.to, lines: q.lines.map((l: any) => l.map((w: any) => w.text).join(" ")) }));
     default: return null;
@@ -570,6 +600,19 @@ class Layout(unittest.TestCase):
         self.assertEqual(done["fit"], 1)
         self.assertEqual(cut["fit"], 0)
         self.assertNotAlmostEqual(cut["rect"]["x"], before["rect"]["x"])
+
+    def test_a_letterboxed_band_centres_its_picture_and_eases_its_bars(self):
+        plain, boxed = self.run_calls({"op": "rect", "mode": "fit", "cx": 0.5},
+                                      {"op": "rect", "mode": "fit", "cx": 0.5, "clip": [0.12, 0.12]})
+        self.assertAlmostEqual(boxed["h"], plain["h"])
+        shown_top = boxed["y"] + 0.12 * boxed["h"]
+        shown_h = boxed["h"] * 0.76
+        self.assertAlmostEqual(shown_top + shown_h / 2, 0.43 * 1920, delta=1)
+        spans = [{"from": 0, "to": 60, "mode": "crop", "cx": 0.5, "ease": 0},
+                 {"from": 60, "to": 120, "mode": "fit", "cx": 0.5, "ease": 12, "clip": [0.1, 0.1]}]
+        mid, done = self.run_calls({"op": "view", "spans": spans, "frame": 66}, {"op": "view", "spans": spans, "frame": 90})
+        self.assertTrue(0 < mid["clip"][0] < 0.1)
+        self.assertEqual(done["clip"], [0.1, 0.1])
 
     def test_captions_are_short_phone_lines_with_every_word_once(self):
         words, t = [], 0.0

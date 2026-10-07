@@ -752,8 +752,30 @@ def _frames(seconds: float, fps: float) -> int:
     return int(round(float(seconds) * float(fps)))
 
 
+# Looks that put the narration's own words on screen (a typed statement, a key word, a quote, a headline or
+# chapter card): a Short's captions already say them, and each would pull the picture out to the band.
+_TEXT_CATEGORIES = {"TEXT", "QUOTES", "HEADLINES", "TRANSITIONS"}
+_TEXT_TYPES = {"typewriter", "word-type", "sentence-highlight", "kicker", "chapter", "title", "quote",
+               "underline-title", "bar-title", "swoosh-title", "red-strip", "memo-box", "highlight", "callout"}
+
+
+def says_words(ov: dict) -> bool:
+    """Is this overlay a look that only puts words of the narration on screen?"""
+    from . import templates
+    if str(ov.get("type") or "") in _TEXT_TYPES:
+        return True
+    tid = str(ov.get("template") or "")
+    if not tid and ov.get("type") == "motion" and ov.get("variant"):
+        tid = "LIB_" + str(ov["variant"]).upper().replace("-", "_")
+    try:
+        t = templates.get(tid) if tid else None
+    except Exception:  # noqa: BLE001 - an unknown look is kept
+        t = None
+    return bool(t) and str(t.get("category") or "") in _TEXT_CATEGORIES
+
+
 def stage_doc(doc: dict, start: float, end: float, fps: int = SHORT_FPS, audio_url: str = "",
-              music: bool = True, keep_captions: bool = False) -> dict:
+              music: bool = True, keep_captions: bool = False, drop_text_looks: bool = False) -> dict:
     """
     The long video's document cut to [start, end) seconds, on the Short's own clock at `fps`: the 16:9
     stage the Short draws (remotion Main renders it), the long video's own look - its scenes, graphics,
@@ -806,6 +828,8 @@ def stage_doc(doc: dict, start: float, end: float, fps: int = SHORT_FPS, audio_u
 
     overlays = []
     for ov in doc.get("overlays") or []:
+        if drop_text_looks and says_words(ov):
+            continue
         a = float(ov.get("startFrame") or 0)
         d = max(1.0, float(ov.get("durationInFrames") or 0))
         b = a + d
@@ -938,9 +962,14 @@ def scene_framing(scene: dict, focus: Optional[dict]) -> dict:
         if box and kind in ("face", "object", "action"):
             cx = max(0.0, min(1.0, box["x"] + box["w"] / 2))
         return {"mode": "native", "cx": round(cx, 4), "why": "vertical source"}
+    bars = focus.get("bars") if isinstance(focus.get("bars"), dict) else {}
+    top, bottom = _stage_bars(bars, aspect)
+    if top > 0.015 and bottom > 0.015:
+        # A letterboxed picture (black bars baked into the file): cropped, the bars would frame the Short top
+        # and bottom; zoomed past them, it would soften. Fitted, with the bars trimmed off the band.
+        return {"mode": "fit", "cx": 0.5, "why": "letterboxed", "clip": [round(top, 4), round(bottom, 4)]}
     if focus.get("overlay") or kind == "text":
         return {"mode": "fit", "cx": 0.5, "why": "lettering in the picture"}
-    bars = focus.get("bars") if isinstance(focus.get("bars"), dict) else {}
     if max([float(v or 0) for k, v in bars.items() if k in ("left", "right")] or [0.0]) > 0.12:
         return {"mode": "crop", "cx": 0.5, "why": "pillarboxed"}
     if box and kind in ("face", "object", "action") and conf >= (0.35 if kind == "face" else 0.4):
@@ -955,6 +984,21 @@ def scene_framing(scene: dict, focus: Optional[dict]) -> dict:
             return {"mode": "crop", "cx": cx, "why": kind}
         return {"mode": "fit", "cx": 0.5, "why": f"wide {kind}"}
     return {"mode": "crop", "cx": 0.5, "why": "centre"}
+
+
+def _stage_bars(bars: dict, src_aspect: float) -> Tuple[float, float]:
+    """A source's top and bottom black bars as shares of the stage once the source is cover-fitted to 16:9."""
+    try:
+        top, bottom = float(bars.get("top") or 0.0), float(bars.get("bottom") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0, 0.0
+    stage = STAGE_W / STAGE_H
+    if src_aspect and src_aspect < stage:
+        keep = src_aspect / stage                  # the share of the source's height the stage shows
+        off = (1.0 - keep) / 2.0
+        top = max(0.0, (top - off) / keep)
+        bottom = max(0.0, (bottom - off) / keep)
+    return min(top, 0.4), min(bottom, 0.4)
 
 
 def _graphic_spans(stage: dict) -> List[Tuple[int, int]]:
@@ -1001,9 +1045,12 @@ def plan_framing(stage: dict, focus: Dict[str, dict]) -> List[dict]:
             span = {"from": p0, "to": p1, "mode": mode, "cx": base["cx"] if mode != "fit" else 0.5,
                     "ease": 0 if p0 == a else EASE_FRAMES, "scene": idx,
                     "why": "graphic on screen" if in_graphic and base["mode"] != "fit" else base["why"]}
+            # A letterboxed shot's band leaves its bars out - not while a graphic is up (it may sit in them).
+            if base.get("clip") and not in_graphic:
+                span["clip"] = list(base["clip"])
             prev = out[-1] if out else None
             if prev and prev["mode"] == span["mode"] and abs(prev["cx"] - span["cx"]) < 1e-6 and prev["to"] == p0 \
-                    and (span["ease"] or prev["scene"] == idx):
+                    and prev.get("clip") == span.get("clip") and (span["ease"] or prev["scene"] == idx):
                 prev["to"] = p1       # nothing changes here: one span
                 continue
             out.append(span)
@@ -1015,8 +1062,8 @@ def plan_framing(stage: dict, focus: Dict[str, dict]) -> List[dict]:
 def native_media(stage: dict, spans: List[dict]) -> None:
     """
     A NATIVE span draws its shot's own file straight into the frame (span.media, which the renderer
-    serves like any media); the stage's copy of that scene plays the preview copy instead, so no two
-    players ever read one file on the same frames (see _backdrop_copies), and its backdrop is the still.
+    serves like any media); the stage's copy of that scene becomes its still, so the frame never decodes
+    the same clip twice (see _backdrop_copies) - the stage shows it only if a graphic pulls the framing out.
     """
     scenes = stage.get("scenes") or []
     for s in spans:
@@ -1026,8 +1073,9 @@ def native_media(stage: dict, spans: List[dict]) -> None:
         if not m.get("url"):
             continue
         s["media"] = {k: m.get(k) for k in ("type", "url", "clipSeconds", "thumbnail") if m.get(k) is not None}
-        if m.get("type") == "video" and m.get("previewUrl"):
-            scenes[s["scene"]]["media"] = {**m, "url": m["previewUrl"], "previewUrl": None, "backdropStill": True}
+        still = m.get("previewUrl") or m.get("thumbnail")
+        if m.get("type") == "video" and still:
+            scenes[s["scene"]]["media"] = {**m, "type": "image", "url": still, "previewUrl": None}
 
 
 def framing_counts(spans: List[dict]) -> Dict[str, int]:
@@ -1171,41 +1219,35 @@ def _normalise_clips(stage: dict, deadline: float, fps: int = 0) -> None:
 
 def _backdrop_copies(stage: dict, folder: str, deadline: float, fetch=None) -> None:
     """
-    Each clip's blurred backdrop (Short.tsx Backdrop) plays a file of its own, never the one the stage is
-    drawing at the same moment: a small 480-px copy made here from the (cleaned) clip - light to decode,
-    blurred anyway, and as clean to seek. The editor's preview copies are not used: Remotion could not
-    find frames in one of them on the laptop ("No frame found at position", 2026-10-07). Kept in
-    media.previewUrl: the renderer serves that field and draws nothing else from it. No copy = the
-    backdrop is the clip's still.
+    Each clip's blurred backdrop (Short.tsx Backdrop) is a STILL of the clip, made here (480 px, from the
+    middle of what the scene plays): blurred anyway, and the frame then decodes one video, not two. A
+    second video per frame filled Remotion's OffthreadVideo cache on a busy laptop and failed renders with
+    "No frame found at position" (2026-10-07; Remotion's docs: frames evicted from a cache that is too
+    small). Kept in media.previewUrl: the renderer serves that field and draws nothing else from it. No
+    still = the clip's own thumbnail.
     """
-    copies: Dict[str, str] = {}
+    fps = float(stage.get("fps") or SHORT_FPS)
+    stills: Dict[str, str] = {}
     for sc in stage.get("scenes") or []:
         m = sc.get("media") or {}
         local = str(m.get("url") or "")
         if m.get("type") != "video":
             continue
+        m.pop("previewUrl", None)                # never the editor's preview copy
         if not os.path.isfile(local):
-            m.pop("previewUrl", None)          # (a remote clip: its backdrop is its still)
+            continue                             # (a remote clip: its backdrop is its thumbnail)
+        if local in stills:
+            m["previewUrl"] = stills[local]
             continue
-        if local in copies:
-            m["previewUrl"] = copies[local]
-            continue
-        path = os.path.splitext(local)[0] + "-backdrop.mp4"
+        path = os.path.splitext(local)[0] + "-backdrop.jpg"
         if not os.path.isfile(path) and time.time() < deadline:
-            p = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", local, "-an",
-                                "-vf", "scale=480:-2,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast",
-                                "-crf", "26", "-g", "15", "-bf", "0", "-movflags", "+faststart", path],
-                               capture_output=True, text=True, timeout=120)
-            if p.returncode != 0 or not _playable(path):
-                try:
-                    shutil.copyfile(local, path)
-                except OSError:
-                    path = ""
-        if path and os.path.isfile(path):
-            copies[local] = path
+            mid = max(0.0, min(float(m.get("clipSeconds") or 1.0), float(sc.get("durationInFrames") or 0) / fps) / 2)
+            subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{mid:.2f}", "-i", local,
+                            "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4", path],
+                           capture_output=True, text=True, timeout=60)
+        if os.path.isfile(path) and os.path.getsize(path) > 0:
+            stills[local] = path
             m["previewUrl"] = path
-        else:
-            m.pop("previewUrl", None)
 
 
 def analyse_shots(stage: dict, deadline: float, detect_clip=None, detect_still=None) -> Dict[str, dict]:
@@ -1319,7 +1361,7 @@ def make_one(doc: dict, ctx: _Ctx, job: dict, narration: str, work: str, opts: d
     boost = float(((doc.get("audio") or {}).get("boostDb") or 0) or 0)
     voice = _slice_narration(narration, start, end, os.path.join(folder, "narration.wav"), boost)
     stage = stage_doc(doc, start, end, fps=fps, audio_url=voice, music=opts.get("music", True) is not False,
-                      keep_captions=landscape)
+                      keep_captions=landscape, drop_text_looks=not landscape)
     have = templates.sfx_files()
     stage["sfx"] = [fx for fx in stage.get("sfx") or [] if fx.get("name") in have]
     deadline = time.time() + float(opts.get("analyse_seconds") or ANALYSE_SECONDS)
