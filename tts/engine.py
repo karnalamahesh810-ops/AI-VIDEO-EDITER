@@ -196,7 +196,8 @@ class ModelHost:
             gen = time.time() - t0
             # Chatterbox's last token decodes to a few ms of noise (the multilingual model drops it itself).
             wav = trim(wav, SR, cut_end=0.0 if self.name == "mtl" else 0.02)
-            chk = self.check(t["text"], wav, t.get("lang", "en"), bool(t.get("validate", True)))
+            # Checked against the words as written when the model read a respelling (check_text).
+            chk = self.check(t.get("check_text") or t["text"], wav, t.get("lang", "en"), bool(t.get("validate", True)))
             chk.update({"gen_seconds": round(gen, 2), "seed": seed})
             tries.append(chk)
             if best is None or chk["score"] < best[1]["score"]:

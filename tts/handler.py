@@ -18,9 +18,13 @@ Input (job["input"]):
   return      "url" (R2 upload, default) | "b64"
   tail_pause  silence after the last piece (default: the piece's own pause)
   analyze     add speaker similarity (vs the sample) and median pitch to the answer
+  pronounce   the channel's pronunciation list for this part: [{"word", "say", "matchCase"}]
+              (textnorm.protect_pronunciations: matched in the text as written, the respelling
+              read by the voice, the word itself used for the read-back check). Absent = as before.
 
 Output: {"ok", "audio_url"|"audio_b64", "seconds", "format", "chunks", "retries",
          "wall_seconds", "rtf", "model", "replicas", "checks", ...}
+         (+ "pronounced": places changed, when "pronounce" had entries)
 """
 from __future__ import annotations
 
@@ -39,7 +43,7 @@ BOOT = time.time()
 import audio  # noqa: E402
 import r2  # noqa: E402
 from engine import DEFAULTS, MODEL_NAMES, SR, ReplicaPool, auto_replicas, gpu_memory_gb, gpu_name  # noqa: E402
-from textnorm import normalize, plan_chunks  # noqa: E402
+from textnorm import clean_pronounce, normalize, plan_chunks, protect_pronunciations  # noqa: E402
 
 VOICE_DIR = os.environ.get("TTS_VOICE_DIR", "/tmp/tts_voices")
 MAX_TEXT = int(os.environ.get("TTS_MAX_TEXT", "8000"))
@@ -139,11 +143,20 @@ def tts(inp: dict, job_id: str, progress) -> dict:
         return {"ok": False, "error": "this voice model needs a voice sample (preset or clone)"}
     t_voice = time.time() - t0
 
-    spoken = normalize(text, lang)
+    # The channel's pronunciations: found in the text as written, kept away from normalize() as
+    # placeholders, put back per chunk (the respelling for the voice, the word for the check).
+    entries = clean_pronounce(inp.get("pronounce"))
+    said = protect_pronunciations(text, entries, lang) if entries else None
+    spoken = normalize(said.text if said else text, lang)
     default_chars = 360 if ENGINE == "qwen" else 280
     chunks = plan_chunks(spoken, max_chars=int(_clamp(inp.get("chunk_chars", default_chars), 120, 420, default_chars)), pause_scale=pause)
     if not chunks:
         return {"ok": False, "error": "nothing to read after cleaning the text"}
+    texts = [c.text for c in chunks]
+    check_texts = None
+    if said and said.count:
+        check_texts = [said.for_check(t) for t in texts]
+        texts = [said.for_voice(t) for t in texts]
 
     def on_done(done, total):
         try:
@@ -156,17 +169,23 @@ def tts(inp: dict, job_id: str, progress) -> dict:
     sr = SR
     if ENGINE == "qwen":
         # The whole part in one batch (see engine_qwen): one task, per-piece results back.
-        part = POOL.run([{"op": "part", "voice_key": voice_key, "ref_path": ref_path, "ref_text": voice.get("text"),
-                          "texts": [c.text for c in chunks], "params": params, "seed": seed, "validate": validate,
-                          "max_attempts": attempts, "lang": lang}], on_done)[0]
+        task = {"op": "part", "voice_key": voice_key, "ref_path": ref_path, "ref_text": voice.get("text"),
+                "texts": texts, "params": params, "seed": seed, "validate": validate,
+                "max_attempts": attempts, "lang": lang}
+        if check_texts:
+            task["check_texts"] = check_texts
+        part = POOL.run([task], on_done)[0]
         sr = part["sr"]
         share = part["gen_seconds"] / max(1, len(chunks))
         results = [{"wav": w, "check": c, "attempts": a, "gen_seconds": share}
                    for w, c, a in zip(part["wavs"], part["checks"], part["attempts"])]
     else:
-        tasks = [{"op": "chunk", "model": model, "voice_key": voice_key, "ref_path": ref_path, "text": c.text,
+        tasks = [{"op": "chunk", "model": model, "voice_key": voice_key, "ref_path": ref_path, "text": t,
                   "params": params, "seed": seed + i * 101, "validate": validate, "max_attempts": attempts, "lang": lang}
-                 for i, c in enumerate(chunks)]
+                 for i, t in enumerate(texts)]
+        if check_texts:
+            for task, check in zip(tasks, check_texts):
+                task["check_text"] = check
         results = POOL.run(tasks, on_done)
     t_gen = time.time() - t_gen
 
@@ -192,9 +211,11 @@ def tts(inp: dict, job_id: str, progress) -> dict:
     }
     if ref_info:
         answer["sample_seconds"] = ref_info.get("seconds")
+    if said:
+        answer["pronounced"] = said.count
     if inp.get("analyze"):
         answer["heard"] = [r["check"].get("heard") for r in results]
-        answer["texts"] = [c.text for c in chunks]
+        answer["texts"] = texts
         answer["f0_hz"] = audio.f0_median(track, sr)
         if ref_path:
             sim = POOL.run([{"op": "similarity", "model": model, "ref_path": ref_path, "wav": track}])[0]

@@ -16,13 +16,15 @@ Pure Python (no torch), so the offline tests run anywhere.
   human rhythm instead of whatever silence the model happened to leave.
 * words_for_compare(): the same normalization applied to a transcript, so a
   speech-recognition check can compare what was said with what was asked.
+* protect_pronunciations(): a channel's pronunciation list ("Mead" -> "meed")
+  swapped in around normalize() and plan_chunks() (see the section at the end).
 """
 from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
 
 ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
@@ -504,3 +506,203 @@ def expected_seconds(text: str, wpm: float = 155.0) -> float:
 def first_words(text: str, n: int = 8) -> Optional[str]:
     w = (text or "").split()
     return " ".join(w[:n]) if w else None
+
+
+# ---------------------------------------------------------------------------------------------
+# A channel's pronunciation list
+#
+# The app keeps, per channel, how the narrator says some words ("Mead" -> "meed", "Yosemite" ->
+# "yo-SEM-it-ee"); tts-own sends the entries a part uses as job input
+# "pronounce": [{"word", "say", "matchCase"}] together with the ORIGINAL text.
+#
+# The matching rules are the app's (supabase/functions/_shared/pronounce.ts; keep the two the same):
+# whole words and phrases only (no letter or digit right before or after), any capitals unless
+# matchCase, the longest entry first, one pass (a respelling is never changed again), nothing around a
+# match touched, ' matches the curly apostrophes and - the other hyphens, a phrase's spaces match any
+# spaces or one line break, [stage directions] left alone.
+#
+# The words are found in the text AS WRITTEN, before normalize(), so an entry like "I-15" or "CO2"
+# matches what the writer typed. Each place is then swapped for a placeholder that normalize() and
+# plan_chunks() leave alone (lower-case letters, no digits; its first letter a capital when the word's
+# is, so the sentence and abbreviation rules around it see what they saw before), which keeps the
+# respelling away from the number / initialism reading ("Kuh-LOR-uh-doh" is not letters, "B2" stays
+# "B2"). After chunking every placeholder is put back twice: the respelling in the text the voice model
+# reads, and the word as written (normalized) in the text the read-back check compares the transcript
+# with - what a listener would write ("Colorado"), so a respelling never causes a retry.
+
+PRONOUNCE_MAX = 300
+_PRONOUNCE_WORD_MAX = 60
+_PRONOUNCE_SAY_MAX = 120
+_INVISIBLE = re.compile("[­​-‍⁠﻿]")
+_CONTROL = re.compile("[\u0000-\u001f\u007f-\u009f  ]")
+_BRACKETS = re.compile(r"[\[\]{}<>]")
+_HAS_ALNUM = re.compile(r"[^\W_]")
+_APOSTROPHES = "'‘’ʼ"
+_HYPHENS = "-‐‑‒–"
+_WORD_CHAR = r"(?:[^\W_]|[̀-ͯ])"
+_PHRASE_SPACE = r"(?:[^\S\n]*\n[^\S\n]*|[^\S\n]+)"
+_DIRECTION = re.compile(r"\[[^\]\n]{0,40}\]")
+_TOKEN_PREFIXES = ("zqv", "qzx", "xvq", "vxz", "jqz", "zjq")
+_DIGIT_LETTERS = "abcdefghij"
+
+
+def _clean_field(v) -> str:
+    if not isinstance(v, str):
+        return ""
+    v = unicodedata.normalize("NFC", v)
+    v = _INVISIBLE.sub("", v)
+    v = _CONTROL.sub(" ", v)
+    return re.sub(r"\s+", " ", v).strip()
+
+
+def _pronounce_key(word: str, match_case: bool) -> str:
+    w = re.sub("[‘’ʼ]", "'", word)
+    w = re.sub("[‐-–]", "-", w)
+    return "c:" + w if match_case else "i:" + w.lower()
+
+
+def clean_pronounce(raw) -> List[dict]:
+    """The job's list checked the way the app checks it: well-formed entries only, the first of two with
+    the same spelling, at most 300. Anything that is not a list is an empty list."""
+    if not isinstance(raw, list):
+        return []
+    out: List[dict] = []
+    seen = set()
+    for item in raw[:2000]:
+        if len(out) >= PRONOUNCE_MAX:
+            break
+        if not isinstance(item, dict):
+            continue
+        word, say = _clean_field(item.get("word")), _clean_field(item.get("say"))
+        if not word or len(word) > _PRONOUNCE_WORD_MAX or _BRACKETS.search(word) or not _HAS_ALNUM.search(word):
+            continue
+        if not say or len(say) > _PRONOUNCE_SAY_MAX or _BRACKETS.search(say) or not _HAS_ALNUM.search(say):
+            continue
+        if say == word:
+            continue
+        match_case = item.get("matchCase") is True
+        key = _pronounce_key(word, match_case)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"word": word, "say": say, "matchCase": match_case})
+    return out
+
+
+def _char_pattern(ch: str) -> str:
+    if ch in _APOSTROPHES:
+        return "[" + _APOSTROPHES + "]"
+    if ch in _HYPHENS:
+        return "[" + _HYPHENS + "]"
+    return re.escape(ch)
+
+
+def _word_pattern(word: str) -> str:
+    return _PHRASE_SPACE.join("".join(_char_pattern(c) for c in part) for part in word.split(" "))
+
+
+def _bounded(body: str) -> str:
+    return "(?<!" + _WORD_CHAR + ")(?:" + body + ")(?!" + _WORD_CHAR + ")"
+
+
+def scan_pronunciations(text: str, entries) -> List[Tuple[int, int, dict]]:
+    """Every place an entry matches in `text` as (start, end, entry), left to right, never overlapping."""
+    items_in = clean_pronounce(entries)
+    if not text or not items_in:
+        return []
+    order = sorted(range(len(items_in)),
+                   key=lambda i: (-len(items_in[i]["word"]), 0 if items_in[i]["matchCase"] else 1, i))
+    items = [(items_in[i], re.compile(_bounded(_word_pattern(items_in[i]["word"])),
+                                      0 if items_in[i]["matchCase"] else re.IGNORECASE)) for i in order]
+    any_word = re.compile(_bounded("|".join(_word_pattern(e["word"]) for e, _ in items)), re.IGNORECASE)
+    directions = [(m.start(), m.end()) for m in _DIRECTION.finditer(text)]
+    out: List[Tuple[int, int, dict]] = []
+    pos = 0
+    while True:
+        hit = any_word.search(text, pos)
+        if not hit:
+            break
+        at = hit.start()
+        inside = next((end for start, end in directions if start <= at < end), None)
+        if inside is not None:
+            pos = inside
+            continue
+        found = None
+        for entry, rx in items:
+            m = rx.match(text, at)
+            if m and m.end() > at:
+                found = (at, m.end(), entry)
+                break
+        if found is None:
+            pos = at + 1
+            continue
+        out.append(found)
+        pos = found[1]
+    return out
+
+
+def apply_pronunciations(text: str, entries) -> str:
+    """`text` with every match replaced by its respelling (the app's applyPronunciations)."""
+    out, last = [], 0
+    for start, end, entry in scan_pronunciations(text, entries):
+        out.append(text[last:start])
+        out.append(entry["say"])
+        last = end
+    out.append(text[last:])
+    return "".join(out)
+
+
+@dataclass
+class Pronounced:
+    """The text with each matched place swapped for a placeholder, and how to put them back."""
+    text: str
+    count: int = 0
+    words: int = 0
+    _say: Dict[str, str] = field(default_factory=dict)
+    _heard: Dict[str, str] = field(default_factory=dict)
+    _pattern: Optional["re.Pattern"] = None
+
+    def _restore(self, text: str, table: Dict[str, str]) -> str:
+        if not self._pattern or not table:
+            return text
+        return self._pattern.sub(lambda m: table.get(m.group(0).lower(), m.group(0)), text)
+
+    def for_voice(self, text: str) -> str:
+        """A chunk as the voice model reads it: the respellings."""
+        return self._restore(text, self._say)
+
+    def for_check(self, text: str) -> str:
+        """A chunk as the read-back check compares it: the words as written, normalized."""
+        return self._restore(text, self._heard)
+
+
+def protect_pronunciations(text: str, entries, lang: str = "en") -> Pronounced:
+    """Swap every match in `text` (as written) for a placeholder that normalize() and plan_chunks()
+    leave alone; Pronounced.for_voice / for_check put them back in each chunk."""
+    places = scan_pronunciations(text or "", entries)
+    if not places:
+        return Pronounced(text=text)
+    low = text.lower()
+    prefix = next((p for p in _TOKEN_PREFIXES if p not in low and p[::-1] not in low), None)
+    if prefix is None:  # practically never: these letter runs do not occur in real text
+        return Pronounced(text=text)
+    suffix = prefix[::-1]
+    out, last = [], 0
+    say: Dict[str, str] = {}
+    heard: Dict[str, str] = {}
+    used = []
+    for i, (start, end, entry) in enumerate(places):
+        token = prefix + "".join(_DIGIT_LETTERS[int(d)] for d in str(i)) + suffix
+        written = text[start:end]
+        first = written[:1]
+        shown = token[0].upper() + token[1:] if (first.isupper() or first.isdigit()) else token
+        out.append(text[last:start])
+        out.append(shown)
+        last = end
+        say[token] = entry["say"]
+        heard[token] = normalize(written, lang) or written
+        if entry not in used:
+            used.append(entry)
+    out.append(text[last:])
+    pattern = re.compile("[" + prefix[0].upper() + prefix[0] + "]" + re.escape(prefix[1:]) + "[a-j]+" + re.escape(suffix))
+    return Pronounced(text="".join(out), count=len(places), words=len(used), _say=say, _heard=heard, _pattern=pattern)
