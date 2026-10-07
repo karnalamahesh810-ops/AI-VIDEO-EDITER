@@ -157,14 +157,16 @@ class InTheReclip(Rig):
             s["semanticMetadata"]["sourceUrl"] = ""
         return doc
 
-    def test_a_dry_run_plans_them_again_and_says_how_many_lines_have_a_subject_now(self):
+    def test_a_dry_run_counts_them_and_prices_the_replan_but_never_asks_the_model(self):
         doc = self.doc()
-        with mock.patch.object(director, "is_configured", return_value=False):
+        with mock.patch.object(director, "plan", side_effect=AssertionError("a dry run is free")):
             out = handler.handler(self.job(timeline=doc))
         self.assertTrue(out["ok"], out)
-        self.assertEqual((out["replanned"]["found"], out["replanned"]["replanned"]), (3, 3))
-        self.assertEqual(out["realSubjects"], 4)
-        self.assertEqual(len(out["replannedLines"]), 3)
+        self.assertEqual({k: out["replanned"][k] for k in ("found", "replanned", "pending")},
+                         {"found": 3, "replanned": 0, "pending": 3})
+        self.assertEqual(out["realSubjects"], 2)                       # the lines as they are now
+        self.assertEqual(out["estimate"]["replanLines"], 3)
+        self.assertGreater(out["estimate"]["replanUsd"][1], 0)
 
     def test_an_apply_saves_the_new_search_fields_of_every_line_replanned(self):
         doc = self.doc()

@@ -173,6 +173,15 @@ DIRECTOR_ROUTINE_MODEL = os.getenv("DIRECTOR_ROUTINE_MODEL", "").strip()
 # "" = DIRECTOR_REASONING_EFFORT.
 DIRECTOR_REASONING_EFFORT = os.getenv("DIRECTOR_REASONING_EFFORT", "").strip().lower()
 DIRECTOR_ROUTINE_REASONING_EFFORT = os.getenv("DIRECTOR_ROUTINE_REASONING_EFFORT", "").strip().lower()
+# The re-plan of lines a build planned without the model (src/replan.py): the build's own planner and
+# prompts, on a cheap model with thinking off. On openai/gpt-5.2 at its default effort the California
+# re-plan (167 lines, 12 calls) cost $0.72 - 45k output tokens, 16k of them hidden reasoning at $14/M; the
+# planner's prompt is a structured JSON task the flash models handle (they back the director up in every
+# build). Fallbacks in order; "" for REPLAN_MODEL = the director's own models.
+REPLAN_MODEL = os.getenv("REPLAN_MODEL", "google/gemini-2.5-flash").strip()
+REPLAN_FALLBACK_MODELS = [m.strip() for m in os.getenv("REPLAN_FALLBACK_MODELS", "openai/gpt-5-mini").split(",")
+                          if m.strip()]
+REPLAN_REASONING_EFFORT = os.getenv("REPLAN_REASONING_EFFORT", "none").strip().lower()
 
 # --- vision verification -----------------------------------------------------
 # Every candidate clip/image is shown to a multimodal model, which describes
@@ -261,6 +270,12 @@ VISION_TIMEOUT = float(os.getenv("VISION_TIMEOUT", "60"))
 # No answer after this many seconds: the next model is asked in parallel and
 # the first answer wins (a whole contact sheet gets 1.6x). 0 = one at a time.
 VISION_HEDGE_SECONDS = float(os.getenv("VISION_HEDGE_SECONDS", "25"))
+# A hedge asks a second model while the first is still answering, and both are billed: the California
+# re-clip of 2026-10-07 paid ~$0.003 a vision call on OpenRouter, about three times the $0.00085-0.00096
+# measured without hedges. So a call hedges only while OpenRouter (when vision runs there) has at least
+# this much credit left (read from its free /credits endpoint, cached); 0 = always, as before. A re-clip
+# never hedges (reclip.RECLIP_CONFIG).
+VISION_HEDGE_MIN_CREDIT = float(os.getenv("VISION_HEDGE_MIN_CREDIT", "15"))
 # A call gives up after this long in total; the candidate is then handled
 # like any unjudged one. Late answers are dropped.
 VISION_CALL_BUDGET_SECONDS = float(os.getenv("VISION_CALL_BUDGET_SECONDS", "100"))

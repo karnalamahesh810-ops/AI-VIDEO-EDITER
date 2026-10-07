@@ -20,11 +20,11 @@ other field stay. The repaired fields go into the saved timeline with the rest o
 """
 from __future__ import annotations
 
-import re
+import contextlib
 from collections import Counter
 from typing import Callable, Dict, List, Optional, Tuple
 
-from . import director
+from . import config, director
 from . import intent as scene_intent
 from .transcribe import Segment, keywords_for
 
@@ -140,7 +140,34 @@ def _line_fields(seg: Segment, brief: dict, carry: Tuple[str, str]) -> dict:
     return shot
 
 
-def repair(doc: dict, title: str = "", report: Optional[Callable] = None, model: bool = True) -> dict:
+@contextlib.contextmanager
+def cheap_planner():
+    """
+    The director's models for a re-plan: REPLAN_MODEL with thinking off (REPLAN_REASONING_EFFORT), its
+    fallbacks, then the backup provider - no hedge (a hedged call is billed twice). The California re-plan
+    cost $0.72 on openai/gpt-5.2 at its default effort; the same 12 calls on google/gemini-2.5-flash without
+    thinking are ~$0.10. Everything is put back after; REPLAN_MODEL "" leaves the director's own models.
+    """
+    if not config.REPLAN_MODEL:
+        yield
+        return
+    want = {"DIRECTOR_MODEL": config.REPLAN_MODEL, "DIRECTOR_ROUTINE_MODEL": "",
+            "DIRECTOR_FALLBACK_MODELS": list(config.REPLAN_FALLBACK_MODELS),
+            "DIRECTOR_REASONING_EFFORT": config.REPLAN_REASONING_EFFORT,
+            "DIRECTOR_ROUTINE_REASONING_EFFORT": config.REPLAN_REASONING_EFFORT,
+            "DIRECTOR_HEDGE_SECONDS": 0.0}
+    old = {k: getattr(config, k) for k in want if hasattr(config, k)}
+    for k, v in want.items():
+        setattr(config, k, v)
+    try:
+        yield
+    finally:
+        for k, v in old.items():
+            setattr(config, k, v)
+
+
+def repair(doc: dict, title: str = "", report: Optional[Callable] = None, model: bool = True,
+           cheap: bool = True) -> dict:
     """
     Plan every line whose search was planned without the model again (see the module notes); changes those
     lines' search fields in `doc` in place. Returns {"found", "replanned", "byModel", "byRules", "planner",
@@ -162,8 +189,10 @@ def repair(doc: dict, title: str = "", report: Optional[Callable] = None, model:
     if model and director.is_configured():
         say(f"Planning {len(bad)} lines again: they were planned without the model")
         try:
-            shots, kind, _warns = director.plan(segs, title or (titles[0] if titles else ""), allow_maps=False)
+            with (cheap_planner() if cheap else contextlib.nullcontext()):
+                shots, kind, _warns = director.plan(segs, title or (titles[0] if titles else ""), allow_maps=False)
             out["planner"] = kind
+            out["model"] = config.REPLAN_MODEL if cheap and config.REPLAN_MODEL else config.DIRECTOR_MODEL
             if director.LAST_STORY:
                 brief = dict(director.LAST_STORY)
         except Exception as e:  # noqa: BLE001 - the rule rebuild below

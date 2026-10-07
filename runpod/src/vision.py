@@ -518,6 +518,23 @@ def _route_call(route: tuple, messages: list, max_tokens: int, deadline: float) 
 _HEDGE_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix="vision")
 
 
+def _hedge_seconds() -> float:
+    """
+    VISION_HEDGE_SECONDS, or 0 (no second model while the first still answers): an abandoned call still
+    finishes and is billed, so a hedge doubles the price of every slow call - ~$0.003 a call on the
+    California re-clip of 2026-10-07 against ~$0.0009 without. It hedges only while the OpenRouter account
+    vision is billed to has VISION_HEDGE_MIN_CREDIT left (unknown = no hedge).
+    """
+    hedge = float(config.VISION_HEDGE_SECONDS or 0.0)
+    if hedge <= 0 or float(config.VISION_HEDGE_MIN_CREDIT or 0.0) <= 0:
+        return max(0.0, hedge)
+    if "openrouter.ai" not in (config.VISION_API_BASE or ""):
+        return hedge
+    from . import credit
+    left = credit.openrouter_left()
+    return hedge if left is not None and left >= float(config.VISION_HEDGE_MIN_CREDIT) else 0.0
+
+
 def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple[Optional[str], str]:
     """
     First model that answers: (text, model). (None, "") when none did.
@@ -545,7 +562,7 @@ def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple
         return None, ""
     started = time.time()
     deadline = started + max(1.0, config.VISION_CALL_BUDGET_SECONDS)
-    hedge = config.VISION_HEDGE_SECONDS * (1.6 if max_tokens > 600 else 1.0)
+    hedge = _hedge_seconds() * (1.6 if max_tokens > 600 else 1.0)
     if hedge <= 0:
         for route in queue:
             if time.time() >= deadline:

@@ -1088,10 +1088,25 @@ def _request_extra(model: str, url: str, routine: bool = False) -> dict:
         extra["usage"] = {"include": True}
     effort = _reasoning_effort(routine)
     if effort and openrouter:
-        extra["reasoning"] = {"effort": effort}
+        extra["reasoning"] = _openrouter_reasoning(model, effort)
     elif effort and "kie.ai" in (url or "") and model.startswith("gpt-") and effort != "none":
         extra["reasoning_effort"] = effort
     return extra
+
+
+def _openrouter_reasoning(model: str, effort: str) -> dict:
+    """
+    OpenRouter's reasoning field for one model. "none" / "minimal" turn thinking off where the model allows it
+    (Gemini 2.5: reasoning.max_tokens 0, as vision measured on 2026-10-01) and ask for the least it allows
+    elsewhere (Gemini 3.x and GPT-5 refuse "none": "minimal"); any other effort goes as it is.
+    """
+    m = (model or "").lower()
+    if effort in ("none", "minimal"):
+        if "gemini-2.5" in m:
+            return {"max_tokens": 0}
+        if "gemini" in m or "/gpt-5" in m:
+            return {"effort": "minimal"}
+    return {"effort": effort}
 
 
 def _note_usage(body) -> None:

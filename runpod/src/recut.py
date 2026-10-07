@@ -1430,6 +1430,59 @@ def save_json(project_id: str, key: str, doc: dict) -> str:
     return key
 
 
+def hold_project(project_id: str, say: Callable, wait: float = WRITE_WAIT,
+                 step: str = "Re-clipping") -> Tuple[bool, str]:
+    """
+    The project held for this job BEFORE anything is spent or written (a re-clip that saves as it goes,
+    src/reclip.py): with the service key at once; through the app's storage broker the same hand-over as
+    write_project - a one-field update (current_step) every POLL seconds for up to `wait`, its status saying it
+    waits (awaitHandover) - until the row is "rendering" under this job. (True, "") or (False, why).
+    """
+    if not storage.broker_enabled():
+        if config.SUPABASE_URL and config.SUPABASE_SERVICE_KEY:
+            return True, ""
+        return False, "this worker has no way to write the project (no storage broker, no service key)"
+    if not storage.CURRENT_JOB[0]:
+        return False, "no job id to write the project as"
+    until = time.time() + max(0.0, float(wait))
+    told = False
+    while True:
+        if storage.patch_project(project_id, {"current_step": step}, wait=True):
+            return True, ""
+        if time.time() + POLL > until:
+            return False, ("the project was not handed to this job"
+                           + (f" within {wait / 60.0:.0f} min" if wait else "")
+                           + ": nothing was spent or written")
+        if not told:
+            extra = getattr(say, "extra", None)
+            if isinstance(extra, dict):
+                extra["awaitHandover"] = {"job": storage.CURRENT_JOB[0], "project": project_id, "until": int(until)}
+            say("Waiting for the project to be handed to this job", 3)
+            told = True
+        time.sleep(POLL)
+
+
+def save_project(project_id: str, doc: dict, step: str, final: bool = False) -> bool:
+    """One save of a held project's timeline: the row stays "rendering" under this job (more saves follow)
+    unless `final` (status "editing", progress 100). False when the app did not take it."""
+    fields = {"scene_data": doc, "current_step": step}
+    if final:
+        fields.update(status="editing", progress=100)
+    try:
+        return bool(storage.patch_project(project_id, fields, wait=True))
+    except Exception as e:  # noqa: BLE001 - not saved, said by the caller
+        print(f"[recut] a save of {project_id} broke: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        return False
+
+
+def release_project(project_id: str, why: str) -> bool:
+    """A held project handed back without a new timeline (the last save stands): status "editing"."""
+    try:
+        return bool(storage.patch_project(project_id, {"status": "editing", "current_step": why[:120]}, wait=True))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def write_project(project_id: str, doc: dict, say: Callable, wait: float = WRITE_WAIT,
                   step: str = "Long shots re-cut") -> Tuple[bool, str]:
     """
