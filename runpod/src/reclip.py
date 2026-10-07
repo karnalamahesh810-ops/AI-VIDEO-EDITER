@@ -97,7 +97,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import config, costs, events, gapfill, grade, ledger, media, r2, recut, shotcap, storage, timeline, topics
-from . import ytdlp
+from . import replan, ytdlp
 
 SECONDS = 2400.0           # the time box (s)
 WRITE_WAIT = recut.WRITE_WAIT
@@ -1185,6 +1185,12 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
                           "it changed since it was checked against the database - nothing was done")
     recut._check(doc)
     say("Re-clipping: reading the timeline", 2)
+    # Lines planned without the model (the video's title as their subject and in their search) are planned
+    # again first: every search below - and the editor's "find choices" once the timeline is saved - uses the
+    # new words (src/replan.py; the California video, 2026-10-07: 113 of 167 lines).
+    title = str(inp.get("title") or "")
+    replanned = (replan.repair(doc, title=title, report=lambda m: say(m, 3))
+                 if inp.get("replan") is not False else {})
     pictures = inp.get("pictures") is not False
     limit = int(_num(inp.get("limit")) or 0)
     only = _only(inp, doc)
@@ -1210,7 +1216,10 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
                    likely_bad=found_scan["likelyNewTargets"] if checks and only is None else 0, budget=cap)
     out: Dict[str, Any] = {"ok": True, "project_id": project_id, "dry_run": not apply, "trial": trial,
                            "fingerprint": fp, "fps": fps, "before": before, "estimate": est, "plan": targets[:ROWS],
-                           "offStory": found_scan["offStory"][:ROWS], "unchecked": found_scan["unchecked"]}
+                           "offStory": found_scan["offStory"][:ROWS], "unchecked": found_scan["unchecked"],
+                           "replanned": {k: v for k, v in replanned.items() if k != "lines"},
+                           "replannedLines": list(replanned.get("lines") or [])[:ROWS],
+                           "realSubjects": replan.real_subjects(doc, title)}
     if probed is not None:
         out["probe"] = {k: v for k, v in probed.items() if k != "perTarget"}
     print(f"[reclip] {before['scenes']} scenes: {before['clips']} clips, {before['pictures']} pictures, "
@@ -1243,7 +1252,7 @@ def run(inp: dict, doc: dict, work: str, report: Optional[Callable] = None, *,
             raise ReclipError("Cloudflare R2 is not configured on this worker: there is nowhere to keep the backup "
                               "and the new shots")
         out.update(written=False, writeError="")
-    if not targets and not checks:
+    if not targets and not checks and not (apply and replanned.get("replanned")):
         out["writeError"] = "nothing to re-clip"
         out["seconds"] = round(time.time() - started, 1)
         return out
