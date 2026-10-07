@@ -84,5 +84,88 @@ class Classes(unittest.TestCase):
         self.assertNotIn("http", ytdlp_reason("ERROR: unable to open https://x.example/a?sig=1"))
 
 
+class WhoIsToBlame(unittest.TestCase):
+    def setUp(self):
+        _forget()
+
+    def tearDown(self):
+        _forget()
+
+    def test_a_bot_check_on_two_routes_never_condemns_the_video(self):
+        for route in ("p1", "p2", "p3"):
+            self.assertEqual(ytdlp._note_failure("VIDBOT00001", FailureClass.BOT_CHECK, route), FailureClass.BOT_CHECK)
+        self.assertFalse(ytdlp._video_unavailable("VIDBOT00001"))
+
+    def test_a_plain_refusal_or_geo_lock_on_two_routes_does(self):
+        ytdlp._note_failure("VIDGEO00001", FailureClass.GEO_BLOCKED, "p1")
+        self.assertFalse(ytdlp._video_unavailable("VIDGEO00001"))
+        self.assertEqual(ytdlp._note_failure("VIDGEO00001", FailureClass.GEO_BLOCKED, "p2"),
+                         FailureClass.MEDIA_UNAVAILABLE)
+        self.assertTrue(ytdlp._video_unavailable("VIDGEO00001"))
+        media.reset_cache()                     # the two-route guess is this job's only
+        self.assertFalse(ytdlp._video_unavailable("VIDGEO00001"))
+
+    def test_youtubes_own_never_outlives_the_job_on_this_worker(self):
+        ytdlp._note_failure("VIDPAID0001", FailureClass.MEDIA_UNAVAILABLE, "p1",
+                            "ERROR: [youtube] VIDPAID0001: This video requires payment to watch")
+        media.reset_cache()                     # the next job on this worker
+        self.assertTrue(ytdlp._video_unavailable("VIDPAID0001"))
+        self.assertIn("requires payment", ytdlp.never_reason("VIDPAID0001"))
+        with mock.patch.object(ytdlp.time, "time", return_value=time.time() + ytdlp._NEVER_TTL + 5):
+            self.assertFalse(ytdlp._video_unavailable("VIDPAID0001"))
+
+    def test_retries_by_class(self):
+        def run(outcomes):
+            calls = []
+            it = iter(outcomes)
+
+            def fake_fetch(vid, out_dir, start, seconds):
+                cls = next(it)
+                calls.append(cls)
+                if cls is None:
+                    media._LAST_FAILURE.set(None)
+                    return "/w/ok.mp4"
+                media._note_failure(vid, cls, f"p{len(calls)}")
+                return ""
+            with mock.patch.object(media, "_yt_fetch", fake_fetch), \
+                    mock.patch.object(media.time, "sleep", lambda s: None):
+                _forget()
+                return media._yt_fetch_retry("VIDRETRY001", "/w", 1.0, 7.0, "t"), calls
+        S, B, P = FailureClass.STREAM_REFUSED, FailureClass.BOT_CHECK, FailureClass.MEDIA_UNAVAILABLE
+        self.assertEqual(run([S, S, None]), ("/w/ok.mp4", [S, S, None]))     # a refused stream: 2 more tries
+        self.assertEqual(run([S, S, S, None])[0], "")
+        self.assertEqual(run([B, B, None]), ("/w/ok.mp4", [B, B, None]))     # bot checks rotate on
+        self.assertEqual(run([P, None]), ("", [P]))                           # paid: one try, no more
+
+
+class SearchSaysNever(unittest.TestCase):
+    def setUp(self):
+        _forget()
+
+    def tearDown(self):
+        _forget()
+
+    def test_live_premieres_members_and_known_refusals_never_reach_the_ranking(self):
+        ytdlp._note_failure("PAIDPAID001", FailureClass.MEDIA_UNAVAILABLE, "p1", "requires payment")
+        rows = [
+            "GOODGOOD001\t95\thttps://www.youtube.com/watch?v=GOODGOOD001\tKTLA 5\tNA\tNA\tFlood in Los Angeles",
+            "LIVELIVE001\tNA\thttps://www.youtube.com/watch?v=LIVELIVE001\tNews\tis_live\tNA\tLIVE: storm",
+            "SOONSOON001\tNA\thttps://www.youtube.com/watch?v=SOONSOON001\tNews\tis_upcoming\tNA\tPremiere",
+            "MEMBMEMB001\t300\thttps://www.youtube.com/watch?v=MEMBMEMB001\tCh\tNA\tsubscriber_only\tMembers",
+            "PREMPREM001\t300\thttps://www.youtube.com/watch?v=PREMPREM001\tCh\tNA\tpremium_only\tPremium",
+            "PAIDPAID001\t5400\thttps://www.youtube.com/watch?v=PAIDPAID001\tFilms\tNA\tNA\tThe Film",
+            "WASLIVE0001\t3600\thttps://www.youtube.com/watch?v=WASLIVE0001\tNews\twas_live\tpublic\tYesterday",
+            "SHORTSHORT1\t40\thttps://www.youtube.com/shorts/SHORTSHORT1\tNA\tNA\tNA\tA short\twith a tab",
+        ]
+        result = SimpleNamespace(returncode=0, stdout="\n".join(rows) + "\n", stderr="")
+        with mock.patch.object(media.subprocess, "run", return_value=result) as run:
+            got = media._yt_candidates("ytsearch20:la flood", False)
+        self.assertIn("%(live_status)s\t%(availability)s", " ".join(run.call_args.args[0]))
+        self.assertEqual([c["id"] for c in got], ["GOODGOOD001", "WASLIVE0001", "SHORTSHORT1"])
+        self.assertEqual(got[0], {"id": "GOODGOOD001", "duration": 95.0, "aspect": 0.0,
+                                  "title": "Flood in Los Angeles", "channel": "KTLA 5"})
+        self.assertEqual((got[2]["aspect"], got[2]["channel"], got[2]["title"]), (9 / 16, "", "A short\twith a tab"))
+
+
 if __name__ == "__main__":
     unittest.main()

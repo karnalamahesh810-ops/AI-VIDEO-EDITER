@@ -2207,7 +2207,7 @@ def _google_youtube_candidates(query: str) -> List[dict]:
     out = []
     for row in search_google_videos(query):
         m = re.search(r"youtube\.com/watch\?v=([\w-]{11})", row["url"])
-        if not m:
+        if not m or _video_unavailable(m.group(1)):
             continue
         out.append({"id": m.group(1), "duration": row["seconds"], "aspect": 0.0,
                     "title": row["title"], "channel": "", "via": "google"})
@@ -2609,7 +2609,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         for candidate in ranked[skip:] + ranked[:skip]:
             if used and f"yt:{candidate['id']}" in used:
                 continue
-            if candidate["id"] in tried:
+            if candidate["id"] in tried or _video_unavailable(candidate["id"]):
                 continue
             # A disqualifying title excludes the candidate outright. Scoring it
             # down is not enough: the loop still takes the best of what is left,
@@ -3187,9 +3187,12 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             t, rows, via = fut.result()
             pool.add(rows, query=t[0], variant=t[1], via=via)
 
+    # A video YouTube already refused for good (paid, members-only, age-gated...: _video_unavailable)
+    # leaves the ranking too: the search lists are cached, and it used to take a scout's place.
     ranked = [c for c in pool.ranked()
               if c.id not in tried and _usable_title(c.title, c.channel, c.aspect, f"{intent_text} {context}")
-              and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")]
+              and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")
+              and not _video_unavailable(c.id)]
     if config.EYEWITNESS_SEARCHES:
         # Phone, drone, chaser and helicopter titles first, compilations last
         # (the Nature & Weather edit), on top of the metadata score.
