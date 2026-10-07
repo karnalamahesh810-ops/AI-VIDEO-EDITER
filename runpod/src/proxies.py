@@ -167,7 +167,7 @@ class ProxyManager:
         # A refusal is the platform flagging the address: the route steps
         # aside at once and is quarantined on the second; a rate limit
         # quarantines immediately. Timeouts and drops take two, then three.
-        refused = cls in (FailureClass.ACCESS_DENIED, FailureClass.RATE_LIMITED)
+        refused = cls in (FailureClass.ACCESS_DENIED, FailureClass.BOT_CHECK, FailureClass.RATE_LIMITED)
         if r.state == RECOVERING or r.consecutive_failures >= _QUARANTINE_AFTER \
                 or cls == FailureClass.RATE_LIMITED \
                 or (refused and r.consecutive_failures >= 2):

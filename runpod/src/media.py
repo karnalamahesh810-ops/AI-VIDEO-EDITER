@@ -52,7 +52,7 @@ from .storage import download
 from .filters import (  # noqa: F401
     _STILL_EXTS, _is_still, _video_seconds, _gray_frames, has_burned_captions, _texty_rows, _longest_run, playable_video, clip_quality, _video_dims, _blurry, _corner_watermark, _PTS_RE, scene_cuts, clean_window, trim_clip, tidy_clip)
 from .ytdlp import (  # noqa: F401
-    _PROXIES, PROXY_MANAGER, _UNAVAILABLE_VIDEOS, _DENIED_ON, _FAIL_LOCK, _LAST_FAILURE, _NET_SEM, _next_proxy, _acquire_proxy, _release_proxy, _proxy_index, proxy_snapshot, _note_failure, _video_unavailable, pot_provider_alive, pot_provider_log, probe_youtube, _bench_proxy, _yt_network_args, BLOCK_SIGNS, BOT_CHECK, looks_blocked, _YT_THIS_YEAR, _yt_candidates, _yt_info, _yt_fetch)
+    _PROXIES, PROXY_MANAGER, _UNAVAILABLE_VIDEOS, _DENIED_ON, _FAIL_LOCK, _LAST_FAILURE, _NET_SEM, _next_proxy, _acquire_proxy, _release_proxy, _proxy_index, proxy_snapshot, _note_failure, _video_unavailable, pot_provider_alive, pot_provider_log, probe_youtube, probe_download, direct_exit, _bench_proxy, _yt_network_args, BLOCK_SIGNS, BOT_CHECK, looks_blocked, _YT_THIS_YEAR, _yt_candidates, _yt_info, _yt_fetch)
 from . import ytdlp as _ytdlp  # noqa: F401
 from . import filters as _filters  # noqa: F401
 
@@ -404,6 +404,9 @@ def _serpapi_images(engine: str, query: str) -> List[tuple]:
         return rows
     except (requests.RequestException, ValueError) as e:
         _source_error(f"serpapi_{engine}", e)
+        # The month's searches used up (429) or the key refused: no more SerpApi calls this job,
+        # pictures and videos alike (only the video path stopped before).
+        _serpapi_spent(e)
         return []
 
 
@@ -2207,7 +2210,7 @@ def _google_youtube_candidates(query: str) -> List[dict]:
     out = []
     for row in search_google_videos(query):
         m = re.search(r"youtube\.com/watch\?v=([\w-]{11})", row["url"])
-        if not m:
+        if not m or _video_unavailable(m.group(1)):
             continue
         out.append({"id": m.group(1), "duration": row["seconds"], "aspect": 0.0,
                     "title": row["title"], "channel": "", "via": "google"})
@@ -2609,7 +2612,7 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
         for candidate in ranked[skip:] + ranked[:skip]:
             if used and f"yt:{candidate['id']}" in used:
                 continue
-            if candidate["id"] in tried:
+            if candidate["id"] in tried or _video_unavailable(candidate["id"]):
                 continue
             # A disqualifying title excludes the candidate outright. Scoring it
             # down is not enough: the loop still takes the best of what is left,
@@ -3187,9 +3190,12 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             t, rows, via = fut.result()
             pool.add(rows, query=t[0], variant=t[1], via=via)
 
+    # A video YouTube already refused for good (paid, members-only, age-gated...: _video_unavailable)
+    # leaves the ranking too: the search lists are cached, and it used to take a scout's place.
     ranked = [c for c in pool.ranked()
               if c.id not in tried and _usable_title(c.title, c.channel, c.aspect, f"{intent_text} {context}")
-              and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")]
+              and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")
+              and not _video_unavailable(c.id)]
     if config.EYEWITNESS_SEARCHES:
         # Phone, drone, chaser and helicopter titles first, compilations last
         # (the Nature & Weather edit), on top of the metadata score.

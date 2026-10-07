@@ -24,7 +24,7 @@ from typing import Dict, List, Optional
 import requests
 
 from . import config, costs, events, proxies
-from .errors import FailureClass, classify_ytdlp, from_reason
+from .errors import FailureClass, classify_ytdlp, from_reason, ytdlp_reason
 from .filters import playable_video
 
 # Vertical uploads (Shorts, phone video) when a style frames them on a blurred
@@ -129,10 +129,12 @@ def with_stop(fn):
 
 
 def reset() -> None:
-    """Between jobs: forget unavailable videos, the metadata cache and the counters."""
+    """Between jobs: forget unavailable videos, the metadata cache and the counters.
+    (Videos YouTube itself called never downloadable stay remembered: _NEVER.)"""
     EPOCH[0] += 1
     with _INFO_LOCK:
         _YT_INFO_CACHE.clear()
+        _DURATION.clear()
     with _FAIL_LOCK:
         _UNAVAILABLE_VIDEOS.clear()
         _DENIED_ON.clear()
@@ -158,6 +160,17 @@ _UNAVAILABLE_VIDEOS: set = set()
 
 
 _DENIED_ON: Dict[str, set] = {}
+
+
+# Videos YouTube itself said can never come down here (paid, members-only,
+# age-gated, private, removed, a premiere still to come), remembered across this
+# worker's jobs for _NEVER_TTL seconds: the same searches find the same paid
+# film again (2026-10-03..07: 14 paid videos took 46 download tries, 3.3 each,
+# every one refused). Only YouTube's own words put a video here, never the
+# two-route guess in _note_failure; the job's own set still clears per job.
+_NEVER: Dict[str, tuple] = {}
+_NEVER_TTL = 12 * 3600.0
+_NEVER_MAX = 5000
 
 
 _FAIL_LOCK = threading.Lock()
@@ -273,18 +286,27 @@ def proxy_snapshot() -> List[dict]:
     return PROXY_MANAGER.snapshot()
 
 
-def _note_failure(video_id: str, cls: FailureClass, proxy: str) -> FailureClass:
+def _note_failure(video_id: str, cls: FailureClass, proxy: str, why: str = "") -> FailureClass:
     """
-    Record a failed download; returns the class to act on. A video refused
-    on two different routes is unavailable, whatever YouTube said, and the
-    second route is not to blame.
+    Record a failed download; returns the class to act on. YouTube's own "never"
+    (MEDIA_UNAVAILABLE: paid, members-only, age-gated, removed...) ends the
+    video for this job and is remembered on this worker (_NEVER). A plain
+    refusal or a geo lock on two different routes means the video, whatever
+    YouTube said, and the second route is not to blame. A bot check or a
+    refused stream never condemns the video: the bot check is the address
+    (two flagged proxies used to retire a good video), the stream's 403 a
+    passing session.
     """
     _LAST_FAILURE.set((cls, proxy))
     if cls == FailureClass.MEDIA_UNAVAILABLE:
         with _FAIL_LOCK:
             _UNAVAILABLE_VIDEOS.add(video_id)
+            if video_id:
+                while len(_NEVER) >= _NEVER_MAX:
+                    _NEVER.pop(next(iter(_NEVER)))
+                _NEVER[video_id] = (time.time(), (why or "")[:100])
         return cls
-    if cls == FailureClass.ACCESS_DENIED and video_id:
+    if cls in (FailureClass.ACCESS_DENIED, FailureClass.GEO_BLOCKED) and video_id:
         with _FAIL_LOCK:
             routes = _DENIED_ON.setdefault(video_id, set())
             routes.add(proxy)
@@ -297,7 +319,32 @@ def _note_failure(video_id: str, cls: FailureClass, proxy: str) -> FailureClass:
 
 def _video_unavailable(video_id: str) -> bool:
     with _FAIL_LOCK:
-        return video_id in _UNAVAILABLE_VIDEOS
+        if video_id in _UNAVAILABLE_VIDEOS:
+            return True
+        seen = _NEVER.get(video_id)
+        return bool(seen) and time.time() - seen[0] < _NEVER_TTL
+
+
+def never_reason(video_id: str) -> str:
+    """Why YouTube said this video can never come down here ("" = it did not, or long ago)."""
+    with _FAIL_LOCK:
+        seen = _NEVER.get(video_id)
+    return seen[1] if seen and time.time() - seen[0] < _NEVER_TTL else ""
+
+
+# What the flat search already says about a result, as its live_status and
+# availability fields: such a video is never downloaded, so it is never
+# ranked, scouted or judged either.
+_NEVER_LIVE = {"is_live": "a live stream", "is_upcoming": "a premiere still to come",
+               "post_live": "a stream still processing"}
+_NEVER_AVAILABILITY = {"premium_only": "YouTube Premium only", "subscriber_only": "members only",
+                       "needs_auth": "needs a signed-in account", "private": "private"}
+
+
+def search_says_never(live_status: str, availability: str) -> str:
+    """Why a search result can never be downloaded, from its search metadata alone ("" = it may be)."""
+    return _NEVER_LIVE.get((live_status or "").strip(), "") or \
+        _NEVER_AVAILABILITY.get((availability or "").strip(), "")
 
 
 def pot_provider_alive() -> bool:
@@ -454,19 +501,25 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 20,
     any other vertical video is dropped when it is scouted (_scout), which
     reads the full info anyway. Only the CC-only mode still needs the full
     form, because the licence is not on the results page.
+
+    The results page also marks live streams, premieres to come and members /
+    Premium-only uploads (live_status, availability): those can never be
+    downloaded and leave the list here, as do videos YouTube already refused
+    for good (_video_unavailable) - before any metadata call, storyboard or
+    vision check is spent on them.
     """
     if require_cc:
         cmd = [
             "yt-dlp", target, "--skip-download", "--no-warnings",
             "--playlist-items", f"1-{limit}",
-            "--print", "%(id)s\t%(duration)s\t%(width)s\t%(height)s\t%(title)s",
+            "--print", "%(id)s\t%(duration)s\t%(width)s\t%(height)s\t%(live_status)s\t%(availability)s\t%(title)s",
             "--match-filter", "license *= Creative Commons",
         ]
     else:
         cmd = [
             "yt-dlp", target, "--flat-playlist", "--no-warnings",
             "--playlist-items", f"1-{limit}",
-            "--print", "%(id)s\t%(duration)s\t%(url)s\t%(channel)s\t%(title)s",
+            "--print", "%(id)s\t%(duration)s\t%(url)s\t%(channel)s\t%(live_status)s\t%(availability)s\t%(title)s",
         ]
     if stopped():
         return []
@@ -499,32 +552,41 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 20,
     _release_proxy(proxy, p.returncode == 0, None if p.returncode == 0 else classify_ytdlp(p.stderr, p.returncode),
                    started)
 
-    out = []
+    def num(x):
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return 0.0
+
+    out, dropped = [], []
     for line in (p.stdout or "").splitlines():
         parts = line.rstrip("\n").split("\t")
-        if len(parts) < 5 or not parts[0].strip():
+        if len(parts) < 7 or not parts[0].strip():
             continue
-        vid, dur, w, h, title = parts[0], parts[1], parts[2], parts[3], "\t".join(parts[4:])
-        channel = h if h and not h.replace(".", "").isdigit() and h != "NA" else ""
-
-        def num(x):
-            try:
-                return float(x)
-            except (TypeError, ValueError):
-                return 0.0
+        vid, dur, w, h, live, avail = (x.strip() for x in parts[:6])
+        title = "\t".join(parts[6:])
         if require_cc:
             width, height = num(w), num(h)
             aspect = (width / height) if height else 0.0
+            channel = ""
         else:
             # Flat results carry the URL where the full form had dimensions.
             aspect = 9 / 16 if "/shorts/" in w else 0.0
+            channel = h if h and h != "NA" else ""
+        why = search_says_never(live, avail) or ("refused for good" if _video_unavailable(vid) else "")
+        if why:
+            dropped.append(why)
+            continue
         out.append({
-            "id": vid.strip(),
+            "id": vid,
             "duration": num(dur),
             "aspect": aspect,
             "title": title.strip(),
             "channel": channel,
         })
+    if dropped:
+        print(f"[media] search: {len(dropped)} result(s) left out before any check - "
+              + ", ".join(sorted(set(dropped))), flush=True)
     return out
 
 
@@ -572,9 +634,16 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
             _release_proxy(proxy, False, FailureClass.INVALID_MEDIA, started)
             return {}, proxy
     if not info:
-        cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode), proxy)
+        why = ytdlp_reason(p.stderr)
+        first = classify_ytdlp(p.stderr, p.returncode)
+        cls = _note_failure(video_id, first, proxy, why)
         _release_proxy(proxy, False, cls, started)
-        print(f"[media] metadata failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}", flush=True)
+        print(f"[media] metadata failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}: "
+              f"{why or 'no diagnostic'}", flush=True)
+        # Kept like a download's failure (video_job_events), so a refusal at this step is counted too.
+        events.emit("source", "metadata_failed", level="warning", provider="youtube",
+                    failure=first.value, data={"video": video_id, "proxy": _proxy_index(proxy)},
+                    message=why[:120])
         return {}, proxy
     _release_proxy(proxy, True, None, started)
     if info:
@@ -590,17 +659,40 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
 # with a frameless file. Not the proxy's fault: fetch again without reuse.
 _HLS_REUSE = "cannot reuse http connection for different host"
 
+# ffmpeg asked to start a section at or past the video's end fails: ERANGE
+# ("Numerical result out of range") on the worker's ffmpeg 5.1, "Could not open
+# encoder before EOF" on newer ones. It was 53 of the 368 failed downloads of
+# 2026-10-03..07, short videos asked again and again at the same point (a
+# 24-second upload 16 times, a 14-second one 8); the length the download
+# printed (DLINFO) shows it, whatever ffmpeg said.
 
-def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
-              timeout: int = 300, hls_fix: bool = False) -> str:
-    """Download one section of one known video. Returns the local path or ''."""
-    # Different ranges must not reuse a previous download of the same video.
-    range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
-    # Each parallel scene gets its own path even when it selects the same
-    # source/time range; yt-dlp otherwise races over one partial output file.
-    fetch_id = uuid.uuid4().hex[:10]
-    out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}_{fetch_id}.%(ext)s")
-    cmd = [
+# Each video's length as yt-dlp reported it at a download (the DLINFO line);
+# the metadata cache has it for scouted videos. Per job.
+_DURATION: Dict[str, float] = {}
+
+
+def known_duration(video_id: str) -> float:
+    """The video's length in seconds when this job has seen it (0 = unknown)."""
+    with _INFO_LOCK:
+        cached = _YT_INFO_CACHE.get(video_id)
+        got = _DURATION.get(video_id, 0.0)
+    try:
+        return float((cached[0] or {}).get("duration") or 0.0) if cached else float(got or 0.0)
+    except (TypeError, ValueError):
+        return float(got or 0.0)
+
+
+def fit_start(start_at: float, seconds: float, duration: float) -> float:
+    """A section start inside the video: one that would begin within a second of
+    the end (or past it) moves back so the section ends at the end."""
+    if duration and start_at > duration - 1.0:
+        return max(0.0, duration - seconds - 0.25)
+    return start_at
+
+
+def _fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float) -> List[str]:
+    """The section download's yt-dlp command, before its network arguments."""
+    return [
         "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
         "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
         "--force-keyframes-at-cuts",
@@ -613,7 +705,98 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         "--no-playlist", "--no-warnings",
         "--merge-output-format", "mp4",
         "-o", out_tpl, "--print", "after_move:filepath",
+        # The video's length and the format taken, printed before the download
+        # starts (so a failed one still says them): see _dlinfo.
+        "--print", "before_dl:DLINFO %(duration)s|%(format_id)s",
     ]
+
+
+def probe_download(video_id: str = "ka2S39HhLsM", start: float = 30.0, seconds: float = 3.0,
+                   which: str = "all") -> List[dict]:
+    """
+    A real section download per route, made exactly as _yt_fetch makes one:
+    the metadata probe (probe_youtube) passes on addresses whose streams
+    YouTube still refuses, and the direct route was never tried this way.
+    `which`: "all" (direct and every proxy), "direct" or "proxies". Routes by
+    name only - a proxy URL carries credentials; the files are deleted. Three
+    at a time, behind the job's network slots.
+    """
+    import shutil
+    import tempfile
+    routes = []
+    if which in ("all", "direct"):
+        routes.append(("direct", ""))
+    if which in ("all", "proxies"):
+        routes += [(f"proxy#{i + 1}", p) for i, p in enumerate(config.YTDLP_PROXIES)]
+
+    def one(route):
+        name, proxy = route
+        d = tempfile.mkdtemp(prefix="probe_dl_")
+        cmd = _fetch_cmd(video_id, os.path.join(d, "probe.%(ext)s"), start, seconds) + _yt_network_args(proxy)
+        t = time.time()
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=180)
+            rc, out, err = p.returncode, p.stdout or "", p.stderr or ""
+        except subprocess.TimeoutExpired:
+            rc, out, err = -9, "", "timed out"
+        files = [os.path.join(d, f) for f in os.listdir(d) if f.endswith(".mp4")]
+        ok = rc == 0 and bool(files) and playable_video(files[0])
+        size = os.path.getsize(files[0]) if files else 0
+        shutil.rmtree(d, ignore_errors=True)
+        _dur, fmt = _dlinfo(out)
+        row = {"route": name, "ok": ok, "seconds": round(time.time() - t, 1), "kb": size // 1024,
+               "format": fmt}
+        if not ok:
+            cls = classify_ytdlp(err, rc, timed_out=(rc == -9), empty=(rc == 0))
+            # Never echo anything that could contain the proxy URL.
+            row["why"] = f"{cls.value}: " + re.sub(r"https?://\S+", "<url>", ytdlp_reason(err, 100))
+        return row
+
+    def guarded(route):
+        with _NET_SEM:
+            return one(route)
+
+    with ThreadPoolExecutor(max_workers=max(1, min(3, len(routes)))) as ex:
+        return list(ex.map(guarded, routes))
+
+
+def direct_exit() -> dict:
+    """Where this worker's own traffic leaves from (country / network), for the direct route."""
+    try:
+        j = requests.get("https://ipinfo.io/json", timeout=10).json()
+        return {"country": j.get("country"), "region": j.get("region"), "org": (j.get("org") or "")[:60],
+                "datacenter": os.getenv("RUNPOD_DC_ID", "")}
+    except (requests.RequestException, ValueError) as e:
+        return {"error": type(e).__name__}
+
+
+def _dlinfo(stdout: str) -> tuple:
+    """(duration, format id) from the DLINFO line a download prints before it starts."""
+    for line in (stdout or "").splitlines():
+        if line.startswith("DLINFO "):
+            dur, _, fmt = line[7:].strip().partition("|")
+            try:
+                return float(dur), fmt.strip()
+            except ValueError:
+                return 0.0, fmt.strip()
+    return 0.0, ""
+
+
+def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
+              timeout: int = 300, hls_fix: bool = False, refit: bool = True) -> str:
+    """Download one section of one known video. Returns the local path or ''.
+    A start at or past the video's known end moves back inside it (fit_start);
+    a start found past the end only by the download itself is fitted and tried
+    once more (`refit`)."""
+    start_at = fit_start(start_at, seconds, known_duration(video_id))
+    # Different ranges must not reuse a previous download of the same video.
+    range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
+    # Each parallel scene gets its own path even when it selects the same
+    # source/time range; yt-dlp otherwise races over one partial output file.
+    fetch_id = uuid.uuid4().hex[:10]
+    out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}_{fetch_id}.%(ext)s")
+    cmd = _fetch_cmd(video_id, out_tpl, start_at, seconds)
     if _video_unavailable(video_id):
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
@@ -640,21 +823,39 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             _release_proxy(proxy, False, cls, started)
             print(f"[media] YouTube clip download timed out ({video_id}, {start_at:.1f}s) "
                   f"via proxy #{_proxy_index(proxy)}", flush=True)
+            events.emit("source", "download_failed", level="warning", provider="youtube",
+                        failure=cls.value, data={"video": video_id, "proxy": _proxy_index(proxy),
+                                                 "start": round(start_at, 1)},
+                        message=f"timed out after {timeout} s")
             return ""
         except FileNotFoundError:
             _note_failure(video_id, FailureClass.PROVIDER_UNAVAILABLE, proxy)
             _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
             print("[media] yt-dlp executable is missing; cannot download YouTube footage", flush=True)
             return ""
+    duration, fmt = _dlinfo(p.stdout)
+    if duration:
+        with _INFO_LOCK:
+            _DURATION[video_id] = duration
     if p.returncode != 0:
-        cls = _note_failure(video_id, classify_ytdlp(p.stderr, p.returncode), proxy)
+        why = ytdlp_reason(p.stderr)
+        if refit and duration and fit_start(start_at, seconds, duration) != start_at:
+            # Asked past the video's end: not the route's fault, nor the video's.
+            _release_proxy(proxy, True, None, started)
+            fitted = fit_start(start_at, seconds, duration)
+            print(f"[media] {video_id} is {duration:.0f} s long; the section at {start_at:.1f}s "
+                  f"moves to {fitted:.1f}s", flush=True)
+            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False)
+        first = classify_ytdlp(p.stderr, p.returncode)
+        cls = _note_failure(video_id, first, proxy, why)
         _release_proxy(proxy, False, cls, started)
-        reason = re.sub(r"https?://[^\s]+", "[URL]", (p.stderr or "").strip())
         print(f"[media] download failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}: "
-              f"{reason[-160:] or 'no diagnostic'}", flush=True)
+              f"{why or 'no diagnostic'}", flush=True)
         events.emit("source", "download_failed", level="warning", provider="youtube",
-                    failure=cls.value, data={"video": video_id, "proxy": _proxy_index(proxy)},
-                    message=reason[-120:])
+                    failure=first.value, data={"video": video_id, "proxy": _proxy_index(proxy),
+                                               "start": round(start_at, 1), "format": fmt,
+                                               "length": duration or None},
+                    message=why[:120])
         return ""
     found = ""
     for line in (p.stdout or "").splitlines():
@@ -679,9 +880,22 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             _release_proxy(proxy, True, None, started)
             print(f"[media] HLS connection reuse failed ({video_id} @{start_at:.0f}s); "
                   "fetching again without reuse", flush=True)
-            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True)
+            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True, refit=refit)
+        if refit and duration and fit_start(start_at, seconds, duration) != start_at:
+            # A frameless section from the video's last second: asked at its end.
+            try:
+                os.remove(found)
+            except OSError:
+                pass
+            _release_proxy(proxy, True, None, started)
+            fitted = fit_start(start_at, seconds, duration)
+            print(f"[media] {video_id} is {duration:.0f} s long; the empty section at {start_at:.1f}s "
+                  f"moves to {fitted:.1f}s", flush=True)
+            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False)
         events.emit("source", "empty_download", level="warning", provider="youtube",
-                    failure="INVALID_MEDIA", data={"video": video_id, "proxy": _proxy_index(proxy)},
+                    failure="INVALID_MEDIA", data={"video": video_id, "proxy": _proxy_index(proxy),
+                                                   "start": round(start_at, 1), "format": fmt,
+                                                   "length": duration or None},
                     message=reason[-160:])
         print(f"[media] empty download ({video_id} @{start_at:.0f}s, "
               f"{os.path.getsize(found)} bytes) via proxy #{_proxy_index(proxy)}: "
@@ -713,6 +927,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     except OSError:
         pass
     events.emit("source", "download_ok", provider="youtube",
-                data={"video": video_id, "seconds": round(seconds, 1), "proxy": _proxy_index(proxy)},
+                data={"video": video_id, "seconds": round(seconds, 1), "proxy": _proxy_index(proxy),
+                      "format": fmt},
                 duration_ms=(time.time() - started) * 1000.0)
     return found

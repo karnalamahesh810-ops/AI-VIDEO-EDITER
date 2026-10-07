@@ -37,6 +37,23 @@ class SerpApi(unittest.TestCase):
                 media._serpapi_images("google_images", "x")
         self.assertEqual(get.call_count, 2)
 
+    def test_a_used_up_month_stops_the_jobs_picture_searches(self):
+        # 2026-10-07: the free plan's 250 searches were spent; every call answered 429.
+        import requests as _rq
+        used_up = mock.Mock(status_code=429)
+        used_up.raise_for_status = mock.Mock(side_effect=_rq.HTTPError(
+            "429 Client Error: Too Many Requests for url: https://serpapi.com/search.json"))
+        media._SERPAPI_VIDEO_USED["n"] = 0
+        try:
+            with mock.patch.object(config, "SERPAPI_MAX_PER_JOB", 30), \
+                    mock.patch.object(media.requests, "get", return_value=used_up) as get:
+                for _ in range(5):
+                    self.assertEqual(media._serpapi_images("google_images", "x"), [])
+                    self.assertEqual(media._serpapi_videos("x"), [])
+            self.assertEqual(get.call_count, 1)
+        finally:
+            media._SERPAPI_VIDEO_USED["n"] = 0
+
     def test_unconfigured_does_nothing(self):
         with mock.patch.object(config, "SERPAPI_API_KEY", ""), mock.patch.object(media.requests, "get") as get:
             self.assertEqual(media._serpapi_images("google_images", "x"), [])

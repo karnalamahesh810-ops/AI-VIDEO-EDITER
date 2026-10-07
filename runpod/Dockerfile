@@ -28,10 +28,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
 # YouTube answers datacenter IPs - every RunPod machine - with "Sign in to
 # confirm you're not a bot" unless the request carries a proof-of-origin
 # token. This server mints them; yt-dlp's bgutil plugin (requirements.txt)
-# fetches one per request. Started by scripts/start.sh. Pinned commit.
+# fetches one per request. Started by scripts/start.sh. Pinned commit: 2.0.1
+# (2026-10-02, server dependency CVE fixes; plugin and server versions match).
 RUN git init /opt/bgutil \
     && cd /opt/bgutil \
-    && git fetch --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider 2d758ea29ae5c65886bdf56c42ebbdfe17d78bbb \
+    && git fetch --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider 2df09aeaa71a4eec1e31901e84fbddbf0c7c54a9 \
     && git checkout FETCH_HEAD \
     && cd server && npm ci --no-audit --no-fund && npx tsc \
     && rm -rf /opt/bgutil/.git

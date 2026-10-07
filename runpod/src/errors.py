@@ -18,7 +18,22 @@ class FailureClass(str, Enum):
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
     RATE_LIMITED = "RATE_LIMITED"
     ACCESS_DENIED = "ACCESS_DENIED"
+    # YouTube's own "Sign in to confirm you're not a bot" (or its captcha, or "not
+    # available on this app"): the ADDRESS is flagged, never the video. Measured
+    # 2026-10-03..07: 39 of 46 videos refused this way came down on another route.
+    BOT_CHECK = "BOT_CHECK"
     MEDIA_UNAVAILABLE = "MEDIA_UNAVAILABLE"
+    # "Not made available in your country": another country's route may get it.
+    GEO_BLOCKED = "GEO_BLOCKED"
+    # The video's stream itself answered 403 after its formats were read (ffmpeg
+    # "Server returned 403 Forbidden" on googlevideo): 218 of 368 failed YouTube
+    # downloads 2026-10-03..07, and 183 of the 197 videos it hit came down on a
+    # later try. Never the video's fault. The refused URL is refused for any client
+    # (a paired probe), and how often depends on the address: 6-11% on most routes,
+    # 23-30% on two of them in the owner's 2026-10-07 video. So it counts against
+    # the route like a timeout (degraded after two in a row, benched after three),
+    # never at once like a bot check.
+    STREAM_REFUSED = "STREAM_REFUSED"
     PROXY_FAILURE = "PROXY_FAILURE"
     INVALID_MEDIA = "INVALID_MEDIA"
     FFMPEG_FAILURE = "FFMPEG_FAILURE"
@@ -34,7 +49,10 @@ RETRY: Dict[FailureClass, dict] = {
     FailureClass.PROVIDER_UNAVAILABLE: {"retries": 0, "backoff": 0.0, "switch": False, "proxy_fault": False},
     FailureClass.RATE_LIMITED: {"retries": 1, "backoff": 5.0, "switch": True, "proxy_fault": True},
     FailureClass.ACCESS_DENIED: {"retries": 2, "backoff": 0.0, "switch": True, "proxy_fault": True},
+    FailureClass.BOT_CHECK: {"retries": 2, "backoff": 0.0, "switch": True, "proxy_fault": True},
     FailureClass.MEDIA_UNAVAILABLE: {"retries": 0, "backoff": 0.0, "switch": False, "proxy_fault": False},
+    FailureClass.GEO_BLOCKED: {"retries": 1, "backoff": 0.0, "switch": True, "proxy_fault": False},
+    FailureClass.STREAM_REFUSED: {"retries": 2, "backoff": 0.0, "switch": True, "proxy_fault": True},
     FailureClass.PROXY_FAILURE: {"retries": 2, "backoff": 1.0, "switch": True, "proxy_fault": True},
     FailureClass.INVALID_MEDIA: {"retries": 1, "backoff": 0.0, "switch": True, "proxy_fault": True},
     FailureClass.FFMPEG_FAILURE: {"retries": 1, "backoff": 0.0, "switch": False, "proxy_fault": False},
@@ -42,19 +60,33 @@ RETRY: Dict[FailureClass, dict] = {
     FailureClass.UNKNOWN: {"retries": 1, "backoff": 1.0, "switch": True, "proxy_fault": False},
 }
 
+# First match wins, so the order matters: a rate-limited session and a geo lock
+# read like "this video is not available" too, and the video's own refusals
+# ("Private video. Sign in if you've been granted access") carry sign-in words.
 _RULES = [
-    (FailureClass.RATE_LIMITED, ("http error 429", "too many requests", "rate limit")),
+    (FailureClass.RATE_LIMITED, ("http error 429", "too many requests", "rate limit", "rate-limited by youtube",
+                                 "this content isn't available, try again later")),
+    (FailureClass.GEO_BLOCKED, (
+        "not made this video available in your country", "not available from your location",
+        "geo restriction", "geo-restrict", "blocked it in your country", "is not available in your country")),
+    (FailureClass.BOT_CHECK, (
+        "not a bot", "captcha", "content is not available on this app",
+        "unable to download api page: http error 403")),
     (FailureClass.MEDIA_UNAVAILABLE, (
         "video unavailable", "private video", "has been removed", "this video is not available",
-        "video is unavailable", "is not available in your country", "age-restricted", "age restricted",
-        "sign in to confirm your age", "members-only", "members only", "premieres in", "is a live event",
-        "this live event", "no longer available", "does not exist", "video has been terminated",
-        "account associated with this video has been terminated", "join this channel",
-        "content is not available on this app")),
+        "video is unavailable", "age-restricted", "age restricted", "sign in to confirm your age",
+        "inappropriate for some users", "members-only", "members only", "join this channel",
+        "channel's members", "requires payment", "music premium", "youtube premium members",
+        "premieres in", "is a live event", "this live event", "live stream recording is not available",
+        "no longer available", "does not exist", "video has been terminated",
+        "account associated with this video has been terminated")),
+    (FailureClass.STREAM_REFUSED, (
+        "server returned 403 forbidden", "unable to download video data: http error 403",
+        "server returned 4xx client error")),
     (FailureClass.ACCESS_DENIED, (
-        "sign in to confirm", "confirm you're not a bot", "confirm you are not a bot", "please sign in",
-        "this content isn't available", "unable to download api page: http error 403",
-        "http error 403", "requested format is not available", "login required", "captcha")),
+        "sign in to confirm", "please sign in", "this content isn't available",
+        "http error 403", "requested format is not available", "login required",
+        "only available for registered users")),
     (FailureClass.PROXY_FAILURE, (
         "unable to connect to proxy", "proxy", "tunnel connection failed", "connection reset",
         "connection refused", "remote end closed", "eof occurred", "ssl:", "sslerror",
@@ -84,6 +116,29 @@ def classify_ytdlp(stderr: str = "", returncode: Optional[int] = None,
     if returncode == 0:
         return FailureClass.INVALID_MEDIA
     return FailureClass.UNKNOWN
+
+
+_COOKIES_ADVICE = re.compile(r"\.?\s*(?:Use --cookies-from-browser or --cookies|This helps protect our community)\b.*$",
+                             re.IGNORECASE | re.DOTALL)
+
+
+def ytdlp_reason(stderr: str = "", limit: int = 160) -> str:
+    """
+    The words that say why a yt-dlp run failed: its last ERROR line without yt-dlp's
+    cookies advice, links blanked; for "ffmpeg exited" the ffmpeg line before it.
+    The tail of stderr used to be stored instead, which for a refusal is only the
+    advice: all 48 sign-in failures of 2026-10-03..07 were saved as "...for how to
+    manually pass cookies...", the reason itself cut off.
+    """
+    lines = [l.strip() for l in (stderr or "").splitlines() if l.strip()]
+    errors = [l for l in lines if l.startswith("ERROR")]
+    text = errors[-1] if errors else (lines[-1] if lines else "")
+    if errors and "ffmpeg exited" in text.lower():
+        before = [l for l in lines if not l.startswith(("ERROR", "WARNING"))]
+        if before:
+            text = f"{before[-1]} | {text}"
+    text = _COOKIES_ADVICE.sub("", re.sub(r"https?://\S+", "[URL]", text)).strip()
+    return text[:limit]
 
 
 def classify_exception(exc: Exception, status: Optional[int] = None) -> FailureClass:
@@ -116,7 +171,9 @@ def from_reason(why: str) -> FailureClass:
     w = (why or "").lower()
     if "timed out" in w or "timeout" in w:
         return FailureClass.NETWORK_TIMEOUT
-    if "refused" in w or "bot" in w:
+    if "bot" in w:
+        return FailureClass.BOT_CHECK
+    if "refused" in w:
         return FailureClass.ACCESS_DENIED
     if "empty" in w:
         return FailureClass.INVALID_MEDIA
