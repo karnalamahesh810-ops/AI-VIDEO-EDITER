@@ -115,9 +115,33 @@ YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
 # simultaneous yt-dlp processes on one worker.
 NETWORK_CONCURRENCY = int(os.getenv("NETWORK_CONCURRENCY", "0")) or max(4, min(16, 2 * len(YTDLP_PROXIES)))
 
+# --- Kie: off for good -------------------------------------------------------
+# The owner, 2026-10-07: Kie (api.kie.ai) is turned off for good - its balance is
+# negative and OpenRouter replaces it. Every Kie route is ignored unless KIE_ENABLED=1,
+# even when a template still carries a Kie address or KIE_API_KEY: the vision and
+# planner backup (AI_FALLBACK_*), a Kie base for the director or vision, the
+# generated pictures (IMAGE_API_BASE) and the Kie credit checks. Read at call time
+# (kie_blocked), so one job or one test can still turn it on.
+KIE_ENABLED = _flag("KIE_ENABLED", False)
+OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
+
+
+def kie_url(url) -> bool:
+    """A Kie address (api.kie.ai)."""
+    return "kie.ai" in str(url or "")
+
+
+def kie_blocked(url) -> bool:
+    """A Kie address while Kie is off (KIE_ENABLED, read now): never called."""
+    return kie_url(url) and not KIE_ENABLED
+
+
 # --- generated images --------------------------------------------------------
 # Any OpenAI-compatible /images/generations endpoint (OpenAI gpt-image-1, or a
 # compatible gateway). Same env shape as the director below, deliberately.
+# OpenRouter (IMAGE_API_BASE https://openrouter.ai/api/v1) draws through its chat
+# completions with an image-output model (media._openrouter_generate), e.g.
+# IMAGE_MODEL google/gemini-2.5-flash-image. A Kie base is never called while Kie is off.
 IMAGE_API_BASE = os.getenv("IMAGE_API_BASE", "https://api.openai.com/v1").rstrip("/")
 IMAGE_API_KEY = os.getenv("IMAGE_API_KEY", "")
 IMAGE_MODEL = os.getenv("IMAGE_MODEL", "gpt-image-1")
@@ -171,8 +195,12 @@ DIRECTOR_ROUTINE_MODEL = os.getenv("DIRECTOR_ROUTINE_MODEL", "").strip()
 # minimal, low, medium, high; anything else is ignored. The routine calls (the
 # shot batches, rescue, sequences, assign) may take their own, lower effort;
 # "" = DIRECTOR_REASONING_EFFORT.
+# 2026-10-07: the routine calls default to "low" (the story brief keeps the provider's default). A/B on two real
+# 16-line batches on openai/gpt-5.2 (scratchpad planner_ab.py): reasoning 1,617 -> 400 and 626 -> 136 tokens,
+# $0.068 -> $0.053 and $0.053 -> $0.043 a batch (-20%), 28% faster, the same lines planned as footage or stills
+# on 26 of 32 and equally specific subjects, places and years. "" = the provider's default, as before.
 DIRECTOR_REASONING_EFFORT = os.getenv("DIRECTOR_REASONING_EFFORT", "").strip().lower()
-DIRECTOR_ROUTINE_REASONING_EFFORT = os.getenv("DIRECTOR_ROUTINE_REASONING_EFFORT", "").strip().lower()
+DIRECTOR_ROUTINE_REASONING_EFFORT = os.getenv("DIRECTOR_ROUTINE_REASONING_EFFORT", "low").strip().lower()
 # The re-plan of lines a build planned without the model (src/replan.py): the build's own planner and
 # prompts, on a cheap model with thinking off. On openai/gpt-5.2 at its default effort the California
 # re-plan (167 lines, 12 calls) cost $0.72 - 45k output tokens, 16k of them hidden reasoning at $14/M; the
@@ -201,9 +229,10 @@ AI_FALLBACK_MODEL = os.getenv("AI_FALLBACK_MODEL", "gemini-2.5-flash")
 AI_FALLBACK_VISION_MODEL = os.getenv("AI_FALLBACK_VISION_MODEL", "") or AI_FALLBACK_MODEL
 
 VISION_ENABLED = _flag("VISION_ENABLED", True)
-VISION_API_BASE = os.getenv("VISION_API_BASE", "") or DIRECTOR_API_BASE or "https://api.kie.ai/v1"
-VISION_API_KEY = (os.getenv("VISION_API_KEY", "") or DIRECTOR_API_KEY
-                  or os.getenv("KIE_API_KEY", ""))
+# OpenRouter when nothing names a base (was Kie's /v1); a Kie key is only read while Kie is on.
+VISION_API_BASE = os.getenv("VISION_API_BASE", "") or DIRECTOR_API_BASE or OPENROUTER_API_BASE
+VISION_API_KEY = (os.getenv("VISION_API_KEY", "") or DIRECTOR_API_KEY or os.getenv("OPENROUTER_API_KEY", "")
+                  or (os.getenv("KIE_API_KEY", "") if KIE_ENABLED else ""))
 # Measured on 8 real candidates, cache cleared per model (2026-09-25):
 #   gemini-3-8-flash-openai  7.2s/img  0.080 credits
 #   gpt-5-2                 14.5s/img  0.085 credits
@@ -224,6 +253,17 @@ VISION_FALLBACK_MODELS = [m.strip() for m in
 # "" = VISION_MODEL for everything, exactly as before. OpenRouter: google/gemini-2.5-flash-lite
 # ($0.10/$0.40 per M against gemini-2.5-flash's $0.30/$2.50).
 VISION_TILE_MODEL = os.getenv("VISION_TILE_MODEL", "").strip()
+# A storyboard call the judge checks afterwards (a scout's pick, a fine pass) sends its sheet as this many
+# images instead of one (vision._sheet_images). Gemini 2.x bills a lone 1200x540 sheet 2,322 prompt tokens
+# (it cuts it into 9 crops) and each image of a request with two or more 258: 2 images = 516 tokens. Measured
+# 2026-10-07 (scratchpad cq/): a pick $0.00101 -> $0.00039 and a fine pass $0.00134 -> $0.00061 on a 23-line
+# replay; on 40 real sheets the 2-image pick agreed with the one-sheet pick on go / skip 32 of 40 times, the
+# one-sheet pick with itself asked again 30 of 40. 1 = one sheet, as before. A subject pool's rating keeps one.
+VISION_SHEET_IMAGES = int(os.getenv("VISION_SHEET_IMAGES", "2"))
+# Shorter answers where nothing reads the words: a fine pass's tiles without descriptions, a pick's description
+# in at most 8 words (both only logged). Output tokens are $2.50/M on gemini-2.5-flash: a fine pass's answer
+# 161 -> 82 tokens. Off = the answers as before.
+VISION_COMPACT_TILES = _flag("VISION_COMPACT_TILES", True)
 VISION_MIN_SCORE = float(os.getenv("VISION_MIN_SCORE", "0.70"))
 # Footage quality floor (sharpness, stability, light, framing), judged in the
 # same call. Low on purpose: it only removes clips that are plainly unwatchable,
@@ -276,6 +316,10 @@ VISION_HEDGE_SECONDS = float(os.getenv("VISION_HEDGE_SECONDS", "25"))
 # this much credit left (read from its free /credits endpoint, cached); 0 = always, as before. A re-clip
 # never hedges (reclip.RECLIP_CONFIG).
 VISION_HEDGE_MIN_CREDIT = float(os.getenv("VISION_HEDGE_MIN_CREDIT", "15"))
+# The hedge's clock starts when the first request has one of this worker's slots and goes out, not while it
+# waits for one: under a 16-way load the queue alone used to set off a second, billed request for every
+# waiting call (vision._ask hedge_at). Off = the clock starts when the call is handed over, as before.
+VISION_HEDGE_FROM_SEND = _flag("VISION_HEDGE_FROM_SEND", True)
 # A call gives up after this long in total; the candidate is then handled
 # like any unjudged one. Late answers are dropped.
 VISION_CALL_BUDGET_SECONDS = float(os.getenv("VISION_CALL_BUDGET_SECONDS", "100"))
@@ -291,6 +335,10 @@ VISION_KIE_MAX_CONCURRENCY = int(os.getenv("VISION_KIE_MAX_CONCURRENCY", "8"))
 # with their station logo, headline banner and ticker as they are. Off = the
 # old rule (any other channel's text or logo rejects a clip).
 NEWS_FOOTAGE = _flag("NEWS_FOOTAGE", True)
+# The news rule spelt out for the judge (vision._NEWS_OVERLAY_RULE): a station's or outlet's logo, an agency's
+# mark, a webcam's ID and timestamp, a 'video courtesy of' credit and news banners are not "text or watermark";
+# another channel's stamp on a re-upload and a creator's captions still are. Off = the news rule as before.
+VISION_NEWS_OVERLAYS_OK = _flag("VISION_NEWS_OVERLAYS_OK", True)
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
@@ -321,6 +369,12 @@ JUDGE_MAX_PER_SCENE = int(os.getenv("JUDGE_MAX_PER_SCENE", "12"))
 # simulation picked the same shots with 21% fewer paid calls and 32% fewer
 # downloads). "0" = exactly as before.
 JUDGE_MEMORY = _flag("JUDGE_MEMORY", True)
+# A video with this many different moments turned down for a reason that holds for its other moments too - the
+# judge saw other people's text or a watermark, the file has burned-in captions or UI, or it is too poor to
+# show - is left alone for the rest of the job (media._mark_bad): a channel's logo bug or its captions are on
+# every moment, and each other line used to pay a scout, a download and a judge to find that out again (text or
+# watermark was 88 of 242 turn-downs on the Obama re-clip, 2026-10-07). 0 = moments only, as before.
+JUDGE_MEMORY_VIDEO_STRIKES = int(os.getenv("JUDGE_MEMORY_VIDEO_STRIKES", "2"))
 # Searches a typed scene intent expands to (src/intent.py), specific first.
 INTENT_QUERIES_MAX = int(os.getenv("INTENT_QUERIES_MAX", "10"))
 # The candidate pool (src/candidates.py): every search variant plus
@@ -605,6 +659,21 @@ BATCH_LIMIT_MARGIN_SECONDS = float(os.getenv("BATCH_LIMIT_MARGIN_SECONDS", "300"
 # Total worker slots including the parent worker. The parent handles one part
 # locally while up to nine child jobs run on the other endpoint workers.
 FANOUT_PARTS = int(os.getenv("FANOUT_PARTS", "10"))
+# A build's sourcing on other workers (fan-out parts: src/fanout.source). Off - one machine per build (the owner,
+# 2026-10-07): the fan-out builds cost 5x the machine time for the same video (Yellowstone 2a2200b3, 21.5 min:
+# 18 parts, 9,316 worker-seconds, $1.49; Lake Mead a197d293, 17.9 min, one machine: 2,106 s, $0.29) - each part
+# bills its whole time box while most of its threads wait on its slowest line, and every part starts cold,
+# probes YouTube on every route and pools its own subjects. A pod build never fanned out (the app sets
+# FANOUT_PARTS 1); the serverless fallback inherited the template's 10. Renders still spread over the workers
+# (FANOUT_RENDER / POD_RENDER_FANOUT; FANOUT_PARTS still caps their chunks). 1 = the parts as before.
+BUILD_FANOUT = os.getenv("BUILD_FANOUT", "0").strip().lower() in ("1", "true", "yes", "on")
+# A build sourced on one machine: pass 1 gets max(PASS1_BUDGET_SECONDS, this x its lines) - every line its share
+# of SOURCE_WORKERS threads (12 s x 16 threads = 192 s a line, SCENE_SECONDS_MIN..MAX; a fan-out part's lines had
+# up to 300 s, a clip-first line that finds its clip takes 75-290 s on the 2026-10-07 replay) - and the job's sourcing
+# deadline is at least that plus SINGLE_TAIL_SECONDS for pass 2, the rescue and the fill. A fan-out part's own
+# pass keeps 3 s a line (its box is the whole part). A pod's own PASS1_BUDGET_SECONDS wins when it is longer.
+SINGLE_PASS1_PER_SCENE = float(os.getenv("SINGLE_PASS1_PER_SCENE", "12"))
+SINGLE_TAIL_SECONDS = float(os.getenv("SINGLE_TAIL_SECONDS", "600"))
 FANOUT_MIN_SCENES = int(os.getenv("FANOUT_MIN_SCENES", "1"))
 FANOUT_API_KEY = (os.getenv("FANOUT_API_KEY", "")
                   or os.getenv("RUNPOD_API_KEY", ""))
@@ -899,6 +968,11 @@ SOURCE_WORKERS = int(os.getenv("SOURCE_WORKERS", "16"))
 # Refuse to source a video with an empty AI account (handler._require_ai_credit).
 REQUIRE_AI_CREDIT = os.getenv("REQUIRE_AI_CREDIT", "1").strip().lower() not in ("0", "false", "no")
 MIN_AI_CREDIT = float(os.getenv("MIN_AI_CREDIT", "5"))
+# The same refusal for the OpenRouter account (handler._require_openrouter_credit): a plan or a build does not
+# start with less than this many dollars on it (a 20-minute video's planning and clip checks come to about
+# $1-2). 0 = never refused. A small job (a scene's new shot) asks for OPENROUTER_MIN_CREDIT_SMALL.
+OPENROUTER_MIN_CREDIT = float(os.getenv("OPENROUTER_MIN_CREDIT", "2"))
+OPENROUTER_MIN_CREDIT_SMALL = float(os.getenv("OPENROUTER_MIN_CREDIT_SMALL", "0.2"))
 # Refuse to start sourcing when no connection can download from YouTube
 # (every search still "works" from a blocked IP; the downloads fail and the
 # gaps became paid AI images - two real videos got 0 YouTube clips).

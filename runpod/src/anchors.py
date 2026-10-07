@@ -297,7 +297,12 @@ def find_anchor(frame_path_or_b64: str, what: str, context: str = "", *,
                                      + "Answer with the JSON only."},
             {"type": "image_url", "image_url": {"url": f"data:{_mime(b64)};base64,{b64}"}},
         ]
-        text, _model = vision._ask([{"role": "system", "content": _SYSTEM}, {"role": "user", "content": content}], 300)
+        token = vision._KIND.set("anchor")           # its price on its own line of the ledger
+        try:
+            text, _model = vision._ask([{"role": "system", "content": _SYSTEM}, {"role": "user", "content": content}],
+                                       300)
+        finally:
+            vision._KIND.reset(token)
         if not text:
             return None                       # no model answered: not cached, the next ask tries again
         costs.record("vision.anchor")

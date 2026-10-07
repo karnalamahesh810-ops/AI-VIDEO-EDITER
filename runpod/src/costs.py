@@ -81,7 +81,7 @@ _CATEGORY = {"vision.judge": "vision", "vision.rate_tiles": "vision", "vision.pi
 # (OpenRouter's usage.cost - the vision judge since 2026-10-01, the planning calls
 # since 2026-10-05). "<category>.measured" counts the answers that came priced, so a
 # call that went to a provider that does not say (the Kie fallback) is still estimated.
-_MEASURED = ("vision", "llm")
+_MEASURED = ("vision", "llm", "image")      # image.usd: an OpenRouter picture (media._openrouter_generate)
 
 # A pod's price when nothing says what its machine costs (scripts/pod_job.py reads
 # POD_COST_PER_HR, then the pod's own RunPod record): a 16-vCPU cpu3c pod, $0.48/h
@@ -96,9 +96,35 @@ _WORKER_OWNED = frozenset({"runpod.worker_second", "serp.call"})
 
 
 def _counts_only(key: str) -> bool:
-    """A measured price, a count of priced answers or a token count: never priced as a unit of its own."""
-    return key.endswith((".usd", ".measured")) or \
+    """A measured price, a count of priced answers, a token count or a call count by kind
+    (vision.<kind>.calls, llm.<kind>.calls): never priced as a unit of its own."""
+    return key.endswith((".usd", ".measured", ".calls")) or \
         (key.startswith(tuple(f"{c}." for c in _MEASURED)) and key.endswith("_tokens"))
+
+
+def breakdown(units: dict) -> dict:
+    """
+    What the measured AI money went on, from a ledger's units: {"vision": {kind: {"usd", "calls"}},
+    "llm": {kind: {...}}} - each call kind's own OpenRouter price (vision.<kind>.usd: judge, judge_open,
+    judge_still, pick, rate, pool_rate, anchor, review...; llm.<kind>.usd: brief, plan, rescue, sequences,
+    assign, replan...) and vision.hedge.usd, what hedges' second requests cost. {} for a ledger from before
+    the kinds were kept.
+    """
+    out: Dict[str, Dict[str, dict]] = {}
+    for key, value in (units or {}).items():
+        parts = str(key).split(".")
+        if len(parts) != 3 or parts[0] not in _MEASURED or parts[2] not in ("usd", "calls"):
+            continue
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            continue
+        row = out.setdefault(parts[0], {}).setdefault(parts[1], {"usd": 0.0, "calls": 0})
+        if parts[2] == "usd":
+            row["usd"] = round(row["usd"] + v, 6)
+        else:
+            row["calls"] = int(row["calls"] + v)
+    return out
 
 
 # What this process runs on, for the price of its own seconds: a serverless worker
@@ -314,6 +340,9 @@ class Ledger:
                 out["boot_seconds"] = round(self.boot_seconds, 1)
             out["units"] = {k: (int(v) if float(v).is_integer() else round(v, 6 if k.endswith(".usd") else 3))
                             for k, v in self.units.items()}
+            split = breakdown(out["units"])
+            if split:
+                out["breakdown"] = split        # the AI money by call kind (vision.<kind>.usd, llm.<kind>.usd)
             return out
 
 
@@ -353,7 +382,7 @@ def charge_machine_start() -> float:
 def kie_balance(timeout: int = 10) -> Optional[float]:
     """The Kie credit balance, when the vision key is a Kie key; else None."""
     key = config.VISION_API_KEY
-    if not key or "kie.ai" not in (config.VISION_API_BASE or ""):
+    if not key or "kie.ai" not in (config.VISION_API_BASE or "") or config.kie_blocked(config.VISION_API_BASE):
         return None
     try:
         r = requests.get("https://api.kie.ai/api/v1/chat/credit",

@@ -19,8 +19,10 @@ Verdicts are cached by file content, so re-sourcing a scene never pays twice
 for the same candidate.
 """
 import base64
+import contextvars
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -48,6 +50,14 @@ _FAILS = {"n": 0}
 # Candidates no model could judge at all (all attempts failed, or no frames):
 # kept unscored, so the job result reports how many reached the timeline that way.
 _UNJUDGED = {"n": 0}
+# What kind of call this thread is making (judge, pick, rate, anchor, review...) and whether it is a hedge's
+# second request: the cost ledger keeps each kind's own price (vision.<kind>.usd, vision.<kind>.calls) and
+# the hedges' (vision.hedge.usd), so a video's vision money splits by what it was spent on.
+_KIND: contextvars.ContextVar = contextvars.ContextVar("vision_kind", default="other")
+_HEDGED: contextvars.ContextVar = contextvars.ContextVar("vision_hedged", default=False)
+# The request a hedged call is waiting on: {"launched", "queued", "at"} - "at" is when it got a slot here
+# and went out (VISION_HEDGE_FROM_SEND).
+_SENT: contextvars.ContextVar = contextvars.ContextVar("vision_sent", default=None)
 
 _SYSTEM = (
     "You check whether a video clip or photo is usable B-roll for one line of a "
@@ -176,9 +186,27 @@ _NEWS_TEXT_RULE = (
     "incidental real-world text (a street sign) is fine.\n")
 
 
+# The news rule, spelt out (VISION_NEWS_OVERLAYS_OK). Told only that news overlays are welcome, the judge still
+# set has_text_or_watermark on them and turned down the story's own event footage: on the Yellowstone news lines
+# of 2026-10-07 the USGS webcam of the Biscuit Basin blast (its camera ID and timestamp), The Guardian's and a
+# "video courtesy of" clip of it and a press conference with a FOX 31 bug, all scored 0.8-1.0. Asked again with
+# this sentence, 13 of 29 such verdicts were cleared, 7 of them on-topic event shots (0.75-1.0), while a creator's
+# captioned phone video and an aggregator's stamped "USA UPDATE" re-upload were still turned down.
+_NEWS_OVERLAY_RULE = (
+    " In this video has_text_or_watermark is true ONLY for the things listed above. Answer it false for a TV "
+    "station's or a news outlet's logo or credit (FOX 31, CNN, The Guardian, Reuters), a government agency's mark "
+    "or a camera's ID and timestamp (USGS, NOAA, a park webcam), a 'video courtesy of' credit, and a headline "
+    "banner, chyron, ticker, lower-third or news subtitles over real footage of the subject - none of them lowers "
+    "the score either. Another YouTube channel's own logo or watermark stamped over footage it re-uploads, and a "
+    "creator's big captions or subscribe overlays, are still has_text_or_watermark true.")
+
+
 def _system() -> str:
     if config.NEWS_FOOTAGE:
-        return _SYSTEM.replace(_STRICT_TEXT_RULE, _NEWS_TEXT_RULE)
+        rule = _NEWS_TEXT_RULE
+        if getattr(config, "VISION_NEWS_OVERLAYS_OK", False):
+            rule = _NEWS_TEXT_RULE.rstrip(chr(10)) + _NEWS_OVERLAY_RULE + chr(10)
+        return _SYSTEM.replace(_STRICT_TEXT_RULE, rule)
     return _SYSTEM
 
 
@@ -226,9 +254,9 @@ def out_of_credits() -> bool:
 
 
 OUT_OF_CREDITS_MESSAGE = (
-    "The AI account (Kie) is out of credits, so shots could not be planned or "
-    "checked and the video would be random clips. Top up the Kie account whose "
-    "key is set on the RunPod endpoint (DIRECTOR_API_KEY), then run it again.")
+    "The AI account (OpenRouter) is out of credits, so shots could not be planned or "
+    "checked and the video would be random clips. Top up the OpenRouter account whose "
+    "key is set on the RunPod endpoint (DIRECTOR_API_KEY / VISION_API_KEY), then run it again.")
 
 
 class OutOfCredits(RuntimeError):
@@ -241,8 +269,14 @@ def require_credits() -> None:
 
 
 def fallback_configured() -> bool:
+    """The backup provider is set - and is not Kie while Kie is off (config.kie_blocked)."""
     return bool(config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY
-                and config.AI_FALLBACK_VISION_MODEL)
+                and config.AI_FALLBACK_VISION_MODEL and not config.kie_blocked(config.AI_FALLBACK_API_BASE))
+
+
+def main_configured() -> bool:
+    """The main vision provider has a key - and is not Kie while Kie is off."""
+    return bool(config.VISION_API_KEY) and not config.kie_blocked(config.VISION_API_BASE)
 
 
 def ai_exhausted() -> bool:
@@ -251,7 +285,7 @@ def ai_exhausted() -> bool:
 
 
 def enabled() -> bool:
-    main = bool(config.VISION_API_KEY) and not _OUT_OF_CREDITS["hit"]
+    main = main_configured() and not _OUT_OF_CREDITS["hit"]
     return bool(config.VISION_ENABLED and (main or fallback_configured()))
 
 
@@ -316,7 +350,12 @@ _SLOTS = threading.BoundedSemaphore(max(1, min(config.VISION_CONCURRENCY, config
 def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
               key: str = "", main: bool = True) -> Tuple[Optional[str], bool]:
     """(text, retryable): one call to one model; retryable when the failure was transient."""
+    box = _SENT.get()
+    if box is not None:
+        box["queued"] = True            # waiting for one of this worker's slots: not sent yet
     with _SLOTS:
+        if box is not None:
+            box.setdefault("at", time.time())
         return _ask_once_slot(model, messages, max_tokens, url, key, main)
 
 
@@ -383,11 +422,39 @@ def _note_usage(body) -> None:
                   "vision.completion_tokens": int(usage.get("completion_tokens") or 0)}
     except (TypeError, ValueError):
         return
+    kind = _KIND.get() or "other"
     if usd > 0:
         costs.record("vision.usd", usd)
+        costs.record(f"vision.{kind}.usd", usd)
+        if _HEDGED.get():
+            costs.record("vision.hedge.usd", usd)       # what the hedges' second requests cost
+    costs.record(f"vision.{kind}.calls")
     for k, n in counts.items():
         if n:
             costs.record(k, n)
+
+
+def _error_of(r, body) -> Tuple[int, str]:
+    """(status, message) of an OpenRouter-style failure - {"error": {"code", "message"}} with the HTTP status, or
+    the error on the choice - (0, "") for an answer to read. Kie's {"code": 4xx} shape is read by the caller."""
+    status = getattr(r, "status_code", 200)
+    status = status if isinstance(status, int) and not isinstance(status, bool) else 200
+    if not isinstance(body, dict):
+        return (status, "") if status >= 400 else (0, "")
+    err = body.get("error")
+    choices = body.get("choices")
+    if not err and isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        err = choices[0].get("error")
+    if not err:
+        return (status, "") if status >= 400 and not choices else (0, "")
+    code, msg = (err.get("code"), err.get("message")) if isinstance(err, dict) else (None, err)
+    try:
+        code = int(code)
+    except (TypeError, ValueError):
+        code = 0
+    if code < 400:
+        code = status if status >= 400 else 500
+    return code, str(msg or "")[:200]
 
 
 def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
@@ -421,11 +488,22 @@ def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
                 note_out_of_credits()
             return None, False
         return None, body["code"] >= 500 or body["code"] == 429
+    code, msg = _error_of(r, body)
+    if code:
+        # OpenRouter's own error shape. 402 is the account (or the key's limit) out of credit: every later
+        # call fails the same way - the Yellowstone build of 2026-10-07 made thousands of such calls after
+        # its balance ran out - so the main provider is not asked again in this job (as a Kie 402 was).
+        _fail(model, f"HTTP {r.status_code}, error {code}: {msg[:150]}")
+        if code == 402 or is_credit_error(code, msg):
+            if main:
+                note_out_of_credits()
+            return None, False
+        return None, code >= 500 or code in (408, 429)
     try:
         text = body["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
         _fail(model, f"HTTP {r.status_code}, no choices: {json.dumps(body)[:150]}")
-        return None, r.status_code >= 500
+        return None, r.status_code >= 500 or r.status_code == 429
     if isinstance(text, list):
         text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
     if not (text or "").strip():
@@ -478,7 +556,7 @@ def _routes(first: str = "") -> list:
     models = [m for m in [config.VISION_MODEL] + list(config.VISION_FALLBACK_MODELS) if m]
     if first:
         models = [first] + [m for m in models if m != first]
-    routes = [(m, "", "", True) for m in models if config.VISION_API_KEY]
+    routes = [(m, "", "", True) for m in models if main_configured()]
     if fallback_configured():
         routes.append((config.AI_FALLBACK_VISION_MODEL,
                        f"{config.AI_FALLBACK_API_BASE}/chat/completions",
@@ -575,6 +653,7 @@ def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple
         return None, ""
     running: Dict = {}
     nxt = 0
+    boxes: List[dict] = []              # each launched request: {"launched", "queued", "at"}
 
     def launch(backup: bool) -> None:
         nonlocal nxt
@@ -582,15 +661,41 @@ def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple
         nxt += 1
         if backup:
             costs.record("vision.hedge")
-        running[_HEDGE_POOL.submit(_route_call, route, messages, max_tokens, deadline)] = route
+        box = {"launched": time.time()}
+        boxes.append(box)
+        # The pool thread runs in a copy of this call's context: its kind is billed to the same line of the
+        # ledger, and a backup is marked as a hedge's second request.
+        running[_HEDGE_POOL.submit(contextvars.copy_context().run, _launched, box, backup, route, messages,
+                                   max_tokens, deadline)] = route
+
+    def hedge_at() -> Optional[float]:
+        """
+        When the next backup may be asked: VISION_HEDGE_SECONDS after the newest request went out
+        (VISION_HEDGE_FROM_SEND) - not after it was handed to the pool. A request still waiting for one of
+        this worker's slots has not been sent: no backup for it yet (None). Under a 16-way load the clock
+        used to run while calls queued here, every queued call was hedged, and both answers were billed
+        (~$0.003 a call on the California re-clip of 2026-10-07 against ~$0.0009).
+        """
+        box = boxes[-1]
+        if getattr(config, "VISION_HEDGE_FROM_SEND", True):
+            if "at" in box:
+                return box["at"] + hedge
+            if box.get("queued"):
+                return None
+        return box["launched"] + hedge
 
     launch(False)
     while running:
         left = deadline - time.time()
         if left <= 0:
             break
-        # Wait for an answer, but no longer than the next hedge point.
-        until_hedge = (started + hedge * nxt) - time.time() if nxt < len(queue) else left
+        # Wait for an answer, but no longer than the next hedge point (a request still queued here is looked
+        # at again shortly).
+        if nxt < len(queue):
+            at = hedge_at()
+            until_hedge = (at - time.time()) if at is not None else 0.25
+        else:
+            until_hedge = left
         done, _ = wait(list(running), timeout=max(0.05, min(left, until_hedge)),
                        return_when=FIRST_COMPLETED)
         for fut in done:
@@ -603,9 +708,21 @@ def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple
                 return text, route[0]
             if text:
                 _fail(route[0], f"unusable answer: {text[:120]!r}")
-        if nxt < len(queue) and (not running or time.time() >= started + hedge * nxt):
-            launch(bool(running))
+        if nxt < len(queue):
+            at = hedge_at()
+            if not running or (at is not None and time.time() >= at):
+                launch(bool(running))
     return None, ""
+
+
+def _launched(box: dict, backup: bool, route: tuple, messages: list, max_tokens: int,
+              deadline: float) -> Optional[str]:
+    """_route_call for one hedged request, on a pool thread: it says when it went out (box) and whether it
+    is a backup (the ledger's vision.hedge.usd)."""
+    _SENT.set(box)
+    if backup:
+        _HEDGED.set(True)
+    return _route_call(route, messages, max_tokens, deadline)
 
 
 def probe() -> dict:
@@ -973,7 +1090,11 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     messages = [{"role": "system", "content": _system() + (_EVENT_RULE if event else "")},
                 {"role": "user", "content": content}]
 
-    text, model = _ask(messages, 400, accept=lambda t: _parse(t) is not None)
+    token = _KIND.set("judge_open" if times else ("judge_still" if still else "judge"))
+    try:
+        text, model = _ask(messages, 400, accept=lambda t: _parse(t) is not None)
+    finally:
+        _KIND.reset(token)
     verdict = _parse(text) if text else None
     if verdict:
         verdict["model"] = model
@@ -1067,6 +1188,11 @@ def appeal(relevance: Optional[float], quality: Optional[float]) -> float:
     return (relevance or 0.0) + 0.5 * (0.5 if quality is None else quality)
 
 
+_PICK_ANSWER = "Reply with JSON only: {\"tile\": int, \"score\": number, \"description\": str}"
+# A pick's description is only logged (VISION_COMPACT_TILES): a few words instead of a sentence or two.
+_PICK_ANSWER_SHORT = ("Reply with JSON only: {\"tile\": int, \"score\": number, \"description\": str} - the "
+                      "description at most 8 words.")
+
 _PICK_SYSTEM = (
     "You pick B-roll for one line of a documentary narration. You are shown a "
     "numbered grid of thumbnails taken across one YouTube video (numbers in the "
@@ -1082,9 +1208,17 @@ _PICK_SYSTEM = (
     "The tiles are small, low-resolution thumbnails. Only score above 0.7 when you "
     "can actually make out the subject. If a tile is too blurry to identify, do not "
     "guess from the video's topic - score it low. A wrong pick costs a download.\n"
-    "Reply with JSON only: {\"tile\": int, \"score\": number, \"description\": str}"
+    + _PICK_ANSWER
 )
 
+
+_RATE_ANSWER = ("Reply with JSON only: {\"tiles\": [{\"tile\": int, \"score\": number, "
+                "\"description\": str}]} listing only tiles scoring 0.7 or more (an empty list "
+                "when none fit).")
+# The fine pass's answer (VISION_COMPACT_TILES): scores only - its descriptions were never read, and they were
+# about half of a fine pass's price (output tokens at $2.50/M on gemini-2.5-flash).
+_RATE_ANSWER_BARE = ("Reply with JSON only: {\"tiles\": [{\"tile\": int, \"score\": number}]} listing only "
+                     "tiles scoring 0.7 or more (an empty list when none fit) - no descriptions.")
 
 _RATE_SYSTEM = (
     "You pick B-roll moments for a documentary, GoMotion-style: one long video about "
@@ -1102,13 +1236,75 @@ _RATE_SYSTEM = (
     "Scoring: 0.9-1.0 clearly the subject, striking footage; 0.7-0.89 clearly the "
     "subject; below 0.7 leave the tile out. Tiles are small thumbnails - never score "
     "above 0.7 what you cannot actually make out.\n"
-    "Reply with JSON only: {\"tiles\": [{\"tile\": int, \"score\": number, "
-    "\"description\": str}]} listing only tiles scoring 0.7 or more (an empty list "
-    "when none fit)."
+    + _RATE_ANSWER
 )
 
 
 _TILE_ROW = re.compile(r'\{\s*"tile"\s*:\s*(\d+)\s*,\s*"score"\s*:\s*([\d.]+)\s*,\s*"description"\s*:\s*"((?:[^"\\]|\\.)*)"')
+# A rating without descriptions (VISION_COMPACT_TILES): {"tile": 5, "score": 0.8}.
+_TILE_ROW_BARE = re.compile(r'\{\s*"tile"\s*:\s*(\d+)\s*,\s*"score"\s*:\s*([\d.]+)\s*\}')
+
+# The storyboard sheet's geometry (src/moments.py lays it out: 5 tiles a row, each 240x135).
+_SHEET_COLS, _SHEET_TILE_W, _SHEET_TILE_H = 5, 240, 135
+
+
+def _sheet_images(sheet_b64: str, count: int, parts: int) -> List[str]:
+    """
+    One storyboard sheet as `parts` images (VISION_SHEET_IMAGES), each a near-square grid of its share of the
+    numbered tiles, in order - or [sheet_b64] when it cannot or need not be split.
+
+    Gemini 2.x bills a request's image by its size only when it is the request's ONLY image: one 1200x540
+    sheet is cut into 9 crops and billed 2,322 prompt tokens, while each image of a request carrying two or
+    more is billed 258 (measured on google/gemini-2.5-flash through OpenRouter, 2026-10-07: 1200x540 alone
+    2,329 tokens; the same with any second image 523).
+    """
+    parts = max(1, int(parts or 1))
+    if parts < 2 or count < 2 * parts:
+        return [sheet_b64]
+    try:
+        import io as _io
+        from PIL import Image
+        sheet = Image.open(_io.BytesIO(base64.b64decode(sheet_b64))).convert("RGB")
+    except Exception:  # noqa: BLE001 - an unreadable sheet goes as it came
+        return [sheet_b64]
+    tw, th = _SHEET_TILE_W, _SHEET_TILE_H
+    if sheet.width < _SHEET_COLS * tw or sheet.height < ((count + _SHEET_COLS - 1) // _SHEET_COLS) * th:
+        return [sheet_b64]              # not the layout this knows
+    tiles = []
+    for i in range(count):
+        x, y = (i % _SHEET_COLS) * tw, (i // _SHEET_COLS) * th
+        tiles.append(sheet.crop((x, y, x + tw, y + th)))
+    out: List[str] = []
+    per = (count + parts - 1) // parts
+    for k in range(0, count, per):
+        group = tiles[k:k + per]
+        n = len(group)
+        # The column count whose grid is closest to square: the model sees each image at one fixed size.
+        cols = min(range(1, min(_SHEET_COLS, n) + 1),
+                   key=lambda c: abs(math.log((c * tw) / (((n + c - 1) // c) * th))))
+        rows = (n + cols - 1) // cols
+        canvas = Image.new("RGB", (cols * tw, rows * th), "black")
+        for m, tile in enumerate(group):
+            canvas.paste(tile, ((m % cols) * tw, (m // cols) * th))
+        buf = _io.BytesIO()
+        canvas.save(buf, "JPEG", quality=80)
+        out.append(base64.b64encode(buf.getvalue()).decode())
+    return out
+
+
+def _sheet_content(sheet_b64: str, count: int, checked: bool) -> Tuple[list, str]:
+    """(the image parts of a storyboard call, the sentence that says how its tiles are shown). Split
+    (VISION_SHEET_IMAGES) only for a call the judge checks afterwards - a scout's pick or a fine pass; a subject
+    pool's rating can put its moments on a timeline without the judge, so it keeps the whole sheet."""
+    parts = int(getattr(config, "VISION_SHEET_IMAGES", 1) or 1) if checked else 1
+    images = _sheet_images(sheet_b64, count, parts) if parts > 1 else [sheet_b64]
+    content = [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b}"}} for b in images]
+    if len(images) < 2:
+        return content, f"There are {count} tiles, numbered 1-{count}."
+    per = (count + len(images) - 1) // len(images)
+    spans = ", ".join(f"{k + 1}-{min(count, k + per)}" for k in range(0, count, per))
+    return content, (f"There are {count} tiles, numbered 1-{count}, shown across {len(images)} images "
+                     f"(tiles {spans}, in order).")
 
 
 # Storyboard calls the judge checks afterwards (checked=True) that VISION_TILE_MODEL
@@ -1147,19 +1343,28 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
     """
     if not enabled():
         return None
+    images, shown = _sheet_content(sheet_b64, count, checked)
+    # A fine pass (checked) needs each tile's score only - its descriptions were never read (VISION_COMPACT_TILES).
+    system = _RATE_SYSTEM + (_NEWS_TILE_RULE if config.NEWS_FOOTAGE else "")
+    if checked and getattr(config, "VISION_COMPACT_TILES", False):
+        system = system.replace(_RATE_ANSWER, _RATE_ANSWER_BARE)
     messages = [
-        {"role": "system", "content": _RATE_SYSTEM + (_NEWS_TILE_RULE if config.NEWS_FOOTAGE else "")},
+        {"role": "system", "content": system},
         {"role": "user", "content": [
             {"type": "text", "text": (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
              + (f"INTENT (the exact shot wanted): {intent}\n" if intent else "")
              + (f"SUBJECT: {subject}\n" if subject else "")
              + (f"WHAT THE LINES SAY ABOUT IT: {context[:600]}\n" if context else "")
-             + f"There are {count} tiles, numbered 1-{count}."},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},
+             + shown},
+            *images,
         ]},
     ]
     first = _tile_first(checked)
-    text, model = _ask(messages, 900, first=first) if first else _ask(messages, 900)
+    token = _KIND.set("rate" if checked else "pool_rate")
+    try:
+        text, model = _ask(messages, 900, first=first) if first else _ask(messages, 900)
+    finally:
+        _KIND.reset(token)
     _note_tile_model(first, model)
     _counted()
     if not text:
@@ -1191,6 +1396,14 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
             if 1 <= tile <= count:
                 out.append({"tile": tile, "score": score, "description": m2.group(3)[:300]})
         if not out:
+            for m2 in _TILE_ROW_BARE.finditer(text):
+                try:
+                    tile, score = int(m2.group(1)), max(0.0, min(1.0, float(m2.group(2))))
+                except ValueError:
+                    continue
+                if 1 <= tile <= count:
+                    out.append({"tile": tile, "score": score, "description": ""})
+        if not out:
             _fail(model, f"unparseable tile rating: {text[:120]!r}")
             return None
     return out
@@ -1203,17 +1416,24 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "",
     timeline (a scout), so VISION_TILE_MODEL may answer."""
     if not enabled():
         return None
+    images, shown = _sheet_content(sheet_b64, count, checked)
+    system = _PICK_SYSTEM + (_NEWS_TILE_RULE if config.NEWS_FOOTAGE else "")
+    if getattr(config, "VISION_COMPACT_TILES", False):
+        system = system.replace(_PICK_ANSWER, _PICK_ANSWER_SHORT)
     messages = [
-        {"role": "system", "content": _PICK_SYSTEM + (_NEWS_TILE_RULE if config.NEWS_FOOTAGE else "")},
+        {"role": "system", "content": system},
         {"role": "user", "content": [
             {"type": "text", "text": (f"STORY: {_STORY['line']}\n" if _STORY["line"] else "")
-             + f"INTENT: {intent}\nNARRATION: {context}\n"
-             f"There are {count} tiles, numbered 1-{count}."},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{sheet_b64}"}},
+             + f"INTENT: {intent}\nNARRATION: {context}\n" + shown},
+            *images,
         ]},
     ]
     first = _tile_first(checked)
-    text, model = _ask(messages, 400, first=first) if first else _ask(messages, 400)
+    token = _KIND.set("pick")
+    try:
+        text, model = _ask(messages, 400, first=first) if first else _ask(messages, 400)
+    finally:
+        _KIND.reset(token)
     _note_tile_model(first, model)
     _counted()
     if not text:

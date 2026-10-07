@@ -43,6 +43,8 @@ def openrouter_left(max_age: float = CACHE_SECONDS) -> Optional[float]:
         r = requests.get("https://openrouter.ai/api/v1/credits", headers={"Authorization": f"Bearer {key}"},
                          timeout=15)
         data = (r.json() or {}).get("data") or {}
+        if getattr(r, "status_code", 200) >= 400 or "total_credits" not in data:
+            return None                 # refused or not a balance (a bad key, a rate limit): unknown, never $0
         left = float(data.get("total_credits") or 0.0) - float(data.get("total_usage") or 0.0)
     except Exception:  # noqa: BLE001 - unknown, never a reason to fail a job
         return None

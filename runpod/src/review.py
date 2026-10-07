@@ -831,7 +831,11 @@ def parse_verdicts(text: str, n: int) -> Optional[Dict[int, dict]]:
 def _ask(messages: list, max_tokens: int, accept=None) -> Tuple[Optional[str], str]:
     """The vision model (src/vision._ask: OpenAI-compatible, hedged, the fallback models behind it)."""
     from . import vision
-    return vision._ask(messages, max_tokens, accept=accept)
+    token = vision._KIND.set("review")                  # its price on its own line of the ledger
+    try:
+        return vision._ask(messages, max_tokens, accept=accept)
+    finally:
+        vision._KIND.reset(token)
 
 
 def _vision_on() -> bool:

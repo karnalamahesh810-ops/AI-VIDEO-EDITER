@@ -340,6 +340,7 @@ class PersonSafetyNet(unittest.TestCase):
         r.json.return_value = body
         with mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
                 mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
+                mock.patch.object(config, "KIE_ENABLED", True), \
                 mock.patch.object(config, "DIRECTOR_MODEL", "gpt-5-2"), \
                 mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", []), \
                 mock.patch.object(director.requests, "post", return_value=r):
@@ -410,6 +411,7 @@ class DirectorFallback(unittest.TestCase):
         vision.reset()          # the circuit breaker is shared: a failed call here must not bench the next test's
         self.patches = [mock.patch.object(config, "DIRECTOR_API_KEY", "k"),
                         mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"),
+                        mock.patch.object(config, "KIE_ENABLED", True),
                         mock.patch.object(config, "DIRECTOR_MODEL", "gpt-5-2"),
                         mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", ["gemini-3-pro"]),
                         mock.patch.object(config, "DIRECTOR_RETRY_WAIT", 0.0)]    # retries, without the waits
@@ -2663,6 +2665,7 @@ class StoryBrief(unittest.TestCase):
 
         with mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
                 mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
+                mock.patch.object(config, "KIE_ENABLED", True), \
                 mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
                 mock.patch.object(config, "DIRECTOR_FALLBACK_MODELS", []), \
                 mock.patch.object(director, "_today", return_value=TODAY), \
@@ -2945,6 +2948,7 @@ class MetaphorsAndMaps(unittest.TestCase):
                   "repeat": True}]
         with mock.patch.object(config, "DIRECTOR_API_KEY", "k"), \
                 mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
+                mock.patch.object(config, "KIE_ENABLED", True), \
                 mock.patch.object(config, "DIRECTOR_MODEL", "m"), \
                 mock.patch.object(director, "_chat_json", side_effect=chat):
             ideas = director.rescue_queries(items, story=story)
@@ -3133,6 +3137,7 @@ class NoAIFallbacks(unittest.TestCase):
         try:
             with mock.patch.object(config, "VISION_API_KEY", "kie"), \
                     mock.patch.object(config, "VISION_API_BASE", "https://api.kie.ai/v1"), \
+                    mock.patch.object(config, "KIE_ENABLED", True), \
                     mock.patch.object(config, "VISION_FALLBACK_MODELS", ["gemini-3-pro"]), \
                     mock.patch.object(config, "AI_FALLBACK_API_BASE", "https://gen.example/openai"), \
                     mock.patch.object(config, "AI_FALLBACK_API_KEY", "g"), \
@@ -3156,6 +3161,7 @@ class NoAIFallbacks(unittest.TestCase):
         r.json.return_value = {"choices": [{"message": {"content": '{"sequences": []}'}}]}
         try:
             with mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"), \
+                    mock.patch.object(config, "KIE_ENABLED", True), \
                     mock.patch.object(config, "DIRECTOR_API_KEY", "kie"), \
                     mock.patch.object(config, "DIRECTOR_MODEL", "gpt-5-2"), \
                     mock.patch.object(config, "AI_FALLBACK_API_BASE", "https://gen.example/openai"), \
