@@ -404,6 +404,9 @@ def _serpapi_images(engine: str, query: str) -> List[tuple]:
         return rows
     except (requests.RequestException, ValueError) as e:
         _source_error(f"serpapi_{engine}", e)
+        # The month's searches used up (429) or the key refused: no more SerpApi calls this job,
+        # pictures and videos alike (only the video path stopped before).
+        _serpapi_spent(e)
         return []
 
 
