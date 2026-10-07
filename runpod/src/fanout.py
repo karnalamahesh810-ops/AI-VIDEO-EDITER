@@ -70,7 +70,17 @@ def readiness(n_scenes: int, project_id: Optional[str] = None) -> dict:
 
 
 def enabled_for(n_scenes: int, project_id: str) -> bool:
-    return readiness(n_scenes, project_id)["enabled"]
+    """A build's sourcing goes to parts on other workers: only with BUILD_FANOUT (off - one machine per build,
+    the owner 2026-10-07; renders still spread: render_enabled)."""
+    return bool(getattr(config, "BUILD_FANOUT", False)) and readiness(n_scenes, project_id)["enabled"]
+
+
+def single_machine_deadline(n_lines: int) -> float:
+    """Seconds a build sourced on one machine may take for `n_lines`: the usual budget (source_budget), but never
+    less than pass 1's line-count share (SINGLE_PASS1_PER_SCENE a line) plus SINGLE_TAIL_SECONDS."""
+    per = float(getattr(config, "SINGLE_PASS1_PER_SCENE", 0.0) or 0.0)
+    tail = float(getattr(config, "SINGLE_TAIL_SECONDS", 0.0) or 0.0)
+    return max(source_budget(n_lines), per * max(0, n_lines) + tail)
 
 
 def split(jobs: List[dict], sequences: List[dict], parts: int) -> List[Dict[str, Any]]:

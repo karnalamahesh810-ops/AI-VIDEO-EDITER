@@ -977,6 +977,63 @@ def _kie_generate(full_prompt: str, timeout: int) -> Optional[str]:
     return None
 
 
+def image_generation_available() -> bool:
+    """
+    A generated picture can be asked for: a key, and not Kie while Kie is off (config.kie_blocked; the owner,
+    2026-10-07 - Kie's balance is negative and OpenRouter replaces it). With the template's Kie image base this
+    is False, so no line plans on, or counts, a generated picture. OpenRouter draws them instead when
+    IMAGE_API_BASE is OpenRouter's and IMAGE_MODEL one of its image-output models (_openrouter_generate).
+    """
+    if not config.IMAGE_API_KEY or config.kie_blocked(config.IMAGE_API_BASE):
+        return False
+    return not ("kie.ai" in config.IMAGE_API_BASE and _IMAGE_NO_CREDIT["hit"])
+
+
+def _openrouter_generate(full_prompt: str, timeout: int) -> Optional[dict]:
+    """
+    One picture from an OpenRouter image-output model (IMAGE_MODEL, e.g. google/gemini-2.5-flash-image): its
+    chat completions with modalities image+text; the picture comes back as a data URL in message.images.
+    Its price goes to the ledger with the call (image.usd, OpenRouter's usage.cost).
+    """
+    try:
+        w, h = (int(v) for v in str(config.IMAGE_SIZE).lower().split("x"))
+        ratio = "16:9" if w * 9 >= h * 16 - 1 and w > h else _kie_image_size(config.IMAGE_SIZE)
+    except (TypeError, ValueError):
+        ratio = "16:9"
+    try:
+        r = requests.post(
+            f"{config.IMAGE_API_BASE.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}", "Content-Type": "application/json"},
+            json={"model": config.IMAGE_MODEL, "modalities": ["image", "text"],
+                  "messages": [{"role": "user", "content": full_prompt}],
+                  "image_config": {"aspect_ratio": ratio}, "usage": {"include": True}},
+            timeout=timeout)
+        body = r.json()
+    except (requests.RequestException, ValueError) as e:
+        print(f"[media] image generation failed: {type(e).__name__}", flush=True)
+        return None
+    usage = body.get("usage") if isinstance(body, dict) else None
+    try:
+        usd = float((usage or {}).get("cost") or 0.0)
+    except (TypeError, ValueError):
+        usd = 0.0
+    if usd > 0:
+        costs.record("image.usd", usd)
+    try:
+        message = body["choices"][0]["message"]
+        for img in message.get("images") or []:
+            url = ((img or {}).get("image_url") or {}).get("url") or ""
+            if url.startswith("data:") and "," in url:
+                return {"b64_json": url.split(",", 1)[1]}
+            if url.startswith("http"):
+                return {"url": url}
+    except (KeyError, IndexError, TypeError, AttributeError):
+        pass
+    err = body.get("error") if isinstance(body, dict) else None
+    print(f"[media] image generation returned no picture: {str(err or '')[:160]}", flush=True)
+    return None
+
+
 def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[MediaAsset]:
     """
     Render an illustration for a beat no real photograph covers.
@@ -990,8 +1047,8 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
     not a record of the event, and the editor should be able to see which is
     which before publishing.
     """
-    if not config.IMAGE_API_KEY:
-        return None
+    if not image_generation_available():
+        return None                     # no key, or Kie (off for good since 2026-10-07)
     if "kie.ai" in config.IMAGE_API_BASE and (_IMAGE_NO_CREDIT["hit"] or (_ai_on_kie() and vision.out_of_credits())):
         return None
     os.makedirs(out_dir, exist_ok=True)
@@ -1001,6 +1058,8 @@ def generate_image(prompt: str, out_dir: str, timeout: int = 180) -> Optional[Me
     if "kie.ai" in config.IMAGE_API_BASE:
         url = _kie_generate(full_prompt, timeout)
         item = {"url": url} if url else None
+    elif "openrouter.ai" in config.IMAGE_API_BASE:
+        item = _openrouter_generate(full_prompt, timeout)
     else:
         item = _openai_generate(full_prompt, timeout)
     if not item:
@@ -1434,16 +1493,35 @@ def _is_bad(*keys: str) -> str:
         return next((_BAD[k] for k in keys if k and k in _BAD), "")
 
 
+# Reasons that hold for a video's other moments too once two of its moments showed them (a channel's logo bug,
+# its captions, a poor upload): JUDGE_MEMORY_VIDEO_STRIKES of them leave the whole video alone.
+_STRIKE_REASONS = (f"{_JUDGED_LINE_FREE}: text or watermark", f"{_JUDGED_LINE_FREE}: too poor to show",
+                   "another creator's burned-in captions", "burned-in text or UI")
+# video -> the moments of it turned down for one of those reasons in this job.
+_STRIKES: Dict[str, set] = {}
+
+
 def _mark_bad(video: str, moment: str, why: str) -> None:
     """Remember a line-independent rejection: for the whole source video when the
-    reason covers it (generated, unreadable), else for that moment only."""
+    reason covers it (generated, unreadable), else for that moment only - and the
+    whole video once JUDGE_MEMORY_VIDEO_STRIKES of its moments were turned down for
+    text, a watermark, captions or poor quality (_STRIKE_REASONS)."""
     if not why or not why.startswith(_LINE_FREE):
         return
     key = video if why.startswith(_VIDEO_WIDE) or not moment else moment
+    strikes = int(getattr(config, "JUDGE_MEMORY_VIDEO_STRIKES", 0) or 0)
     with _CACHE_LOCK:
         if len(_BAD) > 20000:
             _BAD.clear()
+            _STRIKES.clear()
         _BAD[key] = why[:80]
+        if strikes > 0 and video and moment and key == moment and why.startswith(_STRIKE_REASONS):
+            seen = _STRIKES.setdefault(video, set())
+            seen.add(moment)
+            if len(seen) >= strikes and video not in _BAD:
+                _BAD[video] = f"{len(seen)} moments: {why}"[:80]
+                print(f"[media] {video}: {len(seen)} moments turned down ({why[:60]}) - the whole video is left alone",
+                      flush=True)
 
 
 def judge_clip(path: str, job: Dict[str, Any], label: str = "", source_url: str = "",
@@ -3685,6 +3763,7 @@ def reset_cache():
     SLOP_REJECTED.clear()
     with _CACHE_LOCK:
         _BAD.clear()                    # what was unusable is decided again per job
+        _STRIKES.clear()
         _SHORT_SECTIONS.clear()
         _CLIP_SEARCHED.clear()          # which lines' clip searches ran to their end
     _LIBRARY_KEEP["on"] = False         # the job's Library.load turns it on
@@ -3713,7 +3792,10 @@ def _generation_budget_left() -> bool:
         if _GENERATED[0] >= config.IMAGE_MAX_PER_VIDEO:
             return False
         _GENERATED[0] += 1
-    costs.record("image.generate")
+    if image_generation_available():
+        # Counted only when something can draw it: with Kie off (and no OpenRouter image model) an attempt
+        # makes nothing and must not show up as a Kie-credit estimate in the video's cost.
+        costs.record("image.generate")
     with _CACHE_LOCK:
         return True
 
@@ -4641,7 +4723,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
                 on_recheck=None, sequences: Optional[List[dict]] = None,
                 assign=None, on_pool=None, exclude: Optional[set] = None,
-                refill: bool = True, **kwargs) -> List[Optional[MediaAsset]]:
+                refill: bool = True, pass1_per_scene: Optional[float] = None,
+                **kwargs) -> List[Optional[MediaAsset]]:
     """
     Source visuals for many scenes, with no two scenes sharing a visual.
 
@@ -4816,7 +4899,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # recheck / fill steps below, which exist for exactly that.
     pool = _new_pool(max(1, workers))
     started = time.time()
-    deadline = started + _budget(config.PASS1_BUDGET_SECONDS, 3.0, len(pass1))
+    # `pass1_per_scene`: a whole video sourced on one machine (the handler's single-machine build) gets its
+    # pass 1 by its line count (config.SINGLE_PASS1_PER_SCENE); a fan-out part's pass keeps 3 s a line.
+    deadline = started + _budget(config.PASS1_BUDGET_SECONDS, float(pass1_per_scene or 3.0), len(pass1))
     if _ytdlp.DEADLINE[0]:
         # The job's sourcing deadline wins: a part must hand back what it found
         # (and upload it) before the parent stops waiting, or all of it is lost.

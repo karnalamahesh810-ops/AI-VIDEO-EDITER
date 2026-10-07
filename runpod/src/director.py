@@ -20,6 +20,7 @@ otherwise, and also fills any beat the model skipped. Two hard boundaries:
     A map is a factual claim; the reference renders ship one that contradicts
     its own caption, and that is the bug this rule exists to avoid.
 """
+import contextvars
 import datetime
 import json
 import math
@@ -1025,14 +1026,15 @@ def _routes(routine: bool = False) -> List[tuple]:
     A routine call (DIRECTOR_ROUTINE_MODEL set) asks the cheaper model first, the
     director's own model after it."""
     out = []
-    if config.DIRECTOR_API_BASE and config.DIRECTOR_API_KEY:
+    # A Kie address is never asked while Kie is off (config.kie_blocked; the owner, 2026-10-07).
+    if config.DIRECTOR_API_BASE and config.DIRECTOR_API_KEY and not config.kie_blocked(config.DIRECTOR_API_BASE):
         first = [config.DIRECTOR_ROUTINE_MODEL] if routine and config.DIRECTOR_ROUTINE_MODEL else []
         models = []
         for m in first + [config.DIRECTOR_MODEL] + config.DIRECTOR_FALLBACK_MODELS:
             if m and m not in models:
                 models.append(m)
         out += [(config.DIRECTOR_API_BASE, config.DIRECTOR_API_KEY, m, True) for m in models]
-    if config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY and config.AI_FALLBACK_MODEL:
+    if config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY and config.AI_FALLBACK_MODEL             and not config.kie_blocked(config.AI_FALLBACK_API_BASE):
         out.append((config.AI_FALLBACK_API_BASE, config.AI_FALLBACK_API_KEY,
                     config.AI_FALLBACK_MODEL, False))
     return out
@@ -1109,10 +1111,16 @@ def _openrouter_reasoning(model: str, effort: str) -> dict:
     return {"effort": effort}
 
 
+# Which planning call this is (brief, plan, rescue, sequences, assign; _chat_json reads it off the prompt):
+# the ledger keeps each kind's own price (llm.<kind>.usd, llm.<kind>.calls; costs.breakdown).
+_LLM_KIND: contextvars.ContextVar = contextvars.ContextVar("llm_kind", default="other")
+
+
 def _note_usage(body) -> None:
     """What a planning call really cost and used, when the provider says (OpenRouter's
     usage): llm.usd, llm.prompt_tokens, llm.cached_tokens, llm.completion_tokens,
-    llm.reasoning_tokens. Recorded for every answer, a failed one too: it is billed."""
+    llm.reasoning_tokens, and the kind's own llm.<kind>.usd / llm.<kind>.calls.
+    Recorded for every answer, a failed one too: it is billed."""
     usage = body.get("usage") if isinstance(body, dict) else None
     if not isinstance(usage, dict):
         return
@@ -1127,8 +1135,11 @@ def _note_usage(body) -> None:
                                            if isinstance(out_details, dict) else 0)}
     except (TypeError, ValueError):
         return
+    kind = _LLM_KIND.get() or "other"
     if usd > 0:
         costs.record("llm.usd", usd)
+        costs.record(f"llm.{kind}.usd", usd)
+    costs.record(f"llm.{kind}.calls")
     for k, n in counts.items():
         if n:
             costs.record(k, n)
@@ -1275,6 +1286,25 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
     the first valid answer wins; the call ends after DIRECTOR_BUDGET_FACTOR x
     its timeout.
     """
+    token = _LLM_KIND.set(_kind_of(system))
+    try:
+        return _chat_json_kind(system, payload, timeout, errors, routine)
+    finally:
+        _LLM_KIND.reset(token)
+
+
+def _kind_of(system: str) -> str:
+    """The ledger's name for a planning call, by its prompt."""
+    for name, prompt in (("brief", "_BRIEF_PROMPT"), ("plan", "_SYSTEM_PROMPT"), ("rescue", "_RESCUE_PROMPT"),
+                         ("sequences", "_SEQUENCE_PROMPT"), ("assign", "_ASSIGN_PROMPT")):
+        if system is globals().get(prompt) or system == globals().get(prompt):
+            return name
+    return "other"
+
+
+def _chat_json_kind(system: str, payload: dict, timeout: int = 120,
+                    errors: Optional[List[str]] = None, routine: bool = False) -> Optional[dict]:
+    """_chat_json under its kind (_LLM_KIND)."""
     queue = [r for r in _routes(routine)
              if not (r[3] and vision.out_of_credits()) and vision.model_available(r[2])]
     if not queue:
@@ -1297,7 +1327,8 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
         nonlocal nxt
         route = queue[nxt]
         nxt += 1
-        running[_CHAT_POOL.submit(_chat_route, route, system, payload, timeout, errors, deadline,
+        running[_CHAT_POOL.submit(contextvars.copy_context().run, _chat_route, route, system, payload, timeout,
+                                  errors, deadline,
                                   routine)] = route
 
     launch()
@@ -2526,9 +2557,12 @@ _RESCUE_PROMPT = (
 
 
 def is_configured() -> bool:
-    return bool((config.DIRECTOR_API_BASE and config.DIRECTOR_API_KEY and config.DIRECTOR_MODEL)
+    """A planning model can be asked: the director's own or the backup provider (never a Kie one while
+    Kie is off)."""
+    return bool((config.DIRECTOR_API_BASE and config.DIRECTOR_API_KEY and config.DIRECTOR_MODEL
+                 and not config.kie_blocked(config.DIRECTOR_API_BASE))
                 or (config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY
-                    and config.AI_FALLBACK_MODEL))
+                    and config.AI_FALLBACK_MODEL and not config.kie_blocked(config.AI_FALLBACK_API_BASE)))
 
 
 def rescue_queries(items: List[dict], story: Optional[dict] = None) -> dict:

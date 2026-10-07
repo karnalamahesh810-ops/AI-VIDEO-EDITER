@@ -140,7 +140,8 @@ class OpenRouterErrors(_Planner):
 
 class KieUnchanged(_Planner):
     def test_kies_wrapped_failures_are_still_read(self):
-        with mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"):
+        # Kie is off by default since 2026-10-07 (config.KIE_ENABLED); turned on, its answers are read as before.
+        with mock.patch.object(config, "DIRECTOR_API_BASE", "https://api.kie.ai/v1"),                 mock.patch.object(config, "KIE_ENABLED", True):
             got = self.run_with({"openai/gpt-5.2": [reply(200, {"code": 500, "msg": "Server exception"}), OK]})
             self.assertEqual(got, {"ok": 1})
             self.assertEqual(len(self.asked), 2)
