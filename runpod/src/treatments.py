@@ -46,6 +46,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from . import config, hookboost, numwords, templates
 from . import automaps, config, numwords, templates
 from . import datagraphics, lookpack, screentext, sources
+from .presenter import is_presenter_scene
 from .transcribe import Segment
 
 # Read off VidRush's own timelines (an animation block every 8-10 s through
@@ -2806,6 +2807,13 @@ class _Planner:
             if (sc.get("media") or {}).get("type") == "animation":
                 a = int(sc.get("startFrame", 0))
                 self.blocks.append((a / fps, (a + int(sc.get("durationInFrames", 0))) / fps))
+            elif is_presenter_scene(sc):
+                # The presenter talking (src/presenter/hybrid.py): nothing is laid over a face either, and no
+                # figure is held across into it.
+                a = int(sc.get("startFrame", 0))
+                b = a + int(sc.get("durationInFrames", 0))
+                self.blocks.append((a / fps, b / fps))
+                self.covered.append((a, b))
         # Seconds already taken by the caller (the job's title card): held like a must-show graphic.
         for a, b in reserved or []:
             try:
@@ -2890,7 +2898,7 @@ class _Planner:
         last = -1e9
         for i, seg in enumerate(self.segments):
             scene = self.scenes[i] if i < len(self.scenes) else {}
-            if (scene.get("media") or {}).get("type") == "animation":
+            if (scene.get("media") or {}).get("type") == "animation" or is_presenter_scene(scene):
                 continue
             after = getattr(self.segments[i + 1], "text", "") if i + 1 < len(self.segments) else ""
             found = sources.find(seg.text or "", after or "", listed)
@@ -3008,7 +3016,7 @@ class _Planner:
             shot = self.shots[i] if i < len(self.shots) else {}
             scene = self.scenes[i] if i < len(self.scenes) else {}
             m, year = vr_moment(seg.text or "", shot, self.brief, year, self._section_place(i))
-            if m is None or (scene.get("media") or {}).get("type") == "animation":
+            if m is None or (scene.get("media") or {}).get("type") == "animation" or is_presenter_scene(scene):
                 continue                    # (an animation scene IS a full-screen graphic: nothing lands on it)
             window = _voice_window(seg, {"_key": m["key"]}, 1.0, 1.0, self.fps)
             if window is None:
@@ -3037,7 +3045,7 @@ class _Planner:
                 pass
         for i, seg in enumerate(self.segments):
             scene = self.scenes[i] if i < len(self.scenes) else {}
-            if (scene.get("media") or {}).get("type") == "animation":
+            if (scene.get("media") or {}).get("type") == "animation" or is_presenter_scene(scene):
                 continue
             shot = self.shots[i] if i < len(self.shots) else {}
             fig = next((c for c in cues_for(seg, shot, self.brief)
@@ -3094,6 +3102,13 @@ class _Planner:
         media_kind = (scene.get("media") or {}).get("type")
         if media_kind == "animation":
             self._animation_scene(seg, scene, at, scene_frames)
+            return
+        if is_presenter_scene(scene):
+            # The presenter talking (src/presenter/hybrid.py): no look on it, and none runs into it.
+            self.treatments.append(self._entry(scene, [], i))
+            self.spans.append({"start": start / fps, "end": (start + scene_frames) / fps, "idx": None,
+                               "klass": "full", "must": True, "tr": None})
+            self.prev_archival = False
             return
         text = seg.text or ""
         hint = shot.get("overlay") if isinstance(shot.get("overlay"), dict) else None
@@ -3388,6 +3403,9 @@ class _Planner:
             scene = self.scenes[i] if i < len(self.scenes) else {}
             if i >= len(self.segments) or (scene.get("media") or {}).get("type") == "animation":
                 rep["status"] = "skipped: the line is already a full-screen graphic"
+                continue
+            if is_presenter_scene(scene):
+                rep["status"] = "skipped: the presenter says this line on camera"
                 continue
             series = store.get(f["key"]) if store is not None else None
             if not series:
@@ -5129,8 +5147,8 @@ def same_subject(a: str, b: str) -> bool:
 def _scene_picture(scene: dict) -> str:
     """The scene's picture (its image, or its clip for a frame) as a key, "" when it has none."""
     m = scene.get("media") if isinstance(scene, dict) else None
-    if not isinstance(m, dict) or m.get("type") not in ("image", "video"):
-        return ""
+    if not isinstance(m, dict) or m.get("type") not in ("image", "video") or is_presenter_scene(scene):
+        return ""                           # (never the presenter's face inside a picture look)
     return str(m.get("url") or "")
 
 

@@ -79,6 +79,9 @@ LIST_LIMIT = 50_000
 # Shots with nothing to fetch again, by where they came from.
 NO_ORIGIN = {
     "generated": "an AI-made picture cannot be made again the same",
+    # The AI presenter (src/presenter/hybrid.py): cut to its own words from a take - its original on R2
+    # (semanticMetadata.originalUrl) starts before the line, so a copy fetched again would be out of sync.
+    "ai-presenter": "the AI presenter's clip is cut to its own words: make the video again to make it again",
     "noaa_goes": "a live satellite loop of that day cannot be fetched again",
     "upload": "the owner's own upload has to be uploaded again",
 }
@@ -266,6 +269,8 @@ def inventory(doc: dict) -> Tuple[List[Link], dict]:
                          tone=tone if tone and tone.get("v") == grade.TONE_VERSION and grade._valid_tone(tone) else None,
                          thumb=r2.locate(str(m.get("thumbnail") or "")),
                          preview=r2.locate(str(m.get("previewUrl") or ""))))
+        if isinstance(m.get("split"), dict):
+            look(m["split"], f"{sid} split screen", i)        # a presenter split screen's real half
         anim = s.get("animation") if isinstance(s.get("animation"), dict) else {}
         for x in anim.get("media") or []:
             look(x, f"{sid} graphic", i)

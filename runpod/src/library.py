@@ -58,6 +58,7 @@ from typing import Dict, List, Optional
 import requests
 
 from . import config, ledger, libstore, media, storage
+from .presenter import is_presenter_scene
 
 INDEX_PATH = "library/index.json"
 # The broker signs two URLs per row it returns: 500 rows meant ~1000 storage
@@ -232,13 +233,22 @@ def shown_rows(doc: dict, project_id: str) -> List[dict]:
     rows, seen = [], set()
     for s in (doc or {}).get("scenes") or []:
         m = s.get("media") if isinstance(s, dict) else None
+        split_sem: dict = {}
+        if isinstance(m, dict) and is_presenter_scene(s):
+            # Never the AI presenter's clip (src/presenter/hybrid.py): a split screen's real half instead.
+            split_sem = ((s.get("semanticMetadata") or {}).get("split") or {}) if isinstance(
+                s.get("semanticMetadata"), dict) else {}
+            m, half_sem = ledger.split_half(m)
+            split_sem = dict(half_sem, subject=split_sem.get("query") or "",
+                             contentDescription=split_sem.get("contentDescription") or "",
+                             relevanceScore=split_sem.get("relevanceScore"))
         if not isinstance(m, dict) or m.get("type") not in ("video", "image"):
             continue
         loc = _r2_location(m.get("url") or "")
         if not loc or loc[1] in seen:
             continue
         seen.add(loc[1])
-        sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
+        sem = split_sem or (s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {})
         thumb = _r2_location(m.get("thumbnail") or "")
         subject = str(sem.get("subject") or sem.get("searchQuery") or s.get("query") or "")[:200]
         kind = ("generated" if m.get("generated") or m.get("source") == "generated"

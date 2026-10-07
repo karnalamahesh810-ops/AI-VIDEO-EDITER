@@ -28,9 +28,10 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from . import templates
+from .presenter import is_presenter_scene
 
 # --------------------------------------------------------------------------- #
 # The look ids (the contract with the renderer's registry: LibKinetic "kt-")
@@ -1219,15 +1220,27 @@ def _year_after(m: dict) -> Optional[int]:
     return None
 
 
-def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None) -> Tuple[List[dict], List[dict]]:
+def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None,
+         skip: Sequence[Tuple[float, float]] = ()) -> Tuple[List[dict], List[dict]]:
     """
     The KT overlays for every data moment of the narration, and the log of every moment (shown or why not).
     Each overlay carries `at` (the word's second), priority and the moment it shows; startFrame /
-    durationInFrames are set by schedule().
+    durationInFrames are set by schedule(). `skip`: spans (seconds) whose moments get no look - the presenter
+    says them on camera (src/presenter/hybrid.py); left out before the repeats are counted, so the same number
+    said again later on the footage is shown there.
     """
     nar = Narration(words)
     ms = moments(nar)
     log: List[dict] = []
+    if skip:
+        keep_ms = []
+        for m in ms:
+            if any(a <= float(m["at"]) < b for a, b in skip):
+                log.append({"at": round(float(m["at"]), 2), "said": m.get("said"), "kind": m.get("kind"),
+                            "look": None, "why": "the presenter says it on camera"})
+                continue
+            keep_ms.append(m)
+        ms = keep_ms
     for m in ms:
         m["score"] = score(m)
     # comparisons first: a run of named values of one unit is one look
@@ -1509,12 +1522,14 @@ def _scene_card(ov: dict) -> bool:
     return isinstance(ov, dict) and ov.get("type") == "highlight" and not ov.get("template")
 
 
-def schedule(overlays: List[dict], fps: int, total_frames: int) -> Tuple[List[dict], List[dict]]:
+def schedule(overlays: List[dict], fps: int, total_frames: int,
+             blocked: Sequence[Tuple[int, int]] = ()) -> Tuple[List[dict], List[dict]]:
     """
     Place every overlay in one lane, highest priority first: each at its word (or its old start) or up to its
     slack later, for at least min_frames and up to its wanted length, never over another. A look that cannot
-    have its least time anywhere in its window is left out (logged), never cut short. Returns (placed in time
-    order, dropped rows).
+    have its least time anywhere in its window is left out (logged), never cut short. `blocked`: frame spans
+    no look may cover (the presenter on camera: src/presenter/hybrid.py) - held in the lane like looks that
+    never move. Returns (placed in time order, dropped rows).
     """
     breath = int(round(BREATH * fps))
     items = []
@@ -1545,6 +1560,10 @@ def schedule(overlays: List[dict], fps: int, total_frames: int) -> Tuple[List[di
         it["hi"] = it["start"] + it["slack"]
     placed: List[dict] = []                    # items with "s": each holds [s, s + need + breath) at least
     dropped: List[dict] = []
+    for a, b in blocked or ():
+        if int(b) > int(a):
+            placed.append({"s": int(a), "need": int(b) - int(a), "want": int(b) - int(a), "pri": 1000,
+                           "lo": int(a), "hi": int(a), "slack": 0, "early": 0, "block": True})
 
     def blockers(s: int, need: int, skip=None) -> List[dict]:
         return [p for p in placed if p is not skip and s < p["s"] + p["need"] + breath and s + need + breath > p["s"]]
@@ -1589,14 +1608,16 @@ def schedule(overlays: List[dict], fps: int, total_frames: int) -> Tuple[List[di
                         "said": it["ov"].get("said") or it["ov"].get("text") or "",
                         "why": "no room for its full animation (it would have been cut short)"
                         if it["start"] + it["need"] <= total_frames else "too close to the end of the video"})
-    # every placed look as long as it wants, up to the next one
+    # every placed look as long as it wants, up to the next one (or the next blocked span)
     placed.sort(key=lambda p: p["s"])
     for k, p in enumerate(placed):
+        if p.get("block"):
+            continue
         nxt = placed[k + 1]["s"] if k + 1 < len(placed) else total_frames + breath
         dur = max(p["need"], min(p["want"], nxt - breath - p["s"], total_frames - p["s"]))
         p["ov"]["startFrame"] = int(p["s"])
         p["ov"]["durationInFrames"] = int(dur)
-    return [p["ov"] for p in placed], dropped
+    return [p["ov"] for p in placed if not p.get("block")], dropped
 
 
 def short_overlays(overlays: List[dict], fps: int) -> List[dict]:
@@ -1661,7 +1682,13 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
         [int(s.get("startFrame") or 0) + int(s.get("durationInFrames") or 0) for s in doc.get("scenes") or []] + [0])
     before = [dict(o) for o in doc.get("overlays") or [] if isinstance(o, dict)]
     short_before = short_overlays(before, fps)     # (before the lane changes any of them in place)
-    new, log = plan(words_of(doc), fps) if plan_data else ([], [])
+    # The presenter on camera (src/presenter/hybrid.py): no look lands on it or runs into it. None: as before.
+    presenter = [(int(sc.get("startFrame") or 0), int(sc.get("startFrame") or 0) + int(sc.get("durationInFrames") or 0))
+                 for sc in doc.get("scenes") or [] if is_presenter_scene(sc)]
+    if presenter:
+        new, log = plan(words_of(doc), fps, skip=[(a / fps, b / fps) for a, b in presenter]) if plan_data else ([], [])
+    else:
+        new, log = plan(words_of(doc), fps) if plan_data else ([], [])
     # A brand kit that names its looks: only the KT looks it allows (another style of the same kind first).
     allowed = templates.allowed()
     if allowed is None:
@@ -1745,7 +1772,10 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
             kept[i] = {**ov, "text": cap}
     # a scene's own text card is its picture: it keeps its frames, outside the lane
     cards = [o for o in kept if _scene_card(o)]
-    placed, dropped = schedule([o for o in kept if not _scene_card(o)] + new, fps, total)
+    if presenter:
+        placed, dropped = schedule([o for o in kept if not _scene_card(o)] + new, fps, total, blocked=presenter)
+    else:
+        placed, dropped = schedule([o for o in kept if not _scene_card(o)] + new, fps, total)
     for o in placed:
         if o.get("_points") and isinstance(o.get("items"), list):
             # a timeline's later years land on their words from where the look really starts

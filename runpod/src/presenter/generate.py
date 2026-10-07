@@ -166,14 +166,21 @@ def motion_prompt(motion: str, what: str) -> str:
 class Generator:
     def __init__(self, *, provider: Provider, budget: Budget, tier: Dict[str, Any], kit: dict, work: str,
                  store: Store, cache: Cache, checker: _checks.Checker, narration_wav: str, total: float,
-                 bible: Dict[str, str], on_progress: Optional[Callable[[int, int], None]] = None):
+                 bible: Dict[str, str], on_progress: Optional[Callable[[int, int], None]] = None,
+                 still_fallback: bool = True):
         self.provider, self.budget, self.tier, self.kit = provider, budget, tier, kit
+        # False (the hybrid mode, src/presenter/hybrid.py): a presenter shot that fails is no shot at all - its
+        # line goes back to the footage search, never to an AI still or the kit's set.
+        self.still_fallback = bool(still_fallback)
         self.work, self.store, self.cache, self.checker = work, store, cache, checker
         self.narration, self.total, self.bible = narration_wav, float(total), bible
         self.on_progress = on_progress
         self.dir = os.path.join(work, "presenter")
         os.makedirs(self.dir, exist_ok=True)
         self._lock = threading.Lock()
+        # One framing or master prepared at a time (download, 16:9 crop, upload): parallel takes once read a
+        # master another take was still writing (the hybrid laptop test, 2026-10-07).
+        self._kit_lock = threading.Lock()
         self._done = 0
         self._total = 0
         self._sets_used: set = set()
@@ -187,6 +194,10 @@ class Generator:
     # ------------------------------------------------------------------ kit files
     def _framing(self, framing_id: str) -> Tuple[str, str]:
         """(local 16:9 JPEG, link the provider can fetch) for one of the kit's framings."""
+        with self._kit_lock:
+            return self._framing_locked(framing_id)
+
+    def _framing_locked(self, framing_id: str) -> Tuple[str, str]:
         with self._lock:
             if framing_id in self._framing_cache:
                 return self._framing_cache[framing_id]
@@ -201,6 +212,10 @@ class Generator:
         return local, link
 
     def _master_files(self) -> Tuple[str, str]:
+        with self._kit_lock:
+            return self._master_locked()
+
+    def _master_locked(self) -> Tuple[str, str]:
         with self._lock:
             if self._master[0]:
                 return self._master
@@ -295,6 +310,9 @@ class Generator:
                     asset.checks["earlier"] = why
                 return asset
             why.append("checks failed")
+        if not self.still_fallback:
+            self._note(f"{shot.id}: no presenter shot ({'; '.join(why)[:200]})")
+            return None
         self._note(f"{shot.id}: presenter shot falls back to a still ({'; '.join(why)[:200]})")
         still = self.still(shot, in_shot=False, reason="presenter shot failed")
         if still is not None:

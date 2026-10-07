@@ -107,6 +107,7 @@ from src import sharpness
 from src import living
 from src import hookcheck
 from src import shorts
+from src.presenter import hybrid as presenter_hybrid
 
 
 def _work_dir(job_id: str) -> str:
@@ -610,12 +611,49 @@ def publish_media(doc: dict, project_id: str, bucket: str, report: Reporter,
             scene["reviewReason"] = "Media could not be saved; re-source before rendering"
             failures += 1
     _publish_living(doc, project_id, job_id)
+    _publish_split_halves(doc, project_id)
     _publish_overlay_pictures(doc, project_id)
     doc["meta"]["publishedMedia"] = len(published)
     if failures:
         doc["meta"]["warnings"].append(
             f"{failures} scene(s) could not be saved to storage.")
     return len(published)
+
+
+def _publish_split_halves(doc: dict, project_id: str) -> int:
+    """
+    The real half of a presenter split screen (media.split: the line's own
+    clip or picture beside the AI presenter, src/presenter/hybrid.py) goes up
+    with the scene media - to Cloudflare R2 only, a public link that never
+    expires (nothing re-signs a link nested in the media). Without R2, or when
+    the upload fails, the split goes and the presenter shows full-screen: the
+    saved timeline never points at a file of this job. Never fails the job.
+    Returns how many halves went up (0 for a timeline without any).
+    """
+    done = 0
+    for scene in doc.get("scenes") or []:
+        media = scene.get("media") if isinstance(scene.get("media"), dict) else {}
+        half = media.get("split") if isinstance(media.get("split"), dict) else None
+        path = str((half or {}).get("url") or "")
+        if not half or not path or not os.path.isfile(path):
+            continue
+        url = ""
+        if project_id and r2.enabled():
+            ext = os.path.splitext(path)[1] or ".bin"
+            obj = f"projects/{project_id}/media/{scene.get('id')}_split{ext}"
+            try:
+                url = r2.upload(path, r2.tokened(obj), content_type=r2.content_type(path),
+                                deadline=time.time() + config.R2_MEDIA_UPLOAD_SECONDS, cache_control=r2.IMMUTABLE)
+            except Exception as e:  # noqa: BLE001 - the presenter full-screen instead
+                print(f"[worker] could not publish {obj}: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        if url:
+            half["url"] = url
+            done += 1
+        else:
+            media.pop("split", None)
+            scene["frame"] = "full"
+            scene.setdefault("semanticMetadata", {}).pop("split", None)
+    return done
 
 
 def _publish_overlay_pictures(doc: dict, project_id: str) -> dict:
@@ -1057,6 +1095,9 @@ def _narration_fields(doc: dict) -> dict:
 
 
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
+    if presenter_hybrid.block(inp):
+        # A presenter block naming no usable kit fails now, before anything is paid for (src/presenter/hybrid.py).
+        presenter_hybrid.kit_for(inp)
     raw_audio = inp.get("audio_url") or inp.get("audio_path")
     made = None
     if not raw_audio and tts.configured() and tts.wanted(inp):
@@ -1114,6 +1155,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     report("Reading the whole story", 13)
     events.phase("plan")
     brief = director.story_brief(segments, title, configured=director.is_configured())
+    if presenter_hybrid.block(inp):
+        # The AI presenter is a made-up person: never the story's cast, to cut on or find footage of
+        # (src/presenter/hybrid.py). Without a presenter block the brief is as the planner wrote it.
+        presenter_hybrid.scrub_brief(brief, presenter_hybrid.kit_for(inp))
     # Which footage packs this story is about (src/packs.py): a Lake Powell video
     # reads the water and nature shelves, for the fallback ladder's first rung.
     packs.use_job(title=title, brief=brief, style=styles.resolve(inp.get("video_style")))
@@ -1153,6 +1198,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     mentions.apply_focus(shots, segments, mention_focus, brief)
     # Out of AI credits already: stop before a single footage search is paid for.
     vision.require_credits()
+    # The AI presenter inside this footage style (src/presenter/hybrid.py), only for a job with a presenter
+    # block: the lines it says on camera are chosen now and its takes made beside the footage search. None
+    # (no block): nothing below changes.
+    hy = (presenter_hybrid.start(inp, segments, shots, narration_path=audio_path, duration=audio_duration,
+                                 work=work, brief=brief)
+          if presenter_hybrid.block(inp) else None)
     # Real data graphics (src/datagraphics.py, DATA_GRAPHICS): the official numbers behind the narration's water
     # and weather facts (USBR, USGS, the Drought Monitor, NOAA - free, keyless), fetched beside the footage search
     # in their own time box; nothing in it can fail the job. Off: nothing starts.
@@ -1197,6 +1248,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "hook": bool(shot.get("hook")) or float(seg.start) < config.HOOK_SECONDS,
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
+    # The lines the footage search is for: every line, but the presenter's full-screen ones with a presenter
+    # block (a split screen's line keeps its search: its real clip or picture is the right half).
+    search_jobs = hy.search_jobs(jobs) if hy is not None else jobs
 
     last_pct = [22]
 
@@ -1277,11 +1331,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # One sourcing budget for the whole job (every worker shares it).
     from src import ytdlp as _ytdlp_mod
     # One machine per build unless BUILD_FANOUT: its sourcing deadline covers a pass 1 sized by the line count.
-    budget_s = (fanout.source_budget(len(jobs)) if fanout.enabled_for(len(jobs), project_id or "")
-                else fanout.single_machine_deadline(len(jobs)))
+    budget_s = (fanout.source_budget(len(search_jobs)) if fanout.enabled_for(len(search_jobs), project_id or "")
+                else fanout.single_machine_deadline(len(search_jobs)))
     _ytdlp_mod.set_deadline(time.time() + budget_s)
-    print(f"[worker] sourcing budget {budget_s:.0f}s for {len(jobs)} scenes"
-          f"{'' if fanout.enabled_for(len(jobs), project_id or '') else ' on this one machine'}", flush=True)
+    print(f"[worker] sourcing budget {budget_s:.0f}s for {len(search_jobs)} scenes"
+          f"{'' if fanout.enabled_for(len(search_jobs), project_id or '') else ' on this one machine'}", flush=True)
     lib = library.Library.load(project_id, (report.job or {}).get("id", ""),
                                inp.get("media_bucket") or config.MEDIA_BUCKET)
     LAST_LIBRARY["lib"] = lib
@@ -1294,8 +1348,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # search, the lines a niche pack clip fits best (src/packs.py) - never the hook,
     # never a line that needs its exact event or place. Those lines are settled here
     # and left out of every search below.
-    packed = packs.first_pass(jobs, work, require_cc=require_cc) if config.PACKS_FIRST else {}
-    open_jobs = [j for j in jobs if j["index"] not in packed] if packed else jobs
+    packed = packs.first_pass(search_jobs, work, require_cc=require_cc) if config.PACKS_FIRST else {}
+    open_jobs = [j for j in search_jobs if j["index"] not in packed] if packed else search_jobs
     pools_wanted = bool(config.SUBJECT_POOLS and inp.get("allow_youtube") is not False)
     in_parts = bool(pools_wanted and config.POOLS_IN_PARTS and open_jobs
                     and fanout.enabled_for(len(open_jobs), project_id))
@@ -1342,20 +1396,39 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         got = local(rest, set(taken), seqs=sequences, single=True)
         for j, a in zip(sorted(rest, key=lambda j: j["index"]), got):
             assets[j["index"]] = a
+    # The presenter's takes were made beside the search (src/presenter/hybrid.py). A full-screen presenter line
+    # whose take failed gets its real footage now, searched like every other line; the presenter's own lines stay
+    # out of every fill below. Without a presenter block fill_jobs is jobs: nothing changes.
+    fill_jobs = jobs
+    if hy is not None:
+        report("Waiting for the presenter's shots")          # no percentage: the search's band is past it
+        hy.wait()
+        failed = set(hy.failed_full())
+        retry = [j for j in jobs if j["index"] in failed]
+        if retry:
+            report(f"Finding footage for {len(retry)} presenter line(s)", done=0, total=len(retry))
+            _ytdlp_mod.set_deadline(time.time() + presenter_hybrid.retry_seconds(
+                len(retry), fanout.single_machine_deadline(len(retry))))
+            busy = set(taken) | {a.identity for a in assets if a is not None}
+            got = local(retry, busy, single=True)
+            for j, a in zip(sorted(retry, key=lambda j: j["index"]), got):
+                assets[j["index"]] = a
+            hy.searched_after = sorted(failed)
+        fill_jobs = hy.fill_jobs(jobs)
     # Lines the per-scene path left empty, or filled with a clip already on the
     # timeline, get the pools' spare approved moments: real, distinct footage of
     # the story's subjects instead of a black hole or a repeat.
     if pooled:
         seen_ids: set = set()
         redo = []
-        for j in jobs:
+        for j in fill_jobs:
             a = assets[j["index"]]
             if a is None or a.identity in seen_ids:
                 redo.append(j["index"])
             else:
                 seen_ids.add(a.identity)
         if redo:
-            extra = pools.fill_from_reserve(jobs, redo, work, require_cc=require_cc, assets=assets, library=lib)
+            extra = pools.fill_from_reserve(fill_jobs, redo, work, require_cc=require_cc, assets=assets, library=lib)
             for i, a in extra.items():
                 assets[i] = a
             pool_stats["reserve_filled"] = len(extra)
@@ -1374,31 +1447,31 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     results_by_index = [None] * (max(j["index"] for j in jobs) + 1)
     for j in jobs:
         results_by_index[j["index"]] = assets[j["index"]]
-    held = media.hold_violations(jobs, results_by_index)
+    held = media.hold_violations(fill_jobs, results_by_index)
     if held and pools_wanted:
-        extra = pools.fill_from_reserve(jobs, sorted(held), work, require_cc=require_cc,
+        extra = pools.fill_from_reserve(fill_jobs, sorted(held), work, require_cc=require_cc,
                                         assets=results_by_index, library=lib)
         for i, a in extra.items():
             results_by_index[i] = a
     rescued: dict = {}
     # Still empty: one last time-boxed pass before the render repeats a shot
     # (the Glen Canyon job repeated ~19 clips across 148 empty scenes).
-    if any(results_by_index[j["index"]] is None for j in jobs):
-        n_empty = sum(1 for j in jobs if results_by_index[j["index"]] is None)
+    if any(results_by_index[j["index"]] is None for j in fill_jobs):
+        n_empty = sum(1 for j in fill_jobs if results_by_index[j["index"]] is None)
         report(f"Finding footage for {n_empty} empty scenes", 62)
-        rescued = media.rescue_fill(jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")),
-                                    footage_only={j["index"] for j in jobs
+        rescued = media.rescue_fill(fill_jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")),
+                                    footage_only={j["index"] for j in fill_jobs
                                                   if j.get("hook") and j.get("subject_type") != "document"})
     if held:
-        pool_stats["variety"] = dict(media.restore_held(jobs, results_by_index, held), held=len(held),
+        pool_stats["variety"] = dict(media.restore_held(fill_jobs, results_by_index, held), held=len(held),
                                      reasons=dict(collections.Counter(r for _a, r, _k in held.values())))
         print(f"[worker] variety: {pool_stats['variety']}", flush=True)
     # Still empty, with the shot cap on: a clip the judge approved for this very line (a runner-up of
     # the clip the variety rules took off it) or for another piece of the same cut beat comes before
     # the ladder's pictures - real footage of the same sentence (src/shotcap.py runner_ups_first).
-    if shotcap.enabled() and any(results_by_index[j["index"]] is None for j in jobs):
+    if shotcap.enabled() and any(results_by_index[j["index"]] is None for j in fill_jobs):
         try:
-            first = shotcap.runner_ups_first(jobs, results_by_index, cap_info, held=held)
+            first = shotcap.runner_ups_first(fill_jobs, results_by_index, cap_info, held=held)
         except Exception as e:  # noqa: BLE001 - the ladder below
             print(f"[worker] runner-ups skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
             first = {}
@@ -1412,17 +1485,17 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # fill gets the planner's graphic or the neighbouring shot held over it
     # once the timeline is built.
     fallback: dict = {}
-    if any(results_by_index[j["index"]] is None for j in jobs):
+    if any(results_by_index[j["index"]] is None for j in fill_jobs):
         if config.NO_REUSE:
-            n_left = sum(1 for j in jobs if results_by_index[j["index"]] is None)
+            n_left = sum(1 for j in fill_jobs if results_by_index[j["index"]] is None)
             report(f"Filling {n_left} scenes the footage search ran out of time for", 63)
-            fallback = gapfill.fill_empty(jobs, results_by_index, work, library=lib, require_cc=require_cc,
+            fallback = gapfill.fill_empty(fill_jobs, results_by_index, work, library=lib, require_cc=require_cc,
                                           youtube_only=bool(flags.get("youtube_only")),
                                           label="after the footage search")
             pool_stats["fallback"] = fallback
         elif config.REUSE_SHOTS_TO_FILL and config.RESCUE_BEFORE_REUSE:
             # The old rule (NO_REUSE=0): a shot reused at most REUSE_MAX_USES times.
-            rescued["reused"] = media.fill_from_story(jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
+            rescued["reused"] = media.fill_from_story(fill_jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
     for j in jobs:
         assets[j["index"]] = results_by_index[j["index"]]
     if rescued:
@@ -1455,7 +1528,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         data_store.wait(config.DATA_GRAPHICS_WAIT)
     with datagraphics.use(data_store):
         doc = timeline.build(
-            segments, shots, assets,
+            # With a presenter block, the presenter's clips on its lines (a split line's real asset is kept
+            # for its right half): src/presenter/hybrid.py.
+            segments, shots, hy.for_build(assets) if hy is not None else assets,
             # The resolved URL, not the temp path: the document has to stay
             # meaningful after this job's work directory is gone.
             audio_url=audio_src or audio_path,
@@ -1474,6 +1549,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # What was fetched from where and how long it took, beside what the planner did with it.
         doc.setdefault("meta", {}).setdefault("dataGraphics", {"facts": 0, "shown": 0, "disagree": 0, "items": []})
         doc["meta"]["dataGraphics"]["fetch"] = data_store.report()
+    if hy is not None:
+        # The presenter's scenes as the presenter's: split frames with the line's real visual, hard cuts, no
+        # effect or move, their metadata (src/presenter/hybrid.py) - before the passes below look at them.
+        hy.decorate(doc)
     # What the hook booster changed (src/hookboost.py): the cuts made before the
     # shots were planned, and the opening as it was built.
     if doc.get("meta", {}).get("hookBoost") or boost_info:
@@ -1600,6 +1679,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # made, the shots over it now, what replaced a hold that would have run long.
     if shotcap.enabled():
         doc["meta"]["shotCap"] = shotcap.report(doc, cap_info)
+    if hy is not None:
+        # Nothing over the presenter (a look from the footage before ends at the cut), the presenter's report
+        # and costs (meta.presenterHybrid), the YouTube disclosure line.
+        hy.finish(doc)
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).
@@ -3066,6 +3149,11 @@ def handler(job):
         vstyle = styles.apply(inp)
         if vstyle:
             print(f"[worker] video style: {vstyle}", flush=True)
+    # The AI presenter inside a footage style (src/presenter/hybrid.py) is real footage around the presenter and
+    # nothing else generated: no AI pictures in its search, its gap fills, a Replace Clip or a render's repairs.
+    if (act in ("plan", "build") and presenter_hybrid.block(inp)) or (
+            act in ("resource", "render") and presenter_hybrid.is_hybrid_doc(inp.get("timeline"))):
+        presenter_hybrid.force_config(inp)
     config_before = _apply_config(inp.get("config"))
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
@@ -3451,7 +3539,7 @@ def handler(job):
                 ladder=not _is_presenter_doc(doc),
                 story=meta.get("story") if isinstance(meta.get("story"), dict) else None,
                 require_cc=bool(inp["require_cc"] if inp.get("require_cc") is not None else config.REQUIRE_CC),
-                allow_generated=config.QUALITY_REPAIR_GENERATED,
+                allow_generated=config.QUALITY_REPAIR_GENERATED and not presenter_hybrid.is_hybrid_doc(doc),
                 library_loader=(lambda: library.Library.load(project_id, job_id, bucket)) if project_id else None)
             # Editor renders are split across every worker too. They used to
             # render the whole video on one worker: a 15-minute video took
@@ -3495,7 +3583,8 @@ def handler(job):
             # The quality check before the render repairs with this job's own
             # plan: its lines, clip library, spare pool moments and flags.
             quality.set_context(ladder=not _is_presenter_doc(doc), plan=True,
-                                allow_generated=config.QUALITY_REPAIR_GENERATED)
+                                allow_generated=config.QUALITY_REPAIR_GENERATED
+                                and not presenter_hybrid.is_hybrid_doc(doc))
             if split:
                 # Long video: save the clips first so every worker can fetch
                 # them, then render in chunks across the workers.

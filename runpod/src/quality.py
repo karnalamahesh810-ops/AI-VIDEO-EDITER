@@ -84,6 +84,7 @@ from urllib.request import url2pathname
 import requests
 
 from . import config, events, gapfill, r2, templates
+from .presenter import PRESENTER_SOURCE, is_presenter_scene
 
 # --------------------------------------------------------------------------- #
 # What the renderer does (remotion/src), read off the code or measured
@@ -538,6 +539,8 @@ def look_pictures(ov: dict, scenes: List[dict]) -> Optional[List[str]]:
     out: List[str] = []
 
     def add(m) -> None:
+        if isinstance(m, dict) and str(m.get("source") or "") == PRESENTER_SOURCE:
+            return                          # never the presenter's face inside a picture look
         s = _still_of(m)
         if s and s not in out:
             out.append(s)
@@ -1223,11 +1226,15 @@ class Gate:
                 continue
             if not got.ok:
                 problems[i] = ("unreachable" if not got.reached else "tiny" if got.tiny else "broken", got.why)
-            elif kind == "video" and got.seconds > 0:
+            elif kind == "video" and got.seconds > 0 and not is_presenter_scene(s):
+                # (The presenter's clip is cut to its own words: never re-timed or slowed - src/presenter/hybrid.py.
+                # Only a missing or broken one is a problem: real footage takes its line.)
                 p = self._cover(i, scenes, got.seconds)
                 if p:
                     problems[i] = p
         for i, why in gapfill.find_repeats(self.doc):
+            if i < len(scenes) and is_presenter_scene(scenes[i]):
+                continue                    # (a split screen's real half seen twice: the presenter stays)
             problems.setdefault(i, ("repeat", f"it repeats an earlier scene ({why})"))
         if config.STOCK_GATE_REPAIR:
             # A stock agency's picture on a timeline built before the block
@@ -1624,7 +1631,7 @@ class Gate:
         for i, s in enumerate(scenes):
             m = s.get("media") or {}
             url = str(m.get("url") or "")
-            if not url or s.get("teaser") or str(s.get("frame") or "full") != "full":
+            if not url or s.get("teaser") or str(s.get("frame") or "full") != "full" or is_presenter_scene(s):
                 continue
             sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
             source = str(m.get("source") or sem.get("provider") or "")
@@ -2074,7 +2081,7 @@ class Gate:
         problems = {}
         for d in defects:
             for k in d.get("scenes") or []:
-                if 0 <= k < len(scenes):
+                if 0 <= k < len(scenes) and not is_presenter_scene(scenes[k]):
                     problems.setdefault(k, (d["kind"], d["why"]))
         # Silence has no scene to repair, and drawing the same narration again
         # gives the same sound: it is reported, never re-rendered for.

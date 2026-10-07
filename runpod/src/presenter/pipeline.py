@@ -268,6 +268,10 @@ def info() -> Dict[str, Any]:
             known.append(kits.public_summary(kits.normalize(k)))
         except kits.KitError:
             continue
+    from . import hybrid
     return {"style": STYLE, "defaultTier": tiers.DEFAULT_TIER,
             "tiers": {k: tiers.summary(tiers.resolve(k)) for k in tiers.all_tiers()},
-            "estimate": estimate.table(), "kits": known, "script": script_preset.PRESET, "disclosure": DISCLOSURE}
+            "estimate": estimate.table(), "kits": known, "script": script_preset.PRESET, "disclosure": DISCLOSURE,
+            # The presenter inside any footage style (a job's "presenter" block): $ per 10/15/20-minute video at
+            # light / medium, real footage everywhere else (src/presenter/hybrid.py).
+            "hybrid": dict(hybrid.estimate_table(), disclosure=hybrid.DISCLOSURE)}

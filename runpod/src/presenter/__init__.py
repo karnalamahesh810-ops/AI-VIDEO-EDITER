@@ -23,6 +23,17 @@ from __future__ import annotations
 from typing import Any, Dict
 
 STYLE = "ai_presenter"
+# A scene whose media.source is this is the presenter talking (src/presenter/generate.py): generated, lip-synced
+# to its own window of the narration and trimmed to its scene. The footage passes leave such a scene alone - no
+# search, swap, hold-over, re-time, move, look, library row or ledger entry (the hybrid mode puts these scenes
+# into ordinary footage timelines: src/presenter/hybrid.py).
+PRESENTER_SOURCE = "ai-presenter"
+
+
+def is_presenter_scene(scene: Any) -> bool:
+    """A timeline scene that shows the presenter talking (its media is a presenter clip)."""
+    media = scene.get("media") if isinstance(scene, dict) else None
+    return isinstance(media, dict) and str(media.get("source") or "") == PRESENTER_SOURCE
 
 
 def is_presenter(inp: Dict[str, Any]) -> bool:

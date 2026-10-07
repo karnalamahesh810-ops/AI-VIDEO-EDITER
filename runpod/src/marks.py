@@ -26,6 +26,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from . import config, sfxplan, templates
+from .presenter import is_presenter_scene
 
 POINTING_PHOTO = {"LIB_PE_RED_ARROW", "LIB_PE_CIRCLE_SPOTLIGHT"}
 # (the photo focus, LibPremium: its push-in and ring centre on the anchor found; the frame's centre without one)
@@ -236,8 +237,8 @@ def place_video_marks(doc: dict, find, frame_at) -> Dict[str, int]:
         if len(placed) >= limit:
             break
         m = scene.get("media") or {}
-        if m.get("type") != "video" or not _local(m.get("url") or ""):
-            continue
+        if m.get("type") != "video" or not _local(m.get("url") or "") or is_presenter_scene(scene):
+            continue                        # (never an arrow on the presenter: src/presenter/hybrid.py)
         what = _what_from(str(scene.get("text") or ""))
         if not what:
             continue

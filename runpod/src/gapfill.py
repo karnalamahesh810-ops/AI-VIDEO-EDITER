@@ -49,6 +49,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import config, ytdlp
+from .presenter import is_presenter_scene
 
 # Pictures tried per search in the ladder's picture rung (it was 6; most of the
 # Mount Rainier video's first six came from sites that refuse downloads).
@@ -202,6 +203,17 @@ class Shot:
         m = scene.get("media") or {}
         if m.get("type") not in ("video", "image") or not m.get("url"):
             return None
+        half = m.get("split") if isinstance(m.get("split"), dict) else None
+        if half and half.get("url") and is_presenter_scene(scene):
+            # A presenter split screen (src/presenter/hybrid.py): its REAL half is the shot no other scene may
+            # repeat (nothing else can ever show the presenter's own clip).
+            ident = str(half.get("assetId") or "")
+            src = str(half.get("sourceUrl") or "")
+            video = _video_of(ident, src) if half.get("type") == "video" else ""
+            moment = half.get("moment") if isinstance(half.get("moment"), dict) else {}
+            return cls(ident="" if video else ident, files=tuple(_files_of(half.get("url") or "")), video=video,
+                       start=_start_from(moment, src, half.get("url") or "") if video else None,
+                       at=int(scene.get("startFrame") or 0) / max(1, fps), chain=bool(moment.get("chain")))
         sem = scene.get("semanticMetadata") or {}
         ident = str(sem.get("assetId") or "")
         src = str(sem.get("sourceUrl") or "")
@@ -864,6 +876,10 @@ def _hold(doc: dict, i: int, rate: Optional[float], ceiling: bool = False, still
     nxt = scenes[i + 1] if i + 1 < len(scenes) and not _empty(scenes[i + 1]) else None
     prev = prev if prev is not None and (prev.get("media") or {}).get("type") in ("video", "image") else None
     nxt = nxt if nxt is not None and (nxt.get("media") or {}).get("type") in ("video", "image") else None
+    # Never the presenter (src/presenter/hybrid.py): their clip is cut to its own words - held over another
+    # line it would be slowed or run on with the lips out of sync.
+    prev = None if prev is not None and is_presenter_scene(prev) else prev
+    nxt = None if nxt is not None and is_presenter_scene(nxt) else nxt
     if prev is None and nxt is None or need <= 0:
         return False
     if rate is None:
@@ -1327,9 +1343,11 @@ def find_repeats(doc: dict) -> List[Tuple[int, str]]:
         if shot is None:
             continue
         why = used.why_not(i, shot)
-        if why:
+        if why and not is_presenter_scene(s):
             out.append((i, why))
         else:
+            # (The AI presenter is never cleared as a repeat - a split screen's real half seen before stays
+            # beside it; later scenes are checked against it as usual: src/presenter/hybrid.py.)
             used.add(i, shot)
     return out
 

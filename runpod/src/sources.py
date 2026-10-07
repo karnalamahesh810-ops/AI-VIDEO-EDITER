@@ -28,6 +28,8 @@ import re
 import time
 from typing import Callable, Dict, List, Optional, Tuple
 
+from .presenter import is_presenter_scene
+
 LOOK = "LIB_SRC_TAG"            # the one look (remotion LibSourceTag.tsx, "src-tag"), registered autoPick false
 MAX_NAME = 40                   # a name longer than this is not a tag (it would be a sentence in the corner)
 
@@ -621,6 +623,9 @@ def _settle(doc: dict, look: Optional[Callable], budget: float) -> Dict[str, obj
                  if int(s.get("startFrame") or 0) < b and a < int(s.get("startFrame") or 0) + int(s.get("durationInFrames") or 0)]
         if any((scenes[n].get("media") or {}).get("type") == "animation" for n in under):
             drop.add(i)                     # the scene became a full-screen graphic (gapfill): nothing lands on it
+            continue
+        if any(is_presenter_scene(scenes[n]) for n in under):
+            drop.add(i)                     # the presenter talking (src/presenter/hybrid.py): nothing lands on it
             continue
         boxes: list = []
         for n in under:

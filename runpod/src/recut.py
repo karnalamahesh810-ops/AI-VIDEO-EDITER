@@ -73,6 +73,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import config, events, gapfill, grade, ledger, media, r2, shotcap, storage, timeline, upscale, ytdlp
+from .presenter import is_presenter_scene
 
 CAP = 7.0                  # the longest a shot stays on screen (s)
 SLACK = 0.5                # a scene is cut when it runs longer than CAP + SLACK
@@ -221,12 +222,16 @@ def kind_of(scene: Any) -> str:
     """
     "video" / "image": a shot of footage or a still; "empty": a scene still
     without one; "graphic": an animation, a map or a full-screen look (keeps
-    its length); "teaser": a cold-open flash (src/hookboost.py); "" otherwise.
+    its length); "teaser": a cold-open flash (src/hookboost.py); "presenter":
+    the AI presenter talking (src/presenter/hybrid.py: never cut, searched or
+    judged - its lips follow the voice); "" otherwise.
     """
     if not isinstance(scene, dict):
         return ""
     if scene.get("teaser"):
         return "teaser"
+    if is_presenter_scene(scene):
+        return "presenter"
     m = scene.get("media") if isinstance(scene.get("media"), dict) else {}
     vt = str(scene.get("visualType") or "footage")
     if scene.get("animation") or m.get("type") == "animation" or vt in ("animation", "map"):
@@ -442,6 +447,7 @@ def plan_doc(doc: dict, cap: float = CAP, lo: float = MIN_PIECE,
     counts: Dict[str, Any] = {"scenes": len(scenes), "long": 0, "longByKind": {}, "longest": 0.0, "empty": 0,
                               "cut": 0, "pieces": 0, "newPieces": 0}
     reasons = {"graphic": "a graphic or animation keeps its own length", "teaser": "a cold-open flash",
+               "presenter": "the AI presenter keeps its own length (its lips follow the voice)",
                "": "not a shot of footage or a still"}
     for i, s in enumerate(scenes):
         if not isinstance(s, dict):

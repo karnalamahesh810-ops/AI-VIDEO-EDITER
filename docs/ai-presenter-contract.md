@@ -164,3 +164,83 @@ Write it in the first person, with no contractions, at about 175 words a minute.
   | `PRESENTER_PARALLEL`, `PRESENTER_VIDEO_PARALLEL`, `PRESENTER_IMAGE_PARALLEL` | how many calls run at once |
 
 - **No Kie anywhere.** Every call goes to OpenRouter. `providers.AlgrowREST` is the slot for an Algrow provider (`PRESENTER_PROVIDER=algrow`).
+
+## 10. Hybrid: the presenter inside any footage style (worker branch `feature/presenter-hybrid`)
+
+Any style but `ai_presenter` (`documentary`, `news_compilation`, ...) takes an optional `presenter` block. The build stays the normal one: real YouTube clips and real web pictures, found and judged line by line. The presenter is cut in on a few lines. **Nothing else is generated:** no AI pictures, no AI clips and no kit sets, not even as fallbacks. Code: `runpod/src/presenter/hybrid.py`.
+
+```json
+"presenter": {
+  "presenter_id": "hollis",
+  "presenter_kit": { "...": "the kit, section 2 (the app's workerKit)" },
+  "share": 0.14,
+  "level": "medium",
+  "split_screen": true,
+  "budget_usd": 1.07
+}
+```
+
+| Field | Values | Default | Notes |
+|---|---|---|---|
+| `presenter_id` / `presenter_kit` | as in sections 1-2 | | The inline kit wins. `catalogue` / `catalogue_url` / `base_url` are read too. A block with no usable kit fails the job before anything is spent. |
+| `share` | 0.02-0.30 | 0.14 | Share of the running time: `0.08` light, `0.14` medium. |
+| `level` | `light` / `medium` | | A label. A level sent alone sets its share. |
+| `split_screen` | bool | `true` | About a third of the middle appearances are 50/50: the presenter left, **that line's real clip or picture** right. Never the hook or the close. |
+| `budget_usd` | dollars | narration s × share × $0.05 × 1.5 (never under every planned take once more) | A hard cap on the presenter's OpenRouter calls. The plan is trimmed to fit first, keeping room for one retry of its dearest take: the latest middle appearance goes first, then the close, then the hook. A take refused or failed past it: the line gets footage. |
+| `enabled` | `false` | | Switches a block off. |
+
+Without the block nothing changes: tests prove the timeline is byte-for-byte that of 68205fc.
+
+**What the presenter says on camera:**
+- The hook's first sentence (up to 9 s).
+- Chapter openings ("Now, ...", "Here is the part ...", the brief's section starts).
+- A beat whenever the footage has run ~40 s without one, while the share allows.
+- The close.
+- A line about the presenter ("My name is Hollis Reed": their name was the line's subject) is theirs to say first.
+- Each appearance is 3.5-7.5 s of whole lines, with at least 10 s of footage between appearances.
+- Never a line the plan gave a graphic, except the opening sentence and the sign-off (the hint gives way). A named person's or a document's line only as a split; such a line keeps the opening or the close on footage (`meta.presenterHybrid.log` says why).
+
+**How the presenter shots are made:**
+- One `heygen/avatar-iv` take per appearance, from its narration window, made beside the footage search.
+- The take is cut frame-exact into one clip per line, so the editor keeps every line as its own scene.
+- Checks (frozen, black, the face against the master). The retry uses the other framing.
+- A failed take sends its lines back to the footage search after the main search, in a box of their own (150 s + 30 s a line, `PRESENTER_HYBRID_RETRY_SECONDS`), then the usual fills. The build waits for the takes at most 900 s after its search (`PRESENTER_HYBRID_WAIT_SECONDS`); a later take is not used.
+- Full-screen presenter lines are never searched. Split lines are.
+- The presenter's name never goes into a footage search (a made-up person: the laptop test's search for "Hollis Reed" found a real Hollis in a court case). It leaves every shot's query, fallbacks and subject.
+
+**Around the presenter:**
+- No look, graphic, data look, date, mark, source tag or sound effect over a presenter scene. A look running in from the footage before ends at the cut.
+- Hard cuts in and out.
+- No effect, film treatment, move or reframe on the presenter.
+- The quality gate, the hook check, the AI review, hold-overs, re-cut, re-clip, restore, the clip library and the cross-video ledger all leave presenter scenes alone. The real half of a split is recorded like any shown footage.
+- Replace Clip refuses a presenter scene (section 8).
+- The job runs with `IMAGE_MAX_PER_VIDEO 0`, `PREFER_GENERATED_IMAGES false`, `GENERATED_IMAGES_IN_HOOK false` and `HOOK_TEASER false`, whatever its config says. Its Replace Clip and render jobs get the same.
+
+**In the timeline:**
+- **Presenter scenes:**
+  - `media.source` is `"ai-presenter"` (a clip cut to its line, muted).
+  - `effect`, `treatment` and `motion` are `"none"`; `reframe` is `"off"`; `transition` is `"none"`.
+  - `semanticMetadata.shotKind` is `"presenter"`, plus `role` and `presenter {kit, name, framing, lag, take, lines, window, mode: "hybrid"}`.
+  - Also `generated` and `originalUrl` (the whole take on R2).
+- **Split scenes:**
+  - Also `frame: "split"` and `media.split {type, url, source, motion, focusX, assetId, sourceUrl, moment, clipSeconds, attribution, license}`. This is the REAL half; it is published to R2 with the scene media, and without R2 the split goes and the presenter stays full-screen.
+  - Also `semanticMetadata.split {query, relevanceScore, contentDescription, real: true}`.
+- **`meta.presenterHybrid`:**
+  - `mode`, `kit`, `share`, `shareOfTime`, `splitScreen`;
+  - `planned[]`, `overBudget[]`, `made[]`, `fellBack[{id, lines, why}]`, `searchedAfter[]`;
+  - `screen {seconds, share, scenes, splitScenes, appearances}`;
+  - `costs {presenterUsd, checksUsd, totalUsd}`, `budget`, `estimate`;
+  - `swept {trimmed, dropped, sfx}`, `log`, `disclosure`, `warnings`.
+- **`meta.warnings[0]`** is the disclosure line, when the presenter appears.
+- **`meta.costs`** carries the `presenter` category as in section 3.
+
+**Estimate:** `presenter_info.hybrid`.
+- Its fields: `{shares, defaultShare, usdPerPresenterSecond, normalBuildPerMinute, byShare.light|medium."10"|"15"|"20" {usd, parts, presenterSeconds, billedSeconds, appearances, formula}, disclosure}`.
+- The formula: the normal footage build (~$0.11/min) + presenter seconds × $0.05. Each take is billed 0.9 s over its screen time, and ~10% need a retake. Face checks are added; the vision of unsearched lines is taken off.
+
+| Share | 10 min | 15 min | 20 min |
+|---|---|---|---|
+| light (0.08) | $4.17 | $6.26 | $8.34 |
+| medium (0.14) | $6.48 | $9.71 | $12.95 |
+
+**The app Player** needs the same `frame: "split"` drawing as section 8, with a video right half (`media.split.type: "video"`).

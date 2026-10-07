@@ -23,6 +23,7 @@ from . import config, hookboost, sfxplan, templates
 from .director import TEMPLATES
 from .transcribe import Segment
 from .media import MediaAsset
+from .presenter import PRESENTER_SOURCE
 
 SCHEMA_VERSION = 2
 
@@ -1463,7 +1464,9 @@ def _build(segments: List[Segment], shots: List[dict],
         start, duration = bounds[i], bounds[i + 1] - bounds[i]
 
         animation = None
-        if pack and vt.wants_animation(seg, shot, asset, brief, seen=seen_figures):
+        # The presenter's own line (src/presenter/hybrid.py) is never turned into a full-screen graphic.
+        presenter = asset is not None and getattr(asset, "source", "") == PRESENTER_SOURCE
+        if pack and not presenter and vt.wants_animation(seg, shot, asset, brief, seen=seen_figures):
             animation = vt.animation_for(seg, shot, pack, brief, counts=anim_counts)
             vt.note_figure(seen_figures, seg, animation)
         if animation:
@@ -1568,6 +1571,10 @@ def _build(segments: List[Segment], shots: List[dict],
             "reviewRequired": bool(review),
             "reviewReason": reason or "",
         })
+        if presenter:
+            # The presenter talking, as shot: no film treatment or effect over the face, no move or crop
+            # (scene.reframe "off": the reframe, the hook's push-in and living photos all leave it be).
+            scenes[-1].update(treatment="none", effect="none", motion="none", reframe="off")
 
         overlay = shot.get("overlay")
         if overlay and overlay["type"] in {"photo-card", "name-card"}:

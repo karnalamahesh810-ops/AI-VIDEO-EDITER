@@ -33,6 +33,7 @@ from .providers import Provider, ProviderError, data_url_for
 CHECK_USD = 0.004            # the most one check call may cost
 
 SEVERE_PRESENTER = {"different_person", "warped_face", "extra_person", "melted_face"}
+SEVERE_NATURAL = 0.75        # a face a severe issue is named for fails under this "natural" score
 SEVERE_BROLL = {"melted_hands", "extra_fingers", "warped_face", "garbled_text", "morphing", "watermark",
                 "extra_limbs", "duplicated_person", "collage"}
 
@@ -174,7 +175,15 @@ class Checker:
             return {"ok": True, "checked": False}
         issues = sorted({str(i).strip().lower() for i in got.get("issues") or [] if str(i).strip()})
         same, natural = _f(got.get("same_person"), 0.5), _f(got.get("natural"), 0.5)
-        ok = same >= 0.6 and natural >= 0.5 and not (set(issues) & SEVERE_PRESENTER)
+        # A severe issue counts when the model's own scores agree: a wrong or extra person (same_person under
+        # 0.8), a broken face (natural under SEVERE_NATURAL). The list alone is noisy: the hybrid laptop test's
+        # opening take (same 1.0, natural 0.8, "melted_face, bad_mouth") was a blink and an open mouth mid-word.
+        severe = set(issues) & SEVERE_PRESENTER
+        if severe & {"different_person", "extra_person"}:
+            severe_ok = same >= 0.8 and not (severe - {"different_person", "extra_person"} and natural < SEVERE_NATURAL)
+        else:
+            severe_ok = natural >= SEVERE_NATURAL
+        ok = same >= 0.6 and natural >= 0.5 and (not severe or severe_ok)
         return {"ok": ok, "checked": True, "samePerson": same, "natural": natural, "issues": issues,
                 "model": got.get("_model")}
 

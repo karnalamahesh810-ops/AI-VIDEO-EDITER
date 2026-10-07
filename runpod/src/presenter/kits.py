@@ -300,16 +300,16 @@ def fetch(kit: dict, ref: str, folder: str, timeout: float = 60.0) -> str:
     ref = link(kit, ref) or ref
     if ref.startswith(("http://", "https://")):
         out = _local_name(ref, folder)
-        if os.path.isfile(out) and os.path.getsize(out) > 0:
-            return out
-        try:
-            r = requests.get(ref, timeout=timeout)
-        except requests.RequestException as e:
-            raise KitError(f"kit picture unreachable: {type(e).__name__}") from e
-        if r.status_code != 200 or len(r.content) < 1000:
-            raise KitError(f"kit picture answered HTTP {r.status_code}")
-        with open(out, "wb") as fh:
-            fh.write(r.content)
+        with _lock_for(out):                    # one download per file: the other takes wait for it
+            if os.path.isfile(out) and os.path.getsize(out) > 0:
+                return out
+            try:
+                r = requests.get(ref, timeout=timeout)
+            except requests.RequestException as e:
+                raise KitError(f"kit picture unreachable: {type(e).__name__}") from e
+            if r.status_code != 200 or len(r.content) < 1000:
+                raise KitError(f"kit picture answered HTTP {r.status_code}")
+            _write_whole(out, r.content)
         return out
     path = ref[7:] if ref.startswith("file://") else ref
     if not os.path.isabs(path):
@@ -317,9 +317,29 @@ def fetch(kit: dict, ref: str, folder: str, timeout: float = 60.0) -> str:
     if not os.path.isfile(path):
         raise KitError(f"kit file missing: {os.path.basename(path)}")
     out = _local_name(os.path.abspath(path), folder)
-    if not os.path.isfile(out):
-        shutil.copyfile(path, out)
+    with _lock_for(out):
+        if not os.path.isfile(out):
+            tmp = f"{out}.{threading.get_ident()}.part"
+            shutil.copyfile(path, tmp)
+            os.replace(tmp, out)
     return out
+
+
+_FETCHING: Dict[str, threading.Lock] = {}
+
+
+def _lock_for(path: str) -> threading.Lock:
+    with _LOCK:
+        return _FETCHING.setdefault(os.path.abspath(path), threading.Lock())
+
+
+def _write_whole(out: str, data: bytes) -> None:
+    """The file appears whole or not at all: the presenter's takes run in parallel, and one that found another's
+    half-written master read a broken PNG (the hybrid laptop test, 2026-10-07)."""
+    tmp = f"{out}.{threading.get_ident()}.part"
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+    os.replace(tmp, out)
 
 
 def framing(kit: dict, framing_id: str) -> Optional[dict]:

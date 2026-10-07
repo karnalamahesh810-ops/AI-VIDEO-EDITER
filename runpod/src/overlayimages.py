@@ -31,6 +31,8 @@ import re
 import urllib.parse
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .presenter import is_presenter_scene
+
 MIN_SIDE = 240              # a picture smaller than this on its short side is not shown full-size in a look
 MAX_BYTES = 25_000_000
 FETCH_TIMEOUT = 25
@@ -183,6 +185,8 @@ def fix(overlays: List[dict], *, project_id: str = "", scenes: Optional[List[dic
         near = sorted(scenes, key=lambda s: abs(int(s.get("startFrame") or 0) - at))[:3]
         for s in near:
             md = s.get("media") or {}
+            if is_presenter_scene(s):
+                continue                    # never the AI presenter's face inside a look
             if str(md.get("type") or "") == "image" and md.get("url"):
                 out.append(md["url"])
             elif md.get("thumbnail"):

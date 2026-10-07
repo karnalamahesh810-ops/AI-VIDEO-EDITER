@@ -70,6 +70,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import config, costs, events, gapfill, quality, templates
+from .presenter import is_presenter_scene
 
 # --------------------------------------------------------------------------- #
 # What the review looks for, and what it may do about it
@@ -547,6 +548,9 @@ def plan_samples(doc: dict, file_fps: Optional[float] = None,
             continue
         if s.get("teaser"):
             skipped[i] = "a cold-open flash of a later shot"
+            continue
+        if is_presenter_scene(s):
+            skipped[i] = "the AI presenter talking (made and checked by its own step)"
             continue
         if m.get("type") not in ("video", "image") or not m.get("url"):
             skipped[i] = "a graphic of ours, not a clip"

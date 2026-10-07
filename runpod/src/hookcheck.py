@@ -52,6 +52,7 @@ import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from . import config
+from .presenter import is_presenter_scene
 
 # A clip's file must run on this much past what its scene shows before its opening moves inside it (s).
 MIN_SHIFT = 0.3
@@ -533,6 +534,8 @@ def _hook_shot(scene: dict) -> str:
     m = scene.get("media") or {}
     if scene.get("animation") or m.get("type") not in ("video", "image"):
         return ""
+    if is_presenter_scene(scene):
+        return ""               # the AI presenter (src/presenter/hybrid.py): made and checked by its own step
     return _local(m.get("url"))
 
 

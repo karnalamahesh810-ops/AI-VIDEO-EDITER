@@ -544,6 +544,8 @@ def _weak(scene: dict) -> bool:
 
 def _solid(scene: dict) -> bool:
     m = scene.get("media") or {}
+    if str(m.get("source") or "") == "ai-presenter":
+        return False            # the AI presenter is never held over another line (src/presenter/hybrid.py)
     return m.get("type") in ("video", "image") and bool(m.get("url")) and not _weak(scene)
 
 

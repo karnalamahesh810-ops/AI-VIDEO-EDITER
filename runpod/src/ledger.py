@@ -54,6 +54,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import config
+from .presenter import PRESENTER_SOURCE, is_presenter_scene
 
 VERSION = 1
 _INF = float("inf")
@@ -540,6 +541,19 @@ def _local(path: str) -> str:
     return p if p and not p.startswith(("http://", "https://")) and os.path.isfile(p) else ""
 
 
+def split_half(media: dict) -> tuple:
+    """(media, semanticMetadata)-shaped dicts of a presenter split screen's real half, ({}, {}) without one."""
+    half = media.get("split") if isinstance(media, dict) and isinstance(media.get("split"), dict) else None
+    if not half or not half.get("url"):
+        return {}, {}
+    return ({"type": half.get("type") or "", "url": half.get("url") or "", "source": half.get("source") or "",
+             "clipSeconds": half.get("clipSeconds"), "attribution": half.get("attribution") or "",
+             "license": half.get("license") or ""},
+            {"sourceUrl": half.get("sourceUrl") or "", "assetId": half.get("assetId") or "",
+             "moment": half.get("moment") if isinstance(half.get("moment"), dict) else {},
+             "provider": half.get("source") or ""})
+
+
 def items_from_doc(doc: dict) -> List[dict]:
     """
     What a timeline shows, as ledger items: a YouTube moment (id + range, or
@@ -556,9 +570,13 @@ def items_from_doc(doc: dict) -> List[dict]:
             continue
         m = s.get("media") if isinstance(s.get("media"), dict) else {}
         sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
+        if is_presenter_scene(s):
+            # The AI presenter (src/presenter/hybrid.py) is never recorded; a split screen's real half is, like
+            # any clip or picture the video shows.
+            m, sem = split_half(m)
         kind = m.get("type") or ""
         source = str(m.get("source") or sem.get("provider") or "")
-        if kind not in ("video", "image") or source in _NEVER or m.get("generated"):
+        if kind not in ("video", "image") or source in _NEVER or source == PRESENTER_SOURCE or m.get("generated"):
             continue
         secs = max(0.5, int(s.get("durationInFrames") or fps) / fps)
         clip = m.get("clipSeconds")
