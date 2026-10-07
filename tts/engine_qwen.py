@@ -126,6 +126,11 @@ class QwenHost:
     def run_part(self, t: dict) -> dict:
         self.load()
         texts: List[str] = t["texts"]
+        # What each piece is checked against: the words as written where the model read a respelling
+        # from the channel's pronunciation list (handler / textnorm.protect_pronunciations).
+        checks: List[str] = t.get("check_texts") or texts
+        if len(checks) != len(texts):
+            checks = texts
         lang = t.get("lang", "en")
         language = LANG_NAMES.get(lang, "English")
         prompt = self.prompt_for(t["voice_key"], t["ref_path"], t.get("ref_text"))
@@ -148,7 +153,7 @@ class QwenHost:
             for i, w in zip(todo, wavs):
                 attempts[i] += 1
                 w = trim(np.asarray(w, np.float32).reshape(-1), sr)
-                chk = self.check(texts[i], w, lang, bool(t.get("validate", True)))
+                chk = self.check(checks[i], w, lang, bool(t.get("validate", True)))
                 if best[i] is None or chk["score"] < best[i][1]["score"]:
                     best[i] = (w, chk)
                 if not chk["ok"]:
