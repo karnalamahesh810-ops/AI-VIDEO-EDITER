@@ -299,6 +299,16 @@ class Framing(unittest.TestCase):
         self.assertLessEqual(shorts.scene_framing(self.scene(clip), edge)["cx"], 1 - shorts.WINDOW / 2 + 1e-9)
         self.assertEqual(shorts.scene_framing(self.scene(clip), None), {"mode": "crop", "cx": 0.5, "why": "centre"})
 
+    def test_no_push_in_for_a_moment_before_or_after_a_graphic(self):
+        stage = {"fps": 30, "durationInFrames": 300,
+                 "scenes": [{"id": "a", "startFrame": 0, "durationInFrames": 300, "media": {"type": "video", "url": "/a"}}],
+                 "overlays": [{"startFrame": 20, "durationInFrames": 90}]}
+        spans = shorts.plan_framing(stage, {})
+        # The first 0.5 s would have been cropped and then pulled out: the Short opens fitted instead.
+        self.assertEqual((spans[0]["from"], spans[0]["mode"], spans[0]["ease"]), (0, "fit", 0))
+        self.assertEqual(spans[1]["mode"], "crop")
+        self.assertEqual(spans[1]["ease"], shorts.EASE_FRAMES)
+
     def test_a_letterboxed_shot_is_fitted_with_its_bars_left_out(self):
         clip = {"type": "video", "url": "/a.mp4"}
         boxed = {"kind": "none", "aspect": 16 / 9, "why": "letterbox bars",

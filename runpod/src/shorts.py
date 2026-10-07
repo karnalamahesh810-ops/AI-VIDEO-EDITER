@@ -1029,6 +1029,10 @@ def plan_framing(stage: dict, focus: Dict[str, dict]) -> List[dict]:
     framing is FIT, eased over EASE_FRAMES when that happens inside a shot.
     """
     graphics = _graphic_spans(stage)
+    fps = int(stage.get("fps") or SHORT_FPS)
+    # A shot's own framing shorter than this before or after a graphic inside the same shot is not worth a
+    # push in and a pull out (it would open the Short on a jump): the shot stays fitted for it.
+    least = int(round(1.0 * fps))
     out: List[dict] = []
     for idx, sc in enumerate(stage.get("scenes") or []):
         base = scene_framing(sc, focus.get(sc.get("id") or "") or focus.get(str(idx)))
@@ -1036,11 +1040,17 @@ def plan_framing(stage: dict, focus: Dict[str, dict]) -> List[dict]:
         b = a + int(sc["durationInFrames"])
         cuts = sorted({p for g in graphics for p in g if a < p < b})
         points = [a] + cuts + [b]
+        pieces = []
         for p0, p1 in zip(points, points[1:]):
-            if p1 <= p0:
-                continue
-            mid = (p0 + p1) / 2.0
-            in_graphic = any(g0 <= mid < g1 for g0, g1 in graphics)
+            if p1 > p0:
+                mid = (p0 + p1) / 2.0
+                pieces.append([p0, p1, any(g0 <= mid < g1 for g0, g1 in graphics)])
+        if base["mode"] != "fit" and any(g for _, _, g in pieces):
+            for k, piece in enumerate(pieces):
+                near = (k > 0 and pieces[k - 1][2]) or (k + 1 < len(pieces) and pieces[k + 1][2])
+                if not piece[2] and near and piece[1] - piece[0] < least:
+                    piece[2] = True
+        for p0, p1, in_graphic in pieces:
             mode = "fit" if in_graphic else base["mode"]
             span = {"from": p0, "to": p1, "mode": mode, "cx": base["cx"] if mode != "fit" else 0.5,
                     "ease": 0 if p0 == a else EASE_FRAMES, "scene": idx,
