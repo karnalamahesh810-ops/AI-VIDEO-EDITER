@@ -81,7 +81,12 @@ _CATEGORY = {"vision.judge": "vision", "vision.rate_tiles": "vision", "vision.pi
 # (OpenRouter's usage.cost - the vision judge since 2026-10-01, the planning calls
 # since 2026-10-05). "<category>.measured" counts the answers that came priced, so a
 # call that went to a provider that does not say (the Kie fallback) is still estimated.
-_MEASURED = ("vision", "llm", "image")      # image.usd: an OpenRouter picture (media._openrouter_generate)
+_MEASURED = ("vision", "llm", "image",       # image.usd: an OpenRouter picture (media._openrouter_generate)
+             # The AI presenter style (src/presenter): presenter.usd its lip-synced talking clips (heygen/avatar-iv),
+             # aivideo.usd its image-to-video clips - each call at OpenRouter's own usage.cost.
+             "presenter", "aivideo")
+# Counts kept beside those prices, never priced as units: the seconds generated and the seconds on screen.
+_COUNT_ONLY = {"presenter.seconds", "presenter.screen_seconds", "aivideo.seconds", "aivideo.screen_seconds"}
 
 # A pod's price when nothing says what its machine costs (scripts/pod_job.py reads
 # POD_COST_PER_HR, then the pod's own RunPod record): a 16-vCPU cpu3c pod, $0.48/h
@@ -98,7 +103,7 @@ _WORKER_OWNED = frozenset({"runpod.worker_second", "serp.call"})
 def _counts_only(key: str) -> bool:
     """A measured price, a count of priced answers, a token count or a call count by kind
     (vision.<kind>.calls, llm.<kind>.calls): never priced as a unit of its own."""
-    return key.endswith((".usd", ".measured", ".calls")) or \
+    return key.endswith((".usd", ".measured", ".calls")) or key in _COUNT_ONLY or \
         (key.startswith(tuple(f"{c}." for c in _MEASURED)) and key.endswith("_tokens"))
 
 
@@ -319,6 +324,10 @@ class Ledger:
                 measured = round(self.balance_before - self.balance_after, 2)
             out = {c: round(by.get(c, 0.0), 4) for c in
                    ("runpod", "vision", "llm", "image", "proxy", "serp", "storage", "tts", "other")}
+            # The AI presenter style's generated video (src/presenter): only on a job that made some.
+            for c in ("presenter", "aivideo"):
+                if by.get(c) or any(k.startswith(f"{c}.") for k in self.units):
+                    out[c] = round(by.get(c, 0.0), 4)
             out["total"] = round(sum(out.values()), 4)
             out["credits_estimated"] = round(sum(self.units.get(k, 0.0) * self.prices.get(k, 0.0)
                                                  for k in _CREDIT_KEYS), 2)

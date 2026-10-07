@@ -238,6 +238,17 @@ export interface SceneMedia {
    * the render, src/quality.py): a scene picture never stops a render (components/motion/safePicture.tsx).
    */
   fallbackStill?: string;
+  /**
+   * The AI presenter style's split screen (scene.frame "split", src/presenter/assemble.py): this scene's clip
+   * (the presenter) fills the left half, cropped so the face sits at `focusX` (object-position x, %), and this
+   * picture - the line's own - the right half, with its slow move. Both halves full height, no border.
+   */
+  split?: { type: "image" | "video"; url: string; source?: string; motion?: Motion; focusX?: number; html5?: boolean };
+  /**
+   * A clip drawn by the browser's own video element instead of Remotion's compositor (SceneClip ClipVideo): for
+   * a machine whose security blocks Remotion's unsigned binaries. Absent = OffthreadVideo, as before.
+   */
+  html5?: boolean;
 }
 
 export interface Scene {
@@ -267,7 +278,8 @@ export interface Scene {
   transitionGain?: number;
   /** "inset": media framed on a backdrop at its own shape (archival, low-res, 4:3). */
   /** "window": the footage plays inside a floating player window on a designed backdrop (case-file look). */
-  frame?: "full" | "inset" | "window";
+  /** "split": 50/50, this scene's clip on the left, media.split on the right (the AI presenter style). */
+  frame?: "full" | "inset" | "window" | "split";
   /** The editor's reframing choice for this scene (see SceneReframe). */
   reframe?: SceneReframe;
   /** The editor's say on a living photo: "off" (or false) = the still drawn flat; absent / "auto" = its layers. */
@@ -611,6 +623,13 @@ export interface TimelineProps {
    * median tone first. Absent or null = the pictures as sourced.
    */
   grade?: { preset?: string; strength?: number; normalize?: boolean } | null;
+  /**
+   * A light film look over the whole picture track - every scene and transition, never the graphics or the
+   * captions (components/FilmLook.tsx): grain (overlay opacity, ~0.03-0.08) and a soft vignette (edge
+   * darkening, ~0.1-0.25). The AI presenter style sets it when the job asks for "look": "warm" (it makes the
+   * presenter, the AI clips and the stills read as one camera). Absent or null = nothing drawn, as before.
+   */
+  look?: { grain?: number; vignette?: number } | null;
   /**
    * Ambience beds (src/ambience.py): looped sfx/amb-*.mp3 under the scenes
    * that are somewhere, one at a time. `level` is their master (1 = as

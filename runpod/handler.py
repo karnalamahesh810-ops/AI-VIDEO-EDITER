@@ -1607,6 +1607,35 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     return doc
 
 
+def _is_presenter_doc(doc: dict) -> bool:
+    """A timeline the AI presenter style made (src/presenter): its shots are generated, not sourced footage."""
+    return str(((doc or {}).get("meta") or {}).get("videoStyle") or "") == "ai_presenter"
+
+
+def _plan_document(inp: dict, work: str, report: Reporter) -> dict:
+    """The timeline of a plan or build: the AI presenter style's own pipeline (src/presenter), else the footage plan."""
+    if styles.resolve(inp.get("video_style")) == "ai_presenter":
+        from src import presenter
+        return presenter.plan(inp, work, report, narrate=_narration_from_script)
+    return do_plan(inp, work, report)
+
+
+def _after_plan(doc: dict, work: str, report: Reporter) -> None:
+    """
+    The checks a planned timeline gets before it is published. The AI
+    presenter's shots were made and checked by its own pipeline: the footage
+    passes (the repeat ladder, the hook's clip check, the clip library, the
+    cross-video ledger) are not for generated shots.
+    """
+    _sanitize_videos(doc)
+    if _is_presenter_doc(doc):
+        return
+    _no_repeats(doc, report)            # the last look before the editor gets it
+    _hook_check(doc, work, report)      # the opening's clips judged on their own cuts
+    _keep_in_library(doc, report)
+    ledger.note(doc)                    # while the photos are still here to hash
+
+
 def _replan_beat(scene: dict, doc: dict, story: dict, title: str) -> dict:
     """
     Regenerate: plan this one beat again from the story, as the planner
@@ -1742,6 +1771,10 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         raise ValueError(f"scene_index must be between 0 and {len(scenes) - 1}")
 
     scene = scenes[idx]
+    if str((scene.get("media") or {}).get("source") or "") == "ai-presenter":
+        # Its lips follow the voice: found footage in its place would leave the presenter's line without them.
+        raise ValueError("This is the AI presenter talking - it cannot be replaced with a found clip. "
+                         "Make the video again to change the presenter's shots.")
     fps = int(doc.get("fps") or config.DEFAULT_FPS)
     seconds = max(0.4, int(scene.get("durationInFrames", fps)) / fps)
     sem = dict(scene.get("semanticMetadata") or {})
@@ -3246,6 +3279,13 @@ def handler(job):
             return {**out, "action": "relook", "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
 
+        if action == "presenter_info":
+            # The AI presenter style for the app (src/presenter): its tiers, $ per 10/15/20-minute video per
+            # tier, the presenter kits, the script preset. No paid call, no project write.
+            from src import presenter
+            return {"ok": True, "action": "presenter_info", **presenter.info(),
+                    "elapsed": round(time.time() - started, 1)}
+
         if action == "health":
             # Include the storage preflight: a missing bucket or bad key is
             # otherwise only discovered at the upload step, after the render.
@@ -3324,12 +3364,8 @@ def handler(job):
             library.start_maintenance(project_id, job_id, inp.get("media_bucket") or config.MEDIA_BUCKET)
 
         if action == "plan":
-            doc = do_plan(inp, work, report)
-            _sanitize_videos(doc)
-            _no_repeats(doc, report)            # the last look before the editor gets it
-            _hook_check(doc, work, report)      # the opening's clips judged on their own cuts
-            _keep_in_library(doc, report)
-            ledger.note(doc)                    # while the photos are still here to hash
+            doc = _plan_document(inp, work, report)
+            _after_plan(doc, work, report)
             # Without this the timeline points at files this job is about to
             # delete. See publish_media().
             if project_id and inp.get("publish_media", True):
@@ -3395,7 +3431,9 @@ def handler(job):
             packs.use_job(brief=meta.get("story") if isinstance(meta.get("story"), dict) else None,
                           style=str(meta.get("videoStyle") or ""))
             quality.set_context(
-                ladder=True, story=meta.get("story") if isinstance(meta.get("story"), dict) else None,
+                # (An AI presenter video is never repaired with found footage or web pictures: no ladder.)
+                ladder=not _is_presenter_doc(doc),
+                story=meta.get("story") if isinstance(meta.get("story"), dict) else None,
                 require_cc=bool(inp["require_cc"] if inp.get("require_cc") is not None else config.REQUIRE_CC),
                 allow_generated=config.QUALITY_REPAIR_GENERATED,
                 library_loader=(lambda: library.Library.load(project_id, job_id, bucket)) if project_id else None)
@@ -3404,8 +3442,9 @@ def handler(job):
             # 15 minutes of one CPU and then failed on one broken clip.
             split = bool(project_id and fanout.render_enabled(doc, project_id))
             out = do_render(doc, inp, work, report, split=split)
-            if project_id:
+            if project_id and not _is_presenter_doc(doc):
                 # Before the done write: the broker takes rows only while the project renders.
+                # (Never an AI presenter video's generated shots: the library is real footage.)
                 library.record_shown(doc, project_id, job_id)
             if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))
@@ -3421,12 +3460,8 @@ def handler(job):
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "build":
-            doc = do_plan(inp, work, report)
-            _sanitize_videos(doc)
-            _no_repeats(doc, report)            # the last look before the render and the editor
-            _hook_check(doc, work, report)      # the opening's clips judged on their own cuts
-            _keep_in_library(doc, report)
-            ledger.note(doc)                    # while the photos are still here to hash
+            doc = _plan_document(inp, work, report)
+            _after_plan(doc, work, report)
             if project_id:
                 # Saved before the render: a failure there keeps the search.
                 storage.patch_project(project_id, {"scene_data": doc}, wait=True)
@@ -3443,7 +3478,8 @@ def handler(job):
                      and fanout.render_enabled(doc, project_id))
             # The quality check before the render repairs with this job's own
             # plan: its lines, clip library, spare pool moments and flags.
-            quality.set_context(ladder=True, plan=True, allow_generated=config.QUALITY_REPAIR_GENERATED)
+            quality.set_context(ladder=not _is_presenter_doc(doc), plan=True,
+                                allow_generated=config.QUALITY_REPAIR_GENERATED)
             if split:
                 # Long video: save the clips first so every worker can fetch
                 # them, then render in chunks across the workers.
@@ -3482,9 +3518,9 @@ def handler(job):
             if not split and project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))
-            if project_id:
+            if project_id and not _is_presenter_doc(doc):
                 # Every shown clip into the app's library, before the done write (the broker
-                # takes rows only while the project renders).
+                # takes rows only while the project renders). Never generated presenter shots.
                 library.record_shown(doc, project_id, job_id)
             if project_id and not inp.get("_caller_writes_result"):
                 storage.patch_project(project_id, _done_fields(out))

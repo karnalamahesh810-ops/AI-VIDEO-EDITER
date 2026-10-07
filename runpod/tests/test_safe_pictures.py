@@ -270,7 +270,7 @@ class TheRenderer(unittest.TestCase):
         clip_src = self._src("components", "SceneClip.tsx")
         self.assertIn("media.fallbackStill ||", clip_src)
         self.assertEqual(clip_src.count("fallback={hold}"), 3)              # window, inset, framed by hand
-        self.assertEqual(clip_src.count("fallbackStill={holdStill}"), 2)    # living, still
+        self.assertEqual(clip_src.count("fallbackStill={holdStill}"), 3)    # living, still, a split screen's half
         still = self._src("transitions", "stillMotion.tsx")
         self.assertIn("<BlurredHold still={fallbackStill} />", still)
         main = self._src("Main.tsx")

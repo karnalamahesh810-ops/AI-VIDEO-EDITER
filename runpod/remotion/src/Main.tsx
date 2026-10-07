@@ -18,6 +18,7 @@ import { LookSoundContext, LookSounds, type LookSoundScope } from "./components/
 import { lookSoundsOn, planDocSounds, type SoundCue, type SoundTemplate } from "./components/lib/lookSoundPlan";
 import { PackTransitions } from "./transitions/PackTransition";
 import { GradeContext, gradeStateFor } from "./components/Grade";
+import { FilmLook } from "./components/FilmLook";
 import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve, type Ambience, type Bed }
   from "./components/ambienceMix";
 import { BrandVideo, EndCard, Watermark } from "./components/brand/BrandLayers";
@@ -505,6 +506,10 @@ const Body: React.FC<TimelineProps> = (props) => {
       <PackTransitions scenes={scenes} fps={fps} durationInFrames={props.durationInFrames} premountFor={premount}
         voiceLufs={(props.meta as { voiceLufs?: unknown } | undefined)?.voiceLufs}
         volume={props.sfxEnabled === false ? 0 : Math.min(1, Math.max(0, Number(props.sfxVolume ?? 1)))} />
+
+      {/* One film look over the whole picture track (doc.look: grain + vignette), under the graphics and
+          captions; absent = nothing (components/FilmLook.tsx). */}
+      {props.look ? <FilmLook look={props.look} /> : null}
 
       {/* Overlay track — graphics sit on top of the visuals (a look in the
           bottom strip, the source tag, reads CaptionsOn to stay clear of the captions) */}

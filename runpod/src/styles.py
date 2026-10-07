@@ -133,6 +133,33 @@ STYLES: Dict[str, dict] = {
         "config": {"MIN_SCENE_SECONDS": 3.0, "TARGET_SCENE_SECONDS": 5.0, "MAX_SCENE_SECONDS": 9.0,
                    "ALLOW_VERTICAL": True},
     },
+    # The AI presenter (src/presenter/, docs/ai-avatar-style-plan-2026-10-07.md): a made-up presenter talks
+    # to camera from one believable set (HeyGen Avatar IV, lip-synced to the job's own voice track), cut with
+    # AI stills that move and AI clips animated from them - all through OpenRouter, no footage search. Its
+    # plan is src/presenter/pipeline.py, not the sourcing path. The edit follows the owner's six reference
+    # videos (docs/ai-avatar-reference-analysis-2026-10-07.md): one visual per ~4 s line (11-16 cuts a
+    # minute), the presenter opening at 0:00 for up to 12 s, hard cuts, nothing on top (no graphics planner,
+    # no captions, no sound effects). Tiers, kits and toggles are job inputs (tier, presenter_id, look,
+    # lower_third, captions, dissolves); "inputs" are job defaults: no YouTube check for a style that
+    # searches nothing.
+    "ai_presenter": {
+        "label": "AI presenter",
+        "transitions": "documentary", "graphics": "minimal",
+        "inputs": {"allow_youtube": False},
+        "config": {"MIN_SCENE_SECONDS": 2.5, "TARGET_SCENE_SECONDS": 4.0, "MAX_SCENE_SECONDS": 5.5,
+                   "SHOT_MAX_SECONDS": 12.0,
+                   # The sourcing path's own generated pictures never run here (the style makes its own).
+                   "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False,
+                   "TREATMENTS": False, "MARKS_ENABLED": False, "DATA_GRAPHICS": False,
+                   # Clips as generated; the style checks every clip itself (src/presenter/checks.py). The
+                   # footage checks of the render's quality gate (soft uploads, channel watermarks, stock
+                   # agencies) are for found footage: on, they would swap a 720p AI clip or a 1K still for a
+                   # web picture.
+                   "REFRAME_CLIPS": False, "AI_REVIEW": False,
+                   "PICTURE_SHARPNESS_CHECK": False, "CLIP_SHARPNESS_CHECK": False, "WATERMARK_CHECK": False,
+                   "STOCK_GATE_REPAIR": False,
+                   "LIVING_PHOTOS": True},
+    },
 }
 
 # The owner's overlay transition pack (remotion/public/transitions, 2026-10-01:
@@ -192,7 +219,9 @@ _ALIASES = {"news": "trending_news", "news-compilation": "news_compilation", "co
             "news_compilation", "top": "compilation", "top_list": "compilation", "documentary_story": "story",
             "nature": "nature_weather", "weather": "nature_weather", "nature_&_weather": "nature_weather",
             "nature_and_weather": "nature_weather", "nature-weather": "nature_weather",
-            "nature/weather": "nature_weather", "nature_/_weather": "nature_weather"}
+            "nature/weather": "nature_weather", "nature_/_weather": "nature_weather",
+            "presenter": "ai_presenter", "ai-presenter": "ai_presenter", "ai_avatar": "ai_presenter",
+            "ai-avatar": "ai_presenter", "avatar": "ai_presenter"}
 
 
 def resolve(name: str) -> str:
@@ -244,6 +273,8 @@ def apply(inp: dict) -> str:
     inp["graphics_density"] = merged["GRAPHICS_DENSITY"]
     if spec.get("pack") and not inp.get("style_pack"):
         inp["style_pack"] = spec["pack"]
+    for key, value in (spec.get("inputs") or {}).items():
+        inp.setdefault(key, value)                  # the style's job defaults; the job's own choice wins
     if spec.get("music") and not inp.get("bgm_genre") and not inp.get("bgm_track") and not inp.get("bgm_url"):
         inp["bgm_genre"] = spec["music"]            # read by timeline._bgm_for; ducked under the voice
     return style
