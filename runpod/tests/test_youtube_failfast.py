@@ -52,14 +52,24 @@ class Classes(unittest.TestCase):
             self.assertEqual(classify_ytdlp(text, 1), FailureClass.BOT_CHECK, text[:60])
         self.assertTrue(RETRY[FailureClass.BOT_CHECK]["proxy_fault"])
 
-    def test_a_refused_stream_is_neither_the_video_nor_the_route(self):
+    def test_a_refused_stream_is_never_the_video_and_only_slowly_the_route(self):
         text = ("[in#0 @ 000001f9d6db07c0] Error opening input: Server returned 403 Forbidden (access denied)\n"
                 "Error opening input file https://rr1---sn-x.googlevideo.com/videoplayback?a=b\n"
                 "Error opening input files: Server returned 403 Forbidden (access denied)\n\n"
                 "ERROR: ffmpeg exited with code 1")
         self.assertEqual(classify_ytdlp(text, 1), FailureClass.STREAM_REFUSED)
         policy = RETRY[FailureClass.STREAM_REFUSED]
-        self.assertEqual((policy["retries"], policy["proxy_fault"]), (2, False))
+        self.assertEqual((policy["retries"], policy["switch"], policy["proxy_fault"]), (2, True, True))
+        from src.proxies import DEGRADED, HEALTHY, QUARANTINED, ProxyManager
+        pm = ProxyManager(["http://a", "http://b"])
+        a = pm.by_url["http://a"]
+        pm.release("http://a", False, FailureClass.STREAM_REFUSED, 500)
+        self.assertEqual(a.state, HEALTHY)                  # one refused stream: still in the rotation
+        pm.release("http://a", False, FailureClass.STREAM_REFUSED, 500)
+        self.assertEqual(a.state, DEGRADED)
+        pm.release("http://a", False, FailureClass.STREAM_REFUSED, 500)
+        self.assertEqual(a.state, QUARANTINED)              # three in a row: benched like a dead route
+        self.assertEqual(pm.acquire(), "http://b")
 
     def test_geo_rate_limit_and_the_rest(self):
         self.assertEqual(classify_ytdlp("ERROR: [youtube] x: Video unavailable. The uploader has not made this "

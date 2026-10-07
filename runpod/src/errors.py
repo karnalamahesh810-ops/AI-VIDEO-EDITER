@@ -27,8 +27,12 @@ class FailureClass(str, Enum):
     GEO_BLOCKED = "GEO_BLOCKED"
     # The video's stream itself answered 403 after its formats were read (ffmpeg
     # "Server returned 403 Forbidden" on googlevideo): 218 of 368 failed YouTube
-    # downloads 2026-10-03..07, spread evenly over every route, and 183 of the 197
-    # videos it hit came down on a later try. Neither the video's fault nor the route's.
+    # downloads 2026-10-03..07, and 183 of the 197 videos it hit came down on a
+    # later try. Never the video's fault. The refused URL is refused for any client
+    # (a paired probe), and how often depends on the address: 6-11% on most routes,
+    # 23-30% on two of them in the owner's 2026-10-07 video. So it counts against
+    # the route like a timeout (degraded after two in a row, benched after three),
+    # never at once like a bot check.
     STREAM_REFUSED = "STREAM_REFUSED"
     PROXY_FAILURE = "PROXY_FAILURE"
     INVALID_MEDIA = "INVALID_MEDIA"
@@ -48,7 +52,7 @@ RETRY: Dict[FailureClass, dict] = {
     FailureClass.BOT_CHECK: {"retries": 2, "backoff": 0.0, "switch": True, "proxy_fault": True},
     FailureClass.MEDIA_UNAVAILABLE: {"retries": 0, "backoff": 0.0, "switch": False, "proxy_fault": False},
     FailureClass.GEO_BLOCKED: {"retries": 1, "backoff": 0.0, "switch": True, "proxy_fault": False},
-    FailureClass.STREAM_REFUSED: {"retries": 2, "backoff": 0.0, "switch": True, "proxy_fault": False},
+    FailureClass.STREAM_REFUSED: {"retries": 2, "backoff": 0.0, "switch": True, "proxy_fault": True},
     FailureClass.PROXY_FAILURE: {"retries": 2, "backoff": 1.0, "switch": True, "proxy_fault": True},
     FailureClass.INVALID_MEDIA: {"retries": 1, "backoff": 0.0, "switch": True, "proxy_fault": True},
     FailureClass.FFMPEG_FAILURE: {"retries": 1, "backoff": 0.0, "switch": False, "proxy_fault": False},
