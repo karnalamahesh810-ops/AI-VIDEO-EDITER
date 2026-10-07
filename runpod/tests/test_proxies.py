@@ -8,7 +8,8 @@ from src.proxies import DEGRADED, HEALTHY, QUARANTINED, RECOVERING, ProxyManager
 
 class Classify(unittest.TestCase):
     def test_ytdlp_messages(self):
-        self.assertEqual(classify_ytdlp("ERROR: Sign in to confirm you're not a bot", 1), FailureClass.ACCESS_DENIED)
+        # The address, never the video (tests/test_youtube_failfast.py).
+        self.assertEqual(classify_ytdlp("ERROR: Sign in to confirm you're not a bot", 1), FailureClass.BOT_CHECK)
         self.assertEqual(classify_ytdlp("ERROR: [youtube] x: Video unavailable", 1), FailureClass.MEDIA_UNAVAILABLE)
         self.assertEqual(classify_ytdlp("ERROR: Private video. Sign in if you've been granted access", 1),
                          FailureClass.MEDIA_UNAVAILABLE)
