@@ -134,6 +134,7 @@ def reset() -> None:
     EPOCH[0] += 1
     with _INFO_LOCK:
         _YT_INFO_CACHE.clear()
+        _DURATION.clear()
     with _FAIL_LOCK:
         _UNAVAILABLE_VIDEOS.clear()
         _DENIED_ON.clear()
@@ -658,9 +659,56 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
 # with a frameless file. Not the proxy's fault: fetch again without reuse.
 _HLS_REUSE = "cannot reuse http connection for different host"
 
+# ffmpeg asked to start a section at or past the video's end fails: ERANGE
+# ("Numerical result out of range") on the worker's ffmpeg 5.1, "Could not open
+# encoder before EOF" on newer ones. It was 53 of the 368 failed downloads of
+# 2026-10-03..07, short videos asked again and again at the same point (a
+# 24-second upload 16 times, a 14-second one 8); the length the download
+# printed (DLINFO) shows it, whatever ffmpeg said.
+
+# Each video's length as yt-dlp reported it at a download (the DLINFO line);
+# the metadata cache has it for scouted videos. Per job.
+_DURATION: Dict[str, float] = {}
+
+
+def known_duration(video_id: str) -> float:
+    """The video's length in seconds when this job has seen it (0 = unknown)."""
+    with _INFO_LOCK:
+        cached = _YT_INFO_CACHE.get(video_id)
+        got = _DURATION.get(video_id, 0.0)
+    try:
+        return float((cached[0] or {}).get("duration") or 0.0) if cached else float(got or 0.0)
+    except (TypeError, ValueError):
+        return float(got or 0.0)
+
+
+def fit_start(start_at: float, seconds: float, duration: float) -> float:
+    """A section start inside the video: one that would begin within a second of
+    the end (or past it) moves back so the section ends at the end."""
+    if duration and start_at > duration - 1.0:
+        return max(0.0, duration - seconds - 0.25)
+    return start_at
+
+
+def _dlinfo(stdout: str) -> tuple:
+    """(duration, format id) from the DLINFO line a download prints before it starts."""
+    for line in (stdout or "").splitlines():
+        if line.startswith("DLINFO "):
+            dur, _, fmt = line[7:].strip().partition("|")
+            try:
+                return float(dur), fmt.strip()
+            except ValueError:
+                return 0.0, fmt.strip()
+    return 0.0, ""
+
+
 def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
-              timeout: int = 300, hls_fix: bool = False) -> str:
-    """Download one section of one known video. Returns the local path or ''."""
+              timeout: int = 300, hls_fix: bool = False, refit: bool = True) -> str:
+    """Download one section of one known video. Returns the local path or ''.
+    A start at or past the video's known end moves back inside it (fit_start);
+    a start found past the end only by the download itself is fitted and tried
+    once more (`refit`)."""
+    start_at = fit_start(start_at, seconds, known_duration(video_id))
     # Different ranges must not reuse a previous download of the same video.
     range_key = f"{round(start_at * 1000)}_{round(seconds * 1000)}"
     # Each parallel scene gets its own path even when it selects the same
@@ -680,6 +728,9 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         "--no-playlist", "--no-warnings",
         "--merge-output-format", "mp4",
         "-o", out_tpl, "--print", "after_move:filepath",
+        # The video's length and the format taken, printed before the download
+        # starts (so a failed one still says them): see _dlinfo.
+        "--print", "before_dl:DLINFO %(duration)s|%(format_id)s",
     ]
     if _video_unavailable(video_id):
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
@@ -717,8 +768,19 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             _release_proxy(proxy, False, FailureClass.PROVIDER_UNAVAILABLE, started)
             print("[media] yt-dlp executable is missing; cannot download YouTube footage", flush=True)
             return ""
+    duration, fmt = _dlinfo(p.stdout)
+    if duration:
+        with _INFO_LOCK:
+            _DURATION[video_id] = duration
     if p.returncode != 0:
         why = ytdlp_reason(p.stderr)
+        if refit and duration and fit_start(start_at, seconds, duration) != start_at:
+            # Asked past the video's end: not the route's fault, nor the video's.
+            _release_proxy(proxy, True, None, started)
+            fitted = fit_start(start_at, seconds, duration)
+            print(f"[media] {video_id} is {duration:.0f} s long; the section at {start_at:.1f}s "
+                  f"moves to {fitted:.1f}s", flush=True)
+            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False)
         first = classify_ytdlp(p.stderr, p.returncode)
         cls = _note_failure(video_id, first, proxy, why)
         _release_proxy(proxy, False, cls, started)
@@ -726,7 +788,8 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
               f"{why or 'no diagnostic'}", flush=True)
         events.emit("source", "download_failed", level="warning", provider="youtube",
                     failure=first.value, data={"video": video_id, "proxy": _proxy_index(proxy),
-                                               "start": round(start_at, 1)},
+                                               "start": round(start_at, 1), "format": fmt,
+                                               "length": duration or None},
                     message=why[:120])
         return ""
     found = ""
@@ -752,10 +815,22 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             _release_proxy(proxy, True, None, started)
             print(f"[media] HLS connection reuse failed ({video_id} @{start_at:.0f}s); "
                   "fetching again without reuse", flush=True)
-            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True)
+            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True, refit=refit)
+        if refit and duration and fit_start(start_at, seconds, duration) != start_at:
+            # A frameless section from the video's last second: asked at its end.
+            try:
+                os.remove(found)
+            except OSError:
+                pass
+            _release_proxy(proxy, True, None, started)
+            fitted = fit_start(start_at, seconds, duration)
+            print(f"[media] {video_id} is {duration:.0f} s long; the empty section at {start_at:.1f}s "
+                  f"moves to {fitted:.1f}s", flush=True)
+            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False)
         events.emit("source", "empty_download", level="warning", provider="youtube",
                     failure="INVALID_MEDIA", data={"video": video_id, "proxy": _proxy_index(proxy),
-                                                   "start": round(start_at, 1)},
+                                                   "start": round(start_at, 1), "format": fmt,
+                                                   "length": duration or None},
                     message=reason[-160:])
         print(f"[media] empty download ({video_id} @{start_at:.0f}s, "
               f"{os.path.getsize(found)} bytes) via proxy #{_proxy_index(proxy)}: "
@@ -787,6 +862,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     except OSError:
         pass
     events.emit("source", "download_ok", provider="youtube",
-                data={"video": video_id, "seconds": round(seconds, 1), "proxy": _proxy_index(proxy)},
+                data={"video": video_id, "seconds": round(seconds, 1), "proxy": _proxy_index(proxy),
+                      "format": fmt},
                 duration_ms=(time.time() - started) * 1000.0)
     return found

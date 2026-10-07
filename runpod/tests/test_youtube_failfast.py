@@ -167,5 +167,71 @@ class SearchSaysNever(unittest.TestCase):
         self.assertEqual((got[2]["aspect"], got[2]["channel"], got[2]["title"]), (9 / 16, "", "A short\twith a tab"))
 
 
+class SectionInsideTheVideo(unittest.TestCase):
+    def setUp(self):
+        _forget()
+
+    def tearDown(self):
+        _forget()
+
+    def test_fit_start(self):
+        self.assertEqual(ytdlp.fit_start(20.0, 6.5, 14.0), 7.25)        # past the end
+        self.assertEqual(ytdlp.fit_start(13.5, 6.5, 14.0), 7.25)        # its last half second
+        self.assertEqual(ytdlp.fit_start(5.0, 6.5, 14.0), 5.0)          # inside: untouched
+        self.assertEqual(ytdlp.fit_start(20.0, 6.5, 0.0), 20.0)         # length unknown
+        self.assertEqual(ytdlp.fit_start(20.0, 30.0, 14.0), 0.0)
+
+    def _run(self, results, start=20.0):
+        calls = []
+        it = iter(results)
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return next(it)
+        with mock.patch.object(ytdlp.subprocess, "run", fake_run), \
+                mock.patch.object(ytdlp, "_acquire_proxy", return_value=""), \
+                mock.patch.object(ytdlp, "_release_proxy"), \
+                mock.patch.object(ytdlp, "playable_video", return_value=True):
+            got = ytdlp._yt_fetch("SHORTVID001", self.dir, start, 6.5)
+        return got, [c[c.index("--download-sections") + 1] for c in calls]
+
+    def test_a_start_past_a_short_videos_end_moves_inside_it_once(self):
+        with tempfile.TemporaryDirectory() as self.dir:
+            path = os.path.join(self.dir, "yt_SHORTVID001_ok.mp4")
+            with open(path, "wb") as fh:
+                fh.write(b"x" * 2048)
+            erange = SimpleNamespace(returncode=1, stdout="DLINFO 14.0|137\n", stderr=(
+                "Numerical result out of range\nError while processing the decoded data for stream #0:0\n\n"
+                "ERROR: ffmpeg exited with code 1"))
+            ok = SimpleNamespace(returncode=0, stdout=f"DLINFO 14.0|137\n{path}\n", stderr="")
+            got, sections = self._run([erange, ok])
+            self.assertEqual(got, path)
+            self.assertEqual(sections, ["*20.0-26.5", "*7.2-13.8"])
+            # The length is known now: the next ask past the end goes inside at once.
+            got, sections = self._run([ok], start=30.0)
+            self.assertEqual(sections, ["*7.2-13.8"])
+
+    def test_newer_ffmpegs_wording_is_fitted_too(self):
+        # ffmpeg 9 says "Could not open encoder before EOF" where 5.1 said ERANGE: the printed length decides.
+        with tempfile.TemporaryDirectory() as self.dir:
+            path = os.path.join(self.dir, "yt_SHORTVID001_ok.mp4")
+            with open(path, "wb") as fh:
+                fh.write(b"x" * 2048)
+            eof = SimpleNamespace(returncode=1, stdout="DLINFO 24|137\n", stderr=(
+                "[vost#0:0/libx264 @ 0x1] Could not open encoder before EOF\n"
+                "ERROR: ffmpeg exited with code 4294967262"))
+            ok = SimpleNamespace(returncode=0, stdout=f"DLINFO 24|137\n{path}\n", stderr="")
+            got, sections = self._run([eof, ok], start=25.0)
+            self.assertEqual((got, sections), (path, ["*25.0-31.5", "*17.2-23.8"]))
+
+    def test_past_the_end_twice_is_one_fit_only(self):
+        with tempfile.TemporaryDirectory() as self.dir:
+            erange = SimpleNamespace(returncode=1, stdout="DLINFO 14.0|137\n",
+                                     stderr="Numerical result out of range\nERROR: ffmpeg exited with code 1")
+            got, sections = self._run([erange, erange])
+            self.assertEqual((got, len(sections)), ("", 2))
+            self.assertFalse(ytdlp._video_unavailable("SHORTVID001"))
+
+
 if __name__ == "__main__":
     unittest.main()
