@@ -3,6 +3,8 @@ import { Composition } from "remotion";
 import { Main } from "./Main";
 import { FootprintSheet, type FootprintSheetProps } from "./FootprintSheet";
 import { brandFrames } from "./components/brand/brandLayout";
+import { Short } from "./short/Short";
+import type { ShortProps } from "./short/shortLayout";
 import type { TimelineProps } from "./types";
 
 const sheet: FootprintSheetProps = { looks: [], samples: 4, scenes: [], accent: "#FFD400" };
@@ -17,6 +19,18 @@ const fallback: TimelineProps = {
   captions: { enabled: true, position: "bottom", accent: "#FFD400", fontFamily: "Inter" },
   scenes: [],
   overlays: [],
+};
+
+const shortFallback: ShortProps = {
+  fps: 30,
+  width: 1080,
+  height: 1920,
+  durationInFrames: 300,
+  stage: { ...fallback, captions: { ...fallback.captions, enabled: false } },
+  framing: [{ from: 0, to: 300, mode: "crop", cx: 0.5 }],
+  captions: { enabled: true, words: [], accent: "#F2B544" },
+  hook: null,
+  accent: "#F2B544",
 };
 
 export const RemotionRoot: React.FC = () => {
@@ -58,6 +72,24 @@ export const RemotionRoot: React.FC = () => {
           + Math.max(0, ...props.looks.map((l) => l.overlay.durationInFrames || 0))),
       })}
     />
+    {/* A 9:16 Short cut from a finished video's own timeline (src/shorts.py): the long video's picture
+        framed for a phone, a hook line and captions. Size and length come from the props. */}
+    <Composition
+      id="Short"
+      component={Short}
+      durationInFrames={shortFallback.durationInFrames}
+      fps={shortFallback.fps}
+      width={shortFallback.width}
+      height={shortFallback.height}
+      defaultProps={shortFallback}
+      calculateMetadata={({ props }) => ({
+        durationInFrames: Math.max(1, Math.round(props.durationInFrames)),
+        fps: props.fps,
+        width: props.width,
+        height: props.height,
+      })}
+    />
     </>
   );
 };
+

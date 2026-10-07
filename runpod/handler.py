@@ -106,6 +106,7 @@ from src import tts
 from src import sharpness
 from src import living
 from src import hookcheck
+from src import shorts
 
 
 def _work_dir(job_id: str) -> str:
@@ -3013,7 +3014,8 @@ def handler(job):
     # events stay with this job's own status and result, so nothing of it is
     # ever written to the app's database. Nor is a re-cut's (src/recut.py),
     # whose one write is the finished timeline.
-    reports_to = "" if action in ("restore_media", "recut", "relook", "reclip") else project_id
+    # Nor is a Short's (src/shorts.py): its result is the job's output, stored by the app's video-shorts.
+    reports_to = "" if action in ("restore_media", "recut", "relook", "reclip", "shorts") else project_id
     applying = action in ("recut", "reclip") and bool(inp.get("apply"))
     events.start_job(job_id, reports_to, part=("part" if action in ("source_part", "render_chunk") else ""))
     if action in ("plan", "build", "render", "resource") or applying:
@@ -3209,6 +3211,20 @@ def handler(job):
                 out = {"ok": False, "error": str(e)[:800]}
             return {**out, "action": "relook", "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
+
+        if action == "shorts":
+            # 9:16 Shorts cut from a finished video's own timeline (src/shorts.py), or the long video's
+            # first seconds as rendered (aspect "landscape": the hook preview). No sourcing, no paid calls;
+            # the files go to R2 and the result to the job's output - the project row is never written,
+            # and a failure never marks the project failed.
+            events.phase("shorts")
+            try:
+                out = shorts.run(inp, work, report)
+            except Exception as e:  # noqa: BLE001 - reported in the result, the project is not touched
+                traceback.print_exc()
+                out = {"ok": False, "error": f"{type(e).__name__}: {e}"[:800]}
+            return {**out, "action": "shorts", "costs": costs.summary(time.time() - started),
+                    "events": events.summary(), "elapsed": round(time.time() - started, 1)}
 
         if action == "health":
             # Include the storage preflight: a missing bucket or bad key is
