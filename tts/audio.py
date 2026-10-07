@@ -11,7 +11,7 @@ tempo and encoding. No torch here.
                     never clipping a soft start or the decay of the last word.
 * stitch()          pieces joined with exact pauses (no crossfades: a 6 ms
                     fade at each edge only stops clicks).
-* finish()          tempo (rubberband, else atempo), loudness to -16 LUFS,
+* finish()          tempo (atempo), loudness to -16 LUFS,
                     a -1 dBFS limiter, MP3 44.1 kHz 128 kbps mono or WAV.
 """
 from __future__ import annotations
@@ -198,8 +198,8 @@ def write_wav(path: str, x: np.ndarray, sr: int) -> None:
 def tempo_filter(speed: float) -> str:
     if abs(speed - 1.0) < 0.01:
         return ""
-    if has_filter("rubberband"):
-        return f"rubberband=tempo={speed:.3f}:pitchq=quality:window=standard"
+    # atempo, never rubberband: measured 2026-10-07 on the five presenter voices, rubberband's tempo
+    # dropped naturalness (UTMOS) from ~4.5 to 2.4-3.6 even at 0.92, while atempo kept 4.39-4.53.
     parts = []
     s = speed
     while s > 2.0:
