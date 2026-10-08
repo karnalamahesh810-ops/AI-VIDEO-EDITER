@@ -222,7 +222,9 @@ def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600,
         out = s.get("output") or {}
         line = f"{st} {out.get('progress', '')}% {out.get('status', '')}"
         if line != last:
-            print(f"[bench]   {int(time.time() - t0)}s {line}", flush=True)
+            # The case's name on every progress line: several cases run side by side (--parallel), and
+            # "Sourced k/n" read with its time is each line's own finish in pass 1.
+            print(f"[bench]   {case['name']} {int(time.time() - t0)}s {line}", flush=True)
             last = line
         if st in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
             break
