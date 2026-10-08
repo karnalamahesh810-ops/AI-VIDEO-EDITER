@@ -2334,9 +2334,11 @@ def _slices_from_cache(cache, need: List[Tuple[int, str]], work: str) -> Dict[in
 
 
 def cut_sound(whole: str, path: str, start: float, end: float) -> str:
-    """Seconds start..end of a WAV as a WAV of its own (a chunk's slice of the whole mix)."""
+    """Seconds start..end of a WAV as a WAV of its own (a chunk's slice of the whole mix), cut on exact samples."""
+    s0, s1 = int(round(start * AUDIO_RATE)), int(round(end * AUDIO_RATE))
     p = subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-y", "-i", whole, "-af",
-                        f"atrim=start={start:.6f}:end={end:.6f},asetpts=N/SR/TB", "-c:a", "pcm_s16le", path],
+                        f"aresample={AUDIO_RATE},atrim=start_sample={s0}:end_sample={s1},asetpts=N/SR/TB",
+                        "-c:a", "pcm_s16le", path],
                        capture_output=True, text=True, timeout=600)
     if p.returncode != 0 or not os.path.isfile(path):
         raise RuntimeError(f"a slice of the sound could not be cut: {(p.stderr or '')[-200:]}")
