@@ -260,6 +260,42 @@ class ShotPlan(unittest.TestCase):
         shots, _ = self.plan(share=0.0, video=0.0)
         self.assertEqual({s.kind for s in shots}, {"picture"})
 
+    def test_the_jobs_cap_on_the_presenters_time(self):
+        # presenter_max_seconds (only when the job sends it): a 13-minute plan whose share asks for ~145 s keeps
+        # its hook and close and spreads the rest evenly within the cap; split screens count.
+        segs, total = segments_for(SENTENCES * 12)
+
+        def plan(cap):
+            planner = shotplan.Planner(shotplan.beats_from(segs, total),
+                                       [shotplan.rule_note(s.text, i, len(segs)) for i, s in enumerate(segs)], total,
+                                       presenter_share=0.14, ai_video_share=0.15, presenter_broll=0.15,
+                                       framings=("medium", "wide"), split_share=0.33, max_seconds=cap)
+            shots = planner.plan()
+            return shots, [s for s in shots if s.kind == "presenter"], planner
+        _shots, free, planner = plan(None)
+        self.assertIsNone(planner.capped)
+        self.assertGreater(sum(s.seconds for s in free), 120.0)
+        shots, pres, planner = plan(120.0)
+        self.assertLessEqual(sum(s.seconds for s in pres), 120.0 + 1e-6)     # split screens included
+        self.assertTrue(any(s.split for s in pres))
+        self.assertEqual((pres[0].role, pres[0].start, pres[-1].role), ("hook", 0.0, "close"))
+        self.assertAlmostEqual(pres[-1].end, total)
+        self.assertEqual(planner.capped["maxSeconds"], 120.0)
+        gaps = [b.start - a.end for a, b in zip(pres, pres[1:])]
+        self.assertLessEqual(max(gaps), 2.0 * total / (len(pres) - 1))      # spread over the whole video
+        self.assertAlmostEqual(shots[0].start, 0.0)                          # the shots still tile the narration
+        self.assertAlmostEqual(shots[-1].end, total)
+        for a, b in zip(shots, shots[1:]):
+            self.assertAlmostEqual(a.end, b.start)
+        # A tiny cap keeps the hook and the close alone; a plan within the cap is exactly the uncapped one.
+        _s, pres, _p = plan(5.0)
+        self.assertEqual([s.role for s in pres], ["hook", "close"])
+        short, total_short = segments_for()
+        kw = dict(presenter_share=0.14, ai_video_share=0.15, presenter_broll=0.15, framings=("medium", "wide"),
+                  split_share=0.33)
+        self.assertEqual([s.as_dict() for s in shotplan.plan(short, total_short, max_seconds=120.0, **kw)],
+                         [s.as_dict() for s in shotplan.plan(short, total_short, **kw)])
+
     def test_framings_alternate_like_two_cameras(self):
         shots, _ = self.plan(sentences=SENTENCES * 2)
         fr = [s.framing for s in shots if s.kind == "presenter"]
@@ -351,6 +387,17 @@ class TiersAndEstimate(unittest.TestCase):
             self.assertTrue(b < s < p, (m, b, s, p))
         own = estimate.estimate(15, "budget", own_voice=True)
         self.assertEqual(own["parts"]["voice"], 0.0)
+
+    def test_the_estimate_keeps_to_the_jobs_cap(self):
+        free, capped = estimate.estimate(20, "budget"), estimate.estimate(20, "budget", max_seconds=120)
+        self.assertEqual((free["seconds"]["presenter"], capped["seconds"]["presenter"]), (168, 120))
+        self.assertEqual(capped["seconds"]["stills"] - free["seconds"]["stills"], 48)     # the stills take the rest
+        self.assertLess(capped["usd"], free["usd"])
+        self.assertEqual((free["maxSeconds"], capped["maxSeconds"]), (None, 120.0))
+        # Within the cap nothing changes.
+        short = estimate.estimate(10, "budget", max_seconds=120)
+        self.assertEqual({k: v for k, v in short.items() if k != "maxSeconds"},
+                         {k: v for k, v in estimate.estimate(10, "budget").items() if k != "maxSeconds"})
 
 
 # ------------------------------------------------------------------ the budget guard
@@ -884,6 +931,40 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(pipeline.budget_cap({"presenter_budget_usd": 2.5}, {"usd": 9}), 2.5)
         with mock.patch.dict(os.environ, {"PRESENTER_BUDGET_USD": ""}):
             self.assertEqual(pipeline.budget_cap({}, {"usd": 4.0}), 6.0)
+
+    def test_the_presenters_time_is_capped_only_when_the_job_sends_it(self):
+        from src.presenter import pipeline
+        self.assertIsNone(pipeline.max_seconds_of({}))
+        self.assertEqual(pipeline.max_seconds_of({"presenter_max_seconds": 120}), 120.0)
+        self.assertEqual(pipeline.max_seconds_of({"presenter_max_seconds": "90"}), 90.0)
+        for bad in (0, -3, True, "lots", None, float("inf")):
+            self.assertIsNone(pipeline.max_seconds_of({"presenter_max_seconds": bad}), bad)
+
+        class Planned(Exception):
+            pass
+        seen = []
+
+        def planner(*a, **kw):
+            seen.append(kw.get("max_seconds"))
+            raise Planned()
+        with tempfile.TemporaryDirectory() as d:
+            kit = kit_in(os.path.join(d, "kitsrc"))
+            wav = make_wav(os.path.join(d, "voice.wav"), 76.0)
+            segs, _total = segments_for()
+            words = [{"text": w.text, "start": w.start, "end": w.end} for s in segs for w in s.words]
+            for extra in ({}, {"presenter_max_seconds": 30}):
+                work = os.path.join(d, f"work{len(seen)}")
+                os.makedirs(work)
+                with mock.patch.object(providers, "get", return_value=FakeProvider()), \
+                        mock.patch.object(pipeline, "Store", lambda *a, **k: FakeStore()), \
+                        mock.patch.object(pipeline.shotplan, "Planner", side_effect=planner), \
+                        mock.patch.object(pipeline.estimate, "estimate", wraps=estimate.estimate) as est, \
+                        mock.patch.dict(os.environ, {"PRESENTER_CACHE_DIR": os.path.join(d, "cache")}):
+                    with self.assertRaises(Planned):
+                        pipeline.plan(dict({"video_style": "ai_presenter", "presenter_kit": dict(kit), "audio_path": wav,
+                                            "words": words, "title": "Potatoes"}, **extra), work, mock.MagicMock())
+                self.assertEqual(est.call_args.kwargs.get("max_seconds"), seen[-1])
+        self.assertEqual(seen, [None, 30.0])          # the plan and the estimate behind the budget both keep to it
 
     def test_a_presenter_span_runs_on_to_its_sentence_end(self):
         segs, total = segments_for(["Stop keeping your potatoes and onions in the same basket, I have watched good "

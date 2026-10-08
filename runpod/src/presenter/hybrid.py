@@ -12,8 +12,10 @@ docs/ai-presenter-contract.md section 10):
                   "share": 0.14,                         # of the running time: 0.08 light, 0.14 medium (default)
                   "level": "medium",                     # the app's label for the share ("light" | "medium")
                   "split_screen": true,                  # about a third of the middle appearances 50/50
-                  "budget_usd": 9.45}                    # hard cap on the presenter's paid calls (the app sends
-                                                         # narration seconds x share x $0.05 x 1.5; absent: ours)
+                  "max_seconds": 120,                    # the presenter's whole time on screen at most (default
+                                                         # 120, however long the video; split screens count)
+                  "budget_usd": 9.0}                     # hard cap on the presenter's paid calls (the app sends
+                                                         # min(narration s x share, 120) x $0.05 x 1.5; absent: ours)
 
 Without the block nothing here runs and the build is exactly what it was.
 
@@ -26,7 +28,11 @@ What it does (handler.do_plan calls each step at its place):
                    lines (the references: 3.6-7.3 s, median 5 s), never a line
                    the plan gave a graphic, never a named person's line
                    full-screen (that one may be a split: the person stays on
-                   screen beside the presenter).
+                   screen beside the presenter). Never past max_seconds in
+                   all (the presenter is what costs): a plan that would pass
+                   it keeps the opening and the close and spreads the beats
+                   between them evenly instead, adding none once the next
+                   would pass the cap. A plan within the cap is unchanged.
   2. start()       the appearances are made in the background while the
                    footage search runs: one heygen/avatar-iv take per
                    appearance from its narration window (src/presenter/
@@ -71,9 +77,13 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .. import config
 from . import PRESENTER_SOURCE, is_presenter_scene
+from .shotplan import CAP_MARGIN
 
 SHARES = {"light": 0.08, "medium": 0.14}
 DEFAULT_SHARE = "medium"            # the reference channels' own ~14%
+# The presenter's whole time on screen, however long the video (the owner, 2026-10-08: about two minutes at most -
+# the presenter is what costs). Split screens count: they are paid the same. A block's max_seconds sets its own.
+MAX_SECONDS = float(os.getenv("PRESENTER_HYBRID_MAX_SECONDS", "120") or 120)
 PMIN, PMAX = 3.5, 7.5               # one appearance, seconds of whole lines
 HOOK_MAX = 9.0                      # the opening sentence on camera (the references open on the presenter 4-13 s)
 MAX_GAP = 40.0                      # the presenter comes back at least this often, while the share allows
@@ -163,11 +173,23 @@ def block(inp: Optional[dict]) -> Optional[Dict[str, Any]]:
     if level in SHARES and out["share_name"] == "custom":
         out["share_name"] = level                   # the label as the app shows it; the number is what is used
     out["split_screen"] = raw.get("split_screen", raw.get("split", True)) not in (False, 0, "0", "false", "no", "off")
+    out["max_seconds"] = max_seconds_of(raw.get("max_seconds"))
     try:
         out["budget_usd"] = max(0.0, float(raw.get("budget_usd"))) if raw.get("budget_usd") not in (None, "") else None
     except (TypeError, ValueError):
         out["budget_usd"] = None
     return out
+
+
+def max_seconds_of(value: Any) -> float:
+    """The cap on the presenter's whole time on screen (seconds): a positive number, else MAX_SECONDS."""
+    if isinstance(value, bool):
+        return MAX_SECONDS
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return MAX_SECONDS
+    return x if math.isfinite(x) and x > 0 else MAX_SECONDS
 
 
 def share_of(value: Any) -> Tuple[str, float]:
@@ -298,15 +320,18 @@ class Selector:
     def __init__(self, lines: List[Line], total: float, *, share: float, split: bool,
                  framings: Sequence[str] = ("master",), chapters: Iterable[int] = (),
                  pmin: float = PMIN, pmax: float = PMAX, hook_max: float = HOOK_MAX, max_gap: float = MAX_GAP,
-                 min_apart: float = MIN_APART):
+                 min_apart: float = MIN_APART, max_seconds: Optional[float] = MAX_SECONDS):
         self.lines, self.total = lines, float(total)
         self.share, self.split = float(share), bool(split)
         self.framings = list(framings) or ["master"]
         self.chapters = set(int(c) for c in chapters)
         self.pmin, self.pmax, self.hook_max = pmin, max(pmin, pmax), max(pmax, hook_max)
         self.max_gap, self.min_apart = max_gap, min_apart
+        # The presenter's whole time on screen at most, split screens included (None: the share alone decides).
+        self.max_seconds = float(max_seconds) if max_seconds and float(max_seconds) > 0 else None
         self.picked: List[Appearance] = []
-        self.notes: List[str] = []                  # why a hook or a close was left out
+        self.notes: List[str] = []                  # why a hook or a close was left out; the cap, when it held
+        self.capped: Optional[Dict[str, Any]] = None    # the share's plan went past max_seconds: by how much
 
     # ---- helpers
     def _ok(self, i: int) -> bool:
@@ -414,7 +439,22 @@ class Selector:
         n = len(self.lines)
         if n == 0 or self.share <= 0 or self.total <= 0:
             return []
-        target = self.share * self.total
+        self._anchors()
+        anchors = list(self.picked)
+        self._to_share()
+        self._splits()
+        # The presenter is what costs: a plan past max_seconds in all (a long video) keeps its opening and close,
+        # and the beats between them are spread evenly to the cap instead. Within the cap the plan is as it was.
+        if self.max_seconds is not None and self._used() > self.max_seconds + 1e-6:
+            self._cap(anchors)
+        for k, ap in enumerate(self.picked):
+            ap.framing = self.framings[k % len(self.framings)]
+            ap.id = f"h{k:02d}"
+        return list(self.picked)
+
+    def _anchors(self) -> None:
+        """The opening and the sign-off: the two appearances every plan keeps (when their lines allow)."""
+        n = len(self.lines)
         # The hook: the opening sentence, on camera - the planner's graphic hint on it gives way (nothing is laid
         # over the presenter); a line that must show its person, document or full-screen graphic keeps the opening.
         hook = self._hook_lines()
@@ -432,6 +472,12 @@ class Selector:
                 ln = self.lines[n - 1]
                 why = ln.why_not or ("is longer than one appearance" if ln.seconds > self.pmax else "keeps its footage")
                 self.notes.append(f"no closing appearance: the last line {why}")
+
+    def _to_share(self) -> None:
+        """Between the opening and the close: chapter openings and lines said to the viewer, then the presenter
+        back after every long stretch of footage, to the share."""
+        n = len(self.lines)
+        target = self.share * self.total
         # Chapter openings and the lines most said to the viewer: best first, spread out, to the share.
         tried: Set[int] = set()
         while self._used() < target - 0.5 * self.pmin:
@@ -473,11 +519,69 @@ class Selector:
                         break
                 if changed:
                     break
+
+    def _cap(self, anchors: List[Appearance]) -> None:
+        """
+        The share's plan went past max_seconds: keep the opening and the
+        close, then one beat near each evenly spaced mark between them (the
+        best line there, a chapter opening first) while it fits the cap, then
+        one more in the longest stretch of footage while one fits. Split
+        screens count (they are paid the same).
+        """
+        asked = self._used()
+        middle = [a.seconds for a in self.picked if a.role not in ("hook", "close")]
+        typical = sum(middle) / len(middle) if middle else (self.pmin + self.pmax) / 2.0
+        cap = float(self.max_seconds or 0.0)
+        self.picked = sorted(anchors, key=lambda a: a.start)
+        lo = max((a.end for a in anchors if a.role == "hook"), default=0.0)
+        hi = min((a.start for a in anchors if a.role == "close"), default=self.total)
+        room = cap - self._used()
+        count = int(room / (typical * CAP_MARGIN)) if room > 0 else 0
+        if count > 0 and hi > lo:
+            step = (hi - lo) / (count + 1)
+            for k in range(1, count + 1):
+                mark = lo + step * k
+                self._near(mark, mark - step / 2.0, mark + step / 2.0, step, cap)
+        while self._fill_longest(cap):
+            pass
         self._splits()
-        for k, ap in enumerate(self.picked):
-            ap.framing = self.framings[k % len(self.framings)]
-            ap.id = f"h{k:02d}"
-        return list(self.picked)
+        self.capped = {"askedSeconds": round(asked, 1), "maxSeconds": cap, "seconds": round(self._used(), 1),
+                       "appearances": len(self.picked)}
+        self.notes.append(f"the share asked for {asked:.0f} s of presenter, past the cap of {cap:.0f} s: the opening, "
+                          f"the close and evenly spaced beats, {self._used():.0f} s in {len(self.picked)} appearance(s)")
+
+    def _near(self, mark: float, lo: float, hi: float, width: float, cap: float) -> bool:
+        """One appearance from the best line whose middle is in [lo, hi] (nearest `mark` first, a chapter opening
+        ahead of the rest), when it fits under `cap`. True when one was added."""
+        taken = self._taken()
+        used = self._used()
+
+        def mid(i: int) -> float:
+            return (self.lines[i].start + self.lines[i].end) / 2.0
+        lines = [i for i in range(len(self.lines)) if i not in taken and self._ok(i) and lo - 1e-6 <= mid(i) <= hi + 1e-6]
+        for i in sorted(lines, key=lambda i: self._score(i) - abs(mid(i) - mark) / max(width, 1.0), reverse=True):
+            chapter = i in self.chapters or bool(_CHAPTER.search(self.lines[i].text or ""))
+            ap = self._make(self._forward(i), "chapter" if chapter else "beat",
+                            "a chapter opening" if chapter else "an evenly spaced beat (the presenter's time is capped)")
+            if ap is None or used + ap.seconds > cap + 1e-6:
+                continue
+            if self._add(ap):
+                return True
+        return False
+
+    def _fill_longest(self, cap: float) -> bool:
+        """What the cap still has room for: one more beat in the longest stretch of footage that can take one.
+        True when one was added."""
+        if self._used() + min(self.pmin, 2.0) > cap + 1e-6:
+            return False
+        edges = [(0.0, 0.0)] + [(a.start, a.end) for a in self.picked] + [(self.total, self.total)]
+        gaps = sorted(((s1 - e0, e0, s1) for (_s0, e0), (s1, _e1) in zip(edges, edges[1:])), reverse=True)
+        for length, e0, s1 in gaps:
+            if length < 2 * self.min_apart + min(self.pmin, 2.0):
+                break
+            if self._near((e0 + s1) / 2.0, e0, s1, length, cap):
+                return True
+        return False
 
     def _splits(self) -> None:
         """About a third of the middle appearances as a split screen (never the hook or the close): those holding
@@ -531,13 +635,14 @@ def plan_lines(segments: Sequence[Any], shots: Sequence[dict], duration: float, 
 
 
 def select(segments: Sequence[Any], shots: Sequence[dict], duration: float, *, fps: int, share: float,
-           split: bool, framings: Sequence[str] = ("master",), brief: Optional[dict] = None) -> List[Appearance]:
+           split: bool, framings: Sequence[str] = ("master",), brief: Optional[dict] = None,
+           max_seconds: Optional[float] = MAX_SECONDS) -> List[Appearance]:
     """The presenter's appearances for a footage plan (whole lines, frame-exact spans): see the module notes."""
     lines, total = plan_lines(segments, shots, duration, fps)
     if not lines:
         return []
     return Selector(lines, total, share=share, split=split, framings=framings,
-                    chapters=chapter_lines(brief, len(lines))).plan()
+                    chapters=chapter_lines(brief, len(lines)), max_seconds=max_seconds).plan()
 
 
 def take_usd(seconds: float, appearances: int = 1) -> float:
@@ -572,17 +677,19 @@ def fit_budget(appearances: List[Appearance], cap: Optional[float]) -> Tuple[Lis
 
 
 # ------------------------------------------------------------------ the estimate
-def estimate(minutes: float, share: Any = DEFAULT_SHARE, *, split_screen: bool = True) -> Dict[str, Any]:
+def estimate(minutes: float, share: Any = DEFAULT_SHARE, *, split_screen: bool = True,
+             max_seconds: Optional[float] = MAX_SECONDS) -> Dict[str, Any]:
     """
-    What a hybrid video costs: the normal footage build + presenter seconds x
-    $0.05 (heygen/avatar-iv; each appearance is billed 0.9 s over its screen
-    time for the lip-sync lead-in and tail, ~10% need a second take) + a face
-    check per take - less the vision of the full-screen presenter lines no
-    one searches.
+    What a hybrid video costs: the normal footage build + presenter seconds
+    (share x length, never past max_seconds) x $0.05 (heygen/avatar-iv; each
+    appearance is billed 0.9 s over its screen time for the lip-sync lead-in
+    and tail, ~10% need a second take) + a face check per take - less the
+    vision of the full-screen presenter lines no one searches.
     """
     name, frac = share_of(share)
     m = max(0.0, float(minutes or 0.0))
-    seconds = m * 60.0 * frac
+    asked = m * 60.0 * frac
+    seconds = min(asked, float(max_seconds)) if max_seconds and float(max_seconds) > 0 else asked
     appearances = seconds / 5.0
     billed = (seconds + PAD_SECONDS * appearances) * (1.0 + RETRY_SHARE)
     presenter = billed * USD_PER_SECOND
@@ -594,8 +701,10 @@ def estimate(minutes: float, share: Any = DEFAULT_SHARE, *, split_screen: bool =
     return {"minutes": m, "share": name, "shareOfTime": frac, "usd": round(total, 2),
             "parts": {"normalBuild": round(normal, 2), "presenter": round(presenter, 2), "checks": round(checks, 3),
                       "searchSaved": round(-saved, 3)},
-            "presenterSeconds": round(seconds), "billedSeconds": round(billed), "appearances": int(math.ceil(appearances)),
-            "formula": "normal build + presenter seconds x $0.05 (+0.9 s a take, ~10% retakes) + face checks"}
+            "presenterSeconds": round(seconds), "capped": seconds < asked - 1e-9,
+            "billedSeconds": round(billed), "appearances": int(math.ceil(appearances)),
+            "formula": "normal build + presenter seconds (share x length, at most max_seconds) x $0.05 (+0.9 s a "
+                       "take, ~10% retakes) + face checks"}
 
 
 def estimate_table(minutes: Iterable[float] = (10, 15, 20)) -> Dict[str, Any]:
@@ -603,9 +712,10 @@ def estimate_table(minutes: Iterable[float] = (10, 15, 20)) -> Dict[str, Any]:
     lengths = [float(x) for x in minutes]
     by = {name: {str(int(x) if x.is_integer() else x): estimate(x, name) for x in lengths} for name in SHARES}
     return {"shares": dict(SHARES), "defaultShare": DEFAULT_SHARE, "usdPerPresenterSecond": USD_PER_SECOND,
-            "normalBuildPerMinute": NORMAL_PER_MIN, "byShare": by,
-            "note": "Real footage everywhere else; nothing else generated. The job records what each call really cost "
-                    "(meta.costs, meta.presenterHybrid.costs)."}
+            "maxSeconds": MAX_SECONDS, "normalBuildPerMinute": NORMAL_PER_MIN, "byShare": by,
+            "note": f"Real footage everywhere else; nothing else generated. The presenter is on screen {MAX_SECONDS:.0f} s "
+                    "at most, however long the video (split screens count). The job records what each call really "
+                    "cost (meta.costs, meta.presenterHybrid.costs)."}
 
 
 # ------------------------------------------------------------------ the presenter's shots, beside the search
@@ -643,6 +753,7 @@ class Hybrid:
         self.searched_after: List[int] = []
         self.halves: Dict[int, Any] = {}
         self.dropped: List[Dict[str, Any]] = []         # planned, left out to fit the cap (their lines keep footage)
+        self.capped: Optional[Dict[str, Any]] = None    # the share asked for more than max_seconds (Selector.capped)
         self.log: List[str] = []
 
     # ---- which lines
@@ -696,7 +807,9 @@ class Hybrid:
             self.appearances = []
             self.made = {}
             return
-        self.est = estimate(self.duration / 60.0, self.blk.get("share"), split_screen=bool(self.blk.get("split_screen")))
+        max_s = max_seconds_of(self.blk.get("max_seconds"))
+        self.est = estimate(self.duration / 60.0, self.blk.get("share"), split_screen=bool(self.blk.get("split_screen")),
+                            max_seconds=max_s)
         cap = self.blk.get("budget_usd")
         if cap is None:
             env = os.getenv("PRESENTER_BUDGET_USD", "").strip()
@@ -706,9 +819,10 @@ class Hybrid:
                 cap = None
         if cap is None:
             planned = sum(ap.seconds for ap in self.appearances)
-            # The app's own rule (narration seconds x share x $0.05 x 1.5), never under every planned take once
-            # more (the other framing) with its checks.
-            cap = max(0.5, round(self.duration * float(self.blk.get("share") or 0.0) * USD_PER_SECOND * 1.5, 2),
+            # The app's own rule (min(narration seconds x share, max_seconds) x $0.05 x 1.5), never under every
+            # planned take once more (the other framing) with its checks.
+            asked = min(self.duration * float(self.blk.get("share") or 0.0), max_s)
+            cap = max(0.5, round(asked * USD_PER_SECOND * 1.5, 2),
                       round(take_usd(planned, len(self.appearances)) * 1.6, 2))
         self.appearances, over = fit_budget(self.appearances, cap)
         for ap in over:
@@ -732,7 +846,8 @@ class Hybrid:
                              store=self.store, cache=self.cache, checker=self.checker, narration_wav=wav,
                              total=self.duration, bible={}, still_fallback=False)
         self._note(f"{len(self.appearances)} appearance(s), {planned:.1f} s on camera "
-                   f"({planned / max(self.duration, 1e-6):.0%} of {self.duration:.0f} s), cap ${cap:.2f}: "
+                   f"({planned / max(self.duration, 1e-6):.0%} of {self.duration:.0f} s, at most {max_s:.0f} s), "
+                   f"cap ${cap:.2f}: "
                    + ", ".join(f"{ap.id} {ap.role}{' split' if ap.split else ''} lines {ap.lines[0]}-{ap.lines[-1]}"
                                for ap in self.appearances))
         self._thread = threading.Thread(target=self._make_all, name="presenter-hybrid", daemon=True)
@@ -948,6 +1063,10 @@ class Hybrid:
         report = {
             "mode": "hybrid", "kit": _public_kit(self.kit), "share": self.blk.get("share_name"),
             "shareOfTime": self.blk.get("share"), "splitScreen": bool(self.blk.get("split_screen")),
+            # The cap on the presenter's whole time (split screens count) and, when the share asked for more, how
+            # much: {askedSeconds, maxSeconds, seconds, appearances}.
+            "maxSeconds": max_seconds_of(self.blk.get("max_seconds")), "capped": self.capped,
+            "plannedSeconds": round(sum(ap.seconds for ap in self.appearances), 2),
             "planned": [ap.as_dict() for ap in self.appearances],
             "overBudget": list(self.dropped),
             "made": [m.appearance.id for m in made],
@@ -1142,11 +1261,13 @@ def start(inp: Dict[str, Any], segments: Sequence[Any], shots: Sequence[dict], *
     framings = [f["id"] for f in kit.get("framings") or []][:2] or ["master"]
     lines, total = plan_lines(segments, shots, duration, fps)
     selector = Selector(lines, total, share=float(blk["share"]), split=bool(blk["split_screen"]),
-                        framings=framings, chapters=chapter_lines(brief, len(lines)))
+                        framings=framings, chapters=chapter_lines(brief, len(lines)),
+                        max_seconds=max_seconds_of(blk.get("max_seconds")))
     appearances = selector.plan() if lines else []
     hy = Hybrid(inp=inp, blk=blk, kit=kit, appearances=appearances,
                 spans={ln.index: (ln.start, ln.end) for ln in lines}, duration=duration, fps=fps,
                 work=os.path.join(work, "hybrid"))
+    hy.capped = selector.capped
     for note in selector.notes:
         hy._note(note)
     if scrubbed:

@@ -10,7 +10,9 @@ is ~200-240 stills, ~30-40 clips and ~2.5-4 minutes of presenter) and the
 tier's own shares and first-choice models:
 
   presenter   on-screen seconds x 1.1 (handles and retakes) x its $/s; one
-              appearance per ~5 s on screen
+              appearance per ~5 s on screen (on-screen seconds = the tier's
+              share x the length, never past the job's max_seconds when it
+              sends one; the stills take the rest)
   AI video    on-screen seconds x 1.4 (trims and rejected takes) x its $/s;
               one clip per ~4.5 s on screen, each from its own start still
   pictures    one new still per ~4 s of still time, the clips' start stills
@@ -46,13 +48,18 @@ SLOW_CLIP_MODELS = ("minimax/", "alibaba/wan")
 
 
 def estimate(minutes: float, tier: Any = None, *, own_voice: bool = False,
-             overrides: Optional[dict] = None) -> Dict[str, Any]:
-    """$ and minutes for one video of `minutes` at `tier` ({"usd", "parts", "counts", "makeMinutes", ...})."""
+             overrides: Optional[dict] = None, max_seconds: Optional[float] = None) -> Dict[str, Any]:
+    """
+    $ and minutes for one video of `minutes` at `tier` ({"usd", "parts", "counts", "makeMinutes", ...});
+    `max_seconds`: the job's cap on the presenter's whole time (the stills take the rest).
+    """
     spec = tier if isinstance(tier, dict) and "presenter_share" in tier else _tiers.resolve(tier, overrides)
     m = max(0.0, float(minutes or 0.0))
     s = m * 60.0
     p_share, v_share = float(spec["presenter_share"]), float(spec["ai_video_share"])
     presenter_s, video_s = s * p_share, s * v_share
+    if max_seconds and float(max_seconds) > 0:
+        presenter_s = min(presenter_s, float(max_seconds))
     still_s = max(0.0, s - presenter_s - video_s)
 
     pres_model, pres_res = (list(spec.get("presenter_model") or ["heygen/avatar-iv", "1080p"]) + ["1080p"])[:2]
@@ -86,6 +93,7 @@ def estimate(minutes: float, tier: Any = None, *, own_voice: bool = False,
     make = (2.0 + (0.2 * m + 2.0) + 3.0 + generate + render) if m else 0.0
     return {
         "tier": spec.get("id"), "label": spec.get("label"), "minutes": m,
+        "maxSeconds": float(max_seconds) if max_seconds and float(max_seconds) > 0 else None,
         "usd": round(total, 2),
         "parts": {k: round(v, 2) for k, v in parts.items()},
         "seconds": {"presenter": round(presenter_s), "aiVideo": round(video_s), "stills": round(still_s)},

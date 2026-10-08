@@ -17,6 +17,7 @@ Nothing here touches the footage search, the vision judge or Kie.
 """
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import time
@@ -102,6 +103,21 @@ def script_words(spoken: List[transcribe.Word], script: str) -> List[transcribe.
     return out
 
 
+def max_seconds_of(inp: Dict[str, Any]) -> Optional[float]:
+    """
+    The job's cap on the presenter's whole time on screen (presenter_max_seconds, seconds; split screens
+    count), or None: the tier's share alone decides. Only a job that sends it is capped (the app sends 120).
+    """
+    v = (inp or {}).get("presenter_max_seconds")
+    if isinstance(v, bool):
+        return None
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    return x if math.isfinite(x) and x > 0 else None
+
+
 def budget_cap(inp: Dict[str, Any], est: Dict[str, Any]) -> float:
     """The job's spending cap: its own presenter_budget_usd, else PRESENTER_BUDGET_USD, else 1.5x the estimate."""
     for v in (inp.get("presenter_budget_usd"), os.getenv("PRESENTER_BUDGET_USD", "")):
@@ -177,7 +193,10 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
         words = script_words(words, inp["script"])
     segments = transcribe.segment_words(words, origin=0.0, until=duration)
 
-    est = estimate.estimate(duration / 60.0, tier, own_voice=not nar["made"])
+    # The job's cap on the presenter's whole time (presenter_max_seconds; none unless sent): the plan and the
+    # estimate behind the budget both keep to it.
+    cap_seconds = max_seconds_of(inp)
+    est = estimate.estimate(duration / 60.0, tier, own_voice=not nar["made"], max_seconds=cap_seconds)
     budget = Budget(budget_cap(inp, est))
     title = str(inp.get("title") or inp.get("title_overlay") or "").strip()
 
@@ -186,15 +205,18 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     cache_dir = os.getenv("PRESENTER_CACHE_DIR", "").strip() or os.path.join(work, "presenter_cache")
     notes = director.annotate(beats, title=title, kit=kit, provider=provider, budget=budget, cache=cache_dir)
     limits = {k: float(inp[f"presenter_{k}"]) for k in ("min", "max") if inp.get(f"presenter_{k}")}
-    shots = shotplan.Planner(
+    planner = shotplan.Planner(
         beats, notes["notes"], duration, presenter_share=tier["presenter_share"],
         ai_video_share=tier["ai_video_share"], presenter_broll=tier["presenter_broll"],
         # Two cameras at most, like the references (one set, one or two angles): the master and the second.
-        framings=[f["id"] for f in kit["framings"]][:2], split_share=tier["split_share"],
+        framings=[f["id"] for f in kit["framings"]][:2], split_share=tier["split_share"], max_seconds=cap_seconds,
         **({"presenter_min": limits["min"]} if "min" in limits else {}),
-        **({"presenter_max": limits["max"]} if "max" in limits else {})).plan()
+        **({"presenter_max": limits["max"]} if "max" in limits else {}))
+    shots = planner.plan()
     planned = shotplan.stats(shots, duration)
     print(f"[presenter] plan: {planned}", flush=True)
+    if planner.capped:
+        print(f"[presenter] the presenter's time is capped: {planner.capped}", flush=True)
 
     project_id = str(inp.get("project_id") or "")
     store = Store(project_id, str(inp.get("_job_id") or ""))
@@ -238,6 +260,9 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     meta["presenter"] = {
         "tier": tiers.summary(tier), "kit": kits.public_summary(kit),
         "planner": notes["planner"], "plannerErrors": notes["errors"][:3], "bible": notes["bible"],
+        # The job's cap on the presenter's whole time (None: none sent) and, when the share asked for more, how
+        # much: {askedSeconds, maxSeconds, seconds, appearances}.
+        "maxSeconds": cap_seconds, "capped": planner.capped,
         "planned": planned, "final": dict(shotplan.stats(final, duration), bySource=by_source),
         "fallbacks": sum(1 for _s, a in items if a is not None and a.fallback),
         "empty": sum(1 for _s, a in items if a is None),

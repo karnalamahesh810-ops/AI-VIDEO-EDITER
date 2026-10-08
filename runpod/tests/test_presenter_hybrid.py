@@ -252,6 +252,185 @@ class LineSelection(unittest.TestCase):
         self.assertEqual([a.role for a in aps], ["hook"])
 
 
+# ------------------------------------------------------------------ at most two minutes of presenter
+def on_screen(aps):
+    """The presenter's whole time on screen: every appearance, split screens included (they are paid the same)."""
+    return sum(a.seconds for a in aps)
+
+
+class Cap(unittest.TestCase):
+    """The owner (2026-10-08): the presenter is never on screen more than about two minutes a video, however long
+    the video - the presenter is what costs. max_seconds (default 120) caps the plan; split screens count."""
+
+    def pick(self, minutes, share="medium", split=True, **kw):
+        segs, shots, total = long_plan(minutes)
+        return hybrid.select(segs, shots, total, fps=30, share=hybrid.SHARES[share], split=split,
+                             framings=["master", "closeup"], **kw), total, len(segs)
+
+    def test_a_25_minute_script_at_medium_ends_within_two_minutes(self):
+        self.assertEqual(hybrid.MAX_SECONDS, 120.0)
+        free, _t, _n = self.pick(25.0, max_seconds=None)
+        self.assertGreater(on_screen(free), 2 * 120)                         # the share alone: 0.14 x 25 min and more
+        aps, _t, _n = self.pick(25.0)                                         # the hybrid's default cap
+        self.assertLessEqual(on_screen(aps), 120.0 + 1e-6)
+        self.assertGreater(on_screen(aps), 120.0 - hybrid.PMAX)               # ...and close to it, not far under
+        # The job's block carries the cap (default 120); a longer cap is the job's to send.
+        blk = hybrid.block({"presenter": {"presenter_id": "ruth", "share": 0.14, "level": "medium"}})
+        self.assertEqual(blk["max_seconds"], 120.0)
+        longer, _t, _n = self.pick(25.0, max_seconds=200)
+        self.assertLessEqual(on_screen(longer), 200.0 + 1e-6)
+        self.assertGreater(on_screen(longer), on_screen(aps))
+
+    def test_short_videos_are_unchanged(self):
+        for minutes, share in ((5.0, "light"), (5.0, "medium"), (10.0, "light"), (10.0, "medium"), (15.0, "light")):
+            free, _t, _n = self.pick(minutes, share, max_seconds=None)
+            aps, _t, _n = self.pick(minutes, share)
+            self.assertLessEqual(on_screen(free), 120.0, (minutes, share))
+            self.assertEqual([a.as_dict() for a in aps], [a.as_dict() for a in free], (minutes, share))
+        segs, shots, _a, _inp, total = plan_inputs()
+        kw = dict(fps=30, share=0.14, split=True, framings=["master", "closeup"])
+        self.assertEqual([a.as_dict() for a in hybrid.select(segs, shots, total, **kw)],
+                         [a.as_dict() for a in hybrid.select(segs, shots, total, max_seconds=None, **kw)])
+
+    def test_the_opening_and_the_close_are_always_kept(self):
+        for max_seconds in (120, 30, 5):
+            aps, _t, n = self.pick(25.0, max_seconds=max_seconds)
+            self.assertEqual((aps[0].role, aps[0].lines[0], aps[0].start), ("hook", 0, 0.0), max_seconds)
+            self.assertEqual((aps[-1].role, aps[-1].lines[-1]), ("close", n - 1), max_seconds)
+        self.assertEqual([a.role for a in aps], ["hook", "close"])          # a cap under both: the two alone
+
+    def test_the_beats_between_are_spread_evenly(self):
+        aps, total, _n = self.pick(25.0)
+        middle = [a for a in aps if a.role not in ("hook", "close")]
+        self.assertGreaterEqual(len(middle), 20)
+        for k in range(5):                                                   # every fifth of the video has some
+            a, b = total * k / 5, total * (k + 1) / 5
+            self.assertGreaterEqual(sum(1 for x in middle if a <= x.start < b), 3, k)
+        gaps = [b.start - a.end for a, b in zip(aps, aps[1:])]
+        self.assertGreaterEqual(min(gaps), hybrid.MIN_APART - 1e-6)
+        self.assertLessEqual(max(gaps), 2.0 * total / (len(aps) - 1))       # never a long stretch without them
+
+    def test_split_screens_count_toward_the_cap(self):
+        aps, _t, _n = self.pick(25.0, split=True)
+        splits = [a for a in aps if a.split]
+        self.assertTrue(splits)
+        self.assertLessEqual(on_screen(aps), 120.0 + 1e-6)                  # the split appearances inside the 120 s
+        self.assertFalse(any(a.split for a in aps if a.role in ("hook", "close")))
+        full, _t, _n = self.pick(25.0, split=False)
+        self.assertFalse(any(a.split for a in full))
+        self.assertLessEqual(on_screen(full), 120.0 + 1e-6)
+
+    def test_a_long_light_video_is_capped_too(self):
+        free, _t, _n = self.pick(30.0, "light", max_seconds=None)
+        aps, _t, _n = self.pick(30.0, "light")
+        self.assertGreater(on_screen(free), 120.0)
+        self.assertLessEqual(on_screen(aps), 120.0 + 1e-6)
+
+    def test_the_blocks_max_seconds(self):
+        def cap(v):
+            return hybrid.block({"presenter": {"presenter_id": "ruth", "max_seconds": v}})["max_seconds"]
+        self.assertEqual(cap(90), 90.0)
+        self.assertEqual(cap("150"), 150.0)
+        for bad in (None, "", 0, -5, "lots", True, float("nan")):
+            self.assertEqual(cap(bad), hybrid.MAX_SECONDS, bad)
+
+    def test_the_estimate_and_the_report_carry_the_cap(self):
+        e = hybrid.estimate(25, "medium")
+        self.assertEqual((e["presenterSeconds"], e["capped"]), (120, True))
+        self.assertEqual(hybrid.estimate(25, "medium", max_seconds=None)["presenterSeconds"], 210)
+        self.assertEqual((hybrid.estimate(10, "medium")["presenterSeconds"], hybrid.estimate(10, "medium")["capped"]),
+                         (84, False))
+        # Past the cap a longer video adds only its footage build: the presenter's part stays where it is.
+        self.assertEqual(hybrid.estimate(20, "medium")["parts"]["presenter"], e["parts"]["presenter"])
+        self.assertAlmostEqual(e["usd"] - hybrid.estimate(20, "medium")["usd"], 5 * hybrid.NORMAL_PER_MIN, delta=0.011)
+        self.assertLess(hybrid.estimate(25, "medium")["parts"]["presenter"],
+                        hybrid.estimate(25, "medium", max_seconds=None)["parts"]["presenter"])
+        table = hybrid.estimate_table()
+        self.assertEqual(table["maxSeconds"], 120.0)
+        self.assertEqual(table["byShare"]["medium"]["20"]["presenterSeconds"], 120)
+        self.assertEqual(table["byShare"]["light"]["10"]["presenterSeconds"], 48)
+
+
+class CapBudget(unittest.TestCase):
+    """The money cap (budget_usd) still applies inside the time cap: the lower of the two wins."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.work = self.tmp.name
+        self.kit = kit_in(os.path.join(self.work, "kitsrc"), framings=("medium", "closeup"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def begin(self, minutes=25.0, **extra):
+        """A Hybrid planned for a long narration, begun with the takes themselves switched off (no file is made)."""
+        segs, shots, total = long_plan(minutes)
+        blk = hybrid.block({"video_style": "documentary",
+                            "presenter": dict({"presenter_kit": self.kit, "share": "medium"}, **extra)})
+        lines, total = hybrid.plan_lines(segs, shots, total, 30)
+        sel = hybrid.Selector(lines, total, share=blk["share"], split=blk["split_screen"],
+                              framings=["medium", "closeup"], max_seconds=blk["max_seconds"])
+        planned = sel.plan()
+        hy = hybrid.Hybrid(inp={"project_id": ""}, blk=blk, kit=self.kit, appearances=list(planned),
+                           spans={ln.index: (ln.start, ln.end) for ln in lines}, duration=total, fps=30, work=self.work)
+        hy.capped = sel.capped
+        with mock.patch.object(hybrid.Hybrid, "_make_all", lambda self: None), \
+                mock.patch.object(media_io, "to_wav", return_value=os.path.join(self.work, "vo.wav")), \
+                mock.patch.dict(os.environ, {"PRESENTER_BUDGET_USD": ""}):
+            hy.begin("vo.mp3", provider=FakeProvider(), store=FakeStore(), cache_dir=os.path.join(self.work, "cache"))
+        hy._thread.join(10)
+        return hy, planned, total
+
+    @staticmethod
+    def cost(aps):
+        """fit_budget's own sum: every take once and one retry of the dearest."""
+        return sum(hybrid.take_usd(a.seconds) for a in aps) + max((hybrid.take_usd(a.seconds) for a in aps), default=0.0)
+
+    def test_a_budget_lower_than_the_cap_still_wins(self):
+        hy, planned, _total = self.begin(budget_usd=2.0)
+        self.assertLessEqual(on_screen(planned), 120.0 + 1e-6)
+        self.assertGreater(self.cost(planned), 2.0)                          # 120 s would cost more than the budget
+        self.assertEqual(hy.budget.cap, 2.0)
+        self.assertTrue(hy.dropped)
+        self.assertLess(on_screen(hy.appearances), on_screen(planned))
+        self.assertLessEqual(self.cost(hy.appearances), 2.0 + 1e-9)
+        self.assertEqual(hy.appearances[0].role, "hook")                     # the opening is the last to go
+
+    def test_the_default_budget_follows_the_capped_time(self):
+        hy, planned, total = self.begin()
+        self.assertEqual(hy.dropped, [])
+        uncapped = round(total * 0.14 * hybrid.USD_PER_SECOND * 1.5, 2)       # what the share alone would have set
+        want = max(0.5, round(min(total * 0.14, 120.0) * hybrid.USD_PER_SECOND * 1.5, 2),
+                   round(hybrid.take_usd(on_screen(planned), len(planned)) * 1.6, 2))
+        self.assertAlmostEqual(hy.budget.cap, want, places=6)
+        self.assertLess(hy.budget.cap, uncapped)
+        # The app's budget for any video past the cap (120 s x $0.05 x 1.5 = $9.00) makes every planned take.
+        keep, dropped = hybrid.fit_budget(list(planned), 9.0)
+        self.assertEqual((len(keep), dropped), (len(planned), []))
+
+    def test_the_jobs_plan_keeps_to_the_blocks_cap(self):
+        segs, shots, total = long_plan(25.0)
+        for extra, cap in (({}, 120.0), ({"max_seconds": 60}, 60.0)):
+            inp = {"video_style": "documentary", "project_id": "",
+                   "presenter": dict({"presenter_kit": self.kit, "share": 0.14, "level": "medium"}, **extra)}
+            with mock.patch.object(hybrid.Hybrid, "begin", lambda self, *a, **k: None):
+                hy = hybrid.start(inp, segs, shots, narration_path="vo.mp3", duration=total, work=self.work)
+            self.assertLessEqual(on_screen(hy.appearances), cap + 1e-6)
+            self.assertEqual((hy.appearances[0].role, hy.appearances[-1].role), ("hook", "close"))
+            self.assertEqual(hy.capped["maxSeconds"], cap)
+            self.assertTrue(any(f"past the cap of {cap:.0f} s" in line for line in hy.log), hy.log)
+
+    def test_the_report_says_the_cap_held(self):
+        hy, planned, _total = self.begin()
+        rep = hy.finish({"scenes": [], "durationInFrames": 1, "meta": {}})
+        self.assertEqual(rep["maxSeconds"], 120.0)
+        self.assertEqual(rep["capped"]["maxSeconds"], 120.0)
+        self.assertGreater(rep["capped"]["askedSeconds"], 120.0)
+        self.assertLessEqual(rep["plannedSeconds"], 120.0 + 1e-6)
+        self.assertEqual(rep["estimate"]["presenterSeconds"], 120)
+        self.assertTrue(any("at most 120 s" in line for line in hy.log))
+
+
 # ------------------------------------------------------------------ the takes
 class FailFor(FakeProvider):
     """Fails every take whose voice window belongs to the named appearances."""
