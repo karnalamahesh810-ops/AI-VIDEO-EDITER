@@ -1030,12 +1030,6 @@ def clear_over_presenter(doc: Dict[str, Any], min_seconds: float = 1.2) -> Dict[
     return out
 
 
-def reserved_seconds(scenes: Sequence[dict], fps: int) -> List[Tuple[float, float]]:
-    """The presenter scenes' spans in seconds (the graphics planner lays nothing over them)."""
-    return [(int(sc["startFrame"]) / fps, (int(sc["startFrame"]) + int(sc["durationInFrames"])) / fps)
-            for sc in scenes if is_presenter_scene(sc)]
-
-
 # ------------------------------------------------------------------ the presenter is nobody to search for
 def _name_pattern(kit: Optional[dict]) -> Optional["re.Pattern[str]"]:
     """The presenter's full name (and their first name when it is not a common word) as one pattern."""
