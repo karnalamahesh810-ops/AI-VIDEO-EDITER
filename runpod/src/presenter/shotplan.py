@@ -10,7 +10,12 @@ Where the presenter goes (the research's step 3 and the reference channels):
   * the key "why it matters" lines, first-person lines and lines said
     straight to the viewer;
   * and nowhere else beyond the tier's share, spread so the presenter comes
-    back at least every MAX_GAP seconds.
+    back at least every MAX_GAP seconds;
+  * with a cap on the presenter's whole time (the job's presenter_max_seconds:
+    the presenter is what costs), a plan that would pass it keeps the hook
+    and the close and spreads the appearances between them evenly instead,
+    until the next one would pass the cap (split screens count: they are paid
+    the same). A plan within the cap is left as it is.
 A presenter shot lasts PRESENTER_MIN-PRESENTER_MAX seconds (3-8 s); a longer
 passage cuts away to b-roll while the voice runs on (the shot ends on a word
 boundary, ideally a sentence or clause end). Between two presenter shots
@@ -48,6 +53,10 @@ AI_MIN = 3.0
 MAX_GAP = 40.0
 HOOK_SECONDS = 30.0
 FRONT_SECONDS = 120.0
+# Under a cap on the presenter's whole time, the evenly spaced appearances are counted this much longer than the
+# plan's own typical one, so the last of them is not the one left out; what the cap still has room for after them
+# goes to the longest stretches without the presenter (src/presenter/hybrid.py uses it too).
+CAP_MARGIN = 1.1
 EPS = 1e-6
 
 
@@ -209,10 +218,13 @@ class Planner:
                  presenter_min: float = PRESENTER_MIN, presenter_max: float = PRESENTER_MAX,
                  broll_min: float = BROLL_MIN, broll_max: float = BROLL_MAX, max_gap: float = MAX_GAP,
                  hook_seconds: float = HOOK_SECONDS, first_max: float = PRESENTER_FIRST_MAX,
-                 split_share: float = 0.0):
+                 split_share: float = 0.0, max_seconds: Optional[float] = None):
         self.beats, self.total = beats, float(total)
         self.notes = list(notes) + [Note()] * max(0, len(beats) - len(notes))
         self.p_share, self.v_share, self.in_shot_share = presenter_share, ai_video_share, presenter_broll
+        # The presenter's whole time on screen at most (seconds; None: the share alone decides).
+        self.max_seconds = float(max_seconds) if max_seconds and float(max_seconds) > 0 else None
+        self.capped: Optional[Dict[str, Any]] = None        # the share's plan went past max_seconds: by how much
         self.framings = list(framings) or ["master"]
         self.pmin, self.pmax = presenter_min, max(presenter_min, presenter_max)
         self.first_max = max(self.pmax, first_max)
@@ -319,7 +331,8 @@ class Planner:
         # The close: the presenter signs off - when the video has room for b-roll in between.
         if self.total >= 2 * self.pmin + self.bmin + 2 and n > 1:
             self._add(self._grow_backward(n - 1), "close")
-        used = lambda: sum(y - x for (x, y, _r) in self.runs)   # noqa: E731
+        anchors = list(self.runs)
+        used = self._used
         # Chapter openings, key lines, first person: best first, spread out, until the share is reached.
         tried = set()
         while used() < target - 0.5 * self.pmin:
@@ -351,7 +364,72 @@ class Planner:
                         break
                 if changed:
                     break
+        # A cap on the presenter's whole time that this plan passes (a long video): the hook and the close stay,
+        # the appearances between them are spread evenly instead.
+        if self.max_seconds is not None and used() > self.max_seconds + EPS:
+            self._cap(anchors)
         return list(self.runs)
+
+    def _used(self) -> float:
+        return sum(y - x for (x, y, _r) in self.runs)
+
+    def _cap(self, anchors: List[Tuple[float, float, str]]) -> None:
+        """
+        The share's plan went past max_seconds: keep the hook and the close,
+        then one appearance near each evenly spaced mark between them (the
+        best beat there, a chapter opening first) as long as it fits the cap,
+        then one more in the longest stretch without the presenter while one
+        fits. Split screens count (they are paid the same).
+        """
+        asked = self._used()
+        middle = [y - x for (x, y, r) in self.runs if (x, y, r) not in anchors]
+        typical = sum(middle) / len(middle) if middle else (self.pmin + self.pmax) / 2.0
+        cap = float(self.max_seconds or 0.0)
+        self.runs = sorted(anchors)
+        lo = max((y for (x, y, r) in anchors if r == "hook"), default=0.0)
+        hi = min((x for (x, y, r) in anchors if r == "close"), default=self.total)
+        room = cap - self._used()
+        count = int(room / (typical * CAP_MARGIN)) if room > 0 else 0
+        if count > 0 and hi > lo:
+            step = (hi - lo) / (count + 1)
+            for k in range(1, count + 1):
+                mark = lo + step * k
+                self._near(mark, mark - step / 2.0, mark + step / 2.0, step, cap)
+        while self._fill_longest(cap):
+            pass
+        self.capped = {"askedSeconds": round(asked, 1), "maxSeconds": cap, "seconds": round(self._used(), 1),
+                       "appearances": len(self.runs)}
+
+    def _near(self, mark: float, lo: float, hi: float, width: float, cap: float) -> bool:
+        """One presenter span from the best beat whose middle is in [lo, hi] (nearest `mark` first, a chapter
+        opening ahead of the rest), when it fits under `cap`. True when one was added."""
+        used = self._used()
+
+        def mid(i: int) -> float:
+            return (self.beats[i].start + self.beats[i].end) / 2.0
+        beats = [i for i in range(len(self.beats)) if lo - EPS <= mid(i) <= hi + EPS]
+        for i in sorted(beats, key=lambda i: self._score(i) - abs(mid(i) - mark) / max(width, 1.0), reverse=True):
+            span = self._grow_forward(i)
+            if not span or used + (span[1] - span[0]) > cap + EPS:
+                continue
+            role = self.notes[i].role
+            if self._add(span, role if role in ("chapter", "why") else "comes back"):
+                return True
+        return False
+
+    def _fill_longest(self, cap: float) -> bool:
+        """What the cap still has room for: one more span in the longest stretch without the presenter that can
+        take one. True when one was added."""
+        if self._used() + min(self.pmin, 2.0) > cap + EPS:
+            return False
+        edges = [0.0] + [v for (x, y, _r) in self.runs for v in (x, y)] + [self.total]
+        gaps = [(edges[k], edges[k + 1]) for k in range(0, len(edges) - 1, 2)]
+        for (ga, gb) in sorted(gaps, key=lambda g: g[1] - g[0], reverse=True):
+            if gb - ga < 2 * self.bmin + min(self.pmin, 2.0):
+                break
+            if self._near((ga + gb) / 2.0, ga, gb, gb - ga, cap):
+                return True
+        return False
 
     # ---- b-roll
     def _broll_pieces(self, a: float, b: float) -> List[Tuple[float, float]]:

@@ -36,6 +36,7 @@ Worker branch `feature/ai-presenter` (code: `runpod/src/presenter/`). The app se
 | `dissolves` | 0-1 | `0` | Share of b-roll-to-b-roll joins that dissolve (never into/out of the presenter). |
 | `bgm` / `bgm_url` / `bgm_genre` | | off | Music only when asked: no bundled bed suits a talking head. |
 | `presenter_budget_usd` | dollars | 1.5 × estimate | Hard cap on OpenRouter spend for the job; past it, shots fall back to free stills. |
+| `presenter_max_seconds` | seconds | none | A cap on the presenter's whole time on screen, split screens included (they are paid the same). Only a job that sends it is capped (the app sends `120`). A plan whose tier share asks for more keeps the hook and the close and spreads the appearances between them evenly, adding none once the next would pass the cap; the stills take the rest. A plan within the cap is unchanged. The estimate behind the default budget uses the capped seconds too; `meta.presenter.maxSeconds` / `capped {askedSeconds, maxSeconds, seconds, appearances}` say what happened. |
 | `presenter_config` | tier overrides | | A/B one job: `{"ai_video_share": 0.25, "video_models": [["minimax/hailuo-3-max","768p"]]}`. |
 
 Everything else (`title`, `project_id`, `language`, `media_bucket`, `upload_url`, `width`/`height`/`fps`, brand kit) works as today.
@@ -107,6 +108,7 @@ Current numbers:
 | `standard` | 15% / 25% / 60% | $27.53 | $41.29 | $55.04 | 180 stills, 67 clips, 3.0 min presenter |
 | `premium` | 18% / 40% / 42% | $68.61 | $102.90 | $137.20 | 126 stills, 107 clips, 3.6 min presenter |
 
+- With `presenter_max_seconds: 120` (what the app sends, 2026-10-08) the presenter stops at 2 minutes and stills take the rest: `budget` $15.45 / $22.90 / $28.74, `standard` $27.53 / $40.67 / $52.59, `premium` $68.61 / $101.68 / $134.39 (`estimate.estimate(..., max_seconds=120)`; the app's `presenterEstimate` pins the same numbers).
 - Making a 15-minute video takes about 30-47 minutes.
 - The 90-second laptop test cost $3.38 on OpenRouter: the budget mix on 2K stills and 1080p clips, the planner and the checks included.
 
@@ -176,7 +178,8 @@ Any style but `ai_presenter` (`documentary`, `news_compilation`, ...) takes an o
   "share": 0.14,
   "level": "medium",
   "split_screen": true,
-  "budget_usd": 1.07
+  "max_seconds": 120,
+  "budget_usd": 9.0
 }
 ```
 
@@ -186,7 +189,8 @@ Any style but `ai_presenter` (`documentary`, `news_compilation`, ...) takes an o
 | `share` | 0.02-0.30 | 0.14 | Share of the running time: `0.08` light, `0.14` medium. |
 | `level` | `light` / `medium` | | A label. A level sent alone sets its share. |
 | `split_screen` | bool | `true` | About a third of the middle appearances are 50/50: the presenter left, **that line's real clip or picture** right. Never the hook or the close. |
-| `budget_usd` | dollars | narration s × share × $0.05 × 1.5 (never under every planned take once more) | A hard cap on the presenter's OpenRouter calls. The plan is trimmed to fit first, keeping room for one retry of its dearest take: the latest middle appearance goes first, then the close, then the hook. A take refused or failed past it: the line gets footage. |
+| `max_seconds` | seconds | `120` (`PRESENTER_HYBRID_MAX_SECONDS`) | The presenter's whole time on screen, however long the video. **Split screens count** (they are paid the same). Anything but a positive number reads as the default. |
+| `budget_usd` | dollars | min(narration s × share, `max_seconds`) × $0.05 × 1.5 (never under every planned take once more) | A hard cap on the presenter's OpenRouter calls. The plan is trimmed to fit first, keeping room for one retry of its dearest take: the latest middle appearance goes first, then the close, then the hook. A take refused or failed past it: the line gets footage. A budget lower than what `max_seconds` would cost wins. |
 | `enabled` | `false` | | Switches a block off. |
 
 Without the block nothing changes: tests prove the timeline is byte-for-byte that of 68205fc.
@@ -199,6 +203,7 @@ Without the block nothing changes: tests prove the timeline is byte-for-byte tha
 - A line about the presenter ("My name is Hollis Reed": their name was the line's subject) is theirs to say first.
 - Each appearance is 3.5-7.5 s of whole lines, with at least 10 s of footage between appearances.
 - Never a line the plan gave a graphic, except the opening sentence and the sign-off (the hint gives way). A named person's or a document's line only as a split; such a line keeps the opening or the close on footage (`meta.presenterHybrid.log` says why).
+- **Never past `max_seconds` in all** (120 s by default; split screens count). A plan whose share asks for more (medium from ~11 minutes, light from ~19) keeps the opening and the close, then puts one beat near each evenly spaced mark between them (the best line there, a chapter opening first), adding none once the next would pass the cap; what the cap still has room for goes to the longest stretch without the presenter. A 25-minute medium video: 27 appearances, 118 s, one about every 55 s. A plan within the cap is unchanged (tests compare them).
 
 **How the presenter shots are made:**
 - One `heygen/avatar-iv` take per appearance, from its narration window, made beside the footage search.
@@ -227,6 +232,7 @@ Without the block nothing changes: tests prove the timeline is byte-for-byte tha
   - Also `semanticMetadata.split {query, relevanceScore, contentDescription, real: true}`.
 - **`meta.presenterHybrid`:**
   - `mode`, `kit`, `share`, `shareOfTime`, `splitScreen`;
+  - `maxSeconds`, `plannedSeconds`, `capped` (`null`, or `{askedSeconds, maxSeconds, seconds, appearances}` when the share asked for more than the cap);
   - `planned[]`, `overBudget[]`, `made[]`, `fellBack[{id, lines, why}]`, `searchedAfter[]`;
   - `screen {seconds, share, scenes, splitScenes, appearances}`;
   - `costs {presenterUsd, checksUsd, totalUsd}`, `budget`, `estimate`;
@@ -235,12 +241,14 @@ Without the block nothing changes: tests prove the timeline is byte-for-byte tha
 - **`meta.costs`** carries the `presenter` category as in section 3.
 
 **Estimate:** `presenter_info.hybrid`.
-- Its fields: `{shares, defaultShare, usdPerPresenterSecond, normalBuildPerMinute, byShare.light|medium."10"|"15"|"20" {usd, parts, presenterSeconds, billedSeconds, appearances, formula}, disclosure}`.
-- The formula: the normal footage build (~$0.11/min) + presenter seconds × $0.05. Each take is billed 0.9 s over its screen time, and ~10% need a retake. Face checks are added; the vision of unsearched lines is taken off.
+- Its fields: `{shares, defaultShare, usdPerPresenterSecond, maxSeconds, normalBuildPerMinute, byShare.light|medium."10"|"15"|"20" {usd, parts, presenterSeconds, capped, billedSeconds, appearances, formula}, disclosure}`.
+- The formula: the normal footage build (~$0.11/min) + presenter seconds × $0.05, where presenter seconds = min(share × length, 120). Each take is billed 0.9 s over its screen time, and ~10% need a retake. Face checks are added; the vision of unsearched lines is taken off.
 
 | Share | 10 min | 15 min | 20 min |
 |---|---|---|---|
 | light (0.08) | $4.17 | $6.26 | $8.34 |
-| medium (0.14) | $6.48 | $9.71 | $12.95 |
+| medium (0.14) | $6.48 | $9.33 (was $9.71) | $9.88 (was $12.95) |
+
+Past the cap a longer video adds only its footage build (~$0.11 a minute): a 25-minute medium video is $10.43 (was $16.19).
 
 **The app Player** needs the same `frame: "split"` drawing as section 8, with a video right half (`media.split.type: "video"`).
