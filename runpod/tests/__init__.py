@@ -16,6 +16,9 @@ os.environ.setdefault("ALLOW_ARCHIVE_ORG", "0")
 # render tests' documents point at made-up links. tests/test_voice_polish.py
 # switches it on around its own local files.
 os.environ.setdefault("VOICE_POLISH", "0")
+# The smart re-render (src/rendercache.py) reads and keeps chunks in R2 by a project's id: the suite's renders
+# would list a mocked bucket. tests/test_render_cache.py switches it on around its own renders.
+os.environ.setdefault("RENDER_CACHE", "0")
 # The grade measures each scene's picture before a render, reading remote
 # ones by their link: the suite's documents point at made-up links. No time
 # for it here; tests/test_grade.py gives its own measurements a budget.

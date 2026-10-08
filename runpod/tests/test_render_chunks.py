@@ -173,7 +173,9 @@ class _pod_env:
 
     def __enter__(self):
         vals = {"POD_RENDER_FANOUT": True, "FANOUT_API_KEY": "k", "POD_RENDER_ENDPOINT_ID": "ep",
-                "POD_RENDER_CHUNKS": 4, "POD_RENDER_MIN_CHUNK_FRAMES": 30, "POD_RENDER_MIN_SECONDS": 0,
+                # Chunks follow the timeline (src/rendercache.py stable_chunks): 20 s = 600 frames at 30 fps.
+                "POD_RENDER_CHUNKS": 4, "POD_RENDER_CHUNK_SECONDS": 20,
+                "POD_RENDER_MIN_CHUNK_FRAMES": 30, "POD_RENDER_MIN_SECONDS": 0,
                 "POD_RENDER_QUEUE_GRACE_SECONDS": 600, "POD_RENDER_SPECULATE": False,
                 "POD_RENDER_CHUNK_TIMEOUT_SECONDS": 1800, "POD_RENDER_TIMEOUT_SECONDS": 3600,
                 "POD_RENDER_KEEP_CHUNKS": False, "POD_RENDER_PREFIX": "chunks/",

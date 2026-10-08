@@ -226,6 +226,37 @@ def x264_preset() -> str:
     return p if p in _X264_PRESETS else ""
 
 
+def jpeg_quality() -> int:
+    """config.RENDER_JPEG_QUALITY (1-100) for the frames Chrome hands to the encoder, 0 = Remotion's (80)."""
+    try:
+        q = int(getattr(config, "RENDER_JPEG_QUALITY", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+    return q if 1 <= q <= 100 else 0
+
+
+def gl_backend() -> str:
+    """The --gl backend a render passes (REMOTION_GL, else "angle" on a machine with an NVIDIA device), or ""."""
+    return os.getenv("REMOTION_GL", "").strip() or ("angle" if os.path.exists("/dev/nvidia0") else "")
+
+
+def encoder_settings(composition: str = "Main") -> dict:
+    """
+    Everything besides the document that decides a rendered chunk's pixels and
+    its bitstream: the renderer's code (renderer_fingerprint), the x264 CRF and
+    preset, the frames' JPEG quality, the GL backend. A cached chunk is reused
+    only under the same settings (src/rendercache.py), so it always joins newly
+    drawn chunks without re-encoding.
+    """
+    try:
+        fp = renderer_fingerprint()
+    except OSError:
+        fp = ""
+    return {"renderer": fp, "composition": composition or "Main", "codec": "h264",
+            "crf": int(config.RENDER_CRF or 0), "x264": x264_preset() or "medium", "jpeg": jpeg_quality(),
+            "gl": gl_backend(), "pix": "yuv420p"}
+
+
 _FINGERPRINTS: dict = {}
 _BUNDLE_LOCK = threading.Lock()
 _BUNDLE_FAILED: set = set()
@@ -463,6 +494,9 @@ def render(props: dict, out_path: str, composition: str = "Main",
         # medium, took ~16% of the machine for no visible gain (see _X264_PRESETS).
         if picture and x264_preset():
             cmd.append(f"--x264-preset={x264_preset()}")
+        # The JPEG every frame passes through on its way from Chrome to x264.
+        if picture and jpeg_quality():
+            cmd.append(f"--jpeg-quality={jpeg_quality()}")
         if audio_to and picture and not muted:
             audio_to = os.path.abspath(audio_to)
             if os.path.exists(audio_to):
@@ -486,9 +520,8 @@ def render(props: dict, out_path: str, composition: str = "Main",
         # remains on OffthreadVideo's bounded FFmpeg workers. CPU-only local
         # runs keep Remotion's default backend. REMOTION_GL can override this
         # for a pod whose driver requires another supported backend.
-        gl_backend = os.getenv("REMOTION_GL", "").strip()
-        if gl_backend or os.path.exists("/dev/nvidia0"):
-            cmd.append(f"--gl={gl_backend or 'angle'}")
+        if gl_backend():
+            cmd.append(f"--gl={gl_backend()}")
 
         n_frames = frame_count(props, frames)
         limit = int(timeout) if timeout else render_timeout(n_frames, concurrency)

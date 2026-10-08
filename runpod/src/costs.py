@@ -210,6 +210,9 @@ class Ledger:
             self.started = time.time()
             self.balance_before: Optional[float] = None
             self.balance_after: Optional[float] = None
+            # The smart re-render's account (src/fanout.py render_pod): chunks reused, frames not drawn again
+            # and what that saved - meta.costs.render.
+            self.render: Optional[dict] = None
 
     def record(self, key: str, units: float = 1.0) -> None:
         with self.lock:
@@ -352,6 +355,8 @@ class Ledger:
             split = breakdown(out["units"])
             if split:
                 out["breakdown"] = split        # the AI money by call kind (vision.<kind>.usd, llm.<kind>.usd)
+            if self.render:
+                out["render"] = dict(self.render)
             return out
 
 
@@ -372,6 +377,12 @@ def absorb(child: Optional[dict], billed_seconds: Optional[float] = None) -> Non
 
 def summary(worker_seconds: Optional[float] = None) -> dict:
     return LEDGER.summary(worker_seconds)
+
+
+def note_render(stats: Optional[dict]) -> None:
+    """A render's reuse of earlier chunks (src/fanout.py render_pod): in its summary as "render"."""
+    with LEDGER.lock:
+        LEDGER.render = {k: v for k, v in (stats or {}).items() if k != "kept"} or None
 
 
 def charge_machine_start() -> float:

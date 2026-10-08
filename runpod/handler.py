@@ -108,6 +108,7 @@ from src import living
 from src import hookcheck
 from src import shorts
 from src import aifill
+from src import rendercache
 from src.presenter import hybrid as presenter_hybrid
 
 
@@ -2207,10 +2208,15 @@ def _sanitize_stills(doc: dict, work: str, fetched: dict = None, fresh: bool = T
     dropped = 0
     medias = [s.get("media") for s in doc.get("scenes", [])]
     medias += [m for o in doc.get("overlays", []) for m in (o.get("media") or [])]
-    for n, media in enumerate(medias):
-        if not isinstance(media, dict) or media.get("type") != "image" or not media.get("url"):
-            continue
-        url = media["url"]
+    # Each picture once (several scenes and looks can show the same one), eight at a time: one by one, a
+    # 19-minute video's ~120 stills took the render machine a minute or two before its first frame.
+    by_url: Dict[str, List[dict]] = {}
+    for media in medias:
+        if isinstance(media, dict) and media.get("type") == "image" and media.get("url"):
+            by_url.setdefault(media["url"], []).append(media)
+
+    def clean(item) -> tuple:
+        n, url = item
         src = url if is_local(url) and os.path.isfile(url) else ""
         if not src and os.path.isfile((fetched or {}).get(url) or ""):
             src = fetched[url]
@@ -2237,12 +2243,21 @@ def _sanitize_stills(doc: dict, work: str, fetched: dict = None, fresh: bool = T
                 ok = os.path.isfile(out) and os.path.getsize(out) > 2000
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 ok = False
-        if ok:
-            media["url"] = out
-        else:
-            dropped += 1
-            media.clear()
-            media.update({"type": "color", "url": "", "source": "none"})
+        return url, (out if ok else "")
+    items = list(enumerate(by_url))
+    if items:
+        with ThreadPoolExecutor(max_workers=min(8, len(items))) as pool:
+            done = list(pool.map(clean, items))
+    else:
+        done = []
+    for url, out in done:
+        for media in by_url[url]:
+            if out:
+                media["url"] = out
+            else:
+                dropped += 1
+                media.clear()
+                media.update({"type": "color", "url": "", "source": "none"})
     if dropped:
         print(f"[worker] {dropped} still(s) could not be decoded; covered by other shots",
               flush=True)
@@ -2400,6 +2415,9 @@ def _job_deadline(inp: dict) -> float:
 
 def do_render(doc: dict, inp: dict, work: str, report: Reporter,
               split: bool = False) -> dict:
+    # This render's own account only: a warm worker kept the last job's.
+    for key in ("render_manifest", "pod_render", "render_fanout"):
+        media.LAST_STATS.pop(key, None)
     # The document may have come back from a browser, so validate before
     # spending GPU minutes on it. A scene without media is the quality check's
     # to repair first (below); the render requires every one after that.
@@ -2773,11 +2791,15 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
     # it draws are gone does it raise (fanout.SpreadFailed) - do_render then
     # repairs what is named or fails.
     spread = fanout.pod_render_enabled(doc)
-    if spread:
+    # The smart re-render (src/rendercache.py): chunks an earlier render of this project drew are reused,
+    # here too when no workers can be had. The scope is the project (a benchmark may name its own).
+    scope = str(inp.get("render_cache_scope") or inp.get("project_id") or "")
+    if spread or (scope and config.RENDER_CACHE):
         finished = fanout.render_pod(doc, out_path,
                                      job_id=inp.get("_job_id") or (getattr(report, "job", None) or {}).get("id", ""),
                                      work=work, report=report, composition=inp.get("composition", "Main"),
-                                     concurrency=concurrency)
+                                     concurrency=concurrency, cache_scope=scope,
+                                     cache_mode=rendercache.mode_of(inp.get("render_cache")))
     if finished:
         pass
     # The Supabase-broker chunk render only when Cloudflare R2 is not set up:
@@ -3420,6 +3442,17 @@ def handler(job):
             return {**out, "action": "presenter_set", "costs": costs.summary(time.time() - started),
                     "elapsed": round(time.time() - started, 1)}
 
+        if action == "render_cache_cleanup":
+            # Old smart re-render entries (src/rendercache.py): only keys under RENDER_CACHE_PREFIX are listed
+            # or deleted - never a project's media or a finished video. A dry run unless {"dry_run": false}.
+            try:
+                out = rendercache.cleanup(days=inp.get("days"), scope=str(inp.get("scope") or ""),
+                                          dry_run=inp.get("dry_run", True) is not False)
+                out["ok"] = True
+            except Exception as e:  # noqa: BLE001 - reported in the result
+                out = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}
+            return {**out, "action": "render_cache_cleanup", "elapsed": round(time.time() - started, 1)}
+
         if action == "presenter_info":
             # The AI presenter style for the app (src/presenter): its tiers, $ per 10/15/20-minute video per
             # tier, the presenter kits, the script preset. No paid call, no project write.
@@ -3451,6 +3484,12 @@ def handler(job):
                     "podRender": fanout.pod_render_ready(),
                     "renderer": renderer.renderer_fingerprint(),
                     "x264Preset": renderer.x264_preset() or "medium",
+                    # The smart re-render (src/rendercache.py): chunk length, what a re-render draws here alone.
+                    "renderCache": {"on": bool(config.RENDER_CACHE), "prefix": config.RENDER_CACHE_PREFIX,
+                                    "chunkSeconds": config.POD_RENDER_CHUNK_SECONDS,
+                                    "localChunks": config.POD_RENDER_LOCAL_CHUNKS,
+                                    "keepDays": config.RENDER_CACHE_KEEP_DAYS,
+                                    "jpegQuality": renderer.jpeg_quality() or 80},
                     "machine": _machine(),
                     "potProvider": media.pot_provider_alive(),
                     **({} if media.pot_provider_alive() else {"potLog": media.pot_provider_log()}),

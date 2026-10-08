@@ -1375,6 +1375,34 @@ POD_RENDER_KEEP_CHUNKS = _flag("POD_RENDER_KEEP_CHUNKS", False)
 # leaves a chunk running or queued for long. 0 = no policy.
 POD_RENDER_JOB_POLICY = _flag("POD_RENDER_JOB_POLICY", True)
 
+# --- smart re-render (src/rendercache.py) -------------------------------------------
+# A spread render cuts the video into chunks of about this many seconds, each
+# ending on the cleanest scene cut near that length (rendercache.stable_chunks):
+# the boundaries follow the timeline only, so a re-render cuts it the same way
+# and every chunk an edit did not touch is reused. Shorter chunks re-render less
+# after an edit; each chunk also costs a machine's start-up (~20-40 s).
+POD_RENDER_CHUNK_SECONDS = float(os.getenv("POD_RENDER_CHUNK_SECONDS", "90"))
+# A re-render that needs at most this many chunks drawn draws them on its own
+# machine: no worker is woken (start-up, a second download of the media) for a
+# one-line edit.
+POD_RENDER_LOCAL_CHUNKS = int(os.getenv("POD_RENDER_LOCAL_CHUNKS", "2"))
+# Rendered chunks and the whole sound mix are kept in R2 under a content hash of
+# what they draw (RENDER_CACHE_PREFIX/<project>/), and reused by the next render
+# of the project when their hash is unchanged. A job's input may say
+# render_cache "off" (neither) or "refresh" (draw everything, keep it).
+RENDER_CACHE = _flag("RENDER_CACHE", True)
+RENDER_CACHE_PREFIX = os.getenv("RENDER_CACHE_PREFIX", "render-cache/v1/").strip()
+# Entries older than this are deleted by the clean-up (rendercache.cleanup, the
+# worker's render_cache_cleanup action) or an R2 lifecycle rule on the prefix; a
+# reused entry starts its age again.
+RENDER_CACHE_KEEP_DAYS = float(os.getenv("RENDER_CACHE_KEEP_DAYS", "14"))
+# With no workers to spread over (no endpoint, POD_RENDER_FANOUT off), a render
+# with nothing cached still renders whole on its machine; on, it renders chunk by
+# chunk there and keeps them (benchmarks; a machine without helpers).
+RENDER_LOCAL_CHUNKED = _flag("RENDER_LOCAL_CHUNKED", False)
+# JPEG quality of the frames Chrome hands to x264 (1-100; 0 = Remotion's 80).
+RENDER_JPEG_QUALITY = int(os.getenv("RENDER_JPEG_QUALITY", "0"))
+
 # --- whisper -----------------------------------------------------------------
 # "base" is the sweet spot for narration alignment on CPU; bump to "small" on GPU.
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
