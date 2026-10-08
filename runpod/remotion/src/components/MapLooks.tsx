@@ -1,6 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import { SafeImg } from './motion/safePicture';
+import {GIBS_MAX, ImageryTile, TILE, TileFilters, USGS_MAX, usgsZoom} from './motion/satelliteTiles';
 import {geoContains, geoMercator, geoPath} from 'd3-geo';
 import {feature} from 'topojson-client';
 import topology from 'world-atlas/countries-110m.json';
@@ -32,12 +33,9 @@ const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
 const inOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const outCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
-const TILE = 256;
 const DISPLAY = 1.5;
 const US_BOXES = [[18, 50, -126, -65], [51, 72, -170, -129], [18, 23, -161, -154]];
 const inUS = (p: MapLocation) => US_BOXES.some(([a, b, c, d]) => p.lat >= a && p.lat <= b && p.lon >= c && p.lon <= d);
-const GIBS_MAX = 8;
-const USGS_MAX = 16;
 
 // Web-Mercator world pixel at a (possibly fractional) zoom.
 const worldPx = (lat: number, lon: number, z: number): [number, number] => {
@@ -46,18 +44,12 @@ const worldPx = (lat: number, lon: number, z: number): [number, number] => {
   return [((lon + 180) / 360) * n, (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * n];
 };
 
-const usgsZoom = (z: number, us: boolean) => us && z > GIBS_MAX - 2;
-const tileUrl = (z: number, x: number, y: number, us: boolean) =>
-  usgsZoom(z, us)
-    ? `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/${z}/${y}/${x}`
-    : `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_NextGeneration/default/GoogleMapsCompatible_Level8/${z}/${y}/${x}.jpeg`;
-// USGS imagery has no data over open water and serves those pixels black: a
-// coastal zoom showed black squares on the sea. Its tiles go through this
-// filter (near-black -> transparent) over a NASA Blue Marble underlay.
-const NO_DATA_FILTER_ID = 'usgs-no-data';
+// USGS imagery has no data over open water and serves it black (and around
+// Hawaii as flat cream, orange, periwinkle or white slabs): its tiles go through
+// TileFilters' no-data filter over a NASA Blue Marble underlay (motion/satelliteTiles).
 // Blue Marble paints the open sea near-black too; under a USGS zoom its sea
 // drops out as well and a painted ocean (USGS offshore water) shows instead.
-const DARK_SEA_FILTER_ID = 'underlay-dark-sea';
+const TILE_FILTERS = 'satmap';
 const OCEAN = '#17314f';
 
 // How close the camera lands, by what the gazetteer says the place is.
@@ -142,11 +134,9 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
       for (let tx = Math.floor(left / TILE); tx <= Math.floor(right / TILE); tx++) {
         const wx = ((tx % n) + n) % n;
         out.push(
-          <SafeImg key={`${gibs ? 'g' : ''}${z}-${tx}-${ty}`} src={tileUrl(z, wx, ty, us && !gibs)} onError={() => undefined}
-            delayRenderTimeoutInMilliseconds={60000} maxRetries={3}
-            style={{position: 'absolute', left: width / 2 + (tx * TILE - cx) * scale, top: height / 2 + (ty * TILE - cy) * scale,
-              width: Math.ceil(size) + 1, height: Math.ceil(size) + 1, opacity,
-              filter: gibs ? `url(#${DARK_SEA_FILTER_ID})` : usgsZoom(z, us) ? `url(#${NO_DATA_FILTER_ID})` : undefined}} />,
+          <ImageryTile key={`${gibs ? 'g' : ''}${z}-${tx}-${ty}`} id={TILE_FILTERS} z={z} x={wx} y={ty} us={us} under={gibs}
+            left={width / 2 + (tx * TILE - cx) * scale} top={height / 2 + (ty * TILE - cy) * scale} size={size}
+            opacity={opacity} />,
         );
       }
     }
@@ -174,16 +164,7 @@ export const SatelliteMap: React.FC<{overlay: Overlay; accent: string}> = ({over
         <AbsoluteFill style={{background: under.length ? OCEAN : undefined,
           filter: teal ? 'grayscale(.85) sepia(.35) hue-rotate(150deg) saturate(1.3) brightness(.62) contrast(1.15)'
           : dark ? 'brightness(.55) contrast(1.25) saturate(.55) hue-rotate(-8deg)' : 'saturate(1.1) contrast(1.05)'}}>
-          <svg width={0} height={0} style={{position: 'absolute'}}>
-            <filter id={NO_DATA_FILTER_ID} colorInterpolationFilters="sRGB">
-              {/* alpha = 9 x (R + G + B) - 0.1: black no-data drops out, dark water stays */}
-              <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  9 9 9 0 -0.1" />
-            </filter>
-            <filter id={DARK_SEA_FILTER_ID} colorInterpolationFilters="sRGB">
-              {/* alpha = 4 x (R + G + B) - 0.4: the black sea goes, land stays */}
-              <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  4 4 4 0 -0.4" />
-            </filter>
-          </svg>
+          <TileFilters id={TILE_FILTERS} />
           {underTiles}
           {mainTiles}
         </AbsoluteFill>

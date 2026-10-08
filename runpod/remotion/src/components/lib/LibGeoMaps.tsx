@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill } from "remotion";
-import { SafeImg } from "../motion/safePicture";
+import { GIBS_MAX, ImageryTile, TILE, TileFilters, USGS_MAX, usgsZoom } from "../motion/satelliteTiles";
 import { feature } from "topojson-client";
 import statesTopology from "../../data/us-states.json";
 import type { GeoDoc, Overlay } from "../../types";
@@ -34,10 +34,7 @@ const STATES = (feature(statesTopology as never, statesTopology.objects.states a
   .filter((f) => { const id = Number(f.id); return Number.isFinite(id) && id <= 56 && id !== 2 && id !== 15; });
 
 // ------------------------------------------------------------------ web mercator camera
-const TILE = 256;
 const DISPLAY = 1.5;
-const GIBS_MAX = 8;
-const USGS_MAX = 16;
 const RAD = Math.PI / 180;
 const WATER = "#59c9f5";
 const mercX = (lon: number) => (lon + 180) / 360;
@@ -52,12 +49,11 @@ const projector = (cam: Cam, unit: number, width: number, height: number) => {
 };
 const US_BOXES = [[18, 50, -126, -65], [51, 72, -170, -129], [18, 23, -161, -154]];
 const inUS = (lon: number, lat: number) => US_BOXES.some(([a, b, c, d]) => lat >= a && lat <= b && lon >= c && lon <= d);
-const usgsZoom = (z: number, us: boolean) => us && z > GIBS_MAX - 2;
-const tileUrl = (z: number, x: number, y: number, us: boolean) => (usgsZoom(z, us)
-  ? `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/${z}/${y}/${x}`
-  : `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_NextGeneration/default/GoogleMapsCompatible_Level8/${z}/${y}/${x}.jpeg`);
 
-/** The imagery under a camera (as the pro maps do): USGS inside the US with a Blue Marble underlay for the sea. */
+/**
+ * The imagery under a camera (as the pro maps do): USGS inside the US with a Blue Marble underlay for the sea,
+ * USGS no-data dropped and a missing USGS level drawn from the next (motion/satelliteTiles).
+ */
 const Tiles: React.FC<{ cam: Cam; us: boolean; grade: string }> = ({ cam, us, grade }) => {
   const { kw, width, height } = useBase();
   const id = useSvgId("geot");
@@ -85,11 +81,8 @@ const Tiles: React.FC<{ cam: Cam; us: boolean; grade: string }> = ({ cam, us, gr
       for (let tx = Math.floor(left / TILE); tx <= Math.floor(right / TILE); tx++) {
         const wx = ((tx % n) + n) % n;
         out.push(
-          <SafeImg key={`${gibs ? "g" : "u"}${z}-${tx}-${ty}`} src={tileUrl(z, wx, ty, us && !gibs)} onError={() => undefined}
-            maxRetries={3} delayRenderTimeoutInMilliseconds={60000}
-            style={{ position: "absolute", left: width / 2 + (tx * TILE - cx) * scale, top: height / 2 + (ty * TILE - cy) * scale,
-              width: Math.ceil(size) + 1, height: Math.ceil(size) + 1, opacity: o,
-              filter: gibs ? `url(#${id}sea)` : usgsZoom(z, us) ? `url(#${id}nd)` : undefined }} />,
+          <ImageryTile key={`${gibs ? "g" : "u"}${z}-${tx}-${ty}`} id={id} z={z} x={wx} y={ty} us={us} under={gibs}
+            left={width / 2 + (tx * TILE - cx) * scale} top={height / 2 + (ty * TILE - cy) * scale} size={size} opacity={o} />,
         );
       }
     }
@@ -97,14 +90,7 @@ const Tiles: React.FC<{ cam: Cam; us: boolean; grade: string }> = ({ cam, us, gr
   };
   return (
     <AbsoluteFill style={{ background: "#0b1a2c", filter: grade }}>
-      <svg width={0} height={0} style={{ position: "absolute" }}>
-        <filter id={`${id}nd`} colorInterpolationFilters="sRGB">
-          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  9 9 9 0 -0.1" />
-        </filter>
-        <filter id={`${id}sea`} colorInterpolationFilters="sRGB">
-          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  4 4 4 0 -0.4" />
-        </filter>
-      </svg>
+      <TileFilters id={id} />
       {under.flatMap((l) => layer(l, true))}
       {layers.flatMap((l) => layer(l, false))}
     </AbsoluteFill>

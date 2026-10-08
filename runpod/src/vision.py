@@ -131,14 +131,20 @@ _SYSTEM = (
     "field video carrying a small news banner are false.\n"
     "And one more, answered whatever the line: music_or_vice: do the frames show a music "
     "video or a music performance (a rapper or singer performing, music-video styling, a "
-    "concert), a nightclub or a party with dancing or drinking, or someone smoking, vaping, "
-    "taking drugs or drinking alcohol? A political rally, convention, debate, speech, hearing, "
+    "concert), a nightclub or a party with dancing or drinking, or a person smoking or vaping "
+    "(a cigarette, cigar, pipe, joint or vape at their lips or in their hand), taking drugs or "
+    "drinking alcohol? Name what you saw in vice: \"music\", \"club\", \"smoking\", \"drugs\", "
+    "\"alcohol\", else \"none\". Only what a person is visibly doing counts: smoke from a fire, "
+    "burning rubbish or tyres, a dump, cooking, a chimney or factory, vehicle exhaust, tear gas, "
+    "a wildfire or a volcano is false (\"none\"), and so is someone drinking water, tea or a soft "
+    "drink. A political rally, convention, debate, speech, hearing, "
     "ceremony, wedding or state dinner is false.\n"
     "Keep the description to one plain sentence of at most 25 words.\n"
     "Reply with one valid JSON object only. Do not wrap it in JSON.stringify(), "
     "JavaScript, markdown, or commentary: {\"description\": str, \"score\": number, \"quality\": number, "
     "\"has_text_or_watermark\": bool, \"is_talking_head\": bool, \"ai_generated\": bool, \"studio\": bool, "
-    "\"music_or_vice\": bool, \"specificity\": \"event\"|\"location\"|\"generic\"}"
+    "\"music_or_vice\": bool, \"vice\": \"music\"|\"club\"|\"smoking\"|\"drugs\"|\"alcohol\"|\"none\", "
+    "\"specificity\": \"event\"|\"location\"|\"generic\"}"
 )
 
 # News footage the GoMotion way (config.NEWS_FOOTAGE): the same judge, with the
@@ -935,6 +941,7 @@ def _parse(text: str) -> Optional[dict]:
         quality = max(0.0, min(1.0, float(data["quality"])))
     except (KeyError, TypeError, ValueError):
         quality = None      # not rated: unknown, never a reason to reject
+    music_or_vice, vice = _vice(data)
     return {
         "description": str(data.get("description") or "")[:600],
         "score": max(0.0, min(1.0, score)),
@@ -945,9 +952,11 @@ def _parse(text: str) -> Optional[dict]:
         # reject each (acceptable). A string "false" is false.
         "ai_generated": _truthy(data.get("ai_generated")),
         "studio": _truthy(data.get("studio")),
-        # A music video or performance, a club, smoking / drugs / drinking (src/topics.py): a reject unless
-        # the story or the line is about it (acceptable's allow_vice).
-        "music_or_vice": _truthy(data.get("music_or_vice")),
+        # A music video or performance, a club, a person smoking / vaping, drugs or alcohol (src/topics.py): a
+        # reject unless the story or the line is about it (acceptable's allow_vice). Only with a kind of vice
+        # named ("vice"; smoke from a fire is "none") when the judge names one.
+        "music_or_vice": music_or_vice,
+        "vice": vice,
         "specificity": (data.get("specificity")
                         if data.get("specificity") in scene_intent.SPECIFICITY else ""),
         # Only the opening check asks it (judge with `span`): whether the clip's
@@ -1031,10 +1040,43 @@ def _wanted_line(wants: str) -> str:
 # The owner, 2026-10-06: rapper and music-video clips, people smoking, in a story about a politician's
 # brothers - "we don't want those clips in our videos". Told only when neither the story nor the line is
 # about music, nightlife, smoking, drugs or drinking (src/topics.py); a video about a rapper is judged as usual.
+# 2026-10-08: smoke is not smoking - a Nairobi aerial over "a large, smoking garbage dump" was taken for a
+# smoking scene. Only a person seen smoking, vaping, taking drugs or drinking alcohol is.
 _OFF_STORY_RULE = ("OFF-STORY: neither this story nor this line is about music, nightlife, smoking, drugs or "
                    "drinking - a music video or performance, a nightclub or a party with dancing or drinking, or "
-                   "someone smoking, vaping, taking drugs or drinking is wrong for this line: score such a shot "
-                   "at most 0.2 (a political rally, convention, debate, speech or ceremony is not such a shot).\n")
+                   "a person seen smoking a cigarette, vaping, taking drugs or drinking alcohol is wrong for this "
+                   "line: score such a shot at most 0.2 (a political rally, convention, debate, speech or ceremony "
+                   "is not such a shot, nor is smoke from a fire, a dump, a chimney, a factory, traffic or tear "
+                   "gas).\n")
+
+# What the judge may name in "vice" (its music_or_vice answer stands only with one of these, or with none given).
+VICE_KINDS = ("music", "club", "smoking", "drugs", "alcohol")
+_VICE_WORDS = {"music": "music", "rap": "music", "rapper": "music", "concert": "music", "singer": "music",
+               "club": "club", "nightclub": "club", "party": "club", "smoking": "smoking", "cigarette": "smoking",
+               "cigar": "smoking", "vaping": "smoking", "vape": "smoking", "joint": "smoking", "drugs": "drugs",
+               "drug": "drugs", "alcohol": "alcohol", "drinking": "alcohol", "beer": "alcohol", "wine": "alcohol"}
+# A kind written out that is no vice: smoke from a fire, steam, exhaust; water, tea or a soft drink.
+_NOT_VICE = {"none", "no", "false", "null", "smoke", "fire", "fires", "steam", "exhaust", "fog", "dust", "water",
+             "tea", "coffee", "soda", "juice", "milk"}
+
+
+def _vice(data: dict) -> Tuple[bool, str]:
+    """
+    (music_or_vice, vice) from the judge's answer. The kind it names decides: a music video or performance,
+    a club, a person smoking or vaping, drugs or alcohol turn the shot down; "none" - or anything else, such
+    as smoke from a fire - does not, whatever the boolean says. An answer without a kind keeps the boolean.
+    """
+    flagged = _truthy(data.get("music_or_vice"))
+    raw = str(data.get("vice") or "").strip().lower()
+    if not raw:
+        return flagged, ""
+    if raw in VICE_KINDS:
+        kind = raw
+    else:
+        words = re.findall(r"[a-z]+", raw)
+        kind = "" if any(w in _NOT_VICE for w in words) else next(
+            (_VICE_WORDS[w] for w in words if w in _VICE_WORDS), "")
+    return bool(flagged and kind), kind or "none"
 
 
 def judge(path: str, intent: str, context: str = "", event: bool = False,
