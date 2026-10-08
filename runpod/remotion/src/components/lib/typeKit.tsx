@@ -167,7 +167,8 @@ export const MIRROR: Record<string, Zone> = {
   "lower-left": "lower-right", "lower-right": "lower-left", "upper-left": "upper-right", "upper-right": "upper-left",
   "left-panel": "right-panel", "right-panel": "left-panel",
 };
-export const isRight = (z: Zone) => z.endsWith("right");
+// (a panel zone names its side first: "right-panel" is the right side - it read as the left until 2026-10-08)
+export const isRight = (z: Zone) => z.endsWith("right") || z.startsWith("right");
 export const isUpper = (z: Zone) => z.startsWith("upper");
 
 /** A block's rectangle (px) at a zone: anchored to the safe corner, w x h. */

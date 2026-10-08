@@ -32,13 +32,14 @@ import scale from "./typeScale.json";
  * the type system of every kt- look (white bold grotesk, one accent, glass).
  */
 
-type Feat = { type: string; id?: string | number; properties?: { name?: string }; geometry: unknown };
+export type Feat = { type: string; id?: string | number; properties?: { name?: string }; geometry: unknown };
 type FeatColl = { type: "FeatureCollection"; features: Feat[] };
-const WORLD = (feature(worldTopology as never, worldTopology.objects.countries as never) as unknown as FeatColl).features
+/** The world's countries (Antarctica left out) and the US states, from the bundled outlines (shared with LibKtMaps3). */
+export const WORLD = (feature(worldTopology as never, worldTopology.objects.countries as never) as unknown as FeatColl).features
   .filter((x) => x.properties?.name !== "Antarctica");
-const STATES = (feature(statesTopology as never, statesTopology.objects.states as never) as unknown as FeatColl).features;
-const inUS = (p: { lat: number; lon: number }) => p.lat > 18 && p.lat < 72 && p.lon > -170 && p.lon < -64;
-const R_MILES = 3958.8;
+export const STATES = (feature(statesTopology as never, statesTopology.objects.states as never) as unknown as FeatColl).features;
+export const inUS = (p: { lat: number; lon: number }) => p.lat > 18 && p.lat < 72 && p.lon > -170 && p.lon < -64;
+export const R_MILES = 3958.8;
 const unitOf = (W: number, H: number) => Math.min(H, (W * 9) / 16);
 const capFont = (sh: number, U: number, ks: number, cap = GROTESK_CAP) => (sh * U * ks) / cap;
 
@@ -46,7 +47,7 @@ const capFont = (sh: number, U: number, ks: number, cap = GROTESK_CAP) => (sh * 
  * The state (in the US) or the country a place is in: the one its gazetteer label names when that one is
  * near ("Lake Mead, Nevada" sits on the Nevada / Arizona line), else the one containing it, else the nearest.
  */
-const regionOf = (p: { lat: number; lon: number }, named = ""): Feat | null => {
+export const regionOf = (p: { lat: number; lon: number }, named = ""): Feat | null => {
   const set = inUS(p) ? STATES : WORLD;
   const pt: [number, number] = [p.lon, p.lat];
   const want = named.trim().toLowerCase();
@@ -83,7 +84,7 @@ const regionOf = (p: { lat: number; lon: number }, named = ""): Feat | null => {
 };
 
 /** A round length for a scale bar between `lo` and `hi` px at `pxPerUnit`. */
-const niceBar = (pxPerUnit: number, lo: number, hi: number): number => {
+export const niceBar = (pxPerUnit: number, lo: number, hi: number): number => {
   const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000];
   return steps.find((s) => s * pxPerUnit >= lo && s * pxPerUnit <= hi) ?? steps.reduce((a, s) => (Math.abs(s * pxPerUnit - (lo + hi) / 2)
     < Math.abs(a * pxPerUnit - (lo + hi) / 2) ? s : a), 1);

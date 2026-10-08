@@ -104,7 +104,7 @@ TOLERANCE_FRAMES = 2
 ENTRANCE_FRAMES = 16
 EXIT_FRAMES = 8
 CUT_TRANSITIONS = {"flash", "chromatic-flash", "glitch", "vhs-glitch", "film-burn", "light-leak", "whip-pan",
-                   "zoom-punch", "shake-cut", "blur-dissolve", "luma-fade"}
+                   "zoom-punch", "shake-cut", "blur-dissolve", "luma-fade", "light-sweep", "soft-whip"}
 # The image looks and how they find their pictures (Main.tsx lookPictures).
 PHOTO_CARDS = {"photo-card", "name-card"}
 STILL_LOOKS = {"board", "clipping", "doc", "facts", "dossier", "window", "audio", "evidence"}

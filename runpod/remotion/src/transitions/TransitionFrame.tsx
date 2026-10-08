@@ -21,6 +21,8 @@ import {
  *   shake-cut        a short camera shake on impact
  *   blur-dissolve    defocus out of the old shot, refocus into the new one
  *   luma-fade        dip through black where shadows fall first
+ *   light-sweep      one clean band of warm-white light across the cut (looks pack 3)
+ *   soft-whip        a gentle directional drift and settle (looks pack 3)
  *
  * Only the few frames around a cut do any work: outside the windows the
  * wrapper is a plain full-frame div with no filter, so the rest of the video
@@ -291,6 +293,59 @@ const lookFor = (s: TransitionState, id: string, fid: string, k: number): Look =
             <Grain id={fid} seed={(rel + 30) % 50} opacity={0.22 * e} />
           </>
         ),
+      };
+    }
+    case "light-sweep": {
+      // Looks pack 3 (2026-10-08): one clean band of warm-white light crosses the frame through the cut on a
+      // slight diagonal - a crisp core in a soft glow, a faint horizontal streak - while the exposure lifts a
+      // little into the cut and settles after it. Neutral light, never the amber / rose of the light leak.
+      // always left to right: the two halves are drawn by different scenes (each with its own id), so a
+      // direction from the id could reverse the band on the cut
+      const dir = 1;
+      // the band's centre crosses the middle of the frame ON the cut, at an even 8.5 % of the width a frame
+      // (about two thirds of a second edge to edge): in from one side over the outgoing shot, out the other
+      const x = 50 + 8.5 * rel;
+      const cx = dir > 0 ? x : 100 - x;
+      const e = side === "out" ? easeInOutSine(p) : Math.pow(1 - p, 1.6);
+      const band = (a: number) => `rgba(255,248,236,${a.toFixed(3)})`;
+      return {
+        style: { filter: `brightness(${(1 + 0.16 * e).toFixed(3)}) contrast(${(1 - 0.05 * e).toFixed(3)}) saturate(${(1 - 0.08 * e).toFixed(3)})` },
+        over: (
+          <>
+            <AbsoluteFill style={{
+              pointerEvents: "none", mixBlendMode: "screen", opacity: Math.min(1, 0.35 + 0.65 * e),
+              background: `linear-gradient(${dir > 0 ? 104 : 76}deg, ${band(0)} ${(cx - 30).toFixed(1)}%, ${band(0.1)} ${(cx - 16).toFixed(1)}%, `
+                + `${band(0.36)} ${(cx - 6).toFixed(1)}%, ${band(0.8)} ${(cx - 1).toFixed(1)}%, rgba(255,253,248,0.92) ${cx.toFixed(1)}%, `
+                + `${band(0.8)} ${(cx + 1).toFixed(1)}%, ${band(0.36)} ${(cx + 6).toFixed(1)}%, ${band(0.1)} ${(cx + 16).toFixed(1)}%, `
+                + `${band(0)} ${(cx + 30).toFixed(1)}%)`,
+            }} />
+            <AbsoluteFill style={{
+              pointerEvents: "none", mixBlendMode: "screen", opacity: 0.45 * e,
+              background: `radial-gradient(ellipse 70% 3.2% at ${cx.toFixed(1)}% 50%, rgba(255,250,240,0.95) 0%, rgba(255,250,240,0) 100%)`,
+            }} />
+          </>
+        ),
+      };
+    }
+    case "soft-whip": {
+      // Looks pack 3: the whip's gentle cousin - the picture drifts a short way with a soft directional blur and
+      // the next shot eases in from the other side and settles (no hard slide, no flash).
+      // one direction for both halves (they are drawn by different scenes): out to the left, in from the right
+      const dir = 1;
+      const e = side === "out" ? Math.pow(p, 2.2) : Math.pow(1 - easeOutCubic(p), 1.6);
+      // the picture grows a touch as it drifts, always a little more than it moves, so its edge (or the wrapped
+      // tile past it) never shows - a soft whip has too little blur to hide a seam
+      const shift = (side === "out" ? -dir : dir) * 4.5 * e;
+      const blurX = 38 * e * k;
+      if (blurX < 0.5 && Math.abs(shift) < 0.05) return { style: {} };
+      return {
+        style: {
+          transform: `translateX(${shift.toFixed(2)}%) scale(${(1 + 0.095 * e).toFixed(4)})`,
+          filter: `url(#${fid}) brightness(${(1 + 0.05 * e).toFixed(3)})`,
+        },
+        tile: true,
+        region: { x: -0.2, w: 1.4 },
+        filter: <feGaussianBlur in="SRC" stdDeviation={`${blurX.toFixed(1)} ${(blurX * 0.03).toFixed(1)}`} />,
       };
     }
     case "whip-pan": {

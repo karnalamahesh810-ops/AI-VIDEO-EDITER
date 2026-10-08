@@ -30,13 +30,22 @@ KT_SELF_BACKED = KT_UPPER | {"KT_DATE_BADGE"}
 # words on the footage like the kinetic words above (home low left, the panel over a busy picture).
 KT_PACK_OWN_PLACE = {"KT_TERM", "KT_LEVEL", "KT_TREND", "KT_MILESTONES", "KT_POINTER", "KT_CHAPTER", "KT_EVIDENCE",
                      "KT_THEN_NOW", "KT_TWO_PLACES", "KT_LOCATOR", "KT_PLACE"}
+# Looks pack 3 (remotion LibKtPack3 / LibKtMaps3, src/lookpack3.py): its maps cover the frame (left alone); its cards
+# take the calmer side of their picture - the glass ones (the ranking, the waterline, the scale, the alert) never the
+# panel, they bring their own; the change and the streak (a figure on a soft shade, like kt-number) the panel over a busy
+# picture.
+KT_PACK3_MAPS = {"KT_ROUTE", "KT_STORM", "KT_TOTALS", "KT_REGIONS"}
+KT_PACK3_HOME = {"KT_RANKING": "right-panel", "KT_WATERLINE": "right-panel", "KT_SEVERITY": "lower-left",
+                 "KT_ALERT": "upper-left"}
+KT_PACK3_GLASS = set(KT_PACK3_HOME)
 BUSY_EDGE = 45.0        # mean edge strength (0-255) of the look's corner above which words get the panel
 CALMER = 0.7            # the mirrored corner is used when it is at most this share of the home corner's
 # the corners measured, as shares of the frame (x0, y0, x1, y1)
 BOXES = {"lower-left": (0.0, 0.55, 0.45, 0.95), "lower-right": (0.55, 0.55, 1.0, 0.95),
          "upper-left": (0.0, 0.05, 0.45, 0.4), "upper-right": (0.55, 0.05, 1.0, 0.4),
          "left-panel": (0.0, 0.3, 0.45, 0.75), "right-panel": (0.55, 0.3, 1.0, 0.75)}
-MIRROR = {"lower-left": "lower-right", "upper-left": "upper-right", "left-panel": "right-panel"}
+MIRROR = {"lower-left": "lower-right", "upper-left": "upper-right", "left-panel": "right-panel",
+          "lower-right": "lower-left", "upper-right": "upper-left", "right-panel": "left-panel"}
 
 
 def _focus_busy(media: dict) -> Optional[bool]:
@@ -82,6 +91,8 @@ def corner(edges, zone: str) -> float:
 
 
 def _home(tid: str, panel: bool) -> str:
+    if tid in KT_PACK3_HOME:
+        return KT_PACK3_HOME[tid]
     if tid in KT_UPPER:
         return "upper-left"
     if tid in KT_FIXED_LOWER:
@@ -125,7 +136,8 @@ def place(overlays: List[dict], scenes: List[dict], *, fetch: Optional[Callable[
     todo = []
     for ov in overlays or []:
         tid = str(ov.get("template") or "")
-        if not tid.startswith("KT_") or tid in KT_PACK_OWN_PLACE or ov.get("backing") or ov.get("zone"):
+        if not tid.startswith("KT_") or tid in KT_PACK_OWN_PLACE or tid in KT_PACK3_MAPS or ov.get("backing") \
+                or ov.get("zone"):
             continue
         sc = scene_at(int(ov.get("startFrame") or 0))
         if sc is not None:
@@ -151,7 +163,7 @@ def place(overlays: List[dict], scenes: List[dict], *, fetch: Optional[Callable[
         if busy is None:
             busy = here is not None and here >= BUSY_EDGE
         out["measured"] += 1
-        if busy and tid not in KT_FIXED_LOWER and tid not in KT_SELF_BACKED:
+        if busy and tid not in KT_FIXED_LOWER and tid not in KT_SELF_BACKED and tid not in KT_PACK3_GLASS:
             ov["backing"] = "panel"
             out["panel"] += 1
         if edges is not None and here is not None and here >= BUSY_EDGE * 0.8:

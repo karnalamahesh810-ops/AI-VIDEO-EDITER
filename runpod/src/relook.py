@@ -16,7 +16,10 @@ sounds stay exactly as they are; nothing is sourced, no paid call is made.
   3. data looks: the narration's dates, times, years, percentages, multipliers
      and numbers get their KT looks on their words, the retired looks are
      rewritten as their clean equivalents, and every look gets its full
-     animation in one lane (datalooks.finish).
+     animation in one lane (datalooks.finish) - looks pack 3 included: its
+     rankings, lake levels, scales, changes, streaks, alerts and lists of
+     states on their words, and an older map whose line is a storm's track,
+     a route or values by place turned into the pack's map (src/lookpack3.py).
 
 A dry run (the default) returns the new timeline and the diff and writes
 nothing. An apply (apply: true) needs expect_fingerprint - the fingerprint of
@@ -33,7 +36,7 @@ import re
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from . import config, datalooks, geocode, lookplace, overlayimages, r2, recut
+from . import config, datalooks, geocode, lookpack3, lookplace, overlayimages, r2, recut
 
 
 class RelookError(RuntimeError):
@@ -47,7 +50,7 @@ MOVED_KM = 50.0             # a place that moved this far was wrong before
 def _is_map(ov: dict) -> bool:
     return isinstance(ov.get("locations"), list) and bool(ov.get("locations")) and (
         ov.get("type") == "map" or str(ov.get("template") or "").startswith("MAP_")
-        or str(ov.get("template") or "") == "LIB_PR_MAP_PATH")
+        or str(ov.get("template") or "") in ("LIB_PR_MAP_PATH",) + lookpack3.MAP_IDS)
 
 
 def _line_at(words: List[dict], t0: float, t1: float) -> str:
@@ -74,6 +77,12 @@ def fix_maps(doc: dict, *, brief: Optional[dict] = None, resolve: Optional[Calla
         got = resolve(names, text=_line_at(words, t0, t1), brief=brief, region=region, why=why)
         row = {"template": ov.get("template"), "at": round(t0, 2), "places": names,
                "before": [[l.get("lat"), l.get("lon")] for l in ov["locations"] if isinstance(l, dict)]}
+        if got and str(ov.get("template") or "") in lookpack3.MAP_IDS and len(got) != len(ov["locations"]):
+            # a pack-3 map's items go with its places one by one: when a place is not found again its places stay as
+            # they were (they were resolved by the gazetteer when the map was made)
+            rows.append({**row, "action": "kept", "why": "a place could not be confirmed again; kept as it was"})
+            keep.append(ov)
+            continue
         if not got:
             rows.append({**row, "action": "dropped", "why": (why[0] if why else "a place could not be found")})
             continue
@@ -137,6 +146,9 @@ def _summary(diff: Dict[str, Any]) -> Dict[str, Any]:
         "addedNumbers": sum(v for k, v in looks["addedByLook"].items() if k in (datalooks.KT_NUMBER, datalooks.KT_CHIP,
                                                                                 datalooks.KT_COMPARE,
                                                                                 datalooks.KT_MULTIPLIER)),
+        # looks pack 3: its data looks added on their words, and the older maps that took its route / storm / totals map
+        "addedPack3": sum(v for k, v in looks["addedByLook"].items() if k in lookpack3.IDS),
+        "upgradedMaps": len(looks.get("upgraded") or []),
         "retiredRemoved": sum(1 for r in looks["removed"] if r["template"] in datalooks.RETIRED_IDS),
         "retiredRewritten": len(looks["remapped"]),
         "replacedFigureLooks": sum(1 for r in looks["removed"] if r["template"] not in datalooks.RETIRED_IDS),

@@ -86194,6 +86194,2108 @@
    ]
   },
   {
+   "id": "KT_RANKING",
+   "name": "Ranked Bars",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "Three to six names with their values ('Flagstaff got 3.4 inches, Prescott 2.9, Phoenix 2.1 ...'), as a frosted card on the calm side: the title and its unit, one rank slot a row - the numerals faint from the start - each row arriving in ITS slot as it is said: the name rising, its bar growing to scale, its value counting. Once the last one is said the leader takes the accent and one light sweeps along its bar. A ranked list of names without values works the same, without bars.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-ranking",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 10,
+    "types": false,
+    "leastSeconds": 5.5,
+    "sample": {
+     "text": "Rain in 24 hours",
+     "subtitle": "Inches, Arizona",
+     "suffix": "IN",
+     "items": [
+      {
+       "label": "Flagstaff",
+       "value": 3.4,
+       "at": 1.9
+      },
+      {
+       "label": "Prescott",
+       "value": 2.9,
+       "at": 3.4
+      },
+      {
+       "label": "Phoenix",
+       "value": 2.1,
+       "at": 0.1
+      },
+      {
+       "label": "Tucson",
+       "value": 1.8,
+       "at": 1.0
+      },
+      {
+       "label": "Yuma",
+       "value": 0.4,
+       "at": 2.7
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick",
+       "count-tick"
+      ],
+      "at": 16,
+      "gain_db": -10
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ranking-run"
+   ],
+   "tags": [
+    "lib",
+    "ktp3"
+   ]
+  },
+  {
+   "id": "KT_WATERLINE",
+   "name": "Waterline",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "A lake's level through the years ('1,225 feet in 1983 ... 1,040 feet in 2022', or 'down 170 feet since 2000'): a frosted card on the calm side with a canyon in section drawing itself on; the water rises to the first year's level, then falls to each next year's level as it is said, every level it leaves staying as a dashed line with its year and figure, the pale bathtub ring left on the walls above the water; once the last level lands the drop counts in a pill (185 FT).",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 8.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-waterline",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 44,
+    "types": false,
+    "leastSeconds": 6.5,
+    "sample": {
+     "text": "Lake Mead",
+     "subtitle": "Feet above sea level",
+     "suffix": "FT",
+     "items": [
+      {
+       "label": "1983",
+       "value": 1225
+      },
+      {
+       "label": "2000",
+       "value": 1214,
+       "at": 1.6
+      },
+      {
+       "label": "2022",
+       "value": 1040,
+       "at": 3.0
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "whoosh-soft",
+      "alt": [
+       "whoosh-soft-v2"
+      ],
+      "at": 46,
+      "gain_db": -15
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 78,
+      "gain_db": -9
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "lake-level"
+   ],
+   "tags": [
+    "lib",
+    "ktp3"
+   ]
+  },
+  {
+   "id": "KT_SEVERITY",
+   "name": "Scale",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A level on its scale as said - a hurricane's category, a tornado's EF rating, the drought monitor's D0-D4, the Colorado River's shortage tiers, 'level 3 of 4': a frosted card low on the calm side, the scale's name as a kicker, the level rising letter by letter, one line of what was said about it, and the scale itself - one labelled segment a level - lighting one after another up to the level, the lit ones from soft white toward the accent, a marker landing over the level and one light sweep across it.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-severity",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 39,
+    "types": false,
+    "leastSeconds": 4.2,
+    "sample": {
+     "text": "Category 4",
+     "label": "Hurricane",
+     "subtitle": "Winds of 140 mph",
+     "value": 4,
+     "total": 5,
+     "items": [
+      {
+       "label": "1"
+      },
+      {
+       "label": "2"
+      },
+      {
+       "label": "3"
+      },
+      {
+       "label": "4"
+      },
+      {
+       "label": "5"
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 20,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 39,
+      "gain_db": -8
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "scale-level"
+   ],
+   "tags": [
+    "lib",
+    "ktp3"
+   ]
+  },
+  {
+   "id": "KT_DELTA",
+   "name": "Change",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A figure's change as said, low on the calm side over a soft shade: from and to ('from 1,225 feet in 1983 to 1,040 feet') - the old figure quieter with its year under it, an arrow drawing from it (bending down for a fall, up for a rise) to the new figure, which counts from the old value on its own word, then the change in a pill (185 FT) and one line of context; or one change since a time ('down 38 percent since 2000'), big with its arrow and SINCE 2000 under it.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-delta",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 44,
+    "types": false,
+    "leastSeconds": 4.6,
+    "sample": {
+     "text": "Lake Mead",
+     "subtitle": "The lowest since the lake first filled",
+     "suffix": "FT",
+     "items": [
+      {
+       "label": "1983",
+       "value": 1225
+      },
+      {
+       "label": "2022",
+       "value": 1040,
+       "at": 1.4
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 14,
+      "gain_db": -13
+     },
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 18,
+      "until": 42,
+      "gain_db": -8
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "tick"
+      ],
+      "at": 44,
+      "gain_db": -6
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "change-from-to"
+   ],
+   "tags": [
+    "lib",
+    "ktp3"
+   ]
+  },
+  {
+   "id": "KT_STREAK",
+   "name": "Streak",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A streak of days as said ('31 straight days above 110 degrees', '143 days without rain'), low on the calm side over a soft shade: the kicker as said (STRAIGHT, IN A ROW, WITHOUT RAIN), the count rolling up with DAYS beside it, and the streak as a calendar - one cell a day, a week to a column - lighting with the count, the last day in the accent and ringed as it lands; one line of context under it. Never a span of time ('three days later').",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-streak",
+    "sfx": {
+     "name": "count-roll",
+     "volume": 0.3
+    },
+    "sfxAt": 46,
+    "types": false,
+    "leastSeconds": 4.6,
+    "sample": {
+     "text": "In a row",
+     "value": 31,
+     "suffix": "days",
+     "subtitle": "Above 110 degrees in Phoenix"
+    },
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 8,
+      "until": 44,
+      "gain_db": -8
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "tick"
+      ],
+      "at": 46,
+      "gain_db": -6
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "day-streak"
+   ],
+   "tags": [
+    "lib",
+    "ktp3"
+   ]
+  },
+  {
+   "id": "KT_ALERT",
+   "name": "Weather Alert",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "An official alert by name as said ('a flash flood warning until 9 p.m. for Clark County', 'evacuation orders'): a frosted card top left, a small status dot in the alert's level colour (warning red, watch orange, advisory amber) popping and pinging twice, who issued it when said (else ALERT), the alert's name rising letter by letter, and what was said of it - until when, where - coming into focus under it. No bars and no strip: the dot alone carries the colour.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-alert",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 6,
+    "types": false,
+    "leastSeconds": 4.4,
+    "sample": {
+     "text": "Flash Flood Warning",
+     "subtitle": "Until 9 PM · Clark County",
+     "label": "National Weather Service"
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "radar-ping",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 6,
+      "gain_db": -12
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "official-alert"
+   ],
+   "tags": [
+    "lib",
+    "ktp3"
+   ]
+  },
+  {
+   "id": "KT_ROUTE",
+   "name": "Route",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Two to six places in order - a river's course, a canal, a supply or evacuation route - on the dark map framed on them, their states lit: the camera starts close on the first stop and eases out as the route draws from stop to stop in the accent with a bright head, reaching each stop on its word: its ring draws and pings and its name opens on glass beside it, the distance (as said, else the straight-line miles) counting in a tag; then light flows along the route while it holds.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-route",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 12,
+    "types": false,
+    "leastSeconds": 6.0,
+    "sample": {
+     "text": "Central Arizona Project",
+     "label": "The canal",
+     "value": 336,
+     "suffix": "MI",
+     "locations": [
+      {
+       "label": "Lake Havasu, Arizona",
+       "lat": 34.483,
+       "lon": -114.322
+      },
+      {
+       "label": "Phoenix, Arizona",
+       "lat": 33.448,
+       "lon": -112.074
+      },
+      {
+       "label": "Tucson, Arizona",
+       "lat": 32.222,
+       "lon": -110.975
+      }
+     ],
+     "items": [
+      {
+       "label": "Lake Havasu"
+      },
+      {
+       "label": "Phoenix",
+       "at": 1.6
+      },
+      {
+       "label": "Tucson",
+       "at": 3.0
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -12
+     },
+     {
+      "name": "pin-drop",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "at": 48,
+      "gain_db": -11
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "route-upgrade"
+   ],
+   "tags": [
+    "lib",
+    "ktp3",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "KT_STORM",
+   "name": "Storm Track",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "A storm moving through the places it reaches, each with its time as said ('MON 4 AM', 'TUESDAY MORNING') - else the place alone: on the dark map framed on its track, the forecast cone widens along the path, then the storm - a spiral turning the way storms turn in that hemisphere - travels it, reaching each position on its word, the track solid behind it and dashed ahead; each position opens its time and place on glass as the storm passes; its name and strength as said on a glass tag top left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-storm",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "leastSeconds": 6.5,
+    "sample": {
+     "text": "Hurricane Beryl",
+     "subtitle": "Category 1",
+     "label": "Storm track",
+     "locations": [
+      {
+       "label": "Matagorda, Texas",
+       "lat": 28.69,
+       "lon": -95.97
+      },
+      {
+       "label": "Houston, Texas",
+       "lat": 29.76,
+       "lon": -95.37
+      },
+      {
+       "label": "Shreveport, Louisiana",
+       "lat": 32.52,
+       "lon": -93.75
+      }
+     ],
+     "items": [
+      {
+       "label": "Mon 4 AM"
+      },
+      {
+       "label": "Mon 10 AM",
+       "at": 2.0
+      },
+      {
+       "label": "Tue morning",
+       "at": 3.6
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -12
+     },
+     {
+      "name": "radar-ping",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "at": 30,
+      "gain_db": -14
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "storm-track"
+   ],
+   "tags": [
+    "lib",
+    "ktp3",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "KT_TOTALS",
+   "name": "Totals Map",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "A value said for each of three to six places - rain, snow, heat, wind: on the dark map framed on them, each place's dot drops in and its value opens on glass beside it on its word, counting, its unit small after it and the place under it; once all are in, the highest takes the accent - its glass edged, its dot ringed once. The title and the unit on a glass tag top left.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-totals",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 16,
+    "types": false,
+    "leastSeconds": 5.6,
+    "sample": {
+     "text": "Rainfall totals",
+     "subtitle": "Last 24 hours",
+     "label": "Arizona",
+     "suffix": "IN",
+     "locations": [
+      {
+       "label": "Phoenix, Arizona",
+       "lat": 33.448,
+       "lon": -112.074
+      },
+      {
+       "label": "Tucson, Arizona",
+       "lat": 32.222,
+       "lon": -110.975
+      },
+      {
+       "label": "Flagstaff, Arizona",
+       "lat": 35.198,
+       "lon": -111.651
+      },
+      {
+       "label": "Yuma, Arizona",
+       "lat": 32.693,
+       "lon": -114.628
+      },
+      {
+       "label": "Prescott, Arizona",
+       "lat": 34.54,
+       "lon": -112.469
+      }
+     ],
+     "items": [
+      {
+       "label": "Phoenix",
+       "value": 2.1,
+       "at": 0.1
+      },
+      {
+       "label": "Tucson",
+       "value": 1.8,
+       "at": 0.9
+      },
+      {
+       "label": "Flagstaff",
+       "value": 3.4,
+       "at": 1.7
+      },
+      {
+       "label": "Yuma",
+       "value": 0.4,
+       "at": 2.5
+      },
+      {
+       "label": "Prescott",
+       "value": 2.9,
+       "at": 3.3
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -12
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 16,
+      "gain_db": -11
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "totals-by-place"
+   ],
+   "tags": [
+    "lib",
+    "ktp3",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "KT_REGIONS",
+   "name": "States",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Three to twelve US states (or countries) named in one list ('Wyoming, Colorado, Utah, New Mexico, Nevada, Arizona and California'): on the dark map framed on them, each lights up on its word - its face lifting toward the accent with a soft glow, an accent edge drawing round it, its name rising at its middle - while a glass counter counts them (7 STATES); the land round them named faintly.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-regions",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 16,
+    "types": false,
+    "leastSeconds": 5.8,
+    "sample": {
+     "text": "Colorado River Basin",
+     "items": [
+      {
+       "label": "Wyoming",
+       "at": 0.2
+      },
+      {
+       "label": "Colorado",
+       "at": 0.8
+      },
+      {
+       "label": "Utah",
+       "at": 1.4
+      },
+      {
+       "label": "New Mexico",
+       "at": 2.0
+      },
+      {
+       "label": "Nevada",
+       "at": 2.6
+      },
+      {
+       "label": "Arizona",
+       "at": 3.1
+      },
+      {
+       "label": "California",
+       "at": 3.7
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-soft-v2",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -12
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 16,
+      "gain_db": -10
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "states-list"
+   ],
+   "tags": [
+    "lib",
+    "ktp3",
+    "own-backdrop"
+   ]
+  },
+  {
    "id": "LIB_NX_STAT_CONTEXT",
    "name": "Figure in Context",
    "category": "NUMBERS",
@@ -96755,6 +98857,20 @@
    "value": "vhs-glitch",
    "duration": 0.4,
    "use": "into old footage, a twist"
+  },
+  {
+   "id": "TR_LIGHT_SWEEP",
+   "name": "Light Sweep",
+   "value": "light-sweep",
+   "duration": 0.6,
+   "use": "a change of place or a new section, clean and bright"
+  },
+  {
+   "id": "TR_SOFT_WHIP",
+   "name": "Soft Whip",
+   "value": "soft-whip",
+   "duration": 0.45,
+   "use": "movement between places, gentler than the whip"
   }
  ],
  "sfx": {

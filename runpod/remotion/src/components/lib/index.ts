@@ -55,6 +55,8 @@ import { LOOKS as L_LibKtDates } from "./LibKtDates";
 import { LOOKS as L_LibKtPack } from "./LibKtPack";
 import { LOOKS as L_LibKtPictures } from "./LibKtPictures";
 import { LOOKS as L_LibKtMaps } from "./LibKtMaps";
+import { LOOKS as L_LibKtPack3 } from "./LibKtPack3";
+import { LOOKS as L_LibKtMaps3 } from "./LibKtMaps3";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -172,4 +174,9 @@ export const LIBRARY: Record<string, Look> = {
   ...pick(L_LibKtPack, ["kt-quote", "kt-term", "kt-level", "kt-trend", "kt-milestones", "kt-pointer", "kt-chapter"]),
   ...pick(L_LibKtPictures, ["kt-evidence", "kt-then-now", "kt-two-places"]),
   ...pick(L_LibKtMaps, ["kt-locator", "kt-place"]),
+  // Looks pack 3 (LibKtPack3 / LibKtMaps3, 2026-10-08: "more animations, better animations ... perfectly quality ones"):
+  // a ranking, a waterline, a scale, a change, a streak, a weather alert, a route, a storm track, a totals map and the
+  // states a line names - the kinetic-type system, each part on its word; the planner's rules in src/lookpack3.py.
+  ...pick(L_LibKtPack3, ["kt-ranking", "kt-waterline", "kt-severity", "kt-delta", "kt-streak", "kt-alert"]),
+  ...pick(L_LibKtMaps3, ["kt-route", "kt-storm", "kt-totals", "kt-regions"]),
 };

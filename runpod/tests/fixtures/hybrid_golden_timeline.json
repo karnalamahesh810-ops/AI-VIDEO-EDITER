@@ -1314,7 +1314,7 @@
    },
    "startFrame": 1241,
    "text": "Today a lot of those windmills stand still, and the wells under them are dry.",
-   "transition": "blur-dissolve",
+   "transition": "light-sweep",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -1332,7 +1332,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "blur-dissolve",
+    "transitionIn": "light-sweep",
     "transitionOut": "none",
     "variant": null
    },
@@ -2251,7 +2251,7 @@
    },
    "startFrame": 2347,
    "text": "Some farms have gone back to dryland crops that live on rain alone.",
-   "transition": "luma-fade",
+   "transition": "blur-dissolve",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -2269,7 +2269,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "luma-fade",
+    "transitionIn": "blur-dissolve",
     "transitionOut": "none",
     "variant": null
    },
@@ -2629,11 +2629,11 @@
    "volume": 0.357
   },
   {
-   "durationFrames": 24,
+   "durationFrames": 34,
    "kind": "transition",
-   "name": "whoosh-soft-v2",
-   "startFrame": 1237,
-   "volume": 0.357
+   "name": "light-shimmer",
+   "startFrame": 1228,
+   "volume": 0.337
   }
  ],
  "sfxEnabled": true,

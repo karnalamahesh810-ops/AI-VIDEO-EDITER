@@ -33,6 +33,9 @@ export const CUT_TRANSITIONS: Record<string, TransitionTiming> = {
   "shake-cut": { out: 0, in: 10 },
   "blur-dissolve": { out: 7, in: 10 },
   "luma-fade": { out: 8, in: 11 },
+  // Looks pack 3 (2026-10-08): a clean band of light through the cut, and a gentle whip.
+  "light-sweep": { out: 6, in: 12 },
+  "soft-whip": { out: 5, in: 9 },
 };
 
 export const isCutTransition = (t?: SceneTransition | string | null): boolean =>

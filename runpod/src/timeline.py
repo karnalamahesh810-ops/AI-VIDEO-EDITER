@@ -46,6 +46,8 @@ TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide",
                # Editor cut transitions that straddle the cut (remotion/src/transitions).
                "whip-pan", "zoom-punch", "shake-cut", "blur-dissolve", "luma-fade",
                "chromatic-flash", "vhs-glitch",
+               # Looks pack 3 (2026-10-08): a clean band of light across the cut, a gentle whip.
+               "light-sweep", "soft-whip",
                # A true cross-dissolve: the outgoing shot plays on under the
                # incoming one as it fades in (news-compilation style).
                "crossfade"}
@@ -67,23 +69,29 @@ _TRANSITION_CYCLE = ["film-burn", "whip", "flash", "zoom", "light-leak", "slide"
 #             section change (0: only at section changes)
 STYLES = ("documentary", "history", "story", "news", "compilation", "trending", "explainer", "weather",
           "crossfade")
+# Looks pack 3 (2026-10-08, the owner: "1-2 subtle premium transitions"): the light sweep (one clean band of
+# warm-white light through the cut) joins the calm styles' turns and the soft whip (a short drift that settles) the
+# moving ones - each once in its cycle, so neither comes round more often than the others.
 _STYLE_TRANSITIONS = {
-    "documentary": {"cycle": ["light-leak", "blur-dissolve", "luma-fade", "film-burn"],
+    "documentary": {"cycle": ["light-leak", "light-sweep", "blur-dissolve", "luma-fade", "film-burn"],
                     "chapter": "light-leak", "gap": 6, "force": 0},
     "history": {"cycle": ["film-burn", "blur-dissolve", "light-leak", "luma-fade"],
                 "chapter": "film-burn", "gap": 6, "force": 0},
-    "story": {"cycle": ["blur-dissolve", "light-leak", "luma-fade", "film-burn"],
+    "story": {"cycle": ["blur-dissolve", "light-sweep", "light-leak", "luma-fade", "film-burn"],
               "chapter": "luma-fade", "gap": 6, "force": 0},
-    "explainer": {"cycle": ["blur-dissolve", "whip-pan", "luma-fade", "zoom-punch", "light-leak"],
+    "explainer": {"cycle": ["blur-dissolve", "soft-whip", "luma-fade", "light-sweep", "zoom-punch", "whip-pan",
+                            "light-leak"],
                   "chapter": "luma-fade", "gap": 5, "force": 0},
-    "weather": {"cycle": ["whip-pan", "flash", "blur-dissolve", "zoom-punch", "luma-fade", "glitch"],
+    "weather": {"cycle": ["soft-whip", "light-sweep", "whip-pan", "blur-dissolve", "zoom-punch", "flash", "luma-fade",
+                          "glitch"],
                 "chapter": "flash", "gap": 4, "force": 6},
-    "news": {"cycle": ["whip-pan", "flash", "zoom-punch", "glitch", "shake-cut", "chromatic-flash"],
+    "news": {"cycle": ["whip-pan", "light-sweep", "zoom-punch", "soft-whip", "flash", "glitch", "shake-cut",
+                       "chromatic-flash"],
              "chapter": "flash", "gap": 3, "force": 4},
-    "compilation": {"cycle": ["whip-pan", "glitch", "zoom-punch", "chromatic-flash", "shake-cut",
+    "compilation": {"cycle": ["whip-pan", "glitch", "soft-whip", "zoom-punch", "chromatic-flash", "shake-cut",
                               "vhs-glitch", "flash"],
                     "chapter": "chromatic-flash", "gap": 3, "force": 4},
-    "trending": {"cycle": ["zoom-punch", "chromatic-flash", "whip-pan", "vhs-glitch", "shake-cut",
+    "trending": {"cycle": ["zoom-punch", "chromatic-flash", "whip-pan", "soft-whip", "vhs-glitch", "shake-cut",
                            "flash", "glitch"],
                  "chapter": "chromatic-flash", "gap": 3, "force": 4},
 }
@@ -116,6 +124,8 @@ _TRANSITION_SFX = {
     "whip-pan": ("whoosh-fast", 9.0), "zoom-punch": ("zoom-in-whoosh", 9.5),
     "film-burn": ("light-shimmer", 10.0), "light-leak": ("light-shimmer", 11.0),
     "blur-dissolve": ("whoosh-soft-v2", 11.0), "shake-cut": ("hit-deep", 7.0),
+    # looks pack 3: the light sweep shimmers, the soft whip is a soft whoosh, both well under the voice
+    "light-sweep": ("light-shimmer", 11.5), "soft-whip": ("whoosh-soft-v2", 10.5),
     # The older entrances an editor can still pick.
     "whip": ("whoosh-fast", 9.5), "punch": ("zoom-in-whoosh", 10.0), "zoom": ("whoosh-soft-v2", 11.0),
     "slide": ("ui-swipe", 11.0), "mosaic": ("glitch-short-v2", 11.0),

@@ -671,6 +671,12 @@ TRANSITIONS = [
     {"id": "TR_LUMA_FADE", "name": "Luma Fade", "value": "luma-fade", "duration": 0.5, "use": "a section ends"},
     {"id": "TR_CHROMATIC_FLASH", "name": "Chromatic Flash", "value": "chromatic-flash", "duration": 0.35, "use": "a revelation, trending energy"},
     {"id": "TR_VHS_GLITCH", "name": "VHS Glitch", "value": "vhs-glitch", "duration": 0.4, "use": "into old footage, a twist"},
+    # Looks pack 3 (2026-10-08): premium and quiet - one clean band of warm-white light through the cut, and the whip's
+    # gentle cousin (a short drift with a soft directional blur that settles).
+    {"id": "TR_LIGHT_SWEEP", "name": "Light Sweep", "value": "light-sweep", "duration": 0.6,
+     "use": "a change of place or a new section, clean and bright"},
+    {"id": "TR_SOFT_WHIP", "name": "Soft Whip", "value": "soft-whip", "duration": 0.45,
+     "use": "movement between places, gentler than the whip"},
 ]
 
 SFX = {

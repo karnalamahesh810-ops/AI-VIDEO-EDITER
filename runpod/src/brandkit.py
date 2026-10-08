@@ -398,6 +398,9 @@ NEAREST = {
     "shake-cut": ("punch", "zoom-punch", "glitch"),
     "split-wipe": ("bar-wipe", "slide", "whip"),
     "bar-wipe": ("split-wipe", "slide", "whip"),
+    # looks pack 3: the light sweep is a soft bright change, the soft whip a gentle move
+    "light-sweep": ("light-leak", "flash", "blur-dissolve", "fade"),
+    "soft-whip": ("whip-pan", "whip", "slide", "blur-dissolve"),
 }
 
 

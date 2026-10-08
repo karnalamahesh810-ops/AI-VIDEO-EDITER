@@ -5,6 +5,8 @@ from the worker: the classes come in as arguments, so the SAME inputs can be
 built against the base commit's code (68205fc) to make the golden timeline
 (tests/fixtures/hybrid_golden_timeline.json) and against today's code to
 prove a timeline without a presenter block is byte-for-byte what it was.
+Rebuilt on feature/looks-pack-3: the documentary transition cycle gained the
+light sweep (one cut and its sound changed; nothing else).
 """
 
 LINES = [
