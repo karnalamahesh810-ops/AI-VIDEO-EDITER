@@ -48,6 +48,29 @@ class Scoring(unittest.TestCase):
         self.assertGreater(m["runpod_usd"], 0)
         self.assertEqual(m["warnings"], 1)
 
+    def test_costs_come_from_the_job_ledger(self):
+        # An OpenRouter-priced job: the model calls at their own price, the worker's seconds at its rate -
+        # never the old Kie-credit estimate.
+        doc = {"scenes": [
+            {"durationInFrames": 100, "media": {"type": "video", "url": "/w/a.mp4"},
+             "semanticMetadata": {"relevanceScore": 0.8, "qualityScore": 0.7, "assetId": "yt:A"}},
+            {"durationInFrames": 300, "media": {"type": "image", "url": "/w/b.jpg"}, "semanticMetadata": {}},
+            {"durationInFrames": 100, "media": {"type": "color"}, "reviewRequired": True},
+        ], "meta": {"aiUsage": {"estimatedCredits": 500}}}
+        ledger = {"total": 0.5, "runpod": 0.2, "vision": 0.25, "llm": 0.05, "image": 0.0}
+        m = bench.score_timeline(doc, {"entities": []}, elapsed=100, costs=ledger)
+        self.assertAlmostEqual(m["ai_usd"], 0.3)
+        self.assertAlmostEqual(m["runpod_usd"], 0.2)
+        self.assertAlmostEqual(m["total_usd"], 0.5)
+        self.assertEqual(m["cost_source"], "ledger")
+        self.assertEqual(m["video_time_pct"], 20.0)          # 100 of 500 frames are the clip
+        self.assertEqual(m["image_pct"], 33.3)
+        self.assertEqual(m["judged_pct"], 50.0)              # the picture had no verdict
+        self.assertEqual(m["review_flags"], 1)
+        # The same ledger kept on the timeline (meta.costs) counts when the result's is missing.
+        doc["meta"]["costs"] = ledger
+        self.assertAlmostEqual(bench.score_timeline(doc, {"entities": []}, elapsed=100)["ai_usd"], 0.3)
+
     def test_cases_load_with_audio(self):
         cases = bench.load_cases()
         self.assertEqual(len(cases), 7)
