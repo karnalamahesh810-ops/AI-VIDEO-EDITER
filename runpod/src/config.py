@@ -1877,3 +1877,36 @@ TTS_GAP_SECONDS = float(os.getenv("TTS_GAP_SECONDS", "0.3"))
 TTS_LUFS = float(os.getenv("TTS_LUFS", "0"))
 # A script longer than this is refused (about two hours of speech).
 TTS_MAX_CHARS = int(os.getenv("TTS_MAX_CHARS", "120000"))
+
+# --- Language versions (src/langversion.py, the owner 2026-10-09) ------------
+# "Make a language version" of a finished video: its narration translated on OpenRouter, voiced by our own
+# voice endpoint (Qwen3-TTS, thumbgenius-tts) and the finished timeline re-timed to it - no footage search.
+# The voice endpoint and a RunPod key allowed on it (the worker's own FANOUT key is the owner's full key).
+LANG_TTS_ENDPOINT = os.getenv("LANG_TTS_ENDPOINT", "noxv85ue2spsrl").strip()
+LANG_TTS_API_KEY = (os.getenv("LANG_TTS_API_KEY", "") or os.getenv("TG_TTS_RUNPOD_API_KEY", "")
+                    or FANOUT_API_KEY).strip()
+# Parts voiced at once (the voice endpoint runs at most 4 workers) and a part's size: ~1.5 minutes of speech, cut
+# between sentences; the voice server makes a whole part in one batch.
+LANG_TTS_PARALLEL = int(os.getenv("LANG_TTS_PARALLEL", "4"))
+LANG_TTS_PART_CHARS = int(os.getenv("LANG_TTS_PART_CHARS", "1400"))
+# The voice's tempo (atempo on the server, 0.7-1.3) and its pause scale between sentences (1 = the server's).
+LANG_TTS_SPEED = float(os.getenv("LANG_TTS_SPEED", "1.0"))
+LANG_TTS_PAUSE = float(os.getenv("LANG_TTS_PAUSE", "0.85"))
+# One part, a cold GPU worker's start included; the whole narration, every retry included.
+LANG_TTS_TIMEOUT = float(os.getenv("LANG_TTS_TIMEOUT", "900"))
+LANG_TTS_TOTAL_SECONDS = float(os.getenv("LANG_TTS_TOTAL_SECONDS", "2400"))
+# The quiet between two parts (they always meet between sentences).
+LANG_PART_GAP_SECONDS = float(os.getenv("LANG_PART_GAP_SECONDS", "0.45"))
+# A part whisper can follow less than this share of is voiced once more (a garbled or truncated take).
+LANG_MIN_MATCH = float(os.getenv("LANG_MIN_MATCH", "0.5"))
+# The translation: a cheap, good model with thinking off, its backups in order; requests of about this many
+# source characters (whole sentences), this many at once; and a cap on what one version may spend on it (USD).
+LANG_TRANSLATE_MODEL = os.getenv("LANG_TRANSLATE_MODEL", "google/gemini-2.5-flash").strip()
+LANG_TRANSLATE_FALLBACK_MODELS = [m.strip() for m in os.getenv("LANG_TRANSLATE_FALLBACK_MODELS",
+                                                                "openai/gpt-5-mini").split(",") if m.strip()]
+LANG_TRANSLATE_BATCH_CHARS = int(os.getenv("LANG_TRANSLATE_BATCH_CHARS", "4000"))
+LANG_TRANSLATE_PARALLEL = int(os.getenv("LANG_TRANSLATE_PARALLEL", "4"))
+LANG_TRANSLATE_MAX_USD = float(os.getenv("LANG_TRANSLATE_MAX_USD", "1.0"))
+# What hears the new narration for its word times (the captions, the scene cuts): its own model beside the worker's
+# WHISPER_MODEL - "base" heard a clean Spanish narration at 0.89 of its words, large-v3-turbo at 0.99 (2026-10-09).
+LANG_WHISPER_MODEL = os.getenv("LANG_WHISPER_MODEL", "small").strip()

@@ -67,6 +67,10 @@ DEFAULT_PRICES: Dict[str, float] = {
     # The GPU seconds the voice endpoint itself reported: counted, not priced
     # (they are inside tts.seconds); they are what the estimate is checked against.
     "tts.gpu_seconds": 0.0,
+    # A language version's narration on our own voice endpoint (src/langversion.py): what RunPod bills of each
+    # part's job - its wait for a worker (a cold start) and its run - on a 16-24 GB GPU worker ($0.00016-0.00019
+    # a second, flex, 2026-10). Each worker's idle minute after its last part is not in it.
+    "lang.tts_gpu_seconds": 0.00019,
 }
 _CREDIT_KEYS = ("vision.judge", "vision.rate_tiles", "vision.pick_tile", "vision.hedge", "vision.anchor",
                 "vision.review", "llm.director_call",
@@ -75,7 +79,8 @@ _CATEGORY = {"vision.judge": "vision", "vision.rate_tiles": "vision", "vision.pi
              "vision.hedge": "vision", "vision.anchor": "vision", "vision.review": "vision",
              "llm.director_call": "llm", "llm.brief_call": "llm", "image.generate": "image",
              "runpod.worker_second": "runpod", "proxy.bytes": "proxy", "serp.call": "serp",
-             "storage.bytes": "storage", "tts.char": "tts", "tts.seconds": "tts", "tts.gpu_seconds": "tts"}
+             "storage.bytes": "storage", "tts.char": "tts", "tts.seconds": "tts", "tts.gpu_seconds": "tts",
+             "lang.tts_gpu_seconds": "tts"}
 # Categories whose provider reports each call's own price ("<category>.usd"): when it
 # did, that call is counted at its price instead of the category's credit estimate
 # (OpenRouter's usage.cost - the vision judge since 2026-10-01, the planning calls
