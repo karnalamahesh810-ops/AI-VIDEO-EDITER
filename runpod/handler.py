@@ -3407,6 +3407,19 @@ def handler(job):
             return {**out, "action": "shorts", "costs": costs.summary(time.time() - started),
                     "events": events.summary(), "elapsed": round(time.time() - started, 1)}
 
+        if action == "presenter_set":
+            # Where an AI presenter is filmed (src/presenter/sets.py), outside a video: the set "auto" picks for a
+            # title and script, whether the presenter + set pair is cached, and - with "make": true - the pair
+            # found or made (two Nano Banana Pro pictures, paid once ever; "budget_usd" caps it, default $0.60).
+            from src.presenter import sets as presenter_sets
+            try:
+                out = presenter_sets.action(inp, work)
+            except Exception as e:  # noqa: BLE001 - reported in the result, nothing else is touched
+                traceback.print_exc()
+                out = {"ok": False, "error": f"{type(e).__name__}: {e}"[:800]}
+            return {**out, "action": "presenter_set", "costs": costs.summary(time.time() - started),
+                    "elapsed": round(time.time() - started, 1)}
+
         if action == "presenter_info":
             # The AI presenter style for the app (src/presenter): its tiers, $ per 10/15/20-minute video per
             # tier, the presenter kits, the script preset. No paid call, no project write.
