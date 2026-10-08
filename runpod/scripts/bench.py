@@ -21,6 +21,7 @@ import re
 import statistics
 import subprocess
 import sys
+import threading
 
 # Windows consoles default to cp1252; a metrics line with a non-Latin
 # character must not kill a benchmark run after the job has finished.
@@ -72,14 +73,30 @@ def _hits(text: str, phrases: List[str]) -> bool:
     return any(scene_intent._phrase_hit(p, tw) for p in phrases if p)
 
 
-def score_timeline(doc: dict, case: dict, elapsed: float = 0.0) -> dict:
-    """Metrics for one finished plan. Pure: unit-tested on synthetic timelines."""
+def _ai_usd(costs: dict) -> Optional[float]:
+    """What the job's model calls cost (OpenRouter's own usage.cost, src/costs.py): vision + planning +
+    pictures (+ the presenter's generated video). None for a job that returned no ledger."""
+    if not isinstance(costs, dict) or "total" not in costs:
+        return None
+    return sum(float(costs.get(k) or 0.0) for k in ("vision", "llm", "image", "presenter", "aivideo"))
+
+
+def score_timeline(doc: dict, case: dict, elapsed: float = 0.0, costs: Optional[dict] = None) -> dict:
+    """Metrics for one finished plan. Pure: unit-tested on synthetic timelines.
+
+    `costs`: the job's ledger (the result's "costs", also kept as meta.costs). With it, ai_usd is what the
+    job's model calls really cost (OpenRouter prices each call) and runpod_usd the worker's seconds at its
+    own rate; without it (an old timeline), the Kie-credit estimate and the wall-time guess as before."""
     scenes = doc.get("scenes") or []
     meta = doc.get("meta") or {}
     n = len(scenes)
     filled = [s for s in scenes if (s.get("media") or {}).get("url")
               and (s.get("media") or {}).get("type") in ("video", "image")]
     videos = [s for s in filled if s["media"].get("type") == "video"]
+    images = [s for s in filled if s["media"].get("type") == "image"]
+
+    def frames(group):
+        return sum(float(s.get("durationInFrames") or 0) for s in group)
 
     def sem(s):
         return s.get("semanticMetadata") or {}
@@ -103,11 +120,20 @@ def score_timeline(doc: dict, case: dict, elapsed: float = 0.0) -> dict:
     cands = [float((sem(s).get("candidates") or {}).get("candidates"))
              for s in filled if (sem(s).get("candidates") or {}).get("candidates") is not None]
     usage = meta.get("aiUsage") or {}
-    ai_usd = float(usage.get("estimatedCredits") or 0) * CREDIT_USD
-    fanout = (meta.get("sourcing") or {}).get("fanout") or meta.get("fanout") or {}
-    workers = 1 + int(fanout.get("parts") or 0)
-    runpod_usd = elapsed * RUNPOD_USD_PER_WORKER_SECOND * max(1, min(workers, 10)) * 0.6
+    ledger = costs if isinstance(costs, dict) and costs else (meta.get("costs") or {})
+    ai_usd = _ai_usd(ledger)
+    if ai_usd is None:
+        ai_usd = float(usage.get("estimatedCredits") or 0) * CREDIT_USD
+    if isinstance(ledger, dict) and ledger.get("runpod") is not None:
+        runpod_usd = float(ledger.get("runpod") or 0.0)
+    else:
+        fanout = (meta.get("sourcing") or {}).get("fanout") or meta.get("fanout") or {}
+        workers = 1 + int(fanout.get("parts") or 0)
+        runpod_usd = elapsed * RUNPOD_USD_PER_WORKER_SECOND * max(1, min(workers, 10)) * 0.6
     treatments = meta.get("treatments") or {}
+    total_frames = frames(scenes)
+    judged = [s for s in filled if sem(s).get("relevanceScore") is not None]
+    quality = [float(sem(s).get("qualityScore")) for s in filled if sem(s).get("qualityScore") is not None]
     return {
         "scenes": n,
         **({k: treatments.get(k) for k in ("text_treatments", "maps", "data_graphics", "callouts",
@@ -116,6 +142,13 @@ def score_timeline(doc: dict, case: dict, elapsed: float = 0.0) -> dict:
         "style_pack": meta.get("stylePack"),
         "fill_pct": round(100 * len(filled) / n, 1) if n else 0.0,
         "video_pct": round(100 * len(videos) / n, 1) if n else 0.0,
+        # Clip share by screen time (a short clip line weighs less than a long picture line), the pictures,
+        # the share of filled lines a vision verdict judged, and the judge's mean footage quality (0-1).
+        "video_time_pct": round(100 * frames(videos) / total_frames, 1) if total_frames else 0.0,
+        "image_pct": round(100 * len(images) / n, 1) if n else 0.0,
+        "judged_pct": round(100 * len(judged) / len(filled), 1) if filled else None,
+        "avg_quality": round(statistics.mean(quality), 3) if quality else None,
+        "review_flags": sum(1 for s in scenes if s.get("reviewRequired")),
         "entity_acc": round(100 * len(ent_ok) / len(ent_scenes), 1) if ent_scenes else None,
         "location_acc": round(100 * len(loc_ok) / len(loc_scenes), 1) if loc_scenes else None,
         "case_entity_coverage": round(100 * len(case_ok) / len(filled), 1) if filled else 0.0,
@@ -127,9 +160,10 @@ def score_timeline(doc: dict, case: dict, elapsed: float = 0.0) -> dict:
         "avg_winning_score": round(statistics.mean(fin), 3) if fin else None,
         "vision_calls": usage.get("visionCalls"),
         "generation_s": round(elapsed, 1),
-        "ai_usd": round(ai_usd, 3),
-        "runpod_usd": round(runpod_usd, 3),
-        "total_usd": round(ai_usd + runpod_usd, 3),
+        "ai_usd": round(ai_usd, 4),
+        "runpod_usd": round(runpod_usd, 4),
+        "total_usd": round(ai_usd + runpod_usd, 4),
+        "cost_source": "ledger" if _ai_usd(ledger) is not None else "estimate",
         "warnings": len(meta.get("warnings") or []),
     }
 
@@ -138,12 +172,37 @@ def score_timeline(doc: dict, case: dict, elapsed: float = 0.0) -> dict:
 OUT_DIR = os.path.join(ROOT, "bench", "out")
 
 
+def _slug(text: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("_")[:80] or "run"
+
+
+def save_run(label: str, case_name: str, payload: dict) -> str:
+    """The job's whole answer (timeline, ledger, events, vision stats) under bench/out/runs/<label>/<case>.json,
+    so the chosen clips can be looked at later (scripts never print keys; the answer holds none)."""
+    folder = os.path.join(OUT_DIR, "runs", _slug(label))
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"{case_name}.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+    return path
+
+
+# What a job asks for: "youtube" - YouTube clips only (the benchmark's original setting: every line a footage
+# line, one source, no clips-first ladder); "app" - what the app's video-v2 sends for a real build (YouTube
+# allowed, pictures allowed, no stock), so the clips-first ladder and the pictures after it run as in production.
+SOURCES = {
+    "youtube": {"youtube_only": True, "allow_youtube": True},
+    "app": {"youtube_only": False, "allow_youtube": True, "prefer": "youtube", "source_policy": "no_stock"},
+}
+
+
 def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600,
-             render: bool = False, width: int = 1280, height: int = 720) -> dict:
+             render: bool = False, width: int = 1280, height: int = 720, sources: str = "youtube",
+             label: str = "") -> dict:
     import requests
     H = {"Authorization": f"Bearer {key}"}
     inp = {"action": "build" if render else "plan", "audio_url": f"bench://{case['name']}",
-           "title": case["title"], "youtube_only": True, "allow_youtube": True, "publish_media": False,
+           "title": case["title"], **SOURCES[sources], "publish_media": False,
            "contract_version": 2, "bench": True}
     if render:
         # The finished video comes back inline (no project to upload to), so
@@ -163,7 +222,9 @@ def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600,
         out = s.get("output") or {}
         line = f"{st} {out.get('progress', '')}% {out.get('status', '')}"
         if line != last:
-            print(f"[bench]   {int(time.time() - t0)}s {line}", flush=True)
+            # The case's name on every progress line: several cases run side by side (--parallel), and
+            # "Sourced k/n" read with its time is each line's own finish in pass 1.
+            print(f"[bench]   {case['name']} {int(time.time() - t0)}s {line}", flush=True)
             last = line
         if st in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
             break
@@ -172,8 +233,17 @@ def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600,
             return {"ok": False, "error": "benchmark timeout", "elapsed": time.time() - t0}
         time.sleep(10)
     elapsed = time.time() - t0
+    try:
+        kept = {k: v for k, v in out.items() if k != "video_b64"} if isinstance(out, dict) else out
+        saved = save_run(label or "run", case["name"], {"job": jid, "status": st, "input": inp, "output": kept,
+                                                         "error": s.get("error")})
+    except (OSError, TypeError, ValueError) as e:
+        saved = ""
+        print(f"[bench]   could not save the run: {type(e).__name__}", flush=True)
     if st != "COMPLETED" or not out.get("ok", True):
-        return {"ok": False, "error": (s.get("error") or out.get("error") or st)[:300], "elapsed": elapsed}
+        # A failed job was paid for all the same: its ledger comes back when the handler got that far.
+        return {"ok": False, "error": (s.get("error") or out.get("error") or st)[:300], "elapsed": elapsed,
+                "job": jid, "costs": out.get("costs") if isinstance(out, dict) else None, "saved": saved}
     video_path = ""
     if out.get("video_b64"):
         import base64
@@ -184,7 +254,7 @@ def run_case(case: dict, key: str, config: Optional[dict], timeout: int = 3600,
         print(f"[bench]   saved {video_path} ({os.path.getsize(video_path) / 1e6:.1f} MB)", flush=True)
     ev = out.get("events") or {}
     return {"ok": True, "timeline": out.get("timeline") or {}, "elapsed": float(out.get("elapsed") or elapsed),
-            "job": jid, "video": video_path, "costs": out.get("costs"),
+            "job": jid, "video": video_path, "costs": out.get("costs"), "saved": saved,
             "events": {k: ev.get(k) for k in ("stage_seconds", "child_stage_seconds", "failures_by_class",
                                              "providers", "errors") if k in ev},
             "sourcing": ((out.get("timeline") or {}).get("meta") or {}).get("sourcing"),
@@ -210,9 +280,9 @@ def report() -> None:
         print("no results yet")
         return
     rows = [json.loads(l) for l in open(RESULTS, encoding="utf-8") if l.strip()]
-    cols = ["fill_pct", "entity_acc", "location_acc", "case_entity_coverage", "visual_relevance",
-            "timestamp_relevance", "duplicate_rate", "generic_rate", "avg_candidates",
-            "avg_winning_score", "generation_s", "total_usd"]
+    cols = ["fill_pct", "video_pct", "video_time_pct", "entity_acc", "location_acc", "case_entity_coverage",
+            "visual_relevance", "avg_quality", "timestamp_relevance", "duplicate_rate", "generic_rate",
+            "avg_candidates", "avg_winning_score", "generation_s", "ai_usd", "runpod_usd", "total_usd"]
     print(f"{'label':<22} {'sha':<8} {'case':<24} " + " ".join(f"{c[:10]:>10}" for c in cols))
     for r in rows:
         m = r.get("metrics") or {}
@@ -239,6 +309,11 @@ def main() -> int:
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--parallel", type=int, default=1)
     ap.add_argument("--render", action="store_true", help="build (plan + render) and save the video to bench/out")
+    ap.add_argument("--sources", choices=sorted(SOURCES), default="youtube",
+                    help="youtube: clips only (the original benchmark); app: what a real build asks for")
+    ap.add_argument("--sha", default="", help="the worker image's commit, when it is not this checkout's HEAD")
+    ap.add_argument("--max-ai-usd", type=float, default=0.0,
+                    help="no new case starts once the model calls of this run cost this much (0 = no cap)")
     args = ap.parse_args()
     if args.report:
         report()
@@ -254,17 +329,24 @@ def main() -> int:
         config[k.strip()] = v.strip()
     names = None if args.cases == "all" else [n.strip() for n in args.cases.split(",")]
     cases = load_cases(names)
-    sha = git_sha()
+    sha = args.sha or git_sha()
     label = args.label or f"run {time.strftime('%Y-%m-%d %H:%M')}"
     from concurrent.futures import ThreadPoolExecutor
+    spent = {"ai": 0.0, "runpod": 0.0}
+    spent_lock = threading.Lock()
 
     def one(case):
-        res = run_case(case, key, config, render=args.render)
+        with spent_lock:
+            over = args.max_ai_usd > 0 and spent["ai"] >= args.max_ai_usd
+        if over:
+            print(f"[bench] {case['name']}: skipped - this run's model calls reached ${spent['ai']:.3f}", flush=True)
+            return {"label": label, "case": case["name"], "ok": False, "skipped": True}
+        res = run_case(case, key, config, render=args.render, sources=args.sources, label=label)
         row = {"label": label, "sha": sha, "case": case["name"], "at": int(time.time()),
-               "config": config, "ok": res["ok"], "render": args.render}
+               "config": config, "sources": args.sources, "ok": res["ok"], "render": args.render,
+               "job": res.get("job"), "saved": res.get("saved", "")}
         if res["ok"]:
-            row["metrics"] = score_timeline(res["timeline"], case, res["elapsed"])
-            row["job"] = res.get("job")
+            row["metrics"] = score_timeline(res["timeline"], case, res["elapsed"], costs=res.get("costs"))
             if res.get("video"):
                 row["video"] = res["video"]
             if res.get("costs"):
@@ -277,6 +359,12 @@ def main() -> int:
         else:
             row["error"] = res.get("error", "")
             row["metrics"] = {"generation_s": round(res.get("elapsed", 0), 1)}
+            ai = _ai_usd(res.get("costs") or {})
+            if ai is not None:
+                row["metrics"].update(ai_usd=round(ai, 4), runpod_usd=round(float(res["costs"].get("runpod") or 0), 4))
+        with spent_lock:
+            spent["ai"] += float(row["metrics"].get("ai_usd") or 0.0)
+            spent["runpod"] += float(row["metrics"].get("runpod_usd") or 0.0)
         record(row)
         print(f"[bench] {case['name']}: {json.dumps(row.get('metrics'))}" + ("" if res["ok"] else f" FAILED {row['error']}"),
               flush=True)
@@ -285,7 +373,8 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=max(1, args.parallel)) as ex:
         rows = list(ex.map(one, cases))
     ok = [r for r in rows if r["ok"]]
-    print(f"[bench] {len(ok)}/{len(rows)} cases completed; results in {RESULTS}")
+    print(f"[bench] {len(ok)}/{len(rows)} cases completed; model calls ${spent['ai']:.3f}, "
+          f"RunPod ${spent['runpod']:.3f}; results in {RESULTS}")
     return 0 if ok else 1
 
 

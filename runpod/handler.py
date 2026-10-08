@@ -2930,7 +2930,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # parts) and its pass-1 time - each can be A/B'd on one job.
                       "VISION_SHEET_IMAGES", "VISION_COMPACT_TILES", "JUDGE_MEMORY_VIDEO_STRIKES", "BUILD_FANOUT",
                       "VISION_NEWS_OVERLAYS_OK",
-                      "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS")
+                      "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS",
+                      # Each line's own sourcing trace in meta.sourcing.traces (the benchmark, 2026-10-08), and
+                      # how long pass 1 waits for the lines it closed on to hand back what they hold.
+                      "SOURCE_TRACE", "PASS1_COLLECT_SECONDS")
 
 
 def _apply_config(overrides) -> dict:

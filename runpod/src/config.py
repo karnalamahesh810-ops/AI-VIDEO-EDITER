@@ -674,6 +674,14 @@ BUILD_FANOUT = os.getenv("BUILD_FANOUT", "0").strip().lower() in ("1", "true", "
 # pass keeps 3 s a line (its box is the whole part). A pod's own PASS1_BUDGET_SECONDS wins when it is longer.
 SINGLE_PASS1_PER_SCENE = float(os.getenv("SINGLE_PASS1_PER_SCENE", "12"))
 SINGLE_TAIL_SECONDS = float(os.getenv("SINGLE_TAIL_SECONDS", "600"))
+# SOURCE_TRACE (off; the benchmark turns it on per job): each line's own sourcing trace - every pass it went
+# through, when it started, how long it took, whether its time ran out, what it ended with, and its searches,
+# scouts, downloads, filters and verdicts (media._trace) - in meta.sourcing.traces. Off, a build keeps none.
+SOURCE_TRACE = _flag("SOURCE_TRACE", False)
+# When pass 1 closes on lines still running, they stop at their next network call and get this long to hand
+# back what they already hold (a hook line's first passing clip while its second look ran on, a near-miss kept
+# while later wordings were searched) - before, every answer after the close was thrown away (2026-10-08). 0 = off.
+PASS1_COLLECT_SECONDS = float(os.getenv("PASS1_COLLECT_SECONDS", "30"))
 FANOUT_MIN_SCENES = int(os.getenv("FANOUT_MIN_SCENES", "1"))
 FANOUT_API_KEY = (os.getenv("FANOUT_API_KEY", "")
                   or os.getenv("RUNPOD_API_KEY", ""))

@@ -1215,6 +1215,37 @@ _WORDING: contextvars.ContextVar = contextvars.ContextVar("wording", default=0)
 # None = off.
 _TRACE: contextvars.ContextVar = contextvars.ContextVar("trace", default=None)
 TRACE_ROWS = 60
+# A build's own per-line traces (config.SOURCE_TRACE, off: the benchmark turns it on per job): every pass a
+# line went through - when it started (seconds into the sourcing), how long it took, whether its time ran out,
+# what it ended with and its trace rows (_trace) - {line index: [entry, ...]}, kept in meta.sourcing.traces.
+LINE_TRACES: Dict[int, List[dict]] = {}
+_LINE_TRACES_T0 = [0.0]
+_LINE_TRACES_LOCK = threading.Lock()
+
+
+def _traced(index: int, step: str, fn, *args, **kwargs):
+    """fn(*args, **kwargs), with this line's trace kept when config.SOURCE_TRACE is on (else just the call).
+    Called inside the line's own time box, so `stopped` says whether that box (or the job's) ran out."""
+    if not getattr(config, "SOURCE_TRACE", False):
+        return fn(*args, **kwargs)
+    rows: List[dict] = []
+    token = _TRACE.set(rows)
+    t0 = time.time()
+    got = None
+    try:
+        got = fn(*args, **kwargs)
+        return got
+    finally:
+        _TRACE.reset(token)
+        entry = {"pass": step, "at": round(t0 - _LINE_TRACES_T0[0], 1), "seconds": round(time.time() - t0, 1),
+                 "stopped": bool(_ytdlp.stopped()),
+                 "got": f"{got.kind}:{got.source}" if isinstance(got, MediaAsset) else ""}
+        if isinstance(got, MediaAsset):
+            entry.update(score=got.relevance_score, judged=got.judged_by or "",
+                         title=str(got.attribution or "")[:70], rung=str((got.score_parts or {}).get("rung") or ""))
+        entry["rows"] = rows
+        with _LINE_TRACES_LOCK:
+            LINE_TRACES.setdefault(int(index), []).append(entry)
 
 
 def _flags_of(verdict: Optional[dict]) -> str:
@@ -4749,6 +4780,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     t_start = time.time()
     LAST_STATS.clear()
     LAST_STATS.update(scenes=len(jobs))
+    with _LINE_TRACES_LOCK:
+        LINE_TRACES.clear()
+        _LINE_TRACES_T0[0] = t_start
     with _CACHE_LOCK:
         if _PHOTOS["cap"] is None:
             # This worker's share of the video's photos (a fan-out part: its lines').
@@ -4850,7 +4884,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         # the one with more appeal (relevance first, footage quality second)
         # opens the video.
         try:
-            alt = attempt(job, nth + 1)
+            alt = _traced(job["index"], "hook+1", attempt, job, nth + 1)
         except Exception:  # noqa: BLE001
             return got
         if alt is None or alt.relevance_score is None:
@@ -4879,7 +4913,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         token = _ytdlp.STOP.set((box, own))
         try:
             try:
-                got = attempt(job, nth)
+                got = _traced(job["index"], "pass1", attempt, job, nth)
             except Exception as e:  # noqa: BLE001
                 print(f"[media] '{job['query']}' failed: {e}", flush=True)
                 return None
@@ -4941,6 +4975,38 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             if pending and len(pending) <= max(1, len(futures) // 10):
                 deadline = min(deadline, time.time() + config.STRAGGLER_GRACE_SECONDS)
                 box.shorten(deadline)
+        if pending:
+            # The box closes now: a line still running stops at its next search, download or verdict and hands
+            # back what it already holds - a hook line's first passing clip while its second look ran on, a
+            # near-miss kept while later wordings were searched. Those answers came after the close and were
+            # thrown away: on the 2026-10-08 benchmark 6-12 of 13-15 opening lines were still running when pass
+            # 1 closed, each left empty for the slower, unjudged passes after it. They get a short while to come
+            # back (PASS1_COLLECT_SECONDS); a line that never started is not started now.
+            box.end()
+            never = [f for f in list(pending) if f.cancel()]
+            pending.difference_update(never)
+            collect_until = time.time() + max(0.0, float(getattr(config, "PASS1_COLLECT_SECONDS", 0.0) or 0.0))
+            collected = kept = 0
+            while pending and time.time() < collect_until:
+                finished, pending = wait(pending, timeout=max(0.1, min(5.0, collect_until - time.time())),
+                                         return_when=FIRST_COMPLETED)
+                for fut in finished:
+                    idx = futures[fut]
+                    collected += 1
+                    try:
+                        results[idx] = fut.result()
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[media] worker error on scene {idx}: {e}", flush=True)
+                    kept += 1 if results[idx] is not None else 0
+                    with lock:
+                        done += 1
+                        if on_done:
+                            on_done(done, len(jobs))
+            if collected:
+                LAST_STATS.update(pass1_collected=collected, pass1_collected_kept=kept)
+                print(f"[media] {collected} line(s) still running at the close came back ({kept} with a shot)",
+                      flush=True)
+            pending.update(never)               # never started: counted with the lines given up on
         if pending:
             stuck = sorted(futures[f] + 1 for f in pending)
             print(f"[media] gave up waiting on scene(s) {stuck}; they go to the recheck",
@@ -5020,7 +5086,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             if time.time() >= deadline:
                 return None
             try:
-                candidate = source_for_segment(
+                candidate = _traced(
+                    job["index"], f"pass2.{attempt}", source_for_segment,
                     job["query"], float(job.get("seconds") or 0), work_dir,
                     visual_type=job.get("visual_type", "footage"),
                     nth=nth + attempt, used=used,
@@ -5131,7 +5198,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 return None
             _ytdlp.STOP.set((box3, 0.0))      # this task runs in its own copied context
             try:
-                got = source_for_segment(
+                got = _traced(
+                    job["index"], "recheck", source_for_segment,
                     alts[0], float(job.get("seconds") or 0), work_dir,
                     visual_type=job.get("visual_type", "footage"), used=used,
                     fallbacks=alts[1:], prompt=job.get("prompt", ""),
@@ -5217,6 +5285,17 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # Pictures and clips measured for real detail, how many were too soft, the seconds spent.
     LAST_STATS["sharpness"] = _sharpness.stats()
     LAST_STATS["stageSeconds"] = stage_seconds()           # where the sourcing threads' time went
+    if getattr(config, "SOURCE_TRACE", False):
+        # A line still running when its pass closed has no entry for that pass (it never finished).
+        # Keyed by this pass's own line index (a build's per-scene lines, re-indexed): each with the line it was.
+        lines = {j["index"]: {"query": str(j.get("query") or "")[:90], "line": str(j.get("context") or "")[:90],
+                              "start": j.get("start"), "hook": bool(j.get("hook")),
+                              "type": j.get("visual_type", "footage"),
+                              "subject_type": j.get("subject_type") or ""} for j in ordered}
+        with _LINE_TRACES_LOCK:
+            LAST_STATS["traces"] = {str(i): {**lines.get(i, {}), "passes": [dict(e, rows=list(e.get("rows") or []))
+                                                                            for e in LINE_TRACES.get(i, [])]}
+                                    for i in sorted(set(LINE_TRACES) | set(lines))}
     LAST_STATS.update(total_seconds=round(time.time() - t_start, 1),
                       reused_to_fill=reused,
                       still_empty=sum(1 for r in results if r is None),

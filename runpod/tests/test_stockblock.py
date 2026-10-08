@@ -159,6 +159,38 @@ class Names(unittest.TestCase):
         with mock.patch.object(config, "STOCK_BLOCK", False):
             self.assertEqual(stockblock.reason(ALAMY), "")
 
+    def test_a_youtube_videos_thumbnail_is_never_a_picture(self):
+        # The 2026-10-08 benchmark: an NDTV upload's headline thumbnail filled a wildfire line as a "picture".
+        thumb = "https://i.ytimg.com/vi/H6fLJlU85M0/maxresdefault.jpg"
+        self.assertEqual(stockblock.reason(thumb), "a video's thumbnail (youtube thumbnail)")
+        self.assertTrue(stockblock.reason("https://img.youtube.com/vi/abc/hqdefault.jpg"))
+        self.assertTrue(stockblock.reason("https://i9.ytimg.com/vi_webp/abc/mqdefault.webp"))
+        # Found on its watch page (the picture search's page or the credit line names it).
+        self.assertTrue(stockblock.reason("https://cdn.example.com/a.jpg", page_url="https://www.youtube.com/watch?v=x"))
+        self.assertTrue(stockblock.asset_reason(photo(
+            "https://cdn.example.com/a.jpg", attribution="California Wildfire | Iconic Sunset Boulevard In Ruins — "
+                                                         "https://www.youtube.com/watch?v=H6fLJlU85M0")))
+        self.assertTrue(stockblock.asset_reason({"sourceUrl": thumb, "source": "web_image"}))
+        # Not a video's thumbnail: a picture on a page that only mentions YouTube, a clip of the timeline.
+        self.assertEqual(stockblock.reason(PLAIN, title="As seen on YouTube"), "")
+        self.assertEqual(stockblock.reason("https://www.myyoutube-fan.example.com/a.jpg"), "")
+        with mock.patch.object(config, "STOCK_BLOCK", False):
+            self.assertEqual(stockblock.reason(thumb), "")
+
+    def test_the_picture_search_drops_youtube_thumbnails(self):
+        images = [{"imageUrl": "https://i.ytimg.com/vi/H6fLJlU85M0/maxresdefault.jpg", "imageWidth": 1280,
+                   "imageHeight": 720, "title": "Iconic Sunset Boulevard In Ruins", "link": "https://www.youtube.com/watch?v=H6fLJlU85M0"},
+                  {"imageUrl": PLAIN, "imageWidth": 1300, "imageHeight": 900, "title": "Boulder Beach", "link": "https://www.nps.gov/x"}]
+        resp = mock.Mock(status_code=200)
+        resp.json.return_value = {"images": images}
+        resp.raise_for_status = mock.Mock()
+        stockblock.reset()
+        with mock.patch.object(config, "ALLOW_WEB_IMAGES", True), mock.patch.object(config, "SERPER_API_KEY", "k"), \
+                mock.patch.object(media.requests, "post", return_value=resp):
+            found = media.search_web_images("sunset boulevard fire", 6)
+        self.assertEqual([a.url for a in found], [PLAIN])
+        self.assertEqual(stockblock.stats()["byAgency"], {"youtube thumbnail": 1})
+
     def test_assets_and_editor_choice_or_library_rows(self):
         self.assertTrue(stockblock.asset_reason(photo(ALAMY)))
         self.assertTrue(stockblock.asset_reason(photo("https://i.pinimg.com/a.jpg", page_url="https://www.alamy.com/x")))
