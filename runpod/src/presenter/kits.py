@@ -24,7 +24,8 @@ light, palette, lens} (the style bible's defaults), master, framings [{id,
 url, shot, set, face_x (where the face is across the frame, 0-1: the split
 screen crops on it)}], sets [{id, url, label}], style ("selfie": the avatar
 moves like a handheld phone), avatar {prompt, motion_prompt, expressiveness},
-voice {sample_url, suggested}, grade (a grade preset). Picture links are https
+voice {sample_url, suggested}, grade (a grade preset), home_set (the catalogue
+set its own pictures show - src/presenter/sets.py). Picture links are https
 (R2), or files - absolute, or relative to the catalogue - for local runs.
 """
 from __future__ import annotations
@@ -40,12 +41,14 @@ from urllib.parse import urljoin
 
 import requests
 
+from . import motion as _motion
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATALOGUE = os.path.join(HERE, "kits.json")
 
-DEFAULT_MOTION_PROMPT = (
-    "Calm, natural talking: small head nods and slight head turns, relaxed blinking, gentle eyebrow movement, "
-    "shoulders still, hands stay out of frame. Static tripod camera; the room behind stays perfectly still.")
+# The tuned default (src/presenter/motion.py: eyes, face and hands, the owner 2026-10-08); every take now builds its
+# own from the framing and the line's tone (motion.for_shot) - these stay for kits and callers that read them.
+DEFAULT_MOTION_PROMPT = _motion.MEDIUM
 DEFAULT_AVATAR_PROMPT = ("{who} talks warmly and calmly straight to the camera. Natural, subtle head movement, "
                          "realistic lip sync. Static camera, still background.")
 
@@ -133,9 +136,7 @@ def catalogue(refresh: bool = False) -> Dict[str, dict]:
 _URL_KEYS = ("url", "path", "file", "image", "src", "href")
 # The order a kit's framings are used in (by id): the master, then a medium close-up as the second camera.
 FRAMING_PREFERENCE = ("master", "medium", "closeup", "close", "wide", "three_quarter")
-SELFIE_MOTION_PROMPT = (
-    "Handheld phone selfie: the phone sways gently in the hand; natural talking with small head movements, relaxed "
-    "blinking, the free hand out of frame; the room behind stays still.")
+SELFIE_MOTION_PROMPT = _motion.SELFIE
 
 
 def _url_of(entry: Any) -> str:
@@ -232,7 +233,16 @@ def normalize(kit: dict) -> dict:
     k["avatar"] = {"prompt": str(avatar.get("prompt") or DEFAULT_AVATAR_PROMPT.format(who=k["persona"])),
                    "motion_prompt": str(avatar.get("motion_prompt")
                                         or (SELFIE_MOTION_PROMPT if selfie else DEFAULT_MOTION_PROMPT)),
+                   # The kit's own words (the app may send them) replace the per-take defaults (motion.for_shot).
+                   # (a kit normalised once already keeps its own flags: its filled-in defaults are not "its own")
+                   "custom_prompt": (bool(avatar["custom_prompt"]) if "custom_prompt" in avatar
+                                     else bool(avatar.get("prompt"))),
+                   "custom_motion": (bool(avatar["custom_motion"]) if "custom_motion" in avatar
+                                     else bool(avatar.get("motion_prompt"))),
+                   "selfie": selfie,
                    **({"expressiveness": avatar["expressiveness"]} if avatar.get("expressiveness") else {})}
+    # The catalogue set its own pictures show (src/presenter/sets.py): a pick of that set uses them, free.
+    k["home_set"] = str(k.get("home_set") or "").strip().lower()
     voice = k.get("voice") if isinstance(k.get("voice"), dict) else {}
     k["voice"] = {"sample_url": str(voice.get("sample_url") or voice.get("sample_mp3") or voice.get("wav") or ""),
                   "suggested": str(voice.get("suggested") or voice.get("label") or voice.get("id") or ""),
@@ -354,5 +364,8 @@ def other_framing(kit: dict, framing_id: str) -> Optional[dict]:
 
 def public_summary(kit: dict) -> Dict[str, Any]:
     """What the plan's meta and the app keep about the kit (no local paths)."""
-    return {"id": kit["id"], "name": kit["name"], "title": kit.get("title", ""), "synthetic": kit.get("synthetic", True),
-            "framings": [f["id"] for f in kit.get("framings") or []], "sets": [s["id"] for s in kit.get("sets") or []]}
+    out = {"id": kit["id"], "name": kit["name"], "title": kit.get("title", ""), "synthetic": kit.get("synthetic", True),
+           "framings": [f["id"] for f in kit.get("framings") or []], "sets": [s["id"] for s in kit.get("sets") or []]}
+    if isinstance(kit.get("filming_set"), dict):
+        out["filmingSet"] = {k: kit["filming_set"].get(k) for k in ("id", "label", "how")}
+    return out

@@ -43,7 +43,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .. import costs
 from . import checks as _checks
 from . import kits as _kits
-from . import media_io, tiers
+from . import media_io, motion, tiers
 from .budget import Budget, BudgetExceeded
 from .director import bible_line
 from .providers import ImageRequest, Provider, ProviderError, VideoRequest, data_url_for
@@ -52,6 +52,8 @@ from .store import Cache, Store
 
 PAD_BEFORE = 0.3
 PAD_AFTER = 0.6
+# The rumble under a home recording (fans, handling, traffic) out of the avatar's copy of the voice (Hz).
+AVATAR_HIGHPASS = 70.0
 CLIP_HANDLE = 0.5             # seconds kept past a scene's end (a dissolve, rounding)
 PRESENTER_PARALLEL = int(os.getenv("PRESENTER_PARALLEL", "6"))
 VIDEO_PARALLEL = int(os.getenv("PRESENTER_VIDEO_PARALLEL", "6"))
@@ -190,6 +192,8 @@ class Generator:
         self.no_https_audio = False
         self.no_expressiveness = False
         self._issues: Dict[str, List[str]] = {}      # what a failed look check found, for the retry's prompt
+        self._gain: Optional[float] = None           # the avatar's copy of the voice: one steady gain (media_io)
+        self.voice_level: Optional[Dict[str, float]] = None
 
     # ------------------------------------------------------------------ kit files
     def _framing(self, framing_id: str) -> Tuple[str, str]:
@@ -227,6 +231,24 @@ class Generator:
         with self._lock:
             self._master = (local, link)
         return self._master
+
+    def voice_gain(self) -> float:
+        """The steady gain (dB) every presenter window gets, measured once on the whole narration: any voice - our
+        TTS, a quiet phone recording, a hot one - reaches the lip-sync model at about the same loudness."""
+        with self._lock:
+            if self._gain is not None:
+                return self._gain
+        try:
+            level = media_io.loudness(self.narration)
+        except Exception:  # noqa: BLE001 - unmeasured: the voice as it is
+            level = None
+        gain = media_io.avatar_gain(level)
+        with self._lock:
+            self.voice_level, self._gain = level, gain
+        if level:
+            self._note(f"narration {level['lufs']:.1f} LUFS, peak {level['peak']:.1f} dBFS: avatar windows "
+                       f"{gain:+.1f} dB")
+        return gain
 
     # ------------------------------------------------------------------ progress
     def _tick(self) -> None:
@@ -323,14 +345,18 @@ class Generator:
         model, res = (list(self.tier.get("presenter_model") or ["heygen/avatar-iv", "1080p"]) + ["1080p"])[:2]
         stem = f"{shot.id}_{framing_id}_{attempt}"
         win = media_io.cut_window(self.narration, shot.start, shot.end, os.path.join(self.dir, f"{stem}.wav"),
-                                  pad_before=PAD_BEFORE, pad_after=PAD_AFTER, total=self.total)
+                                  pad_before=PAD_BEFORE, pad_after=PAD_AFTER, total=self.total,
+                                  gain_db=self.voice_gain(), highpass=AVATAR_HIGHPASS)
         frame_local, frame_link = self._framing(framing_id)
         audio_url = self.store.put(win["path"], f"{stem}.wav", temp=True, content_type="audio/wav")
-        avatar = self.kit.get("avatar") or {}
-        opts = {"motion_prompt": avatar.get("motion_prompt") or _kits.DEFAULT_MOTION_PROMPT}
-        if avatar.get("expressiveness") and not self.no_expressiveness:
-            opts["expressiveness"] = avatar["expressiveness"]
-        req = VideoRequest(model=model, prompt=avatar.get("prompt") or "", resolution=res, aspect_ratio="16:9",
+        # How the presenter moves on this take: the framing (a close-up keeps the hands below the frame) and the
+        # line's tone (src/presenter/motion.py).
+        plan = motion.for_shot(self.kit, text=shot.text, role=shot.role, framing=_kits.framing(self.kit, framing_id),
+                               framing_id=framing_id)
+        opts = {"motion_prompt": plan["motion_prompt"]}
+        if plan.get("expressiveness") and not self.no_expressiveness:
+            opts["expressiveness"] = plan["expressiveness"]
+        req = VideoRequest(model=model, prompt=plan["prompt"], resolution=res, aspect_ratio="16:9",
                            images=[frame_link], audio_url=audio_url, options={"heygen": opts})
         payload = {"kind": "presenter", "model": model, "res": res, "prompt": req.prompt, "opts": opts}
         if not audio_url:
@@ -372,7 +398,10 @@ class Generator:
         out = media_io.probe(clip)
         return Asset(shot_id=shot.id, kind="video", path=clip, source="ai-presenter", model=model, usd=got["usd"],
                      url=got["url"], width=int(out["width"]), height=int(out["height"]), seconds=out["duration"],
-                     prompt=req.prompt, framing=framing_id, lag=lag, checks={"face": verdict, "window": win},
+                     prompt=req.prompt, framing=framing_id, lag=lag,
+                     checks={"face": verdict, "window": win,
+                             "motion": {"tone": plan["tone"], "role": plan["role"],
+                                        "expressiveness": opts.get("expressiveness", ""), "close": plan["close"]}},
                      cached=got["cached"])
 
     # ------------------------------------------------------------------ stills

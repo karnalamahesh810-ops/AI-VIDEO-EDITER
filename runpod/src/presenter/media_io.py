@@ -70,13 +70,51 @@ def to_wav(src: str, out: str, rate: int = 24000) -> str:
     return out
 
 
+_LUFS = re.compile(r"I:\s+(-?[\d.]+)\s+LUFS")
+_PEAK = re.compile(r"Peak:\s+(-?[\d.]+|-inf)\s+dBFS")
+# The level the avatar hears (src/presenter/generate.py): any voice - our TTS at about -16 to -20 LUFS, a quiet phone
+# recording, a hot one that clips - reaches the lip-sync model at about the same loudness. Only the copy sent to the
+# avatar changes (its own sound is muted); the video's narration is never touched.
+AVATAR_LUFS = -18.0
+GAIN_MIN, GAIN_MAX = -8.0, 15.0
+GAIN_DEADBAND = 1.0
+PEAK_CEILING = -1.0
+
+
+def loudness(path: str) -> Optional[Dict[str, float]]:
+    """{"lufs", "peak"} (integrated loudness, true peak dBFS) of a file's sound; None when unreadable or silent."""
+    p = _run([FFMPEG, "-v", "info", "-nostats", "-i", path, "-map", "0:a:0", "-af",
+              "ebur128=peak=true:framelog=quiet", "-f", "null", "-"], 900)
+    err = p.stderr.decode("utf-8", "replace")
+    lufs = _LUFS.findall(err)
+    if p.returncode != 0 or not lufs:
+        return None
+    value = float(lufs[-1])
+    if value <= -70.0:
+        return None
+    peaks = _PEAK.findall(err)
+    peak = float(peaks[-1]) if peaks and peaks[-1] != "-inf" else -99.0
+    return {"lufs": value, "peak": peak}
+
+
+def avatar_gain(level: Optional[Dict[str, float]], target: float = AVATAR_LUFS) -> float:
+    """The steady gain (dB) that brings a narration to the avatar's level without clipping (0 when close already)."""
+    if not level:
+        return 0.0
+    gain = max(GAIN_MIN, min(GAIN_MAX, target - float(level["lufs"])))
+    gain = min(gain, PEAK_CEILING - float(level.get("peak", -99.0)))
+    return 0.0 if abs(gain) < GAIN_DEADBAND else round(gain, 2)
+
+
 def cut_window(src_wav: str, start: float, end: float, out: str, *, pad_before: float, pad_after: float,
-               total: float, rate: int = 24000) -> Dict[str, float]:
+               total: float, rate: int = 24000, gain_db: float = 0.0, highpass: float = 0.0) -> Dict[str, float]:
     """
     The voice from `start - pad_before` to `end + pad_after` as its own WAV. A
     window that reaches past the narration's start or end is padded with
     silence instead, so the clip's time `lead` (= pad_before) is always the
-    scene's first frame. Returns {"path", "from", "to", "lead", "seconds"}.
+    scene's first frame. `gain_db` (one steady gain) and `highpass` (Hz: the
+    rumble of a home recording out) shape the copy the avatar hears - never
+    its timing. Returns {"path", "from", "to", "lead", "seconds", "gainDb"}.
     """
     want_a, want_b = start - pad_before, end + pad_after
     a, b = max(0.0, want_a), min(float(total), want_b)
@@ -85,6 +123,10 @@ def cut_window(src_wav: str, start: float, end: float, out: str, *, pad_before: 
     pre_ms = int(round(max(0.0, a - want_a) * 1000))
     post = max(0.0, want_b - b)
     chain = []
+    if highpass and highpass > 0:
+        chain.append(f"highpass=f={float(highpass):.0f}")
+    if gain_db:
+        chain.append(f"volume={float(gain_db):.2f}dB")
     if pre_ms > 0:
         chain.append(f"adelay={pre_ms}:all=1")
     if post > 0.001:
@@ -97,7 +139,7 @@ def cut_window(src_wav: str, start: float, end: float, out: str, *, pad_before: 
     if p.returncode != 0 or not os.path.isfile(out):
         raise MediaError(f"window not cut: {p.stderr.decode('utf-8', 'replace')[-200:]}")
     return {"path": out, "from": round(want_a, 3), "to": round(want_b, 3), "lead": round(pad_before, 3),
-            "seconds": round(want_b - want_a, 3)}
+            "seconds": round(want_b - want_a, 3), **({"gainDb": round(float(gain_db), 2)} if gain_db else {})}
 
 
 def trim(src: str, out: str, offset: float, seconds: float, *, mute: bool = True, crf: int = 17,

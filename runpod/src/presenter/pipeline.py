@@ -2,6 +2,12 @@
 The AI presenter style end to end, for a plan or build job whose video_style
 is "ai_presenter" (handler.do_plan hands the whole plan to plan() here):
 
+  0. the set (src/presenter/sets.py, the job's "presenter_set"): where the
+     presenter is filmed - chosen first ("auto" reads the title and the
+     script, else the narration's words), the presenter + set pair found in
+     the R2 cache or made in the background while the narration is aligned,
+     applied to the kit before the planner reads it (absent: the kit's own
+     set, as before);
   1. the narration: the job's voice (an upload, or our TTS made from the
      script by the handler's narrate step) and its word timings (the job's
      own "words", else whisper as every style);
@@ -20,12 +26,13 @@ from __future__ import annotations
 import math
 import os
 import shutil
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
 from .. import config, storage, timeline, transcribe
 from .. import render as renderer
-from . import assemble, director, estimate, kits, media_io, providers, shotplan, tiers
+from . import assemble, director, estimate, kits, media_io, providers, sets, shotplan, tiers
 from .budget import Budget
 from .checks import Checker
 from .generate import Generator
@@ -160,8 +167,8 @@ def _costs(budget: Budget) -> Dict[str, Any]:
         n[kind] = n.get(kind, 0) + (0 if row.get("released") else 1)
     return {"presenterUsd": round(by.get("presenter", 0.0), 4), "aiVideoUsd": round(by.get("aivideo", 0.0), 4),
             "imagesUsd": round(by.get("image", 0.0), 4), "checksUsd": round(by.get("check", 0.0), 4),
-            "plannerUsd": round(by.get("plan", 0.0), 4), "totalUsd": round(sum(by.values()), 4),
-            "calls": n}
+            "plannerUsd": round(by.get("plan", 0.0), 4), "setUsd": round(by.get("set", 0.0), 4),
+            "totalUsd": round(sum(by.values()), 4), "calls": n}
 
 
 def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = None) -> Dict[str, Any]:
@@ -181,6 +188,30 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     report.estimate(duration)
     wav = media_io.to_wav(nar["path"], os.path.join(work, "narration_24k.wav"))
 
+    # The job's cap on the presenter's whole time (presenter_max_seconds; none unless sent): the plan and the
+    # estimate behind the budget both keep to it.
+    cap_seconds = max_seconds_of(inp)
+    est = estimate.estimate(duration / 60.0, tier, own_voice=not nar["made"], max_seconds=cap_seconds)
+    budget = Budget(budget_cap(inp, est))
+    checker = Checker(provider, budget, work)
+    title = str(inp.get("title") or inp.get("title_overlay") or "").strip()
+
+    # Where the presenter is filmed (src/presenter/sets.py; no "presenter_set": the kit's own set, as before).
+    set_job = sets.SetJob(kit, inp.get("presenter_set"), provider=provider, budget=budget, work=work,
+                          checker=checker, log=lambda m: print(m, flush=True))
+    set_thread: List[threading.Thread] = []
+
+    def start_set() -> None:
+        if set_job.needs_pair() and not set_thread:
+            # Its own room on top of the video's cap (presenter + set: two pictures, paid once ever).
+            budget.cap += set_job.extra_budget()
+            t = threading.Thread(target=set_job.run, name="presenter-set", daemon=True)
+            t.start()
+            set_thread.append(t)
+    if set_job.requested and (inp.get("script") or title or (set_job.req or {}).get("id") != "auto"):
+        set_job.choose(title=title, text=sets.job_text((), inp.get("script") or ""))
+        start_set()
+
     report("Aligning narration", 8)
     words = words_from(inp.get("words"))
     if not words:
@@ -192,15 +223,23 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     if inp.get("script"):
         words = script_words(words, inp["script"])
     segments = transcribe.segment_words(words, origin=0.0, until=duration)
-
-    # The job's cap on the presenter's whole time (presenter_max_seconds; none unless sent): the plan and the
-    # estimate behind the budget both keep to it.
-    cap_seconds = max_seconds_of(inp)
-    est = estimate.estimate(duration / 60.0, tier, own_voice=not nar["made"], max_seconds=cap_seconds)
-    budget = Budget(budget_cap(inp, est))
-    title = str(inp.get("title") or inp.get("title_overlay") or "").strip()
+    if set_job.requested and set_job.choice is None:
+        # Auto with neither a script nor a title: the narration's own words choose.
+        set_job.choose(title=title, text=" ".join(w.text for w in words))
+        start_set()
 
     report("Planning the presenter video", 14)
+    warnings: List[str] = []
+    if set_thread:
+        # The planner and every shot read the kit: the presenter is put in the set first.
+        report("Putting the presenter in the set", 14)
+        set_thread[0].join(sets.CLAIM_WAIT_SECONDS + 600.0)
+        if set_thread[0].is_alive():
+            set_job.error = set_job.error or "the set was not ready in time"
+        else:
+            kit = set_job.kit
+        if set_job.warning():
+            warnings.append(set_job.warning())
     beats = shotplan.beats_from(segments, duration)
     cache_dir = os.getenv("PRESENTER_CACHE_DIR", "").strip() or os.path.join(work, "presenter_cache")
     notes = director.annotate(beats, title=title, kit=kit, provider=provider, budget=budget, cache=cache_dir)
@@ -221,7 +260,6 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     project_id = str(inp.get("project_id") or "")
     store = Store(project_id, str(inp.get("_job_id") or ""))
     cache = Cache(cache_dir, store if project_id else None)
-    checker = Checker(provider, budget, work)
 
     def progress(done: int, total: int) -> None:
         report(f"Sourcing the presenter, clips and pictures {done}/{total}", 22 + int(40 * done / max(total, 1)),
@@ -235,7 +273,6 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     finally:
         removed = store.cleanup()
     report("Designing the edit", 64)
-    warnings: List[str] = []
     if gen.no_https_audio:
         warnings.append("Presenter shots need R2 (the voice goes to the avatar model by an https link): "
                         "they were drawn as pictures instead.")
@@ -270,6 +307,8 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
         "costs": _costs(budget), "budget": budget.report(), "estimate": est,
         "cache": {"hits": cache.hits, "folder": "PRESENTER_CACHE_DIR" if os.getenv("PRESENTER_CACHE_DIR") else "job"},
         "checks": {"calls": checker.calls, "unchecked": checker.unchecked},
+        # Where the presenter was filmed (src/presenter/sets.py): asked / chosen / used, the pair and its cost.
+        "set": set_job.report(),
         "storage": {"prefix": store.prefix, "kept": store.kept, "inputsRemoved": removed},
         "disclosure": DISCLOSURE, "seconds": round(time.time() - started, 1), "log": gen.log[-60:],
     }
@@ -297,6 +336,10 @@ def info() -> Dict[str, Any]:
     return {"style": STYLE, "defaultTier": tiers.DEFAULT_TIER,
             "tiers": {k: tiers.summary(tiers.resolve(k)) for k in tiers.all_tiers()},
             "estimate": estimate.table(), "kits": known, "script": script_preset.PRESET, "disclosure": DISCLOSURE,
+            # Where the presenter is filmed (src/presenter/sets.py): the catalogue the app's Set picker shows, the
+            # set "auto" falls back to, and what a new presenter + set pair costs (once, ever).
+            "sets": {"catalogue": sets.catalogue(), "groups": [{"id": g, "label": label} for g, label in sets.GROUPS],
+                     "default": sets.DEFAULT_SET, "pairUsd": round(2 * sets.PICTURE_USD, 2)},
             # The presenter inside any footage style (a job's "presenter" block): $ per 10/15/20-minute video at
             # light / medium, real footage everywhere else (src/presenter/hybrid.py).
             "hybrid": dict(hybrid.estimate_table(), disclosure=hybrid.DISCLOSURE)}
