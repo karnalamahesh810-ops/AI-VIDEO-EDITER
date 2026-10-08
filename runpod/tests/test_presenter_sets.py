@@ -312,6 +312,9 @@ class Pairs(unittest.TestCase):
         index = self.store.json[f"{folder.rsplit('/', 1)[0]}/index.json"]
         self.assertEqual(set(index["sets"]), {"library"})
         self.assertTrue(index["sets"]["library"]["master_1280"])
+        row = index["sets"]["library"]
+        self.assertEqual((row["master"], row["closeup"]), (manifest["images"]["master"], manifest["images"]["closeup"]))
+        self.assertEqual(row["made_from"], manifest["made_from"])     # the app sends a ready pair inline only if so
         self.assertTrue(all(v.get("ok") for v in pair.checks.values()))
         # The next job (any user, any video): no picture paid again.
         p2 = SetProvider()

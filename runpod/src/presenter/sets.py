@@ -979,8 +979,12 @@ def _keep(store: SetStore, kit: dict, sp: SetSpec, choice: Choice, pair: Pair, m
         index_key = f"{pair.folder.rsplit('/', 1)[0]}/index.json"
         index = store.get_json(index_key) or {}
         rows = index.get("sets") if isinstance(index.get("sets"), dict) else {}
-        rows[sp.id] = {"label": sp.label, "master_1280": urls["master_1280"], "closeup_1280": urls["closeup_1280"],
-                       "made_at": pair.made_at, **({"description": sp.niches} if sp.group == "custom" else {})}
+        # The originals and the master they were drawn from too: the app may send a ready pair inline with the job
+        # ("images"), when made_from is still the presenter's master.
+        rows[sp.id] = {"label": sp.label, "master": urls["master"], "closeup": urls["closeup"],
+                       "master_1280": urls["master_1280"], "closeup_1280": urls["closeup_1280"],
+                       "made_from": made_from, "made_at": pair.made_at,
+                       **({"description": sp.niches} if sp.group == "custom" else {})}
         store.put_json(index_key, {"version": 1, "kit": kit.get("id"), "sets": rows})
     except Exception as e:  # noqa: BLE001
         log(f"[sets] {sp.id}: set.json/index.json not written ({type(e).__name__})")
