@@ -150,7 +150,8 @@ def do_upscale(job_id: str, inp: dict) -> dict:
         t0 = time.time()
         out = os.path.join(work, "out.mp4")
         then = args["fps"] and abs(args["fps"] - float(info["fps"] or 0)) > 0.5
-        got = engine("vsr").upscale(src, out if not then else os.path.join(work, "vsr.mp4"), lines=args["lines"],
+        vsr = engine("vsr")
+        got = vsr.upscale(src, out if not then else os.path.join(work, "vsr.mp4"), lines=args["lines"],
                                     start=args["start"], seconds=args["seconds"], sparse=args["sparse"],
                                     local_range=args["local_range"], seed=args["seed"], info=info,
                                     keep_frames=bool(then), text_guard=args["text_guard"])
@@ -166,7 +167,7 @@ def do_upscale(job_id: str, inp: dict) -> dict:
             _remux_audio(out, src, args["start"], args["seconds"], info)
         url = publish(out, job_id, "mp4", "video/mp4")
         return {"ok": True, "url": url, **got, "gpu_seconds": round(time.time() - t0, 1),
-                "engine": "flashvsr-1.1-tiny"}
+                "engine": "flashvsr-1.1-" + ("long" if vsr.long else "tiny")}
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
