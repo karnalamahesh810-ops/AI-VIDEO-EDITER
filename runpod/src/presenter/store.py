@@ -40,9 +40,11 @@ def file_hash(path: str) -> str:
 
 
 class Store:
-    def __init__(self, project_id: str = "", job_id: str = "", enabled: Optional[bool] = None):
+    def __init__(self, project_id: str = "", job_id: str = "", enabled: Optional[bool] = None,
+                 folder: str = "presenter"):
         base = f"projects/{project_id}" if project_id else f"jobs/{job_id or 'adhoc'}"
-        self.prefix = f"{base}/presenter"
+        # (AI fill keeps its pictures and clips beside the project's, under .../aifill: src/aifill.py.)
+        self.prefix = f"{base}/{folder or 'presenter'}"
         self.enabled = r2.enabled() if enabled is None else bool(enabled)
         self._lock = threading.Lock()
         self.temp_keys: List[str] = []

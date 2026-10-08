@@ -252,3 +252,54 @@ Without the block nothing changes: tests prove the timeline is byte-for-byte tha
 Past the cap a longer video adds only its footage build (~$0.11 a minute): a 25-minute medium video is $10.43 (was $16.19).
 
 **The app Player** needs the same `frame: "split"` drawing as section 8, with a video right half (`media.split.type: "video"`).
+
+## 11. Sets: where the presenter is filmed, for any niche (worker branch `feature/presenter-sets`)
+
+Code: `runpod/src/presenter/sets.py` (catalogue, auto choice, the pair, the cache) and `runpod/src/presenter/motion.py` (how the presenter moves). Without a set field nothing changes: the presenter stays in the kit's own set.
+
+**Job fields**
+- AI presenter style: `"presenter_set": {"id": "auto" | <set id> | "home" | "custom", "description": "..."}` (a bare string is the id).
+- Hybrid add-on: the presenter block's `"set"`, the same object.
+- Optional on either: `"images": {"master": "https://...", "closeup": "https://..."}` (a pair the app already has: nothing is made), `"regenerate": true` (make the pair again).
+- Kit field `home_set`: the catalogue set the kit's own pictures show (library: ruth/hollis/rosa/leo `kitchen`, gideon `workshop`). A pick of that set uses the kit itself: free. Without it the worker reads it from `room`.
+
+**The catalogue** (`presenter_info.sets.catalogue`: id, label, hint, group, niches; the app's `_shared/presenterSets.ts` mirrors it):
+
+| Group | Sets |
+|---|---|
+| Studios and desks | `studio` Neutral studio (the fallback), `office` Modern office, `tech_desk` Tech desk, `podcast` Podcast studio, `newsroom` Newsroom desk, `trading_desk` Finance desk, `weather_studio` Weather studio |
+| Learning and stories | `classroom` Classroom, `library` Library / study (history), `dark_room` Dark moody room (true crime), `science_lab` Science lab |
+| Home and hands-on | `kitchen` Kitchen, `workshop` Workshop / garage, `living_room` Cozy living room, `gym` Gym, `car` Car interior |
+| On location | `city_street` City street, `nature` Nature / outdoors, `landmark` Travel landmark, `storm` Storm, on location |
+
+Plus `custom` ("Describe a set"): the description (3-200 characters; the app refuses public figures and brand names) is the place. The same description is the same set: `custom-<sha1[:10]>`.
+
+**Auto**
+- Keyword rules over the title (x3) and the script (the narration's own lines when there is no script), one word counted at most 3 times, for 24 niches (history, biography, ideas, finance, business, tech, gaming, true crime, travel, city, food, DIY, fitness, sports, talk, science, health, lifestyle, education, news, weather, storm, nature, cars).
+- Sure (best score at least 3 and 1.4x the next): that set, no call.
+- Unsure: one `google/gemini-2.5-flash` call (~$0.0005) picks from the catalogue; an answer under 0.5 confidence, or none: `studio`.
+- A pick equal to the kit's `home_set`: the kit's own set.
+- 22 sample scripts across niches are pinned by tests on both sides (`tests/fixtures/set_choice_samples.json`).
+
+**The pair (paid once, ever, per presenter + set)**
+- Two Nano Banana Pro (`google/gemini-3-pro-image`, 2K, 16:9) pictures: the main camera (waist up, the set's stance, hands resting) with the kit's master as the reference, then a close-up (mid-chest up, hands out of frame) with the new picture and the master as references.
+- The clothes stay the kit's; outdoors adds a plain jacket, the lab a lab coat, the gym training clothes. No text, logos or brands; screens show abstract shapes, charts or a generic radar map, never words.
+- Each picture: a size check and a same-person check against the master (gemini-2.5-flash, ~$0.0006); one retry with a stronger same-person line.
+- About $0.28 a pair. It has its own room on top of the job's cap (`PAIR_PROJECTED_USD` $0.453, only when the pair is not cached yet).
+- Kept on R2 beside the kit's master: `presenters/<id>/sets/<set>/` (library) or `presenters/user/<uid>/<id>/sets/<set>/` (a user's own): `master-<token>.png`, `closeup-<token>.png`, `*_1280-<token>.jpg` previews, `set.json` (status, `made_from` = the master it was drawn from: a newer master makes it again, images, checks, cost). The kit folder's `sets/index.json` lists the made sets: `{label, master, closeup, master_1280, closeup_1280, made_from, made_at, description?}` (the app's picker shows the previews; for an explicit set whose `made_from` is still the presenter's master it may send `master`/`closeup` inline as `images`).
+- A job that finds another job making the same pair waits for it (up to `PRESENTER_SET_WAIT_SECONDS`, 240 s).
+- The style makes the pair while whisper aligns the narration; the hybrid makes it in the presenter's background thread before the first take.
+- Anything that fails (budget, model, checks, storage): the kit's own set, with a warning; the video is never lost.
+
+**What comes back**: `meta.presenter.set` / `meta.presenterHybrid.set` = `{requested, id, how (asked | rules | model | default | home), asked, label, scores, model, pair {set, master, closeup, masterPreview, closeupPreview, cached ("" made now | "r2" | "job"), usd, folder, checks}, used (the set id, or "home"), usd, error, seconds}`; `costs.setUsd`; each hybrid presenter scene's `semanticMetadata.presenter.set` and `.motion`.
+
+**Action `presenter_set`** (no video): `{presenter_kit | presenter_id..., "set": "auto" | id | {...}, "title", "script", "make": false, "budget_usd": 0.6}` -> the choice, `cached`, and with `make: true` the pair (found or made) and its cost.
+
+**How the presenter moves** (every take, with or without a set): the `heygen/avatar-iv` call carries `provider.options.heygen = {motion_prompt, expressiveness}`.
+- What avatar-iv takes on OpenRouter: prompt; resolution 720p/1080p; aspect 16:9, 9:16, 1:1; one image + one https audio link (the clip is as long as the audio; no seed, no duration); passthrough `motion_prompt`, `expressiveness` (low | medium | high, HeyGen's default low), `fit`, `remove_background`, `background`, `caption`, `title`, `voice_id` / `voice_settings` (HeyGen's own TTS: never used).
+- The motion prompt: eyes open on the lens with quick blinks (never held shut, no squinting), small nods and tilts on stressed words, a relaxed face; on the main camera the hands rest and now and then make a small, calm gesture at chest height (a close-up keeps them below the frame); nothing fast or repetitive, never near the face; plus a line for the line's tone (opening, sign-off, question, emphasis, serious, memory, list).
+- `expressiveness`: low (HeyGen's own default). `PRESENTER_EXPRESSIVENESS=medium` raises the main camera's; a close-up, a serious line and a selfie stay low; a kit's own `avatar.expressiveness` wins. A 400 on it: the next takes go without it. The 2026-10-08 proof with medium: more head (+35%) and hand (2x) movement than the old takes, but the eyes were shut or squinting in about a quarter of the frames and the face check failed the take; the prompt now asks for open eyes and quick blinks, and medium waits for an A/B.
+- The prompt names the set the presenter is in.
+- A kit's own `avatar.prompt` / `avatar.motion_prompt` replace the defaults (tone lines are still added).
+
+**Any voice, exact lip-sync**: the narration is the only sound of the video. Each take's window is cut from it frame-exact; the copy sent to the avatar only gets one steady gain to about -18 LUFS (never past -1 dBFS peak; measured once on the whole narration) and a 70 Hz high-pass, so a quiet phone recording, a hot one or our TTS all reach the lip-sync model alike. The returned clip's own audio is cross-correlated with that window (`lag`), the clip trimmed frame-exact and muted.

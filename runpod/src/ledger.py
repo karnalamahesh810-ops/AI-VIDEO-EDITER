@@ -60,8 +60,9 @@ VERSION = 1
 _INF = float("inf")
 _YT_ID = re.compile(r"(?:[?&]v=|youtu\.be/|/shorts/|/embed/|\byt:)([\w-]{11})(?![\w-])")
 _T_PARAM = re.compile(r"[?&#]t=(\d+(?:\.\d+)?)(?:s|$|&)|[?&#]t=(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)")
-# Never recorded: pictures and loops made for this video, and empty scenes.
-_NEVER = {"", "none", "generated", "noaa_goes", "upload", "animation", "color", "template"}
+# Never recorded: pictures and loops made for this video (AI fill's "ai-generated" too: src/aifill.py), and
+# empty scenes.
+_NEVER = {"", "none", "generated", "ai-generated", "noaa_goes", "upload", "animation", "color", "template"}
 _JOB_KEY = re.compile(r"([^/]+)\.json$")
 
 

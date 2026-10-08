@@ -231,10 +231,27 @@ def agency(url: str = "", page_url: str = "", thumbnail: str = "", title: str = 
     return found
 
 
+# A video's own thumbnail is its title card - the channel's headline in big letters, arrows, a logo (the
+# benchmark of 2026-10-08: an NDTV upload's "ICONIC SUNSET BOULEVARD IN RUINS, MANY CELEBS LOSE HOMES"
+# thumbnail, i.ytimg.com/vi/<id>/maxresdefault.jpg, filled a wildfire line as a "picture", judged 0.9). Its
+# address, or a page that is the video itself, says so before any download.
+_VIDEO_THUMB_HOSTS = ("ytimg.com", "img.youtube.com", "youtube.com", "youtu.be", "youtube-nocookie.com")
+
+
+def video_thumbnail(*urls) -> bool:
+    """One of these addresses is a YouTube video's thumbnail or the video's own page."""
+    return any(host == d or host.endswith("." + d) for u in urls for host in _hosts(u) for d in _VIDEO_THUMB_HOSTS)
+
+
 def reason(url: str = "", page_url: str = "", thumbnail: str = "", title: str = "", attribution: str = "") -> str:
-    """Why a picture candidate must not be used ("" = keep): "a stock-agency picture (alamy)"."""
+    """Why a picture candidate must not be used ("" = keep): "a stock-agency picture (alamy)", or "a video's
+    thumbnail (youtube thumbnail)" for a YouTube video's title card found by a picture search."""
     found = agency(url, page_url, thumbnail, title, attribution)
-    return f"a stock-agency picture ({found})" if found else ""
+    if found:
+        return f"a stock-agency picture ({found})"
+    if enabled() and video_thumbnail(url, page_url, attribution):
+        return "a video's thumbnail (youtube thumbnail)"
+    return ""
 
 
 def _fields(item: Any) -> Dict[str, str]:
@@ -261,7 +278,7 @@ def asset_reason(item: Any) -> str:
     if item is None or not enabled():
         return ""
     source = item.get("source") if isinstance(item, dict) else getattr(item, "source", "")
-    if source == "generated":
+    if source in ("generated", "ai-generated"):         # (AI fill's own pictures: src/aifill.py)
         return ""
     return reason(**_fields(item))
 

@@ -495,7 +495,10 @@ class FindForTheStory(unittest.TestCase):
 
     def test_images_are_found_only_when_asked_for(self):
         lib = library.Library("p", "j")
-        lib.entries = [library._from_row(r) for r in (oldrow(1, kind="image"), oldrow(2))]
+        # (A picture row keeps the picture's own address: a YouTube watch page is a video's thumbnail, never a
+        # picture - src/stockblock.video_thumbnail.)
+        lib.entries = [library._from_row(r) for r in (oldrow(1, kind="image", source_url="https://upload.wikimedia.org/x.jpg"),
+                                                      oldrow(2))]
         self.assertEqual([e["id"] for e in lib.find("Lake Mead", n=3)], ["yt:oldvid0002@3"])
         self.assertEqual([e["id"] for e in lib.find("Lake Mead", n=3, kind="image")], ["yt:oldvid0001@3"])
 

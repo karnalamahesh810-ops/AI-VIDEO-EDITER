@@ -84,6 +84,7 @@ from urllib.request import url2pathname
 import requests
 
 from . import config, events, gapfill, r2, templates
+from .aifill import AI_SOURCE, is_ai_scene
 from .presenter import PRESENTER_SOURCE, is_presenter_scene
 
 # --------------------------------------------------------------------------- #
@@ -620,7 +621,7 @@ def text_scene(doc: dict, s: dict) -> None:
 
 def _how(asset) -> str:
     """How the ladder filled a scene, in words."""
-    if getattr(asset, "source", "") == "generated":
+    if getattr(asset, "source", "") in ("generated", AI_SOURCE):
         return "an AI picture"
     if getattr(asset, "kind", "") == "image":
         return "a picture"
@@ -1586,6 +1587,10 @@ class Gate:
                 info[sid]["how"] = "held over by its neighbouring shots"
             elif (s.get("media") or {}).get("type") == "animation":
                 info[sid]["how"] = "a motion graphic of its line"
+            elif is_ai_scene(s) and "how" not in info[sid]:
+                # AI fill (src/aifill.py): only in a job with an ai_fill block.
+                info[sid]["how"] = ("an AI clip made for its line" if (s.get("media") or {}).get("type") == "video"
+                                    else "an AI picture made for its line")
             elif not gapfill._empty(s) and "how" not in info[sid]:
                 # A hold would have run past SHOT_MAX_SECONDS (src/shotcap.py): a fresh shot instead.
                 cap = (s.get("semanticMetadata") or {}).get("shotCap") or {}
@@ -1632,8 +1637,9 @@ class Gate:
         for i, s in enumerate(scenes):
             m = s.get("media") or {}
             url = str(m.get("url") or "")
-            if not url or s.get("teaser") or str(s.get("frame") or "full") != "full" or is_presenter_scene(s):
-                continue
+            if not url or s.get("teaser") or str(s.get("frame") or "full") != "full" or is_presenter_scene(s) \
+                    or is_ai_scene(s):
+                continue                    # (an AI fill picture or clip is made at its size: src/aifill.py)
             sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
             source = str(m.get("source") or sem.get("provider") or "")
             if m.get("type") == "image" and sharpness.picture_on() and source != "generated":

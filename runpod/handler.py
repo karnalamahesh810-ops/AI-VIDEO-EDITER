@@ -107,6 +107,7 @@ from src import sharpness
 from src import living
 from src import hookcheck
 from src import shorts
+from src import aifill
 from src.presenter import hybrid as presenter_hybrid
 
 
@@ -1572,6 +1573,16 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         _bind_overlay_photos(doc, work, _put_split)
     except Exception as e:  # noqa: BLE001 - a nicety, never a failure
         print(f"[worker] split images skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+    if aifill.enabled():
+        # AI fill (src/aifill.py), only for a job with an ai_fill block: every line nothing real was found for -
+        # the search, the pools, the rescue and the ladder have all had their turn - gets an AI picture (a few key
+        # ones an AI clip) before any hold, borrowed picture or text card below. Without the block nothing runs.
+        aifill.set_story(brief)
+        report("Making AI pictures for the lines with no footage")
+        try:
+            aifill.fill_doc(doc, work=work, story=brief, label="after the footage search", report=report)
+        except Exception as e:  # noqa: BLE001 - AI fill never fails a video
+            print(f"[worker] AI fill skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
     # (d) the last resort for a line the ladder could not fill: the planner's
     # graphic for it, else the neighbouring shot held over it (src/gapfill.py).
     # Never an empty scene, never another scene's clip.
@@ -1683,6 +1694,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # Nothing over the presenter (a look from the footage before ends at the cut), the presenter's report
         # and costs (meta.presenterHybrid), the YouTube disclosure line.
         hy.finish(doc)
+    # AI fill's report (meta.aiFill) and, once it made anything, its YouTube disclosure line (src/aifill.py).
+    aifill.annotate(doc)
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).
@@ -2930,7 +2943,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       # parts) and its pass-1 time - each can be A/B'd on one job.
                       "VISION_SHEET_IMAGES", "VISION_COMPACT_TILES", "JUDGE_MEMORY_VIDEO_STRIKES", "BUILD_FANOUT",
                       "VISION_NEWS_OVERLAYS_OK",
-                      "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS")
+                      "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS",
+                      # Each line's own sourcing trace in meta.sourcing.traces (the benchmark, 2026-10-08), and
+                      # how long pass 1 waits for the lines it closed on to hand back what they hold.
+                      "SOURCE_TRACE", "PASS1_COLLECT_SECONDS")
 
 
 def _apply_config(overrides) -> dict:
@@ -3185,6 +3201,14 @@ def handler(job):
     hookcheck.reset()                   # and the hook check's vision calls
     packs.reset()                       # and the niches its footage packs are read for
     quality.reset()                     # and so is the quality check's
+    # AI fill (src/aifill.py): only a plan, build or render with an ai_fill block - its caps and budget (a
+    # render counts the AI pictures its timeline already shows and what its plan spent). Otherwise off.
+    if action in ("plan", "build", "render"):
+        aifill.start(inp, work=work, project_id=project_id, job_id=job_id,
+                     doc=inp.get("timeline") if action == "render" and isinstance(inp.get("timeline"), dict)
+                     else None)
+    else:
+        aifill.reset()
     kit_scope = brandkit.scope(kit)     # left in the finally below, whatever happens
     kit_scope.__enter__()
 
@@ -3383,6 +3407,19 @@ def handler(job):
             return {**out, "action": "shorts", "costs": costs.summary(time.time() - started),
                     "events": events.summary(), "elapsed": round(time.time() - started, 1)}
 
+        if action == "presenter_set":
+            # Where an AI presenter is filmed (src/presenter/sets.py), outside a video: the set "auto" picks for a
+            # title and script, whether the presenter + set pair is cached, and - with "make": true - the pair
+            # found or made (two Nano Banana Pro pictures, paid once ever; "budget_usd" caps it, default $0.60).
+            from src.presenter import sets as presenter_sets
+            try:
+                out = presenter_sets.action(inp, work)
+            except Exception as e:  # noqa: BLE001 - reported in the result, nothing else is touched
+                traceback.print_exc()
+                out = {"ok": False, "error": f"{type(e).__name__}: {e}"[:800]}
+            return {**out, "action": "presenter_set", "costs": costs.summary(time.time() - started),
+                    "elapsed": round(time.time() - started, 1)}
+
         if action == "presenter_info":
             # The AI presenter style for the app (src/presenter): its tiers, $ per 10/15/20-minute video per
             # tier, the presenter kits, the script preset. No paid call, no project write.
@@ -3401,6 +3438,8 @@ def handler(job):
                     "imageModelName": config.IMAGE_MODEL if config.IMAGE_API_KEY else "",
                     "preferGenerated": config.PREFER_GENERATED_IMAGES,
                     "imageCapPerVideo": config.IMAGE_MAX_PER_VIDEO,
+                    # AI fill (src/aifill.py): whether a job's ai_fill block can reach OpenRouter, and its models.
+                    "aiFill": aifill.health(),
                     "storage": store,
                     "readyToRender": store.get("ok", False),
                     "parallelWorkers": fanout.readiness(config.FANOUT_MIN_SCENES),
@@ -3470,6 +3509,7 @@ def handler(job):
         if action == "plan":
             doc = _plan_document(inp, work, report)
             _after_plan(doc, work, report)
+            aifill.annotate(doc)                # (the checks above may have made more: src/aifill.py)
             # Without this the timeline points at files this job is about to
             # delete. See publish_media().
             if project_id and inp.get("publish_media", True):
@@ -3546,6 +3586,9 @@ def handler(job):
             # 15 minutes of one CPU and then failed on one broken clip.
             split = bool(project_id and fanout.render_enabled(doc, project_id))
             out = do_render(doc, inp, work, report, split=split)
+            if aifill.enabled():
+                # The AI pictures the render's repairs made (src/aifill.py), with the timeline's own before them.
+                out["aiFill"] = aifill.report(doc)
             if project_id and not _is_presenter_doc(doc):
                 # Before the done write: the broker takes rows only while the project renders.
                 # (Never an AI presenter video's generated shots: the library is real footage.)
@@ -3566,6 +3609,7 @@ def handler(job):
         if action == "build":
             doc = _plan_document(inp, work, report)
             _after_plan(doc, work, report)
+            aifill.annotate(doc)                # (the checks above may have made more: src/aifill.py)
             if project_id:
                 # Saved before the render: a failure there keeps the search.
                 storage.patch_project(project_id, {"scene_data": doc}, wait=True)
@@ -3620,6 +3664,8 @@ def handler(job):
                         print(f"[review] swapped clips not saved: {type(e).__name__}: {str(e)[:120]}", flush=True)
                     review.unsaved_back(doc, carried)
                 review.mark_for_review(doc, out["review"], carried=carried)
+            # What AI fill made and spent, the render's repairs included (src/aifill.py; nothing without the block).
+            aifill.annotate(doc)
             if not split and project_id and inp.get("publish_media", True):
                 publish_media(doc, project_id, inp.get("media_bucket") or config.MEDIA_BUCKET,
                               report, job_id=job_id, band=(93, 99))
@@ -3685,6 +3731,7 @@ def handler(job):
         _restore_config(config_before)
         kit_scope.__exit__(None, None, None)
         quality.reset()
+        aifill.reset()
         events.phase("")
         try:
             events.flush(storage.broker_events)

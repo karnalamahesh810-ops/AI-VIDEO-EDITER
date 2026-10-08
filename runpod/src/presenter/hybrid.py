@@ -14,8 +14,11 @@ docs/ai-presenter-contract.md section 10):
                   "split_screen": true,                  # about a third of the middle appearances 50/50
                   "max_seconds": 120,                    # the presenter's whole time on screen at most (default
                                                          # 120, however long the video; split screens count)
-                  "budget_usd": 9.0}                     # hard cap on the presenter's paid calls (the app sends
+                  "budget_usd": 9.0,                     # hard cap on the presenter's paid calls (the app sends
                                                          # min(narration s x share, 120) x $0.05 x 1.5; absent: ours)
+                  "set": "auto"}                         # where the presenter is filmed (src/presenter/sets.py):
+                                                         # "auto", a set id, "home", or {"id": "custom",
+                                                         # "description": ...}; absent: the kit's own set
 
 Without the block nothing here runs and the build is exactly what it was.
 
@@ -33,8 +36,11 @@ What it does (handler.do_plan calls each step at its place):
                    it keeps the opening and the close and spreads the beats
                    between them evenly instead, adding none once the next
                    would pass the cap. A plan within the cap is unchanged.
-  2. start()       the appearances are made in the background while the
-                   footage search runs: one heygen/avatar-iv take per
+  2. start()       the set is chosen (src/presenter/sets.py: the block's
+                   "set"; "auto" reads the title and the narration), then
+                   in the background - the set pair found or made first
+                   (presenter + set, paid once ever), then the takes - while
+                   the footage search runs: one heygen/avatar-iv take per
                    appearance from its narration window (src/presenter/
                    generate.py: kit framing, checks, the other framing as the
                    retry, the job's budget), cut frame-exact into one clip
@@ -755,6 +761,8 @@ class Hybrid:
         self.dropped: List[Dict[str, Any]] = []         # planned, left out to fit the cap (their lines keep footage)
         self.capped: Optional[Dict[str, Any]] = None    # the share asked for more than max_seconds (Selector.capped)
         self.log: List[str] = []
+        self.texts: Dict[int, str] = {}                 # line -> its words (the take's tone: src/presenter/motion.py)
+        self.set_job = None                             # src/presenter/sets.SetJob: where the presenter is filmed
 
     # ---- which lines
     def lines_of(self, *, split: Optional[bool] = None) -> Set[int]:
@@ -833,12 +841,18 @@ class Hybrid:
         if not self.appearances:
             return
         planned = sum(ap.seconds for ap in self.appearances)
-        self.budget = Budget(cap)
+        # A set pair that must be made (presenter + set, two pictures, paid once ever) gets its own room on top of
+        # the takes' cap: the plan above was fitted to the takes alone.
+        extra = self.set_job.extra_budget() if self.set_job is not None and self.set_job.needs_pair() else 0.0
+        self.budget = Budget(cap + extra)
         project_id = str(self.inp.get("project_id") or "")
         self.store = store or Store(project_id, str(self.inp.get("_job_id") or ""))
         cache_dir = cache_dir or os.getenv("PRESENTER_CACHE_DIR", "").strip() or os.path.join(self.work, "presenter_cache")
         self.cache = Cache(cache_dir, self.store if project_id else None)
         self.checker = Checker(provider, self.budget, self.work)
+        if self.set_job is not None:
+            self.set_job.provider, self.set_job.budget = provider, self.budget
+            self.set_job.checker, self.set_job.work = self.checker, self.work
         tier = tiers.resolve("budget")
         os.makedirs(self.work, exist_ok=True)
         wav = media_io.to_wav(narration_path, os.path.join(self.work, "presenter_narration_24k.wav"))
@@ -847,14 +861,34 @@ class Hybrid:
                              total=self.duration, bible={}, still_fallback=False)
         self._note(f"{len(self.appearances)} appearance(s), {planned:.1f} s on camera "
                    f"({planned / max(self.duration, 1e-6):.0%} of {self.duration:.0f} s, at most {max_s:.0f} s), "
-                   f"cap ${cap:.2f}: "
+                   f"cap ${cap:.2f}" + (f" + ${extra:.2f} for the set" if extra else "") + ": "
                    + ", ".join(f"{ap.id} {ap.role}{' split' if ap.split else ''} lines {ap.lines[0]}-{ap.lines[-1]}"
                                for ap in self.appearances))
         self._thread = threading.Thread(target=self._make_all, name="presenter-hybrid", daemon=True)
         self._thread.start()
 
+    def _prepare_set(self) -> None:
+        """The presenter in the chosen set (found in the cache or made), before any take: every take uses it. A set
+        that cannot be had keeps the kit's own set (a warning says so)."""
+        sj = self.set_job
+        if sj is None or not sj.needs_pair():
+            return
+        kit = sj.run()
+        self.kit = kit
+        if self.gen is not None:
+            self.gen.kit = kit
+        if sj.warning():
+            self.warnings.append(sj.warning())
+        how = "the presenter's own set kept" if sj.error else (
+            "from the cache" if sj.pair is not None and sj.pair.cached else "made")
+        self._note(f"set {sj.choice.id}: {how}")
+
     def _make_all(self) -> None:
         from .generate import PRESENTER_PARALLEL
+        try:
+            self._prepare_set()
+        except Exception:  # noqa: BLE001 - the kit's own set: the takes still run
+            self._note(f"set: {traceback.format_exc(limit=3)[-300:]}")
         try:
             with ThreadPoolExecutor(max_workers=max(1, PRESENTER_PARALLEL)) as pool:
                 futs = {ap.id: pool.submit(self._make_one, ap) for ap in self.appearances}
@@ -872,7 +906,8 @@ class Hybrid:
     def _make_one(self, ap: Appearance) -> None:
         from .shotplan import Shot
         made = self.made[ap.id]
-        shot = Shot(kind="presenter", start=ap.start, end=ap.end, text="", words=[], beats=list(ap.lines),
+        text = " ".join(self.texts.get(i, "") for i in ap.lines).strip()
+        shot = Shot(kind="presenter", start=ap.start, end=ap.end, text=text, words=[], beats=list(ap.lines),
                     role=ap.role, framing=ap.framing, split=ap.split, id=ap.id, reason=ap.reason)
         try:
             asset = self.gen.presenter(shot)
@@ -990,7 +1025,9 @@ class Hybrid:
             window = {k: v for k, v in ((take.checks or {}).get("window") or {}).items() if k != "path"}
             sem["presenter"] = {"kit": (self.kit or {}).get("id"), "name": (self.kit or {}).get("name"),
                                 "framing": take.framing, "lag": take.lag, "take": ap.id, "lines": list(ap.lines),
-                                "window": window, "mode": "hybrid"}
+                                "window": window, "mode": "hybrid",
+                                "set": ((self.kit or {}).get("filming_set") or {}).get("id") or "home",
+                                "motion": (take.checks or {}).get("motion")}
             sem["generated"] = {k: v for k, v in take.report().items() if k != "checks"}
             sem["generated"]["checks"] = {k: v for k, v in (take.checks or {}).items() if k in ("face",)}
             if take.url:
@@ -1078,7 +1115,9 @@ class Hybrid:
                        "scenes": sum(1 for sc in doc.get("scenes") or [] if is_presenter_scene(sc)),
                        "splitScenes": splits, "appearances": len(made)},
             "costs": {"presenterUsd": round(by.get("presenter", 0.0), 4), "checksUsd": round(by.get("check", 0.0), 4),
-                      "totalUsd": round(sum(by.values()), 4)},
+                      "setUsd": round(by.get("set", 0.0), 4), "totalUsd": round(sum(by.values()), 4)},
+            # Where the presenter was filmed (src/presenter/sets.py): asked / chosen / used, the pair and its cost.
+            "set": self.set_job.report() if self.set_job is not None else None,
             "budget": self.budget.report() if self.budget is not None else None,
             "estimate": self.est, "swept": swept, "seconds": self.seconds, "log": self.log[-40:]
             + (self.gen.log[-40:] if self.gen is not None else []),
@@ -1246,7 +1285,7 @@ def kit_for(inp: Dict[str, Any], blk: Optional[Dict[str, Any]] = None) -> dict:
 
 def start(inp: Dict[str, Any], segments: Sequence[Any], shots: Sequence[dict], *, narration_path: str,
           duration: float, work: str, brief: Optional[dict] = None, provider=None, store=None,
-          cache_dir: str = "") -> Optional[Hybrid]:
+          cache_dir: str = "", set_store=None) -> Optional[Hybrid]:
     """
     The job's presenter, planned and started (the takes made in the
     background), or None without a presenter block. A block naming no usable
@@ -1258,7 +1297,24 @@ def start(inp: Dict[str, Any], segments: Sequence[Any], shots: Sequence[dict], *
     kit = kit_for(inp, blk)
     scrubbed = scrub_presenter(list(shots), kit, brief)
     fps = int(inp.get("fps") or config.DEFAULT_FPS)
-    framings = [f["id"] for f in kit.get("framings") or []][:2] or ["master"]
+    # Where the presenter is filmed (src/presenter/sets.py): chosen now (auto reads the title and the narration's
+    # lines; the model only when the rules are unsure), found or made in the background before the takes.
+    set_job = None
+    if blk.get("set") not in (None, "", False):
+        from . import providers as _providers
+        from . import sets as _sets
+        provider = provider or _providers.get()
+        set_job = _sets.SetJob(kit, blk.get("set"), provider=provider, work=os.path.join(work, "hybrid"),
+                               store=set_store, log=lambda m: print(m, flush=True))
+        try:
+            set_job.choose(title=str(inp.get("title") or inp.get("title_overlay") or ""),
+                           text=_sets.job_text(segments, ""))
+        except Exception as e:  # noqa: BLE001 - the kit's own set
+            print(f"[hybrid] set choice failed ({type(e).__name__}): the presenter's own set", flush=True)
+            set_job = None
+    planned_set = set_job is not None and set_job.needs_pair()
+    framings = (["master", "closeup"] if planned_set
+                else [f["id"] for f in kit.get("framings") or []][:2] or ["master"])
     lines, total = plan_lines(segments, shots, duration, fps)
     selector = Selector(lines, total, share=float(blk["share"]), split=bool(blk["split_screen"]),
                         framings=framings, chapters=chapter_lines(brief, len(lines)),
@@ -1268,6 +1324,8 @@ def start(inp: Dict[str, Any], segments: Sequence[Any], shots: Sequence[dict], *
                 spans={ln.index: (ln.start, ln.end) for ln in lines}, duration=duration, fps=fps,
                 work=os.path.join(work, "hybrid"))
     hy.capped = selector.capped
+    hy.texts = {ln.index: ln.text for ln in lines}
+    hy.set_job = set_job
     for note in selector.notes:
         hy._note(note)
     if scrubbed:
