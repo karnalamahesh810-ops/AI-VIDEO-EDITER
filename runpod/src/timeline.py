@@ -418,6 +418,16 @@ BGM_LUFS = {"investigative-v5": -26.9, "investigative-20m": -26.9, "suspense-v2"
 BGM_LUFS_UNKNOWN = -14.0
 
 
+def track_lufs_of(bgm: Optional[dict]) -> float:
+    """The bed's measured loudness: a bundled track's (BGM_LUFS), an AI bed's own (src/gputools.py brings it
+    to AI_MUSIC_LUFS and reports it), else a normal release's (BGM_LUFS_UNKNOWN)."""
+    bgm = bgm or {}
+    own = bgm.get("lufs")
+    if isinstance(own, (int, float)) and not isinstance(own, bool) and -60.0 < float(own) < 0.0:
+        return round(float(own), 1)
+    return BGM_LUFS.get(str(bgm.get("track") or ""), BGM_LUFS_UNKNOWN)
+
+
 def _bgm_track(genre: str, seconds: float, seed: str) -> str:
     """
     A track of the genre long enough to play under the whole narration without
@@ -455,6 +465,16 @@ def _bgm_for(inp: Dict[str, Any], pack: Optional[dict], brief: Optional[dict],
         return {"url": str(inp["bgm_url"]), "volume": float(inp.get("bgm_volume", 0.12)), "loop": True}
     if not inp.get("bgm", config.BGM_AUTO):
         return None
+    # A bed made for this video on the GPU tools endpoint (src/gputools.py: the job asked for "ai_music", or
+    # AI_MUSIC), started beside the footage search: played like a library track - one pass when it is as long as
+    # the video, else repeated with the renderer's crossfade. Not ready in time or failed: the library track.
+    from . import gputools
+    if gputools.music_wanted(inp):
+        from . import brandkit
+        if brandkit.music_limit(inp) != brandkit.NONE:
+            ai = gputools.music_for(inp, wait=config.AI_MUSIC_WAIT)
+            if ai:
+                return {**ai, "volume": float(inp.get("bgm_volume", 0.12))}
     asked = str(inp.get("bgm_genre") or "").strip().lower()
     genre = _BGM_MOODS.get(asked, asked) or bgm_mood(brief, story_text)
     names = {name for tracks in BGM_TRACKS.values() for name, _ in tracks}
@@ -541,7 +561,7 @@ def music_flat(music: Optional[dict], bgm: Optional[dict], fps: int, total: int,
            {"startFrame": fade_half, "volume": 0.0, "mood": mood, "kind": "fade-out"}]
     for k, s in enumerate(out):
         s["endFrame"] = max(s["startFrame"] + 1, out[k + 1]["startFrame"] if k + 1 < len(out) else total)
-    track_lufs = BGM_LUFS.get(str((bgm or {}).get("track") or ""), BGM_LUFS_UNKNOWN)
+    track_lufs = track_lufs_of(bgm)
     return {**music, "sections": out, "duck": round(max(0.0, min(1.0, float(config.MUSIC_DUCK))), 3),
             "levels": {"voiceLufs": round(float(voice_lufs), 1), "trackLufs": track_lufs, "mode": "flat",
                        "speech": level}}
@@ -566,7 +586,7 @@ def music_automation(music: Optional[dict], bgm: Optional[dict], segments: List[
     if not moods:
         moods = [{"startFrame": 0, "endFrame": total, "mood": "EXPLANATION", "volume": MUSIC_MOOD_REF}]
     moods = sorted(moods, key=lambda s: int(s.get("startFrame", 0)))
-    track_lufs = BGM_LUFS.get(str((bgm or {}).get("track") or ""), BGM_LUFS_UNKNOWN)
+    track_lufs = track_lufs_of(bgm)
     base_db = float(voice_lufs) - MUSIC_UNDER_VOICE_DB - track_lufs
     rise = 10 ** (MUSIC_PAUSE_RISE_DB / 20.0)
 

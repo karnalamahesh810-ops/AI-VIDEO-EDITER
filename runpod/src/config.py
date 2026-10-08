@@ -1152,6 +1152,41 @@ ARCHIVE_RESTORE_SMOOTH = _flag("ARCHIVE_RESTORE_SMOOTH", False)
 ARCHIVE_RESTORE_LIBRARY = _flag("ARCHIVE_RESTORE_LIBRARY", False)
 ARCHIVE_RESTORE_CACHE_DIR = os.getenv("ARCHIVE_RESTORE_CACHE_DIR", "")
 ARCHIVE_RESTORE_CACHE_MB = float(os.getenv("ARCHIVE_RESTORE_CACHE_MB", "2048"))
+# --- GPU tools (src/gputools.py; the gputools/ RunPod GPU endpoint "thumbgenius-gpu-tools") ------------------
+# Three optional polishes on our own GPU endpoint, each OFF until the owner has seen it on his videos; a job
+# turns one on with {"config": {"UPSCALE_LOWRES_CLIPS": 1}} (or INTERPOLATE_60FPS / AI_MUSIC). Without the
+# endpoint (GPU_TOOLS_ENDPOINT_ID + a key with run/status rights on it) all three are off whatever the flags say,
+# and every step falls back to what the video did before. Feasibility, quality and costs: gpu_tools_test/notes.md.
+GPU_TOOLS_ENDPOINT_ID = os.getenv("GPU_TOOLS_ENDPOINT_ID", "").strip()
+GPU_TOOLS_API_KEY = os.getenv("GPU_TOOLS_API_KEY", "").strip()
+GPU_TOOLS_API_BASE = os.getenv("GPU_TOOLS_API_BASE", "").strip()
+# Clips in flight on the endpoint at once (the endpoint's own workersMax decides how many run).
+GPU_TOOLS_PARALLEL = int(os.getenv("GPU_TOOLS_PARALLEL", "6"))
+# FlashVSR v1.1: a clip under UPSCALE_LOWRES_BELOW lines (the 480p uploads accepted since 2026-10-08) and at most
+# UPSCALE_LOWRES_MAX_SECONDS long (the sourced file is the used section) is sharpened to 1080 lines on the GPU
+# instead of the CPU Lanczos pass, within UPSCALE_LOWRES_SECONDS for the whole video (a cold endpoint loads its
+# model first); a clip not back by then gets the Lanczos pass as before.
+UPSCALE_LOWRES_CLIPS = _flag("UPSCALE_LOWRES_CLIPS", False)
+UPSCALE_LOWRES_BELOW = int(os.getenv("UPSCALE_LOWRES_BELOW", "720"))
+UPSCALE_LOWRES_MAX_SECONDS = float(os.getenv("UPSCALE_LOWRES_MAX_SECONDS", "12"))
+UPSCALE_LOWRES_SECONDS = float(os.getenv("UPSCALE_LOWRES_SECONDS", "300"))
+# RIFE 4.25: in a 60 fps render every clip under 50 fps (and at most INTERPOLATE_MAX_SECONDS long) is retimed to
+# 60 fps before the render, within INTERPOLATE_SECONDS for the whole video; a clip not back keeps its own rate.
+INTERPOLATE_60FPS = _flag("INTERPOLATE_60FPS", False)
+INTERPOLATE_MAX_SECONDS = float(os.getenv("INTERPOLATE_MAX_SECONDS", "20"))
+INTERPOLATE_SECONDS = float(os.getenv("INTERPOLATE_SECONDS", "420"))
+# ACE-Step 1.5: a music bed made for the video (src/gputools.py music_*), when the job asks ("ai_music": true,
+# "bgm_track": "ai") or AI_MUSIC is on - never instead of a track the job chose. AI_MUSIC_SECONDS boxes the
+# generation (it runs beside the footage search); AI_MUSIC_WAIT is how long the timeline still waits for it.
+# Longer videos than AI_MUSIC_MAX_SECONDS (the model's 10 minutes) hear the bed repeat with the renderer's
+# crossfade. AI_MUSIC_LUFS = the bundled tracks' level (timeline.BGM_LUFS), so MUSIC_LEVEL sounds the same.
+AI_MUSIC = _flag("AI_MUSIC", False)
+AI_MUSIC_SECONDS = float(os.getenv("AI_MUSIC_SECONDS", "600"))
+AI_MUSIC_WAIT = float(os.getenv("AI_MUSIC_WAIT", "60"))
+AI_MUSIC_MAX_SECONDS = float(os.getenv("AI_MUSIC_MAX_SECONDS", "600"))
+AI_MUSIC_TAIL_SECONDS = float(os.getenv("AI_MUSIC_TAIL_SECONDS", "4"))
+AI_MUSIC_LUFS = float(os.getenv("AI_MUSIC_LUFS", "-27"))
+AI_MUSIC_LM = _flag("AI_MUSIC_LM", True)
 # Smart reframing (src/reframe.py): a slow push toward the subject (faces,
 # what stands out, the action) on a locked-off shot, and stills aimed at their
 # subject - the owner, 2026-10-01: "it feels hand-edited". Detection is

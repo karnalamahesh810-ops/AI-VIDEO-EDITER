@@ -108,6 +108,7 @@ from src import living
 from src import hookcheck
 from src import shorts
 from src import aifill
+from src import gputools
 from src.presenter import hybrid as presenter_hybrid
 
 
@@ -1096,6 +1097,7 @@ def _narration_fields(doc: dict) -> dict:
 
 
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
+    gputools.reset()                           # this job's GPU tools stats, retimed clips and music bed
     if presenter_hybrid.block(inp):
         # A presenter block naming no usable kit fails now, before anything is paid for (src/presenter/hybrid.py).
         presenter_hybrid.kit_for(inp)
@@ -1160,6 +1162,14 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # The AI presenter is a made-up person: never the story's cast, to cut on or find footage of
         # (src/presenter/hybrid.py). Without a presenter block the brief is as the planner wrote it.
         presenter_hybrid.scrub_brief(brief, presenter_hybrid.kit_for(inp))
+    # The AI music bed (src/gputools.py: the job's "ai_music" / "bgm_track": "ai", or AI_MUSIC): made on the GPU
+    # tools endpoint beside the footage search, from the story's mood and the narration's length; the timeline
+    # picks it up (timeline._bgm_for), else the library track plays. Not asked: nothing starts.
+    if gputools.music_wanted(inp):
+        asked = str(inp.get("bgm_genre") or "").strip().lower()
+        mood = (timeline._BGM_MOODS.get(asked, asked) if asked and asked != "ai"
+                else timeline.bgm_mood(brief, " ".join(s.text for s in segments[:60])))
+        gputools.start_music(inp, mood, audio_duration)
     # Which footage packs this story is about (src/packs.py): a Lake Powell video
     # reads the water and nature shelves, for the fallback ladder's first rung.
     packs.use_job(title=title, brief=brief, style=styles.resolve(inp.get("video_style")))
@@ -1507,13 +1517,24 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # keeps the original file). With ARCHIVE_RESTORE, archive film is
     # restored first (src/archive_restore.py) and the restored file is the
     # one published.
-    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE:
+    render_fps = int(inp.get("fps") or config.DEFAULT_FPS)
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE or config.UPSCALE_LOWRES_CLIPS:
         report("Restoring archive footage and enhancing pictures to HD" if config.ARCHIVE_RESTORE
                else "Enhancing pictures and clips to HD", 64)
         try:
-            pool_stats["upscale"] = upscale.upscale_assets([a for a in assets if a is not None])
+            pool_stats["upscale"] = upscale.upscale_assets([a for a in assets if a is not None], fps=render_fps)
         except Exception as e:  # noqa: BLE001 - never fail a video over polish
             print(f"[worker] upscale skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+    # Real 60 fps (src/gputools.py, INTERPOLATE_60FPS): in a 60 fps render every clip under 50 fps is retimed to
+    # 60 by RIFE on the GPU tools endpoint, so footage moves like the graphics; a clip not back in time keeps its
+    # own rate (the renderer shows each frame twice, as before).
+    if config.INTERPOLATE_60FPS and render_fps >= 50 and gputools.client():
+        report("Smoothing footage to 60 fps", 64)
+        try:
+            pool_stats["fps60"] = gputools.interpolate_clips([a for a in assets if a is not None], render_fps,
+                                                             time.time() + config.INTERPOLATE_SECONDS)
+        except Exception as e:  # noqa: BLE001 - never fail a video over polish
+            print(f"[worker] 60 fps step skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
     if config.ARCHIVE_RESTORE:
@@ -1648,6 +1669,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Pictures and clips measured for real detail and turned down as too soft, all
     # passes counted (src/sharpness.py).
     doc["meta"]["sourcing"]["sharpness"] = sharpness.stats()
+    # What the GPU tools endpoint did for this video (src/gputools.py): clips sharpened / retimed, the music bed.
+    if gputools.STATS:
+        doc["meta"]["gpuTools"] = dict(gputools.STATS)
     # What this video cost on the AI account (Kie credits), estimated from
     # measured per-call prices (2026-09-25, Gemini 3.8 Flash): vision ~0.08
     # per check, a planning call ~0.15, gpt-image-2 ~4 per image. A key that
@@ -1945,11 +1969,19 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
     # The same polish as a build: with the style's ALLOW_VERTICAL a vertical
     # replacement (or choice) is framed on its blurred copy, not cropped at render;
     # with ARCHIVE_RESTORE an archive replacement is restored.
-    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE:
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE or config.UPSCALE_LOWRES_CLIPS:
         try:
-            upscale.upscale_assets([asset])
+            # With the GPU HD boost on (src/gputools.py), a Replace Clip waits for it at most 90 s.
+            upscale.upscale_assets([asset], **({"fps": fps, "gpu_seconds": 90.0} if config.UPSCALE_LOWRES_CLIPS
+                                               else {}))
         except Exception as e:  # noqa: BLE001 - never fail a replacement over polish
             print(f"[worker] upscale skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+    if config.INTERPOLATE_60FPS and fps >= 50 and gputools.client():
+        # The replacement moves at 60 like the clips a 60 fps build retimed (src/gputools.py).
+        try:
+            gputools.interpolate_clips([asset], fps, time.time() + min(120.0, config.INTERPOLATE_SECONDS))
+        except Exception as e:  # noqa: BLE001 - never fail a replacement over polish
+            print(f"[worker] 60 fps step skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     if config.ALLOW_VERTICAL:
         for alt in list(asset.alternatives or [])[:count - 1]:
             p = alt.get("localPath") or ""
@@ -2946,7 +2978,11 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS",
                       # Each line's own sourcing trace in meta.sourcing.traces (the benchmark, 2026-10-08), and
                       # how long pass 1 waits for the lines it closed on to hand back what they hold.
-                      "SOURCE_TRACE", "PASS1_COLLECT_SECONDS")
+                      "SOURCE_TRACE", "PASS1_COLLECT_SECONDS",
+                      # The GPU tools endpoint (src/gputools.py; all off by default): FlashVSR on clips under
+                      # 720 lines, RIFE real 60 fps, an ACE-Step music bed - one job can try each.
+                      "UPSCALE_LOWRES_CLIPS", "UPSCALE_LOWRES_BELOW", "UPSCALE_LOWRES_SECONDS",
+                      "INTERPOLATE_60FPS", "INTERPOLATE_SECONDS", "AI_MUSIC", "AI_MUSIC_LM", "AI_MUSIC_WAIT")
 
 
 def _apply_config(overrides) -> dict:
