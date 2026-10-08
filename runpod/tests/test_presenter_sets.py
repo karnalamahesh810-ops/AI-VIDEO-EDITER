@@ -322,6 +322,24 @@ class Pairs(unittest.TestCase):
         self.assertEqual((again.cached, len(p2.images)), ("r2", 0))
         self.assertEqual(again.master_url, pair.master_url)
 
+    def test_regenerate_makes_it_again(self):
+        self.ensure(SetProvider())
+        p = SetProvider()
+        pair, _ = self.ensure(p, regenerate=True)
+        self.assertEqual((pair.cached, len(p.images)), ("", 2))
+        self.assertEqual(sets.request_of({"id": "office", "regenerate": True})["regenerate"], True)
+
+    def test_a_described_set_has_its_own_folder(self):
+        b = Budget(5.0)
+        p = SetProvider()
+        choice = sets.choose({"id": "custom", "description": "a lighthouse on a rocky coast at sunset"}, self.kit)
+        pair = sets.ensure(self.kit, choice, provider=p, budget=b, work=self.work, checker=Checker(p, b, self.work),
+                           store=self.store, log=lambda m: None)
+        self.assertRegex(pair.folder, r"/sets/custom-[0-9a-f]{10}$")
+        self.assertIn("a lighthouse on a rocky coast at sunset", p.images[0].prompt)
+        self.assertEqual(self.store.json[f"{pair.folder}/set.json"]["description"],
+                         "a lighthouse on a rocky coast at sunset")
+
     def test_a_newer_master_makes_the_pair_again(self):
         self.ensure(SetProvider())
         kit2 = kits.normalize(dict(self.kit, master=kits.framing(self.kit, "medium")["url"]))
@@ -582,8 +600,35 @@ class Style(unittest.TestCase):
             self.assertGreater(meta["costs"]["setUsd"], 0.2)
             pres = [s for s in doc["scenes"] if s["media"]["source"] == "ai-presenter"]
             self.assertTrue(pres)
-            set_prompts = [r for r in p.images if "lab coat" in r.prompt]
+            set_prompts = [r for r in p.images if "now filmed in a different place" in r.prompt
+                           or "image 2 is the same person" in r.prompt]
             self.assertEqual(len(set_prompts), 2)
+            self.assertTrue(all("lab coat" in r.prompt for r in set_prompts))
+
+    def test_auto_with_no_script_or_title_reads_the_narration(self):
+        with tempfile.TemporaryDirectory() as d:
+            kit = hollis_like(os.path.join(d, "kitsrc"))                 # its own set: kitchen
+            wav = make_wav(os.path.join(d, "voice.wav"), 76.0)
+            segs, _total = segments_for()                                  # potatoes, onions, the cellar
+            words = [{"text": w.text, "start": w.start, "end": w.end} for s in segs for w in s.words]
+            work = os.path.join(d, "work")
+            os.makedirs(work)
+            p = SetProvider()
+
+            class Planned(Exception):
+                pass
+            seen = {}
+
+            def planner(*a, **kw):
+                seen["framings"] = kw.get("framings")
+                raise Planned()
+            with mock.patch.object(providers, "get", return_value=p),                     mock.patch.object(pipeline, "Store", lambda *a, **k: FakeStore()),                     mock.patch.object(pipeline.shotplan, "Planner", side_effect=planner),                     mock.patch.object(sets, "SetStore", return_value=FakeSetStore(os.path.join(d, "r2"))),                     mock.patch.dict(os.environ, {"PRESENTER_CACHE_DIR": os.path.join(d, "cache")}):
+                with self.assertRaises(Planned):
+                    pipeline.plan({"video_style": "ai_presenter", "presenter_kit": dict(kit), "audio_path": wav,
+                                   "words": words, "presenter_budget_usd": 20, "presenter_set": "auto"}, work,
+                                  mock.MagicMock())
+            self.assertEqual(p.images, [])                                 # a cooking story: his own kitchen, free
+            self.assertEqual(seen["framings"][0], "master")
 
 
 # ------------------------------------------------------------------ how the presenter moves
