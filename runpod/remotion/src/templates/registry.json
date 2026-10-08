@@ -90456,7 +90456,7 @@
    "name": "Fact Check",
    "category": "CALLOUTS",
    "component": "motion",
-   "description": "A claim and its verdict ('You may have heard that we only use 10 percent of our brains. That's a myth.'), as a frosted card on the calm side: CLAIM over the claim in quotes; ON the verdict word a stamp presses in (FALSE in red, TRUE in green, MISLEADING in orange) with an ink ring - a false claim struck through line by line, a misleading one underlined with a wave - and the fact under it when the narration says how it really is. The verdict is the first item's label, landing on its moment. For science, health, history myths, news and social claims.",
+   "description": "A claim and its verdict ('You may have heard that we only use 10 percent of our brains. That's a myth.'), as a frosted card on the calm side: CLAIM over the claim in quotes; ON the verdict word a stamp presses in (FALSE in red, TRUE in green, MISLEADING in orange) with an ink ring - a false claim struck through line by line, a misleading one underlined with a wave - and the fact under it when the narration says how it really is. The verdict is the first item's label, landing on its moment; the label is when the claim was made, beside CLAIM ('1969'). For science, health, history myths, news and social claims.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -90469,6 +90469,11 @@
      "type": "string",
      "label": "Subtitle",
      "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
     },
     "items": {
      "type": "list",
