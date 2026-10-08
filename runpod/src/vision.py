@@ -20,6 +20,7 @@ for the same candidate.
 """
 import base64
 import contextvars
+import datetime
 import hashlib
 import json
 import math
@@ -207,13 +208,118 @@ _NEWS_OVERLAY_RULE = (
     "creator's big captions or subscribe overlays, are still has_text_or_watermark true.")
 
 
-def _system() -> str:
-    if config.NEWS_FOOTAGE:
+# What anyone ADDED over the footage, spelt out for a line held to the strict or the event rule (2026-10-09). The
+# 2026-10-08 bench placed another creator's subtitles, an archive's timecode, a "BATHTUB RING" label with its arrow,
+# a document graphic laid over a road, a satellite comparison with typed years and channels' marks in a WWII history,
+# a Lake Mead explainer and an Obama biography: the news rule (above) was applied to every story kind, and it told
+# the judge to let subtitles and banners through.
+_ADDED_TEXT_RULE = (
+    " Text or graphics someone ADDED on top of the footage after it was filmed set has_text_or_watermark true as "
+    "well, small or faint ones included: subtitles or captions (even one line at the bottom), a timecode or frame "
+    "counter, a date, title, name or headline typed over the picture, a label, arrow, circle or box pointing at "
+    "something, a map, chart, document or second picture laid over or beside the footage (a split screen, a "
+    "picture-in-picture, a graphic frame laid around it), and a channel's, uploader's or film archive's logo, name or "
+    "web address in a corner. The archive-print exception above is for a photograph's own printed caption, never for "
+    "a mark or timecode over moving footage. Part of what was filmed, and fine: a street sign, a ship's name, a "
+    "scoreboard, a newspaper, a screen or stage slide the camera is filming, and an old film's own border, sprocket "
+    "edge and scratches.")
+# A real event or a current situation filmed in the broadcast era, in a story that is not news: the broadcaster's own
+# marks over its own coverage are part of what that footage is.
+_EVENT_BROADCAST_OK = (
+    " EXCEPTION for this line, which is about a real event or a current situation: a TV station's or news outlet's own "
+    "logo, headline banner, lower-third or ticker over its own footage of it, a small 'courtesy of' credit naming who "
+    "filmed it, and a government camera's ID and timestamp, are NOT has_text_or_watermark and do not lower the score. "
+    "Subtitles, typed dates, labels, arrows, graphics laid over the footage, another YouTube channel's logo over "
+    "footage it re-uploads and a creator's captions still are.")
+TEXT_MODES = ("news", "event", "strict")
+# A line's text rule where the caller knows it (media sets it for the line it sources; storyboard picks read it).
+TEXT_MODE: contextvars.ContextVar = contextvars.ContextVar("vision_text_mode", default="")
+_NEWS_STORY_KINDS = {"news", "weather", "disaster"}
+
+
+def news_story(brief: Optional[dict] = None) -> Optional[bool]:
+    """Whether the video's story is a news story - a news, weather or disaster story, or one about this year or last
+    (director.current_story) - None when no story is known (no kind)."""
+    b = brief if isinstance(brief, dict) else (_STORY.get("brief") or {})
+    kind = str(b.get("kind") or "").strip().lower()
+    if not kind:
+        return None
+    if kind in _NEWS_STORY_KINDS:
+        return True
+    year = b.get("year")
+    return isinstance(year, int) and not isinstance(year, bool) and year >= datetime.date.today().year - 1
+
+
+_YEAR_RE = re.compile(r"\b(1[89]\d\d|20\d\d)\b")
+
+
+def event_footage_line(scene: Optional[dict], brief: Optional[dict] = None) -> bool:
+    """A line about a real event or a current situation, filmed in the broadcast era (VISION_BROADCAST_ERA on): its
+    scene intent's specificity is "event", or its time is current or recent at a named place. A 1942 battle is not:
+    its film carries no broadcaster's marks, only what someone added later."""
+    if not isinstance(scene, dict) or not scene:
+        return False
+    si = scene_intent.SceneIntent.from_dict(scene)
+    t = (si.time_context or "").strip().lower()
+    if t == "historical":
+        return False
+    m = _YEAR_RE.search(t)
+    year = int(m.group(1)) if m else None
+    if year is None and t in ("", "unknown"):
+        b = brief if isinstance(brief, dict) else (_STORY.get("brief") or {})
+        y = b.get("year")
+        year = y if isinstance(y, int) and not isinstance(y, bool) else None
+    era = int(getattr(config, "VISION_BROADCAST_ERA", 1950) or 0)
+    if year is not None and era and year < era:
+        return False
+    if si.specificity == "event":
+        return True
+    return t in ("current", "recent") and si.specificity == "location"
+
+
+def text_mode(scene: Optional[dict] = None, brief: Optional[dict] = None) -> str:
+    """
+    The text rule a line is judged under (2026-10-09):
+
+      news    the news rule (_NEWS_TEXT_RULE, VISION_NEWS_OVERLAYS_OK) - a news, weather or disaster story, or one about
+              now: TV footage as it is, banners, tickers and news subtitles included (the owner's GoMotion choice);
+      event   a line of any other story about a real event or a current situation in the broadcast era
+              (event_footage_line): the strict rule, but a broadcaster's own marks over its coverage are fine;
+      strict  every other line - history, biography, explainers, science and the rest: nothing anyone added.
+
+    NEWS_FOOTAGE off: strict for every line. VISION_TEXT_BY_STORY off, or no story known: the news rule for every
+    line while NEWS_FOOTAGE is on, as before.
+    """
+    if not config.NEWS_FOOTAGE:
+        return "strict"
+    if not getattr(config, "VISION_TEXT_BY_STORY", False):
+        return "news"
+    news = news_story(brief)
+    if news is None or news:
+        return "news"
+    return "event" if event_footage_line(scene, brief) else "strict"
+
+
+def _system(mode: str = "") -> str:
+    mode = mode if mode in TEXT_MODES else ("news" if config.NEWS_FOOTAGE else "strict")
+    if mode == "news":
         rule = _NEWS_TEXT_RULE
         if getattr(config, "VISION_NEWS_OVERLAYS_OK", False):
             rule = _NEWS_TEXT_RULE.rstrip(chr(10)) + _NEWS_OVERLAY_RULE + chr(10)
         return _SYSTEM.replace(_STRICT_TEXT_RULE, rule)
-    return _SYSTEM
+    if not config.NEWS_FOOTAGE or not getattr(config, "VISION_TEXT_BY_STORY", False):
+        return _SYSTEM                  # the strict rule as it always was (NEWS_FOOTAGE off: every line, unchanged)
+    rule = _STRICT_TEXT_RULE.rstrip(chr(10)) + _ADDED_TEXT_RULE
+    if mode == "event":
+        rule += _EVENT_BROADCAST_OK
+    return _SYSTEM.replace(_STRICT_TEXT_RULE, rule + chr(10))
+
+
+def _tile_news() -> bool:
+    """Whether a storyboard pick or rating is told a news report's banner is fine: the line's own text rule when
+    media set it (TEXT_MODE), else the story's."""
+    mode = TEXT_MODE.get() or text_mode(None)
+    return mode in ("news", "event") and bool(config.NEWS_FOOTAGE)
 
 
 _NEWS_TILE_RULE = (" A news report's station logo, headline banner or ticker over otherwise "
@@ -322,6 +428,7 @@ def reset() -> None:
         _OUT_OF_CREDITS["hit"] = False
         _ERRORS.clear()
         _TILE_MODEL.update(model="", asked=0, answered=0)
+        _TEXT_CHECKS.update(n=0, flagged=0)
 
 
 def _fail(model: str, why: str) -> None:
@@ -998,12 +1105,14 @@ _OPENING_RULE = (
 
 # One line describing the whole video (who, what, when, where), set once per
 # job from the director's story brief and shown with every judgement.
-_STORY = {"line": ""}
+_STORY = {"line": "", "brief": {}}
 
 
 def set_story(brief: Optional[dict]) -> None:
     """Give the judge the whole-story brief; None or {} clears it."""
     b = brief or {}
+    # The brief itself, for the text rule (text_mode: its kind and year).
+    _STORY["brief"] = dict(b) if isinstance(b, dict) else {}
     cast = [c.get("name") for c in (b.get("cast") or []) if c.get("name")]
     people = cast or list(b.get("people") or [])
     parts = [b.get("summary") or b.get("event") or "",
@@ -1103,9 +1212,12 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     # the judge is told such a shot is wrong for the line. A story about a rapper is not told.
     from . import topics
     off_story = not topics.allows_vice(f"{intent} {context}")
+    # The line's text rule (text_mode): the news rule in a news story, the strict rule - with a broadcaster's own
+    # marks allowed on a line about a real event - in every other.
+    mode = text_mode(scene)
     key = (f"{_fingerprint(path)}|{int(event)}|{intent}|{_STORY['line'][:80]}"
            f"|{_scene_lines(scene)[:160]}|{wants if wants in ('map', 'chart') else ''}"
-           + (f"|open{span:.2f}" if span else "") + ("" if off_story else "|vice-ok"))
+           + (f"|open{span:.2f}" if span else "") + ("" if off_story else "|vice-ok") + f"|{mode}")
     with _LOCK:
         if key in _CACHE:
             return _CACHE[key]
@@ -1129,7 +1241,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
                 "Answer with ONLY the JSON object described in your instructions - no prose."}]
     content += [{"type": "image_url",
                  "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames]
-    messages = [{"role": "system", "content": _system() + (_EVENT_RULE if event else "")},
+    messages = [{"role": "system", "content": _system(mode) + (_EVENT_RULE if event else "")},
                 {"role": "user", "content": content}]
 
     token = _KIND.set("judge_open" if times else ("judge_still" if still else "judge"))
@@ -1140,6 +1252,7 @@ def judge(path: str, intent: str, context: str = "", event: bool = False,
     verdict = _parse(text) if text else None
     if verdict:
         verdict["model"] = model
+        verdict["text_mode"] = mode
         if times:
             verdict["frames"] = times        # the opening check: where it looked (first, middle, end)
             verdict["span"] = round(span, 2)
@@ -1173,6 +1286,134 @@ def cut_record(verdict: Optional[dict]) -> dict:
     if verdict.get("accepted") is not None:
         out["ok"] = bool(verdict["accepted"])
     return out
+
+
+# The second look at added text (text_check, VISION_TEXT_SECOND_LOOK, 2026-10-09): one narrow question on two larger
+# frames, where the judge's text flag is one of ten questions on three small ones. Told nothing about the story, so
+# it answers what it sees; the line's text rule (text_mode) decides what the answer means.
+_TEXT_SYSTEM = (
+    "You look for text or graphics that were ADDED on top of a video after it was filmed. You are shown two frames "
+    "of one clip. Check every corner, every edge and the lower third closely: added marks are often small or faint.\n"
+    "ADDED: subtitles or captions (even one short line), a timecode or frame counter, a date, title, name or headline "
+    "typed over the picture, a label, arrow, circle or box pointing at something, a logo, watermark, channel name or "
+    "web address in a corner, a TV station's bug, banner, lower-third or ticker, a map, chart, document or second "
+    "picture laid over or beside the footage (a split screen, picture-in-picture, a frame around it), a subscribe "
+    "button or a face-cam.\n"
+    "NOT ADDED - part of what was filmed: street and shop signs, a ship's, train's or plane's name and numbers, a "
+    "scoreboard, a newspaper or book, writing on clothes or vehicles, an old film's own border, sprocket edge and "
+    "scratches, and anything on a screen, monitor, projector or stage display the camera is filming - a keynote's or "
+    "lecture's slides, even when the screen fills much of the frame.\n"
+    "Reply with JSON only, no prose: {\"added\": bool, \"items\": [{\"kind\": \"subtitles\"|\"timecode\"|"
+    "\"typed_text\"|\"label\"|\"logo\"|\"tv_graphics\"|\"overlay\"|\"other\", \"where\": str, \"text\": str}]} - "
+    "items empty when nothing was added.")
+TEXT_KINDS = ("subtitles", "timecode", "typed_text", "label", "logo", "tv_graphics", "overlay", "other")
+# What a line about a real event (text_mode "event") may keep: a broadcaster's own marks over its coverage, and a
+# small credit naming who filmed it ("Courtesy Southern Nevada Water Authority" over the Lake Mead intake, 2026-10-08).
+_EVENT_OK_KINDS = {"logo", "tv_graphics"}
+_COURTESY = re.compile(r"\s*(?:video |footage |photo )?(?:courtesy|credit\b|source:)", re.I)
+_TEXT_CHECKS = {"n": 0, "flagged": 0}
+
+
+def _parse_text_check(text: str) -> Optional[dict]:
+    m = re.search(r"\{[\s\S]*\}", text or "")
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(0))
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or "added" not in data:
+        return None
+    items = []
+    for it in data.get("items") or []:
+        if not isinstance(it, dict):
+            continue
+        kind = str(it.get("kind") or "other").strip().lower()
+        items.append({"kind": kind if kind in TEXT_KINDS else "other",
+                      "where": str(it.get("where") or "")[:40], "text": str(it.get("text") or "")[:80]})
+    return {"added": _truthy(data.get("added")) or bool(items), "items": items}
+
+
+def text_check_decision(got: Optional[dict], mode: str) -> str:
+    """Why the second look turns a clip down under the line's text rule ("" = it does not): the strict rule any
+    added text or mark; the event rule anything but a broadcaster's logo or TV graphics; the news rule nothing."""
+    if not got or not got.get("added") or mode == "news":
+        return ""
+    items = got.get("items") or [{"kind": "other", "where": "", "text": ""}]
+    bad = [it for it in items if mode == "strict" or not (
+        it["kind"] in _EVENT_OK_KINDS or _COURTESY.match(str(it.get("text") or "")))]
+    if not bad:
+        return ""
+    it = bad[0]
+    what = it["kind"].replace("_", " ") + (f" ({it['text']})" if it.get("text") else "")
+    return f"added text: {what}"[:90]
+
+
+def text_check_left() -> int:
+    """Second looks this video may still make (TEXT_SECOND_LOOK_MAX)."""
+    cap = int(getattr(config, "TEXT_SECOND_LOOK_MAX", 0) or 0)
+    with _LOCK:
+        return max(0, cap - _TEXT_CHECKS["n"])
+
+
+def text_check_stats() -> dict:
+    with _LOCK:
+        return dict(_TEXT_CHECKS)
+
+
+def reset_text_checks() -> None:
+    with _LOCK:
+        _TEXT_CHECKS.update(n=0, flagged=0)
+
+
+def text_check(path: str, mode: str = "strict", described: str = "") -> Optional[dict]:
+    """
+    The focused second look at text someone added over a clip (VISION_TEXT_SECOND_LOOK): {"added", "items",
+    "reject": why the line's text rule turns it down ("" = it may stay), "model"}, or None - no model, no frames, a
+    still, or this video's TEXT_SECOND_LOOK_MAX spent. Two frames (a third and two thirds in) at
+    TEXT_SECOND_LOOK_WIDTH, one call (~$0.0003), cached by the file and the rule. `described`: what the judge said
+    the clip shows - where a stage screen or a sign is part of the scene (a keynote's slides read as "overlays"
+    without it on the 2026-10-08 iPhone clips).
+    """
+    if not enabled() or not path or not os.path.exists(path):
+        return None
+    if os.path.splitext(path)[1].lower() in _STILL_EXT:
+        return None
+    key = f"text|{_fingerprint(path)}|{mode}"
+    with _LOCK:
+        if key in _CACHE:
+            return _CACHE[key]
+        if _TEXT_CHECKS["n"] >= int(getattr(config, "TEXT_SECOND_LOOK_MAX", 0) or 0):
+            return None
+        _TEXT_CHECKS["n"] += 1
+    width = max(256, int(getattr(config, "TEXT_SECOND_LOOK_WIDTH", 768) or 768))
+    frames = sample_frames(path, 2, width)
+    if not frames:
+        return None
+    said = " ".join(str(described or "").split())[:240]
+    content = [{"type": "text", "text": (f"Another look described the clip as: {said}\n" if said else "")
+                + "These are 2 frames of one clip. Answer with ONLY the JSON object."}]
+    content += [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames]
+    messages = [{"role": "system", "content": _TEXT_SYSTEM}, {"role": "user", "content": content}]
+    token = _KIND.set("text_check")
+    try:
+        text, model = _ask(messages, 300, accept=lambda t: _parse_text_check(t) is not None)
+    finally:
+        _KIND.reset(token)
+    _counted()
+    got = _parse_text_check(text) if text else None
+    if got is None:
+        if text:
+            _fail(model, f"unparseable text check: {text[:120]!r}")
+        return None
+    costs.record("vision.text_check")
+    got["model"] = model
+    got["reject"] = text_check_decision(got, mode)
+    with _LOCK:
+        if got["reject"]:
+            _TEXT_CHECKS["flagged"] += 1
+        _CACHE[key] = got
+    return got
 
 
 def acceptable(verdict: Optional[dict], allow_people: bool = False, allow_vice: bool = False,
@@ -1387,7 +1628,7 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
         return None
     images, shown = _sheet_content(sheet_b64, count, checked)
     # A fine pass (checked) needs each tile's score only - its descriptions were never read (VISION_COMPACT_TILES).
-    system = _RATE_SYSTEM + (_NEWS_TILE_RULE if config.NEWS_FOOTAGE else "")
+    system = _RATE_SYSTEM + (_NEWS_TILE_RULE if _tile_news() else "")
     if checked and getattr(config, "VISION_COMPACT_TILES", False):
         system = system.replace(_RATE_ANSWER, _RATE_ANSWER_BARE)
     messages = [
@@ -1459,7 +1700,7 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "",
     if not enabled():
         return None
     images, shown = _sheet_content(sheet_b64, count, checked)
-    system = _PICK_SYSTEM + (_NEWS_TILE_RULE if config.NEWS_FOOTAGE else "")
+    system = _PICK_SYSTEM + (_NEWS_TILE_RULE if _tile_news() else "")
     if getattr(config, "VISION_COMPACT_TILES", False):
         system = system.replace(_PICK_ANSWER, _PICK_ANSWER_SHORT)
     messages = [

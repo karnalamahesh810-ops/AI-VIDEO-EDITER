@@ -363,6 +363,23 @@ NEWS_FOOTAGE = _flag("NEWS_FOOTAGE", True)
 # mark, a webcam's ID and timestamp, a 'video courtesy of' credit and news banners are not "text or watermark";
 # another channel's stamp on a re-upload and a creator's captions still are. Off = the news rule as before.
 VISION_NEWS_OVERLAYS_OK = _flag("VISION_NEWS_OVERLAYS_OK", True)
+# The news rule by story (2026-10-09; vision.text_mode). On the 2026-10-08 bench another creator's subtitles, an
+# archive's timecode, typed labels and dates, a document laid over the footage and channels' marks passed in a WWII
+# history, a Lake Mead explainer and an Obama biography: NEWS_FOOTAGE's rule applied to every story kind. On: the news
+# rule only in a news, weather or disaster story or one about now; a line of any other story about a real event or a
+# current situation filmed from VISION_BROADCAST_ERA on keeps a broadcaster's own marks over its coverage; every other
+# line is held to the strict rule, its added text spelt out - and the free subtitle-band and corner-mark checks
+# (src/filters.py) turn such clips down before any model call. Off = the news rule for every line, as before.
+VISION_TEXT_BY_STORY = _flag("VISION_TEXT_BY_STORY", True)
+VISION_BROADCAST_ERA = int(os.getenv("VISION_BROADCAST_ERA", "1950"))
+# A focused second look at added text (vision.text_check, 2026-10-09): the judge's text flag is one question among ten
+# and it caught 5 of 12 known leaks in a re-judge of the bench's placed clips. A clip the judge kept on a line held to
+# the strict or event rule is asked once more, about added text only, on two larger frames - every hook clip, any
+# other when the free pixel signal (filters.text_signal) or the judge's own description says text may be there - at
+# most TEXT_SECOND_LOOK_MAX calls a video (~$0.0003 each). Off = the judge's verdict alone.
+VISION_TEXT_SECOND_LOOK = _flag("VISION_TEXT_SECOND_LOOK", True)
+TEXT_SECOND_LOOK_MAX = int(os.getenv("TEXT_SECOND_LOOK_MAX", "120"))
+TEXT_SECOND_LOOK_WIDTH = int(os.getenv("TEXT_SECOND_LOOK_WIDTH", "768"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
@@ -791,6 +808,21 @@ GENERATED_IMAGES_IN_HOOK = _flag("GENERATED_IMAGES_IN_HOOK", False)
 HOOK_JUDGE_BEST_OF = int(os.getenv("HOOK_JUDGE_BEST_OF", "3"))
 HOOK_POOL_SCOUT = int(os.getenv("HOOK_POOL_SCOUT", "4"))
 HOOK_JUDGE_MAX_PER_SCENE = int(os.getenv("HOOK_JUDGE_MAX_PER_SCENE", "16"))
+# The opening's own time in pass 1 (2026-10-09). On the 2026-10-08 bench 56 of 94 opening lines were still searching
+# when pass 1 closed: one by one, a hook line's search downloads (~15 s), checks and judges (~9 s) each of its scouted
+# candidates in turn, keeps 1 of ~8 it judges, and needed 150-500 s - while a long build gave it 1.5 x its 192 s share
+# (288 s). Only the lines that start within HOOK_SECONDS; every other line keeps its share, its scouts and its judges:
+# - HOOK_TIME_FACTOR: a hook line's own pass-1 time is its share (media.scene_seconds) x this (1.5 = before).
+# - HOOK_PARALLEL_JUDGE: a hook line downloads, checks and judges this many of a search's scouted candidates side by
+#   side (the same candidates and caps; the shared network and vision slots still bound the whole video). 1 = one by
+#   one, as before.
+# - HOOK_SECOND_LOOK: the second search a hook line made after its first passing clip, for a stronger one. "auto": only
+#   when that clip had no other passing clip to beat and is under EXCELLENT_SCORE, in at most
+#   HOOK_SECOND_LOOK_SECONDS; "always" (as before: its whole remaining time); "off".
+HOOK_TIME_FACTOR = float(os.getenv("HOOK_TIME_FACTOR", "2.5"))
+HOOK_PARALLEL_JUDGE = int(os.getenv("HOOK_PARALLEL_JUDGE", "3"))
+HOOK_SECOND_LOOK = os.getenv("HOOK_SECOND_LOOK", "auto").strip().lower()
+HOOK_SECOND_LOOK_SECONDS = float(os.getenv("HOOK_SECOND_LOOK_SECONDS", "150"))
 # A story about something happening now (a news, weather or disaster story
 # about this year) searches the last month's uploads first - "this month" on
 # YouTube and Dailymotion - and falls back to this year's and then any upload
@@ -1063,6 +1095,25 @@ MIN_ARCHIVE_HEIGHT = int(os.getenv("MIN_ARCHIVE_HEIGHT", "240"))
 # and was turned down before the judge; the HD uploads left were other debates, other years. 8 = 2018 and
 # before, in 2026.
 PERIOD_FOOTAGE_YEARS = int(os.getenv("PERIOD_FOOTAGE_YEARS", "0"))
+# People from before video existed (src/personera.py, 2026-10-09). A line about a story person at least
+# PERSON_ERA_YEARS back, either before PERSON_ERA_FILM_YEAR or about a private stretch of the life nobody filmed (born,
+# school, college, a first job, a wedding), searches real photos of that person in that era first - shown with a plain
+# camera move (no living-photo layers) - then, for a person before film was common, archive film of them
+# (PERSON_ERA_CLIP), then the line's own plan. Such a photo may open the video (PERSON_ERA_IN_HOOK: the hook's
+# no-still rule and its footage retry leave it alone). The 2026-10-08 Obama biography put campus tours and a 1960s
+# street under his childhood and studies, and text cards under three lines. Off = the line's own plan only.
+PERSON_ERA_PHOTOS = _flag("PERSON_ERA_PHOTOS", True)
+PERSON_ERA_YEARS = int(os.getenv("PERSON_ERA_YEARS", "8"))
+PERSON_ERA_FILM_YEAR = int(os.getenv("PERSON_ERA_FILM_YEAR", "1950"))
+PERSON_ERA_IN_HOOK = _flag("PERSON_ERA_IN_HOOK", True)
+PERSON_ERA_CLIP = _flag("PERSON_ERA_CLIP", True)
+# An archive print is soft by nature: how far the screen may blow up a person-era photo's real detail (src/sharpness.py;
+# MAX_PICTURE_MAGNIFICATION for every other picture). The Obama biography's Punahou and Occidental photos measured
+# 2.0-2.9x and were all thrown away at 1.86x; thumbnails and page previews measure 3.8x and more. 0 = the usual limit.
+PERSON_ERA_MAX_MAGNIFICATION = float(os.getenv("PERSON_ERA_MAX_MAGNIFICATION", "3.0"))
+# The verdicts a person-era line's photo search may spend (~$0.0005 each) before the line's own plan goes on: every
+# query asks every picture source, three verdicts a source - 36 for a person nobody photographed then.
+PERSON_ERA_MAX_JUDGES = int(os.getenv("PERSON_ERA_MAX_JUDGES", "8"))
 PERIOD_MIN_HEIGHT = int(os.getenv("PERIOD_MIN_HEIGHT", "480"))
 PERIOD_REAL_LINES = int(os.getenv("PERIOD_REAL_LINES", "400"))
 # The judge rates the era's broadcast video soft ("blurry, blocky compression"): a period line's quality floor
@@ -1152,6 +1203,41 @@ ARCHIVE_RESTORE_SMOOTH = _flag("ARCHIVE_RESTORE_SMOOTH", False)
 ARCHIVE_RESTORE_LIBRARY = _flag("ARCHIVE_RESTORE_LIBRARY", False)
 ARCHIVE_RESTORE_CACHE_DIR = os.getenv("ARCHIVE_RESTORE_CACHE_DIR", "")
 ARCHIVE_RESTORE_CACHE_MB = float(os.getenv("ARCHIVE_RESTORE_CACHE_MB", "2048"))
+# --- GPU tools (src/gputools.py; the gputools/ RunPod GPU endpoint "thumbgenius-gpu-tools") ------------------
+# Three optional polishes on our own GPU endpoint, each OFF until the owner has seen it on his videos; a job
+# turns one on with {"config": {"UPSCALE_LOWRES_CLIPS": 1}} (or INTERPOLATE_60FPS / AI_MUSIC). Without the
+# endpoint (GPU_TOOLS_ENDPOINT_ID + a key with run/status rights on it) all three are off whatever the flags say,
+# and every step falls back to what the video did before. Feasibility, quality and costs: gpu_tools_test/notes.md.
+GPU_TOOLS_ENDPOINT_ID = os.getenv("GPU_TOOLS_ENDPOINT_ID", "").strip()
+GPU_TOOLS_API_KEY = os.getenv("GPU_TOOLS_API_KEY", "").strip()
+GPU_TOOLS_API_BASE = os.getenv("GPU_TOOLS_API_BASE", "").strip()
+# Clips in flight on the endpoint at once (the endpoint's own workersMax decides how many run).
+GPU_TOOLS_PARALLEL = int(os.getenv("GPU_TOOLS_PARALLEL", "6"))
+# FlashVSR v1.1: a clip under UPSCALE_LOWRES_BELOW lines (the 480p uploads accepted since 2026-10-08) and at most
+# UPSCALE_LOWRES_MAX_SECONDS long (the sourced file is the used section) is sharpened to 1080 lines on the GPU
+# instead of the CPU Lanczos pass, within UPSCALE_LOWRES_SECONDS for the whole video (a cold endpoint loads its
+# model first); a clip not back by then gets the Lanczos pass as before.
+UPSCALE_LOWRES_CLIPS = _flag("UPSCALE_LOWRES_CLIPS", False)
+UPSCALE_LOWRES_BELOW = int(os.getenv("UPSCALE_LOWRES_BELOW", "720"))
+UPSCALE_LOWRES_MAX_SECONDS = float(os.getenv("UPSCALE_LOWRES_MAX_SECONDS", "12"))
+UPSCALE_LOWRES_SECONDS = float(os.getenv("UPSCALE_LOWRES_SECONDS", "300"))
+# RIFE 4.25: in a 60 fps render every clip under 50 fps (and at most INTERPOLATE_MAX_SECONDS long) is retimed to
+# 60 fps before the render, within INTERPOLATE_SECONDS for the whole video; a clip not back keeps its own rate.
+INTERPOLATE_60FPS = _flag("INTERPOLATE_60FPS", False)
+INTERPOLATE_MAX_SECONDS = float(os.getenv("INTERPOLATE_MAX_SECONDS", "20"))
+INTERPOLATE_SECONDS = float(os.getenv("INTERPOLATE_SECONDS", "420"))
+# ACE-Step 1.5: a music bed made for the video (src/gputools.py music_*), when the job asks ("ai_music": true,
+# "bgm_track": "ai") or AI_MUSIC is on - never instead of a track the job chose. AI_MUSIC_SECONDS boxes the
+# generation (it runs beside the footage search); AI_MUSIC_WAIT is how long the timeline still waits for it.
+# Longer videos than AI_MUSIC_MAX_SECONDS (the model's 10 minutes) hear the bed repeat with the renderer's
+# crossfade. AI_MUSIC_LUFS = the bundled tracks' level (timeline.BGM_LUFS), so MUSIC_LEVEL sounds the same.
+AI_MUSIC = _flag("AI_MUSIC", False)
+AI_MUSIC_SECONDS = float(os.getenv("AI_MUSIC_SECONDS", "600"))
+AI_MUSIC_WAIT = float(os.getenv("AI_MUSIC_WAIT", "60"))
+AI_MUSIC_MAX_SECONDS = float(os.getenv("AI_MUSIC_MAX_SECONDS", "600"))
+AI_MUSIC_TAIL_SECONDS = float(os.getenv("AI_MUSIC_TAIL_SECONDS", "4"))
+AI_MUSIC_LUFS = float(os.getenv("AI_MUSIC_LUFS", "-27"))
+AI_MUSIC_LM = _flag("AI_MUSIC_LM", True)
 # Smart reframing (src/reframe.py): a slow push toward the subject (faces,
 # what stands out, the action) on a locked-off shot, and stills aimed at their
 # subject - the owner, 2026-10-01: "it feels hand-edited". Detection is
@@ -1908,3 +1994,36 @@ TTS_GAP_SECONDS = float(os.getenv("TTS_GAP_SECONDS", "0.3"))
 TTS_LUFS = float(os.getenv("TTS_LUFS", "0"))
 # A script longer than this is refused (about two hours of speech).
 TTS_MAX_CHARS = int(os.getenv("TTS_MAX_CHARS", "120000"))
+
+# --- Language versions (src/langversion.py, the owner 2026-10-09) ------------
+# "Make a language version" of a finished video: its narration translated on OpenRouter, voiced by our own
+# voice endpoint (Qwen3-TTS, thumbgenius-tts) and the finished timeline re-timed to it - no footage search.
+# The voice endpoint and a RunPod key allowed on it (the worker's own FANOUT key is the owner's full key).
+LANG_TTS_ENDPOINT = os.getenv("LANG_TTS_ENDPOINT", "noxv85ue2spsrl").strip()
+LANG_TTS_API_KEY = (os.getenv("LANG_TTS_API_KEY", "") or os.getenv("TG_TTS_RUNPOD_API_KEY", "")
+                    or FANOUT_API_KEY).strip()
+# Parts voiced at once (the voice endpoint runs at most 4 workers) and a part's size: ~1.5 minutes of speech, cut
+# between sentences; the voice server makes a whole part in one batch.
+LANG_TTS_PARALLEL = int(os.getenv("LANG_TTS_PARALLEL", "4"))
+LANG_TTS_PART_CHARS = int(os.getenv("LANG_TTS_PART_CHARS", "1400"))
+# The voice's tempo (atempo on the server, 0.7-1.3) and its pause scale between sentences (1 = the server's).
+LANG_TTS_SPEED = float(os.getenv("LANG_TTS_SPEED", "1.0"))
+LANG_TTS_PAUSE = float(os.getenv("LANG_TTS_PAUSE", "0.85"))
+# One part, a cold GPU worker's start included; the whole narration, every retry included.
+LANG_TTS_TIMEOUT = float(os.getenv("LANG_TTS_TIMEOUT", "900"))
+LANG_TTS_TOTAL_SECONDS = float(os.getenv("LANG_TTS_TOTAL_SECONDS", "2400"))
+# The quiet between two parts (they always meet between sentences).
+LANG_PART_GAP_SECONDS = float(os.getenv("LANG_PART_GAP_SECONDS", "0.45"))
+# A part whisper can follow less than this share of is voiced once more (a garbled or truncated take).
+LANG_MIN_MATCH = float(os.getenv("LANG_MIN_MATCH", "0.5"))
+# The translation: a cheap, good model with thinking off, its backups in order; requests of about this many
+# source characters (whole sentences), this many at once; and a cap on what one version may spend on it (USD).
+LANG_TRANSLATE_MODEL = os.getenv("LANG_TRANSLATE_MODEL", "google/gemini-2.5-flash").strip()
+LANG_TRANSLATE_FALLBACK_MODELS = [m.strip() for m in os.getenv("LANG_TRANSLATE_FALLBACK_MODELS",
+                                                                "openai/gpt-5-mini").split(",") if m.strip()]
+LANG_TRANSLATE_BATCH_CHARS = int(os.getenv("LANG_TRANSLATE_BATCH_CHARS", "4000"))
+LANG_TRANSLATE_PARALLEL = int(os.getenv("LANG_TRANSLATE_PARALLEL", "4"))
+LANG_TRANSLATE_MAX_USD = float(os.getenv("LANG_TRANSLATE_MAX_USD", "1.0"))
+# What hears the new narration for its word times (the captions, the scene cuts): its own model beside the worker's
+# WHISPER_MODEL - "base" heard a clean Spanish narration at 0.89 of its words, large-v3-turbo at 0.99 (2026-10-09).
+LANG_WHISPER_MODEL = os.getenv("LANG_WHISPER_MODEL", "small").strip()

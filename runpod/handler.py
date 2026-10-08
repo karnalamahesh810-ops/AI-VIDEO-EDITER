@@ -107,9 +107,40 @@ from src import sharpness
 from src import living
 from src import hookcheck
 from src import shorts
+from src import langversion
 from src import aifill
 from src import rendercache
+from src import personera
+from src import gputools
 from src.presenter import hybrid as presenter_hybrid
+
+
+def _mark_person_era(jobs: List[dict], segments, shots: List[dict], brief: Optional[dict]) -> int:
+    """
+    Every line about a real person in an era nobody filmed them (src/personera.py: a biography's early life, anyone
+    before film was common) gets "person_era" on its sourcing job and "personEra" on its shot. A line that names no
+    year goes on from the line before's year (a life is told in order). Returns how many.
+    """
+    if not personera.enabled() or not personera.story_people(brief):
+        return 0
+    last_year = None
+    n = 0
+    for job, seg, shot in zip(jobs, segments, shots):
+        text = getattr(seg, "text", "") or ""
+        si = shot.get("sceneIntent") if isinstance(shot.get("sceneIntent"), dict) else None
+        pe = personera.detect(text, shot, brief, prev={"year": last_year} if last_year else None)
+        year = personera.line_year(text, si, None)
+        if year is not None:
+            last_year = year
+        if pe:
+            job["person_era"] = pe
+            shot["personEra"] = pe
+            n += 1
+    if n:
+        print(f"[worker] {n} line(s) about a person before video existed: real photos of them first "
+              f"({', '.join(sorted({j['person_era']['person'] for j in jobs if j.get('person_era')}))[:120]})",
+              flush=True)
+    return n
 
 
 def _work_dir(job_id: str) -> str:
@@ -134,11 +165,13 @@ _PHASE_BY_PREFIX = (
     ("Rendering", "render"), ("Replaced", "render"), ("Balancing the sound", "render"),
     ("Uploading", "upload"),
     ("Saving", "save"),
+    # A language version (src/langversion.py): its own stages before the render.
+    ("Translating", "translate"), ("Voicing", "voice"), ("Matching", "align"), ("Re-timing", "align"),
 )
 # The app's agent cards (GoMotion-style progress screen).
 _AGENT_BY_PHASE = {"narration": "voice", "transcribe": "voice", "plan": "director", "source": "assets",
                    "design": "motion", "sound": "sound", "render": "editor", "upload": "editor",
-                   "save": "editor"}
+                   "save": "editor", "translate": "director", "voice": "voice", "align": "editor"}
 
 
 class _LogTail:
@@ -1097,6 +1130,7 @@ def _narration_fields(doc: dict) -> dict:
 
 
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
+    gputools.reset()                           # this job's GPU tools stats, retimed clips and music bed
     if presenter_hybrid.block(inp):
         # A presenter block naming no usable kit fails now, before anything is paid for (src/presenter/hybrid.py).
         presenter_hybrid.kit_for(inp)
@@ -1161,6 +1195,14 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # The AI presenter is a made-up person: never the story's cast, to cut on or find footage of
         # (src/presenter/hybrid.py). Without a presenter block the brief is as the planner wrote it.
         presenter_hybrid.scrub_brief(brief, presenter_hybrid.kit_for(inp))
+    # The AI music bed (src/gputools.py: the job's "ai_music" / "bgm_track": "ai", or AI_MUSIC): made on the GPU
+    # tools endpoint beside the footage search, from the story's mood and the narration's length; the timeline
+    # picks it up (timeline._bgm_for), else the library track plays. Not asked: nothing starts.
+    if gputools.music_wanted(inp):
+        asked = str(inp.get("bgm_genre") or "").strip().lower()
+        mood = (timeline._BGM_MOODS.get(asked, asked) if asked and asked != "ai"
+                else timeline.bgm_mood(brief, " ".join(s.text for s in segments[:60])))
+        gputools.start_music(inp, mood, audio_duration)
     # Which footage packs this story is about (src/packs.py): a Lake Powell video
     # reads the water and nature shelves, for the fallback ladder's first rung.
     packs.use_job(title=title, brief=brief, style=styles.resolve(inp.get("video_style")))
@@ -1250,6 +1292,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "hook": bool(shot.get("hook")) or float(seg.start) < config.HOOK_SECONDS,
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
+    # People from before video existed (src/personera.py, PERSON_ERA_PHOTOS): a line about a story person in an era
+    # nobody filmed them searches real photos of them then first. The shot keeps it (semanticMetadata.personEra) for
+    # the editor, the re-clip and the living-photo pass.
+    _mark_person_era(jobs, segments, shots, brief)
     # The lines the footage search is for: every line, but the presenter's full-screen ones with a presenter
     # block (a split screen's line keeps its search: its real clip or picture is the right half).
     search_jobs = hy.search_jobs(jobs) if hy is not None else jobs
@@ -1463,7 +1509,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         report(f"Finding footage for {n_empty} empty scenes", 62)
         rescued = media.rescue_fill(fill_jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")),
                                     footage_only={j["index"] for j in fill_jobs
-                                                  if j.get("hook") and j.get("subject_type") != "document"})
+                                                  if j.get("hook") and j.get("subject_type") != "document"
+                                                  and not j.get("person_era")})
     if held:
         pool_stats["variety"] = dict(media.restore_held(fill_jobs, results_by_index, held), held=len(held),
                                      reasons=dict(collections.Counter(r for _a, r, _k in held.values())))
@@ -1508,13 +1555,24 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # keeps the original file). With ARCHIVE_RESTORE, archive film is
     # restored first (src/archive_restore.py) and the restored file is the
     # one published.
-    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE:
+    render_fps = int(inp.get("fps") or config.DEFAULT_FPS)
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE or config.UPSCALE_LOWRES_CLIPS:
         report("Restoring archive footage and enhancing pictures to HD" if config.ARCHIVE_RESTORE
                else "Enhancing pictures and clips to HD", 64)
         try:
-            pool_stats["upscale"] = upscale.upscale_assets([a for a in assets if a is not None])
+            pool_stats["upscale"] = upscale.upscale_assets([a for a in assets if a is not None], fps=render_fps)
         except Exception as e:  # noqa: BLE001 - never fail a video over polish
             print(f"[worker] upscale skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+    # Real 60 fps (src/gputools.py, INTERPOLATE_60FPS): in a 60 fps render every clip under 50 fps is retimed to
+    # 60 by RIFE on the GPU tools endpoint, so footage moves like the graphics; a clip not back in time keeps its
+    # own rate (the renderer shows each frame twice, as before).
+    if config.INTERPOLATE_60FPS and render_fps >= 50 and gputools.client():
+        report("Smoothing footage to 60 fps", 64)
+        try:
+            pool_stats["fps60"] = gputools.interpolate_clips([a for a in assets if a is not None], render_fps,
+                                                             time.time() + config.INTERPOLATE_SECONDS)
+        except Exception as e:  # noqa: BLE001 - never fail a video over polish
+            print(f"[worker] 60 fps step skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
     if config.ARCHIVE_RESTORE:
@@ -1649,6 +1707,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Pictures and clips measured for real detail and turned down as too soft, all
     # passes counted (src/sharpness.py).
     doc["meta"]["sourcing"]["sharpness"] = sharpness.stats()
+    # What the GPU tools endpoint did for this video (src/gputools.py): clips sharpened / retimed, the music bed.
+    if gputools.STATS:
+        doc["meta"]["gpuTools"] = dict(gputools.STATS)
     # What this video cost on the AI account (Kie credits), estimated from
     # measured per-call prices (2026-09-25, Gemini 3.8 Flash): vision ~0.08
     # per check, a planning call ~0.15, gpt-image-2 ~4 per image. A key that
@@ -1936,6 +1997,10 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
             subject=str(sem.get("subject") or ""),
             event_window=str(sem.get("eventWindow") or ""),
             scene_intent=scene_intent, hook=hook, recency=recency,
+            # A line about a person from before video existed (src/personera.py) looks for another photo of them
+            # first - unless the editor typed a search of its own or asked for the line to be planned again.
+            person_era=(sem.get("personEra") if isinstance(sem.get("personEra"), dict)
+                        and not inp.get("query") and mode != "regenerate" else None),
         )
     finally:
         media._KEEP_ALT_FILES.reset(keep)
@@ -1946,11 +2011,19 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
     # The same polish as a build: with the style's ALLOW_VERTICAL a vertical
     # replacement (or choice) is framed on its blurred copy, not cropped at render;
     # with ARCHIVE_RESTORE an archive replacement is restored.
-    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE:
+    if config.UPSCALE_ENABLED or config.ALLOW_VERTICAL or config.ARCHIVE_RESTORE or config.UPSCALE_LOWRES_CLIPS:
         try:
-            upscale.upscale_assets([asset])
+            # With the GPU HD boost on (src/gputools.py), a Replace Clip waits for it at most 90 s.
+            upscale.upscale_assets([asset], **({"fps": fps, "gpu_seconds": 90.0} if config.UPSCALE_LOWRES_CLIPS
+                                               else {}))
         except Exception as e:  # noqa: BLE001 - never fail a replacement over polish
             print(f"[worker] upscale skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
+    if config.INTERPOLATE_60FPS and fps >= 50 and gputools.client():
+        # The replacement moves at 60 like the clips a 60 fps build retimed (src/gputools.py).
+        try:
+            gputools.interpolate_clips([asset], fps, time.time() + min(120.0, config.INTERPOLATE_SECONDS))
+        except Exception as e:  # noqa: BLE001 - never fail a replacement over polish
+            print(f"[worker] 60 fps step skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     if config.ALLOW_VERTICAL:
         for alt in list(asset.alternatives or [])[:count - 1]:
             p = alt.get("localPath") or ""
@@ -2968,7 +3041,18 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS",
                       # Each line's own sourcing trace in meta.sourcing.traces (the benchmark, 2026-10-08), and
                       # how long pass 1 waits for the lines it closed on to hand back what they hold.
-                      "SOURCE_TRACE", "PASS1_COLLECT_SECONDS")
+                      "SOURCE_TRACE", "PASS1_COLLECT_SECONDS",
+                      # Quality round 2 (2026-10-09): the hook's own time and parallel looks, the text rule by
+                      # story and its second look, people from before video existed.
+                      "HOOK_TIME_FACTOR", "HOOK_PARALLEL_JUDGE", "HOOK_SECOND_LOOK", "HOOK_SECOND_LOOK_SECONDS",
+                      "VISION_TEXT_BY_STORY", "VISION_BROADCAST_ERA", "VISION_TEXT_SECOND_LOOK",
+                      "TEXT_SECOND_LOOK_MAX", "TEXT_SECOND_LOOK_WIDTH",
+                      "PERSON_ERA_PHOTOS", "PERSON_ERA_YEARS", "PERSON_ERA_FILM_YEAR", "PERSON_ERA_IN_HOOK",
+                      "PERSON_ERA_CLIP", "PERSON_ERA_MAX_MAGNIFICATION", "PERSON_ERA_MAX_JUDGES",
+                      # The GPU tools endpoint (src/gputools.py; all off by default): FlashVSR on clips under
+                      # 720 lines, RIFE real 60 fps, an ACE-Step music bed - one job can try each.
+                      "UPSCALE_LOWRES_CLIPS", "UPSCALE_LOWRES_BELOW", "UPSCALE_LOWRES_SECONDS",
+                      "INTERPOLATE_60FPS", "INTERPOLATE_SECONDS", "AI_MUSIC", "AI_MUSIC_LM", "AI_MUSIC_WAIT")
 
 
 def _apply_config(overrides) -> dict:
@@ -3145,6 +3229,85 @@ def do_relook(inp: dict, work: str, report: Reporter) -> dict:
     return relook.run(inp, doc, work, report)
 
 
+def _store_version_narration(path: str, inp: dict, lang: str) -> str:
+    """
+    A language version's new narration kept for good, and its link: R2 under the key the app planned for it
+    (inp.narration_key, the project's own folder) - else the app's storage through the broker (a signed link,
+    30 days) - else, with no project (tests, a laptop proof), the file itself.
+    """
+    project_id = str(inp.get("project_id") or "")
+    key = langversion.narration_key(project_id or "adhoc", lang, inp.get("narration_key"))
+    if r2.enabled():
+        try:
+            return r2.upload(path, key, content_type="audio/mpeg", deadline=time.time() + 300,
+                             cache_control="public, max-age=31536000, immutable")
+        except Exception as e:  # noqa: BLE001 - the app's storage is the fallback
+            if storage.r2_only():
+                raise
+            print(f"[lang] narration not stored on R2: {type(e).__name__}: {str(e)[:160]}", flush=True)
+    if project_id and storage.broker_enabled():
+        return storage.broker_upload(path, inp.get("media_bucket") or config.MEDIA_BUCKET,
+                                     f"projects/{project_id}/narration-{lang}.mp3", project_id,
+                                     str(inp.get("_job_id") or ""), read_ttl=60 * 60 * 24 * 30,
+                                     deadline=time.time() + 300)
+    return path
+
+
+def do_translate_version(inp: dict, work: str, report: Reporter) -> dict:
+    """
+    A finished video made again in another language (src/langversion.py): its timeline (from the input) is
+    translated, voiced by our own voice endpoint and re-timed; the new narration is stored, the new timeline
+    saved on the NEW project before the render (a failed render keeps an editable version), then rendered like
+    an editor render and the project marked done. The source project is never written (langversion.check_input
+    refuses a project_id equal to source_project_id).
+    """
+    if not any(inp.get(k) for k in ("timeline", "timeline_url", "timeline_key")):
+        raise ValueError("translate_version needs the source's timeline: timeline, timeline_url or timeline_key")
+    doc = restore.load_timeline(inp, work)
+    langversion.check_input(inp, doc)
+    # Cents of OpenRouter for the translation; refused at once on an empty account, before any GPU is paid.
+    _require_openrouter_credit(config.OPENROUTER_MIN_CREDIT_SMALL)
+    project_id = str(inp.get("project_id") or "")
+    job_id = str(inp.get("_job_id") or "")
+    new_doc, info, narration = langversion.prepare(inp, doc, work, report)
+    lang = info["language"]
+    url = _store_version_narration(narration, inp, lang)
+    langversion.finish_doc(new_doc, info, url, captions=inp.get("captions") if isinstance(inp.get("captions"), bool)
+                           else None, lufs=info.get("lufs"))
+    timeline.validate(new_doc, require_media=False, allow_stock=True)
+    report("Saving the new timeline", 62)
+    if project_id and not inp.get("_caller_writes_result"):
+        storage.patch_project(project_id, {"scene_data": new_doc}, wait=True)
+    # Rendered like an editor render (the "render" action): the narration is the new one, the quality check repairs
+    # with the story's ladder and the project's clip library, the render spread over the workers when it can be.
+    meta = new_doc.get("meta") if isinstance(new_doc.get("meta"), dict) else {}
+    story = meta.get("story") if isinstance(meta.get("story"), dict) else None
+    bucket = inp.get("media_bucket") or config.MEDIA_BUCKET
+    packs.use_job(brief=story, style=str(meta.get("videoStyle") or ""))
+    quality.set_context(
+        ladder=not _is_presenter_doc(new_doc), story=story,
+        require_cc=bool(inp["require_cc"] if inp.get("require_cc") is not None else config.REQUIRE_CC),
+        allow_generated=config.QUALITY_REPAIR_GENERATED and not presenter_hybrid.is_hybrid_doc(new_doc),
+        library_loader=(lambda: library.Library.load(project_id, job_id, bucket)) if project_id else None)
+    split = bool(project_id and fanout.render_enabled(new_doc, project_id))
+    rinp = {**inp, "audio_url": url, "timeline": new_doc,
+            "title": str(inp.get("title") or (meta.get("languageVersion") or {}).get("translatedTitle") or "video")}
+    out = do_render(copy.deepcopy(new_doc), rinp, work, report, split=split)
+    if isinstance(out.get("quality"), dict):
+        new_doc.setdefault("meta", {})["quality"] = out["quality"]
+        quality.mark_for_review(new_doc, out["quality"])
+    if isinstance(out.get("review"), dict):
+        new_doc.setdefault("meta", {})["review"] = out["review"]
+    if project_id and not inp.get("_caller_writes_result"):
+        storage.patch_project(project_id, _done_fields(out))
+    summary = {k: info.get(k) for k in ("language", "from", "voice", "model", "fragments", "requests", "retried",
+                                        "split", "numberIssues", "parts", "partsRedone", "ttsSeconds",
+                                        "ttsGpuSeconds", "llmUsd", "translatedTitle")}
+    summary["align"] = info.get("align")
+    summary["retime"] = info.get("retime")
+    return {"language": lang, "timeline": new_doc, **out, "audio_url": url, "translation": summary}
+
+
 def handler(job):
     started = time.time()
     job_id = job.get("id") or uuid.uuid4().hex
@@ -3195,11 +3358,18 @@ def handler(job):
     config_before = _apply_config(inp.get("config"))
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
+    if action == "translate_version" and project_id and str(project_id) == str(inp.get("source_project_id") or ""):
+        # A language version is always a NEW project: a job naming the source as its own row is refused before
+        # anything is written - not even the "rendering" / "failed" status, which would hide the finished video.
+        _restore_config(config_before)
+        return {"ok": False, "action": "translate_version",
+                "error": "A language version is a new project: it never writes over the video it comes from.",
+                "elapsed": round(time.time() - started, 1)}
     # Project updates go through the broker as this job; parts and render
     # chunks are not the project's job and never write the row. (A re-cut
     # writes it once, at its very end, only on an apply: src/recut.py.)
     storage.CURRENT_JOB[0] = job_id if action in ("plan", "build", "render", "resource", "recut", "relook",
-                                                  "reclip") else ""
+                                                  "reclip", "translate_version") else ""
     # Every job keeps its own ledger and event log; a fan-out child returns
     # both in its result and the parent absorbs them.
     costs.reset(inp.get("prices") if isinstance(inp.get("prices"), dict) else None)
@@ -3213,7 +3383,7 @@ def handler(job):
     reports_to = "" if action in ("restore_media", "recut", "relook", "reclip", "shorts") else project_id
     applying = action in ("recut", "reclip") and bool(inp.get("apply"))
     events.start_job(job_id, reports_to, part=("part" if action in ("source_part", "render_chunk") else ""))
-    if action in ("plan", "build", "render", "resource") or applying:
+    if action in ("plan", "build", "render", "resource", "translate_version") or applying:
         costs.measure_start()
     report = Reporter(reports_to, job=job)
     work = _work_dir(job_id)
@@ -3504,6 +3674,11 @@ def handler(job):
                     "r2": r2.enabled(),
                     # Script -> video: whether a script-only job can have its narration made here.
                     "freeVoice": tts.status(),
+                    # Language versions (src/langversion.py): the voice endpoint, a key for it, the translation
+                    # model; {"probe_tts": true} asks the voice endpoint's own /health with that key.
+                    "languageVersion": {**langversion.tts_ready(),
+                                        **({"voiceEndpoint": langversion.VoiceServer().health()}
+                                           if inp.get("probe_tts") else {})},
                     # The footage library's own bucket (src/libstore.py) and scene media on R2.
                     "r2Library": r2.library_enabled(),
                     "r2SceneMedia": _scene_media_on_r2(),
@@ -3531,6 +3706,16 @@ def handler(job):
                 "status": "rendering", "job_id": job_id,
                 "progress": 0, "error_message": None,
             })
+
+        if action == "translate_version":
+            # A finished video made again in another language (src/langversion.py): this job's project is the
+            # NEW one the app created for it; the source's timeline comes in the input and is never written.
+            out = do_translate_version(inp, work, report)
+            costs.measure_end()
+            return {"ok": True, "action": "translate_version", **out,
+                    "costs": costs.summary(time.time() - started),
+                    "events": events.summary(),
+                    "elapsed": round(time.time() - started, 1)}
 
         if action in ("plan", "build", "resource"):
             _require_ai_credit()

@@ -300,7 +300,7 @@ def _below_floor(path: str) -> bool:
         return False
 
 
-def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
+def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0, fps: int = 0, gpu_seconds: float = 0.0) -> dict:
     """
     Upscale the chosen photos and soft clips of a job in parallel, within the
     time box. Each asset needs `kind` and `local_path`; archive film (source
@@ -313,21 +313,43 @@ def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
     With ARCHIVE_RESTORE, archive clips are restored first, in their own time
     box (src/archive_restore.py); a restored clip skips the steps below, and
     one that could not be restored goes through them as before.
+
+    With UPSCALE_LOWRES_CLIPS and the GPU tools endpoint (src/gputools.py),
+    clips under UPSCALE_LOWRES_BELOW lines are sharpened there by FlashVSR
+    first (in a 60 fps render with INTERPOLATE_60FPS also retimed to `fps`);
+    the ones it returns skip the Lanczos pass, the others take it as before.
+    `gpu_seconds` bounds that GPU step (a Replace Clip waits for it).
     """
+    assets = [a for a in assets if a]
     deadline = time.time() + (deadline_seconds or config.UPSCALE_SECONDS)
     with _LOCK:
         FRAMED.clear()                  # this job's framed clips only
         UPSCALED.clear()
     restored: dict = {}
     if getattr(config, "ARCHIVE_RESTORE", False):
-        assets = [a for a in assets if a]
         restored = _archive_restore(assets, deadline_seconds)
         if not deadline_seconds:
             deadline = time.time() + config.UPSCALE_SECONDS     # the photos' box starts after it
+    gpu: dict = {}
+    if getattr(config, "UPSCALE_LOWRES_CLIPS", False):
+        from . import gputools
+        box = float(config.UPSCALE_LOWRES_SECONDS)
+        for limit in (deadline_seconds, gpu_seconds):
+            if limit:
+                box = min(box, float(limit))
+        try:
+            gpu = gputools.upscale_lowres([a for a in assets if not (restored and _is_restored(
+                getattr(a, "local_path", "") or ""))], time.time() + box, fps=fps)
+        except Exception as e:  # noqa: BLE001 - every clip keeps the Lanczos pass
+            gpu = {"error": f"{type(e).__name__}: {str(e)[:100]}"}
+            print(f"[upscale] GPU sharpening skipped: {gpu['error']}", flush=True)
+        if not deadline_seconds:
+            deadline = time.time() + config.UPSCALE_SECONDS     # the CPU box starts after it
+    sharpened = set(gpu.get("done") or [])
     seen, jobs = set(), []
     for a in assets:
         path = getattr(a, "local_path", "") or ""
-        if not a or not path or path in seen or not os.path.isfile(path):
+        if not path or path in seen or not os.path.isfile(path):
             continue
         seen.add(path)
         if a.kind == "image" and a.source != "generated":
@@ -335,9 +357,16 @@ def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
         elif a.kind == "video" and a.source not in ("archive_org",):
             if restored and _is_restored(path):
                 continue                # already 1080 lines and sharpened
+            if path in sharpened:
+                continue                # FlashVSR made it 1080 lines on the GPU
             jobs.append(("clip", path, False))
+    extra = {}
+    if restored:
+        extra["archiveRestore"] = restored
+    if gpu:
+        extra["gpu"] = {k: (len(v) if k == "done" else v) for k, v in gpu.items()}
     if not jobs or not (config.UPSCALE_ENABLED or config.ALLOW_VERTICAL):
-        return {"queued": 0, "archiveRestore": restored} if restored else {"queued": 0}
+        return dict(extra, queued=0)
     jobs.sort(key=lambda j: not j[2])   # must-upscale photos first (stable: scene order otherwise)
     done = {"image": 0, "clip": 0, "framed": 0, "skipped_time": 0}
 
@@ -361,9 +390,7 @@ def upscale_assets(assets: Iterable, deadline_seconds: float = 0.0) -> dict:
     print(f"[upscale] {done['image']} photo(s) and {done['clip']} clip(s) upscaled, "
           f"{done['framed']} vertical clip(s) framed, of {len(jobs)} checked "
           f"({done['skipped_time']} skipped for time)", flush=True)
-    if restored:
-        return dict(done, queued=len(jobs), archiveRestore=restored)
-    return dict(done, queued=len(jobs))
+    return dict(done, queued=len(jobs), **extra)
 
 
 def _archive_restore(assets: list, deadline_seconds: float = 0.0) -> dict:

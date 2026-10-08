@@ -758,6 +758,11 @@ def scene_reason(scene: dict, fps: float, anchored: List[Tuple[int, int]] = ()) 
     sem = scene.get("semanticMetadata") if isinstance(scene.get("semanticMetadata"), dict) else {}
     if str(sem.get("subjectType") or "").lower() == "document":
         return "a document"
+    parts = sem.get("scoreParts") if isinstance(sem.get("scoreParts"), dict) else {}
+    if parts.get("personEra") or sem.get("personEra"):
+        # A real photo of a person from before video existed (src/personera.py): a plain camera move, never
+        # parallax layers cut through the people in it.
+        return "a period photo of a person"
     focus = m.get("focus") if isinstance(m.get("focus"), dict) else {}
     if focus.get("kind") == "text" or focus.get("overlay"):
         return "lettering on the picture"

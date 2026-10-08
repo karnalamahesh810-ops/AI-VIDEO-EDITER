@@ -7,6 +7,7 @@ corner watermark, and where are its shot changes so a clip can be cut from
 a clean stretch. No network, no model calls. media.py re-exports every
 name so existing callers and tests are unchanged.
 """
+import contextvars
 import os
 import re
 import subprocess
@@ -16,6 +17,17 @@ from . import config
 
 
 _STILL_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+# The line being sourced is held to the strict text rule (vision.text_mode "strict", set by media per line,
+# 2026-10-09): another creator's subtitle band and a static corner mark are turned down here too, as they were before
+# NEWS_FOOTAGE. None (not set: tests, tools) = the job-wide rule, strict only when NEWS_FOOTAGE is off.
+STRICT_TEXT: contextvars.ContextVar = contextvars.ContextVar("strict_text", default=None)
+
+
+def strict_text() -> bool:
+    """Whether this line's clips are held to the strict text rule (STRICT_TEXT, else NEWS_FOOTAGE off)."""
+    got = STRICT_TEXT.get()
+    return (not config.NEWS_FOOTAGE) if got is None else bool(got)
 
 
 def _is_still(path: str) -> bool:
@@ -107,9 +119,11 @@ def has_burned_captions(path: str, count: int = 4) -> bool:
             texty_hits += 1
 
     need = max(2, len(frames) // 2)
-    if config.NEWS_FOOTAGE:
+    if not strict_text():
         # A news report's banner, ticker or subtitle band is allowed (GoMotion
         # shows them); a screen recording's text all over the frame is not.
+        # Since 2026-10-09 only for a line held to the news or event rule
+        # (vision.text_mode): a history or biography line's subtitle band goes.
         return texty_hits >= need
     return sub_hits >= need or texty_hits >= need
 
@@ -249,8 +263,10 @@ def clip_quality(path: str, min_height: int = 0) -> tuple:
             return False, "frozen frame"
     if _blurry(frames, np):
         return False, "blurry"
-    if not config.NEWS_FOOTAGE and _corner_watermark(frames, np):
-        # With news footage on, a station logo in a corner is expected.
+    if strict_text() and _corner_watermark(frames, np):
+        # With news footage on, a station logo in a corner is expected - in a
+        # news story or on a line about a real event (vision.text_mode); a
+        # line held to the strict rule turns a static corner mark down.
         return False, "corner watermark"
     return True, ""
 
@@ -314,6 +330,92 @@ def _corner_watermark(frames, np) -> bool:
         if edges > 0.05 and moving < whole * 0.25:
             return True
     return False
+
+
+# A cheap "something may have been added over this footage" signal (2026-10-09) - never a reason to turn a clip down,
+# only the gate for the vision judge's focused second look at text (vision.text_check). Measured on the 2026-10-08
+# bench's placed clips (13 with another creator's subtitles, a timecode, labels, a document laid over the footage or a
+# channel's mark; 38 clean): the subtitle band above caught 2, the corner mark 1, the creator-caption band 0. A burned-in
+# mark keeps its exact edge pixels in frames seconds apart while the picture under it moves, and typed text makes short
+# runs of letter-stroke rows near the top or bottom of the frame.
+SIGNAL_W, SIGNAL_H = 640, 360
+_SIGNAL_EDGE = 40           # grey step that counts as an edge (640 x 360)
+_SIGNAL_TILE = 16           # persistent edges are counted per 16 x 16 tile...
+_SIGNAL_TILE_SHARE = 0.10   # ...and a tile with this share of them in every frame is a mark
+_SIGNAL_ROW_SHARE = 0.06    # a row with strong vertical edges over this share of the width reads as letters
+
+
+def _edge_map(g, np):
+    e = np.zeros(g.shape, dtype=bool)
+    e[:, 1:] |= np.abs(np.diff(g, axis=1)) > _SIGNAL_EDGE
+    e[1:, :] |= np.abs(np.diff(g, axis=0)) > _SIGNAL_EDGE
+    return e
+
+
+def _persistent_border_tiles(frames, np) -> int:
+    """Tiles along the frame's edges (top 22%, bottom 30%, left and right 18%) holding the same edge pixels in
+    every frame: a logo, a timecode, a caption box or a label that does not move with the picture."""
+    edges = [_edge_map(f.astype("int16"), np) for f in frames]
+    same = edges[0].copy()
+    for e in edges[1:]:
+        same &= e
+    h, w = same.shape
+    t = _SIGNAL_TILE
+    th, tw = h // t, w // t
+    if not th or not tw:
+        return 0
+    tiles = same[:th * t, :tw * t].reshape(th, t, tw, t).mean(axis=(1, 3)) > _SIGNAL_TILE_SHARE
+    ys, xs = np.nonzero(tiles)
+    return int(sum(1 for y, x in zip(ys, xs)
+                   if y < th * 0.22 or y >= th * 0.70 or x < tw * 0.18 or x >= tw * 0.82))
+
+
+def _band_rows(g, np) -> int:
+    """Runs of 2-14 letter-stroke rows (of 180) in the top 22% or the bottom 38% of one frame (at half size)."""
+    a = g.astype("float32")
+    hh, ww = (a.shape[0] // 2) * 2, (a.shape[1] // 2) * 2
+    small = a[:hh, :ww].reshape(hh // 2, 2, ww // 2, 2).mean(axis=(1, 3)).astype("int16")      # 2 x 2 average
+    h, w = small.shape
+    per_row = (np.abs(np.diff(small, axis=1)) > 48).sum(axis=1)
+    rows = list(per_row > w * _SIGNAL_ROW_SHARE) + [False]
+    hits, start = 0, None
+    for i, v in enumerate(rows):
+        if v and start is None:
+            start = i
+        elif not v and start is not None:
+            a, b = start, i - 1
+            start = None
+            if 2 <= b - a + 1 <= 14 and (b < h * 0.22 or a > h * 0.62):
+                hits += 1
+    return hits
+
+
+def text_signal_frames(frames) -> dict:
+    """{"marks": border tiles with persistent edges, "bands": frames with letter-row runs near the top or bottom,
+    "likely": either says added text may be there} for three or more grey frames of one clip (SIGNAL_W x SIGNAL_H,
+    seconds apart)."""
+    try:
+        import numpy as np
+    except ImportError:
+        return {"marks": 0, "bands": 0, "likely": False}
+    frames = [f for f in (frames or []) if getattr(f, "ndim", 0) == 2]
+    if len(frames) < 2:
+        return {"marks": 0, "bands": 0, "likely": False}
+    marks = _persistent_border_tiles(frames, np)
+    bands = sum(1 for f in frames if _band_rows(f, np) > 0)
+    return {"marks": marks, "bands": bands, "likely": bool(marks >= 1 or bands >= 2)}
+
+
+def text_signal(path: str) -> dict:
+    """text_signal_frames for a clip on disk (three frames spread over it); {"likely": False} for a still or an
+    unreadable file. Local, ~0.3 s."""
+    if not path or _is_still(path):
+        return {"marks": 0, "bands": 0, "likely": False}
+    try:
+        frames = _gray_frames(path, 3, w=SIGNAL_W, h=SIGNAL_H)
+    except (OSError, subprocess.TimeoutExpired):
+        frames = []
+    return text_signal_frames(frames)
 
 
 _PTS_RE = re.compile(r"pts_time:\s*([0-9.]+)")

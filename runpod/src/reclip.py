@@ -386,6 +386,12 @@ def _anchored(doc: dict, s: dict) -> bool:
     return recut._anchored_until(doc, start, start + int(s.get("durationInFrames") or 0)) > 0
 
 
+def _person_era_photo(sem: dict) -> bool:
+    """A real photo of a person from before video existed (src/personera.py: scoreParts.personEra)."""
+    parts = sem.get("scoreParts") if isinstance(sem.get("scoreParts"), dict) else {}
+    return bool(parts.get("personEra"))
+
+
 def plan_targets(doc: dict, *, pictures: bool = True, limit: Optional[int] = None,
                  hook_seconds: Optional[float] = None, checked: Optional[Dict[int, dict]] = None) -> List[dict]:
     """
@@ -426,6 +432,8 @@ def plan_targets(doc: dict, *, pictures: bool = True, limit: Optional[int] = Non
                 # A picture nothing had judged, turned down now (a wrong face, another place): it goes too.
                 why = f"the judge turned it down: {c.get('why') or 'not for this line'}"
                 kind, tier = "bad", 0 if in_hook else 1
+            elif _person_era_photo(sem):
+                continue                    # a photo of a person from before video existed: the line's shot
             elif in_hook and str(sem.get("subjectType") or "") != "document":
                 kind, tier = "image", 0
             elif not pictures or _still_kind(s):
