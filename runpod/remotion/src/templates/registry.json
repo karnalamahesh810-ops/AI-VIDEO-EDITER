@@ -88095,7 +88095,7 @@
    "name": "States",
    "category": "MAPS",
    "component": "motion",
-   "description": "Three to twelve US states (or countries) named in one list ('Wyoming, Colorado, Utah, New Mexico, Nevada, Arizona and California'): on the dark map framed on them, each lights up on its word - its face lifting toward the accent with a soft glow, an accent edge drawing round it, its name rising at its middle - while a glass counter counts them (7 STATES); the land round them named faintly.",
+   "description": "Three to twelve US states (or countries) named in one list ('Wyoming, Colorado, Utah, New Mexico, Nevada, Arizona and California'): on the dark map framed on them, each lights up on its word - its face lifting toward the accent with a soft glow, an accent edge drawing round it, its name rising at its middle - while a glass counter counts them (7 STATES); the land round them named faintly. The small label over the title is optional.",
    "kind": "card",
    "emphasis": "high",
    "props": {
@@ -88103,6 +88103,11 @@
      "type": "string",
      "label": "Text",
      "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
     },
     "items": {
      "type": "list",
