@@ -55,6 +55,42 @@ _SCENERY = re.compile(r"\b(drone|aerial|4k|8k|scenery|scenic|nature|relax\w*|amb
                       r"waterfalls?|rivers?|ocean|timelapse|time-lapse|landscapes?|footage|walk(?:ing)? tour|"
                       r"national park|cinematic)\b", re.I)
 
+# A described shot of someone smoking, vaping, taking drugs or drinking alcohol - said outright (scene_reason).
+# The word "smoking" alone is not it: the Obama video's Huruma (Nairobi) aerial, "a large, smoking garbage dump",
+# was taken for a smoking scene and re-clipped away (2026-10-08). Smoke from a fire, a dump, a chimney, a
+# volcano, cooking or traffic, "a joint session", "a blunt statement", weeds and drinking water are no vice.
+# What is smoked: unmistakable with any verb (a cigarette, a joint) or only after "smoke" / "puff on" (weed,
+# crack, a pipe - "holding a pipe" is a plumber; "a smoking pot" is a stove, so pot is never read).
+_SMOKED_PLAIN = r"(?:cigarettes?|cigars?|cigarillos?|joints?|blunts?|spliffs?|e-?cigarettes?|vapes?|bongs?|hookahs?)"
+_SMOKED_DRUG = r"(?:weed|marijuana|cannabis|hash(?:ish)?|crack|meth|heroin|opium|shisha|tobacco|(?:a|an|his|her|their)\s+pipe)"
+_ARTICLE = r"(?:(?:a|an|the|his|her|their|some|another|one)\s+)?"
+_VICE_SCENE = re.compile(
+    # smoking / puffing on ... a cigarette, weed, a pipe; lighting / rolling / passing a cigarette, a joint
+    rf"\b(?:smok(?:e|es|ed|ing)|puff(?:s|ed|ing)?(?:\s+on)?|inhal(?:e|es|ed|ing))\s+{_ARTICLE}"
+    rf"(?:{_SMOKED_PLAIN}|{_SMOKED_DRUG})\b"
+    rf"|\b(?:light(?:s|ed|ing)?(?:\s+up)?|lit|roll(?:s|ed|ing)?|pass(?:es|ed|ing)?|shar(?:e|es|ed|ing))\s+"
+    rf"{_ARTICLE}{_SMOKED_PLAIN}\b"
+    # the things themselves (not their litter, their trade or their shape)
+    r"|\b(?:cigarettes?|cigars?|cigarillos?)\b(?![-\s]*(?:shaped|butts?|ads?|adverts?\w*|advertis\w*|factor(?:y|ies)|"
+    r"compan(?:y|ies)|tax\w*|bans?|smuggl\w*|brands?)\b)"
+    r"|\b(?:vaping|vapers?|vape\s+(?:pens?|clouds?)|bongs?|crack\s+pipes?|hookah\s+(?:lounge|bar|pipe)s?|"
+    r"snort(?:s|ed|ing)|(?:inject(?:s|ed|ing)|shoot(?:s|ing))\s+(?:up\s+)?(?:drugs|heroin)|"
+    r"drug\s+(?:use|users?|addicts?|den)|using\s+drugs|taking\s+drugs)\b"
+    # drinking alcohol, drunk
+    r"|\b(?:drink(?:s|ing)?|sip(?:s|ping)?|swig(?:s|ging)?|chug(?:s|ging)?|toast(?:s|ing)?\s+with)\s+"
+    r"(?:(?:a|an|the|his|her|their|some|another|cans?|bottles?|glass(?:es)?|pints?|shots?|cups?)\s+(?:of\s+)?)*"
+    r"(?:beers?|wine|liquor|whisk(?:e)?y|vodka|rum|gin|tequila|alcohol|booze|spirits|champagne|cocktails?|lager|ale)\b"
+    r"|\bdrunk(?:en)?\b(?!\s+driv)|\bintoxicated\b|\bbinge[- ]drinking\b", re.I)
+# Someone smoking with no object named: "a man smoking on a porch", "youths smoke outside a shop" - never
+# what they smoke over a fire ("women smoking fish") nor a thing that smokes ("chimneys smoking").
+_SMOKER = re.compile(
+    r"\b(?:man|men|woman|women|person|people|someone|somebody|boy|boys|girl|girls|teen\w*|youths?|guy|guys|he|she|"
+    r"they|smokers?|workers?|soldiers?|students?|friends|patrons|customers|passers-?by|locals|villagers|residents)\s+"
+    r"(?:(?:is|are|was|were|sits?|sitting|stands?|standing|seen|caught|shown)\s+){0,2}"
+    r"(?:smoking|smokes|smoked|smoke|vaping|vapes|vape)\b"
+    r"(?!\s+(?:fish|meat|pork|beef|chicken|salmon|ham|sausages?|food|ribs|brisket|turkey|cheese|bacon|tea|"
+    r"garbage|rubbish|trash|tyres?|tires|wood|charcoal|bees?|hives?|out)\b)", re.I)
+
 _LOCK = threading.Lock()
 _STORY = {"text": ""}
 
@@ -114,6 +150,13 @@ def off_topic_title(title: str = "", channel: str = "", categories=None, line: s
     return why
 
 
+def vice_scene(text: str) -> bool:
+    """A described shot says outright that someone smokes or vapes (a cigarette, a joint...), takes drugs or
+    drinks alcohol. Smoke from a fire, a dump, a chimney, cooking or traffic is not such a shot."""
+    t = str(text or "")
+    return bool(_VICE_SCENE.search(t) or _SMOKER.search(t))
+
+
 def scene_reason(text: str, line: str = "", story: Optional[str] = None) -> str:
     """Why a described shot (a scene's content description or title) is off topic for its line: a music
     performance or video, or a smoking / drugs / drinking / club scene in a story and line not about it."""
@@ -123,7 +166,6 @@ def scene_reason(text: str, line: str = "", story: Optional[str] = None) -> str:
     if music_title(t) or re.search(r"\b(rapper|rapping|music video|singer performing|performs on stage|"
                                    r"concert stage|nightclub|club scene)\b", t, re.I):
         return "a music performance or music video"
-    if re.search(r"\b(smoking|smokes|cigarette|vaping|vape|joint|blunt|weed|marijuana|snorting|drug use|"
-                 r"drinking alcohol|drinks? (beer|liquor|alcohol)|drunk)\b", t, re.I):
+    if vice_scene(t):
         return "a smoking, drugs or drinking scene"
     return ""

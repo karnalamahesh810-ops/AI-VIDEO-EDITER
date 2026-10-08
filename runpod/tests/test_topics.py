@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from src import config, gapfill, hookcheck, media, topics, vision
+from src import config, gapfill, hookcheck, media, reclip, topics, vision
 
 WATER = {"summary": "California's reservoirs are draining and these cities could run short of water first",
          "kind": "explainer", "people": []}
@@ -193,6 +193,135 @@ class TheDonors(unittest.TestCase):
         doc = {"fps": 30, "scenes": [s(0, "Kogelo village road", "a dirt road in a village"),
                                      s(1, "Song ft. Somebody", "a rapper performing in a club")]}
         self.assertEqual([d["vid"] for d in gapfill.donors_from_doc(doc)], ["VID00000000"])
+
+
+class SmokeIsNotSmoking(unittest.TestCase):
+    """2026-10-08: the Obama video's Huruma (Nairobi) aerial, which the judge described as "a large, smoking garbage
+    dump", was read as a smoking scene (the bare word "smoking") and re-clipped away as off the story. A smoking
+    scene is a person seen smoking or vaping, taking drugs or drinking alcohol - said outright."""
+
+    # Real descriptions and titles from saved timelines (Obama 70bc06d2, California c4db28b3, the Yellowstone and
+    # Lake Mead projects): smoke from fires, dumps, volcanoes, industry; pipes; a drink from a can.
+    RECORDED_NOT_VICE = [
+        "An aerial view shows a large, smoking garbage dump next to a road, some buildings, and a body of water.",
+        "Burning barricade and smoke on a street in Nairobi, Kenya.",
+        "Aerial view of Huruma, Nairobi, showing densely packed buildings and smoke.",
+        "A man walks past a burned-out car on a city street in daylight, with smoke rising in the background.",
+        "A crowd of people, some in uniform, stand on and around the wreckage of a plane amidst smoke and debris.",
+        "Security forces deploying tear gas during anti-government protests in Huruma.",
+        "Aerial shot of industrial area with smoke in Southern California",
+        "An aerial view of Mount St. Helens with smoke rising from its crater.",
+        "People walk on a boardwalk while a large plume of black smoke rises from a geyser in Yellowstone National Park.",
+        "People watching the massive hydrothermal explosion and black smoke.",
+        "Two images show a man with a beard and glasses, dressed in winter clothing, either eating chips or drinking "
+        "from a can, while a smaller inset image shows a woman's headshot.",
+        "A close-up shot of an exposed water intake pipe in a body of water, with rock walls and a visible 'bathtub "
+        "ring' above.",
+        "Ashfall Fossil Beds – Smokey Da Van — https://smokeydavan.com/2023/07/16/ashfall-fossil-beds/",
+        "YouTube: Phantom 3 Pro aerial footage of Huruma Slum in Nairobi, Kenya",
+    ]
+    # Phrasings a judge writes that only look like a vice.
+    WORDS_NOT_VICE = [
+        "Women smoking fish over an open fire at a market in Kisumu", "Smoked fish for sale at a roadside stall",
+        "Factory chimneys smoking over the city", "Smoking ruins of a building after the fire",
+        "The volcano smokes above the village", "A smoking pot of stew over an open fire",
+        "a joint press conference by the two presidents", "A joint session of Congress", "Joint Base Andrews",
+        "A blunt statement from the minister", "Weeds grow on the dry lake bed", "People drinking water from a tap",
+        "A plumber holding a pipe under a sink", "Workers rolling steel pipes", "A cigar-shaped cloud over the lake",
+        "Cigarette butts litter the beach", "Drunk driving crash on the interstate", "Smoking gun: the memo",
+        "Residents smoke out a beehive", "Tobacco fields in Kentucky", "Expansion joints on a bridge",
+    ]
+    VICE = [
+        "A man smoking a cigarette on a porch", "A young man smokes a cigarette outside a shop in Nairobi.",
+        "A woman vaping in a car", "Two men pass a joint behind a shop", "A teenager smoking weed in a park",
+        "A man lights a cigar.", "Close-up of hands rolling a blunt.", "A group of friends drinking beer at a bar",
+        "A man drinks a glass of whiskey", "People snorting cocaine in a club bathroom",
+        "A drunk man stumbles down the street", "A man smoking on a balcony", "Youths smoke outside a shop",
+        "People smoking shisha at a lounge", "He puffs on his pipe by the fire", "A cigarette burns in an ashtray",
+        "Soldiers sit smoking cigarettes", "students vaping behind the school",
+    ]
+    LINE = "George was photographed outside his home in Huruma, Nairobi"
+
+    def setUp(self):
+        topics.set_story(POLITICS, "Why Obama's Brothers Hated Him")
+
+    def tearDown(self):
+        topics.set_story({}, "")
+
+    def test_smoke_from_things_is_not_a_smoking_scene(self):
+        for text in self.RECORDED_NOT_VICE + self.WORDS_NOT_VICE:
+            self.assertFalse(topics.vice_scene(text), text)
+            self.assertEqual(topics.scene_reason(text, self.LINE), "", text)
+
+    def test_a_person_smoking_drinking_or_on_drugs_still_is(self):
+        for text in self.VICE:
+            self.assertTrue(topics.vice_scene(text), text)
+            self.assertEqual(topics.scene_reason(text, self.LINE), "a smoking, drugs or drinking scene", text)
+        # ...unless the story or the line is about it.
+        self.assertEqual(topics.scene_reason(self.VICE[0], "his father was a chain smoker"), "")
+
+    def test_the_huruma_clip_is_not_re_clipped_away(self):
+        # Scene s0176 at 828.6 s of the Obama timeline, as saved (obama_current_0af17d2f).
+        scene = {"id": "s0176", "text": "In 2012, he was on film saying he had not received it.",
+                 "startFrame": 24858, "durationInFrames": 130,
+                 "media": {"type": "video", "url": "https://r2/huruma.mp4", "source": "youtube",
+                           "attribution": "YouTube: Phantom 3 Pro aerial footage of Huruma Slum in Nairobi, Kenya"},
+                 "semanticMetadata": {"intent": "George Obama in Huruma, Nairobi",
+                                      "contentDescription": "An aerial view shows a large, smoking garbage dump next "
+                                                            "to a road, some buildings, and a body of water."}}
+        self.assertEqual(reclip.off_story(scene), "")
+
+    def test_music_videos_stay_off_the_story(self):
+        # The rap videos the 2026-10-07 scans found in the California and Obama timelines.
+        for title in ("Lil Baby - In A Minute (Official Video)", "Meek Mill - Early Mornings (Official Video)",
+                      "B Flow - DEAR MAMA [Chilling with Obama] (Official Video)"):
+            scene = {"id": "s1", "text": "Malik moved back to Kenya", "startFrame": 0, "durationInFrames": 90,
+                     "media": {"type": "video", "url": "https://r2/x.mp4", "attribution": f"YouTube: {title}"},
+                     "semanticMetadata": {"contentDescription": ""}}
+            self.assertEqual(reclip.off_story(scene), "a music performance or music video", title)
+
+
+class TheJudgesVice(unittest.TestCase):
+    """The judge names what it saw ("vice"); its music_or_vice stands only with a music video or performance, a club,
+    a person smoking or vaping, drugs or alcohol - smoke from a fire is "none", whatever the boolean says."""
+
+    BASE = ('{"description": "%s", "score": 0.7, "quality": 0.8, "has_text_or_watermark": false, '
+            '"is_talking_head": false, "ai_generated": false, "studio": false, "specificity": "location", %s}')
+
+    def parse(self, description, tail):
+        return vision._parse(self.BASE % (description, tail))
+
+    def test_smoke_from_a_dump_is_no_vice(self):
+        dump = "An aerial view shows a large, smoking garbage dump next to a road."
+        for tail in ('"music_or_vice": true, "vice": "none"', '"music_or_vice": true, "vice": "smoke from a fire"',
+                     '"music_or_vice": "true", "vice": "None"', '"music_or_vice": false, "vice": "smoking"'):
+            got = self.parse(dump, tail)
+            self.assertFalse(got["music_or_vice"], tail)
+            self.assertTrue(vision.acceptable(got), tail)
+
+    def test_a_named_vice_turns_it_down(self):
+        for kind in vision.VICE_KINDS + ("music video", "cigarette", "drinking alcohol"):
+            got = self.parse("a man smokes a cigarette on a porch", f'"music_or_vice": true, "vice": "{kind}"')
+            self.assertTrue(got["music_or_vice"], kind)
+            self.assertIn(got["vice"], vision.VICE_KINDS)
+            self.assertFalse(vision.acceptable(got), kind)
+            self.assertTrue(vision.acceptable(got, allow_vice=True), kind)
+
+    def test_an_answer_without_a_kind_keeps_its_boolean(self):
+        self.assertTrue(self.parse("a rapper on stage", '"music_or_vice": true')["music_or_vice"])
+        self.assertFalse(self.parse("a village road", '"music_or_vice": false')["music_or_vice"])
+
+    def test_the_prompt_asks_for_a_person_and_the_kind(self):
+        self.assertIn('"vice": "music"|"club"|"smoking"|"drugs"|"alcohol"|"none"', vision._SYSTEM)
+        self.assertIn("a person smoking or vaping (a cigarette, cigar, pipe, joint or vape at their lips or in "
+                      "their hand)", vision._SYSTEM)
+        self.assertIn("smoke from a fire, burning rubbish or tyres, a dump, cooking, a chimney or factory, vehicle "
+                      "exhaust, tear gas, a wildfire or a volcano is false", vision._SYSTEM)
+        self.assertIn("nor is smoke from a fire, a dump, a chimney, a factory, traffic or tear gas",
+                      vision._OFF_STORY_RULE)
+        for news in (False, True):
+            with mock.patch.multiple(config, NEWS_FOOTAGE=news):
+                self.assertIn('"vice":', vision._system())
 
 
 class PoliticsFootage(unittest.TestCase):
