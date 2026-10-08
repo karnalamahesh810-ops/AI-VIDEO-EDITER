@@ -70,6 +70,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import config, costs, events, gapfill, quality, templates
+from .aifill import is_ai_scene
 from .presenter import is_presenter_scene
 
 # --------------------------------------------------------------------------- #
@@ -551,6 +552,9 @@ def plan_samples(doc: dict, file_fps: Optional[float] = None,
             continue
         if is_presenter_scene(s):
             skipped[i] = "the AI presenter talking (made and checked by its own step)"
+            continue
+        if is_ai_scene(s):
+            skipped[i] = "an AI picture made for its line (AI fill: checked by its own step)"
             continue
         if m.get("type") not in ("video", "image") or not m.get("url"):
             skipped[i] = "a graphic of ours, not a clip"

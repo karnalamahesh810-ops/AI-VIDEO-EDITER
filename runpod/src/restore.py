@@ -79,6 +79,8 @@ LIST_LIMIT = 50_000
 # Shots with nothing to fetch again, by where they came from.
 NO_ORIGIN = {
     "generated": "an AI-made picture cannot be made again the same",
+    # AI fill (src/aifill.py): its original stays on R2 under projects/<id>/aifill/ (semanticMetadata.aiFill).
+    "ai-generated": "an AI fill picture or clip cannot be made again the same",
     # The AI presenter (src/presenter/hybrid.py): cut to its own words from a take - its original on R2
     # (semanticMetadata.originalUrl) starts before the line, so a copy fetched again would be out of sync.
     "ai-presenter": "the AI presenter's clip is cut to its own words: make the video again to make it again",

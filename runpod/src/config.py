@@ -165,6 +165,30 @@ PREFER_GENERATED_IMAGES = _flag("PREFER_GENERATED_IMAGES", False)
 # retry loop could do it without anyone watching.
 IMAGE_MAX_PER_VIDEO = int(os.getenv("IMAGE_MAX_PER_VIDEO", "80"))
 
+# --- AI fill (src/aifill.py) ---------------------------------------------------
+# A real-footage job with an "ai_fill" block (the owner, 2026-10-08): AI pictures - a few of them animated
+# into AI clips - only on the lines nothing real was found for. The block carries the per-job switch and caps
+# (max_images, max_clips, budget_usd); these are the machinery's own settings. Models in the order tried, as
+# JSON [[model, size or resolution], ...] (OpenRouter ids; "" size = the model's own).
+AI_FILL_IMAGE_MODELS = os.getenv(
+    "AI_FILL_IMAGE_MODELS",
+    '[["google/gemini-nano-banana-2.1", "2K"], ["google/gemini-3.1-flash-image", "1K"], '
+    '["google/gemini-2.5-flash-image", ""]]')
+AI_FILL_VIDEO_MODELS = os.getenv(
+    "AI_FILL_VIDEO_MODELS", '[["bytedance/seedance-1-5-pro", "720p"], ["google/veo-3.1-lite", "720p"]]')
+# The text model that writes each picture's description from its line, the lines beside it and the story (one
+# call per pass, ~$0.002 for 20 lines); the rule-built prompt stands in when it fails. "" = rules only.
+AI_FILL_PROMPT_MODELS = [m.strip() for m in os.getenv(
+    "AI_FILL_PROMPT_MODELS", "google/gemini-2.5-flash,openai/gpt-5-mini").split(",") if m.strip()]
+# Pictures and clips made at once, and one pass's time box (a pass: the build's gaps, or one repair's).
+AI_FILL_PARALLEL = int(os.getenv("AI_FILL_PARALLEL", "4"))
+AI_FILL_CLIP_PARALLEL = int(os.getenv("AI_FILL_CLIP_PARALLEL", "3"))
+AI_FILL_SECONDS = float(os.getenv("AI_FILL_SECONDS", "480"))
+# The most a job's block may give AI fill to spend (the app sends ~$2 for 20 pictures and 3 clips).
+AI_FILL_MAX_BUDGET = float(os.getenv("AI_FILL_MAX_BUDGET", "10"))
+# Every AI picture and clip is looked at once (real-looking, on its line, no garbled text or melted hands).
+AI_FILL_CHECK = _flag("AI_FILL_CHECK", True)
+
 # --- AI director -------------------------------------------------------------
 # Optional. Without it the rule-based planner in director.py runs alone.
 DIRECTOR_API_BASE = os.getenv("DIRECTOR_API_BASE", "").rstrip("/")

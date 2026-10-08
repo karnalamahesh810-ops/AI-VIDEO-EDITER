@@ -58,6 +58,7 @@ from typing import Dict, List, Optional
 import requests
 
 from . import config, ledger, libstore, media, storage
+from .aifill import AI_SOURCE, is_ai_scene
 from .presenter import is_presenter_scene
 
 INDEX_PATH = "library/index.json"
@@ -65,9 +66,9 @@ INDEX_PATH = "library/index.json"
 # calls in one burst against the app's small database, two minutes before it
 # stopped answering on 2026-09-29.
 QUERY_LIMIT = 250
-# Never kept: a generated picture, a live satellite loop, an empty scene, or
+# Never kept: a generated picture (AI fill's too: src/aifill.py), a live satellite loop, an empty scene, or
 # the user's own upload (the app saves those itself).
-_NEVER_SOURCES = {"", "none", "generated", "noaa_goes", "upload", "animation", "color"}
+_NEVER_SOURCES = {"", "none", "generated", AI_SOURCE, "noaa_goes", "upload", "animation", "color"}
 # Row kinds the gate may judge and move (the user's uploads are left alone).
 _CHECKED_KINDS = ("video", "image")
 _STOP = {"the", "a", "an", "of", "in", "on", "at", "and", "or", "to", "for", "with", "from", "by",
@@ -234,6 +235,8 @@ def shown_rows(doc: dict, project_id: str) -> List[dict]:
     for s in (doc or {}).get("scenes") or []:
         m = s.get("media") if isinstance(s, dict) else None
         split_sem: dict = {}
+        if is_ai_scene(s):
+            continue            # an AI fill picture or clip (src/aifill.py) is not footage of anything
         if isinstance(m, dict) and is_presenter_scene(s):
             # Never the AI presenter's clip (src/presenter/hybrid.py): a split screen's real half instead.
             split_sem = ((s.get("semanticMetadata") or {}).get("split") or {}) if isinstance(

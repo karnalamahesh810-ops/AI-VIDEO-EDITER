@@ -367,8 +367,8 @@ def weakness(s: dict) -> float:
     """How much a picture is a stand-in (0..1, higher = re-clip it sooner)."""
     m = s.get("media") if isinstance(s.get("media"), dict) else {}
     sem = _sem(s)
-    if str(m.get("source") or "") == "generated":
-        return 1.0
+    if str(m.get("source") or "") in ("generated", "ai-generated"):
+        return 1.0                  # (an AI fill picture or clip is the first a real clip should replace)
     rel = _num(sem.get("relevanceScore"))
     w = 0.7 if rel is None else max(0.0, min(1.0, 1.0 - rel))
     if str(s.get("reviewReason") or "").startswith(_WEAK_REASONS):

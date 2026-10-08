@@ -278,7 +278,7 @@ def asset_reason(item: Any) -> str:
     if item is None or not enabled():
         return ""
     source = item.get("source") if isinstance(item, dict) else getattr(item, "source", "")
-    if source == "generated":
+    if source in ("generated", "ai-generated"):         # (AI fill's own pictures: src/aifill.py)
         return ""
     return reason(**_fields(item))
 
