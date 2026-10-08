@@ -1070,6 +1070,7 @@ class AppSignatures(unittest.TestCase):
         sent["grade"] = {"preset": "documentary", "medians": {"l": 0.4}}
         out = rendercache.manifest_for_app({"version": 2, "chunks": []}, sent)
         self.assertEqual(len(out["sig"]["scenes"]), 4)
+        self.assertEqual(out["sig"]["timing"], [[0, 150], [150, 150], [300, 150], [450, 150]])
         self.assertEqual(out["globals"]["grade"], {"preset": "documentary"})
         self.assertEqual(sorted(out["sound"]), ["audio", "bgm", "sfx"])
         self.assertEqual(out["sound"]["bgm"], {"url": "bgm://suspense-v2", "volume": 0.02})

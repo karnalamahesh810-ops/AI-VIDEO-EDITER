@@ -792,7 +792,10 @@ def overlay_sig(o: dict) -> str:
 
 def app_signatures(doc: dict) -> dict:
     """Per-scene and per-overlay signatures for the app's re-render estimate (no hash the app cannot repeat)."""
-    return {"scenes": [scene_sig(s) for s in doc.get("scenes") or [] if isinstance(s, dict)],
+    scenes = [s for s in doc.get("scenes") or [] if isinstance(s, dict)]
+    return {"scenes": [scene_sig(s) for s in scenes],
+            # The narration's timing: when a scene moved, every slice of the sound is drawn again.
+            "timing": [[int(s.get("startFrame") or 0), int(s.get("durationInFrames") or 0)] for s in scenes],
             "overlays": [[int(o.get("startFrame") or 0), int(o.get("durationInFrames") or 0), overlay_sig(o)]
                          for o in doc.get("overlays") or [] if isinstance(o, dict)]}
 
