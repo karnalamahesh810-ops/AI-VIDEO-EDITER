@@ -799,6 +799,8 @@ def app_signatures(doc: dict) -> dict:
 
 # The settings every frame depends on: when one changed since the last render, the editor estimates a full one.
 APP_GLOBALS = ("fps", "width", "height", "grade", "captions", "look", "overlaysEnabled")
+# What only sounds: when one changed, the editor adds the whole sound to its estimate (_draw_sound draws it).
+APP_SOUND = ("audio", "bgm", "music", "sfx", "sfxEnabled", "sfxVolume", "lookSounds", "ambience")
 
 
 def manifest_for_app(manifest: Optional[dict], sent: Optional[dict]) -> Optional[dict]:
@@ -816,6 +818,7 @@ def manifest_for_app(manifest: Optional[dict], sent: Optional[dict]) -> Optional
         if isinstance(glob.get("grade"), dict):
             glob["grade"] = {k: v for k, v in glob["grade"].items() if k != "medians"}
         out["globals"] = glob
+        out["sound"] = {k: sent.get(k) for k in APP_SOUND if k in sent}
     except Exception:  # noqa: BLE001 - the estimate is only a hint
         pass
     return out
