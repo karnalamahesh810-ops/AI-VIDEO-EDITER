@@ -23,9 +23,10 @@ SFX_DIR = os.path.join(ROOT, "remotion", "public", "sfx")
 CALM = {"documentary", "history", "story"}
 ENERGETIC = {"news", "compilation", "trending"}
 # (looks pack 3, 2026-10-08: the light sweep is a calm style's transition as well as a news one; the soft whip moves)
-SOFT_SET = {"light-leak", "blur-dissolve", "luma-fade", "film-burn", "light-sweep"}
+# (looks pack 4, 2026-10-08: the shutter is a calm style's - a moment in time; the card zoom an energetic style's)
+SOFT_SET = {"light-leak", "blur-dissolve", "luma-fade", "film-burn", "light-sweep", "shutter"}
 ENERGETIC_SET = {"flash", "glitch", "whip-pan", "zoom-punch", "chromatic-flash", "shake-cut", "vhs-glitch", "soft-whip",
-                 "light-sweep"}
+                 "light-sweep", "card-zoom"}
 CONTRACT_SFX = ["whoosh-soft", "swipe", "click", "keys", "shutter", "boom-soft", "ding", "tick",
                 "glitch-short", "riser-short", "flash-hit", "marker", "count-tick", "paper-slide"]
 

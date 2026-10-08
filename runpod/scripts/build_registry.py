@@ -677,6 +677,12 @@ TRANSITIONS = [
      "use": "a change of place or a new section, clean and bright"},
     {"id": "TR_SOFT_WHIP", "name": "Soft Whip", "value": "soft-whip", "duration": 0.45,
      "use": "movement between places, gentler than the whip"},
+    # Looks pack 4 (2026-10-08): two general cuts for every niche - the picture eases back into a rounded card and the
+    # next comes forward out of one (explainers, lists, news), and a soft blink of two dark bars (history, a story).
+    {"id": "TR_CARD_ZOOM", "name": "Card Zoom", "value": "card-zoom", "duration": 0.65,
+     "use": "the next point, item or topic; modern and clean"},
+    {"id": "TR_SHUTTER", "name": "Shutter", "value": "shutter", "duration": 0.5,
+     "use": "a moment in time, a memory, a turn in the story"},
 ]
 
 SFX = {

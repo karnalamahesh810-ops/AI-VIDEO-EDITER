@@ -401,6 +401,9 @@ NEAREST = {
     # looks pack 3: the light sweep is a soft bright change, the soft whip a gentle move
     "light-sweep": ("light-leak", "flash", "blur-dissolve", "fade"),
     "soft-whip": ("whip-pan", "whip", "slide", "blur-dissolve"),
+    # looks pack 4: the card zoom is a soft move in depth, the shutter a dip through black
+    "card-zoom": ("zoom", "blur-dissolve", "zoom-punch", "fade"),
+    "shutter": ("luma-fade", "dip", "fade", "blur-dissolve"),
 }
 
 

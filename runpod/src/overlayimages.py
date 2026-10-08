@@ -238,7 +238,8 @@ def fix(overlays: List[dict], *, project_id: str = "", scenes: Optional[List[dic
                 cands.append(src)
             cands += [str(x.get("url")) for x in image_entries(ov) if x is not m and x.get("url")]
             # a scene picture stands in for a place or a thing - never for a person's portrait
-            if not (str(ov.get("template") or "").startswith(("LIB_PF_", "PERSON_")) or ov.get("type") == "name-card"):
+            if not (str(ov.get("template") or "").startswith(("LIB_PF_", "PERSON_")) or ov.get("type") == "name-card"
+                    or ov.get("template") == "KT_PROFILE"):
                 cands += [u for u in scene_picture(ov) if u]
             got = None
             for c in cands:
@@ -261,6 +262,13 @@ def fix(overlays: List[dict], *, project_id: str = "", scenes: Optional[List[dic
             rows.append({**row, "action": "lost", "why": why})
             break
         if alive:
+            keep.append(ov)
+            continue
+        if ov.get("template") == "KT_PROFILE":
+            # a person's card without its portrait shows their initials (looks pack 4): the card stays
+            ov["media"] = []
+            counts["textOnly"] += 1
+            rows[-1]["action"] = "no picture: the card shows the initials"
             keep.append(ov)
             continue
         alt = _text_variant(ov)

@@ -57,6 +57,8 @@ import { LOOKS as L_LibKtPictures } from "./LibKtPictures";
 import { LOOKS as L_LibKtMaps } from "./LibKtMaps";
 import { LOOKS as L_LibKtPack3 } from "./LibKtPack3";
 import { LOOKS as L_LibKtMaps3 } from "./LibKtMaps3";
+import { LOOKS as L_LibKtPack4 } from "./LibKtPack4";
+import { LOOKS as L_LibKtCards4 } from "./LibKtCards4";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -179,4 +181,10 @@ export const LIBRARY: Record<string, Look> = {
   // states a line names - the kinetic-type system, each part on its word; the planner's rules in src/lookpack3.py.
   ...pick(L_LibKtPack3, ["kt-ranking", "kt-waterline", "kt-severity", "kt-delta", "kt-streak", "kt-alert"]),
   ...pick(L_LibKtMaps3, ["kt-route", "kt-storm", "kt-totals", "kt-regions"]),
+  // Looks pack 4 (LibKtPack4 / LibKtCards4, 2026-10-08: "it's not a weather channel tool ... it needs to do everything"):
+  // general looks for every niche - a price chart, a money counter, a table, pros and cons, a podium, a versus
+  // scoreboard, a profile card, numbered steps, a cause chain, a case file, a social post and a fact check - each part on
+  // its word; the planner's rules in src/lookpack4.py.
+  ...pick(L_LibKtPack4, ["kt-price", "kt-money", "kt-table", "kt-proscons", "kt-podium", "kt-versus"]),
+  ...pick(L_LibKtCards4, ["kt-profile", "kt-steps", "kt-chain", "kt-case", "kt-post", "kt-factcheck"]),
 };

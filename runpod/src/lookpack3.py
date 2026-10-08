@@ -254,9 +254,10 @@ def _time(nar, char: int) -> float:
     return float(nar.time_at(char))
 
 
-# A sentence ends at . ! ? - never inside "9 p.m.", "U.S.", "Dr.", "St.", "Mt." or "vs.".
+# A sentence ends at . ! ? - never inside "9 p.m.", "U.S.", "Dr.", "St.", "Mt." or "vs.", nor after a name's initial
+# ("D. B. Cooper", "John F. Kennedy": looks pack 4).
 _SENTENCE_END = re.compile(r"(?<!\b[ap]\.m)(?<!\bU\.S)(?<!\bDr)(?<!\bSt)(?<!\bMt)(?<!\bMr)(?<!\bMs)(?<!\bvs)(?<!\bFt)"
-                           r"[.!?](?=\s|$)")
+                           r"(?<!\b[A-Z])[.!?](?=\s|$)")
 
 
 def _sentences(nar) -> List[Tuple[int, int]]:
@@ -504,7 +505,8 @@ _PROPER_SUBJ = re.compile(r"\b((?:[A-Z][a-z'’]+)(?:\s+(?:[A-Z][a-z'’]+|River
 
 def _subject_before(text: str, s0: int, at: int) -> str:
     head = re.split(r"[;:,]|\b(?:and|but|while|then)\b", text[s0:at])[-1]
-    found = [m.group(1) for m in _PROPER_SUBJ.finditer(head) if m.group(1).split()[0] not in _NOT_NAME]
+    # (a name never ends on its "of": "Shares of the company rose ..." is about the shares)
+    found = [re.sub(r"\s+of$", "", m.group(1)) for m in _PROPER_SUBJ.finditer(head) if m.group(1).split()[0] not in _NOT_NAME]
     return found[-1] if found and len(found[-1]) <= 32 else ""
 
 

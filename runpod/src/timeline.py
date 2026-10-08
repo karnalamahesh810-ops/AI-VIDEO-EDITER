@@ -48,6 +48,8 @@ TRANSITIONS = {"none", "fade", "film-burn", "zoom", "glitch", "slide",
                "chromatic-flash", "vhs-glitch",
                # Looks pack 3 (2026-10-08): a clean band of light across the cut, a gentle whip.
                "light-sweep", "soft-whip",
+               # Looks pack 4 (2026-10-08): the picture into a rounded card and out of one; a soft blink.
+               "card-zoom", "shutter",
                # A true cross-dissolve: the outgoing shot plays on under the
                # incoming one as it fades in (news-compilation style).
                "crossfade"}
@@ -75,24 +77,24 @@ STYLES = ("documentary", "history", "story", "news", "compilation", "trending", 
 _STYLE_TRANSITIONS = {
     "documentary": {"cycle": ["light-leak", "light-sweep", "blur-dissolve", "luma-fade", "film-burn"],
                     "chapter": "light-leak", "gap": 6, "force": 0},
-    "history": {"cycle": ["film-burn", "blur-dissolve", "light-leak", "luma-fade"],
+    "history": {"cycle": ["film-burn", "blur-dissolve", "shutter", "light-leak", "luma-fade"],
                 "chapter": "film-burn", "gap": 6, "force": 0},
-    "story": {"cycle": ["blur-dissolve", "light-sweep", "light-leak", "luma-fade", "film-burn"],
+    "story": {"cycle": ["blur-dissolve", "light-sweep", "light-leak", "shutter", "luma-fade", "film-burn"],
               "chapter": "luma-fade", "gap": 6, "force": 0},
-    "explainer": {"cycle": ["blur-dissolve", "soft-whip", "luma-fade", "light-sweep", "zoom-punch", "whip-pan",
-                            "light-leak"],
+    "explainer": {"cycle": ["blur-dissolve", "soft-whip", "card-zoom", "luma-fade", "light-sweep", "zoom-punch",
+                            "whip-pan", "light-leak"],
                   "chapter": "luma-fade", "gap": 5, "force": 0},
     "weather": {"cycle": ["soft-whip", "light-sweep", "whip-pan", "blur-dissolve", "zoom-punch", "flash", "luma-fade",
                           "glitch"],
                 "chapter": "flash", "gap": 4, "force": 6},
-    "news": {"cycle": ["whip-pan", "light-sweep", "zoom-punch", "soft-whip", "flash", "glitch", "shake-cut",
-                       "chromatic-flash"],
+    "news": {"cycle": ["whip-pan", "light-sweep", "zoom-punch", "soft-whip", "card-zoom", "flash", "glitch",
+                       "shake-cut", "chromatic-flash"],
              "chapter": "flash", "gap": 3, "force": 4},
-    "compilation": {"cycle": ["whip-pan", "glitch", "soft-whip", "zoom-punch", "chromatic-flash", "shake-cut",
-                              "vhs-glitch", "flash"],
+    "compilation": {"cycle": ["whip-pan", "glitch", "soft-whip", "zoom-punch", "card-zoom", "chromatic-flash",
+                              "shake-cut", "vhs-glitch", "flash"],
                     "chapter": "chromatic-flash", "gap": 3, "force": 4},
-    "trending": {"cycle": ["zoom-punch", "chromatic-flash", "whip-pan", "soft-whip", "vhs-glitch", "shake-cut",
-                           "flash", "glitch"],
+    "trending": {"cycle": ["zoom-punch", "chromatic-flash", "whip-pan", "soft-whip", "card-zoom", "vhs-glitch",
+                           "shake-cut", "flash", "glitch"],
                  "chapter": "chromatic-flash", "gap": 3, "force": 4},
 }
 # The style a style pack or a story kind implies when the job names none.
@@ -126,6 +128,8 @@ _TRANSITION_SFX = {
     "blur-dissolve": ("whoosh-soft-v2", 11.0), "shake-cut": ("hit-deep", 7.0),
     # looks pack 3: the light sweep shimmers, the soft whip is a soft whoosh, both well under the voice
     "light-sweep": ("light-shimmer", 11.5), "soft-whip": ("whoosh-soft-v2", 10.5),
+    # looks pack 4: the card zoom is a soft whoosh of air, the shutter a quiet shutter, both well under the voice
+    "card-zoom": ("whoosh-soft-v2", 11.5), "shutter": ("shutter", 12.0),
     # The older entrances an editor can still pick.
     "whip": ("whoosh-fast", 9.5), "punch": ("zoom-in-whoosh", 10.0), "zoom": ("whoosh-soft-v2", 11.0),
     "slide": ("ui-swipe", 11.0), "mosaic": ("glitch-short-v2", 11.0),

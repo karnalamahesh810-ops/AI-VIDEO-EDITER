@@ -37,6 +37,8 @@ export type SceneTransition =
   | "chromatic-flash" | "vhs-glitch"
   // Looks pack 3 (2026-10-08): a clean band of light across the cut, a gentle whip.
   | "light-sweep" | "soft-whip"
+  // Looks pack 4 (2026-10-08): the picture into a rounded card and out of one, a soft blink of two dark bars.
+  | "card-zoom" | "shutter"
   // News-compilation cross-dissolve: the outgoing shot plays on under the
   // incoming one while it fades in (Main.tsx extends the outgoing scene).
   | "crossfade"

@@ -88301,6 +88301,2339 @@
    ]
   },
   {
+   "id": "KT_PRICE",
+   "name": "Price Chart",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "A price said over time ('Bitcoin went from $1,000 in 2017 to nearly $20,000 by December, then crashed to $3,200'), as a frosted market card on the calm side: the subject as a kicker, the live price counting at the head of a white line that draws to each said price ON its word (a small market wander between them, always through the said prices), a dot and the time as said under each; the peak or the crash called out with a ring, a dashed drop line and a pill; the change from the first price in a pill once the last lands. For finance, business, crypto, real estate, the cost of things in history.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-price",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 49,
+    "types": false,
+    "leastSeconds": 5.6,
+    "sample": {
+     "text": "Bitcoin",
+     "prefix": "$",
+     "items": [
+      {
+       "label": "Jan 2017",
+       "value": 1000,
+       "at": 0.1
+      },
+      {
+       "label": "Dec 2017",
+       "value": 19800,
+       "at": 1.4,
+       "text": "All-time high"
+      },
+      {
+       "label": "Dec 2018",
+       "value": 3200,
+       "at": 2.8
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick",
+       "count-tick"
+      ],
+      "at": 49,
+      "gain_db": -11
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 97,
+      "gain_db": -10
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "price-series"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_MONEY",
+   "name": "Money Counter",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "A big sum said ('Facebook paid $1 billion for Instagram', 'the thieves took $100 million in diamonds'), low on the calm side over a soft shade: who as a kicker, the figure on digit reels - each reel spinning a few turns and landing, the leftmost first, a touch of motion blur - the currency sign beside them, the scale word tracking in under them (BILLION), an accent rule drawing on with one light sweep, one line of what it was. For finance, business deals, true crime heists, sports contracts, the cost of wars.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-money",
+    "sfx": {
+     "name": "count-roll",
+     "volume": 0.3
+    },
+    "sfxAt": 48,
+    "types": false,
+    "leastSeconds": 4.6,
+    "sample": {
+     "label": "Facebook",
+     "value": 1,
+     "prefix": "$",
+     "suffix": "BILLION",
+     "subtitle": "For Instagram, in 2012"
+    },
+    "sounds": [
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 6,
+      "until": 46,
+      "gain_db": -9
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "tick"
+      ],
+      "at": 48,
+      "gain_db": -7
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "big-money"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_TABLE",
+   "name": "Comparison Table",
+   "category": "COMPARISONS",
+   "component": "motion",
+   "description": "Two sides compared on two to four things ('Messi scored 672 goals in 778 games; Ronaldo 701 goals in 1,000 games', 'In 1970 gas cost 36 cents and a car $3,500. Today gas is $3.50 and a car $48,000'), as a frosted table on the calm side: the sides' names at the heads of their columns, a row a thing, each cell rising ON its word with the unit it was said with. Items are the cells: a row's label with the left side's figure, then the same label with the right side's.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-table",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 13,
+    "types": false,
+    "leastSeconds": 5.6,
+    "sample": {
+     "text": "1970 vs Today",
+     "label": "Then and now",
+     "items": [
+      {
+       "label": "Gas",
+       "value": 36,
+       "suffix": "¢",
+       "at": 0.3
+      },
+      {
+       "label": "Car",
+       "value": 3500,
+       "prefix": "$",
+       "at": 0.9
+      },
+      {
+       "label": "Home",
+       "value": 23000,
+       "prefix": "$",
+       "at": 1.5
+      },
+      {
+       "label": "Gas",
+       "value": 3.5,
+       "prefix": "$",
+       "at": 2.3
+      },
+      {
+       "label": "Car",
+       "value": 48000,
+       "prefix": "$",
+       "at": 2.9
+      },
+      {
+       "label": "Home",
+       "value": 420000,
+       "prefix": "$",
+       "at": 3.5
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 13,
+      "gain_db": -12
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "compare-table"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_PROSCONS",
+   "name": "Pros & Cons",
+   "category": "COMPARISONS",
+   "component": "motion",
+   "description": "The upsides and the downsides said ('The upside: lower fees and faster transfers. The downside: wild price swings'), as a frosted card on the calm side: the topic when one was said, PROS and CONS at the heads of two columns, each point landing ON its word - a check (the accent) or a cross (a soft red) drawing on in its ring, its words rising. An item's value is +1 for a pro and -1 for a con. For tech reviews, money decisions, health, travel, education.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-proscons",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 15,
+    "types": false,
+    "leastSeconds": 5.5,
+    "sample": {
+     "text": "Electric cars",
+     "items": [
+      {
+       "label": "Cheaper to run",
+       "value": 1,
+       "at": 0.4
+      },
+      {
+       "label": "Quiet and quick",
+       "value": 1,
+       "at": 1.1
+      },
+      {
+       "label": "Higher price up front",
+       "value": -1,
+       "at": 2.0
+      },
+      {
+       "label": "Charging takes time",
+       "value": -1,
+       "at": 2.7
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 15,
+      "gain_db": -11
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "pros-cons"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_PODIUM",
+   "name": "Podium",
+   "category": "CHARTS",
+   "component": "motion",
+   "description": "A top three said ('Bolt took gold, Thompson silver and Dix bronze', 'the three richest men are ...'), as a frosted card on the calm side: three podium blocks - second, first, third - each rising out of the baseline on its name, its place's numeral on its face (the winner's in the accent, one light sweep), the name above it and the figure under the name when one was said. For sports, rankings and top lists in any niche.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-podium",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 16,
+    "types": false,
+    "leastSeconds": 5.2,
+    "sample": {
+     "text": "Men's 100m final, 2008",
+     "suffix": "s",
+     "items": [
+      {
+       "label": "Usain Bolt",
+       "value": 9.69,
+       "at": 0.3
+      },
+      {
+       "label": "Richard Thompson",
+       "value": 9.89,
+       "at": 1.1
+      },
+      {
+       "label": "Walter Dix",
+       "value": 9.91,
+       "at": 1.9
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 16,
+      "gain_db": -9
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "top-three"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_VERSUS",
+   "name": "Versus",
+   "category": "COMPARISONS",
+   "component": "motion",
+   "description": "A head-to-head said ('Argentina beat France 4-2', 'Obama won 365 electoral votes to McCain's 173', '50,000 Carthaginians faced 86,000 Romans'), as a scoreboard low in the middle of the frame (up top when a face sits there): the kicker over it (FINAL SCORE), two frosted halves sliding in from their sides ON their names, the figures counting up toward the middle, a small VS between them, the winner's figure in the accent with a thin accent line and one light sweep; the event as said under it. For sports, elections, battles, business rivalries, games.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-versus",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 59,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "label": "Final score",
+     "text": "2022 World Cup final, on penalties",
+     "highlight": "Argentina",
+     "items": [
+      {
+       "label": "Argentina",
+       "value": 4,
+       "at": 0.2
+      },
+      {
+       "label": "France",
+       "value": 2,
+       "at": 0.9
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 6,
+      "gain_db": -12
+     },
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 35,
+      "until": 57,
+      "gain_db": -10
+     },
+     {
+      "name": "count-final",
+      "alt": [
+       "tick"
+      ],
+      "at": 59,
+      "gain_db": -8
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "head-to-head"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_PROFILE",
+   "name": "Profile Card",
+   "category": "LOWER_THIRDS",
+   "component": "motion",
+   "description": "A person introduced with facts ('Steve Jobs, the co-founder of Apple, was born in 1955 in San Francisco', 'Sarah Collins, 34, a nurse from Dayton'), as a frosted ID card low on the calm side: the portrait - the scene's own picture of that person, framed on the face (else the person's initials in the accent) - with a thin accent corner, a kicker when one was said (VICTIM), the name rising letter by letter, the role, and each fact on its own line landing ON its word (BORN, DIED, AGE, FROM, LAST SEEN). For biography, history, true crime, sports, business founders.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-profile",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "text": "Ada Lovelace",
+     "subtitle": "Mathematician and writer",
+     "items": [
+      {
+       "label": "Born",
+       "text": "Dec 10, 1815 · London",
+       "at": 0.9
+      },
+      {
+       "label": "Died",
+       "text": "1852",
+       "at": 1.7
+      },
+      {
+       "label": "Known for",
+       "text": "The first computer program",
+       "at": 2.5
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 30,
+      "gain_db": -12
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "person-profile"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_STEPS",
+   "name": "Numbered Steps",
+   "category": "TIMELINES",
+   "component": "motion",
+   "description": "Steps said in order ('First, open a brokerage account. Second, set up a monthly deposit ...', 'Step one: whisk the eggs'), as a frosted card on the calm side: the title when one was said (HOW TO START INVESTING), a numbered ring a step joined by a thin line; each step lands ON its word - its ring filling in the accent, its words rising, the line running on to it - the steps before it checked off, the ones still to come waiting as faint numbers. Steps said far apart get one card each with the steps so far. For how-to, education, recipes, money, tech, health.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "total": {
+     "type": "number",
+     "label": "Out of"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-steps",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 11,
+    "types": false,
+    "leastSeconds": 4.6,
+    "sample": {
+     "text": "How to start investing",
+     "total": 4,
+     "items": [
+      {
+       "label": "Open a brokerage account",
+       "at": 0.2
+      },
+      {
+       "label": "Set up a monthly deposit",
+       "at": 1.2
+      },
+      {
+       "label": "Buy a low-cost index fund",
+       "at": 2.2
+      },
+      {
+       "label": "Leave it alone for years",
+       "at": 3.2
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 11,
+      "gain_db": -11
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "steps-said"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_CHAIN",
+   "name": "Cause & Effect",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Causes and effects said as a chain ('Rising interest rates led to falling home prices, which triggered a wave of defaults', 'The 1929 crash led to mass unemployment, which caused the Great Depression'), low across the frame: a frosted node a cause or an effect, each opening ON its word, an arrow drawing to it from the one before - a spark running along it - CAUSE over the first, EFFECT over the last (the accent edge). For history, economics, science, health.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-chain",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 40,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "items": [
+      {
+       "label": "Rising interest rates",
+       "at": 0.1
+      },
+      {
+       "label": "Falling home prices",
+       "at": 1.3
+      },
+      {
+       "label": "A wave of defaults",
+       "at": 2.5
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 40,
+      "gain_db": -12
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "cause-chain"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_CASE",
+   "name": "Case File",
+   "category": "DOCUMENTS",
+   "component": "motion",
+   "description": "A crime or a mystery with its facts ('On November 24, 1971, a man known as D. B. Cooper hijacked a flight out of Portland, Oregon. The case remains unsolved'), as a frosted dossier on the calm side: CASE FILE on its tab, the case's name as said, each fact typed in ON its word in a mono face (date, location), and the status stamped in ON its word (UNSOLVED, OPEN, COLD CASE in red; SOLVED, CONVICTED in the accent), a little turned, an ink ring on impact. For true crime, mysteries, disasters, unsolved history.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-case",
+    "sfx": {
+     "name": "paper-slide",
+     "volume": 0.3
+    },
+    "sfxAt": 88,
+    "types": false,
+    "leastSeconds": 5.6,
+    "sample": {
+     "text": "D. B. Cooper hijacking",
+     "label": "Case file",
+     "items": [
+      {
+       "label": "Date",
+       "text": "Nov 24, 1971",
+       "at": 0.6
+      },
+      {
+       "label": "Location",
+       "text": "Portland, Oregon",
+       "at": 1.6
+      },
+      {
+       "label": "Status",
+       "text": "Unsolved",
+       "at": 2.9
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "paper-slide",
+      "alt": [
+       "paper",
+       "swipe"
+      ],
+      "at": 0,
+      "gain_db": -14
+     },
+     {
+      "name": "stamp",
+      "alt": [
+       "impact",
+       "pop"
+      ],
+      "at": 88,
+      "gain_db": -8
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "case-facts"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_POST",
+   "name": "Social Post",
+   "category": "DOCUMENTS",
+   "component": "motion",
+   "description": "A social post quoted ('In 2018 Elon Musk tweeted: \"Funding secured.\"', 'One user on Reddit wrote: \"...\"'), as a platform-neutral post card on the calm side: a disc with the poster's initials, the name as said, the handle and the platform only when they were said, the post's words coming into focus line by line, quiet reply / repost / like / views icons - the one the narration counted in the accent, its figure counting up. No figure, handle or platform is ever shown that was not said.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "highlight": {
+     "type": "string",
+     "label": "Highlight words",
+     "max": 200
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-post",
+    "sfx": {
+     "name": "ui-pop",
+     "volume": 0.3
+    },
+    "sfxAt": 2,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "label": "A Reddit user",
+     "highlight": "Reddit",
+     "text": "This is the worst update they have ever shipped. Nothing works the way it used to.",
+     "value": 12000,
+     "suffix": "upvotes"
+    },
+    "sounds": [
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "ui-tick"
+      ],
+      "at": 2,
+      "gain_db": -12
+     },
+     {
+      "name": "count-roll",
+      "alt": [
+       "count-tick"
+      ],
+      "at": 34,
+      "until": 56,
+      "gain_db": -12
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "social-post"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
+   "id": "KT_FACTCHECK",
+   "name": "Fact Check",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "A claim and its verdict ('You may have heard that we only use 10 percent of our brains. That's a myth.'), as a frosted card on the calm side: CLAIM over the claim in quotes; ON the verdict word a stamp presses in (FALSE in red, TRUE in green, MISLEADING in orange) with an ink ring - a false claim struck through line by line, a misleading one underlined with a wave - and the fact under it when the narration says how it really is. The verdict is the first item's label, landing on its moment. For science, health, history myths, news and social claims.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "kt-factcheck",
+    "sfx": {
+     "name": "ui-swipe",
+     "volume": 0.3
+    },
+    "sfxAt": 49,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "text": "We only use 10 percent of our brains",
+     "subtitle": "We use virtually every part of the brain",
+     "items": [
+      {
+       "label": "False",
+       "at": 1.6
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-swipe",
+      "alt": [
+       "swipe",
+       "whoosh-soft"
+      ],
+      "at": 0,
+      "gain_db": -13
+     },
+     {
+      "name": "stamp",
+      "alt": [
+       "impact",
+       "pop"
+      ],
+      "at": 49,
+      "gain_db": -8
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "claim-verdict"
+   ],
+   "tags": [
+    "lib",
+    "ktp4"
+   ]
+  },
+  {
    "id": "LIB_NX_STAT_CONTEXT",
    "name": "Figure in Context",
    "category": "NUMBERS",
@@ -98876,6 +101209,20 @@
    "value": "soft-whip",
    "duration": 0.45,
    "use": "movement between places, gentler than the whip"
+  },
+  {
+   "id": "TR_CARD_ZOOM",
+   "name": "Card Zoom",
+   "value": "card-zoom",
+   "duration": 0.65,
+   "use": "the next point, item or topic; modern and clean"
+  },
+  {
+   "id": "TR_SHUTTER",
+   "name": "Shutter",
+   "value": "shutter",
+   "duration": 0.5,
+   "use": "a moment in time, a memory, a turn in the story"
   }
  ],
  "sfx": {

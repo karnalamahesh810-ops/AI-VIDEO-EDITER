@@ -38,6 +38,15 @@ KT_PACK3_MAPS = {"KT_ROUTE", "KT_STORM", "KT_TOTALS", "KT_REGIONS"}
 KT_PACK3_HOME = {"KT_RANKING": "right-panel", "KT_WATERLINE": "right-panel", "KT_SEVERITY": "lower-left",
                  "KT_ALERT": "upper-left"}
 KT_PACK3_GLASS = set(KT_PACK3_HOME)
+# Looks pack 4 (remotion LibKtPack4 / LibKtCards4, src/lookpack4.py): its cards take the calmer side of their picture
+# and bring their own glass (never the panel); the money counter (a figure on a soft shade, like kt-number) takes the
+# panel over a busy picture; the versus scoreboard and the cause chain place themselves (low in the middle, up top off a
+# face or lettering) and are left alone.
+KT_PACK4_HOME = {"KT_PRICE": "right-panel", "KT_TABLE": "right-panel", "KT_PROSCONS": "right-panel",
+                 "KT_PODIUM": "right-panel", "KT_CASE": "right-panel", "KT_POST": "right-panel",
+                 "KT_PROFILE": "lower-left", "KT_STEPS": "left-panel", "KT_FACTCHECK": "left-panel"}
+KT_PACK4_GLASS = set(KT_PACK4_HOME)
+KT_PACK4_SELF = {"KT_VERSUS", "KT_CHAIN"}
 BUSY_EDGE = 45.0        # mean edge strength (0-255) of the look's corner above which words get the panel
 CALMER = 0.7            # the mirrored corner is used when it is at most this share of the home corner's
 # the corners measured, as shares of the frame (x0, y0, x1, y1)
@@ -93,6 +102,8 @@ def corner(edges, zone: str) -> float:
 def _home(tid: str, panel: bool) -> str:
     if tid in KT_PACK3_HOME:
         return KT_PACK3_HOME[tid]
+    if tid in KT_PACK4_HOME:
+        return KT_PACK4_HOME[tid]
     if tid in KT_UPPER:
         return "upper-left"
     if tid in KT_FIXED_LOWER:
@@ -136,8 +147,8 @@ def place(overlays: List[dict], scenes: List[dict], *, fetch: Optional[Callable[
     todo = []
     for ov in overlays or []:
         tid = str(ov.get("template") or "")
-        if not tid.startswith("KT_") or tid in KT_PACK_OWN_PLACE or tid in KT_PACK3_MAPS or ov.get("backing") \
-                or ov.get("zone"):
+        if not tid.startswith("KT_") or tid in KT_PACK_OWN_PLACE or tid in KT_PACK3_MAPS or tid in KT_PACK4_SELF \
+                or ov.get("backing") or ov.get("zone"):
             continue
         sc = scene_at(int(ov.get("startFrame") or 0))
         if sc is not None:
@@ -163,7 +174,8 @@ def place(overlays: List[dict], scenes: List[dict], *, fetch: Optional[Callable[
         if busy is None:
             busy = here is not None and here >= BUSY_EDGE
         out["measured"] += 1
-        if busy and tid not in KT_FIXED_LOWER and tid not in KT_SELF_BACKED and tid not in KT_PACK3_GLASS:
+        if busy and tid not in KT_FIXED_LOWER and tid not in KT_SELF_BACKED and tid not in KT_PACK3_GLASS \
+                and tid not in KT_PACK4_GLASS:
             ov["backing"] = "panel"
             out["panel"] += 1
         if edges is not None and here is not None and here >= BUSY_EDGE * 0.8:

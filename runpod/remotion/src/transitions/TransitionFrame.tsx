@@ -23,6 +23,8 @@ import {
  *   luma-fade        dip through black where shadows fall first
  *   light-sweep      one clean band of warm-white light across the cut (looks pack 3)
  *   soft-whip        a gentle directional drift and settle (looks pack 3)
+ *   card-zoom        the picture eases back into a rounded card and the next comes forward out of one (looks pack 4)
+ *   shutter          two soft dark bars close over the picture like a blink and open on the next (looks pack 4)
  *
  * Only the few frames around a cut do any work: outside the windows the
  * wrapper is a plain full-frame div with no filter, so the rest of the video
@@ -346,6 +348,43 @@ const lookFor = (s: TransitionState, id: string, fid: string, k: number): Look =
         tile: true,
         region: { x: -0.2, w: 1.4 },
         filter: <feGaussianBlur in="SRC" stdDeviation={`${blurX.toFixed(1)} ${(blurX * 0.03).toFixed(1)}`} />,
+      };
+    }
+    case "card-zoom": {
+      // Looks pack 4 (2026-10-08): the picture eases back into a rounded card - a little smaller, a touch darker,
+      // a soft shadow under it on the frame's black - and the next shot comes forward out of a card into the frame.
+      // Both halves scale about the middle, so the cut happens inside the card, where it reads as a turn of a page.
+      const e = side === "out" ? easeInOutSine(p) : Math.pow(1 - easeOutCubic(p), 1.15);
+      if (e < 0.002) return { style: {} };
+      const radius = 34 * k * Math.min(1, e * 1.6);
+      return {
+        style: {
+          transform: `scale(${(1 - 0.1 * e).toFixed(4)})`,
+          borderRadius: radius,
+          overflow: "hidden",
+          filter: `brightness(${(1 - 0.26 * e).toFixed(3)}) saturate(${(1 - 0.1 * e).toFixed(3)})`,
+          boxShadow: `0 ${(18 * k * e).toFixed(1)}px ${(64 * k * e).toFixed(1)}px rgba(0,0,0,${(0.6 * e).toFixed(2)})`,
+        },
+      };
+    }
+    case "shutter": {
+      // Looks pack 4: two soft-edged dark bars close over the picture to the middle - a blink - and open on the
+      // next shot, which settles from a hair larger. The bars meet on the cut, so the switch is never seen.
+      const e = side === "out" ? easeInQuad(p) : Math.pow(1 - easeOutCubic(p), 1.25);
+      if (e < 0.002) return { style: {} };
+      const cover = 50 * Math.min(1, e * 1.06);                 // % of the height each bar covers
+      const soft = 4;                                          // its feathered edge, % of the height
+      const stop = ((cover / (cover + soft)) * 100).toFixed(2);
+      const bar = (top: boolean) => (
+        <div style={{ position: "absolute", left: 0, right: 0, [top ? "top" : "bottom"]: 0, height: `${(cover + soft).toFixed(2)}%`,
+          background: `linear-gradient(${top ? "180deg" : "0deg"}, #000 0%, #000 ${stop}%, rgba(0,0,0,0) 100%)` }} />
+      );
+      return {
+        style: {
+          transform: `scale(${(1 + 0.03 * e).toFixed(4)})`,
+          filter: `brightness(${(1 - 0.22 * e).toFixed(3)})`,
+        },
+        over: <AbsoluteFill style={{ pointerEvents: "none" }}>{bar(true)}{bar(false)}</AbsoluteFill>,
       };
     }
     case "whip-pan": {

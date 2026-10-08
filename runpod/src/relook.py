@@ -19,7 +19,11 @@ sounds stay exactly as they are; nothing is sourced, no paid call is made.
      animation in one lane (datalooks.finish) - looks pack 3 included: its
      rankings, lake levels, scales, changes, streaks, alerts and lists of
      states on their words, and an older map whose line is a storm's track,
-     a route or values by place turned into the pack's map (src/lookpack3.py).
+     a route or values by place turned into the pack's map (src/lookpack3.py);
+     and looks pack 4 (src/lookpack4.py): price series, big sums, tables,
+     pros and cons, people's cards (with their portrait from the scenes),
+     steps, cause chains, case files, posts, fact checks, top threes and
+     head-to-heads.
 
 A dry run (the default) returns the new timeline and the diff and writes
 nothing. An apply (apply: true) needs expect_fingerprint - the fingerprint of
@@ -36,7 +40,7 @@ import re
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from . import config, datalooks, geocode, lookpack3, lookplace, overlayimages, r2, recut
+from . import config, datalooks, geocode, lookpack3, lookpack4, lookplace, overlayimages, r2, recut
 
 
 class RelookError(RuntimeError):
@@ -148,6 +152,10 @@ def _summary(diff: Dict[str, Any]) -> Dict[str, Any]:
                                                                                 datalooks.KT_MULTIPLIER)),
         # looks pack 3: its data looks added on their words, and the older maps that took its route / storm / totals map
         "addedPack3": sum(v for k, v in looks["addedByLook"].items() if k in lookpack3.IDS),
+        # looks pack 4: the general looks (price, money, table, pros and cons, profile, steps, chain, case, post,
+        # fact check, podium, versus) added on their words, and the person cards given their portrait
+        "addedPack4": sum(v for k, v in looks["addedByLook"].items() if k in lookpack4.IDS),
+        "portraits": int(looks.get("portraits") or 0),
         "upgradedMaps": len(looks.get("upgraded") or []),
         "retiredRemoved": sum(1 for r in looks["removed"] if r["template"] in datalooks.RETIRED_IDS),
         "retiredRewritten": len(looks["remapped"]),

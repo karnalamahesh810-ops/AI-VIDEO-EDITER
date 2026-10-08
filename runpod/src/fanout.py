@@ -940,7 +940,7 @@ class ChildTimes:
 # a cut would fall inside the transition.
 CUT_TRANSITIONS = frozenset({"flash", "chromatic-flash", "glitch", "vhs-glitch", "film-burn", "light-leak",
                              "whip-pan", "zoom-punch", "shake-cut", "blur-dissolve", "luma-fade", "light-sweep",
-                             "soft-whip"})
+                             "soft-whip", "card-zoom", "shutter"})
 # An overlay's entrance (and the sound built into its look) plays over its first frames.
 OVERLAY_ENTRY_FRAMES = 45
 # A sound effect with no planned length is taken as this long, and none plays

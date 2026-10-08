@@ -30,7 +30,7 @@ import math
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from . import lookpack3, templates
+from . import lookpack3, lookpack4, templates
 from .presenter import is_presenter_scene
 
 # --------------------------------------------------------------------------- #
@@ -106,6 +106,42 @@ P3_DEFERS: Dict[str, frozenset] = {
     lookpack3.REGIONS: frozenset({"LIB_BM_RIVER_NETWORK", "LIB_GEO_RIVER_TRACE", "KT_ROUTE", "KT_STORM", "KT_TOTALS"}),
 }
 P3_NEAR = 2.5           # seconds either side of a pack-3 look's words in which an older look says the same thing
+# Looks pack 4 (remotion LibKtPack4 / LibKtCards4, 2026-10-08; src/lookpack4.py): twelve general looks for every niche
+# (a price chart, a money counter, a table, pros and cons, a profile card, steps, a cause chain, a case file, a social
+# post, a fact check, a podium, a versus), planned with pack 3 in one pass (lookpack4.find: the more specific look over
+# the same words, one shared pace). The older looks that say the same nearby give way (P4_REPLACES); a premium chart or
+# real data saying it keeps the moment (P4_DEFERS).
+P4 = frozenset(lookpack4.IDS)
+PACK = P3 | P4
+PACK_DATA = P3_DATA | P4
+P4_REPLACES: Dict[str, frozenset] = {
+    lookpack4.PRICE: frozenset({"LIB_CC_LINE_TICKER", "LIB_CC_TICK_LINE", "NUM_TREND_V1", "NUM_SPARK_V1", "CHART_LINE_V1",
+                                "CHART_AREA_V1", "LIB_CB_STEP_CHART", "CMP_DELTA_V1", "LIB_NUM_TREND_ARROW",
+                                "LIB_NX_DELTA_ARROW", "KT_COMPARE", "KT_DELTA"}),
+    lookpack4.MONEY: frozenset({"NUM_BIG_COUNTER_V1", "NUM_MONEY_STACK_V1", "LIB_CT_MONEY_STACK", "LIB_NUM_MONEY",
+                                "LIB_NX_MONEY_ROLL", "LIB_DX_DRUM_COUNTER", "LIB_NC_LED_COUNTER", "LIB_NC_FLIP_CLOCK"}),
+    lookpack4.TABLE: frozenset({"LIB_CP_TICK_TABLE", "CMP_SIDE_BY_SIDE_V1", "CMP_BOXES_V1", "KT_COMPARE",
+                                "LIB_CC_PLANNED_VS_ACTUAL", "LIB_NUM_VERSUS", "CMP_COLUMNS_V1", "CHART_BARS_V1"}),
+    lookpack4.PROSCONS: frozenset({"LIB_LS_PROS_CONS", "FACTS_CARD_V1", "LIB_CO_CHIP_STACK", "CALL_BULLETS_V1"}),
+    lookpack4.PROFILE: frozenset({"LIB_LT_STACKED_INDEX", "DOSSIER_V1", "LIB_PF_PROFILE", "LIB_PF_DOSSIER",
+                                  "KT_LOWER_THIRD", "PERSON_CARD_V1"}),
+    lookpack4.STEPS: frozenset({"TL_PATH_STEPS_V1", "TL_PROGRESS_STEPS_V1", "LIB_TXT_MINI_TIMELINE", "LIB_CC_WAVE_CHAIN",
+                                "LIB_NUM_STEP_OF", "CALL_BULLETS_V1"}),
+    lookpack4.CHAIN: frozenset({"LIB_SC_CAUSE_CHAIN", "LIB_CC_WAVE_CHAIN"}),
+    lookpack4.CASE: frozenset({"LIB_CF_CASE_STAMP", "DOSSIER_V1", "LIB_CF_EVIDENCE_BAG", "LIB_CN_TRUE_EVENTS"}),
+    lookpack4.POST: frozenset({"LIB_UI_SOCIAL_POST", "LIB_KX_SOCIAL_POST", "LIB_UI_COMMENT_THREAD", "LIB_UI_CHAT_BUBBLES",
+                               "KT_QUOTE", "KT_STATEMENT"}),
+    lookpack4.FACTCHECK: frozenset({"LIB_CP_MYTH_FACT", "LIB_QS_BUT_PIVOT", "KT_STATEMENT"}),
+    lookpack4.PODIUM: frozenset({"LIB_NS_PODIUM", "CHART_RANKING_V1", "LIB_LS_TOP_COUNTDOWN", "LIB_NUM_RANK",
+                                 "LIB_NX_RANK_ROWS"}),
+    lookpack4.VERSUS: frozenset({"CMP_VERSUS_V1", "LIB_NUM_VERSUS", "KT_COMPARE", "CMP_SIDE_BY_SIDE_V1"}),
+}
+P4_DEFERS: Dict[str, frozenset] = {
+    lookpack4.PRICE: frozenset({"KT_TREND", "LIB_PR_GRAPH_BUILD", "LIB_RD_LINE", "LIB_RD_NUMBER"}),
+    lookpack4.TABLE: frozenset({"LIB_RD_BARS", "LIB_PR_GRAPH_BUILD"}),
+}
+PACK_REPLACES: Dict[str, frozenset] = {**P3_REPLACES, **P4_REPLACES}
+PACK_DEFERS: Dict[str, frozenset] = {**P3_DEFERS, **P4_DEFERS}
 
 
 def variant_of(tid: str) -> str:
@@ -197,6 +233,8 @@ def family_of(ov: dict) -> str:
         return _KT_FAMILY[tid]
     if tid in P3:
         return lookpack3.FAMILY[tid]
+    if tid in P4:
+        return lookpack4.FAMILY[tid]
     typ = str(ov.get("type") or "")
     if typ == "map" or tid.startswith("MAP_") or tid == "LIB_PR_MAP_PATH":
         return "map"
@@ -247,6 +285,8 @@ def landing_seconds(ov: dict) -> float:
     tid = str(ov.get("template") or "")
     if tid in P3:
         return lookpack3.landing_seconds(ov)
+    if tid in P4:
+        return lookpack4.landing_seconds(ov)
     if tid in DATE_LAND:
         # a timeline (a counter) that moves on to a year said later in its run lands when that leg (roll) lands
         return max(DATE_LAND[tid], _item_at(ov) + DATE_LEG[tid]) if tid in DATE_LEG else DATE_LAND[tid]
@@ -263,6 +303,8 @@ def min_seconds(ov: dict) -> float:
     """entry + landing + the family's hold + exit: the least time a look may be on screen."""
     if str(ov.get("template") or "") in P3:
         return lookpack3.min_seconds(ov, EXIT)
+    if str(ov.get("template") or "") in P4:
+        return lookpack4.min_seconds(ov, EXIT)
     fam = family_of(ov)
     return round(landing_seconds(ov) + MIN_HOLD.get(fam, MIN_HOLD["other"]) + EXIT, 3)
 
@@ -274,6 +316,8 @@ def min_frames(ov: dict, fps: int) -> int:
 def want_seconds(ov: dict) -> float:
     if str(ov.get("template") or "") in P3:
         return min_seconds(ov) + lookpack3.WANT_EXTRA
+    if str(ov.get("template") or "") in P4:
+        return min_seconds(ov) + lookpack4.WANT_EXTRA
     return max(min_seconds(ov), WANT.get(family_of(ov), WANT["other"]))
 
 
@@ -1280,8 +1324,9 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None,
     Each overlay carries `at` (the word's second), priority and the moment it shows; startFrame /
     durationInFrames are set by schedule(). `skip`: spans (seconds) whose moments get no look - the presenter
     says them on camera (src/presenter/hybrid.py); left out before the repeats are counted, so the same number
-    said again later on the footage is shown there. `allowed`: the brand kit's looks (None: all) - a pack-3 look
-    outside them leaves its figures to the KT looks; `pace3`: the pack-3 spacing (shared with finish's maps).
+    said again later on the footage is shown there. `allowed`: the brand kit's looks (None: all) - a pack look
+    outside them leaves its figures to the KT looks; `pace3`: the packs' spacing (shared with finish's maps; a
+    lookpack4.Pace, which spaces pack 3 and pack 4 as one).
     """
     nar = Narration(words)
     ms = moments(nar)
@@ -1300,9 +1345,12 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None,
     # comparisons first: a run of named values of one unit is one look
     grouped = set()
     looks: List[dict] = []
-    # looks pack 3 (src/lookpack3.py): a ranking, a lake's levels, a scale, a change, a streak, an alert, a list of
-    # states - each one look over its words; the figures it shows are not shown again as figures
-    p3, p3_log = lookpack3.find(nar, allowed=allowed, ok=_p3_ok, skip=skip, pace=pace3)
+    # looks pack 3 and pack 4 (src/lookpack3.py, src/lookpack4.py) in one pass: a ranking, a lake's levels, a scale,
+    # a change, a streak, an alert, a list of states; a price series, a big sum, a table, pros and cons, a person's
+    # card, steps, a cause chain, a case file, a social post, a fact check, a top three, a head-to-head - each one
+    # look over its words (the more specific one wins); the figures it shows are not shown again as figures
+    p3, p3_log = lookpack4.find(nar, allowed=allowed, ok=_p3_ok, skip=skip,
+                                pace=pace3 if pace3 is not None else lookpack4.Pace())
     log.extend(p3_log)
     for c in p3:
         a, b = c["absorb"]
@@ -1375,7 +1423,7 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None,
     for i, lk in enumerate(merged):
         m = lk["m"]
         if lk.get("pack3"):
-            # a pack-3 look: its props as its rule wrote them, each part's second (the lane may move its start)
+            # a pack-3 / pack-4 look: its props as its rule wrote them, each part's second (the lane may move its start)
             c = lk["pack3"]
             tid = lk["props"]["template"]
             uses[tid] = uses.get(tid, 0) + 1
@@ -1383,6 +1431,8 @@ def plan(words: List[dict], fps: int, shown: Optional[Dict[str, float]] = None,
                   "dataLook": True, "said": c["said"], "_at": c["at"], "_end": c["end"], "_score": round(c["score"], 2)}
             if c.get("items_at"):
                 ov["_items_at"] = list(c["items_at"])
+            if c.get("said_s"):
+                ov["_said_s"] = c["said_s"]            # (a post is on screen while its words are said)
             out.append({k: v for k, v in ov.items() if v is not None})
             log.append({"at": round(c["at"], 2), "said": c["said"], "kind": tid, "look": tid, "score": round(c["score"], 2)})
             continue
@@ -1584,6 +1634,9 @@ DAYPART_PRIORITY = 66
 def _priority(ov: dict) -> float:
     if ov.get("type") == "title":
         return PRIORITY["title"]
+    if str(ov.get("template") or "") in P4:
+        return lookpack4.PRIORITY[str(ov["template"])] + (min(6.0, float(ov.get("_score") or 0)) if ov.get("dataLook")
+                                                          else 0.0)
     fam = family_of(ov)
     if fam == "date":
         return DAYPART_PRIORITY if ov.get("_daypart") else PRIORITY["date"]
@@ -1766,7 +1819,7 @@ def _upgrade_maps(kept: List[dict], nar: "Narration", fps: int, allowed: Optiona
     """
     rows: List[dict] = []
     counts = {"route2": 0, "old2": 0}
-    taken = [float(o["_at"]) for o in new if o.get("template") in P3]
+    taken = [float(o["_at"]) for o in new if o.get("template") in PACK]
 
     def ok(tid: str) -> bool:
         return _p3_ok(tid) and (allowed is None or tid in allowed)
@@ -1836,7 +1889,7 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
         if isinstance(picks.get("looks"), list):
             allowed = frozenset(str(x) for x in picks["looks"])
     words = words_of(doc)
-    pace3 = lookpack3.Pace()
+    pace3 = lookpack4.Pace()            # (packs 3 and 4 spaced as one, the maps upgraded below included)
     if presenter:
         new, log = plan(words, fps, skip=[(a / fps, b / fps) for a, b in presenter], allowed=allowed,
                         pace3=pace3) if plan_data else ([], [])
@@ -1845,7 +1898,7 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
     if allowed is not None:
         kept_new = []
         for o in new:
-            if o["template"] not in allowed and o["template"] not in P3:
+            if o["template"] not in allowed and o["template"] not in PACK:
                 if o["template"] in DATE_LOOKS:
                     alt = next((a for a in _date_alternates(strip_private(o)) if a["template"] in allowed), None)
                 else:
@@ -1887,8 +1940,8 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
     remapped: List[dict] = []
     for ov in before:
         tid = str(ov.get("template") or "")
-        if tid in P3_DATA and ov.get("dataLook") and plan_data:
-            # this planner's own pack-3 looks are planned again (one made in the editor stays as it was)
+        if tid in PACK_DATA and ov.get("dataLook") and plan_data:
+            # this planner's own pack-3 / pack-4 looks are planned again (one made in the editor stays as it was)
             removed.append({"template": tid, "at": round(int(ov.get("startFrame") or 0) / fps, 2), "why": "re-planned"})
             continue
         if tid in KT_DATA and (ov.get("dataLook") or (plan_data and allowed is None)):
@@ -1922,7 +1975,7 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
             kept[i] = {**ov, "text": cap}
     # Looks pack 3: an older look saying what a new pack-3 look says, nearby, gives way to it; a premium look (or real
     # data) saying it as well keeps the moment and the pack-3 look stands down.
-    p3_new = [o for o in new if o.get("template") in P3]
+    p3_new = [o for o in new if o.get("template") in PACK]
     if p3_new:
         def says_too(k: dict, o: dict) -> bool:
             t = int(k.get("startFrame") or 0) / fps
@@ -1930,13 +1983,13 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
 
         dropped_p3 = set()
         for o in p3_new:
-            if any(says_too(k, o) and str(k.get("template") or "") in P3_DEFERS.get(o["template"], ()) for k in kept):
+            if any(says_too(k, o) and str(k.get("template") or "") in PACK_DEFERS.get(o["template"], ()) for k in kept):
                 dropped_p3.add(id(o))
                 for row in log:
                     if row.get("look") == o["template"] and abs(row["at"] - float(o["_at"])) < 0.01:
                         row["look"], row["why"] = None, "a premium look already shows it"
                 continue
-            gone = [k for k in kept if says_too(k, o) and str(k.get("template") or "") in P3_REPLACES.get(o["template"], ())
+            gone = [k for k in kept if says_too(k, o) and str(k.get("template") or "") in PACK_REPLACES.get(o["template"], ())
                     and not _scene_card(k)]
             for k in gone:
                 kept.remove(k)
@@ -1973,6 +2026,8 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
             for it, at in zip(o["items"], o["_items_at"]):
                 if at is not None and isinstance(it, dict):
                     it["at"] = round(max(0.0, float(at) - start), 2)
+    # a person's card shows their portrait when a scene on screen around it is of that person (else their initials)
+    portraits = lookpack4.bind_portraits([o for o in placed if o.get("dataLook")], doc.get("scenes") or [], fps)
     doc["overlays"] = sorted([strip_private(o) for o in placed] + cards, key=lambda o: int(o.get("startFrame") or 0))
     shown_ids = {id(o) for o in placed}
     added = [o for o in new if id(o) in shown_ids]
@@ -2000,7 +2055,7 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
         "added": [{"template": o["template"], "at": round(o["startFrame"] / fps, 2),
                    "seconds": round(o["durationInFrames"] / fps, 2), "said": o.get("said", "")} for o in added],
         "addedByLook": {t: sum(1 for o in added if o["template"] == t) for t in sorted({o["template"] for o in added})},
-        "removed": removed, "remapped": remapped, "upgraded": upgraded,
+        "removed": removed, "remapped": remapped, "upgraded": upgraded, "portraits": portraits,
         "dropped": dropped, "moments": log,
         "shortBefore": len(short_before), "shortAfter": len(short_overlays(doc["overlays"], fps)),
         "overlapAfter": len(overlapping(doc["overlays"])),
