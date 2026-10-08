@@ -1547,6 +1547,8 @@ def _build(segments: List[Segment], shots: List[dict],
                 # The model never planned this line (it failed or was out of credit: the rule planner's
                 # search, the video's title in front): a re-clip plans it again first (src/replan.py).
                 **({"plannedBy": "rules"} if shot.get("rule") else {}),
+                # A line about a real person in an era nobody filmed them (src/personera.py): its photos first.
+                **({"personEra": dict(shot["personEra"])} if isinstance(shot.get("personEra"), dict) else {}),
                 "eventWindow": shot.get("eventWindow", ""),
                 "contentDescription": getattr(asset, "content_description", "") or "",
                 "relevanceScore": getattr(asset, "relevance_score", None),

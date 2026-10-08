@@ -363,6 +363,23 @@ NEWS_FOOTAGE = _flag("NEWS_FOOTAGE", True)
 # mark, a webcam's ID and timestamp, a 'video courtesy of' credit and news banners are not "text or watermark";
 # another channel's stamp on a re-upload and a creator's captions still are. Off = the news rule as before.
 VISION_NEWS_OVERLAYS_OK = _flag("VISION_NEWS_OVERLAYS_OK", True)
+# The news rule by story (2026-10-09; vision.text_mode). On the 2026-10-08 bench another creator's subtitles, an
+# archive's timecode, typed labels and dates, a document laid over the footage and channels' marks passed in a WWII
+# history, a Lake Mead explainer and an Obama biography: NEWS_FOOTAGE's rule applied to every story kind. On: the news
+# rule only in a news, weather or disaster story or one about now; a line of any other story about a real event or a
+# current situation filmed from VISION_BROADCAST_ERA on keeps a broadcaster's own marks over its coverage; every other
+# line is held to the strict rule, its added text spelt out - and the free subtitle-band and corner-mark checks
+# (src/filters.py) turn such clips down before any model call. Off = the news rule for every line, as before.
+VISION_TEXT_BY_STORY = _flag("VISION_TEXT_BY_STORY", True)
+VISION_BROADCAST_ERA = int(os.getenv("VISION_BROADCAST_ERA", "1950"))
+# A focused second look at added text (vision.text_check, 2026-10-09): the judge's text flag is one question among ten
+# and it caught 5 of 12 known leaks in a re-judge of the bench's placed clips. A clip the judge kept on a line held to
+# the strict or event rule is asked once more, about added text only, on two larger frames - every hook clip, any
+# other when the free pixel signal (filters.text_signal) or the judge's own description says text may be there - at
+# most TEXT_SECOND_LOOK_MAX calls a video (~$0.0003 each). Off = the judge's verdict alone.
+VISION_TEXT_SECOND_LOOK = _flag("VISION_TEXT_SECOND_LOOK", True)
+TEXT_SECOND_LOOK_MAX = int(os.getenv("TEXT_SECOND_LOOK_MAX", "120"))
+TEXT_SECOND_LOOK_WIDTH = int(os.getenv("TEXT_SECOND_LOOK_WIDTH", "768"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.
 VISION_MAX_CANDIDATES = int(os.getenv("VISION_MAX_CANDIDATES", "3"))
@@ -791,6 +808,21 @@ GENERATED_IMAGES_IN_HOOK = _flag("GENERATED_IMAGES_IN_HOOK", False)
 HOOK_JUDGE_BEST_OF = int(os.getenv("HOOK_JUDGE_BEST_OF", "3"))
 HOOK_POOL_SCOUT = int(os.getenv("HOOK_POOL_SCOUT", "4"))
 HOOK_JUDGE_MAX_PER_SCENE = int(os.getenv("HOOK_JUDGE_MAX_PER_SCENE", "16"))
+# The opening's own time in pass 1 (2026-10-09). On the 2026-10-08 bench 56 of 94 opening lines were still searching
+# when pass 1 closed: one by one, a hook line's search downloads (~15 s), checks and judges (~9 s) each of its scouted
+# candidates in turn, keeps 1 of ~8 it judges, and needed 150-500 s - while a long build gave it 1.5 x its 192 s share
+# (288 s). Only the lines that start within HOOK_SECONDS; every other line keeps its share, its scouts and its judges:
+# - HOOK_TIME_FACTOR: a hook line's own pass-1 time is its share (media.scene_seconds) x this (1.5 = before).
+# - HOOK_PARALLEL_JUDGE: a hook line downloads, checks and judges this many of a search's scouted candidates side by
+#   side (the same candidates and caps; the shared network and vision slots still bound the whole video). 1 = one by
+#   one, as before.
+# - HOOK_SECOND_LOOK: the second search a hook line made after its first passing clip, for a stronger one. "auto": only
+#   when that clip had no other passing clip to beat and is under EXCELLENT_SCORE, in at most
+#   HOOK_SECOND_LOOK_SECONDS; "always" (as before: its whole remaining time); "off".
+HOOK_TIME_FACTOR = float(os.getenv("HOOK_TIME_FACTOR", "2.5"))
+HOOK_PARALLEL_JUDGE = int(os.getenv("HOOK_PARALLEL_JUDGE", "3"))
+HOOK_SECOND_LOOK = os.getenv("HOOK_SECOND_LOOK", "auto").strip().lower()
+HOOK_SECOND_LOOK_SECONDS = float(os.getenv("HOOK_SECOND_LOOK_SECONDS", "150"))
 # A story about something happening now (a news, weather or disaster story
 # about this year) searches the last month's uploads first - "this month" on
 # YouTube and Dailymotion - and falls back to this year's and then any upload
@@ -1063,6 +1095,25 @@ MIN_ARCHIVE_HEIGHT = int(os.getenv("MIN_ARCHIVE_HEIGHT", "240"))
 # and was turned down before the judge; the HD uploads left were other debates, other years. 8 = 2018 and
 # before, in 2026.
 PERIOD_FOOTAGE_YEARS = int(os.getenv("PERIOD_FOOTAGE_YEARS", "0"))
+# People from before video existed (src/personera.py, 2026-10-09). A line about a story person at least
+# PERSON_ERA_YEARS back, either before PERSON_ERA_FILM_YEAR or about a private stretch of the life nobody filmed (born,
+# school, college, a first job, a wedding), searches real photos of that person in that era first - shown with a plain
+# camera move (no living-photo layers) - then, for a person before film was common, archive film of them
+# (PERSON_ERA_CLIP), then the line's own plan. Such a photo may open the video (PERSON_ERA_IN_HOOK: the hook's
+# no-still rule and its footage retry leave it alone). The 2026-10-08 Obama biography put campus tours and a 1960s
+# street under his childhood and studies, and text cards under three lines. Off = the line's own plan only.
+PERSON_ERA_PHOTOS = _flag("PERSON_ERA_PHOTOS", True)
+PERSON_ERA_YEARS = int(os.getenv("PERSON_ERA_YEARS", "8"))
+PERSON_ERA_FILM_YEAR = int(os.getenv("PERSON_ERA_FILM_YEAR", "1950"))
+PERSON_ERA_IN_HOOK = _flag("PERSON_ERA_IN_HOOK", True)
+PERSON_ERA_CLIP = _flag("PERSON_ERA_CLIP", True)
+# An archive print is soft by nature: how far the screen may blow up a person-era photo's real detail (src/sharpness.py;
+# MAX_PICTURE_MAGNIFICATION for every other picture). The Obama biography's Punahou and Occidental photos measured
+# 2.0-2.9x and were all thrown away at 1.86x; thumbnails and page previews measure 3.8x and more. 0 = the usual limit.
+PERSON_ERA_MAX_MAGNIFICATION = float(os.getenv("PERSON_ERA_MAX_MAGNIFICATION", "3.0"))
+# The verdicts a person-era line's photo search may spend (~$0.0005 each) before the line's own plan goes on: every
+# query asks every picture source, three verdicts a source - 36 for a person nobody photographed then.
+PERSON_ERA_MAX_JUDGES = int(os.getenv("PERSON_ERA_MAX_JUDGES", "8"))
 PERIOD_MIN_HEIGHT = int(os.getenv("PERIOD_MIN_HEIGHT", "480"))
 PERIOD_REAL_LINES = int(os.getenv("PERIOD_REAL_LINES", "400"))
 # The judge rates the era's broadcast video soft ("blurry, blocky compression"): a period line's quality floor

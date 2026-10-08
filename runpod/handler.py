@@ -109,7 +109,36 @@ from src import hookcheck
 from src import shorts
 from src import langversion
 from src import aifill
+from src import personera
 from src.presenter import hybrid as presenter_hybrid
+
+
+def _mark_person_era(jobs: List[dict], segments, shots: List[dict], brief: Optional[dict]) -> int:
+    """
+    Every line about a real person in an era nobody filmed them (src/personera.py: a biography's early life, anyone
+    before film was common) gets "person_era" on its sourcing job and "personEra" on its shot. A line that names no
+    year goes on from the line before's year (a life is told in order). Returns how many.
+    """
+    if not personera.enabled() or not personera.story_people(brief):
+        return 0
+    last_year = None
+    n = 0
+    for job, seg, shot in zip(jobs, segments, shots):
+        text = getattr(seg, "text", "") or ""
+        si = shot.get("sceneIntent") if isinstance(shot.get("sceneIntent"), dict) else None
+        pe = personera.detect(text, shot, brief, prev={"year": last_year} if last_year else None)
+        year = personera.line_year(text, si, None)
+        if year is not None:
+            last_year = year
+        if pe:
+            job["person_era"] = pe
+            shot["personEra"] = pe
+            n += 1
+    if n:
+        print(f"[worker] {n} line(s) about a person before video existed: real photos of them first "
+              f"({', '.join(sorted({j['person_era']['person'] for j in jobs if j.get('person_era')}))[:120]})",
+              flush=True)
+    return n
 
 
 def _work_dir(job_id: str) -> str:
@@ -1252,6 +1281,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
              "hook": bool(shot.get("hook")) or float(seg.start) < config.HOOK_SECONDS,
              "context": seg.text}
             for i, (seg, shot) in enumerate(zip(segments, shots))]
+    # People from before video existed (src/personera.py, PERSON_ERA_PHOTOS): a line about a story person in an era
+    # nobody filmed them searches real photos of them then first. The shot keeps it (semanticMetadata.personEra) for
+    # the editor, the re-clip and the living-photo pass.
+    _mark_person_era(jobs, segments, shots, brief)
     # The lines the footage search is for: every line, but the presenter's full-screen ones with a presenter
     # block (a split screen's line keeps its search: its real clip or picture is the right half).
     search_jobs = hy.search_jobs(jobs) if hy is not None else jobs
@@ -1465,7 +1498,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         report(f"Finding footage for {n_empty} empty scenes", 62)
         rescued = media.rescue_fill(fill_jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")),
                                     footage_only={j["index"] for j in fill_jobs
-                                                  if j.get("hook") and j.get("subject_type") != "document"})
+                                                  if j.get("hook") and j.get("subject_type") != "document"
+                                                  and not j.get("person_era")})
     if held:
         pool_stats["variety"] = dict(media.restore_held(fill_jobs, results_by_index, held), held=len(held),
                                      reasons=dict(collections.Counter(r for _a, r, _k in held.values())))
@@ -1938,6 +1972,10 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
             subject=str(sem.get("subject") or ""),
             event_window=str(sem.get("eventWindow") or ""),
             scene_intent=scene_intent, hook=hook, recency=recency,
+            # A line about a person from before video existed (src/personera.py) looks for another photo of them
+            # first - unless the editor typed a search of its own or asked for the line to be planned again.
+            person_era=(sem.get("personEra") if isinstance(sem.get("personEra"), dict)
+                        and not inp.get("query") and mode != "regenerate" else None),
         )
     finally:
         media._KEEP_ALT_FILES.reset(keep)
@@ -2949,7 +2987,14 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUD
                       "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS",
                       # Each line's own sourcing trace in meta.sourcing.traces (the benchmark, 2026-10-08), and
                       # how long pass 1 waits for the lines it closed on to hand back what they hold.
-                      "SOURCE_TRACE", "PASS1_COLLECT_SECONDS")
+                      "SOURCE_TRACE", "PASS1_COLLECT_SECONDS",
+                      # Quality round 2 (2026-10-09): the hook's own time and parallel looks, the text rule by
+                      # story and its second look, people from before video existed.
+                      "HOOK_TIME_FACTOR", "HOOK_PARALLEL_JUDGE", "HOOK_SECOND_LOOK", "HOOK_SECOND_LOOK_SECONDS",
+                      "VISION_TEXT_BY_STORY", "VISION_BROADCAST_ERA", "VISION_TEXT_SECOND_LOOK",
+                      "TEXT_SECOND_LOOK_MAX", "TEXT_SECOND_LOOK_WIDTH",
+                      "PERSON_ERA_PHOTOS", "PERSON_ERA_YEARS", "PERSON_ERA_FILM_YEAR", "PERSON_ERA_IN_HOOK",
+                      "PERSON_ERA_CLIP", "PERSON_ERA_MAX_MAGNIFICATION", "PERSON_ERA_MAX_JUDGES")
 
 
 def _apply_config(overrides) -> dict:

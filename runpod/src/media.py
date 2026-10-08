@@ -1210,6 +1210,25 @@ _RUNG: contextvars.ContextVar = contextvars.ContextVar("rung", default=None)
 # searches of their own words - answered from the subject's cached list, they only re-ranked the first
 # wording's candidates (the review of 2026-10-06).
 _WORDING: contextvars.ContextVar = contextvars.ContextVar("wording", default=0)
+# Set while a person-era line searches photos of its person (src/personera.py): that person's name. The judge is
+# shown each picture's own page title as evidence of who it shows (a childhood photo is no recognisable face).
+_PERSON_PHOTO: contextvars.ContextVar = contextvars.ContextVar("person_photo", default="")
+# ...and the verdicts that search has left ([n], PERSON_ERA_MAX_JUDGES): every query asks every picture source, three
+# verdicts a source - a person nobody photographed then cost 36 of them before the line went on (2026-10-09).
+_PERSON_JUDGES: contextvars.ContextVar = contextvars.ContextVar("person_judges", default=None)
+
+
+def _person_verdict_left() -> bool:
+    """Whether a picture may be judged now: always, but in a person-era photo search (_PERSON_JUDGES) one of its
+    PERSON_ERA_MAX_JUDGES verdicts is taken, and none is left after them."""
+    left = _PERSON_JUDGES.get()
+    if left is None:
+        return True
+    with _JUDGED_LOCK:
+        if left[0] <= 0:
+            return False
+        left[0] -= 1
+        return True
 # A list a scene's YouTube search reports to (src/reclip.py's per-scene trace: each search, each download,
 # filter and verdict - the Obama re-clip of 2026-10-07 found 8 clips in 110 lines and left no record of why).
 # None = off.
@@ -1570,7 +1589,7 @@ def judge_clip(path: str, job: Dict[str, Any], label: str = "", source_url: str 
               (_EVENT_WINDOW, _EVENT_WINDOW.set(job.get("event_window") or "")),
               (_SCENE_INTENT, _SCENE_INTENT.set(job.get("scene_intent") or None)),
               (_IN_HOOK, _IN_HOOK.set(bool(job.get("hook")))),
-              (_SHOWN_SECONDS, _SHOWN_SECONDS.set(span))]
+              (_SHOWN_SECONDS, _SHOWN_SECONDS.set(span))] + text_rule_tokens(job.get("scene_intent"))
     try:
         return _vision_gate(path, job.get("intent") or job.get("query") or "", job.get("context") or "", label,
                             source_url)
@@ -1719,6 +1738,50 @@ def _vision_gate(path: str, intent: str, context: str, label: str, source_url: s
         _stage(f"gate:{'picture' if _is_still(path) else 'clip'}", time.time() - t0)
 
 
+# What in the judge's own description says text may be on screen - a reason for the second look (second_look).
+_TEXT_WORDS = re.compile(
+    r"\b(?:text|texts|captions?|captioned|subtitles?|subtitled|words?|titles?|titled|logos?|labels?|labell?ed|"
+    r"banners?|chyrons?|tickers?|overlays?|overlaid|graphics?|charts?|maps?|diagrams?|documents?|dates?|dated|"
+    r"timestamps?|time stamps?|watermarks?|credits?|lettering|headlines?|split[- ]screen|inset|on[- ]screen|"
+    r"lower[- ]third)\b", re.I)
+
+
+def second_look(path: str, verdict: dict, label: str = "") -> tuple:
+    """
+    (keep, verdict) after the focused second look at added text (vision.text_check; VISION_TEXT_SECOND_LOOK,
+    2026-10-09). Only a clip the judge kept, on a line held to the strict or event rule (vision.text_mode: never in a
+    news story), and only when it is worth a call: every hook clip, any other when the judge's description names
+    text, a caption, a logo, a label or a graphic (_TEXT_WORDS), or the free pixel signal (filters.text_signal: a
+    mark that holds still while the picture moves, letter rows near the top or bottom) says something may be there.
+    The look is told what the judge said the clip shows (a keynote's stage screen is part of the scene). A clip it
+    turns down leaves with has_text_or_watermark set - remembered for every line, as the judge's own text flag is.
+    """
+    if not getattr(config, "VISION_TEXT_SECOND_LOOK", False) or _is_still(path):
+        return True, verdict
+    mode = str(verdict.get("text_mode") or vision.TEXT_MODE.get() or vision.text_mode(_SCENE_INTENT.get()))
+    if mode == "news" or vision.text_check_left() <= 0:
+        return True, verdict
+    why = "hook" if _IN_HOOK.get() else ""
+    if not why and _TEXT_WORDS.search(str(verdict.get("description") or "")):
+        why = "description"
+    if not why:
+        try:
+            why = "pixels" if _filters.text_signal(path).get("likely") else ""
+        except Exception:  # noqa: BLE001 - a failed signal is no reason to look
+            why = ""
+    if not why:
+        return True, verdict
+    got = vision.text_check(path, mode, described=str(verdict.get("description") or ""))
+    if not got:
+        return True, verdict
+    seen = {"why": why, "added": bool(got.get("added")), "reject": got.get("reject") or "",
+            "items": list(got.get("items") or [])[:4]}
+    if not got.get("reject"):
+        return True, dict(verdict, text_check=seen)
+    print(f"[vision] REJECT on the second look at text ({got['reject']}): {label[:60]!r}", flush=True)
+    return False, dict(verdict, has_text_or_watermark=True, text_check=seen)
+
+
 def _judge_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
     """_vision_gate after the credit bar: the AI-slop filters, the local model, the vision judge."""
     why = slop_reason(path, label, source_url)
@@ -1728,6 +1791,10 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         return False, None
     if not intent:
         return True, None
+    if _PERSON_PHOTO.get() and label and _is_still(path):
+        # A person-era photo (src/personera.py): a childhood or student photo is no recognisable face - the page
+        # it was found on says who it shows ("Barack Obama with his mother Ann Dunham, 1962"), the frames decide.
+        intent = f"{intent} [The picture's own page: {label[:140]}]"
     # The local CLIP pass first: the wrong KIND of picture (slide, text page,
     # cartoon, logo, a portrait on a place line) never costs a Gemini call.
     local = _local_check(path, intent)
@@ -1776,6 +1843,9 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
     allow_vice = not off_story(verdict, line)
     keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person", allow_vice=allow_vice,
                              min_quality=_quality_floor())
+    if keep and verdict is not None:
+        # The focused second look at text someone added over a clip (VISION_TEXT_SECOND_LOOK).
+        keep, verdict = second_look(path, verdict, label)
     if verdict is not None and not allow_vice:
         # A music, club or smoking scene the story is not about: a clear no for the near-miss
         # and opening checks too (a copy - the cached verdict stays as the model answered).
@@ -1911,7 +1981,7 @@ def _regions_in(text: str, codes: bool = False) -> set:
             elif name and re.search(rf",\s*{m.group(1)}\b", t):
                 out.add(name)
     # "New Mexico" is a state, not the country.
-    for m in _COUNTRY_RE.finditer(re.sub(r"(?i)new mexico", " ", t)):
+    for m in _COUNTRY_RE.finditer(re.sub(r"(?i)\bnew mexico\b", " ", t)):
         out.add(m.group(1).lower())
     return out
 
@@ -2480,7 +2550,9 @@ def _plan_grabs(eligible: List[dict], grab: float, start_at: float,
     results: Dict[str, Optional[dict]] = {}
     scout = _ytdlp.with_stop(_scout)               # the scene's time box goes with each scout
     with ThreadPoolExecutor(max_workers=len(scouts)) as pool:
-        futures = {pool.submit(scout, c, grab, intent, context): c["id"] for c in scouts}
+        # (In a copy of the line's context: its text rule reaches the storyboard pick - vision.TEXT_MODE.)
+        futures = {pool.submit(contextvars.copy_context().run, scout, c, grab, intent, context): c["id"]
+                   for c in scouts}
         for fut in as_completed(futures):
             try:
                 results[futures[fut]] = fut.result()
@@ -2538,10 +2610,41 @@ def _scene_cap_reached() -> bool:
     return counter is not None and counter[0] >= _judge_limits()["per_scene"]
 
 
+_JUDGED_LOCK = threading.Lock()
+
+
 def _count_judged() -> None:
     counter = _SCENE_JUDGED.get()
     if counter is not None:
-        counter[0] += 1
+        with _JUDGED_LOCK:              # a hook line's batch counts from several threads (judge_width)
+            counter[0] += 1
+
+
+def judge_width() -> int:
+    """How many of a search's scouted candidates this line downloads, checks and judges side by side: a hook
+    line HOOK_PARALLEL_JUDGE (2026-10-09), every other line one after another."""
+    if not _IN_HOOK.get():
+        return 1
+    try:
+        return max(1, int(getattr(config, "HOOK_PARALLEL_JUDGE", 1) or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _side_by_side(fn, items: List[tuple]) -> List[dict]:
+    """fn(*item) for every item at once, each in a copy of this line's context (its time box, scene intent, hook
+    flag and budget counter go with it); results in the items' order. A look that breaks hands back {"c": ...}:
+    nothing found, its claim released by the caller."""
+    with ThreadPoolExecutor(max_workers=max(1, len(items))) as ex:
+        futures = [ex.submit(contextvars.copy_context().run, fn, *item) for item in items]
+        out = []
+        for item, fut in zip(items, futures):
+            try:
+                out.append(fut.result())
+            except Exception as e:  # noqa: BLE001 - one candidate's failure never ends the search
+                print(f"[pool] a candidate look failed: {type(e).__name__}: {str(e)[:100]}", flush=True)
+                out.append({"c": item[0]})
+    return out
 
 
 def _good_enough(passed: List[MediaAsset]) -> bool:
@@ -3356,23 +3459,12 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
     judged = 0
     fine_done = False
     claimed: List[str] = []
-    for row, point, moment in plan:
-        if judged >= limits["candidates"] or _vision_budget_left() < 1 or _good_enough(passed):
-            break
-        c = by_id[row["id"]]
-        if not _claim_inflight(c.id, used):
-            continue                        # another scene is downloading it right now
-        claimed.append(c.id)
-        if config.JUDGE_MEMORY and _is_bad(f"yt:{c.id}@{int(point // 10)}"):
-            # Another scene's judge turned this moment down for every line: not
-            # refined (a paid call) only to be skipped after it.
-            _release_inflight(c.id)
-            continue
-        # The fine pass (one more model call) goes to the best-ranked
-        # download only; the others keep their coarse pick.
-        if not fine_done and _vision_budget_left() >= 2:
-            fine_done = True
-            _count_judged()
+
+    def look(c, row, point, moment, fine: bool) -> dict:
+        """One scouted candidate: the fine pass (when it is this search's first), the moment checks, the
+        download, the filters and the judge. Runs on the line's own thread, or - a hook line, HOOK_PARALLEL_JUDGE -
+        beside the others of its batch in a copy of the line's context. Returns what happened, for settle()."""
+        if fine:
             moment = _refine_moment(row, moment, grab, seek, context)
         if moment and moment.get("fine"):
             point = moment["start"]
@@ -3380,21 +3472,18 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             # An earlier video showed this moment of this video (the owner,
             # 2026-09-30): the next candidate instead.
             print(f"[ledger] skip {c.id} @ {point:.0f}s: shown in an earlier video", flush=True)
-            _release_inflight(c.id)
-            continue
+            return {"c": c}
         mkey = f"yt:{c.id}@{int(point // 10)}"
         least = _plays(seconds, grab)
         if _is_bad(mkey) or _short_section(mkey, least):
-            _release_inflight(c.id)
-            continue                        # another scene found this moment unusable (or too short for it)
+            return {"c": c}                 # another scene found this moment unusable (or too short for it)
         path, clean, cuts = fetch_clean_clip(c.id, out_dir, point, grab, c.title, least=least)
         if not path:
             if clean is False:
                 _note_short_section(mkey, least)    # downloaded, but no clean start long enough: not again
             _trace(step="download", video=c.id, title=c.title[:60],
                    why="no clean stretch long enough" if clean is False else "download failed")
-            _release_inflight(c.id)
-            continue
+            return {"c": c}
         still = motion_rejects(path)
         why = "burned-in text or UI" if has_burned_captions(path) else still
         # An upscaled upload (src/sharpness.py: under MIN_CLIP_REAL_HEIGHT lines of real
@@ -3409,18 +3498,29 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
                 os.remove(path)
             except OSError:
                 pass
-            _release_inflight(c.id)
-            continue
-        judged += 1
+            return {"c": c}
         _count_judged()
         _GATE_SLOP.set("")
         keep, verdict = _vision_gate(path, intent_text, context, c.title)
+        slop_why = _GATE_SLOP.get()
         _trace(step="judge", video=c.id, title=c.title[:60], keep=bool(keep),
                score=(verdict or {}).get("score"), quality=(verdict or {}).get("quality"),
-               why=_GATE_SLOP.get()[:90] or _flags_of(verdict),
+               why=slop_why[:90] or _flags_of(verdict),
                saw=str((verdict or {}).get("description") or "")[:110])
-        if not keep:
-            _mark_bad(f"yt:{c.id}", mkey, _GATE_SLOP.get())
+        return {"c": c, "judged": True, "keep": keep, "verdict": verdict, "why": slop_why, "path": path,
+                "clean": clean, "cuts": cuts, "point": point, "moment": moment, "mkey": mkey}
+
+    def settle(out: dict) -> None:
+        """What one look found, decided in plan order on the line's own thread."""
+        nonlocal soft
+        c = out["c"]
+        if not out.get("judged"):
+            _release_inflight(c.id)
+            return
+        path, verdict, point, moment = out["path"], out["verdict"], out["point"], out["moment"]
+        clean, cuts = out["clean"], out["cuts"]
+        if not out["keep"]:
+            _mark_bad(f"yt:{c.id}", out["mkey"], out["why"])
             v = verdict or {}
             score = float(v.get("score") or 0.0)
             # (A hook clip that opens on something else is a clear no too: never the "best available".)
@@ -3437,13 +3537,13 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
                         pass
                 soft = {"path": path, "score": score, "verdict": verdict, "c": c, "point": point,
                         "moment": moment, "clean": clean, "cuts": cuts}
-                continue
+                return
             try:
                 os.remove(path)
             except OSError:
                 pass
             _release_inflight(c.id)
-            continue
+            return
         asset = _asset_for(path, query, grab, require_cc, title=c.title)
         asset.url = f"https://www.youtube.com/watch?v={c.id}&t={int(point)}"
         asset.apply_verdict(verdict, intent_text)
@@ -3464,6 +3564,45 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
               f"(visual {asset.relevance_score or 0:.2f}, meta {c.metadata:.2f}, "
               f"{asset.specificity or 'unclassed'})", flush=True)
         passed.append(asset)
+
+    # A hook line looks at up to HOOK_PARALLEL_JUDGE candidates side by side (judge_width); any other line, one
+    # after another as always. Each batch stays inside the search's caps: its candidates, the line's vision budget.
+    width = judge_width()
+    k = 0
+    while k < len(plan):
+        if judged >= limits["candidates"] or _vision_budget_left() < 1 or _good_enough(passed):
+            break
+        room = max(1, min(width, limits["candidates"] - judged, _vision_budget_left()))
+        batch = []
+        while k < len(plan) and len(batch) < room:
+            if batch and _vision_budget_left() - len(batch) < 1:
+                break                           # no verdict left in the line's budget for one more beside these
+            row, point, moment = plan[k]
+            k += 1
+            c = by_id[row["id"]]
+            if not _claim_inflight(c.id, used):
+                continue                        # another scene is downloading it right now
+            claimed.append(c.id)
+            if config.JUDGE_MEMORY and _is_bad(f"yt:{c.id}@{int(point // 10)}"):
+                # Another scene's judge turned this moment down for every line: not
+                # refined (a paid call) only to be skipped after it.
+                _release_inflight(c.id)
+                continue
+            # The fine pass (one more model call) goes to the best-ranked
+            # download only; the others keep their coarse pick.
+            fine = False
+            if not fine_done and _vision_budget_left() >= 2:
+                fine_done = True
+                _count_judged()
+                fine = True
+            batch.append((c, row, point, moment, fine))
+        if not batch:
+            continue
+        outs = [look(*batch[0])] if len(batch) == 1 else _side_by_side(look, batch)
+        for out in outs:
+            if out.get("judged"):
+                judged += 1
+            settle(out)
     winner = _best_of(passed)
     if winner is None and soft is not None:
         # Nothing cleared the floor: the best near-miss, flagged for review.
@@ -3832,15 +3971,19 @@ def _generation_budget_left() -> bool:
 
 
 def _may_generate_for(job: Dict[str, Any]) -> bool:
-    """A job's scene may get a generated image: never a real person, never the hook."""
-    if job.get("subject_type") == "person":
+    """A job's scene may get a generated image: never a real person (nor a line about one before video existed:
+    src/personera.py), never the hook."""
+    if job.get("subject_type") == "person" or job.get("person_era"):
         return False
     return not (job.get("hook") and not config.GENERATED_IMAGES_IN_HOOK)
 
 
 def _scene_flags(job: Dict[str, Any]) -> Dict[str, Any]:
-    """The per-scene switches a job carries into source_for_segment (hook, recency, where it starts)."""
+    """The per-scene switches a job carries into source_for_segment (hook, recency, where it starts, and a line about
+    a person before video existed: its person_era, src/personera.py)."""
     out = {"hook": bool(job.get("hook")), "recency": str(job.get("recency") or "")}
+    if isinstance(job.get("person_era"), dict):
+        out["person_era"] = job["person_era"]
     try:
         if job.get("start") is not None:
             out["start"] = float(job["start"])
@@ -4141,6 +4284,8 @@ def _first_that_passes(ahead, used: Optional[set], intent: str, context: str) ->
             print(f"[media] REJECT before judging: {why}: {_image_label(got)[:60]!r}", flush=True)
             _mark_bad(candidate.identity, "", why)
             continue
+        if not _person_verdict_left():
+            break                           # a person-era line's photo search spent its verdicts (PERSON_ERA_MAX_JUDGES)
         judged += 1
         _GATE_SLOP.set("")
         keep, verdict = _vision_gate(got.local_path, intent, context, _image_label(got), source_url=got.url)
@@ -4320,6 +4465,85 @@ def _clip_first_plan(query: str, attempts: List[str], subject: str, scene_intent
     return plan
 
 
+def _person_era_on(hook: bool, start: Optional[float]) -> bool:
+    """Whether a person-era line searches its person's photos here: PERSON_ERA_PHOTOS, not a YouTube-only job, and -
+    in the hook's first HOOK_NO_STILL_SECONDS, where no picture is taken - only with PERSON_ERA_IN_HOOK."""
+    from . import personera
+    if not personera.enabled() or youtube_only():
+        return False
+    no_still = hook and start is not None and float(start) < float(getattr(config, "HOOK_NO_STILL_SECONDS", 0) or 0)
+    return not no_still or bool(getattr(config, "PERSON_ERA_IN_HOOK", False))
+
+
+def _person_era_first(pe: dict, seconds: float, work_dir: str, *, nth: int = 0, used: Optional[set] = None,
+                      prompt: str = "", allow_youtube: Optional[bool] = None, allow_stock: Optional[bool] = None,
+                      require_cc: Optional[bool] = None, context: str = "", scene_intent: Optional[dict] = None,
+                      providers=None) -> Optional[MediaAsset]:
+    """
+    A person-era line's own first look (src/personera.py, 2026-10-09): real photos of its person at that time of
+    their life (personera.queries: "Barack Obama as a baby photo", "Barack Obama Occidental College 1979 photo",
+    "Barack Obama 1970s photograph"), judged as that person then (personera.scene / intent, a portrait allowed, the
+    picture's page title shown as evidence, never a generated picture); then - a person before film was common,
+    PERSON_ERA_CLIP, never a private early life - one search for archive film of them. The photo cap does not apply
+    (`providers`: the job's own allow-list). The asset carries scoreParts.personEra: the hook's footage retry and the
+    re-clip leave it in place, and the living-photo layers stay off it (a plain camera move). None = nothing passed;
+    the line's own plan goes on.
+    """
+    from . import personera
+    person = str(pe.get("person") or "")
+    si = personera.scene(pe, scene_intent)
+    want = personera.intent(pe, context)
+    tokens = [(_SUBJECT_TYPE, _SUBJECT_TYPE.set("person")), (_SCENE_INTENT, _SCENE_INTENT.set(si)),
+              (_PERSON_PHOTO, _PERSON_PHOTO.set(person)), (_ENABLED_PROVIDERS, _ENABLED_PROVIDERS.set(providers)),
+              (_PERSON_JUDGES, _PERSON_JUDGES.set([max(1, int(getattr(config, "PERSON_ERA_MAX_JUDGES", 8) or 8))]))]
+    # An archive print is soft by nature: its own, looser limit on how far the screen may blow it up.
+    cap = float(getattr(config, "PERSON_ERA_MAX_MAGNIFICATION", 0.0) or 0.0)
+    if cap > 0:
+        tokens.append((_sharpness.CAP, _sharpness.CAP.set(max(cap, _sharpness.limit()))))
+    tokens += text_rule_tokens(si)
+    try:
+        for q in personera.queries(pe, scene_intent):
+            if _ytdlp.stopped():
+                return None
+            got = _source_one(q, seconds, work_dir, visual_type="image", nth=nth, used=used, prompt=prompt,
+                              allow_youtube=allow_youtube, allow_stock=allow_stock, require_cc=require_cc,
+                              intent=want, context=context, subject=person, stage="pictures")
+            if got is not None and got.kind == "image" and got.source != "generated":
+                got.score_parts = dict(got.score_parts or {}, personEra=person)
+                print(f"[media] {person}, {pe.get('year')}: a photo of them then ({q!r}) - "
+                      f"{(got.attribution or '')[:60]!r}", flush=True)
+                return got
+            if got is not None and got.local_path and os.path.exists(got.local_path):
+                try:
+                    os.remove(got.local_path)
+                except OSError:
+                    pass
+        if not getattr(config, "PERSON_ERA_CLIP", False) or pe.get("early") or allow_youtube is False \
+                or _ytdlp.stopped():
+            return None
+        q = personera.clip_query(pe)
+        rung = _RUNG.set({"query": q, "label": person})
+        try:
+            got = _source_one(q, seconds, work_dir, visual_type="footage", nth=nth, used=used, prompt=prompt,
+                              allow_youtube=allow_youtube, allow_stock=allow_stock, require_cc=require_cc,
+                              intent=want, context=context, subject=person, stage="youtube")
+        finally:
+            _RUNG.reset(rung)
+        if got is not None and got.kind == "video" and not _near_miss(got):
+            got.score_parts = dict(got.score_parts or {}, personEra=person, rung=person[:80])
+            print(f"[media] {person}, {pe.get('year')}: archive film of them - {(got.attribution or '')[:60]!r}",
+                  flush=True)
+            return got
+        if got is not None and got.local_path and os.path.exists(got.local_path):
+            try:
+                os.remove(got.local_path)
+            except OSError:
+                pass
+        return None
+    finally:
+        reset_tokens(tokens)
+
+
 def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        visual_type: str = "footage", nth: int = 0,
                        used: set = None, fallbacks: List[str] = None,
@@ -4330,9 +4554,12 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
                        subject: str = "", event_window: str = "",
                        scene_intent: Optional[dict] = None, hook: bool = False,
                        recency: str = "", start: Optional[float] = None,
-                       clips_only: bool = False) -> Optional[MediaAsset]:
+                       clips_only: bool = False, person_era: Optional[dict] = None) -> Optional[MediaAsset]:
     """
     Source one scene, relaxing the query until something is found.
+
+    `person_era` (src/personera.py, PERSON_ERA_PHOTOS): the line is about a real person in an era nobody filmed
+    them - real photos of that person then come first (_person_era_first), the line's own plan after them.
 
     The specific phrasing is tried first because it gives the most relevant
     visual; each fallback is broader. Without this a precise query that
@@ -4371,6 +4598,7 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     token = _SUBJECT_TYPE.set(subject_type or "")
     window_token = _EVENT_WINDOW.set(event_window or "")
     intent_token = _SCENE_INTENT.set(scene_intent or None)
+    text_tokens = text_rule_tokens(scene_intent)     # this line's text rule, for the judge, the picks and the filters
     judged_token = _SCENE_JUDGED.set([0])
     tried_token = _SCENE_TRIED.set(set())
     hook_token = _IN_HOOK.set(bool(hook))
@@ -4386,6 +4614,14 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
         providers_token = _ENABLED_PROVIDERS.set(only)
     clip_stop = None                                # the clip stages' own, earlier stop (_clip_stage_stop)
     try:
+        if isinstance(person_era, dict) and person_era.get("person") and not clips_only \
+                and _person_era_on(hook, start):
+            got = _person_era_first(person_era, seconds, work_dir, nth=nth, used=used, prompt=prompt,
+                                    allow_youtube=allow_youtube, allow_stock=allow_stock, require_cc=require_cc,
+                                    context=context, scene_intent=scene_intent, providers=allowed)
+            if got is not None:
+                _count_photo(got)
+                return got
         from .director import relaxed_queries
         attempts = list(dict.fromkeys([query] + list(fallbacks or []) + relaxed_queries(query)))
         if clip_first:
@@ -4498,9 +4734,27 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
         _IN_HOOK.reset(hook_token)
         _SCENE_TRIED.reset(tried_token)
         _SCENE_JUDGED.reset(judged_token)
+        reset_tokens(text_tokens)
         _SCENE_INTENT.reset(intent_token)
         _EVENT_WINDOW.reset(window_token)
         _SUBJECT_TYPE.reset(token)
+
+
+def text_rule_tokens(scene_intent: Optional[dict]) -> list:
+    """Set this line's text rule (vision.text_mode: news / event / strict) where the storyboard picks read it
+    (vision.TEXT_MODE) and the free pixel checks do (filters.STRICT_TEXT: the subtitle band and the corner mark turn
+    a strict line's clip down). Returns the tokens for reset_tokens."""
+    mode = vision.text_mode(scene_intent if isinstance(scene_intent, dict) else None)
+    return [(vision.TEXT_MODE, vision.TEXT_MODE.set(mode)),
+            (_filters.STRICT_TEXT, _filters.STRICT_TEXT.set(mode == "strict"))]
+
+
+def reset_tokens(tokens: list) -> None:
+    for var, tok in reversed(tokens or []):
+        try:
+            var.reset(tok)
+        except (ValueError, RuntimeError):
+            pass                        # set in another context: nothing to undo here
 
 
 def _source_one(query: str, seconds: float, work_dir: str, *,
@@ -4619,9 +4873,12 @@ def _asset_ok_for(job: Optional[Dict[str, Any]], asset) -> tuple:
     scans turned down the same way, and the line ended empty (verified 2026-10-05).
     """
     token = _SUBJECT_TYPE.set(str((job or {}).get("subject_type") or ""))
+    # ...and its text rule: the free subtitle-band and corner-mark checks are the line's (text_rule_tokens).
+    text_tokens = text_rule_tokens((job or {}).get("scene_intent")) if job else []
     try:
         return _asset_ok(asset)
     finally:
+        reset_tokens(text_tokens)
         _SUBJECT_TYPE.reset(token)
 
 
@@ -4728,6 +4985,42 @@ def scene_seconds(left: float, workers: int, n: int) -> float:
         return 0.0
     share = left * max(1, workers) / float(n)
     return max(config.SCENE_SECONDS_MIN, min(config.SCENE_SECONDS_MAX, share))
+
+
+def hook_factor() -> float:
+    """A hook line's own pass-1 time as a multiple of its share (config.HOOK_TIME_FACTOR, never under 1)."""
+    try:
+        return max(1.0, float(getattr(config, "HOOK_TIME_FACTOR", 1.5) or 1.5))
+    except (TypeError, ValueError):
+        return 1.5
+
+
+def second_look_seconds(got: Optional["MediaAsset"]) -> Optional[float]:
+    """
+    How long a hook line's second look may run after its first clip (config.HOOK_SECOND_LOOK): None = no second
+    look, 0 = its whole remaining time ("always", the rule before 2026-10-09). "auto": a near-miss gets one, and a
+    passing clip only when it had no other passing clip to beat (no runner-up) and is under EXCELLENT_SCORE - each
+    in at most HOOK_SECOND_LOOK_SECONDS. The look repeats the line's whole search one candidate further down; on
+    the 2026-10-08 bench it changed the opening clip 2-7 times in a run of 14-40 opening lines, while it held the
+    line's thread (with a fresh vision budget) as the other opening lines waited for theirs.
+    """
+    mode = str(getattr(config, "HOOK_SECOND_LOOK", "always") or "always").strip().lower()
+    if mode in ("off", "0", "false", "no", "none"):
+        return None
+    if mode != "auto":
+        return 0.0
+    if got is None:
+        return None
+    if not _near_miss(got):
+        if got.alternatives:
+            return None                 # the first search already compared passing clips (best of N)
+        if (got.relevance_score or 0.0) >= float(config.EXCELLENT_SCORE):
+            return None
+    try:
+        secs = float(getattr(config, "HOOK_SECOND_LOOK_SECONDS", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        secs = 0.0
+    return secs if secs > 0 else 0.0
 
 
 def _until(futures, deadline: float):
@@ -4882,11 +5175,23 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         # The opening beats decide whether a viewer stays, so they do not take
         # the first clip that merely passes: one more candidate is judged and
         # the one with more appeal (relevance first, footage quality second)
-        # opens the video.
+        # opens the video. HOOK_SECOND_LOOK "auto": only when nothing was there
+        # to beat, in its own short time (second_look_seconds).
+        secs = second_look_seconds(got)
+        if secs is None:
+            return got
+        token = None
+        if secs > 0:
+            held = _ytdlp.STOP.get() or (None, 0.0)
+            until = time.time() + secs
+            token = _ytdlp.STOP.set((held[0], min(held[1], until) if held[1] else until))
         try:
             alt = _traced(job["index"], "hook+1", attempt, job, nth + 1)
         except Exception:  # noqa: BLE001
             return got
+        finally:
+            if token is not None:
+                _ytdlp.STOP.reset(token)
         if alt is None or alt.relevance_score is None:
             return got
         before = vision.appeal(got.relevance_score, got.quality)
@@ -4909,7 +5214,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     share = [0.0]
 
     def fetch(job, nth):
-        own = (time.time() + share[0] * (1.5 if job.get("hook") else 1.0)) if share[0] else 0.0
+        # A hook line's own time is its share x HOOK_TIME_FACTOR (hook_factor); every other line keeps its share.
+        own = (time.time() + share[0] * (hook_factor() if job.get("hook") else 1.0)) if share[0] else 0.0
         token = _ytdlp.STOP.set((box, own))
         try:
             try:
@@ -5484,7 +5790,8 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
                 out[i] = ("a photo already shown", "hard")
                 continue
             shown[a.identity] = shown.get(a.identity, 0) + 1
-            if hook and job.get("subject_type") != "document":
+            if hook and job.get("subject_type") != "document" and not (a.score_parts or {}).get("personEra"):
+                # (A photo of a person from before video existed is that line's shot: src/personera.py.)
                 out[i] = ("a still in the opening", "upgrade")
             elif cap is not None and job.get("subject_type") != "document":
                 photos += 1
