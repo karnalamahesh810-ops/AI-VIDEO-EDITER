@@ -37,14 +37,17 @@ MEDIA_NOT_DRAWN; tests/test_render_cache.py checks that against remotion/src).
 Anything unknown counts: a false miss only costs a render, a false hit would
 show the wrong picture.
 
-The sound (audio_hash) is everything audible: the narration (the polished file
-by its bytes), music, beds, sound effects, the looks' and transitions' own
-sounds. A re-render whose sound did not change reuses the whole mix; one whose
-sound changed draws it again, whole, from the timeline (render.render, WAV).
+The sound is kept chunk by chunk too (audio_slice_hash): each chunk's slice of
+the mix, hashed by what every slice depends on (_audio_global: the narration
+file by its bytes, the music, beds and masters, every scene's timing and
+words, the looks' sound plan) and what sounds near it (its looks' words, sound
+effects, pack transitions, animations). A swapped clip changes no slice; a
+look's new words change the slices it is heard in; new music changes them all.
+The slices are joined sample-exactly and the loudness is set from the whole.
 
 Storage (R2_BUCKET, never under projects/): RENDER_CACHE_PREFIX/<scope>/
   c-<hash>.mp4   a chunk's picture (H.264, exactly its frames)
-  a-<hash>.flac  the whole sound mix before loudness
+  s-<hash>.wav   a chunk's sound before loudness (exactly its samples)
 The scope is the project id (or a job's render_cache_scope). Entries expire
 by age: an R2 lifecycle rule on the prefix, or cleanup() - which only ever
 deletes under RENDER_CACHE_PREFIX and refreshes nothing a render used
@@ -200,6 +203,7 @@ class Doc:
         self.by_id = {}
         for i, s in enumerate(self.scenes):
             self.by_id.setdefault(str(s.get("id")), i)
+        self._audio_global = ""
         self._drawn: Dict[int, dict] = {}
         self._backdrop: Dict[int, Optional[int]] = {}
         self.pack_spans = self._pack_spans()
@@ -490,20 +494,69 @@ def picture_hash(doc: dict, a: int, b: int, enc: Optional[dict] = None, prepared
     return _digest(payload)
 
 
-def audio_hash(doc: dict) -> str:
-    """The hash of everything audible: a re-render whose sound did not change reuses the whole mix."""
-    d = Doc(doc)
-    scenes = []
-    for s in d.scenes:
-        m = s.get("media") if isinstance(s.get("media"), dict) else {}
-        scenes.append([s.get("id"), s.get("startFrame"), s.get("durationInFrames"), s.get("text"),
-                       [(w.get("text"), w.get("start"), w.get("end")) for w in s.get("words") or []
-                        if isinstance(w, dict)],
-                       s.get("transition"), s.get("transitionGain"), m.get("type"), _norm(s.get("animation"))])
+# A sound effect plays at most this long (Main.tsx SFX_MAX_SECONDS); a look's own sound is cut to it too.
+SOUND_REACH_SECONDS = 6.0
+
+
+def _audio_global(d: "Doc") -> str:
+    """
+    What every slice of the sound depends on: the narration (its file by its bytes), the music and the beds
+    with their settings, the masters, the voice level the looks are set against, every scene's timing and
+    words (the music and the beds duck under the words), the video's length (the music's passes), and the
+    looks' sound plan inputs - lookSoundPlan.ts planLooks mutes the weaker of two looks starting close
+    together and hands the typing looks the keyboards in turn, over the whole document - so each look's
+    template, timing, emphasis, sound choice and whether it has words or a number count here; its words
+    themselves (how long it types) only for the slices near it (audio_slice_hash).
+    """
+    if getattr(d, "_audio_global", None):
+        return d._audio_global
+    doc = d.doc
+    looks = []
+    for o in d.overlays:
+        val = o.get("value")
+        looks.append([o.get("template"), o.get("type"), o.get("variant"), int(o.get("startFrame") or 0),
+                      int(o.get("durationInFrames") or 0), o.get("emphasis"), _norm(o.get("sfx")), o.get("soundGain"),
+                      o.get("sfxVolume"), bool(str(o.get("text") or "").strip()),
+                      isinstance(val, (int, float)) and not isinstance(val, bool)])
+    anims = [[i, d.start[i], d.dur[i], _norm(s.get("animation")), bool(str(s.get("text") or "").strip())]
+             for i, s in enumerate(d.scenes) if (s.get("media") or {}).get("type") == "animation"]
+    timing = [[d.start[i], d.dur[i], [(w.get("text"), w.get("start"), w.get("end")) for w in s.get("words") or []
+                                      if isinstance(w, dict)]] for i, s in enumerate(d.scenes)]
     meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
-    payload = {"v": HASH_VERSION, "renderer": renderer.renderer_fingerprint(), "fps": d.fps,
-               "layout": [d.intro, d.body, d.outro], "globals": _globals(doc, PICTURE_ONLY | NOT_DRAWN_TOP),
-               "voiceLufs": meta.get("voiceLufs"), "overlays": _norm(d.overlays), "scenes": scenes}
+    d._audio_global = _digest({"v": HASH_VERSION, "renderer": renderer.renderer_fingerprint(), "fps": d.fps,
+                               "layout": [d.intro, d.body, d.outro],
+                               "globals": _globals(doc, PICTURE_ONLY | NOT_DRAWN_TOP | {"sfx"}),
+                               "voiceLufs": meta.get("voiceLufs"), "looks": looks, "anims": anims, "timing": timing})
+    return d._audio_global
+
+
+def audio_slice_hash(doc: dict, a: int, b: int, prepared: Optional["Doc"] = None) -> str:
+    """
+    The hash of the sound of frames a..b (whole-video frames): everything global (_audio_global) and what
+    sounds near the range - the looks and sound effects that start up to SOUND_REACH_SECONDS before it (a
+    look's typing runs as long as its words), the pack transitions laid over its cuts, its animations, the
+    brand intro or outro when it reaches them. A re-render keeps the slices whose hash did not change: a
+    swapped clip or a look's new words leave every other slice as it was.
+    """
+    d = prepared or Doc(doc)
+    reach = int(round(SOUND_REACH_SECONDS * d.fps)) + 1
+    ba, bb = int(a) - d.intro, int(b) - d.intro
+    looks = [[k, _norm(o)] for k, o in enumerate(d.overlays)
+             if int(o.get("startFrame") or 0) <= bb
+             and int(o.get("startFrame") or 0) + int(o.get("durationInFrames") or 0) - 1 >= ba - reach]
+    sfx = [_norm(x) for x in d.doc.get("sfx") or [] if isinstance(x, dict)
+           and ba - reach <= int(round(float(x.get("startFrame") or 0))) <= bb]
+    packs = [[i, d.scenes[i].get("transition"), d.scenes[i].get("transitionGain"), s0] for i, s0, s1 in d.pack_spans
+             if s0 <= bb and s1 >= ba]
+    anims = [[i, d.drawn(i)] for i, (s0, s1) in enumerate(d.span)
+             if (d.scenes[i].get("media") or {}).get("type") == "animation" and s0 <= bb and s1 >= ba - reach]
+    payload = {"global": _audio_global(d), "range": [int(a), int(b)], "intro": d.intro, "looks": looks,
+               "sfx": sfx, "packs": packs, "anims": anims}
+    brand = d.doc.get("brand") if isinstance(d.doc.get("brand"), dict) else None
+    if brand is not None and d.intro and int(a) < d.intro:
+        payload["brandIntro"] = _norm(brand.get("intro"))
+    if brand is not None and d.outro and int(b) >= d.intro + d.body:
+        payload["brandOutro"] = _norm(brand.get("outro"))
     return _digest(payload)
 
 
@@ -606,8 +659,10 @@ class Cache:
     def chunk_key(self, h: str) -> str:
         return f"{self.prefix}c-{h}.mp4"
 
-    def audio_key(self, h: str) -> str:
-        return f"{self.prefix}a-{h}.flac"
+
+    def slice_key(self, h: str) -> str:
+        """A chunk's slice of the sound mix (lossless, before loudness), by audio_slice_hash."""
+        return f"{self.prefix}s-{h}.wav"
 
     def listing(self) -> Dict[str, int]:
         """{key: size} of what this scope holds (one listing per render); {} when it cannot be read."""
@@ -639,7 +694,7 @@ class Cache:
         if not self.usable or not os.path.isfile(path):
             return False
         try:
-            r2.upload(path, key, content_type=r2.content_type(path) if not path.endswith(".flac") else "audio/flac",
+            r2.upload(path, key, content_type=r2.content_type(path),
                       deadline=time.time() + 300, cache_control="no-store")
             with self.lock:
                 if self._listing is not None:

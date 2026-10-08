@@ -1769,7 +1769,9 @@ class _Chunk:
         self.keys: List[str] = []     # its files in R2
         self.mine = False             # the pod draws it (never queued for a worker)
         self.hash = ""                # its picture's hash (src/rendercache.py), "" without the cache
+        self.slice_hash = ""          # its sound slice's hash (rendercache.audio_slice_hash)
         self.worker_key = ""          # where a worker put its picture in R2 (kept in the cache from there)
+        self.worker_audio_key = ""    # and its sound slice
         self.pod_video = os.path.join(work, f"pchunk_{i:03d}.pod.mp4")
         self.pod_audio = os.path.join(work, f"pchunk_{i:03d}.pod.wav")
         self.worker_video = os.path.join(work, f"pchunk_{i:03d}.worker.mp4")
@@ -1997,6 +1999,7 @@ class _PodRender:
             if ok and not c.done:
                 c.done, c.source, c.video, c.audio = True, "worker", c.worker_video, c.worker_audio
                 c.worker_key = str(out.get("video_key") or "")
+                c.worker_audio_key = "" if self.picture_only else str(out.get("audio_key") or "")
                 if c.local and c.local_cancel is not None:
                     c.local_cancel.set()              # the pod's race copy is not needed
             elif not ok and not c.done:
@@ -2205,17 +2208,19 @@ class _PodRender:
                 "errors": list(self.errors[:6])}
 
     # ---- joining
-    def join(self) -> Tuple[str, str]:
-        """The chunks' pictures joined without re-encoding and their sound slices sample-exactly ("" when the
-        chunks were drawn without their sound: the caller has the whole mix)."""
+    def join(self) -> str:
+        """The chunks' pictures joined without re-encoding (exactly every frame of the video)."""
         order = sorted(self.chunks, key=lambda c: c.a)
         video = os.path.join(self.work, "pod_video.mp4")
         join_videos([c.video for c in order], video, self.total)
-        if self.picture_only:
-            return video, ""
+        return video
+
+    def join_sound(self, slices: Dict[int, Tuple[str, str]]) -> str:
+        """The sound slices, one a chunk, joined sample-exactly (join_wavs): the whole mix, before loudness."""
+        order = sorted(self.chunks, key=lambda c: c.a)
         audio = os.path.join(self.work, "pod_audio.wav")
-        join_wavs([(c.audio, c.frames) for c in order], self.fps, audio)
-        return video, audio
+        join_wavs([(slices[c.i][0], c.frames) for c in order], self.fps, audio)
+        return audio
 
     def redraw_odd(self) -> List[int]:
         """
@@ -2310,107 +2315,107 @@ def _from_cache(cache, units: List[Tuple[int, int, int, str]], work: str) -> Dic
     return got
 
 
-def _flac(wav: str, out: str) -> str:
-    """The whole mix losslessly, half the size of the WAV it came from (what the cache keeps)."""
-    p = subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-y", "-i", wav, "-c:a", "flac",
-                        "-compression_level", "5", out], capture_output=True, text=True, timeout=900)
-    if p.returncode != 0 or not os.path.isfile(out):
-        raise RuntimeError(f"the mix could not be kept as FLAC: {(p.stderr or '')[-200:]}")
+def _slices_from_cache(cache, need: List[Tuple[int, str]], work: str) -> Dict[int, str]:
+    """{chunk index: local WAV} of the sound slices the cache holds for these chunks (by audio_slice_hash)."""
+    want = [(i, h) for i, h in need if h and cache.has(cache.slice_key(h))]
+    got: Dict[int, str] = {}
+
+    def one(item):
+        i, h = item
+        path = os.path.join(work, f"cslice_{i:03d}.wav")
+        ok = cache.get(cache.slice_key(h), path) and os.path.getsize(path) > 44
+        return i, path if ok else ""
+    if want:
+        with ThreadPoolExecutor(max_workers=min(6, len(want))) as ex:
+            for i, path in ex.map(one, want):
+                if path:
+                    got[i] = path
+    return got
+
+
+def cut_sound(whole: str, path: str, start: float, end: float) -> str:
+    """Seconds start..end of a WAV as a WAV of its own (a chunk's slice of the whole mix)."""
+    p = subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-y", "-i", whole, "-af",
+                        f"atrim=start={start:.6f}:end={end:.6f},asetpts=N/SR/TB", "-c:a", "pcm_s16le", path],
+                       capture_output=True, text=True, timeout=600)
+    if p.returncode != 0 or not os.path.isfile(path):
+        raise RuntimeError(f"a slice of the sound could not be cut: {(p.stderr or '')[-200:]}")
+    return path
+
+
+def _draw_sound(doc: dict, chunks: List["_Chunk"], parts: int, work: str, composition: str, concurrency,
+                cancel: Optional[threading.Event] = None) -> Dict[int, str]:
+    """
+    The sound slices no chunk brought and the cache does not hold, drawn here after the chunks (the whole
+    machine): range by range (render.render, WAV, frames a..b) - or, when most of the video's sound changed
+    (the music, the narration), the whole mix at once, cut into its slices. {chunk index: local WAV}.
+    The sound of a range is the same drawn alone or with its picture: the chunks' own slices join it.
+    """
+    tabs = max(2, int(concurrency or config.RENDER_CONCURRENCY or 4))
+    fps = max(1, int(doc.get("fps") or 30))
+    out: Dict[int, str] = {}
+    if len(chunks) * 2 > parts:
+        whole = os.path.join(work, "sound_whole.wav")
+        renderer.render(doc, whole, composition=composition, concurrency=tabs, serve_dir=work, codec="wav",
+                        cancel=cancel)
+        for c in chunks:
+            out[c.i] = cut_sound(whole, os.path.join(work, f"sslice_{c.i:03d}.wav"), c.a / fps, (c.b + 1) / fps)
+        return out
+    for c in chunks:
+        path = os.path.join(work, f"sslice_{c.i:03d}.wav")
+        renderer.render(doc, path, composition=composition, concurrency=tabs, serve_dir=work, frames=(c.a, c.b),
+                        codec="wav", cancel=cancel)
+        if not (os.path.isfile(path) and os.path.getsize(path) > 44):
+            raise RuntimeError(f"the sound of chunk {c.i} rendered empty")
+        out[c.i] = path
     return out
 
 
-class _Mix:
+def _keep(cache, runner: "_PodRender", slices: Dict[int, Tuple[str, str]]) -> dict:
     """
-    A re-render's whole sound mix, beside its chunks (they are drawn without their sound slices): the one
-    the cache keeps when nothing audible changed, else drawn whole from the timeline (render.render, WAV) -
-    the loudness is then set from the whole mix (render.finalize), never from pieces.
+    Every chunk drawn in this render kept under its picture hash and every sound slice under its own (a
+    worker's copied inside R2, this machine's uploaded), the reused ones' age started again. Returns counts.
     """
-
-    def __init__(self, doc: dict, work: str, cache, key: str, composition: str, concurrency):
-        self.path, self.error, self.reused, self.seconds = "", "", False, 0.0
-        self.cancel = threading.Event()
-        self._t = threading.Thread(target=self._run, args=(doc, work, cache, key, composition, concurrency),
-                                   daemon=True, name="render-mix")
-        self._t.start()
-
-    def stop(self) -> None:
-        """The render gave up: the mix is not drawn on for nothing."""
-        self.cancel.set()
-
-    def _run(self, doc, work, cache, key, composition, concurrency):
-        t0 = time.time()
-        try:
-            if cache is not None and cache.has(key):
-                path = os.path.join(work, "cached_mix.flac")
-                if cache.get(key, path) and os.path.getsize(path) > 1024:
-                    self.path, self.reused = path, True
-                    return
-            path = os.path.join(work, "mix.wav")
-            # A few tabs: the chunks are drawn beside it on this machine (or wait on workers).
-            tabs = max(2, int(concurrency or config.RENDER_CONCURRENCY or 4) // 3)
-            renderer.render(doc, path, composition=composition, concurrency=tabs, serve_dir=work, codec="wav",
-                            cancel=self.cancel)
-            if not (os.path.isfile(path) and os.path.getsize(path) > 44):
-                raise RuntimeError("the sound mix rendered empty")
-            self.path = path
-        except Exception as e:  # noqa: BLE001 - render_pod gives up the spread render
-            self.error = f"{type(e).__name__}: {str(e)[:300]}"
-        finally:
-            self.seconds = round(time.time() - t0, 1)
-
-    def result(self, timeout: float = 3600.0) -> str:
-        self._t.join(timeout)
-        if self._t.is_alive():
-            raise RuntimeError("the sound mix did not finish in time")
-        if not self.path:
-            raise RuntimeError(f"the sound mix failed: {self.error or 'nothing written'}")
-        return self.path
-
-
-def _keep(cache, runner: "_PodRender", mix: str, mix_key: str, mix_reused: bool, work: str) -> dict:
-    """
-    Every chunk drawn in this render kept under its hash (a worker's copied inside R2, the pod's uploaded),
-    the reused ones' age started again, and the whole mix kept under its hash. Returns what was kept.
-    """
-    kept = {"chunks": 0, "touched": 0, "mix": False, "errors": 0}
+    kept = {"chunks": 0, "slices": 0, "touched": 0, "errors": 0}
     jobs = []
     for c in runner.chunks:
-        if not c.hash:
-            continue
-        key = cache.chunk_key(c.hash)
-        if c.source == "cache":
-            jobs.append(("touch", key, ""))
-        elif c.source == "worker" and c.worker_key:
-            jobs.append(("copy", key, c.worker_key))
-        elif c.video and os.path.isfile(c.video):
-            jobs.append(("put", key, c.video))
-    if mix and mix_key and not mix_reused:
-        jobs.append(("mix", mix_key, mix))
-    elif mix_key and mix_reused:
-        jobs.append(("touch", mix_key, ""))
+        if c.hash:
+            key = cache.chunk_key(c.hash)
+            if c.source == "cache":
+                jobs.append(("touch", key, ""))
+            elif c.source == "worker" and c.worker_key:
+                jobs.append(("copy", key, c.worker_key))
+            elif c.video and os.path.isfile(c.video):
+                jobs.append(("put", key, c.video))
+        path, where = slices.get(c.i, ("", ""))
+        if c.slice_hash and path:
+            key = cache.slice_key(c.slice_hash)
+            if where == "cache":
+                jobs.append(("touch", key, ""))
+            elif where == "worker" and c.worker_audio_key:
+                jobs.append(("copy-slice", key, c.worker_audio_key))
+            elif os.path.isfile(path):
+                jobs.append(("put-slice", key, path))
 
     def one(job):
         kind, key, src = job
         if kind == "touch":
             cache.touch(key)
             return kind, True
-        if kind == "copy":
+        if kind.startswith("copy"):
             return kind, cache.copy_in(src, key)
-        if kind == "mix":
-            path = src if src.endswith(".flac") else _flac(src, os.path.join(work, "mix_keep.flac"))
-            return kind, cache.put(path, key)
         return kind, cache.put(src, key)
     if jobs:
         with ThreadPoolExecutor(max_workers=6) as ex:
             for kind, done in ex.map(lambda j: _safe_call(one, j), jobs):
                 if kind == "touch":
                     kept["touched"] += 1
-                elif kind == "mix":
-                    kept["mix"] = bool(done)
-                elif done:
-                    kept["chunks"] += 1
-                else:
+                elif not done:
                     kept["errors"] += 1
+                elif kind.endswith("slice"):
+                    kept["slices"] += 1
+                else:
+                    kept["chunks"] += 1
     return kept
 
 
@@ -2440,17 +2445,20 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     Render the finished document `doc` to `out_path` in chunks: spread over the
     serverless workers (see the notes above this section) and, with the render
     cache (src/rendercache.py, `cache_scope`: the project), reusing every chunk
-    an earlier render of it already drew. The parent may be a pod or itself
-    one of the endpoint's serverless workers. Whatever in `doc` is a file on
-    this disk is published for the other machines first (local_refs).
+    and every sound slice an earlier render of it already drew. The parent may
+    be a pod or itself one of the endpoint's serverless workers. Whatever in
+    `doc` is a file on this disk is published for the other machines first
+    (local_refs).
 
     The chunks follow the timeline (rendercache.stable_chunks, ~POD_RENDER_CHUNK_SECONDS
-    each). A re-render with at most POD_RENDER_LOCAL_CHUNKS chunks to draw draws
-    them here, without waking a worker; its chunks are drawn without their sound
-    slices and the whole mix is taken from the cache (nothing audible changed) or
-    drawn whole beside them, the loudness set from it (render.finalize). Without
-    workers (no endpoint, POD_RENDER_FANOUT off) the chunked render runs here
-    alone - when the cache has something to reuse, or RENDER_LOCAL_CHUNKED.
+    each). A chunk is drawn with its slice of the sound; a kept chunk brings
+    its kept slice when nothing audible near it changed, else its slice is
+    drawn alone (_draw_sound); the slices are joined sample-exactly and the
+    loudness set from the whole mix (render.finalize). A re-render with at most
+    POD_RENDER_LOCAL_CHUNKS chunks to draw draws them here, without waking a
+    worker. Without workers (no endpoint, POD_RENDER_FANOUT off) the chunked
+    render runs here alone - when the cache has something to reuse, or
+    RENDER_LOCAL_CHUNKED.
 
     True when `out_path` was written; False when the chunked render could not
     run or broke on the machines - a chunk that failed here and on a worker,
@@ -2474,18 +2482,18 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
         return False
     started = time.time()
     hashes = [""] * len(ranges)
-    mix_key = ""
+    slice_hashes = [""] * len(ranges)
     cached: Dict[int, str] = {}
     if cache is not None:
         try:
             enc = renderer.encoder_settings(composition)
             prepared = rendercache.Doc(doc)
             hashes = [rendercache.picture_hash(doc, a, b, enc, prepared) for a, b in ranges]
-            mix_key = cache.audio_key(rendercache.audio_hash(doc))
+            slice_hashes = [rendercache.audio_slice_hash(doc, a, b, prepared) for a, b in ranges]
             cached = _from_cache(cache, [(i, a, b, h) for i, ((a, b), h) in enumerate(zip(ranges, hashes))], work)
         except Exception as e:  # noqa: BLE001 - the cache never costs a render: everything is drawn
             print(f"[render-cache] not used: {type(e).__name__}: {str(e)[:200]}", flush=True)
-            cache, hashes, mix_key, cached = None, [""] * len(ranges), "", {}
+            cache, hashes, slice_hashes, cached = None, [""] * len(ranges), [""] * len(ranges), {}
     if not helpers and not cached and not getattr(config, "RENDER_LOCAL_CHUNKED", False):
         return False                                  # nothing to reuse and no workers: whole, as before
     reuse = bool(cached)
@@ -2500,8 +2508,8 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     prefix = f"{config.POD_RENDER_PREFIX.rstrip('/')}/{safe}-{uuid.uuid4().hex[:10]}/"
     keys: List[str] = []
     runner = None
-    mix = None
     kept: dict = {}
+    sound = {"reused": 0, "drawn": 0, "seconds": 0.0}
     ok = False
     reason = ""
     try:
@@ -2518,26 +2526,38 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
             keys.append(tl_key)
         runner = _PodRender(doc, ranges, fps=fps, total=total, prefix=prefix, tl_key=tl_key, tl_url=tl_url,
                             job_id=job_id, work=work, report=report, composition=composition,
-                            concurrency=concurrency, helpers=not local_all, picture_only=reuse, cached=cached)
-        for c, h in zip(runner.chunks, hashes):
-            c.hash = h
-        if reuse:
-            mix = _Mix(doc, work, cache, mix_key, composition, concurrency)
+                            concurrency=concurrency, helpers=not local_all, cached=cached)
+        for c, h, sh in zip(runner.chunks, hashes, slice_hashes):
+            c.hash, c.slice_hash = h, sh
         runner.run()
         if reuse:
             runner.redraw_odd()
-        video, audio = runner.join()
-        if reuse:
-            report("Rendering the sound mix", 89)
-            audio = mix.result()
+        video = runner.join()
+        # The sound: each chunk drawn now brought its slice; a kept chunk its kept slice when nothing audible
+        # near it changed; the rest are drawn alone. Joined sample-exactly, the loudness set from the whole.
+        slices: Dict[int, Tuple[str, str]] = {c.i: (c.audio, c.source) for c in runner.chunks
+                                              if c.source in ("pod", "worker") and c.audio
+                                              and os.path.isfile(c.audio)}
+        need = [c for c in runner.chunks if c.i not in slices]
+        if need and cache is not None and cache.mode == "on":
+            got = _slices_from_cache(cache, [(c.i, c.slice_hash) for c in need], work)
+            slices.update({i: (path, "cache") for i, path in got.items()})
+            sound["reused"] = len(got)
+        still = [c for c in runner.chunks if c.i not in slices]
+        if still:
+            report("Rendering the sound", 89)
+            t0 = time.time()
+            drawn = _draw_sound(doc, still, len(runner.chunks), work, composition, concurrency)
+            slices.update({i: (path, "drawn") for i, path in drawn.items()})
+            sound.update(drawn=len(drawn), seconds=round(time.time() - t0, 1))
+            print(f"[render-cache] {len(drawn)} sound slice(s) drawn in {sound['seconds']} s", flush=True)
+        audio = runner.join_sound(slices)
         report("Balancing the sound", 90)
         keeper = None
         if cache is not None and cache.mode in ("on", "refresh"):
             keeper_out: dict = {}
-            keeper = threading.Thread(
-                target=lambda: keeper_out.update(_keep(cache, runner, audio, mix_key,
-                                                       bool(mix is not None and mix.reused), work)),
-                daemon=True, name="render-cache-keep")
+            keeper = threading.Thread(target=lambda: keeper_out.update(_keep(cache, runner, slices)),
+                                      daemon=True, name="render-cache-keep")
             keeper.start()
         renderer.finalize(video, audio, out_path)
         ok = True
@@ -2547,8 +2567,6 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     except Exception as e:  # noqa: BLE001 - the whole video is rendered on the pod instead
         reason = f"{type(e).__name__}: {str(e)[:300]}"
         print(f"[pod-render] spread render stopped ({reason})", flush=True)
-        if mix is not None:
-            mix.stop()
     finally:
         stats = {**(runner.stats() if runner is not None else {"chunks": len(ranges)}), "ok": ok}
         if reason:
@@ -2559,14 +2577,14 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
             stats["cache"] = {"scope": cache.scope, "mode": cache.mode, "reused": sum(
                 1 for c in (runner.chunks if runner is not None else []) if c.source == "cache"),
                 "framesReused": reused_frames, "framesDrawn": total - reused_frames,
-                "mixReused": bool(mix is not None and mix.reused), "mixSeconds": mix.seconds if mix else 0.0,
+                "slicesReused": sound["reused"], "slicesDrawn": sound["drawn"], "soundSeconds": sound["seconds"],
                 "hashSeconds": hashed_in, "local": local_all, "kept": kept,
                 "savedUsd": round(reused_frames * _frame_cost(), 4)}
         if runner is not None:
             runner.cancel_all()
             keys += runner.keys()
         media.LAST_STATS["pod_render"] = stats
-        media.LAST_STATS["render_manifest"] = _manifest(doc, ranges, hashes, runner, mix_key, mix, stats, cache)
+        media.LAST_STATS["render_manifest"] = _manifest(doc, ranges, hashes, runner, stats, cache)
         if cache is not None:
             costs.note_render(stats["cache"])
         print(f"[pod-render] {stats}", flush=True)
@@ -2589,8 +2607,8 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     return ok
 
 
-def _manifest(doc: dict, ranges: List[tuple], hashes: List[str], runner: Optional["_PodRender"], mix_key: str,
-              mix: Optional[_Mix], stats: dict, cache) -> dict:
+def _manifest(doc: dict, ranges: List[tuple], hashes: List[str], runner: Optional["_PodRender"], stats: dict,
+              cache) -> dict:
     """
     What this render drew, for the app (video_projects.render_manifest): each chunk's frames, hash and
     where it came from, the mix and what the cache saved. (The handler adds the per-scene and per-overlay
@@ -2606,7 +2624,8 @@ def _manifest(doc: dict, ranges: List[tuple], hashes: List[str], runner: Optiona
             "chunkSeconds": float(config.POD_RENDER_CHUNK_SECONDS), "chunks": chunks,
             "reused": int(stats.get("fromCache", 0) or 0), "drawn": len(ranges) - int(stats.get("fromCache", 0) or 0),
             "ok": bool(stats.get("ok")), "cache": cache is not None, "scope": getattr(cache, "scope", ""),
-            "mixReused": bool(mix is not None and mix.reused), "savedUsd": c.get("savedUsd", 0.0),
+            "slicesReused": c.get("slicesReused", 0), "slicesDrawn": c.get("slicesDrawn", 0),
+            "savedUsd": c.get("savedUsd", 0.0),
             "at": int(time.time())}
 
 

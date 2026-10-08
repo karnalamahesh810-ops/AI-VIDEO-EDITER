@@ -356,33 +356,72 @@ class PictureHash(unittest.TestCase):
 
 
 class AudioHash(unittest.TestCase):
-    def setUp(self):
-        self.doc = _doc([150] * 20, sfx=[{"name": "whoosh", "startFrame": 300}])
-        self.doc["overlays"] = [{"type": "stat", "template": "", "startFrame": 900, "durationInFrames": 60,
-                                 "text": "40%"}]
-        with mock.patch.object(render, "renderer_fingerprint", return_value="fp1"):
-            self.base = rendercache.audio_hash(self.doc)
+    """The sound of each chunk (audio_slice_hash): what is heard near it, and what every slice depends on."""
 
-    def changes(self, fn):
+    def setUp(self):
+        self.doc = _doc([150] * 20, sfx=[{"name": "whoosh", "startFrame": 300}])   # 3000 frames: five slices
+        self.doc["overlays"] = [{"type": "stat", "template": "", "startFrame": 1300, "durationInFrames": 60,
+                                 "text": "40%"}]
+        self.ranges = _ranges(self.doc)
+        self.base = self.slices(self.doc)
+
+    def slices(self, d):
+        with mock.patch.object(render, "renderer_fingerprint", return_value="fp1"):
+            p = rendercache.Doc(d)
+            return [rendercache.audio_slice_hash(d, a, b, p) for a, b in self.ranges]
+
+    def changed(self, fn):
         d = copy.deepcopy(self.doc)
         fn(d)
+        return _changed(self.base, self.slices(d))
+
+    def test_the_same_document_hashes_the_same_and_every_slice_differs(self):
+        self.assertEqual(len(self.ranges), 5)
+        self.assertEqual(self.slices(json.loads(json.dumps(self.doc))), self.base)
+        self.assertEqual(len(set(self.base)), len(self.base))
+
+    def test_what_is_heard_everywhere_changes_every_slice(self):
+        every = list(range(len(self.ranges)))
+        self.assertEqual(self.changed(lambda d: d["bgm"].update(volume=0.5)), every)
+        self.assertEqual(self.changed(lambda d: d["audio"].update(url="https://sb.example/narration2.mp3")), every)
+        self.assertEqual(self.changed(lambda d: d.update(sfxEnabled=False)), every)
+        self.assertEqual(self.changed(lambda d: d["scenes"][3].update(words=[{"text": "a", "start": 1, "end": 2}])),
+                         every)                                    # the music ducks under the words
+        self.assertEqual(self.changed(lambda d: d["overlays"][0].update(template="stat-count")), every)
+        self.assertEqual(self.changed(lambda d: d["meta"].update(voiceLufs=-16)), every)
+
+    def test_what_is_heard_in_one_place_changes_its_slices_only(self):
+        sfx = _chunk_of(self.ranges, 300)
+        self.assertEqual(self.changed(lambda d: d["sfx"].append({"name": "ding", "startFrame": 2100})),
+                         [_chunk_of(self.ranges, 2100)])
+        self.assertEqual(self.changed(lambda d: d["sfx"][0].update(volume=0.3)), [sfx])
+        self.assertEqual(self.changed(lambda d: d["overlays"][0].update(text="41%")),
+                         [_chunk_of(self.ranges, 1300)])            # a look's typing runs as long as its words
+        self.assertEqual(self.changed(lambda d: d["scenes"][9].update(transition="pack:mlt5")),
+                         [_chunk_of(self.ranges, d0) for d0 in (1350,)])
+
+    def test_a_sound_that_starts_before_a_slice_counts_for_it_too(self):
+        # A sound effect plays up to SOUND_REACH_SECONDS: one starting 2 s before a boundary is heard after it.
+        b = self.ranges[1][0]
+        self.assertEqual(self.changed(lambda d: d["sfx"].append({"name": "riser", "startFrame": b - 60})), [0, 1])
+
+    def test_what_is_only_seen_changes_no_slice(self):
+        self.assertEqual(self.changed(lambda d: d["scenes"][3]["media"].update(url="https://pub.example/x.mp4")), [])
+        self.assertEqual(self.changed(lambda d: d["scenes"][3]["media"].update(type="image")), [])
+        self.assertEqual(self.changed(lambda d: d.update(grade={"preset": "warm"})), [])
+        self.assertEqual(self.changed(lambda d: d.update(captions={"enabled": True})), [])
+        self.assertEqual(self.changed(lambda d: d["scenes"][3].update(motion="zoom-in", effect="dust")), [])
+
+    def test_narration_that_moves_after_t_changes_every_slice(self):
+        # The narration file and its timing are global: the music's ducking follows the words over the video.
+        d, _t = _shift_after(self.doc, 12, 45)
         with mock.patch.object(render, "renderer_fingerprint", return_value="fp1"):
-            return rendercache.audio_hash(d) != self.base
+            p = rendercache.Doc(d)
+            moved = [rendercache.audio_slice_hash(d, a, b, p) for a, b in self.ranges]
+        self.assertEqual(_changed(self.base, moved), list(range(len(self.ranges))))
 
-    def test_what_is_heard_counts(self):
-        self.assertTrue(self.changes(lambda d: d["bgm"].update(volume=0.5)))
-        self.assertTrue(self.changes(lambda d: d["audio"].update(url="https://sb.example/narration2.mp3")))
-        self.assertTrue(self.changes(lambda d: d["sfx"].append({"name": "ding", "startFrame": 600})))
-        self.assertTrue(self.changes(lambda d: d["overlays"][0].update(text="41%")))   # a look's own sound
-        self.assertTrue(self.changes(lambda d: d["scenes"][3].update(transition="pack:mlt5")))
-        self.assertTrue(self.changes(lambda d: d["scenes"][3].update(words=[{"text": "a", "start": 1, "end": 2}])))
-        self.assertTrue(self.changes(lambda d: d.update(sfxEnabled=False)))
-
-    def test_what_is_only_seen_does_not(self):
-        self.assertFalse(self.changes(lambda d: d["scenes"][3]["media"].update(url="https://pub.example/x.mp4")))
-        self.assertFalse(self.changes(lambda d: d.update(grade={"preset": "warm"})))
-        self.assertFalse(self.changes(lambda d: d.update(captions={"enabled": True})))
-        self.assertFalse(self.changes(lambda d: d["scenes"][3].update(motion="zoom-in", effect="dust")))
+    def test_an_animation_scene_is_heard(self):
+        self.assertTrue(self.changed(lambda d: d["scenes"][5]["media"].update(type="animation")))
 
 
 # --------------------------------------------------------------------------- the lists stay true to the renderer
@@ -601,6 +640,8 @@ class FakeStore:
         if key.endswith(".wav"):
             with open(path, "wb") as fh:
                 fh.write(b"RIFF" + b"\0" * 100)
+            with self.lock:                              # what the worker put in R2
+                self.objects[key] = (b"RIFF" + b"\0" * 100, self.now)
             return path
         raise RuntimeError(f"R2 GET {key}: HTTP 404")
 
@@ -613,12 +654,12 @@ class Reuse(unittest.TestCase):
 
     def render(self, doc, workers=None, mode="on", helpers=True, odd=None, **env):
         work = tempfile.mkdtemp()
-        calls = {"render": [], "mix": [], "finalize": [], "joined": None}
+        calls = {"render": [], "sound": [], "finalize": [], "joined": None, "wavs": None}
         workers = workers or FakeWorkers()
 
         def fake_render(d, path, frames=None, audio_to=None, cancel=None, codec=None, muted=False, **kw):
             if codec == "wav":
-                calls["mix"].append(path)
+                calls["sound"].append(tuple(frames) if frames else "whole")
                 with open(path, "wb") as fh:
                     fh.write(b"RIFF" + b"M" * 2000)
                 return path
@@ -635,6 +676,7 @@ class Reuse(unittest.TestCase):
             return out
 
         def fake_join_wavs(parts, fps, out):
+            calls["wavs"] = [(os.path.basename(p), n) for p, n in parts]
             with open(out, "wb") as fh:
                 fh.write(b"RIFF" + b"S" * 2000)
             return out
@@ -646,9 +688,9 @@ class Reuse(unittest.TestCase):
                 fh.write(b"final")
             return {}
 
-        def fake_flac(wav, out):
-            shutil.copy(wav, out)
-            return out
+        def fake_cut(whole, path, start, end):
+            shutil.copy(whole, path)
+            return path
         env.setdefault("POD_RENDER_CHUNK_SECONDS", 20)
         patches = [mock.patch.object(config, "RENDER_CACHE", True),
                    mock.patch.object(config, "RENDER_CACHE_PREFIX", "render-cache/v1/"),
@@ -660,7 +702,7 @@ class Reuse(unittest.TestCase):
                    mock.patch.object(fanout, "_count_frames", side_effect=_fake_count),
                    mock.patch.object(fanout, "join_videos", side_effect=fake_join_videos),
                    mock.patch.object(fanout, "join_wavs", side_effect=fake_join_wavs),
-                   mock.patch.object(fanout, "_flac", side_effect=fake_flac),
+                   mock.patch.object(fanout, "cut_sound", side_effect=fake_cut),
                    mock.patch.object(fanout, "_delete_keys"),
                    mock.patch.object(fanout.r2, "upload", side_effect=self.store.upload),
                    mock.patch.object(fanout.r2, "upload_bytes", side_effect=self.store.upload_bytes),
@@ -695,7 +737,10 @@ class Reuse(unittest.TestCase):
     def chunk_keys(self):
         return sorted(k for k in self.store.objects if re.search(r"/c-[0-9a-f]{20}\.mp4$", k))
 
-    def test_a_first_render_keeps_every_chunk_and_the_whole_mix(self):
+    def slice_keys(self):
+        return sorted(k for k in self.store.objects if re.search(r"/s-[0-9a-f]{20}\.wav$", k))
+
+    def test_a_first_render_keeps_every_chunk_and_its_sound_slice(self):
         doc = _doc([150] * 16)                                     # 2400 frames: four 600-frame chunks
         first = self.render(doc)
         self.assertTrue(first["ok"])
@@ -703,8 +748,9 @@ class Reuse(unittest.TestCase):
         self.assertEqual(len(first["payloads"]), 3)                # spread as before: three on workers
         self.assertTrue(all(not p.get("picture_only") for p in first["payloads"]))
         self.assertEqual(len(self.chunk_keys()), 4)
-        self.assertEqual(len(self.store.copies), 3)                # the workers' chunks copied inside R2
-        self.assertTrue(any(k.endswith(".flac") for k in self.store.objects))
+        self.assertEqual(len(self.slice_keys()), 4)
+        self.assertEqual(len(self.store.copies), 6)                # the workers' chunks and slices copied in R2
+        self.assertEqual(first["sound"], [])                       # every slice came with its chunk
         self.assertTrue(all(k.startswith("render-cache/v1/proj-1/") for k in self.chunk_keys()))
         self.assertEqual(first["finalize"], [b"RIFFS"])            # the sound slices, joined
         m = first["manifest"]
@@ -715,7 +761,7 @@ class Reuse(unittest.TestCase):
         self.assertEqual(shown["globals"]["fps"], 30)
         self.assertEqual(first["costs"]["render"]["reused"], 0)
 
-    def test_one_swapped_clip_draws_one_chunk_here_and_reuses_the_rest_and_the_mix(self):
+    def test_one_swapped_clip_draws_one_chunk_here_and_reuses_the_rest_and_their_sound(self):
         doc = _doc([150] * 16)
         self.render(doc)
         d = copy.deepcopy(doc)
@@ -723,21 +769,37 @@ class Reuse(unittest.TestCase):
         again = self.render(d)
         self.assertTrue(again["ok"])
         self.assertEqual(again["payloads"], [])                    # no worker woken for one chunk
-        self.assertEqual(again["render"], [((1200, 1799), True, False)])  # drawn here, picture only
-        self.assertEqual(again["mix"], [])                         # nothing audible changed: the kept mix
+        self.assertEqual(again["render"], [((1200, 1799), False, True)])  # drawn here, with its sound
+        self.assertEqual(again["sound"], [])                       # nothing audible changed: the kept slices
+        self.assertEqual(again["wavs"], [("cslice_000.wav", 600), ("cslice_001.wav", 600),
+                                         ("pchunk_002.pod.wav", 600), ("cslice_003.wav", 600)])
         self.assertEqual(again["finalize"], [b"RIFFS"])
         self.assertEqual(again["joined"], ["cchunk_000.mp4", "cchunk_001.mp4", "pchunk_002.pod.mp4",
                                            "cchunk_003.mp4"])
         self.assertEqual(again["stats"]["fromCache"], 3)
         c = again["stats"]["cache"]
-        self.assertEqual((c["reused"], c["framesReused"], c["framesDrawn"], c["mixReused"]), (3, 1800, 600, True))
+        self.assertEqual((c["reused"], c["framesReused"], c["framesDrawn"], c["slicesReused"], c["slicesDrawn"]),
+                         (3, 1800, 600, 3, 0))
         self.assertGreater(c["savedUsd"], 0)
         self.assertEqual(again["costs"]["render"]["reused"], 3)
         self.assertEqual([x["source"] for x in again["manifest"]["chunks"]], ["cache", "cache", "pod", "cache"])
         self.assertEqual(len(self.chunk_keys()), 5)                 # the new chunk kept beside the old
-        self.assertEqual(len(self.store.touched), 4)                # three chunks and the mix start their age again
+        self.assertEqual(len(self.slice_keys()), 4)                 # its sound did not change: the same slice
+        self.assertEqual(len(self.store.touched), 6)                # three chunks and their slices start again
 
-    def test_a_change_that_is_only_heard_reuses_every_picture_and_draws_the_mix_whole(self):
+    def test_a_looks_new_words_draw_its_chunk_and_its_sound_only(self):
+        doc = _doc([150] * 16)
+        doc["overlays"] = [{"type": "stat", "template": "", "startFrame": 1300, "durationInFrames": 90, "text": "40%"}]
+        self.render(doc)
+        d = copy.deepcopy(doc)
+        d["overlays"][0]["text"] = "41%"                           # 1300-1389: chunk 2
+        again = self.render(d)
+        self.assertTrue(again["ok"])
+        self.assertEqual(again["render"], [((1200, 1799), False, True)])
+        self.assertEqual(again["sound"], [])                       # the other slices are kept
+        self.assertEqual(again["stats"]["cache"]["slicesReused"], 3)
+
+    def test_a_change_that_is_only_heard_reuses_every_picture_and_draws_the_sound_whole(self):
         doc = _doc([150] * 16)
         self.render(doc)
         d = copy.deepcopy(doc)
@@ -745,10 +807,22 @@ class Reuse(unittest.TestCase):
         again = self.render(d)
         self.assertTrue(again["ok"])
         self.assertEqual(again["render"], [])
-        self.assertEqual(len(again["mix"]), 1)                     # the whole mix, drawn from the timeline
-        self.assertEqual(again["finalize"], [b"RIFFM"])            # and the loudness set from it
+        self.assertEqual(again["sound"], ["whole"])                # every slice changed: one whole mix, cut
+        self.assertEqual([w for w, _n in again["wavs"]], [f"sslice_00{i}.wav" for i in range(4)])
         self.assertEqual(again["stats"]["fromCache"], 4)
-        self.assertFalse(again["stats"]["cache"]["mixReused"])
+        self.assertEqual(again["stats"]["cache"]["slicesDrawn"], 4)
+        self.assertEqual(len(self.slice_keys()), 8)                # the new slices kept beside the old
+
+    def test_a_few_changed_slices_are_drawn_range_by_range(self):
+        doc = _doc([150] * 16, sfx=[{"name": "whoosh", "startFrame": 100}])
+        self.render(doc)
+        d = copy.deepcopy(doc)
+        d["sfx"][0]["volume"] = 0.3                                # a sound effect near the start: chunk 0
+        again = self.render(d)
+        self.assertTrue(again["ok"])
+        self.assertEqual(again["render"], [])
+        self.assertEqual(again["sound"], [(0, 599)])
+        self.assertEqual(again["stats"]["cache"]["slicesReused"], 3)
 
     def test_narration_that_moves_after_t_redraws_after_t_and_reuses_before(self):
         doc = _doc([150] * 32)                                     # 4800 frames: eight chunks
@@ -762,9 +836,10 @@ class Reuse(unittest.TestCase):
             if b < t - 1:
                 self.assertEqual(src, "cache", (a, b))
         self.assertTrue(all(s != "cache" for (a, b), s in zip(frames, sources) if b >= t))
-        self.assertEqual(len(again["mix"]), 1)                     # the narration moved: the mix is drawn again
+        self.assertTrue(again["sound"])                            # the narration moved: its sound is drawn again
+        self.assertEqual(again["stats"]["cache"]["slicesReused"], 0)
 
-    def test_many_changed_chunks_go_to_the_workers_without_their_sound(self):
+    def test_many_changed_chunks_go_to_the_workers_with_their_sound(self):
         doc = _doc([150] * 32)
         self.render(doc)
         d = copy.deepcopy(doc)
@@ -773,7 +848,8 @@ class Reuse(unittest.TestCase):
         again = self.render(d)
         self.assertTrue(again["ok"])
         self.assertEqual(len(again["payloads"]), 3)                # the pod draws one, three go to workers
-        self.assertTrue(all(p["picture_only"] for p in again["payloads"]))
+        self.assertTrue(all(not p.get("picture_only") for p in again["payloads"]))
+        self.assertEqual(again["sound"], [])
         self.assertEqual(again["stats"]["fromCache"], 4)
 
     def test_off_and_refresh(self):
@@ -796,7 +872,7 @@ class Reuse(unittest.TestCase):
         d["scenes"][1]["media"]["url"] = "https://pub.example/media/new.mp4"
         again = self.render(d, helpers=False)
         self.assertTrue(again["ok"])
-        self.assertEqual(again["render"], [((0, 599), True, False)])
+        self.assertEqual(again["render"], [((0, 599), False, True)])
         # Nothing cached and no workers: the whole video on one machine, as before (unless RENDER_LOCAL_CHUNKED).
         self.store.objects.clear()
         self.assertFalse(self.render(d, helpers=False)["ok"])
@@ -841,7 +917,7 @@ class Store(unittest.TestCase):
         now = time.time()
         store.objects = {"render-cache/v1/p1/c-a.mp4": (b"x", now - 30 * 86400),
                          "render-cache/v1/p1/c-b.mp4": (b"xy", now - 86400),
-                         "render-cache/v1/p2/a-c.flac": (b"xyz", now - 20 * 86400),
+                         "render-cache/v1/p2/s-c.wav": (b"xyz", now - 20 * 86400),
                          "projects/p1/final-1.mp4": (b"video", now - 90 * 86400)}
         with mock.patch.object(r2, "list_keys", side_effect=store.list_keys), \
                 mock.patch.object(r2, "delete", side_effect=store.delete), \

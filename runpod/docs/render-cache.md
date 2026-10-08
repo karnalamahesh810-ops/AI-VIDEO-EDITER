@@ -2,8 +2,10 @@
 
 A render keeps every chunk it draws in Cloudflare R2 under a hash of everything that draws
 those frames. The next render of the same project reuses every chunk whose hash did not change
-and draws only the rest; the sound mix is reused when nothing audible changed, else drawn whole
-from the timeline, and the loudness is always set again from the whole mix.
+and draws only the rest. The sound is kept the same way, one slice per chunk: a chunk drawn now
+brings its slice; a kept chunk brings its kept slice when nothing audible near it changed; any
+other slice is drawn alone (sound only, fast). The slices are joined sample-exactly and the
+loudness is always set again from the whole mix.
 
 Code: `src/rendercache.py` (boundaries, hashes, store, clean-up), `src/fanout.py render_pod`
 (reuse, drawing, joining, keeping). Tests: `tests/test_render_cache.py`.
@@ -19,10 +21,11 @@ What an edit re-renders (measured on three real timelines, 18-23 min, 12-15 chun
 
 | Edit | Chunks drawn again | Sound |
 |---|---|---|
-| One line's clip or picture swapped | 1 | reused |
-| One look's words changed | 1 | drawn again (a look's sound can change) |
-| Music level, sound effects | 0 | drawn again |
-| Narration timing moved after time T | every chunk after T; every chunk before T reused | drawn again |
+| One line's clip or picture swapped | 1 | every slice reused (the drawn chunk brings its own) |
+| One look's words changed | 1 | the slices it is heard in |
+| A sound effect added or moved | 0 | the slices it is heard in, drawn alone |
+| Music, music level, narration file | 0 | every slice (one sound-only render, cut) |
+| Narration timing moved after time T | every chunk after T; every chunk before T reused | every slice |
 | Frame rate, size, grade, film look, subtitles on/off | all | - |
 
 With subtitles on, any change of the narration's words re-renders every chunk (the cues are set
@@ -50,8 +53,13 @@ Fields the renderer never reads (`SCENE_NOT_DRAWN`, `MEDIA_NOT_DRAWN`) are left 
 `remotion/src` so the lists stay true. Anything unknown counts: a false miss costs a render, a
 false hit would show the wrong picture.
 
-`audio_hash`: the narration (the polished file by its bytes), music, beds, sound effects, every
-overlay (looks carry sounds), scene timings, words and transitions, the renderer.
+`audio_slice_hash` (one per chunk): what every slice depends on - the narration (the polished
+file by its bytes), music, beds and masters, the voice level, every scene's timing and words (the
+music ducks under them), the looks' sound plan (template, timing, emphasis, sound choice, has
+words / a number: `lookSoundPlan.ts` plans over the whole video), animation scenes, the renderer -
+and what sounds near the chunk: the looks heard in it (their words: typing runs as long as they
+do), sound effects starting up to 6 s before it, pack transitions over its cuts, the brand intro
+or outro. When more than half of the slices changed, the whole sound is drawn once and cut.
 
 ## Settings and job input
 
@@ -67,17 +75,17 @@ overlay (looks carry sounds), scene timings, words and transitions, the renderer
 
 Job input (`render`): `render_cache` = `"on"` (default) | `"refresh"` (draw everything, keep it) |
 `"off"`; `render_cache_scope` (default: the project id). The result carries `render_manifest`
-(chunks, where each came from, the mix, savings, the editor's signatures) and
+(chunks, where each came from, slices reused / drawn, savings, the editor's signatures) and
 `costs.render` (chunks reused, frames not drawn, `savedUsd`).
 
 ## Storage and expiry
 
 ```
 R2_BUCKET/render-cache/v1/<project>/c-<hash>.mp4   a chunk's picture, exactly its frames
-R2_BUCKET/render-cache/v1/<project>/a-<hash>.flac  the whole mix before loudness
+R2_BUCKET/render-cache/v1/<project>/s-<hash>.wav   its sound before loudness, exactly its samples
 ```
 
-About one finished video's size per project (CRF 18 chunks + a FLAC mix). A reused entry is copied
+About one finished video's size per project, plus ~11 MB of sound a minute (48 kHz stereo WAV). A reused entry is copied
 onto itself (`touch`), which starts its age again, so age-based expiry never takes what renders
 keep using.
 
