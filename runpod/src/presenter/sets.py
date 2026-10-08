@@ -299,7 +299,7 @@ def custom_spec(description: str) -> SetSpec:
 
 # ------------------------------------------------------------------ auto: the rules
 # (niche, set, weight, words). Whole words or phrases, lower case, ASCII. The app runs the same table
-# (_shared/presenterSets.ts SET_RULES): change both together - the tests pin the same sample scripts on each side.
+# (_shared/presenterSets.ts NICHES): change both together - the tests pin the same sample scripts on each side.
 NICHES: Tuple[Tuple[str, str, float, str], ...] = (
     ("history", "library", 1.0,
      "history|historic|historical|historian|historians|ancient|century|centuries|medieval|empire|empires|emperor|"
