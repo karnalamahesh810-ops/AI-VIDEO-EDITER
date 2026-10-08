@@ -160,7 +160,7 @@ def for_shot(kit: dict, text: str = "", role: str = "", framing: Optional[dict] 
         prompt = str(avatar["prompt"]).strip()
     else:
         manner = MANNER.get(tone["tone"] if tone["tone"] != "plain" else (tone["role"] or "plain"), MANNER["plain"])
-        prompt = (f"{_who(kit)} talks {manner} straight to the camera. Natural, subtle head movement and natural "
-                  "blinking, realistic lip sync. Static camera, still background.")
+        prompt = (f"{_who(kit)} talks {manner} straight to the camera. Natural, subtle head movement, eyes open on "
+                  "the lens with quick natural blinks, realistic lip sync. Static camera, still background.")
     return {"prompt": prompt, "motion_prompt": motion_prompt, "expressiveness": expressiveness,
             "tone": tone["tone"], "role": tone["role"], "close": close}
