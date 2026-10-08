@@ -52,6 +52,7 @@ import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from . import config
+from .aifill import is_ai_scene
 from .presenter import is_presenter_scene
 
 # A clip's file must run on this much past what its scene shows before its opening moves inside it (s).
@@ -536,6 +537,8 @@ def _hook_shot(scene: dict) -> str:
         return ""
     if is_presenter_scene(scene):
         return ""               # the AI presenter (src/presenter/hybrid.py): made and checked by its own step
+    if is_ai_scene(scene):
+        return ""               # an AI picture or clip made for its line (src/aifill.py): checked by its own step
     return _local(m.get("url"))
 
 

@@ -1186,6 +1186,23 @@ def _no_text_last(doc: dict, cards: List[dict], out: Dict[str, int], *, fresh: b
     return left
 
 
+def _ai_cards(doc: dict, cards: List[dict], out: Dict[str, int], fresh: bool, label: str) -> List[dict]:
+    """
+    (AI fill, src/aifill.py) The lines still without a picture after the real shots, the holds within the
+    cap and the data looks get an AI picture before a hold past the cap, a held or borrowed still or a text
+    card - only in a job with an ai_fill block, never in a render chunk (`fresh` off). Without the block the
+    cards come back as they went in. Returns the scenes still empty, in the order given.
+    """
+    from . import aifill
+    if not cards or not fresh or not aifill.enabled():
+        return cards
+    try:
+        return aifill.cards(doc, cards, out, fresh=fresh, label=label or "last resort")
+    except Exception as e:  # noqa: BLE001 - AI fill never costs a line its last resort
+        print(f"[fill] AI fill skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        return [s for s in cards if _empty(s)]
+
+
 def _hold_long(doc: dict, cards: List[dict], out: Dict[str, int]) -> List[dict]:
     """
     The lines nothing fresh was found for: the shot beside each is held over
@@ -1298,11 +1315,16 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
             cards = list(reversed(_instead_of_hold(doc, cards, out, laddered, search, label, work, banned)))
         if no_text:
             cards = _data_looks(doc, cards, out)
+        # AI fill (src/aifill.py, a job with an ai_fill block only): an AI picture before a hold past the cap.
+        cards = _ai_cards(doc, cards, out, fresh, label)
         # Nothing fresh: real footage beats a text card - the shot beside it held past the cap, never
         # past shotcap.CEILING and never slowed.
         cards = _hold_long(doc, cards, out)
     elif no_text and cards:
         cards = _data_looks(doc, cards, out)
+        cards = _ai_cards(doc, cards, out, fresh, label)
+    elif cards:
+        cards = _ai_cards(doc, cards, out, fresh, label)
     if no_text and cards:
         # Never a text card while anything real can stand in (the owner, 2026-10-06).
         cards = _no_text_last(doc, cards, out, fresh=fresh, search=search, work=work, banned=banned)
@@ -1314,6 +1336,7 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     if any(out.values()):
         print(f"[fill] {label or 'last resort'}: {out['graphic']} graphic(s), {out['held']} held over from "
               f"a neighbour, {out['card']} text card(s)"
+              + (f", {out['ai']} AI picture(s)" if out.get("ai") else "")
               + (f", {out.get('alternative', 0)} runner-up shot(s), {out.get('moment', 0)} other moment(s) of the "
                  f"clip beside and {out.get('ladder', 0)} ladder shot(s) instead of a hold past {shotcap.limit():g} s"
                  if out.get("alternative") or out.get("moment") or out.get("ladder") else "")
@@ -1488,13 +1511,15 @@ def summary(*parts: Dict[str, int]) -> str:
     c = Counter()
     for p in parts:
         for k in ("pack", "library", "reserve", "still", "generated", "graphic", "held", "alternative", "moment",
-                  "ladder", "card"):
+                  "ladder", "ai", "card"):
             c[k] += int((p or {}).get(k) or 0)
     total = sum(c.values())
     names = {"pack": "packs", "library": "library", "reserve": "spare moments", "still": "stills",
              "generated": "generated", "graphic": "graphics", "held": "hold",
              # Instead of a hold past SHOT_MAX_SECONDS (src/shotcap.py).
-             "alternative": "runner-ups", "moment": "other moments", "ladder": "ladder", "card": "text"}
+             "alternative": "runner-ups", "moment": "other moments", "ladder": "ladder",
+             # AI fill's pictures instead of a long hold, a borrowed still or a text card (src/aifill.py).
+             "ai": "AI pictures", "card": "text"}
     used = "/".join(names[k] for k in names if c[k])
     detail = ", ".join(f"{c[k]} {names[k]}" for k in names if c[k])
     return f"filled {total} scenes from {used or 'nothing'}" + (f" ({detail})" if detail else "")

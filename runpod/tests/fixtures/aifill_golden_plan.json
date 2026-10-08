@@ -1,0 +1,2485 @@
+{
+ "audio": {
+  "url": "https://x/vo.mp3",
+  "volume": 1.0
+ },
+ "bgm": {
+  "genre": "investigative",
+  "loop": true,
+  "track": "investigative-v5",
+  "trackSeconds": 1800,
+  "url": "bgm://investigative-v5",
+  "volume": 0.5
+ },
+ "captions": {
+  "accent": "#FFD400",
+  "enabled": false,
+  "fontFamily": "Inter",
+  "position": "bottom",
+  "style": "netflix"
+ },
+ "durationInFrames": 2849,
+ "fps": 30,
+ "height": 1080,
+ "lookSounds": {
+  "intensity": 0.8
+ },
+ "meta": {
+  "cutsPerMinute": 12.0,
+  "dataLooks": {
+   "addedByLook": {
+    "KT_MULTIPLIER": 1,
+    "KT_NUMBER": 1,
+    "KT_PERCENT": 1,
+    "KT_YEAR": 1
+   },
+   "dropped": 0,
+   "removed": 1,
+   "shortAfter": 0,
+   "shortBefore": 1
+  },
+  "fallbackFill": {
+   "ladder": {
+    "asked": 6,
+    "generated": 0,
+    "left": 6,
+    "library": 0,
+    "moment": 0,
+    "pack": 0,
+    "reserve": 0,
+    "seconds": 0.0,
+    "still": 0
+   },
+   "lastResort": {
+    "card": 2,
+    "graphic": 0,
+    "held": 4,
+    "hook": 4,
+    "long": 3
+   }
+  },
+  "generatedScenes": 0,
+  "lookPictures": {
+   "bound": 0,
+   "dropped": 0,
+   "swapped": 0
+  },
+  "marks": {
+   "placed": 0
+  },
+  "overlayCount": 5,
+  "planner": "ai",
+  "sceneCount": 19,
+  "scenesNeedingReview": 7,
+  "scenesWithoutMedia": 7,
+  "schemaVersion": 2,
+  "sourcePolicy": "no_stock",
+  "sources": [
+   "wikimedia",
+   "youtube"
+  ],
+  "stylePack": "documentary",
+  "treatments": {
+   "animation_scenes": 1,
+   "by_category": {
+    "TEXT": 1,
+    "TIMELINES": 1
+   },
+   "callouts": 0,
+   "data_graphics": 1,
+   "footage_scenes": 9,
+   "image_scenes": 3,
+   "image_treatments": 3,
+   "maps": 0,
+   "music_cues": 2,
+   "scenes": 19,
+   "sfx": 0,
+   "text_treatments": 1,
+   "total_treatments": 9,
+   "transitions": 3,
+   "unique_templates": 2
+  },
+  "voiceLufs": -16.0,
+  "voiceLufsSource": "given",
+  "warnings": [
+   "7 scene(s) have no media and will render black."
+  ]
+ },
+ "music": {
+  "duck": 0.8,
+  "levels": {
+   "mode": "flat",
+   "speech": 0.5,
+   "trackLufs": -26.9,
+   "voiceLufs": -16.0
+  },
+  "sections": [
+   {
+    "endFrame": 1,
+    "kind": "fade-in",
+    "mood": "INTRO",
+    "startFrame": 0,
+    "volume": 0.0
+   },
+   {
+    "endFrame": 2759,
+    "kind": "voice",
+    "mood": "INTRO",
+    "startFrame": 1,
+    "volume": 0.5
+   },
+   {
+    "endFrame": 2804,
+    "kind": "fade-out",
+    "mood": "INTRO",
+    "startFrame": 2759,
+    "volume": 0.25
+   },
+   {
+    "endFrame": 2849,
+    "kind": "fade-out",
+    "mood": "INTRO",
+    "startFrame": 2804,
+    "volume": 0.0
+   }
+  ]
+ },
+ "overlays": [
+  {
+   "durationInFrames": 135,
+   "exit": "fade",
+   "fontScale": 1.0,
+   "label": "Definition",
+   "motion": "fade",
+   "startFrame": 234,
+   "style": "documentary",
+   "subtitle": "And it stretches under eight states",
+   "template": "KT_TERM",
+   "text": "Ogallala Aquifer",
+   "theme": "gold",
+   "type": "motion",
+   "variant": "kt-term"
+  },
+  {
+   "dataLook": true,
+   "durationInFrames": 135,
+   "exit": "fade",
+   "label": "PANHANDLE \u00b7 1950",
+   "motion": "fade",
+   "said": "100 feet since 1950",
+   "startFrame": 910,
+   "style": "documentary",
+   "subtitle": "since 1950",
+   "suffix": "FT",
+   "template": "KT_NUMBER",
+   "theme": "gold",
+   "type": "motion",
+   "value": 100,
+   "variant": "kt-number"
+  },
+  {
+   "dataLook": true,
+   "durationInFrames": 150,
+   "exit": "fade",
+   "items": [],
+   "label": "",
+   "motion": "fade",
+   "said": "2011",
+   "startFrame": 1453,
+   "style": "documentary",
+   "template": "KT_YEAR",
+   "text": "",
+   "theme": "gold",
+   "type": "motion",
+   "value": 2011,
+   "variant": "kt-year"
+  },
+  {
+   "dataLook": true,
+   "durationInFrames": 150,
+   "exit": "fade",
+   "label": "HALF",
+   "motion": "fade",
+   "said": "half",
+   "startFrame": 1802,
+   "style": "documentary",
+   "subtitle": "the herd before summer",
+   "suffix": "%",
+   "template": "KT_PERCENT",
+   "theme": "gold",
+   "type": "motion",
+   "value": 50,
+   "variant": "kt-percent"
+  },
+  {
+   "dataLook": true,
+   "durationInFrames": 150,
+   "exit": "fade",
+   "label": "",
+   "motion": "fade",
+   "said": "3 times",
+   "startFrame": 2276,
+   "style": "documentary",
+   "subtitle": "the old cost",
+   "suffix": "\u00d7",
+   "template": "KT_MULTIPLIER",
+   "theme": "gold",
+   "type": "motion",
+   "value": 3,
+   "variant": "kt-multiplier"
+  },
+  {
+   "durationInFrames": 124,
+   "startFrame": 970,
+   "text": "Now, I have seen what that looks like up close.",
+   "type": "highlight"
+  },
+  {
+   "durationInFrames": 147,
+   "startFrame": 1094,
+   "text": "When I started cooking for ranch crews, the windmills never stopped turning.",
+   "type": "highlight"
+  }
+ ],
+ "scenes": [
+  {
+   "durationInFrames": 221,
+   "effect": "color-shift",
+   "frame": "full",
+   "id": "s0000",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 7.39,
+    "contentDescription": "footage of the Texas Panhandle",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0000&t=10"
+   },
+   "motion": "none",
+   "query": "Texas Panhandle footage",
+   "reviewReason": "Held over the next line: nothing new was found for it in time - replace or keep",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0000@10",
+    "candidates": {},
+    "contentDescription": "footage of the Texas Panhandle",
+    "eventWindow": "",
+    "finalScore": null,
+    "heldOver": [
+     "s0001"
+    ],
+    "intent": "Texas Panhandle",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "Texas Panhandle footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0000&t=10",
+    "specificity": "",
+    "subject": "Texas Panhandle",
+    "subjectType": "place"
+   },
+   "startFrame": 0,
+   "text": "Under the Texas Panhandle sits the water that built this country, and it is running out. It is called",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "INTRO",
+    "overlays": [],
+    "primaryType": "footage",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 0.333,
+     "start": 0.0,
+     "text": "Under"
+    },
+    {
+     "end": 0.704,
+     "start": 0.37,
+     "text": "the"
+    },
+    {
+     "end": 1.074,
+     "start": 0.741,
+     "text": "Texas"
+    },
+    {
+     "end": 1.444,
+     "start": 1.111,
+     "text": "Panhandle"
+    },
+    {
+     "end": 1.815,
+     "start": 1.481,
+     "text": "sits"
+    },
+    {
+     "end": 2.185,
+     "start": 1.852,
+     "text": "the"
+    },
+    {
+     "end": 2.556,
+     "start": 2.222,
+     "text": "water"
+    },
+    {
+     "end": 2.926,
+     "start": 2.593,
+     "text": "that"
+    },
+    {
+     "end": 3.296,
+     "start": 2.963,
+     "text": "built"
+    },
+    {
+     "end": 3.667,
+     "start": 3.333,
+     "text": "this"
+    },
+    {
+     "end": 4.037,
+     "start": 3.704,
+     "text": "country,"
+    },
+    {
+     "end": 4.407,
+     "start": 4.074,
+     "text": "and"
+    },
+    {
+     "end": 4.778,
+     "start": 4.444,
+     "text": "it"
+    },
+    {
+     "end": 5.148,
+     "start": 4.815,
+     "text": "is"
+    },
+    {
+     "end": 5.519,
+     "start": 5.185,
+     "text": "running"
+    },
+    {
+     "end": 5.889,
+     "start": 5.556,
+     "text": "out."
+    },
+    {
+     "end": 6.709,
+     "start": 6.376,
+     "text": "It"
+    },
+    {
+     "end": 7.08,
+     "start": 6.746,
+     "text": "is"
+    },
+    {
+     "end": 7.45,
+     "start": 7.117,
+     "text": "called"
+    }
+   ]
+  },
+  {
+   "durationInFrames": 422,
+   "effect": "ken-burns",
+   "frame": "full",
+   "id": "s0003",
+   "media": {
+    "attribution": "Wikimedia Commons",
+    "contentDescription": "a photo of the windmill stock tank",
+    "license": "cc-by",
+    "qualityScore": 0.7,
+    "relevanceScore": 0.82,
+    "source": "wikimedia",
+    "type": "image",
+    "url": "https://upload.wikimedia.org/fixture/picture_03.jpg"
+   },
+   "motion": "push-offcenter",
+   "query": "windmill stock tank footage",
+   "reviewReason": "Held over the next line: nothing new was found for it in time - replace or keep",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "wikimedia:https://upload.wikimedia.org/fixture/picture_03.jpg",
+    "candidates": {},
+    "contentDescription": "a photo of the windmill stock tank",
+    "eventWindow": "",
+    "finalScore": null,
+    "heldOver": [
+     "s0002",
+     "s0001"
+    ],
+    "intent": "windmill stock tank",
+    "moment": {},
+    "provider": "wikimedia",
+    "qualityScore": 0.7,
+    "relevanceScore": 0.82,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "windmill stock tank footage",
+    "sourceUrl": "https://upload.wikimedia.org/fixture/picture_03.jpg",
+    "specificity": "",
+    "subject": "windmill stock tank",
+    "subjectType": "place"
+   },
+   "startFrame": 221,
+   "text": "the Ogallala Aquifer, and it stretches under eight states. Farmers pump it up through center pivots to grow corn, cotton and wheat. Ranchers pump it for their cattle, from windmills beside the stock tanks.",
+   "transition": "pack:mlt13",
+   "transitionGain": 1.0,
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "INTRO",
+    "overlays": [],
+    "primaryType": "image",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "pack:mlt13",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "image",
+   "words": [
+    {
+     "end": 7.82,
+     "start": 7.487,
+     "text": "the"
+    },
+    {
+     "end": 8.191,
+     "start": 7.857,
+     "text": "Ogallala"
+    },
+    {
+     "end": 8.561,
+     "start": 8.228,
+     "text": "Aquifer,"
+    },
+    {
+     "end": 8.931,
+     "start": 8.598,
+     "text": "and"
+    },
+    {
+     "end": 9.302,
+     "start": 8.969,
+     "text": "it"
+    },
+    {
+     "end": 9.672,
+     "start": 9.339,
+     "text": "stretches"
+    },
+    {
+     "end": 10.043,
+     "start": 9.709,
+     "text": "under"
+    },
+    {
+     "end": 10.413,
+     "start": 10.08,
+     "text": "eight"
+    },
+    {
+     "end": 10.783,
+     "start": 10.45,
+     "text": "states."
+    },
+    {
+     "end": 11.604,
+     "start": 11.27,
+     "text": "Farmers"
+    },
+    {
+     "end": 11.974,
+     "start": 11.641,
+     "text": "pump"
+    },
+    {
+     "end": 12.344,
+     "start": 12.011,
+     "text": "it"
+    },
+    {
+     "end": 12.715,
+     "start": 12.381,
+     "text": "up"
+    },
+    {
+     "end": 13.085,
+     "start": 12.752,
+     "text": "through"
+    },
+    {
+     "end": 13.456,
+     "start": 13.122,
+     "text": "center"
+    },
+    {
+     "end": 13.826,
+     "start": 13.493,
+     "text": "pivots"
+    },
+    {
+     "end": 14.196,
+     "start": 13.863,
+     "text": "to"
+    },
+    {
+     "end": 14.567,
+     "start": 14.233,
+     "text": "grow"
+    },
+    {
+     "end": 14.937,
+     "start": 14.604,
+     "text": "corn,"
+    },
+    {
+     "end": 15.307,
+     "start": 14.974,
+     "text": "cotton"
+    },
+    {
+     "end": 15.678,
+     "start": 15.344,
+     "text": "and"
+    },
+    {
+     "end": 16.048,
+     "start": 15.715,
+     "text": "wheat."
+    },
+    {
+     "end": 16.869,
+     "start": 16.535,
+     "text": "Ranchers"
+    },
+    {
+     "end": 17.239,
+     "start": 16.906,
+     "text": "pump"
+    },
+    {
+     "end": 17.609,
+     "start": 17.276,
+     "text": "it"
+    },
+    {
+     "end": 17.98,
+     "start": 17.646,
+     "text": "for"
+    },
+    {
+     "end": 18.35,
+     "start": 18.017,
+     "text": "their"
+    },
+    {
+     "end": 18.72,
+     "start": 18.387,
+     "text": "cattle,"
+    },
+    {
+     "end": 19.091,
+     "start": 18.757,
+     "text": "from"
+    },
+    {
+     "end": 19.461,
+     "start": 19.128,
+     "text": "windmills"
+    },
+    {
+     "end": 19.831,
+     "start": 19.498,
+     "text": "beside"
+    },
+    {
+     "end": 20.202,
+     "start": 19.869,
+     "text": "the"
+    },
+    {
+     "end": 20.572,
+     "start": 20.239,
+     "text": "stock"
+    },
+    {
+     "end": 20.943,
+     "start": 20.609,
+     "text": "tanks."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 147,
+   "effect": "film-flicker",
+   "frame": "full",
+   "id": "s0004",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 5.91,
+    "contentDescription": "footage of the Ogallala Aquifer",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0004&t=14"
+   },
+   "motion": "none",
+   "query": "Ogallala Aquifer footage",
+   "reviewReason": "",
+   "reviewRequired": false,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0004@14",
+    "candidates": {},
+    "contentDescription": "footage of the Ogallala Aquifer",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "Ogallala Aquifer",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "Ogallala Aquifer footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0004&t=14",
+    "specificity": "",
+    "subject": "Ogallala Aquifer",
+    "subjectType": "place"
+   },
+   "startFrame": 643,
+   "text": "But it fills back up far slower than we take it out.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "INTRO",
+    "overlays": [],
+    "primaryType": "footage",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 21.763,
+     "start": 21.43,
+     "text": "But"
+    },
+    {
+     "end": 22.133,
+     "start": 21.8,
+     "text": "it"
+    },
+    {
+     "end": 22.504,
+     "start": 22.17,
+     "text": "fills"
+    },
+    {
+     "end": 22.874,
+     "start": 22.541,
+     "text": "back"
+    },
+    {
+     "end": 23.244,
+     "start": 22.911,
+     "text": "up"
+    },
+    {
+     "end": 23.615,
+     "start": 23.281,
+     "text": "far"
+    },
+    {
+     "end": 23.985,
+     "start": 23.652,
+     "text": "slower"
+    },
+    {
+     "end": 24.356,
+     "start": 24.022,
+     "text": "than"
+    },
+    {
+     "end": 24.726,
+     "start": 24.393,
+     "text": "we"
+    },
+    {
+     "end": 25.096,
+     "start": 24.763,
+     "text": "take"
+    },
+    {
+     "end": 25.467,
+     "start": 25.133,
+     "text": "it"
+    },
+    {
+     "end": 25.837,
+     "start": 25.504,
+     "text": "out."
+    }
+   ]
+  },
+  {
+   "animation": {
+    "exit": "fade",
+    "label": "down",
+    "motion": "rise",
+    "style": "documentary",
+    "suffix": "FT",
+    "template": "NUM_TREND_V1",
+    "text": "WATER TABLE",
+    "theme": "gold",
+    "type": "trend",
+    "value": 100.0
+   },
+   "durationInFrames": 180,
+   "effect": "none",
+   "frame": "full",
+   "id": "s0005",
+   "media": {
+    "source": "template",
+    "type": "animation",
+    "url": ""
+   },
+   "motion": "none",
+   "query": "water table footage",
+   "reviewReason": "No footage found \u2014 a motion graphic fills this beat (keep it or replace the clip)",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "",
+    "candidates": {},
+    "contentDescription": "",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "water table",
+    "moment": {},
+    "provider": "",
+    "qualityScore": null,
+    "relevanceScore": null,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "water table footage",
+    "sourceUrl": "",
+    "specificity": "",
+    "subject": "water table",
+    "subjectType": "place"
+   },
+   "startFrame": 790,
+   "text": "In some Panhandle counties the water table has dropped more than 100 feet since 1950.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": "rise",
+    "chartData": null,
+    "data": {
+     "suffix": "FT",
+     "value": 100.0
+    },
+    "duration": 6.0,
+    "emphasis": "high",
+    "entrance": "rise",
+    "exit": "fade",
+    "mapData": null,
+    "musicCue": "INTRO",
+    "overlays": [],
+    "primaryType": "animation",
+    "secondaryType": "numbers",
+    "sfx": null,
+    "template": "NUM_TREND_V1",
+    "text": "WATER TABLE",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": "documentary"
+   },
+   "visualType": "animation",
+   "words": [
+    {
+     "end": 26.657,
+     "start": 26.324,
+     "text": "In"
+    },
+    {
+     "end": 27.028,
+     "start": 26.694,
+     "text": "some"
+    },
+    {
+     "end": 27.398,
+     "start": 27.065,
+     "text": "Panhandle"
+    },
+    {
+     "end": 27.769,
+     "start": 27.435,
+     "text": "counties"
+    },
+    {
+     "end": 28.139,
+     "start": 27.806,
+     "text": "the"
+    },
+    {
+     "end": 28.509,
+     "start": 28.176,
+     "text": "water"
+    },
+    {
+     "end": 28.88,
+     "start": 28.546,
+     "text": "table"
+    },
+    {
+     "end": 29.25,
+     "start": 28.917,
+     "text": "has"
+    },
+    {
+     "end": 29.62,
+     "start": 29.287,
+     "text": "dropped"
+    },
+    {
+     "end": 29.991,
+     "start": 29.657,
+     "text": "more"
+    },
+    {
+     "end": 30.361,
+     "start": 30.028,
+     "text": "than"
+    },
+    {
+     "end": 30.731,
+     "start": 30.398,
+     "text": "100"
+    },
+    {
+     "end": 31.102,
+     "start": 30.769,
+     "text": "feet"
+    },
+    {
+     "end": 31.472,
+     "start": 31.139,
+     "text": "since"
+    },
+    {
+     "end": 31.843,
+     "start": 31.509,
+     "text": "1950."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 124,
+   "effect": "none",
+   "frame": "full",
+   "id": "s0006",
+   "media": {
+    "source": "none",
+    "type": "color",
+    "url": ""
+   },
+   "motion": "none",
+   "query": "ranch footage",
+   "reviewReason": "No usable clip found \u2014 the line is shown as text; use Find footage to add one",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "",
+    "candidates": {},
+    "contentDescription": "",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "ranch",
+    "moment": {},
+    "provider": "",
+    "qualityScore": null,
+    "relevanceScore": null,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "ranch footage",
+    "sourceUrl": "",
+    "specificity": "",
+    "subject": "ranch",
+    "subjectType": "place"
+   },
+   "startFrame": 970,
+   "text": "Now, I have seen what that looks like up close.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "INTRO",
+    "overlays": [],
+    "primaryType": "empty",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 32.663,
+     "start": 32.33,
+     "text": "Now,"
+    },
+    {
+     "end": 33.033,
+     "start": 32.7,
+     "text": "I"
+    },
+    {
+     "end": 33.404,
+     "start": 33.07,
+     "text": "have"
+    },
+    {
+     "end": 33.774,
+     "start": 33.441,
+     "text": "seen"
+    },
+    {
+     "end": 34.144,
+     "start": 33.811,
+     "text": "what"
+    },
+    {
+     "end": 34.515,
+     "start": 34.181,
+     "text": "that"
+    },
+    {
+     "end": 34.885,
+     "start": 34.552,
+     "text": "looks"
+    },
+    {
+     "end": 35.256,
+     "start": 34.922,
+     "text": "like"
+    },
+    {
+     "end": 35.626,
+     "start": 35.293,
+     "text": "up"
+    },
+    {
+     "end": 35.996,
+     "start": 35.663,
+     "text": "close."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 147,
+   "effect": "none",
+   "frame": "full",
+   "id": "s0007",
+   "media": {
+    "source": "none",
+    "type": "color",
+    "url": ""
+   },
+   "motion": "none",
+   "query": "windmill footage",
+   "reviewReason": "No usable clip found \u2014 the line is shown as text; use Find footage to add one",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "",
+    "candidates": {},
+    "contentDescription": "",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "windmill",
+    "moment": {},
+    "provider": "",
+    "qualityScore": null,
+    "relevanceScore": null,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "windmill footage",
+    "sourceUrl": "",
+    "specificity": "",
+    "subject": "windmill",
+    "subjectType": "place"
+   },
+   "startFrame": 1094,
+   "text": "When I started cooking for ranch crews, the windmills never stopped turning.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "INTRO",
+    "overlays": [],
+    "primaryType": "empty",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "image",
+   "words": [
+    {
+     "end": 36.817,
+     "start": 36.483,
+     "text": "When"
+    },
+    {
+     "end": 37.187,
+     "start": 36.854,
+     "text": "I"
+    },
+    {
+     "end": 37.557,
+     "start": 37.224,
+     "text": "started"
+    },
+    {
+     "end": 37.928,
+     "start": 37.594,
+     "text": "cooking"
+    },
+    {
+     "end": 38.298,
+     "start": 37.965,
+     "text": "for"
+    },
+    {
+     "end": 38.669,
+     "start": 38.335,
+     "text": "ranch"
+    },
+    {
+     "end": 39.039,
+     "start": 38.706,
+     "text": "crews,"
+    },
+    {
+     "end": 39.409,
+     "start": 39.076,
+     "text": "the"
+    },
+    {
+     "end": 39.78,
+     "start": 39.446,
+     "text": "windmills"
+    },
+    {
+     "end": 40.15,
+     "start": 39.817,
+     "text": "never"
+    },
+    {
+     "end": 40.52,
+     "start": 40.187,
+     "text": "stopped"
+    },
+    {
+     "end": 40.891,
+     "start": 40.557,
+     "text": "turning."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 180,
+   "effect": "color-shift",
+   "frame": "full",
+   "id": "s0008",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 7.02,
+    "contentDescription": "footage of the dry well",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0008&t=18"
+   },
+   "motion": "none",
+   "query": "dry well footage",
+   "reviewReason": "",
+   "reviewRequired": false,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0008@18",
+    "candidates": {},
+    "contentDescription": "footage of the dry well",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "dry well",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "dry well footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0008&t=18",
+    "specificity": "",
+    "subject": "dry well",
+    "subjectType": "place"
+   },
+   "startFrame": 1241,
+   "text": "Today a lot of those windmills stand still, and the wells under them are dry.",
+   "transition": "light-sweep",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "INTRO",
+    "overlays": [],
+    "primaryType": "footage",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "light-sweep",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 41.711,
+     "start": 41.378,
+     "text": "Today"
+    },
+    {
+     "end": 42.081,
+     "start": 41.748,
+     "text": "a"
+    },
+    {
+     "end": 42.452,
+     "start": 42.119,
+     "text": "lot"
+    },
+    {
+     "end": 42.822,
+     "start": 42.489,
+     "text": "of"
+    },
+    {
+     "end": 43.193,
+     "start": 42.859,
+     "text": "those"
+    },
+    {
+     "end": 43.563,
+     "start": 43.23,
+     "text": "windmills"
+    },
+    {
+     "end": 43.933,
+     "start": 43.6,
+     "text": "stand"
+    },
+    {
+     "end": 44.304,
+     "start": 43.97,
+     "text": "still,"
+    },
+    {
+     "end": 44.674,
+     "start": 44.341,
+     "text": "and"
+    },
+    {
+     "end": 45.044,
+     "start": 44.711,
+     "text": "the"
+    },
+    {
+     "end": 45.415,
+     "start": 45.081,
+     "text": "wells"
+    },
+    {
+     "end": 45.785,
+     "start": 45.452,
+     "text": "under"
+    },
+    {
+     "end": 46.156,
+     "start": 45.822,
+     "text": "them"
+    },
+    {
+     "end": 46.526,
+     "start": 46.193,
+     "text": "are"
+    },
+    {
+     "end": 46.896,
+     "start": 46.563,
+     "text": "dry."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 147,
+   "effect": "ken-burns",
+   "frame": "full",
+   "id": "s0009",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 5.91,
+    "contentDescription": "footage of the 2011 Texas drought",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0009&t=19"
+   },
+   "motion": "none",
+   "query": "2011 Texas drought footage",
+   "reviewReason": "",
+   "reviewRequired": false,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0009@19",
+    "candidates": {},
+    "contentDescription": "footage of the 2011 Texas drought",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "2011 Texas drought",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "2011 Texas drought footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0009&t=19",
+    "specificity": "",
+    "subject": "2011 Texas drought",
+    "subjectType": "place"
+   },
+   "startFrame": 1421,
+   "text": "The drought of 2011 was the worst one-year drought Texas ever recorded.",
+   "transition": "pack:mlt3",
+   "transitionGain": 1.0,
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": "fade",
+    "chartData": null,
+    "data": {
+     "value": 2011.0
+    },
+    "duration": 4.1,
+    "emphasis": "high",
+    "entrance": "fade",
+    "exit": "none",
+    "mapData": null,
+    "musicCue": "RESOLUTION",
+    "overlays": [
+     "LIB_VR_YEAR_LINE"
+    ],
+    "primaryType": "footage",
+    "secondaryType": "timelines",
+    "sfx": {
+     "name": "count-tick",
+     "volume": 0.3
+    },
+    "template": "LIB_VR_YEAR_LINE",
+    "text": "",
+    "transitionIn": "pack:mlt3",
+    "transitionOut": "none",
+    "variant": "vr-year-line"
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 47.717,
+     "start": 47.383,
+     "text": "The"
+    },
+    {
+     "end": 48.087,
+     "start": 47.754,
+     "text": "drought"
+    },
+    {
+     "end": 48.457,
+     "start": 48.124,
+     "text": "of"
+    },
+    {
+     "end": 48.828,
+     "start": 48.494,
+     "text": "2011"
+    },
+    {
+     "end": 49.198,
+     "start": 48.865,
+     "text": "was"
+    },
+    {
+     "end": 49.569,
+     "start": 49.235,
+     "text": "the"
+    },
+    {
+     "end": 49.939,
+     "start": 49.606,
+     "text": "worst"
+    },
+    {
+     "end": 50.309,
+     "start": 49.976,
+     "text": "one-year"
+    },
+    {
+     "end": 50.68,
+     "start": 50.346,
+     "text": "drought"
+    },
+    {
+     "end": 51.05,
+     "start": 50.717,
+     "text": "Texas"
+    },
+    {
+     "end": 51.42,
+     "start": 51.087,
+     "text": "ever"
+    },
+    {
+     "end": 51.791,
+     "start": 51.457,
+     "text": "recorded."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 147,
+   "effect": "light-leaks",
+   "frame": "full",
+   "id": "s0010",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 5.91,
+    "contentDescription": "footage of the cracked mud pond",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0010&t=20"
+   },
+   "motion": "none",
+   "query": "cracked mud pond footage",
+   "reviewReason": "",
+   "reviewRequired": false,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0010@20",
+    "candidates": {},
+    "contentDescription": "footage of the cracked mud pond",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "cracked mud pond",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "cracked mud pond footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0010&t=20",
+    "specificity": "",
+    "subject": "cracked mud pond",
+    "subjectType": "place"
+   },
+   "startFrame": 1568,
+   "text": "Ponds turned to cracked mud, and the grass burned brown by June.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "RESOLUTION",
+    "overlays": [],
+    "primaryType": "footage",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 52.611,
+     "start": 52.278,
+     "text": "Ponds"
+    },
+    {
+     "end": 52.981,
+     "start": 52.648,
+     "text": "turned"
+    },
+    {
+     "end": 53.352,
+     "start": 53.019,
+     "text": "to"
+    },
+    {
+     "end": 53.722,
+     "start": 53.389,
+     "text": "cracked"
+    },
+    {
+     "end": 54.093,
+     "start": 53.759,
+     "text": "mud,"
+    },
+    {
+     "end": 54.463,
+     "start": 54.13,
+     "text": "and"
+    },
+    {
+     "end": 54.833,
+     "start": 54.5,
+     "text": "the"
+    },
+    {
+     "end": 55.204,
+     "start": 54.87,
+     "text": "grass"
+    },
+    {
+     "end": 55.574,
+     "start": 55.241,
+     "text": "burned"
+    },
+    {
+     "end": 55.944,
+     "start": 55.611,
+     "text": "brown"
+    },
+    {
+     "end": 56.315,
+     "start": 55.981,
+     "text": "by"
+    },
+    {
+     "end": 56.685,
+     "start": 56.352,
+     "text": "June."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 158,
+   "effect": "ken-burns",
+   "frame": "full",
+   "id": "s0011",
+   "media": {
+    "attribution": "Wikimedia Commons",
+    "contentDescription": "a photo of the cattle water truck",
+    "license": "cc-by",
+    "qualityScore": 0.7,
+    "relevanceScore": 0.82,
+    "source": "wikimedia",
+    "type": "image",
+    "url": "https://upload.wikimedia.org/fixture/picture_11.jpg"
+   },
+   "motion": "reveal-left",
+   "query": "cattle water truck footage",
+   "reviewReason": "",
+   "reviewRequired": false,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "wikimedia:https://upload.wikimedia.org/fixture/picture_11.jpg",
+    "candidates": {},
+    "contentDescription": "a photo of the cattle water truck",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "cattle water truck",
+    "moment": {},
+    "provider": "wikimedia",
+    "qualityScore": 0.7,
+    "relevanceScore": 0.82,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "cattle water truck footage",
+    "sourceUrl": "https://upload.wikimedia.org/fixture/picture_11.jpg",
+    "specificity": "",
+    "subject": "cattle water truck",
+    "subjectType": "place"
+   },
+   "startFrame": 1715,
+   "text": "Ranchers hauled water in trucks, or sold off half the herd before summer.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "RESOLUTION",
+    "overlays": [],
+    "primaryType": "image",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "image",
+   "words": [
+    {
+     "end": 57.506,
+     "start": 57.172,
+     "text": "Ranchers"
+    },
+    {
+     "end": 57.876,
+     "start": 57.543,
+     "text": "hauled"
+    },
+    {
+     "end": 58.246,
+     "start": 57.913,
+     "text": "water"
+    },
+    {
+     "end": 58.617,
+     "start": 58.283,
+     "text": "in"
+    },
+    {
+     "end": 58.987,
+     "start": 58.654,
+     "text": "trucks,"
+    },
+    {
+     "end": 59.357,
+     "start": 59.024,
+     "text": "or"
+    },
+    {
+     "end": 59.728,
+     "start": 59.394,
+     "text": "sold"
+    },
+    {
+     "end": 60.098,
+     "start": 59.765,
+     "text": "off"
+    },
+    {
+     "end": 60.469,
+     "start": 60.135,
+     "text": "half"
+    },
+    {
+     "end": 60.839,
+     "start": 60.506,
+     "text": "the"
+    },
+    {
+     "end": 61.209,
+     "start": 60.876,
+     "text": "herd"
+    },
+    {
+     "end": 61.58,
+     "start": 61.246,
+     "text": "before"
+    },
+    {
+     "end": 61.95,
+     "start": 61.617,
+     "text": "summer."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 102,
+   "effect": "film-flicker",
+   "frame": "full",
+   "id": "s0012",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 4.43,
+    "contentDescription": "footage of the Ogallala Aquifer",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0012&t=22"
+   },
+   "motion": "none",
+   "query": "Ogallala Aquifer footage",
+   "reviewReason": "",
+   "reviewRequired": false,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0012@22",
+    "candidates": {},
+    "contentDescription": "footage of the Ogallala Aquifer",
+    "eventWindow": "",
+    "finalScore": null,
+    "intent": "Ogallala Aquifer",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "Ogallala Aquifer footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0012&t=22",
+    "specificity": "",
+    "subject": "Ogallala Aquifer",
+    "subjectType": "place"
+   },
+   "startFrame": 1873,
+   "text": "Here is the part that worries me most.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "RESOLUTION",
+    "overlays": [],
+    "primaryType": "footage",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 62.77,
+     "start": 62.437,
+     "text": "Here"
+    },
+    {
+     "end": 63.141,
+     "start": 62.807,
+     "text": "is"
+    },
+    {
+     "end": 63.511,
+     "start": 63.178,
+     "text": "the"
+    },
+    {
+     "end": 63.881,
+     "start": 63.548,
+     "text": "part"
+    },
+    {
+     "end": 64.252,
+     "start": 63.919,
+     "text": "that"
+    },
+    {
+     "end": 64.622,
+     "start": 64.289,
+     "text": "worries"
+    },
+    {
+     "end": 64.993,
+     "start": 64.659,
+     "text": "me"
+    },
+    {
+     "end": 65.363,
+     "start": 65.03,
+     "text": "most."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 184,
+   "effect": "ken-burns",
+   "frame": "full",
+   "id": "s0013",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 8.13,
+    "contentDescription": "footage of the aquifer",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0013&t=23"
+   },
+   "motion": "none",
+   "query": "aquifer footage",
+   "reviewReason": "Held over the next line: nothing new was found for it in time - replace or keep",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0013@23",
+    "candidates": {},
+    "contentDescription": "footage of the aquifer",
+    "eventWindow": "",
+    "finalScore": null,
+    "heldOver": [
+     "s0014"
+    ],
+    "intent": "aquifer",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "aquifer footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0013&t=23",
+    "specificity": "",
+    "subject": "aquifer",
+    "subjectType": "place"
+   },
+   "startFrame": 1975,
+   "text": "Once a stretch of the aquifer is pumped out, it can take thousands of years to fill",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "RESOLUTION",
+    "overlays": [],
+    "primaryType": "footage",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 66.183,
+     "start": 65.85,
+     "text": "Once"
+    },
+    {
+     "end": 66.554,
+     "start": 66.22,
+     "text": "a"
+    },
+    {
+     "end": 66.924,
+     "start": 66.591,
+     "text": "stretch"
+    },
+    {
+     "end": 67.294,
+     "start": 66.961,
+     "text": "of"
+    },
+    {
+     "end": 67.665,
+     "start": 67.331,
+     "text": "the"
+    },
+    {
+     "end": 68.035,
+     "start": 67.702,
+     "text": "aquifer"
+    },
+    {
+     "end": 68.406,
+     "start": 68.072,
+     "text": "is"
+    },
+    {
+     "end": 68.776,
+     "start": 68.443,
+     "text": "pumped"
+    },
+    {
+     "end": 69.146,
+     "start": 68.813,
+     "text": "out,"
+    },
+    {
+     "end": 69.517,
+     "start": 69.183,
+     "text": "it"
+    },
+    {
+     "end": 69.887,
+     "start": 69.554,
+     "text": "can"
+    },
+    {
+     "end": 70.257,
+     "start": 69.924,
+     "text": "take"
+    },
+    {
+     "end": 70.628,
+     "start": 70.294,
+     "text": "thousands"
+    },
+    {
+     "end": 70.998,
+     "start": 70.665,
+     "text": "of"
+    },
+    {
+     "end": 71.369,
+     "start": 71.035,
+     "text": "years"
+    },
+    {
+     "end": 71.739,
+     "start": 71.406,
+     "text": "to"
+    },
+    {
+     "end": 72.109,
+     "start": 71.776,
+     "text": "fill"
+    }
+   ]
+  },
+  {
+   "durationInFrames": 188,
+   "effect": "light-leaks",
+   "frame": "full",
+   "id": "s0015",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 6.28,
+    "contentDescription": "footage of the water well drilling",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0014&t=24"
+   },
+   "motion": "none",
+   "query": "water well drilling footage",
+   "reviewReason": "Held over the next line: nothing new was found for it in time - replace or keep",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0014@24",
+    "candidates": {},
+    "contentDescription": "footage of the water well drilling",
+    "eventWindow": "",
+    "finalScore": null,
+    "heldOver": [
+     "s0014"
+    ],
+    "intent": "water well drilling",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "water well drilling footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0014&t=24",
+    "specificity": "",
+    "subject": "water well drilling",
+    "subjectType": "place"
+   },
+   "startFrame": 2159,
+   "text": "again. Some towns are already drilling deeper wells, at 3 times the old cost.",
+   "transition": "blur-dissolve",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "RESOLUTION",
+    "overlays": [],
+    "primaryType": "footage",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "blur-dissolve",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 72.48,
+     "start": 72.146,
+     "text": "again."
+    },
+    {
+     "end": 73.3,
+     "start": 72.967,
+     "text": "Some"
+    },
+    {
+     "end": 73.67,
+     "start": 73.337,
+     "text": "towns"
+    },
+    {
+     "end": 74.041,
+     "start": 73.707,
+     "text": "are"
+    },
+    {
+     "end": 74.411,
+     "start": 74.078,
+     "text": "already"
+    },
+    {
+     "end": 74.781,
+     "start": 74.448,
+     "text": "drilling"
+    },
+    {
+     "end": 75.152,
+     "start": 74.819,
+     "text": "deeper"
+    },
+    {
+     "end": 75.522,
+     "start": 75.189,
+     "text": "wells,"
+    },
+    {
+     "end": 75.893,
+     "start": 75.559,
+     "text": "at"
+    },
+    {
+     "end": 76.263,
+     "start": 75.93,
+     "text": "3"
+    },
+    {
+     "end": 76.633,
+     "start": 76.3,
+     "text": "times"
+    },
+    {
+     "end": 77.004,
+     "start": 76.67,
+     "text": "the"
+    },
+    {
+     "end": 77.374,
+     "start": 77.041,
+     "text": "old"
+    },
+    {
+     "end": 77.744,
+     "start": 77.411,
+     "text": "cost."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 303,
+   "effect": "ken-burns",
+   "frame": "full",
+   "id": "s0016",
+   "media": {
+    "attribution": "Wikimedia Commons",
+    "contentDescription": "a photo of the dryland farming",
+    "license": "cc-by",
+    "qualityScore": 0.7,
+    "relevanceScore": 0.82,
+    "source": "wikimedia",
+    "type": "image",
+    "url": "https://upload.wikimedia.org/fixture/picture_15.jpg"
+   },
+   "motion": "drift-diagonal",
+   "query": "dryland farming footage",
+   "reviewReason": "Held over the next line past 7 s (never past 12 s, never slowed): nothing new was found for it in time - replace or keep",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "wikimedia:https://upload.wikimedia.org/fixture/picture_15.jpg",
+    "candidates": {},
+    "contentDescription": "a photo of the dryland farming",
+    "eventWindow": "",
+    "finalScore": null,
+    "heldOver": [
+     "s0017"
+    ],
+    "intent": "dryland farming",
+    "moment": {},
+    "provider": "wikimedia",
+    "qualityScore": 0.7,
+    "relevanceScore": 0.82,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "dryland farming footage",
+    "sourceUrl": "https://upload.wikimedia.org/fixture/picture_15.jpg",
+    "specificity": "",
+    "subject": "dryland farming",
+    "subjectType": "place"
+   },
+   "startFrame": 2347,
+   "text": "Some farms have gone back to dryland crops that live on rain alone. So the next time you see a windmill standing still, you will know why.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "RESOLUTION",
+    "overlays": [],
+    "primaryType": "image",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "image",
+   "words": [
+    {
+     "end": 78.565,
+     "start": 78.231,
+     "text": "Some"
+    },
+    {
+     "end": 78.935,
+     "start": 78.602,
+     "text": "farms"
+    },
+    {
+     "end": 79.306,
+     "start": 78.972,
+     "text": "have"
+    },
+    {
+     "end": 79.676,
+     "start": 79.343,
+     "text": "gone"
+    },
+    {
+     "end": 80.046,
+     "start": 79.713,
+     "text": "back"
+    },
+    {
+     "end": 80.417,
+     "start": 80.083,
+     "text": "to"
+    },
+    {
+     "end": 80.787,
+     "start": 80.454,
+     "text": "dryland"
+    },
+    {
+     "end": 81.157,
+     "start": 80.824,
+     "text": "crops"
+    },
+    {
+     "end": 81.528,
+     "start": 81.194,
+     "text": "that"
+    },
+    {
+     "end": 81.898,
+     "start": 81.565,
+     "text": "live"
+    },
+    {
+     "end": 82.269,
+     "start": 81.935,
+     "text": "on"
+    },
+    {
+     "end": 82.639,
+     "start": 82.306,
+     "text": "rain"
+    },
+    {
+     "end": 83.009,
+     "start": 82.676,
+     "text": "alone."
+    },
+    {
+     "end": 83.83,
+     "start": 83.496,
+     "text": "So"
+    },
+    {
+     "end": 84.2,
+     "start": 83.867,
+     "text": "the"
+    },
+    {
+     "end": 84.57,
+     "start": 84.237,
+     "text": "next"
+    },
+    {
+     "end": 84.941,
+     "start": 84.607,
+     "text": "time"
+    },
+    {
+     "end": 85.311,
+     "start": 84.978,
+     "text": "you"
+    },
+    {
+     "end": 85.681,
+     "start": 85.348,
+     "text": "see"
+    },
+    {
+     "end": 86.052,
+     "start": 85.719,
+     "text": "a"
+    },
+    {
+     "end": 86.422,
+     "start": 86.089,
+     "text": "windmill"
+    },
+    {
+     "end": 86.793,
+     "start": 86.459,
+     "text": "standing"
+    },
+    {
+     "end": 87.163,
+     "start": 86.83,
+     "text": "still,"
+    },
+    {
+     "end": 87.533,
+     "start": 87.2,
+     "text": "you"
+    },
+    {
+     "end": 87.904,
+     "start": 87.57,
+     "text": "will"
+    },
+    {
+     "end": 88.274,
+     "start": 87.941,
+     "text": "know"
+    },
+    {
+     "end": 88.644,
+     "start": 88.311,
+     "text": "why."
+    }
+   ]
+  },
+  {
+   "durationInFrames": 199,
+   "effect": "light-leaks",
+   "frame": "full",
+   "id": "s0018",
+   "media": {
+    "attribution": "YouTube (CC BY)",
+    "clipSeconds": 6.65,
+    "contentDescription": "footage of the ranch",
+    "license": "cc-by",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "source": "youtube",
+    "type": "video",
+    "url": "https://www.youtube.com/watch?v=FIXTURE0017&t=27"
+   },
+   "motion": "none",
+   "query": "ranch footage",
+   "reviewReason": "Held over the next line past 7 s (never past 12 s, never slowed): nothing new was found for it in time - replace or keep",
+   "reviewRequired": true,
+   "semanticMetadata": {
+    "alternatives": [],
+    "assetId": "yt:FIXTURE0017@27",
+    "candidates": {},
+    "contentDescription": "footage of the ranch",
+    "eventWindow": "",
+    "finalScore": null,
+    "heldOver": [
+     "s0017"
+    ],
+    "intent": "ranch",
+    "moment": {},
+    "provider": "youtube",
+    "qualityScore": 0.74,
+    "relevanceScore": 0.86,
+    "sceneIntent": null,
+    "scoreParts": {},
+    "searchQuery": "ranch footage",
+    "sourceUrl": "https://www.youtube.com/watch?v=FIXTURE0017&t=27",
+    "specificity": "",
+    "subject": "ranch",
+    "subjectType": "place"
+   },
+   "startFrame": 2650,
+   "text": "Tell me what county you are in, and whether your wells are holding up.",
+   "transition": "none",
+   "treatment": "film",
+   "visualTreatment": {
+    "animation": null,
+    "chartData": null,
+    "data": {},
+    "duration": null,
+    "emphasis": "low",
+    "entrance": null,
+    "exit": null,
+    "mapData": null,
+    "musicCue": "RESOLUTION",
+    "overlays": [],
+    "primaryType": "footage",
+    "secondaryType": null,
+    "sfx": null,
+    "template": null,
+    "text": "",
+    "transitionIn": "none",
+    "transitionOut": "none",
+    "variant": null
+   },
+   "visualType": "footage",
+   "words": [
+    {
+     "end": 89.465,
+     "start": 89.131,
+     "text": "Tell"
+    },
+    {
+     "end": 89.835,
+     "start": 89.502,
+     "text": "me"
+    },
+    {
+     "end": 90.206,
+     "start": 89.872,
+     "text": "what"
+    },
+    {
+     "end": 90.576,
+     "start": 90.243,
+     "text": "county"
+    },
+    {
+     "end": 90.946,
+     "start": 90.613,
+     "text": "you"
+    },
+    {
+     "end": 91.317,
+     "start": 90.983,
+     "text": "are"
+    },
+    {
+     "end": 91.687,
+     "start": 91.354,
+     "text": "in,"
+    },
+    {
+     "end": 92.057,
+     "start": 91.724,
+     "text": "and"
+    },
+    {
+     "end": 92.428,
+     "start": 92.094,
+     "text": "whether"
+    },
+    {
+     "end": 92.798,
+     "start": 92.465,
+     "text": "your"
+    },
+    {
+     "end": 93.169,
+     "start": 92.835,
+     "text": "wells"
+    },
+    {
+     "end": 93.539,
+     "start": 93.206,
+     "text": "are"
+    },
+    {
+     "end": 93.909,
+     "start": 93.576,
+     "text": "holding"
+    },
+    {
+     "end": 94.28,
+     "start": 93.946,
+     "text": "up."
+    }
+   ]
+  }
+ ],
+ "schemaVersion": 2,
+ "sfx": [
+  {
+   "durationFrames": 34,
+   "kind": "transition",
+   "name": "light-shimmer",
+   "startFrame": 178,
+   "volume": 0.357
+  },
+  {
+   "durationFrames": 34,
+   "kind": "transition",
+   "name": "light-shimmer",
+   "startFrame": 1228,
+   "volume": 0.337
+  },
+  {
+   "durationFrames": 24,
+   "kind": "transition",
+   "name": "whoosh-soft-v2",
+   "startFrame": 2185,
+   "volume": 0.357
+  }
+ ],
+ "sfxEnabled": true,
+ "sfxVolume": 0.4,
+ "width": 1920
+}

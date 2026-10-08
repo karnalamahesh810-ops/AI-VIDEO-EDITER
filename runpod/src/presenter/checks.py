@@ -122,9 +122,11 @@ def _f(v: Any, default: float = 0.0) -> float:
 
 class Checker:
     def __init__(self, provider: Optional[Provider], budget: Budget, work: str,
-                 models: Optional[Sequence[str]] = None):
+                 models: Optional[Sequence[str]] = None, ledger: str = "presenter_check"):
         self.provider, self.budget, self.work = provider, budget, work
         self.models = list(models or [tiers.CHECK_MODEL] + tiers.CHECK_FALLBACK_MODELS)
+        # The ledger's name for these calls (vision.<ledger>.usd): AI fill counts its own (src/aifill.py).
+        self.ledger = ledger or "presenter_check"
         self.calls = 0
         self.unchecked = 0
 
@@ -149,8 +151,8 @@ class Checker:
             usd = self.budget.settle(ticket, res.cost, model=model, kind="check", label=label)
             self.calls += 1
             costs.record("vision.usd", usd)
-            costs.record("vision.presenter_check.usd", usd)
-            costs.record("vision.presenter_check.calls")
+            costs.record(f"vision.{self.ledger}.usd", usd)
+            costs.record(f"vision.{self.ledger}.calls")
             got = _parse(res.text)
             if got is not None:
                 got["_model"] = model
