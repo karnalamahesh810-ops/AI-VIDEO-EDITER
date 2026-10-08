@@ -950,6 +950,30 @@ class WorkerChunks(unittest.TestCase):
         self.assertFalse(self._run(image="png")[0]["ok"])               # a pod asking png, a worker id without it
 
 
+class SameMoveOnEveryMachine(unittest.TestCase):
+    """
+    A still's move (its corner, its direction) was seeded by the picture's link as served - a loopback
+    address with its own port on every render and machine - so two renders of the same frames differed
+    (14 dB apart, measured 2026-10-09) and the editor showed yet another move. It is seeded by the scene.
+    """
+
+    def _src(self, *parts):
+        with open(os.path.join(SRC, *parts), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_the_scene_seeds_its_stills_move(self):
+        clip = self._src("components", "SceneClip.tsx")
+        self.assertEqual(clip.count("seed={scene.id}"), 2)                  # the still and the living photo
+        self.assertIn("seed={`${scene.id}:split`}", clip)
+        still = self._src("transitions", "stillMotion.tsx")
+        self.assertIn("const key = seed || src;", still)
+        self.assertIn("stillTransform(motion, frame, durationInFrames, fps, key, subject)", still)
+        self.assertNotIn("hashStr(src)", still)
+        living = self._src("transitions", "livingPhoto.tsx")
+        self.assertIn("const key = seed || src;", living)
+        self.assertFalse(re.search(r"(stillTransform|layerMove|livingMotion)\([^;]*\bsrc\b", living))
+
+
 class AppSignatures(unittest.TestCase):
     """The editor repeats these (the app's src/lib/renderEstimate.ts asserts the same values)."""
 

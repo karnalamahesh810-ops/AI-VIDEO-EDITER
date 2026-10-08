@@ -274,16 +274,19 @@ export const LivingPicture: React.FC<{
   subject?: Box;
   /** Drawn blurred instead when even the flat picture cannot be drawn (the shot before it). */
   fallbackStill?: string | string[];
-}> = ({ src, living, motion, frame, durationInFrames, fps, width, height, filter, subject, fallbackStill }) => {
+  /** What the move is seeded by: the scene's id (StillPicture's seed), else the picture's link. */
+  seed?: string;
+}> = ({ src, living, motion, frame, durationInFrames, fps, width, height, filter, subject, fallbackStill, seed }) => {
+  const key = seed || src;
   const [failed, setFailed] = useState(false);
   const layersLoad = usePicturesLoad(living.layers.map((l) => l.url));
   if (failed || layersLoad === false) {
     return <StillPicture src={src} motion={motion} frame={frame} durationInFrames={durationInFrames} fps={fps}
-      width={width} filter={filter} subject={subject} fallbackStill={fallbackStill} />;
+      width={width} filter={filter} subject={subject} fallbackStill={fallbackStill} seed={seed} />;
   }
   if (layersLoad === null) return null;
-  const move = livingMotion(motion, src);
-  const outer = stillTransform(move, frame, durationInFrames, fps, src, subject);
+  const move = livingMotion(motion, key);
+  const outer = stillTransform(move, frame, durationInFrames, fps, key, subject);
   const frameAspect = width / Math.max(1, height);
   const [cl, ct, cw, ch] = coverRect(living.aspect || frameAspect, frameAspect);
   // The camera turns about the subject the move is aimed at, else the nearest layer's middle.
@@ -298,10 +301,10 @@ export const LivingPicture: React.FC<{
   for (let k = 0; k <= SAMPLES; k++) {
     const f = (k / SAMPLES) * (dur - 1);
     at.push(f);
-    const o = stillTransform(move, f, durationInFrames, fps, src, subject);
+    const o = stillTransform(move, f, durationInFrames, fps, key, subject);
     corners.push(visibleCorners(cssAffine(o.transform, width, height, o.transformOrigin), width, height));
   }
-  const moves = living.layers.map((l) => at.map((f) => layerMove(move, l.near, f, dur, fps, living.strength, src,
+  const moves = living.layers.map((l) => at.map((f) => layerMove(move, l.near, f, dur, fps, living.strength, key,
     subject)));
   const pad = overscan(moves, corners, pivot);
   const origin = `${(pivot[0] * 100).toFixed(3)}% ${(pivot[1] * 100).toFixed(3)}%`;
@@ -309,7 +312,7 @@ export const LivingPicture: React.FC<{
   return (
     <AbsoluteFill style={{ transform: outer.transform, transformOrigin: outer.transformOrigin, filter }}>
       {living.layers.map((layer, i) => {
-        const mv = layerMove(move, layer.near, frame, dur, fps, living.strength, src, subject);
+        const mv = layerMove(move, layer.near, frame, dur, fps, living.strength, key, subject);
         const transform = `translate(${(mv.x * 100).toFixed(4)}%, ${(mv.y * 100).toFixed(4)}%) `
           + `scale(${(pad * mv.s).toFixed(5)})`;
         if (!layer.box) {
