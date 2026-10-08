@@ -1647,7 +1647,12 @@ class Gate:
                 path = ((got.local if got is not None and got.local else "") or self.fetched.get(url, "")
                         or local_path(url))
                 if path and os.path.isfile(path):
-                    todo.append((i, "image", path, sharpness.motion_zoom(s.get("motion"))))
+                    # (A period photo of a person from before video existed is held to its own, looser limit:
+                    # src/personera.py, PERSON_ERA_MAX_MAGNIFICATION - the limit sourcing chose it under.)
+                    parts = sem.get("scoreParts") if isinstance(sem.get("scoreParts"), dict) else {}
+                    cap = float(getattr(config, "PERSON_ERA_MAX_MAGNIFICATION", 0.0) or 0.0) \
+                        if parts.get("personEra") else 0.0
+                    todo.append((i, "image", path, (sharpness.motion_zoom(s.get("motion")), cap or None)))
             elif m.get("type") == "video" and sharpness.clip_on():
                 if media._is_archive(f"{m.get('attribution') or ''} {sem.get('searchQuery') or ''}", source):
                     continue                # archive film only exists soft
@@ -1662,7 +1667,8 @@ class Gate:
         def measure(item):
             i, kind, src, zoom = item
             if kind == "image":
-                got = sharpness.picture_check(src, zoom=zoom)
+                zoom, cap = zoom
+                got = sharpness.picture_check(src, zoom=zoom, cap=cap)
                 return i, ({"kind": "image", "why": got["why"], "before": got["magnification"],
                             "detail": got["detail"], "zoom": zoom} if not got["ok"] else None)
             got = sharpness.clip_check(src, need=zoom)          # (for a clip: its floor, None = the modern one)

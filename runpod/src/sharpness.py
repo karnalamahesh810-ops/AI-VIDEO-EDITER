@@ -39,6 +39,7 @@ fades soften single frames; an upscaled upload is soft in all of them).
 """
 from __future__ import annotations
 
+import contextvars
 import math
 import os
 import subprocess
@@ -360,7 +361,16 @@ def picture_on() -> bool:
     return bool(getattr(config, "PICTURE_SHARPNESS_CHECK", True))
 
 
+# A looser limit while it is set (2026-10-09): media sets PERSON_ERA_MAX_MAGNIFICATION while a line about a person
+# from before video existed searches photos of them (src/personera.py) - an archive print is soft by nature: the
+# Obama biography's Punahou and Occidental photos measured 2.0-2.9x and were all thrown away at 1.86x.
+CAP: contextvars.ContextVar = contextvars.ContextVar("sharpness_cap", default=None)
+
+
 def limit() -> float:
+    cap = CAP.get()
+    if cap:
+        return float(cap)
     return float(getattr(config, "MAX_PICTURE_MAGNIFICATION", 1.45) or 0.0)
 
 
@@ -385,17 +395,18 @@ def min_size(zoom: Optional[float] = None) -> Tuple[int, int]:
     return int(math.ceil(OUT_W * z / lim)), int(math.ceil(OUT_H * z / lim))
 
 
-def picture_check(path: str, zoom: Optional[float] = None) -> dict:
+def picture_check(path: str, zoom: Optional[float] = None, cap: Optional[float] = None) -> dict:
     """
     {"ok", "magnification", "detail": [w_eff, h_eff], "size": [w, h], "why"}
     for a picture shown full screen, with the move's zoom (default: the one
     the planner will most likely give it). ok is True when the check is off,
     when the file cannot be measured (a check never drops what it cannot
     read), or when the screen enlarges its real detail no more than
-    MAX_PICTURE_MAGNIFICATION.
+    MAX_PICTURE_MAGNIFICATION (`cap`: another limit for this picture - a period photo of a person, CAP).
     """
     out = {"ok": True, "magnification": None, "detail": None, "size": None, "why": ""}
-    if not picture_on() or not path or limit() <= 0:
+    lim = float(cap) if cap else limit()
+    if not picture_on() or not path or lim <= 0:
         return out
     w_eff, h_eff = real_detail(path)
     if not w_eff:
@@ -409,11 +420,11 @@ def picture_check(path: str, zoom: Optional[float] = None) -> dict:
     z = planned_zoom() if zoom is None else float(zoom)
     mag = screen_magnification(w_eff, h_eff, zoom=z)
     out.update(magnification=round(mag, 2), detail=[w_eff, h_eff], size=size)
-    if mag > limit() + 1e-9:
+    if mag > lim + 1e-9:
         out["ok"] = False
         out["why"] = (f"a blurry picture: real detail about {w_eff}x{h_eff}"
                       + (f" of {size[0]}x{size[1]}" if size else "")
-                      + f", blown up {mag:.1f}x on screen (limit {limit():.2f}x)")
+                      + f", blown up {mag:.1f}x on screen (limit {lim:.2f}x)")
     _note("pictures", path, not out["ok"])
     return out
 
