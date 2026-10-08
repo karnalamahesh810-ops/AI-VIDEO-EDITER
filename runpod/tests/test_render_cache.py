@@ -320,7 +320,8 @@ class PictureHash(unittest.TestCase):
         self.assertEqual(_changed(base, _hashes(d, ranges)), list(range(len(ranges))))
 
     def test_the_renderer_and_every_encoder_setting_count(self):
-        for change in ({"renderer": "fp2"}, {"crf": 20}, {"x264": "faster"}, {"jpeg": 92}, {"gl": "angle"}):
+        for change in ({"renderer": "fp2"}, {"crf": 20}, {"x264": "faster"}, {"jpeg": 92}, {"gl": "angle"},
+                       {"image": "png"}):
             self.assertEqual(_changed(self.base, _hashes(self.doc, self.ranges, {**ENC, **change})),
                              list(range(len(self.ranges))), change)
         with mock.patch.object(render, "renderer_fingerprint", return_value="fpX"), \
@@ -708,7 +709,10 @@ class Reuse(unittest.TestCase):
         self.assertEqual(first["finalize"], [b"RIFFS"])            # the sound slices, joined
         m = first["manifest"]
         self.assertEqual([c["source"] for c in m["chunks"]], ["pod", "worker", "worker", "worker"])
-        self.assertEqual(len(m["sig"]["scenes"]), 16)
+        self.assertEqual(m["intro"], 0)
+        shown = rendercache.manifest_for_app(m, doc)
+        self.assertEqual(len(shown["sig"]["scenes"]), 16)
+        self.assertEqual(shown["globals"]["fps"], 30)
         self.assertEqual(first["costs"]["render"]["reused"], 0)
 
     def test_one_swapped_clip_draws_one_chunk_here_and_reuses_the_rest_and_the_mix(self):
@@ -940,6 +944,34 @@ class WorkerChunks(unittest.TestCase):
         # A worker that does not know the setting compares the plain fingerprint: it refuses.
         self.assertNotEqual(fanout.renderer_id_for("fp1", 92), "fp1")
         self.assertEqual(fanout.renderer_id_for("fp1", 0), "fp1")
+        out, seen = self._run(image="png", renderer=fanout.renderer_id_for("fp1", 0, "png"))
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(config.RENDER_IMAGE_FORMAT, "jpeg")
+        self.assertFalse(self._run(image="png")[0]["ok"])               # a pod asking png, a worker id without it
+
+
+class AppSignatures(unittest.TestCase):
+    """The editor repeats these (the app's src/lib/renderEstimate.ts asserts the same values)."""
+
+    def test_the_values_the_app_repeats(self):
+        self.assertEqual([rendercache._fnv(s) for s in ("", "a", "foobar", "Ünïcode é")],
+                         ["811c9dc5", "e40c292c", "bf9cf968", "2fb9ddcd"])
+        scene = {"startFrame": 120, "durationInFrames": 150,
+                 "media": {"type": "video", "url": "https://pub.example/m/a.mp4?token=x"}, "transition": "none",
+                 "motion": "zoom-in", "effect": "ken-burns", "treatment": "none", "frame": "full",
+                 "text": "Lake Mead is falling."}
+        self.assertEqual(rendercache.scene_sig(scene), "b7f14d9c")
+        overlay = {"startFrame": 300, "durationInFrames": 90, "template": "KT_KEYWORD", "type": "motion",
+                   "text": "DROUGHT", "value": 42}
+        self.assertEqual(rendercache.overlay_sig(overlay), "a2becc3f")
+
+    def test_the_manifest_carries_the_timeline_as_sent(self):
+        sent = _doc([150] * 4)
+        sent["grade"] = {"preset": "documentary", "medians": {"l": 0.4}}
+        out = rendercache.manifest_for_app({"version": 2, "chunks": []}, sent)
+        self.assertEqual(len(out["sig"]["scenes"]), 4)
+        self.assertEqual(out["globals"]["grade"], {"preset": "documentary"})
+        self.assertIsNone(rendercache.manifest_for_app(None, sent))
 
 
 class Wiring(unittest.TestCase):

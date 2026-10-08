@@ -226,8 +226,16 @@ def x264_preset() -> str:
     return p if p in _X264_PRESETS else ""
 
 
+def image_format() -> str:
+    """config.RENDER_IMAGE_FORMAT: "png" (lossless frames) or "jpeg" (Remotion's default, anything else)."""
+    return "png" if str(getattr(config, "RENDER_IMAGE_FORMAT", "") or "").strip().lower() == "png" else "jpeg"
+
+
 def jpeg_quality() -> int:
-    """config.RENDER_JPEG_QUALITY (1-100) for the frames Chrome hands to the encoder, 0 = Remotion's (80)."""
+    """config.RENDER_JPEG_QUALITY (1-100) for the frames Chrome hands to the encoder, 0 = Remotion's (80).
+    0 too when the frames are PNG (no JPEG quality applies)."""
+    if image_format() != "jpeg":
+        return 0
     try:
         q = int(getattr(config, "RENDER_JPEG_QUALITY", 0) or 0)
     except (TypeError, ValueError):
@@ -253,8 +261,8 @@ def encoder_settings(composition: str = "Main") -> dict:
     except OSError:
         fp = ""
     return {"renderer": fp, "composition": composition or "Main", "codec": "h264",
-            "crf": int(config.RENDER_CRF or 0), "x264": x264_preset() or "medium", "jpeg": jpeg_quality(),
-            "gl": gl_backend(), "pix": "yuv420p"}
+            "crf": int(config.RENDER_CRF or 0), "x264": x264_preset() or "medium", "image": image_format(),
+            "jpeg": jpeg_quality(), "gl": gl_backend(), "pix": "yuv420p"}
 
 
 _FINGERPRINTS: dict = {}
@@ -494,8 +502,10 @@ def render(props: dict, out_path: str, composition: str = "Main",
         # medium, took ~16% of the machine for no visible gain (see _X264_PRESETS).
         if picture and x264_preset():
             cmd.append(f"--x264-preset={x264_preset()}")
-        # The JPEG every frame passes through on its way from Chrome to x264.
-        if picture and jpeg_quality():
+        # The picture every frame passes through on its way from Chrome to x264: PNG (lossless) or a JPEG.
+        if picture and image_format() == "png":
+            cmd.append("--image-format=png")
+        elif picture and jpeg_quality():
             cmd.append(f"--jpeg-quality={jpeg_quality()}")
         if audio_to and picture and not muted:
             audio_to = os.path.abspath(audio_to)

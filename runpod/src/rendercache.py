@@ -740,3 +740,27 @@ def app_signatures(doc: dict) -> dict:
     return {"scenes": [scene_sig(s) for s in doc.get("scenes") or [] if isinstance(s, dict)],
             "overlays": [[int(o.get("startFrame") or 0), int(o.get("durationInFrames") or 0), overlay_sig(o)]
                          for o in doc.get("overlays") or [] if isinstance(o, dict)]}
+
+
+# The settings every frame depends on: when one changed since the last render, the editor estimates a full one.
+APP_GLOBALS = ("fps", "width", "height", "grade", "captions", "look", "overlaysEnabled")
+
+
+def manifest_for_app(manifest: Optional[dict], sent: Optional[dict]) -> Optional[dict]:
+    """
+    A render's manifest with what the editor compares a later timeline against: the signatures and the
+    frame-wide settings of the timeline AS THE APP SENT IT (the render's own copy has local stills and
+    repairs the editor never sees). The grade's frozen median is the render's, never the editor's.
+    """
+    if not isinstance(manifest, dict) or not isinstance(sent, dict):
+        return manifest
+    out = dict(manifest)
+    try:
+        out["sig"] = app_signatures(sent)
+        glob = {k: sent.get(k) for k in APP_GLOBALS if k in sent}
+        if isinstance(glob.get("grade"), dict):
+            glob["grade"] = {k: v for k, v in glob["grade"].items() if k != "medians"}
+        out["globals"] = glob
+    except Exception:  # noqa: BLE001 - the estimate is only a hint
+        pass
+    return out

@@ -1592,12 +1592,14 @@ def _prefix_ok(prefix: str) -> bool:
     return bool(root) and re.fullmatch(re.escape(root) + r"/[A-Za-z0-9_-]{1,120}/", prefix or "") is not None
 
 
-def renderer_id_for(fingerprint: str, jpeg: int = 0) -> str:
+def renderer_id_for(fingerprint: str, jpeg: int = 0, image: str = "jpeg") -> str:
     """
-    What a chunk's worker must match to draw it: the renderer's fingerprint, and the frames' JPEG quality
-    when it is not Remotion's own (a worker of an older image would ignore the setting - it refuses this
-    id instead, and the pod draws the chunk).
+    What a chunk's worker must match to draw it: the renderer's fingerprint, and the frames' format and
+    JPEG quality when they are not Remotion's own (a worker of an older image would ignore the settings - it
+    refuses this id instead, and the pod draws the chunk).
     """
+    if image == "png":
+        return f"{fingerprint}+png"
     return f"{fingerprint}+j{int(jpeg)}" if jpeg else fingerprint
 
 
@@ -1621,7 +1623,8 @@ def run_pod_chunk(inp: dict, work: str, progress: Callable = None) -> dict:
         jpeg = int(inp.get("jpeg") or 0)
     except (TypeError, ValueError):
         jpeg = 0
-    mine = renderer_id_for(renderer.renderer_fingerprint(), jpeg)
+    image = "png" if str(inp.get("image") or "").lower() == "png" else "jpeg"
+    mine = renderer_id_for(renderer.renderer_fingerprint(), jpeg, image)
     if inp.get("renderer") and inp["renderer"] != mine:
         return {"ok": False, "chunk": i, "error": f"this worker's renderer {mine} is not the pod's {inp['renderer']}"}
     if not r2.enabled():
@@ -1642,7 +1645,7 @@ def run_pod_chunk(inp: dict, work: str, progress: Callable = None) -> dict:
     # without re-encoding.
     saved = {}
     for name, value in (("RENDER_CRF", inp.get("crf")), ("RENDER_X264_PRESET", inp.get("x264")),
-                        ("RENDER_JPEG_QUALITY", jpeg)):
+                        ("RENDER_JPEG_QUALITY", jpeg), ("RENDER_IMAGE_FORMAT", image)):
         if value is not None:
             saved[name] = getattr(config, name)
             setattr(config, name, type(saved[name])(value))
@@ -1819,6 +1822,8 @@ class _PodRender:
         # The worker jobs already put into this job's cost ledger (_bill), and their seconds.
         self.billed: set = set()
         self.worker_seconds = 0.0
+        # Each drawn chunk's time: [index, where, frames, seconds drawing, seconds in all] (the stats).
+        self.times: List[list] = []
 
     # ---- worker jobs
     def _bill(self, c: _Chunk, st: Optional[dict] = None, out: Any = None) -> None:
@@ -1853,9 +1858,11 @@ class _PodRender:
         body = {"input": {"action": "render_chunk", "upload": "r2", "parent_job_id": self.job_id,
                           "chunk": c.i, "frames": [c.a, c.b], "timeline_key": self.tl_key,
                           "timeline_url": self.tl_url, "prefix": self.prefix,
-                          "renderer": renderer_id_for(self.fingerprint, renderer.jpeg_quality()),
+                          "renderer": renderer_id_for(self.fingerprint, renderer.jpeg_quality(),
+                                                      renderer.image_format()),
                           "crf": config.RENDER_CRF, "x264": renderer.x264_preset(), "composition": "Main",
-                          "jpeg": renderer.jpeg_quality(), "deadline_at": self.deadline}}
+                          "jpeg": renderer.jpeg_quality(), "image": renderer.image_format(),
+                          "deadline_at": self.deadline}}
         if self.picture_only:
             body["input"]["picture_only"] = True
         if config.POD_RENDER_JOB_POLICY:
@@ -1949,6 +1956,8 @@ class _PodRender:
                     self._bill(c, st, out)          # a chunk the worker could not draw was billed too
                     if isinstance(out, dict) and out.get("ok") and out.get("video_key") \
                             and (out.get("audio_key") or self.picture_only):
+                        if len(self.times) < 60:
+                            self.times.append([c.i, "worker", c.frames, out.get("drawSeconds"), out.get("seconds")])
                         c.fetching = True
                         c.keys = [str(k) for k in (out.get("video_key"), out.get("audio_key")) if k]
                         fetch_pool.submit(self._collect, c, out)
@@ -2071,6 +2080,9 @@ class _PodRender:
                 self._gone(c, gone, err)
             elif ok:
                 self.local_fps = c.frames / max(1.0, time.time() - started)
+                if len(self.times) < 60:
+                    took = round(time.time() - started, 1)
+                    self.times.append([c.i, "pod", c.frames, took, took])
                 if not c.done:
                     c.done, c.source, c.video, c.audio = True, "pod", c.pod_video, c.pod_audio
                     if c.job:
@@ -2189,7 +2201,7 @@ class _PodRender:
                 "fromCache": sum(1 for c in self.chunks if c.source == "cache"), **self.counts,
                 "podFps": round(self.local_fps, 1), "seconds": round(time.time() - self.started, 1),
                 # The helper workers' time, as billed into the job's cost ledger (_bill).
-                "workerSeconds": round(self.worker_seconds, 1),
+                "workerSeconds": round(self.worker_seconds, 1), "chunkTimes": list(self.times),
                 "errors": list(self.errors[:6])}
 
     # ---- joining
@@ -2581,33 +2593,21 @@ def _manifest(doc: dict, ranges: List[tuple], hashes: List[str], runner: Optiona
               mix: Optional[_Mix], stats: dict, cache) -> dict:
     """
     What this render drew, for the app (video_projects.render_manifest): each chunk's frames, hash and
-    where it came from, the mix, what the cache saved, and per-scene / per-overlay signatures
-    (rendercache.app_signatures) the editor compares with the timeline it has now to estimate a re-render.
+    where it came from, the mix and what the cache saved. (The handler adds the per-scene and per-overlay
+    signatures of the timeline as the app sent it: rendercache.manifest_for_app.)
     """
-    from . import rendercache
     fps = max(1, int(doc.get("fps") or 30))
     chunks = [{"i": i, "frames": [int(a), int(b)], "hash": h,
                "source": (runner.chunks[i].source if runner is not None else "")}
               for i, ((a, b), h) in enumerate(zip(ranges, hashes))]
     c = stats.get("cache") or {}
-    out = {"version": 2, "fps": fps, "durationInFrames": brandkit.total_frames(doc),
-           "width": doc.get("width"), "height": doc.get("height"),
-           "chunkSeconds": float(config.POD_RENDER_CHUNK_SECONDS), "chunks": chunks,
-           "reused": int(stats.get("fromCache", 0) or 0), "drawn": len(ranges) - int(stats.get("fromCache", 0) or 0),
-           "ok": bool(stats.get("ok")), "cache": cache is not None, "scope": getattr(cache, "scope", ""),
-           "mixReused": bool(mix is not None and mix.reused), "savedUsd": c.get("savedUsd", 0.0),
-           "at": int(time.time())}
-    try:
-        out["sig"] = rendercache.app_signatures(doc)
-        # The settings every frame depends on, as they were: when one changed, the editor shows a full render.
-        glob = {k: doc.get(k) for k in ("fps", "width", "height", "grade", "captions", "look", "overlaysEnabled")
-                if k in doc}
-        if isinstance(glob.get("grade"), dict):         # (the median the render froze is not the editor's)
-            glob["grade"] = {k: v for k, v in glob["grade"].items() if k != "medians"}
-        out["globals"] = glob
-    except Exception:  # noqa: BLE001 - the estimate is only a hint
-        pass
-    return out
+    return {"version": 2, "fps": fps, "durationInFrames": brandkit.total_frames(doc),
+            "intro": brandkit.layout(doc)[0], "width": doc.get("width"), "height": doc.get("height"),
+            "chunkSeconds": float(config.POD_RENDER_CHUNK_SECONDS), "chunks": chunks,
+            "reused": int(stats.get("fromCache", 0) or 0), "drawn": len(ranges) - int(stats.get("fromCache", 0) or 0),
+            "ok": bool(stats.get("ok")), "cache": cache is not None, "scope": getattr(cache, "scope", ""),
+            "mixReused": bool(mix is not None and mix.reused), "savedUsd": c.get("savedUsd", 0.0),
+            "at": int(time.time())}
 
 
 def _spread_failed_text(runner: "_PodRender") -> str:

@@ -3489,6 +3489,7 @@ def handler(job):
                                     "chunkSeconds": config.POD_RENDER_CHUNK_SECONDS,
                                     "localChunks": config.POD_RENDER_LOCAL_CHUNKS,
                                     "keepDays": config.RENDER_CACHE_KEEP_DAYS,
+                                    "imageFormat": renderer.image_format(),
                                     "jpegQuality": renderer.jpeg_quality() or 80},
                     "machine": _machine(),
                     "potProvider": media.pot_provider_alive(),
@@ -3638,7 +3639,9 @@ def handler(job):
                 ledger.save(ledger_job, project_id, doc=doc)    # the edited, rendered video's own shots
             costs.measure_end()
             return {"ok": True, "action": "render", **out,
-                    "render_manifest": media.LAST_STATS.get("render_manifest"),
+                    # (With what the editor compares its next timeline against: the one it sent.)
+                    "render_manifest": rendercache.manifest_for_app(media.LAST_STATS.get("render_manifest"),
+                                                                    inp.get("timeline")),
                     "costs": costs.summary(time.time() - started),
                     "events": events.summary(),
                     "filledScenes": sum(1 for r in (out.get("quality") or {}).get("repairs") or []
@@ -3718,6 +3721,8 @@ def handler(job):
                 ledger.save(ledger_job, project_id)     # later videos never show these moments again
             summary = _finish_costs(doc, started)
             return {"ok": True, "action": "build", "timeline": doc, **out, "costs": summary,
+                    # The render's chunks (src/rendercache.py), against the timeline the editor will open.
+                    "render_manifest": rendercache.manifest_for_app(media.LAST_STATS.get("render_manifest"), doc),
                     **_narration_fields(doc),
                     "events": doc["meta"]["events"],
                     **({"frames": list(LAST_FRAMES)} if inp.get("return_frames") else {}),

@@ -1400,7 +1400,10 @@ RENDER_CACHE_KEEP_DAYS = float(os.getenv("RENDER_CACHE_KEEP_DAYS", "14"))
 # with nothing cached still renders whole on its machine; on, it renders chunk by
 # chunk there and keeps them (benchmarks; a machine without helpers).
 RENDER_LOCAL_CHUNKED = _flag("RENDER_LOCAL_CHUNKED", False)
-# JPEG quality of the frames Chrome hands to x264 (1-100; 0 = Remotion's 80).
+# The frames Chrome hands to x264: "jpeg" (Remotion's default) or "png" (lossless: measured on a real range
+# 2026-10-09, JPEG 80 frames through x264 CRF 18 lost 1.6 dB PSNR against the same frames as PNG, and the
+# JPEG's blocking cost x264 14% more bits), and the JPEG's quality (1-100; 0 = Remotion's 80).
+RENDER_IMAGE_FORMAT = os.getenv("RENDER_IMAGE_FORMAT", "jpeg").strip().lower()
 RENDER_JPEG_QUALITY = int(os.getenv("RENDER_JPEG_QUALITY", "0"))
 
 # --- whisper -----------------------------------------------------------------

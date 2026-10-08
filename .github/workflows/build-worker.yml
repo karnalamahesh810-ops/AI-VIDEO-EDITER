@@ -6,7 +6,8 @@ name: Build video worker image
 
 on:
   push:
-    branches: [thumbgenius-video-worker]
+    # feature/render-*: a test image of the branch (its commit sha only, never :latest) for a test pod.
+    branches: [thumbgenius-video-worker, "feature/render-*"]
     paths:
       - "runpod/**"
       - ".github/workflows/build-worker.yml"
@@ -41,15 +42,26 @@ jobs:
         id: img
         run: echo "name=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
+      - name: Tags
+        id: tags
+        run: |
+          {
+            echo "list<<EOF"
+            echo "${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:${{ github.sha }}"
+            # Only the worker branch moves :latest; a feature branch's test image is known by its sha alone.
+            if [ "${{ github.ref }}" = "refs/heads/thumbgenius-video-worker" ]; then
+              echo "${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: ./runpod
           file: ./runpod/Dockerfile
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:latest
-            ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.list }}
           # Layer cache makes repeat builds minutes rather than tens of minutes;
           # the Remotion + Chrome layers are heavy.
           cache-from: type=gha
