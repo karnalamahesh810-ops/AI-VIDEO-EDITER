@@ -137,7 +137,8 @@ export const grow = (m: Uint8Array, w: number, h: number, r: number) => {
 
 /** The key: every pixel of a fill slab or strip, grown past its edge (1 = goes). */
 export const noDataKey = (px: Uint8ClampedArray | Uint8Array, w: number, h: number, white: boolean) => {
-  let key = runs(fillMask(px, w, h, USGS_FILLS, FILL_TOLERANCE), w, h, 2 * FILL_OPEN + 1);
+  // (typed plainly: the editor's newer TypeScript keeps Uint8Array<ArrayBuffer> and Uint8Array<ArrayBufferLike> apart)
+  let key: Uint8Array = runs(fillMask(px, w, h, USGS_FILLS, FILL_TOLERANCE), w, h, 2 * FILL_OPEN + 1);
   if (white) {
     const wk = runs(fillMask(px, w, h, [HAWAII_WHITE], WHITE_TOLERANCE), w, h, 2 * WHITE_OPEN + 1);
     for (let i = 0; i < key.length; i++) key[i] |= wk[i];
