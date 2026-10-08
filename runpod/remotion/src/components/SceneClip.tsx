@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  AbsoluteFill, OffthreadVideo, Video,
+  AbsoluteFill, OffthreadVideo, Sequence, Video,
   useCurrentFrame, useVideoConfig,
 } from "remotion";
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
@@ -12,16 +12,42 @@ import { LivingPicture, StillPicture, TransitionFrame, resolveLiving } from "../
 import { reframeStyle, resolveAim, resolveMove } from "./reframe";
 import { BlurredHold, SafeImg } from "./motion/safePicture";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
+import { clipPlan, type ClipSegment } from "../edit/clipTime";
 
 /**
  * A scene's clip: Remotion's OffthreadVideo (frame-exact, decoded by Remotion's own compositor), or with
  * `html5` the browser's own video element - for a machine whose security blocks Remotion's unsigned compositor
  * (Windows Smart App Control on the owner's laptop, 2026-10-07). Sound always off: the narration is the sound.
  */
-const ClipVideo: React.FC<{ src: string; style?: React.CSSProperties; playbackRate?: number; html5?: boolean }> = (
-  { src, style, playbackRate, html5 }) => (html5
-  ? <Video src={src} style={style} muted playbackRate={playbackRate} />
-  : <OffthreadVideo src={src} style={style} muted playbackRate={playbackRate} />);
+const ClipVideo: React.FC<{ src: string; style?: React.CSSProperties; playbackRate?: number; html5?: boolean;
+  trimBefore?: number }> = ({ src, style, playbackRate, html5, trimBefore }) => (html5
+  ? <Video src={src} style={style} muted playbackRate={playbackRate} trimBefore={trimBefore} />
+  : <OffthreadVideo src={src} style={style} muted playbackRate={playbackRate} trimBefore={trimBefore} />);
+
+/**
+ * A clip played by its plan (../edit/clipTime.ts): one stretch - the clip from its in-point at one speed,
+ * exactly the element an unedited clip always had - or a speed ramp's stretches, each its own Sequence
+ * (mounted a second early in the editor's Player so its picture is there on its first frame).
+ */
+const PlannedVideo: React.FC<{ src: string; style?: React.CSSProperties; plan: ClipSegment[]; html5?: boolean;
+  wrap?: React.CSSProperties }> = ({ src, style, plan, html5, wrap }) => {
+  const { fps } = useVideoConfig();
+  if (plan.length <= 1) {
+    const s = plan[0];
+    return <ClipVideo src={src} style={style} playbackRate={s ? s.rate : 1} html5={html5}
+      trimBefore={s && s.trimBefore > 0 ? s.trimBefore : undefined} />;
+  }
+  return (
+    <>
+      {plan.map((s, i) => (
+        <Sequence key={i} from={s.from} durationInFrames={s.frames} premountFor={Math.round(fps)} style={wrap}>
+          <ClipVideo src={src} style={style} playbackRate={s.rate} html5={html5}
+            trimBefore={s.trimBefore > 0 ? s.trimBefore : undefined} />
+        </Sequence>
+      ))}
+    </>
+  );
+};
 
 /**
  * One visual for one spoken clause.
@@ -101,9 +127,10 @@ export const SceneClip: React.FC<{
   // just enough to fill the scene, never below 0.6x.
   // (useVideoConfig was called again here, after the early returns above - a
   // conditional hook. The values from the top of the component are the same.)
-  const sceneSeconds = durationInFrames / fps;
-  const clip = media.type === "video" ? media.clipSeconds ?? 0 : 0;
-  const rate = clip > 0 && clip < sceneSeconds ? Math.max(0.6, clip / sceneSeconds) : 1;
+  // An unedited clip plays as it always did; the editor's in-point, speed or speed ramp is its plan
+  // (../edit/clipTime.ts, src/cliptime.py on the worker): slip, split and slow motion.
+  const plan = clipPlan({ clipSeconds: media.type === "video" ? media.clipSeconds ?? 0 : 0, trimStart: media.trimStart,
+    speed: scene.speed, speedRamp: scene.speedRamp }, durationInFrames, fps);
   const filters = [grade?.filter, cssFilterFor(treatment), effectFilter(effect, frame), entrance.filter]
     .filter((f) => f && f !== "none")
     .join(" ");
@@ -126,7 +153,7 @@ export const SceneClip: React.FC<{
         <AbsoluteFill style={{ backgroundColor: "#000", flexDirection: "row" }}>
           {grade?.defs}
           <div style={half}>
-            <ClipVideo src={media.url} playbackRate={rate} html5={media.html5}
+            <PlannedVideo src={media.url} plan={plan} html5={media.html5}
               style={{ ...fill, objectPosition: `${split.focusX ?? 50}% 50%` }} />
           </div>
           <div style={half}>
@@ -157,7 +184,7 @@ export const SceneClip: React.FC<{
           <PlayerWindow tone={tone} seed={scene.startFrame % 7}
             title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
             {media.type === "video" ? (
-              <ClipVideo src={media.url} style={media100} playbackRate={rate} html5={media.html5} />
+              <PlannedVideo src={media.url} style={media100} plan={plan} html5={media.html5} />
             ) : (
               <SafeImg src={media.url} style={media100} fallback={hold} />
             )}
@@ -209,7 +236,8 @@ export const SceneClip: React.FC<{
             }}
           >
             {media.type === "video" ? (
-              <ClipVideo src={media.url} style={inset} playbackRate={rate} html5={media.html5} />
+              <PlannedVideo src={media.url} style={inset} plan={plan} html5={media.html5}
+                wrap={{ justifyContent: "center", alignItems: "center" }} />
             ) : (
               <SafeImg src={media.url} style={inset} fallback={hold} />
             )}
@@ -245,10 +273,10 @@ export const SceneClip: React.FC<{
           {media.type === "video" ? (
             moved ? (
               <AbsoluteFill style={moved}>
-                <ClipVideo src={media.url} style={fill} playbackRate={rate} html5={media.html5} />
+                <PlannedVideo src={media.url} style={fill} plan={plan} html5={media.html5} />
               </AbsoluteFill>
             ) : (
-              <ClipVideo src={media.url} style={fill} playbackRate={rate} html5={media.html5} />
+              <PlannedVideo src={media.url} style={fill} plan={plan} html5={media.html5} />
             )
           ) : moved ? (
             // A still the editor framed by hand: the boxes replace its motion.
