@@ -2012,7 +2012,7 @@ SMART_EDITOR_MAX_USD = float(os.getenv("SMART_EDITOR_MAX_USD", "0.20"))
 # Beats per director call (a call designs ~3-4 minutes of narration; calls run in parallel).
 SMART_EDITOR_CHUNK = int(os.getenv("SMART_EDITOR_CHUNK", "40"))
 # Vision marks: at most one per this many seconds of narration (each is one small vision call, ~$0.001).
-SMART_EDITOR_MARK_EVERY = float(os.getenv("SMART_EDITOR_MARK_EVERY", "20"))
+SMART_EDITOR_MARK_EVERY = float(os.getenv("SMART_EDITOR_MARK_EVERY", "30"))
 # The critic: render stills of up to N graphics, a vision model scores them, the weak ones are revised.
 SMART_EDITOR_CRITIC = _flag("SMART_EDITOR_CRITIC", True)
 SMART_EDITOR_CRITIC_MAX = int(os.getenv("SMART_EDITOR_CRITIC_MAX", "8"))
