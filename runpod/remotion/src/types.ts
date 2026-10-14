@@ -328,6 +328,19 @@ export interface MapLocation {
 }
 
 /**
+ * A country or state / province a maps-v2 look highlights (components/maps2): `id` is the country's ISO A3
+ * ("TWN") or the region's ISO 3166-2 ("US-TX"), from the planner's name lookup (src/mapsv2.py, Natural Earth
+ * names); `label` is what the narration calls it, `value` a figure said for it, `at` the second (from the look's
+ * start) its name is said.
+ */
+export interface MapArea {
+  id?: string;
+  label?: string;
+  value?: number;
+  at?: number;
+}
+
+/**
  * The geometry of an auto map (src/automaps.py): a river or canal as lines, a lake or
  * reservoir as outlines, the dam as a pin - all in lon/lat, from the bundled geodata.
  */
@@ -414,6 +427,12 @@ export interface Overlay {
   total?: number;
   items?: OverlayItem[];
   locations?: MapLocation[];
+  /** Maps v2: the countries / states a look highlights (MapArea). */
+  areas?: MapArea[];
+  /** Maps v2: the brand kit id the map draws with (royal, noir, bulletin, atlas - components/maps2/kit.ts). */
+  kit?: string;
+  /** Maps v2 flows: "out" (from the first place to the others, default) or "in" (the others into the first). */
+  direction?: string;
   /** Only used by "split": the two visuals to show, top then bottom. */
   media?: SceneMedia[];
   /**

@@ -149,7 +149,8 @@ class NeverEndEarly(unittest.TestCase):
             self.assertLessEqual(o["startFrame"] + o["durationInFrames"], doc["durationInFrames"])
             self.assertNotIn(o["template"], dl.RETIRED_IDS)
             self.assertFalse(any(k.startswith("_") for k in o))
-        m = next(o for o in doc["overlays"] if o["template"] == "MAP_DISTANCE_V1")
+        # (the map: the planner's, or the maps-v2 look its line upgraded it to)
+        m = next(o for o in doc["overlays"] if o["template"] == "MAP_DISTANCE_V1" or o["template"].startswith("M2_"))
         self.assertGreaterEqual(m["durationInFrames"] / FPS, 6.4)
 
     def test_a_look_is_delayed_or_left_out_never_cut(self):

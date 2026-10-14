@@ -40,7 +40,7 @@ import re
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from . import config, datalooks, geocode, lookpack3, lookpack4, lookplace, overlayimages, r2, recut
+from . import config, datalooks, geocode, lookpack3, lookpack4, lookplace, mapsv2, overlayimages, r2, recut
 
 
 class RelookError(RuntimeError):
@@ -54,7 +54,7 @@ MOVED_KM = 50.0             # a place that moved this far was wrong before
 def _is_map(ov: dict) -> bool:
     return isinstance(ov.get("locations"), list) and bool(ov.get("locations")) and (
         ov.get("type") == "map" or str(ov.get("template") or "").startswith("MAP_")
-        or str(ov.get("template") or "") in ("LIB_PR_MAP_PATH",) + lookpack3.MAP_IDS)
+        or str(ov.get("template") or "") in ("LIB_PR_MAP_PATH",) + lookpack3.MAP_IDS + mapsv2.IDS)
 
 
 def _line_at(words: List[dict], t0: float, t1: float) -> str:

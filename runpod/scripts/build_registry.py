@@ -50,6 +50,11 @@ P = {
     "suffix": {"type": "string", "label": "Unit", "max": 12},
     "items": {"type": "list", "label": "Items", "item": {"label": "string", "value": "number"}},
     "locations": {"type": "places", "label": "Places"},
+    # Maps v2 (LibMaps2): the countries / states a map highlights (id: ISO A3 or ISO 3166-2, else the name), the
+    # brand kit it draws with, and which way its flows run.
+    "areas": {"type": "list", "label": "Areas", "item": {"label": "string", "value": "number"}},
+    "kit": {"type": "enum", "label": "Brand kit", "options": ["auto", "royal", "noir", "bulletin", "atlas"], "default": "auto"},
+    "direction": {"type": "enum", "label": "Flow direction", "options": ["out", "in"], "default": "out"},
     "highlight": {"type": "string", "label": "Highlight words", "max": 200},
     "body": {"type": "string", "label": "Body text", "max": 600},
     "fontScale": {"type": "number", "label": "Text size", "min": 0.6, "max": 1.8, "default": 1.0},
