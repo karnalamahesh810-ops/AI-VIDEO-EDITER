@@ -9,6 +9,9 @@ import { MotionWrap } from "./components/MotionWrap";
 import { motionClass } from "./components/motion/lookClass";
 import { StageFx, stageWindows } from "./components/motion/stage";
 import { SmartSpec } from "./components/smart/SmartSpec";
+import { Windowed, type WindowItem } from "./components/windowed";
+import { LIBRARY } from "./components/lib";
+import { ClipFx } from "./edit/ClipFx";
 import { CameraFx, cameraWindows } from "./components/smart/camera";
 import { sceneAvoid, sceneBusy, sceneSubject } from "./components/motion/avoid";
 import { PictureGuard } from "./components/motion/pictureGuard";
@@ -26,6 +29,7 @@ import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve, type Amb
 import { BrandVideo, EndCard, Watermark } from "./components/brand/BrandLayers";
 import { brandFrames, brandOf } from "./components/brand/brandLayout";
 import { musicPasses, musicVolume as makeMusicVolume, trackSeconds } from "./components/musicMix";
+import { keepRanges, narrationPieces } from "./edit/narration";
 
 // The music beds were replaced by the owner's own tracks (2026-10-01); a
 // document planned before names the old bed, which no longer ships (its 404
@@ -153,6 +157,16 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
   // moment. It carries its own entrance, keys and exit, so no MotionWrap; a bad spec draws nothing.
   if (raw && raw.type === "motion" && raw.variant === "smart-spec") {
     return withSound(<SmartSpec overlay={raw} />, sound);
+  }
+  // Editor v2's motion library (components/smart/library.ts): a recipe places, scales, enters and leaves on its
+  // own (position, scale, speed are its params), so no MotionWrap - it would move and fade it a second time.
+  if (raw && raw.type === "motion" && /^ml-/.test(raw.variant || "")) {
+    const ovL = resolveOverlay(raw);
+    const Look = LIBRARY[ovL.variant || ""];
+    if (!Look) return null;
+    const look = <Look overlay={ovL} accent={accentFor(ovL, accent, accent2)} />;
+    const op = typeof ovL.opacity === "number" && ovL.opacity < 1 ? Math.max(0.2, ovL.opacity) : 1;
+    return withSound(op < 1 ? <AbsoluteFill style={{ opacity: op }}>{look}</AbsoluteFill> : look, sound);
   }
   let ov = resolveOverlay(raw);
   // An image look's pictures, every slot a real picture (lookPictures): the
@@ -451,7 +465,12 @@ const Body: React.FC<TimelineProps> = (props) => {
   // The smart graphics' camera moves on the footage (components/smart/camera.tsx); none = untouched.
   const cameraWins = React.useMemo(() => cameraWindows(overlays || [], fps), [overlays, fps]);
   const overlayNodes = React.useMemo(
-    () => (overlays || []).map((ov, i) => renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`], accent2)),
+    () => (overlays || []).map((ov, i) => {
+      const node = renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`], accent2);
+      // Editor v2: a graphic's own keyframes / effects / mask / motion blur (edit/ClipFx.tsx), as a clip's.
+      const fx = ov as { keyframes?: unknown; effects?: unknown; mask?: unknown; motionBlur?: unknown };
+      return fx.keyframes || fx.effects || fx.mask || fx.motionBlur ? <ClipFx fx={{ ...fx, id: `ov-${i}` }}>{node}</ClipFx> : node;
+    }),
     [overlays, captions.accent, scenes, lookSounds, accent2]);
   // Built once per sfx list: each sound plays for its planned span (a typing
   // run lasts exactly as long as the letters appear) or, unplanned, for the
@@ -472,11 +491,59 @@ const Body: React.FC<TimelineProps> = (props) => {
     return ambience.beds.map((b, i) => bedNode(b, i, fps, on.master, on.duck, speech));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ambience, scenes, props.sfxEnabled, props.durationInFrames, fps]);
+  // The narration: the whole file, or the stretches the editor's ripple deletes kept (edit/narration.ts),
+  // each straight after the one before.
+  const narration = React.useMemo(
+    () => narrationPieces(keepRanges(audio), fps, Math.max(1, Math.ceil(props.durationInFrames))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [audio?.keep, fps, props.durationInFrames]);
   const sfxNodes = React.useMemo(() => {
     if (props.sfxEnabled === false) return [];
     const doubles = builtIn ? doublesLook(overlays || [], lookSounds) : () => false;
     return (props.sfx || []).map((fx, i) => (doubles(fx) ? null : sfxNode(fx, i, fps, props.sfxVolume)));
   }, [props.sfx, props.sfxEnabled, props.sfxVolume, fps, builtIn, overlays, lookSounds]);
+
+  // Only what is near the playhead is mounted (components/windowed.tsx): hundreds of idle Sequences cost
+  // ~50 ms a frame on a long video. The same nodes as before, each with its span.
+  const sceneItems = React.useMemo<WindowItem[]>(() => scenes.map((scene, i) => {
+    const frames = scene.durationInFrames + (scenes[i + 1]?.transition === "crossfade" ? CROSSFADE_FRAMES : 0);
+    return {
+      from: scene.startFrame, frames,
+      node: (
+        <Sequence
+          key={scene.id}
+          from={scene.startFrame}
+          // A cross-dissolve into the next scene: this one plays on underneath
+          // for the length of the dissolve (the next scene is drawn on top).
+          durationInFrames={frames}
+          premountFor={premount}
+        >
+          {/* The next scene's transition starts over this scene's last frames. */}
+          <CrossfadeIn active={scene.transition === "crossfade" && i > 0}>
+            {/* A full-screen animation scene plays its look's own sound too. */}
+            {withSound(<SceneClip scene={scene} accent={captions.accent} accent2={accent2} backdrop={backdrops[scene.id]}
+              nextTransition={scenes[i + 1]?.transition} />, lookSounds[`s${i}`])}
+          </CrossfadeIn>
+        </Sequence>
+      ),
+    };
+  }), [scenes, premount, captions.accent, accent2, backdrops, lookSounds]);
+  const overlayItems = React.useMemo<WindowItem[]>(() => (overlays || []).map((ov, i) => {
+    // Never past the end of the video: the look's own exit (MotionWrap, inside its duration) then
+    // always plays whole instead of the outer sequence cutting it mid-exit.
+    const frames = Math.max(1, Math.min(ov.durationInFrames, bodyFrames - ov.startFrame));
+    return {
+      from: ov.startFrame, frames,
+      node: (
+        <Sequence key={`ov-${i}`} from={ov.startFrame} durationInFrames={frames} premountFor={premount}>
+          {overlayNodes[i]}
+        </Sequence>
+      ),
+    };
+  }), [overlays, overlayNodes, bodyFrames, premount]);
+  const sfxItems = React.useMemo<WindowItem[]>(() => (props.sfx || []).map((fx, i) => ({
+    from: Math.max(0, Math.round(fx.startFrame || 0)), frames: Math.ceil(SFX_MAX_SECONDS * fps) + 1, node: sfxNodes[i],
+  })), [props.sfx, sfxNodes, fps]);
 
   return (
     <AbsoluteFill className="tg-composition" style={{ backgroundColor: "#000" }}>
@@ -488,24 +555,7 @@ const Body: React.FC<TimelineProps> = (props) => {
           settles back as it leaves (components/motion/stage.tsx): no map or chart ever cuts in on a clip. */}
       <CameraFx windows={showOverlays ? cameraWins : []}>
       <StageFx windows={showOverlays ? stageWins : []}>
-      {scenes.map((scene, i) => (
-        <Sequence
-          key={scene.id}
-          from={scene.startFrame}
-          // A cross-dissolve into the next scene: this one plays on underneath
-          // for the length of the dissolve (the next scene is drawn on top).
-          durationInFrames={scene.durationInFrames
-            + (scenes[i + 1]?.transition === "crossfade" ? CROSSFADE_FRAMES : 0)}
-          premountFor={premount}
-        >
-          {/* The next scene's transition starts over this scene's last frames. */}
-          <CrossfadeIn active={scene.transition === "crossfade" && i > 0}>
-            {/* A full-screen animation scene plays its look's own sound too. */}
-            {withSound(<SceneClip scene={scene} accent={captions.accent} accent2={accent2} backdrop={backdrops[scene.id]}
-              nextTransition={scenes[i + 1]?.transition} />, lookSounds[`s${i}`])}
-          </CrossfadeIn>
-        </Sequence>
-      ))}
+      <Windowed items={sceneItems} lead={premount + fps} bucket={fps * 2} />
       </StageFx>
       </CameraFx>
       </GradeContext.Provider>
@@ -525,18 +575,7 @@ const Body: React.FC<TimelineProps> = (props) => {
       {/* Overlay track — graphics sit on top of the visuals (a look in the
           bottom strip, the source tag, reads CaptionsOn to stay clear of the captions) */}
       <CaptionsOn.Provider value={Boolean(captions.enabled)}>
-      {showOverlays && (overlays || []).map((ov, i) => (
-        <Sequence
-          key={`ov-${i}`}
-          from={ov.startFrame}
-          // Never past the end of the video: the look's own exit (MotionWrap, inside its duration) then
-          // always plays whole instead of the outer sequence cutting it mid-exit.
-          durationInFrames={Math.max(1, Math.min(ov.durationInFrames, bodyFrames - ov.startFrame))}
-          premountFor={premount}
-        >
-          {overlayNodes[i]}
-        </Sequence>
-      ))}
+      {showOverlays ? <Windowed items={overlayItems} lead={premount + fps} bucket={fps * 2} /> : null}
       </CaptionsOn.Provider>
 
       {/* Caption track, burned in on top, as a player draws subtitles: one track over the whole
@@ -546,10 +585,14 @@ const Body: React.FC<TimelineProps> = (props) => {
       {captions.enabled ? <CaptionTrack props={props} /> : null}
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
-      {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
+      {audio?.url ? (narration ? narration.map((p) => (
+        <Sequence key={`vo-${p.from}`} from={p.from} durationInFrames={p.frames} name="Narration">
+          <Audio src={audio.url} volume={audio.volume ?? 1} trimBefore={p.trimBefore > 0 ? p.trimBefore : undefined} />
+        </Sequence>
+      )) : <Audio src={audio.url} volume={audio.volume ?? 1} />) : null}
       {bgmNodes}
       {bedNodes}
-      {sfxNodes}
+      <Windowed items={sfxItems} lead={fps} bucket={fps * 2} />
     </AbsoluteFill>
   );
 };

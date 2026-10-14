@@ -48,6 +48,8 @@ export interface Animator {
   from: Partial<Record<"opacity" | "x" | "y" | "scale" | "rot" | "rotX" | "rotY" | "blur" | "tracking", number>>;
   /** Seconds each word lands (the narration's own word times), when known: per-word sync. */
   at?: number[];
+  /** Editor v2: each unit rises out of its own mask (an editorial reveal: the word is never seen outside its line). */
+  clip?: boolean;
 }
 
 export interface Layer {
@@ -96,6 +98,15 @@ export interface Layer {
   stretch?: number;
   skew?: number;
   animator?: Animator;
+  /**
+   * Editor v2 (2026-10-14): a colour bar that sweeps across the words and leaves them behind it (grows from the
+   * left over the first half of `dur`, the words appear under it, then it slides off to the right).
+   */
+  sweep?: { color: string; at: number; dur: number };
+  /** Editor v2: which side a "wipe" key reveals from (l = left to right, as before). */
+  wipeFrom?: "l" | "r" | "t" | "b";
+  /** Editor v2: motion blur along the layer's own movement (x / y / scale keys), 0 = off, 1 = a full frame's shutter. */
+  mb?: number;
   /** A second line under the words, arriving at `at` seconds. */
   sub?: { text: string; size: number; font: string; weight: number; color: string; tracking: number; upper: boolean; at: number };
   /** A small tag above the words (wiped on at `at`). */
@@ -261,7 +272,7 @@ const cleanAnimator = (raw: unknown, dur: number): Animator | undefined => {
   }
   const at = Array.isArray(a.at) ? a.at.slice(0, 80).map((v) => num(v, 0, dur, NaN)) : undefined;
   return { unit, stagger: num(a.stagger, 0, 2, 0.05), dur: num(a.dur, 0.04, 3, 0.45),
-    ease: typeof a.ease === "string" && EASES[a.ease] ? a.ease : "expoOut", from, at };
+    ease: typeof a.ease === "string" && EASES[a.ease] ? a.ease : "expoOut", from, at, ...(a.clip === true ? { clip: true } : {}) };
 };
 
 const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
@@ -280,6 +291,8 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
     opacity: num(r.opacity, 0, 1, 1), blend: typeof r.blend === "string" && BLENDS.has(r.blend) ? r.blend : undefined,
     z: num(r.z, -1, 1, 0),
   };
+  if (r.wipeFrom === "r" || r.wipeFrom === "t" || r.wipeFrom === "b") L.wipeFrom = r.wipeFrom;
+  if (typeof r.mb === "number" && Number.isFinite(r.mb) && r.mb > 0) L.mb = num(r.mb, 0, 1.5, 0.5);
   if (kind === "text" || kind === "counter" || kind === "pin") {
     L.text = str(r.text, 160);
     if (kind === "text" && !L.text.trim()) return null;
@@ -336,6 +349,10 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
       const u = r.deco as Record<string, unknown>;
       const c = (v: unknown) => (v === undefined ? undefined : color(v, "#f2c14e"));
       L.deco = { bar: c(u.bar), underline: c(u.underline), rule: c(u.rule), bracket: c(u.bracket), at: num(u.at, 0, dur, 0.3) };
+    }
+    if (kind === "text" && r.sweep && typeof r.sweep === "object") {
+      const u = r.sweep as Record<string, unknown>;
+      L.sweep = { color: color(u.color, "#f2c14e"), at: num(u.at, 0, dur, 0), dur: num(u.dur, 0.2, 2, 0.7) };
     }
   }
   if (kind === "counter") {

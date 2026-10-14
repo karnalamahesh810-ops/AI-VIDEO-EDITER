@@ -134,9 +134,12 @@ const TextBody: React.FC<{ layer: Layer; ctx: Ctx; counterText?: string }> = ({ 
           wStyle.color = layer.emphColor;
         }
       }
+      const span = <span style={{ ...wStyle, position: "relative", zIndex: 0 }}>{deco}{inner}</span>;
       return (
         <React.Fragment key={wi}>
-          <span style={{ ...wStyle, position: "relative", zIndex: 0 }}>{deco}{inner}</span>
+          {/* A masked reveal (animator.clip): the word rises out of its own line, never seen below it. */}
+          {a?.clip ? <span style={{ display: "inline-block", overflow: "hidden", verticalAlign: "top",
+            padding: "0.04em 0.06em 0.12em", margin: "-0.04em -0.06em -0.12em" }}>{span}</span> : span}
           {wi < words.length - 1 ? " " : null}
         </React.Fragment>
       );
@@ -154,10 +157,18 @@ const TextBody: React.FC<{ layer: Layer; ctx: Ctx; counterText?: string }> = ({ 
   const sw = Math.max(2, 0.0045 * H);
   const shape = (layer.stretch && Math.abs(layer.stretch - 1) > 0.01) || layer.skew
     ? `scaleX(${(layer.stretch || 1).toFixed(3)}) skewX(${(-(layer.skew || 0)).toFixed(2)}deg)` : undefined;
+  // A colour bar sweeping across the words (layer.sweep): it grows from the left, the words appear under it once
+  // it covers them, then it slides off to the right - the block always fits its own words.
+  const SW = layer.sweep;
+  const swIn = SW ? easeOf("expoInOut")((lt - SW.at) / (SW.dur * 0.5)) : 1;
+  const swOut = SW ? easeOf("expoInOut")((lt - SW.at - SW.dur * 0.5) / (SW.dur * 0.5)) : 1;
   const main = (
     <div style={{ ...style, position: "relative", width: "max-content", transform: panel ? undefined : shape,
       transformOrigin: layer.align === "left" ? "0% 50%" : layer.align === "right" ? "100% 50%" : "50% 50%" }}>
-      {body}
+      {SW ? <div style={{ opacity: swOut > 0 ? 1 : 0 }}>{body}</div> : body}
+      {SW && swOut < 1 ? <div style={{ position: "absolute", left: "-0.1em", right: "-0.1em", top: "0.02em", bottom: "0.02em",
+        background: SW.color, transform: swOut > 0 ? `scaleX(${(1 - swOut).toFixed(4)})` : `scaleX(${swIn.toFixed(4)})`,
+        transformOrigin: swOut > 0 ? "100% 50%" : "0% 50%" }} /> : null}
       {D?.underline ? <div style={{ position: "absolute", left: 0, right: 0, bottom: "-0.12em", height: sw * 1.3,
         background: D.underline, transform: `scaleX(${dp(0.1, 0.55).toFixed(4)})`,
         transformOrigin: layer.align === "right" ? "100% 50%" : "0% 50%" }} /> : null}
@@ -521,6 +532,8 @@ const BackdropBody: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
 
 const LayerView: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
   const { t, W, H, dur, spec } = ctx;
+  // Before any early return (a hook): the id of this layer's motion-blur filter.
+  const mbId = React.useId().replace(/[^a-zA-Z0-9_-]/g, "");
   if (t < layer.from || t > layer.to) return null;
   const lt = t - layer.from;
   const k = layer.keys;
@@ -531,6 +544,16 @@ const LayerView: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
   const wipe = Math.max(0, Math.min(1, v("wipe", 1)));
   const blur = v("blur", 0) * (H / 1080);
   const scale = v("scale", 1);
+  // Motion blur (layer.mb): the layer's own speed over half a frame at 30 fps, as a directional blur.
+  let mbX = 0, mbY = 0;
+  if (layer.mb) {
+    const dt = 1 / 60;
+    const dx = (v("x", 0) - valueAt(k, "x", lt - dt, 0)) * W;
+    const dy = (v("y", 0) - valueAt(k, "y", lt - dt, 0)) * H;
+    const ds = (scale - valueAt(k, "scale", lt - dt, 1)) * Math.max(layer.w * W, layer.h * H, 0.2 * H);
+    mbX = Math.min(40, Math.abs(dx) * layer.mb * 0.5 + Math.abs(ds) * layer.mb * 0.25);
+    mbY = Math.min(40, Math.abs(dy) * layer.mb * 0.5 + Math.abs(ds) * layer.mb * 0.25);
+  }
   const z = v("z", layer.z);
   // Depth parallax: nearer layers drift further than the stage as the graphic lives.
   const life = dur > 0 ? t / dur - 0.5 : 0;
@@ -599,12 +622,28 @@ const LayerView: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
   }
   return (
     <div style={{ ...base, transform, opacity: Math.min(1, opacity), transformStyle: "preserve-3d",
-      filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
-      clipPath: wipe < 0.999 ? `inset(-20% ${((1 - wipe) * 100).toFixed(2)}% -20% -20%)` : undefined,
+      filter: [blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "", mbX + mbY > 0.6 ? `url(#mb${mbId})` : ""].filter(Boolean).join(" ") || undefined,
+      clipPath: wipe < 0.999 ? wipeClip(layer.wipeFrom, wipe) : undefined,
       mixBlendMode: layer.kind !== "particles" ? (layer.blend as React.CSSProperties["mixBlendMode"]) : undefined }}>
+      {mbX + mbY > 0.6 ? (
+        <svg width={0} height={0} style={{ position: "absolute" }}>
+          <filter id={`mb${mbId}`} x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation={`${mbX.toFixed(2)} ${mbY.toFixed(2)}`} />
+          </filter>
+        </svg>
+      ) : null}
       {body}
     </div>
   );
+};
+
+/** The clip of a "wipe" key: the visible part grows from the left (default), the right, the top or the bottom. */
+const wipeClip = (from: Layer["wipeFrom"], w: number): string => {
+  const h = ((1 - w) * 100).toFixed(2);
+  if (from === "r") return `inset(-20% -20% -20% ${h}%)`;
+  if (from === "t") return `inset(-20% -20% ${h}% -20%)`;
+  if (from === "b") return `inset(${h}% -20% -20% -20%)`;
+  return `inset(-20% ${h}% -20% -20%)`;
 };
 
 const shadeBg = (kind: string, a: number): string => {

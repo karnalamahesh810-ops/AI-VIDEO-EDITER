@@ -83,7 +83,7 @@ from urllib.request import url2pathname
 
 import requests
 
-from . import config, events, gapfill, r2, templates
+from . import clipfx, cliptime, config, events, gapfill, r2, templates
 from .aifill import AI_SOURCE, is_ai_scene
 from .presenter import PRESENTER_SOURCE, is_presenter_scene
 
@@ -800,6 +800,8 @@ def classify(doc: dict, res: dict) -> Tuple[List[dict], List[dict]]:
                 continue
             if (s.get("media") or {}).get("type") == "animation":
                 graphic = True                               # a dark graphic is drawn that way
+            elif clipfx.dark_on_purpose(s):
+                graphic = True                               # the editor faded, crushed or masked it (src/clipfx.py)
             else:
                 parts.append((part, k))
         # Black over clips or pictures, outside every transition's frames, for long
@@ -1273,8 +1275,17 @@ class Gate:
         m = scenes[i]["media"]
         need = scene_need(scenes, i, self.fps)
         declared = declared_seconds(m)
-        covered = real / play_rate(declared, need)
         tol = TOLERANCE_FRAMES / self.fps
+        if cliptime.is_edited(cliptime.timing_of(scenes[i])):
+            # The editor's in-point or speed (src/cliptime.py, the renderer's edit/clipTime.ts): the clip plays
+            # from part-way in, slowed just enough to reach its scene's end - it covers unless nothing is left.
+            if cliptime.covers(scenes[i], real, need, self.fps, tol):
+                if abs(declared - real) > 0.05:
+                    m["clipSeconds"] = round(real, 2)
+                return None
+            return ("short", f"the clip is {real:.1f} s long and starts {cliptime.trim_start(m):.1f} s in: "
+                             f"too little of it is left for a {need:.1f} s scene")
+        covered = real / play_rate(declared, need)
         if covered >= need - tol:
             if abs(declared - real) > 0.05:
                 m["clipSeconds"] = round(real, 2)          # the renderer plays it at its true speed
@@ -1650,6 +1661,8 @@ class Gate:
             if not url or s.get("teaser") or str(s.get("frame") or "full") != "full" or is_presenter_scene(s) \
                     or is_ai_scene(s):
                 continue                    # (an AI fill picture or clip is made at its size: src/aifill.py)
+            if clipfx.blurs_on_purpose(s):
+                continue                    # the editor blurred it on purpose (src/clipfx.py): soft is the edit
             sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
             source = str(m.get("source") or sem.get("provider") or "")
             if m.get("type") == "image" and sharpness.picture_on() and source != "generated":

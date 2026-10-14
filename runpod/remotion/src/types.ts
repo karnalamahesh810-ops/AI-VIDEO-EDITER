@@ -1,3 +1,6 @@
+import type { ClipKeyframes } from "./edit/keyframes";
+import type { ClipEffect, ClipMask } from "./edit/effects";
+
 export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right"
   // Stills (VidRush): the photo slides in from a side while it settles from a
   // close zoom, then keeps pushing; or a slow push with a slight turn.
@@ -253,6 +256,11 @@ export interface SceneMedia {
    * a machine whose security blocks Remotion's unsigned binaries. Absent = OffthreadVideo, as before.
    */
   html5?: boolean;
+  /**
+   * The editor's in-point (the pro editor, edit/clipTime.ts): seconds into this clip file the scene starts at
+   * - a slip, the second half of a split, a rolled cut. Absent = the file's first frame, as before.
+   */
+  trimStart?: number;
 }
 
 export interface Scene {
@@ -307,6 +315,23 @@ export interface Scene {
   /** Set when the media is generated or unlicensed and a human should look. */
   reviewRequired?: boolean;
   reviewReason?: string;
+  /**
+   * The editor's clip speed (edit/clipTime.ts): a constant `speed` (0.1-8) or a `speedRamp` - the speed at
+   * seconds from the clip's start, straight lines between. Absent = as before (a short clip slowed to fill).
+   */
+  speed?: number;
+  speedRamp?: { t: number; v: number }[];
+  /** The scene this one was cut from by the editor's split: it continues that shot (never a repeat). */
+  splitFrom?: string;
+  /**
+   * Editor v2 (edit/ClipFx.tsx; all optional, cleaned by edit/effects.ts and src/clipfx.py): the clip's
+   * keyframes (x / y shares of the frame, 0 = centred; scale 1 = as drawn; rotation degrees; opacity; anchor),
+   * its effects stack drawn after its look, a mask, and a motion blur along the keyframed move.
+   */
+  keyframes?: ClipKeyframes;
+  effects?: ClipEffect[];
+  mask?: ClipMask;
+  motionBlur?: boolean | number;
 }
 
 /** One row of a chart, comparison or timeline. */
@@ -459,6 +484,14 @@ export interface Overlay {
    * animators and a camera move, designed by src/smart_editor.py and drawn by components/smart/SmartSpec.tsx.
    */
   spec?: unknown;
+  /**
+   * Editor v2's motion library (components/smart/library.ts, variants "ml-*"): the look's brand kit (a kit id -
+   * royal, noir, bulletin, atlas - or a Style Kit's brand tokens), the seconds from the look's first frame each word
+   * of `text` is spoken, and a seed that varies the design between uses. Absent: the video's accent, a stagger.
+   */
+  kit?: unknown;
+  wordAt?: number[];
+  seed?: number;
   labelPosition?: { x: number; y: number };
   /**
    * The places a several-point look marks (an-multi-point), frame shares,
@@ -584,7 +617,11 @@ export interface TimelineProps {
   width: number;
   height: number;
   durationInFrames: number;
-  audio: { url: string; volume: number };
+  /**
+   * The narration. keep: the stretches of the file the video keeps after the editor's ripple deletes
+   * ([start, end] seconds of the file, in order; edit/narration.ts); absent = the whole file from frame 0.
+   */
+  audio: { url: string; volume: number; keep?: [number, number][] };
   /** track / trackSeconds: the bundled track's name, or an own file's measured length (musicMix.ts trackSeconds). */
   bgm?: { url: string; volume: number; track?: string; trackSeconds?: number } | null;
   /**
