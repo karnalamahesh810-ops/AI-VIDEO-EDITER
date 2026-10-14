@@ -694,9 +694,103 @@ def fit_start(start_at: float, seconds: float, duration: float) -> float:
     return start_at
 
 
-def _fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float) -> List[str]:
-    """The section download's yt-dlp command, before its network arguments."""
-    return [
+# A section WITH its sound (the celeb style plays a clip's own audio); footage is fetched silent.
+_WITH_AUDIO = ("bv*[height<=1080][ext=mp4][protocol^=https]+ba[ext=m4a][protocol^=https]"
+               "/bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]")
+
+
+# --- DOWNLOAD_QUALITY "high" ---------------------------------------------------
+# A section cut at exact frames (--force-keyframes-at-cuts) is never stream-
+# copied: yt-dlp's FFmpegFD drops "-c copy" for it, so ffmpeg re-encodes. The
+# legacy command left that to ffmpeg's defaults (x264 crf 23, aac 128k) on an
+# [ext=mp4] pick (AV1 399 or H.264; never VP9): a second lossy generation on
+# YouTube's already thin 1080p (~0.7-1.4 Mbps), and a 1080p ceiling for the
+# clips the viewer watches longest. High: the best SDR picture up to 1080 lines in the
+# newest codec (AV1 > VP9 > H.264, yt-dlp's vcodec order), 30 fps preferred,
+# direct https formats first (HLS sections are fragile, see _HLS_REUSE), then
+# ONE re-encode at x264 crf DOWNLOAD_CRF. Every consumer (Remotion/Chrome, our
+# ffmpeg trims, the quality gate) still gets plain H.264 yuv420p in an .mp4.
+_SDR = "[dynamic_range=SDR]"
+_HIGH_VIDEO = (f"bv*[height<=1080]{_SDR}[protocol^=https]/bv*[height<=1080]{_SDR}"
+               "/bv*[height<=1080]/b[height<=1080]")
+_HIGH_VERTICAL_FIRST = (f"bv*[aspect_ratio<1.2][width<=1080]{_SDR}[protocol^=https]/"
+                        "bv*[aspect_ratio<1.2][width<=1080]/")
+_HIGH_WITH_AUDIO = (f"bv*[height<=1080]{_SDR}[protocol^=https]+ba[protocol^=https]"
+                    f"/bv*[height<=1080]{_SDR}+ba/bv*[height<=1080]+ba/b[height<=1080]")
+# yt-dlp's sort: the biggest picture up to 1080 lines (res = the smaller side,
+# so a vertical upload counts its width), then the frame rate nearest 30 from
+# below (the render is 30 fps; a 60 fps stream is about twice the bytes - but a
+# 60 fps-only upload keeps its 60 fps: slow motion plays from it), SDR, then
+# the newest codec.
+_HIGH_SORT = "res:1080,fps:30,hdr:sdr,vcodec"
+# Hero clips (played with their own sound) may come from a 1440p / 2160p
+# stream - its downscale to 1080 is sharper than YouTube's own 1080p - but only
+# under HERO_MAX_TBR kbps (strict: a 2160p VP9 stream at 10-20 Mbps is
+# skipped), the smallest such tier first.
+_HERO_SORT = "res:1440,fps:30,hdr:sdr,vcodec"
+# Downscale so the picture's smaller side is at most 1080 (a vertical upload
+# keeps its 1080 width), even sizes, lanczos.
+_HERO_SCALE = ("scale=w='trunc(iw*min(1,1080/min(iw,ih))/2)*2'"
+               ":h='trunc(ih*min(1,1080/min(iw,ih))/2)*2':flags=lanczos")
+
+
+def _hero_format() -> str:
+    cap = int(getattr(config, "HERO_MAX_TBR", 9000))
+    return (f"bv*[height>1080][height<=2160][tbr<{cap}]{_SDR}[protocol^=https]+ba[protocol^=https]/"
+            + _HIGH_WITH_AUDIO)
+
+
+def _encode_args(audio: bool, hero: bool) -> str:
+    """ffmpeg's output options for the section's one re-encode (yt-dlp appends
+    them after its own, so they win), as a --downloader-args value."""
+    crf = int(getattr(config, "DOWNLOAD_CRF", 16))
+    preset = re.sub(r"[^a-z]", "", str(getattr(config, "DOWNLOAD_PRESET", "medium")).lower()) or "medium"
+    args = f"-c:v libx264 -preset {preset} -crf {crf} -pix_fmt yuv420p"
+    if hero:
+        args += f' -vf "{_HERO_SCALE}"'
+    args += " -c:a aac -b:a 192k" if audio else " -an"
+    # The chosen stream may be a .webm (VP9, AV1): the output is MP4 whatever
+    # yt-dlp's own "-f" said (ffmpeg keeps the last one); --remux-video then
+    # gives the file its .mp4 name.
+    return "ffmpeg_o:" + args + " -f mp4 -movflags +faststart"
+
+
+def high_quality() -> bool:
+    return str(getattr(config, "DOWNLOAD_QUALITY", "high") or "high").strip().lower() != "legacy"
+
+
+def _fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float, audio: bool = False,
+               hero: bool = False) -> List[str]:
+    """The section download's yt-dlp command, before its network arguments.
+    `audio`: with the clip's own sound; `hero`: a clip the style plays with its
+    sound (implies audio) that may take a >1080 source downscaled to 1080."""
+    if high_quality():
+        audio = audio or hero
+        fmt = _hero_format() if hero else (_HIGH_WITH_AUDIO if audio else (
+            (_HIGH_VERTICAL_FIRST if config.ALLOW_VERTICAL else "") + _HIGH_VIDEO))
+        return [
+            "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
+            "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
+            "--force-keyframes-at-cuts",
+            "-f", fmt, "-S", _HERO_SORT if hero else _HIGH_SORT,
+            "--no-playlist", "--no-warnings",
+            "--merge-output-format", "mp4",
+            "--downloader-args", _encode_args(audio, hero),
+            # A single .webm pick was re-encoded into MP4 under a .webm name.
+            "--remux-video", "mp4",
+            "--postprocessor-args", "VideoRemuxer:-movflags +faststart",
+            "-o", out_tpl, "--print", "after_move:filepath",
+            # Length, format, and what was taken (codec, height, kbps, seconds
+            # fetched): see _dlinfo / network_bytes.
+            "--print", "before_dl:DLINFO %(duration)s|%(format_id)s|%(vcodec)s|%(height)s|%(tbr)s",
+        ]
+    return _legacy_fetch_cmd(video_id, out_tpl, start_at, seconds, audio=audio)
+
+
+def _legacy_fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float,
+                      audio: bool = False) -> List[str]:
+    """DOWNLOAD_QUALITY=legacy: the command exactly as it was before 2026-10-15."""
+    cmd = [
         "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
         "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
         "--force-keyframes-at-cuts",
@@ -713,6 +807,9 @@ def _fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float) -> 
         # starts (so a failed one still says them): see _dlinfo.
         "--print", "before_dl:DLINFO %(duration)s|%(format_id)s",
     ]
+    if audio:
+        cmd[cmd.index("-f") + 1] = _WITH_AUDIO
+    return cmd
 
 
 def probe_download(video_id: str = "ka2S39HhLsM", start: float = 30.0, seconds: float = 3.0,
@@ -747,10 +844,13 @@ def probe_download(video_id: str = "ka2S39HhLsM", start: float = 30.0, seconds: 
         files = [os.path.join(d, f) for f in os.listdir(d) if f.endswith(".mp4")]
         ok = rc == 0 and bool(files) and playable_video(files[0])
         size = os.path.getsize(files[0]) if files else 0
+        # The network's bytes (the proxy's bill), not the re-encoded file's.
+        net = network_bytes(out, seconds, files[0]) if files else 0
         shutil.rmtree(d, ignore_errors=True)
         _dur, fmt = _dlinfo(out)
-        row = {"route": name, "ok": ok, "seconds": round(time.time() - t, 1), "kb": size // 1024,
-               "format": fmt}
+        row = {"route": name, "ok": ok, "seconds": round(time.time() - t, 1), "kb": net // 1024,
+               "file_kb": size // 1024, "format": fmt}
+        row.update({k: v for k, v in _dlstats(out).items() if k in ("vcodec", "height")})
         if not ok:
             cls = classify_ytdlp(err, rc, timed_out=(rc == -9), empty=(rc == 0))
             # Never echo anything that could contain the proxy URL.
@@ -779,7 +879,8 @@ def _dlinfo(stdout: str) -> tuple:
     """(duration, format id) from the DLINFO line a download prints before it starts."""
     for line in (stdout or "").splitlines():
         if line.startswith("DLINFO "):
-            dur, _, fmt = line[7:].strip().partition("|")
+            parts = line[7:].strip().split("|")
+            dur, fmt = parts[0], (parts[1] if len(parts) > 1 else "")
             try:
                 return float(dur), fmt.strip()
             except ValueError:
@@ -787,8 +888,55 @@ def _dlinfo(stdout: str) -> tuple:
     return 0.0, ""
 
 
+def _dlstats(stdout: str) -> dict:
+    """What the DLINFO line says was taken: vcodec, height, tbr (kbps; video +
+    audio when merged). Missing values (yt-dlp's "NA", the legacy line) are
+    left out."""
+    for line in (stdout or "").splitlines():
+        if line.startswith("DLINFO "):
+            parts = [p.strip() for p in line[7:].strip().split("|")]
+            out = {}
+            if len(parts) > 2 and parts[2] not in ("", "NA", "none"):
+                out["vcodec"] = parts[2]
+            for key, i in (("height", 3), ("tbr", 4)):
+                try:
+                    v = float(parts[i])
+                    if v > 0:
+                        out[key] = v
+                except (IndexError, ValueError):
+                    pass
+            return out
+    return {}
+
+
+# ffmpeg seeks a section's input to the keyframe before its start (YouTube's
+# keyframes are up to ~5 s apart) and reads the stream's index: about a second
+# more than the section. And a stream's tbr is its whole-video average, while a
+# chosen moment is usually busier (more motion, more cuts) than the average.
+# Calibrated 2026-10-15 against ffmpeg's own "bytes read" on 18 sections of 3
+# videos (gag reels, a talk show; 0.66-10.8 Mbps streams): actual /
+# (tbr x seconds) was 0.74-2.35, pooled 1.63 on 10 s sections = 1.5 x (s + 1).
+_PREROLL_S = 1.0
+_BUSY_FACTOR = 1.5
+
+
+def network_bytes(stdout: str, seconds: float, path: str = "") -> int:
+    """The bytes a section download took from the network (what a paid proxy
+    bills): the stream's kbps x the seconds fetched. The local file is a
+    re-encode (crf DOWNLOAD_CRF), so its size is not that; it is the fallback
+    when the stream's bitrate is unknown (the legacy DLINFO line)."""
+    tbr = _dlstats(stdout).get("tbr")
+    if tbr:
+        return int(tbr * 1000 / 8 * (max(0.0, float(seconds)) + _PREROLL_S) * _BUSY_FACTOR)
+    try:
+        return os.path.getsize(path) if path else 0
+    except OSError:
+        return 0
+
+
 def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
-              timeout: int = 300, hls_fix: bool = False, refit: bool = True) -> str:
+              timeout: int = 300, hls_fix: bool = False, refit: bool = True, audio: bool = False,
+              hero: bool = False) -> str:
     """Download one section of one known video. Returns the local path or ''.
     A start at or past the video's known end moves back inside it (fit_start);
     a start found past the end only by the download itself is fitted and tried
@@ -800,7 +948,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     # source/time range; yt-dlp otherwise races over one partial output file.
     fetch_id = uuid.uuid4().hex[:10]
     out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}_{fetch_id}.%(ext)s")
-    cmd = _fetch_cmd(video_id, out_tpl, start_at, seconds)
+    cmd = _fetch_cmd(video_id, out_tpl, start_at, seconds, audio=audio, hero=hero)
     if _video_unavailable(video_id):
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
@@ -849,7 +997,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             fitted = fit_start(start_at, seconds, duration)
             print(f"[media] {video_id} is {duration:.0f} s long; the section at {start_at:.1f}s "
                   f"moves to {fitted:.1f}s", flush=True)
-            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False)
+            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False, audio=audio, hero=hero)
         first = classify_ytdlp(p.stderr, p.returncode)
         cls = _note_failure(video_id, first, proxy, why)
         _release_proxy(proxy, False, cls, started)
@@ -884,7 +1032,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             _release_proxy(proxy, True, None, started)
             print(f"[media] HLS connection reuse failed ({video_id} @{start_at:.0f}s); "
                   "fetching again without reuse", flush=True)
-            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True, refit=refit)
+            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True, refit=refit, audio=audio, hero=hero)
         if refit and duration and fit_start(start_at, seconds, duration) != start_at:
             # A frameless section from the video's last second: asked at its end.
             try:
@@ -895,7 +1043,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             fitted = fit_start(start_at, seconds, duration)
             print(f"[media] {video_id} is {duration:.0f} s long; the empty section at {start_at:.1f}s "
                   f"moves to {fitted:.1f}s", flush=True)
-            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False)
+            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False, audio=audio, hero=hero)
         events.emit("source", "empty_download", level="warning", provider="youtube",
                     failure="INVALID_MEDIA", data={"video": video_id, "proxy": _proxy_index(proxy),
                                                    "start": round(start_at, 1), "format": fmt,
@@ -926,10 +1074,8 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             pass
         print(f"[media] straggler download from an earlier job discarded ({video_id})", flush=True)
         return ""
-    try:
-        costs.record("proxy.bytes", os.path.getsize(found))
-    except OSError:
-        pass
+    # What the network carried (stream kbps x seconds), not the re-encoded file.
+    costs.record("proxy.bytes", network_bytes(p.stdout, seconds, found))
     events.emit("source", "download_ok", provider="youtube",
                 data={"video": video_id, "seconds": round(seconds, 1), "proxy": _proxy_index(proxy),
                       "format": fmt},

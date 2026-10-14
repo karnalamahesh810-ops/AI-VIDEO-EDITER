@@ -12,6 +12,10 @@ Bake the local models into the image (run once at docker build).
   export of depth-anything/Depth-Anything-V2-Small, Apache-2.0) for
   src/living.py - ~99 MB. Only the Small model: Depth-Anything-V2 Base and
   Large are CC-BY-NC (non-commercial) and must never be baked in.
+* 3D-Speaker ERes2Net speaker embeddings, VoxCeleb English, ONNX (sherpa-onnx
+  release of modelscope iic/speech_eres2net_sv_en_voxceleb_16k, Apache-2.0)
+  for src/celeb/speakers.py (caption colour per speaker) - ~26 MB, into
+  <root>/celeb/.
 
 Every file is pinned to a revision and checked against its SHA-256; a
 mismatch fails the build rather than shipping an unknown model.
@@ -50,6 +54,13 @@ DEPTH_REPO = "onnx-community/depth-anything-v2-small"
 DEPTH_REV = "4472b7362082ad9968fee890ca0f1e5aca36b93d"
 DEPTH_FILE = ("onnx/model.onnx", "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c")
 DEPTH_DEST = os.path.join("depth-anything-v2-small", "model.onnx")
+# Celeb style speaker colours (src/celeb/speakers.py looks in <root>/celeb first). Apache-2.0.
+CELEB_FILES = {
+    "3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx": (
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/"
+        "3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx",
+        "c59158379255ad66e161679cca6af8d52d51e389e3224ab7d7a7baae295c2db5"),
+}
 
 
 def sha(data: bytes) -> str:
@@ -102,6 +113,16 @@ def main() -> None:
     with open(dest, "wb") as fh:
         fh.write(data)
     print(f"depth {DEPTH_DEST}: {len(data) // 1_000_000} MB")
+
+    celeb_dir = os.path.join(ROOT, "celeb")
+    os.makedirs(celeb_dir, exist_ok=True)
+    for name, (url, want) in CELEB_FILES.items():
+        data = get(url)
+        if sha(data) != want:
+            raise SystemExit(f"checksum mismatch for {name}")
+        with open(os.path.join(celeb_dir, name), "wb") as fh:
+            fh.write(data)
+        print(f"celeb {name}: {len(data) // 1_000_000} MB")
 
 
 if __name__ == "__main__":

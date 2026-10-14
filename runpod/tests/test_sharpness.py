@@ -246,8 +246,8 @@ class Clips(unittest.TestCase):
 
     def test_downloads_take_the_best_bitrate_up_to_1080p(self):
         from src import ytdlp
-        with mock.patch.multiple(config, **ON):
-            self.assertEqual(ytdlp.best_bitrate(), ["-S", "res:1080"])
+
+        def fetched_cmd():
             with mock.patch.object(ytdlp, "_video_unavailable", return_value=False), \
                     mock.patch.object(ytdlp, "stopped", return_value=False), \
                     mock.patch.object(ytdlp, "_acquire_proxy", return_value=""), \
@@ -255,9 +255,20 @@ class Clips(unittest.TestCase):
                     mock.patch.object(ytdlp.subprocess, "run",
                                       return_value=mock.Mock(returncode=1, stdout="", stderr="x")) as run:
                 ytdlp._yt_fetch("abcdefghijk", TMP, 10.0, 5.0)
-            cmd = run.call_args.args[0]
+            return run.call_args.args[0]
+
+        with mock.patch.multiple(config, **ON):
+            self.assertEqual(ytdlp.best_bitrate(), ["-S", "res:1080"])
+            # DOWNLOAD_QUALITY=legacy: the old H.264-only command.
+            with mock.patch.object(config, "DOWNLOAD_QUALITY", "legacy"):
+                cmd = fetched_cmd()
             self.assertIn("res:1080", cmd)
             self.assertIn("bv*[height<=1080][ext=mp4][protocol^=https]", cmd[cmd.index("-f") + 1])
+            # High (the default since 2026-10-15): any codec, SDR, sorted by res first.
+            with mock.patch.object(config, "DOWNLOAD_QUALITY", "high"):
+                cmd = fetched_cmd()
+            self.assertTrue(cmd[cmd.index("-S") + 1].startswith("res:1080"))
+            self.assertIn("bv*[height<=1080][dynamic_range=SDR][protocol^=https]", cmd[cmd.index("-f") + 1])
         with mock.patch.multiple(config, **OFF):
             self.assertEqual(ytdlp.best_bitrate(), [])
 

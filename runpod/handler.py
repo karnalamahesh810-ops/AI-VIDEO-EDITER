@@ -108,6 +108,7 @@ from src import living
 from src import hookcheck
 from src import shorts
 from src import langversion
+from src.celeb import pipeline as celeb_pipeline
 from src import aifill
 from src import personera
 from src import gputools
@@ -2736,6 +2737,12 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # Preferred: the caller pre-signed a destination for us, so this worker
     # needs no Supabase credentials at all. The app's video-render edge
     # function already does this — it holds the service key, we do not.
+    return deliver_video(out_path, inp, doc, duration, work, reports)
+
+
+def deliver_video(out_path: str, inp: dict, doc: dict, duration: float, work: str, reports: dict) -> dict:
+    """The finished file to where the app reads it (inline, a signed URL, R2, the broker or the app's
+    storage), with `reports` riding along. Shared by do_render and the celeb style (src/celeb/pipeline.py)."""
     LAST_FRAMES.clear()
     if inp.get("return_frames"):
         LAST_FRAMES.extend(_contact_sheets(out_path, work))
@@ -3153,7 +3160,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       # The GPU tools endpoint (src/gputools.py; all off by default): FlashVSR on clips under
                       # 720 lines, RIFE real 60 fps, an ACE-Step music bed - one job can try each.
                       "UPSCALE_LOWRES_CLIPS", "UPSCALE_LOWRES_BELOW", "UPSCALE_LOWRES_SECONDS",
-                      "INTERPOLATE_60FPS", "INTERPOLATE_SECONDS", "AI_MUSIC", "AI_MUSIC_LM", "AI_MUSIC_WAIT")
+                      "INTERPOLATE_60FPS", "INTERPOLATE_SECONDS", "AI_MUSIC", "AI_MUSIC_LM", "AI_MUSIC_WAIT",
+                      # Download quality (src/ytdlp.py, 2026-10-15): AV1/VP9 first, one crf-16 re-encode, hero clips
+                      # from 1440p; "legacy" = the old H.264-only fetch with ffmpeg's default re-encode, for an A/B.
+                      "DOWNLOAD_QUALITY", "DOWNLOAD_CRF", "DOWNLOAD_PRESET", "HERO_MAX_TBR")
 
 
 def _apply_config(overrides) -> dict:
@@ -3821,6 +3831,30 @@ def handler(job):
             return {"ok": True, "action": "translate_version", **out,
                     "costs": costs.summary(time.time() - started),
                     "events": events.summary(),
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action in ("plan", "build", "render") and celeb_pipeline.is_celeb(inp):
+            # The celeb compilation style (src/celeb/pipeline.py): the script's clip spots found and played with
+            # their own sound, narration between them, the reference's captions / names / pops on top. Its own
+            # plan and render; no language model, so no AI-credit check - only YouTube must answer.
+            events.phase("celeb")
+            if action != "render" and inp.get("allow_youtube") is not False:
+                report("Checking the YouTube connection", 2)
+                _require_youtube()
+            doc, out_path, seconds = celeb_pipeline.run(action, inp, work, report)
+            out = {}
+            if out_path:
+                report("Uploading video", 96)
+                events.phase("upload")
+                out = deliver_video(out_path, inp, doc, seconds, work, {})
+            if project_id and not inp.get("_caller_writes_result"):
+                row = {"scene_data": doc}
+                row.update(_done_fields(out) if out else {"status": "editing", "current_step": "Timeline ready",
+                                                           "progress": 68})
+                storage.patch_project(project_id, row)
+            costs.measure_end()
+            return {"ok": True, "action": action, "timeline": doc, **out,
+                    "costs": costs.summary(time.time() - started), "events": events.summary(),
                     "elapsed": round(time.time() - started, 1)}
 
         if action in ("plan", "build", "resource"):
