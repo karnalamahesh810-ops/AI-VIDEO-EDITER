@@ -3052,7 +3052,7 @@ def _done_fields(out: dict) -> dict:
 # Settings a job may override for itself ({"config": {...}} in the input), so
 # the benchmark can A/B a selection change on one image. Coerced to the type
 # the setting already has; anything else is ignored.
-CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
+CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
                       "POOL_EXTRA_QUERIES", "POOL_SCOUT", "INTENT_QUERIES_MAX",
                       "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS",
                       "TREATMENTS", "STYLE_PACK", "MOMENT_FINE_PASS", "CLEAN_CUTS",

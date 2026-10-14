@@ -204,6 +204,8 @@ def reason(title: str = "", channel: str = "", description: str = "", tags: Iter
             hit = chan[:30]
         if not hit and name == "game" and _GAMING_CATEGORY in cats:
             hit = "YouTube's Gaming category"
+        if hit and name == "game" and config.GAMEPLAY_FOOTAGE:
+            continue                        # the gaming essay (src/styles.py gaming_essay): the game is the footage
         if hit and not _allowed(topic, line, s):
             return f"{what} ({hit.lower()})"
     # Music: topics.py's own rule (a music video, an audio upload, a rap performance), plus art tracks and edits.

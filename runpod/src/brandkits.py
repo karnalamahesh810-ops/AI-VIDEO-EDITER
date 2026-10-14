@@ -33,10 +33,19 @@ KITS = {
                          "pillBg": "#f4d35e", "pillText": "#10282d"},
               "fonts": {"title": "grotesk", "number": "mono", "label": "narrow", "body": "inter"},
               "titleWeight": 800, "titleTracking": 0.0, "ease": "quintOut", "easeSoft": "inOut", "tempo": 1.0},
+    # The gaming video essay (2026-10-15, docs/style-refs/gta6_driving): white Poppins words on gameplay, the
+    # reference's neon green (wireframes, map zones, boxed words) and a red for the bad side; a quick tempo.
+    "gaming": {"name": "Gaming essay",
+               "colors": {"bg": "#0e0f11", "bg2": "#050506", "primary": "#39e75f", "secondary": "#ff3b3b",
+                          "region": "#31ff45", "text": "#ffffff", "number": "#ffffff", "muted": "#c9cdd2",
+                          "pillBg": "#39e75f", "pillText": "#0b0b0b"},
+               "fonts": {"title": "lib:Poppins", "number": "lib:Poppins", "label": "lib:Space Mono", "body": "inter"},
+               "titleWeight": 700, "titleTracking": -0.01, "ease": "expoOut", "easeSoft": "out", "tempo": 0.9},
 }
 DEFAULT = "noir"
 _BY_STYLE = {"documentary": "noir", "news": "bulletin", "news_compilation": "bulletin", "explainer": "royal",
-             "educational": "atlas", "science": "atlas"}
+             "educational": "atlas", "science": "atlas",
+             "gaming_essay": "gaming", "gaming": "gaming"}
 
 
 def choose(inp: Optional[dict] = None, brand: Optional[dict] = None, video_style: str = "") -> str:

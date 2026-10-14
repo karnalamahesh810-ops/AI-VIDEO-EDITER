@@ -1124,6 +1124,15 @@ _TALKING_HEAD = re.compile(
     r"build guide|tier list|patch notes|season \\d+ ladder|"
     r"stream (?:highlights|vod)|twitch)\b", re.I)
 
+# The gaming essay (config.GAMEPLAY_FOOTAGE): gameplay is the footage, so these title words stop counting against a
+# candidate - but another creator's reaction, stream, commentary or facecam over the game is never taken ("no
+# commentary" is exactly what is wanted).
+_PLAY_WORDS = re.compile(r"(?:gameplay|let's play|lets play|speedrun|playthrough|walkthrough)$", re.I)
+_NOT_CLEAN_PLAY = re.compile(
+    r"\b(?:reacts?|reaction|reacting|livestream|live stream|stream(?:ed|ing)?|vod|twitch|kick\.com|facecam|webcam|"
+    r"podcast|funny moments|first time playing|blind playthrough|tier list|explained|review|"
+    r"(?<!no )commentary|w/ ?\w+|ft\.|feat\.)\b", re.I)
+
 # Titles that usually mean actual footage of the subject.
 _B_ROLL = re.compile(
     r"\b(drone|aerial|4k|footage|b[- ]?roll|timelapse|time[- ]lapse|"
@@ -1383,7 +1392,11 @@ def _talking_head(title: str, line: str = "") -> bool:
     candidate left (2026-10-07). On a line about a named person, that person's own
     appearances (an interview, a debate, a panel, "speaks out") are the footage.
     """
+    if config.GAMEPLAY_FOOTAGE and _NOT_CLEAN_PLAY.search(title or ""):
+        return True                         # somebody's reaction / stream / facecam over the game
     hits = [m.group(1).lower() for m in _TALKING_HEAD.finditer(title or "")]
+    if config.GAMEPLAY_FOOTAGE:
+        hits = [h for h in hits if not _PLAY_WORDS.match(h)]
     if _EVENT_WINDOW.get():
         hits = [h for h in hits if h != "news"]
     if config.NEWS_FOOTAGE:
@@ -2339,6 +2352,8 @@ def youtube_only() -> bool:
 
 
 def _story_channels() -> List[str]:
+    if config.GAMEPLAY_FOOTAGE:
+        return config.GAME_CHANNELS         # the publishers' own trailers and gameplay: no other creator's furniture
     kind = _STORY_KIND["kind"]
     if kind in ("history", "biography"):
         return config.ARCHIVE_CHANNELS
@@ -2827,6 +2842,9 @@ def youtube_clip(query_or_url: str, out_dir: str, seconds: float = 6.0,
                          for n, q in enumerate(_eyewitness_queries(query_or_url)[:2])]
         searches += [(f"{query_or_url} footage", "recent-footage", True),
                       (query_or_url, "recent", True)]
+    elif config.GAMEPLAY_FOOTAGE and config.GAMEPLAY_SEARCH_SUFFIX:
+        # The gaming essay: clean gameplay of the game the line names, before the plain query.
+        searches.append((f"{query_or_url} {config.GAMEPLAY_SEARCH_SUFFIX}", "gameplay", False))
     elif b_roll_intent:
         searches.append((f"{query_or_url} {B_ROLL_INTENT}", "broll", False))
     searches.append((query_or_url, "plain", False))

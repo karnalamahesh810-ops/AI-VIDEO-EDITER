@@ -105323,6 +105323,2798 @@
    "autoPick": false
   },
   {
+   "id": "ML_GM_KINETIC",
+   "name": "Words in the scene",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): Big white words stand in the gameplay one chunk at a time, each swapped in on its spoken word (a hard three-frame cut, or a soft left-to-right letter fade); an all-caps word takes the gold accent. Use: The stressed word of a line (\"learn\", \"driving\", \"Progression\", \"hour: 100\") with its lead-in words; the gaming essay's main punctuation, every few lines in the hook, every 8-15 s after.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 2.2,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-kinetic",
+    "sfx": {
+     "name": "swoosh-text",
+     "volume": 0.3
+    },
+    "sfxAt": 0,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "you had to LEARN"
+    },
+    "sounds": [
+     {
+      "name": "swoosh-text",
+      "alt": [
+       "ui-swipe"
+      ],
+      "at": 0,
+      "gain_db": -19
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-title",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_BOXED",
+   "name": "Boxed words",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): Mono words typed one by one inside green-outlined dark boxes, the last word in the accent - a terminal-like punchline. Use: A two-to-four-word punchline that turns the line round (\"you had\", \"it never changed\", \"you got better\").",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 2.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-boxed",
+    "sfx": {
+     "name": "keys-type",
+     "volume": 0.3
+    },
+    "sfxAt": 2,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "you had"
+    },
+    "sounds": [
+     {
+      "name": "keys-type",
+      "alt": [
+       "typing text"
+      ],
+      "at": 2,
+      "gain_db": -20,
+      "until": 40
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-emphasis",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_METER",
+   "name": "Difficulty meter",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): An Easy -> Hard pill fills with glowing segments sweeping green to red to the level said, its caption words land on their times and a hand-drawn arrow points down at the action. Use: Difficulty talk: hard / easy / skill / challenge / forgiving / punishing (\"made driving hard\", \"a skill again\"); value = how hard (0-100), text = the caption words as said.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.2,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-meter",
+    "sfx": {
+     "name": "ui-pop",
+     "volume": 0.3
+    },
+    "sfxAt": 9,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "driving a SKILL again",
+     "value": 90
+    },
+    "sounds": [
+     {
+      "name": "ui-pop",
+      "alt": [
+       "ui-tick"
+      ],
+      "at": 2,
+      "gain_db": -17
+     },
+     {
+      "name": "riser-short",
+      "alt": [
+       "riser-soft"
+      ],
+      "at": 9,
+      "gain_db": -18
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-data",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_ARTICLE",
+   "name": "Article clipping",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): A newspaper clipping in tight close-up: soft depth-of-field lines around one sharp line, the quoted phrase swept with a yellow highlighter, a slow push. Use: A press or critic phrase the narration quotes or names (\"arcade style\", \"boat-like\", \"too floaty\"); text = the phrase, kicker / sub = the words before / after it in that sentence.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-article",
+    "sfx": {
+     "name": "paper-slide",
+     "volume": 0.3
+    },
+    "sfxAt": 14,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "arcade style",
+     "label": "interest in",
+     "subtitle": "games,"
+    },
+    "sounds": [
+     {
+      "name": "paper-slide",
+      "alt": [
+       "paper-slide-v2"
+      ],
+      "at": 0,
+      "gain_db": -15
+     },
+     {
+      "name": "marker-underline",
+      "alt": [
+       "marker"
+      ],
+      "at": 14,
+      "gain_db": -16
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-callout",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml",
+    "own-backdrop"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_VERSUS",
+   "name": "Versus split",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): A white divider draws down the middle of a split, two big slab titles crown the halves; the side being talked about stays lit, the other dims, and a curved arrow swings over when the talk switches. Use: Two games, versions or eras compared (\"GTA 4 ... GTA 6\", \"Souls vs Elden Ring\"); kicker = the left title, sub = the right title (short: \"IV\", \"VI\"), itemAt = when each is said.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-versus",
+    "sfx": {
+     "name": "whoosh",
+     "volume": 0.3
+    },
+    "sfxAt": 30,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "IV vs VI",
+     "label": "IV",
+     "subtitle": "VI"
+    },
+    "sounds": [
+     {
+      "name": "whoosh",
+      "alt": [
+       "whoosh-fast"
+      ],
+      "at": 0,
+      "gain_db": -15
+     },
+     {
+      "name": "swipe",
+      "alt": [
+       "ui-swipe"
+      ],
+      "at": 30,
+      "gain_db": -17
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-title",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_BOARD",
+   "name": "Cork-board chapter",
+   "category": "TRANSITIONS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): Out of black onto a map-textured cork board: a big chapter number, the chapter's taped label, polaroids that show the shot through them, red strings to a \"?\" card; the camera pushes in. Use: Each new chapter of a gaming essay (about one a minute); text = the chapter title, value or kicker = its number, items = the other chapters' titles, sub = the question card's tape (\"THE ANSWER\").",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.2,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-board",
+    "sfx": {
+     "name": "whoosh-cinematic",
+     "volume": 0.3
+    },
+    "sfxAt": 14,
+    "types": false,
+    "leastSeconds": 1.0,
+    "sample": {
+     "text": "Driving you had to learn",
+     "label": "1",
+     "items": [
+      {
+       "label": "The solution"
+      },
+      {
+       "label": "The third attempt"
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "whoosh-cinematic",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 2,
+      "gain_db": -13
+     },
+     {
+      "name": "paper-pin",
+      "alt": [
+       "pin-drop"
+      ],
+      "at": 14,
+      "gain_db": -17
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-transition",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml",
+    "own-backdrop"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_CURVE",
+   "name": "Learning curve",
+   "category": "NUMBERS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): A curve draws itself over the footage, flat and red along the bottom then sweeping up green, with a glowing head and its label fading in letter by letter. Use: Getting better over time: learning curve, practice, mastery, skill growing, \"your first hour vs your 100th\"; text = the label (\"Learning curve\").",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-curve",
+    "sfx": {
+     "name": "marker-draw",
+     "volume": 0.3
+    },
+    "sfxAt": 5,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "Learning curve"
+    },
+    "sounds": [
+     {
+      "name": "marker-draw",
+      "alt": [
+       "marker"
+      ],
+      "at": 5,
+      "gain_db": -16
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-data",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_ZONE",
+   "name": "Map zone",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): A glowing neon-green outline draws round a district of a map (the shot's own in-game map, or a drawn dark game map), the place's name typing on above it. Use: A place in the game world named (a city, district, region, track: \"Liberty City\", \"Limgrave\", \"the corners\"); kicker \"map\" draws the dark game map when the shot is not one; anchor = the district.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-zone",
+    "sfx": {
+     "name": "light-shimmer",
+     "volume": 0.3
+    },
+    "sfxAt": 5,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "Corners",
+     "label": "map"
+    },
+    "sounds": [
+     {
+      "name": "light-shimmer",
+      "alt": [
+       "whoosh-soft"
+      ],
+      "at": 5,
+      "gain_db": -16
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-callout",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_WIREFRAME",
+   "name": "Wireframe tracker",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): A green wireframe box draws itself edge by edge round the subject (a car, a character), following it, with a label laid on the ground plane in perspective. Use: Physics, hitboxes, weight, handling, collision - the mechanics of a thing on screen (\"PHYSICS\", \"WEIGHT\", \"HITBOX\"); anchor = the subject (a chase-cam car sits low centre).",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 2.8,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-wireframe",
+    "sfx": {
+     "name": "glitch-digital",
+     "volume": 0.3
+    },
+    "sfxAt": 14,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "PHYSICS"
+    },
+    "sounds": [
+     {
+      "name": "glitch-digital",
+      "alt": [
+       "ui-tick"
+      ],
+      "at": 3,
+      "gain_db": -19
+     },
+     {
+      "name": "ui-tick",
+      "alt": [
+       "tick"
+      ],
+      "at": 14,
+      "gain_db": -18
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-emphasis",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_FORMULAS",
+   "name": "Floating formulas",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): Chalk formulas and triangles fade in and float over the shot round its subject - the \"thinking hard\" look. Use: Calculation, understanding, figuring a system out, theory-crafting (\"you learn\", \"understood what the car would do\", \"the math behind it\").",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-formulas",
+    "sfx": {
+     "name": "pen-scribble",
+     "volume": 0.3
+    },
+    "sfxAt": 3,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "understood"
+    },
+    "sounds": [
+     {
+      "name": "pen-scribble",
+      "alt": [
+       "marker"
+      ],
+      "at": 3,
+      "gain_db": -20
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-emphasis",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_THUMBS",
+   "name": "Verdict thumbs",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): A glowing green thumbs-up or red thumbs-down disc pops on the verdict word and slowly grows; a second verdict replaces it on its own word. Use: A verdict or reaction: loved / hated, good / bad, worked / failed, fans for and against; items = \"up\" / \"down\" in the order said, itemAt = their words.",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 2.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-thumbs",
+    "sfx": {
+     "name": "ui-pop",
+     "volume": 0.3
+    },
+    "sfxAt": 0,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "loved hated",
+     "items": [
+      {
+       "label": "up"
+      },
+      {
+       "label": "down"
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop"
+      ],
+      "at": 0,
+      "gain_db": -12
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-emphasis",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_MANUAL",
+   "name": "Game manual",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): An old game manual rises in and opens: aged pages, the guide's title, numbered sections written on as they are said, a red pen circle round the one that matters, a sticky note. Use: Rules, a system, a guide or steps the player had to learn (\"the basics\", \"braking\", \"cornering\"); text = the guide's title, items = the sections as said, sub = a sticky note.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-manual",
+    "sfx": {
+     "name": "paper-slide",
+     "volume": 0.3
+    },
+    "sfxAt": 11,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "Driving guide",
+     "label": "Liberty City manual",
+     "subtitle": "Slow in, fast out",
+     "items": [
+      {
+       "label": "The basics"
+      },
+      {
+       "label": "Braking"
+      },
+      {
+       "label": "Cornering"
+      },
+      {
+       "label": "Different cars"
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "paper-slide",
+      "alt": [
+       "paper-slide-v2"
+      ],
+      "at": 0,
+      "gain_db": -15
+     },
+     {
+      "name": "page-flip",
+      "alt": [
+       "page"
+      ],
+      "at": 11,
+      "gain_db": -15
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-callout",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_SUMMARY",
+   "name": "Summary card",
+   "category": "CALLOUTS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): A dark summary card: the lead line typed on with its key phrase in the accent, then bold-led bullets typed one by one, the card slowly pushing in. Use: Two camps or a debate summed up (\"Team Realistic: ...\", \"Team Arcade: ...\"), what fans say, the state of an argument; text = the lead, kicker = its key phrase, items = \"Name: point\" bullets.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-summary",
+    "sfx": {
+     "name": "keys-type",
+     "volume": 0.3
+    },
+    "sfxAt": 4,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "Fans are still fighting over it 20 years later.",
+     "label": "20 years later",
+     "items": [
+      {
+       "label": "Team Realistic: praises the weight"
+      },
+      {
+       "label": "Team Arcade: calls them boats"
+      }
+     ]
+    },
+    "sounds": [
+     {
+      "name": "keys-type",
+      "alt": [
+       "typing text"
+      ],
+      "at": 4,
+      "gain_db": -21,
+      "until": 60
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-callout",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml",
+    "own-backdrop"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_NEON",
+   "name": "Neon question",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): A neon question box flickers on (pink-to-cyan frame, palm silhouette, a title badge) and the question types itself in with its letters closing up. Use: A question the essay asks the viewer (\"Does braking too late punish you?\"); text = the question as said, sub = a bold second line, kicker = a short badge (\"VI\").",
+   "kind": "tag",
+   "emphasis": "medium",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 4.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-neon",
+    "sfx": {
+     "name": "glitch-short",
+     "volume": 0.3
+    },
+    "sfxAt": 9,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "Does a heavy SUV force you",
+     "subtitle": "to drive differently?",
+     "label": "VI"
+    },
+    "sounds": [
+     {
+      "name": "glitch-short",
+      "alt": [
+       "glitch"
+      ],
+      "at": 1,
+      "gain_db": -16
+     },
+     {
+      "name": "keys-type",
+      "alt": [
+       "typing text"
+      ],
+      "at": 9,
+      "gain_db": -21,
+      "until": 50
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-title",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_STATIC",
+   "name": "TV static cut",
+   "category": "TRANSITIONS",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): The picture breaks into TV static and jittering colour bars for a beat, then the next shot comes through. Use: A cut to an old game, a flashback, a hard topic switch or a joke beat (\"back in 2008\", \"and then everything changed\").",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 0.6,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-static",
+    "sfx": {
+     "name": "glitch-transition",
+     "volume": 0.3
+    },
+    "sfxAt": 0,
+    "types": false,
+    "leastSeconds": 0.6,
+    "sample": {
+     "text": ""
+    },
+    "sounds": [
+     {
+      "name": "glitch-transition",
+      "alt": [
+       "glitch"
+      ],
+      "at": 0,
+      "gain_db": -13
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-transition",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml"
+   ],
+   "autoPick": false
+  },
+  {
+   "id": "ML_GM_ENDLINE",
+   "name": "End line",
+   "category": "HEADLINES",
+   "component": "motion",
+   "description": "Gaming essay pack (brand-kit aware): On black: a small white lead line, then the closing words in bold gold capitals. Use: The essay's last line (\"they'll make getting good at it - MATTER AGAIN\"); sub = the small lead, text = the gold words.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 3.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "ml-gm-endline",
+    "sfx": {
+     "name": "hit-deep",
+     "volume": 0.3
+    },
+    "sfxAt": 22,
+    "types": false,
+    "leastSeconds": 1.6,
+    "sample": {
+     "text": "Matter again",
+     "subtitle": "They'll make getting good at it"
+    },
+    "sounds": [
+     {
+      "name": "hit-deep",
+      "alt": [
+       "boom-soft"
+      ],
+      "at": 22,
+      "gain_db": -18
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "ml-title",
+    "gaming"
+   ],
+   "tags": [
+    "lib",
+    "ml",
+    "own-backdrop"
+   ],
+   "autoPick": false
+  },
+  {
    "id": "LIB_NX_STAT_CONTEXT",
    "name": "Figure in Context",
    "category": "NUMBERS",

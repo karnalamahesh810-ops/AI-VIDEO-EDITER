@@ -1826,6 +1826,18 @@ def _build(segments: List[Segment], shots: List[dict],
                   f"{report['shortAfter']}", flush=True)
         except Exception as e:  # noqa: BLE001 - the plan as it was is still a video
             print(f"[timeline] data looks skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+    # The gaming video essay (src/styles.py gaming_essay, src/gaming.py): the motion library's gaming pack on its
+    # trigger words, the way the owner's reference places it (kinetic words, meter, versus split, chapter boards ...).
+    from . import styles as _styles
+    if _styles.resolve(str(inp.get("video_style") or "")) == "gaming_essay" and doc.get("scenes"):
+        from . import gaming
+        try:
+            rep = gaming.plan(doc)
+            doc.setdefault("meta", {})["gaming"] = rep
+            doc["meta"]["overlayCount"] = len(doc["overlays"])
+            print(f"[timeline] gaming pack: {json.dumps(rep)[:300]}", flush=True)
+        except Exception as e:  # noqa: BLE001 - the planner's looks are still a video
+            print(f"[timeline] gaming pack skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
     # The Smart Editor (src/smart_editor.py, SMART_EDITOR / the job's "smart_editor"): an AI edit director
     # designs new graphics, marks, camera moves and sounds over the planned looks; any failure keeps them.
     from . import smart_editor

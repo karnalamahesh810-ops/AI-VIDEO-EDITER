@@ -274,6 +274,12 @@ def _direct_chunk(rows: List[dict], looks: List[dict], story: dict, recent: List
                       "PointShift; the rest ride on the footage (figures with units, marks)")
                      % (max(2, int(span / 5)), max(1, int(span / 12)))
                      if (story.get("_kit") in ("royal", "atlas")) else
+                     ("GAMING ESSAY: the gaming pack (PLANNER_LOOKS ml-gm-*: kinetic words in the scene, boxed words, "
+                      "difficulty meter, versus split, cork-board chapters, learning curve, map zone, wireframe, formulas, "
+                      "verdict thumbs, manual, summary card, neon question, static cut, end line) is already placed on its "
+                      "trigger words and stays. Add only what it misses: a highlight on a thing in the shot, a camera "
+                      "punch-in on an impact, at most one graphic per 20 s, never over a pack look")
+                     if story.get("_kit") == "gaming" else
                      "DOCUMENTARY: graphics ride on the footage; a kit card only for the one biggest moment"),
         "SFX_LIST": sorted(n for n in _sfx_names() if not n.startswith("amb-") and " " not in n),
         "TRANSITION_LIST": list(TRANSITIONS),
@@ -662,6 +668,9 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
     kept, dropped, maybe = [], 0, []
     for k, ov in enumerate(overlays):
         t = ov.get("startFrame", 0) / fps
+        if ov.get("gaming"):
+            kept.append(ov)                     # the gaming essay's own pack (src/gaming.py): placed on its words
+            continue
         words_only = bool(_TEXT_ONLY.match(str(ov.get("variant") or ""))) or ov.get("type") in (
             "callout", "typewriter", "kicker", "title")
         if ov.get("type") == "title" and ov.get("startFrame", 0) < fps * 1.5:

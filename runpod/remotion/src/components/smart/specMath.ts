@@ -30,12 +30,19 @@ export type LayerKind =
   // browser window, quote with portrait), a full-frame effect (ink bleed, film burn, glitch slices, paper tear,
   // block dissolve, magnifier focus, before / after split) and a hand-drawn mark (scribble loop, brush swoosh,
   // strike-through, loop arrow).
-  | "chart" | "card" | "fx" | "scribble";
+  | "chart" | "card" | "fx" | "scribble"
+  // The gaming video-essay pack (2026-10-15, SpecGaming.tsx): kinetic words in the scene, boxed mono words, a
+  // difficulty meter, an article clipping, a versus split, a cork-board chapter, a learning curve, a glowing map
+  // zone, a wireframe tracker box, floating formulas, verdict thumbs, a game manual, a summary card, a neon
+  // question box, a TV-static cut and an end line.
+  | "game";
 
 export const CHARTS = ["race", "line", "donut", "grid", "timeline", "ladder"] as const;
 export const CARDS = ["sticky", "polaroid", "doc", "social", "phone", "browser", "quote"] as const;
 export const FXS = ["ink", "burn", "glitch", "tear", "blocks", "lens", "split"] as const;
 export const SCRIBBLES = ["loop", "swoosh", "strike", "looparrow"] as const;
+export const GAMES = ["kinetic", "boxed", "meter", "article", "versus", "board", "curve", "zone", "wire", "formula",
+  "thumbs", "manual", "summary", "neon", "static", "endline"] as const;
 
 /** One item of a chart: its label, its value (absent for a ranking without figures), its own unit. */
 export interface DataItem { l: string; v: number | null; pre?: string; suf?: string; dec?: number }
@@ -173,6 +180,7 @@ export interface Layer {
   card?: (typeof CARDS)[number];
   effect?: (typeof FXS)[number];
   scribble?: (typeof SCRIBBLES)[number];
+  game?: (typeof GAMES)[number];
   data?: DataItem[];
   /** Seconds (from the layer's start) each item / word lands - the narration's own times when known. */
   times?: number[];
@@ -208,7 +216,7 @@ export interface MotionSpec {
 }
 
 const KINDS = new Set<LayerKind>(["text", "counter", "rect", "ellipse", "line", "arrow", "bracket", "pin", "spot",
-  "image", "particles", "backdrop", "shape", "waffle", "measure", "loupe", "tiles", "pill", "chart", "card", "fx", "scribble"]);
+  "image", "particles", "backdrop", "shape", "waffle", "measure", "loupe", "tiles", "pill", "chart", "card", "fx", "scribble", "game"]);
 export const FONT_KEYS = ["grotesk", "kinetic", "display", "serif", "serif-italic", "mono", "narrow", "inter", "hand"] as const;
 const KEYED = new Set(["x", "y", "scale", "sx", "sy", "rot", "rotX", "rotY", "z", "opacity", "blur", "draw", "wipe",
   "glow", "p", "tracking", "shake", "dim"]);
@@ -485,9 +493,10 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
     L.fill = color(r.fill, "#ffffff");
     L.color = color(r.color, "#141414");
   }
-  if (kind === "chart" || kind === "card" || kind === "fx" || kind === "scribble") {
+  if (kind === "chart" || kind === "card" || kind === "fx" || kind === "scribble" || kind === "game") {
     cleanPack2(L, r, dur);
     if (kind === "chart" && !L.chart) return null;
+    if (kind === "game" && !L.game) return null;
   }
   if (kind === "particles") {
     L.count = Math.round(num(r.count, 1, 120, 40));
@@ -506,6 +515,7 @@ const cleanPack2 = (L: Layer, r: Record<string, unknown>, dur: number) => {
   L.card = L.kind === "card" ? pick(r.card, CARDS) || "sticky" : undefined;
   L.effect = L.kind === "fx" ? pick(r.effect, FXS) || "ink" : undefined;
   L.scribble = L.kind === "scribble" ? pick(r.scribble, SCRIBBLES) || "loop" : undefined;
+  L.game = L.kind === "game" ? pick(r.game, GAMES) : undefined;
   L.data = (Array.isArray(r.data) ? r.data : []).slice(0, 8).map((d): DataItem | null => {
     if (!d || typeof d !== "object") return null;
     const o = d as Record<string, unknown>;
@@ -523,7 +533,7 @@ const cleanPack2 = (L: Layer, r: Record<string, unknown>, dur: number) => {
   L.text = str(r.text, 200);
   L.label = str(r.label, 60);
   L.meta = str(r.meta, 60);
-  L.items = (Array.isArray(r.items) ? r.items : []).slice(0, 6).map((v) => str(v, 90)).filter((v) => v.trim());
+  L.items = (Array.isArray(r.items) ? r.items : []).slice(0, L.kind === "game" ? 14 : 6).map((v) => str(v, 90)).filter((v) => v.trim());
   L.font = face(r.font, "grotesk");
   L.font2 = face(r.font2, L.font);
   L.size = num(r.size, 0.012, 0.2, 0.032);

@@ -907,6 +907,196 @@ const PACK2: MxRecipe[] = [
 
 // ------------------------------------------------------------------ the recipes
 const T = (s: string) => s.trim();
+// ------------------------------------------------------------------ the gaming video-essay pack (2026-10-15)
+// Measured from the owner's reference "Why GTA 6 Is Making Driving HARD Again!" (docs/style-refs/gta6_driving/
+// catalogue.md): every look draws a "game" layer (SpecGaming.tsx); the gaming_essay style's planner
+// (src/gaming.py) places them on their trigger words. They work in any kit; the "gaming" kit is the reference's own.
+const GM_STOP = new Set(("a an the to of and or but in on at by for with from that this it its is was were be been are as so if than then " +
+  "you your we our they their he his she her i my me just still even not no had have has do did does can could would will").split(" "));
+/** A line's words as the reference shows them: lead-in small words together, every stressed word alone. */
+export const gmChunks = (words: string[]): { t: string; i: number }[] => {
+  const out: { t: string; i: number }[] = [];
+  let cur: string[] = [];
+  let start = 0;
+  words.forEach((w, i) => {
+    const bare = w.toLowerCase().replace(/[^a-z0-9']/g, "");
+    if (GM_STOP.has(bare)) { if (!cur.length) start = i; cur.push(w); return; }
+    if (cur.length === 1 && cur[0].length <= 2) { out.push({ t: `${cur[0]} ${w}`, i: start }); cur = []; return; }
+    if (cur.length) { out.push({ t: cur.join(" "), i: start }); cur = []; }
+    out.push({ t: w, i });
+  });
+  if (cur.length) out.push({ t: cur.join(" "), i: start });
+  return out.slice(0, 14);
+};
+const gmGold = (k: BrandKit) => (k.id === "gaming" ? "#f5c22b" : k.colors.primary);
+const gmTimes = (p: MxParams, c: Ctx, n: number, start: number, gap: number) =>
+  Array.from({ length: n }, (_, i) => { const a = p.itemAt?.[i]; return typeof a === "number" && a >= 0 && a < p.dur ? a : c.s(start + i * gap); });
+const gmPoint = (p: MxParams, x: number, y: number) => (p.point ? { x: p.point.x, y: p.point.y } : { x, y });
+const gmCaps = (w: string) => w === w.toUpperCase() && /[A-Z]{2}/.test(w);
+const GAMING: MxRecipe[] = [
+  {
+    id: "ml-gm-kinetic", name: "Words in the scene", family: "title",
+    about: "Big white words stand in the gameplay one chunk at a time, each swapped in on its spoken word (a hard three-frame cut, or a soft left-to-right letter fade); an all-caps word takes the gold accent.",
+    use: "The stressed word of a line (\"learn\", \"driving\", \"Progression\", \"hour: 100\") with its lead-in words; the gaming essay's main punctuation, every few lines in the hook, every 8-15 s after.",
+    sample: { text: "you had to LEARN" },
+    build: (p, k, c) => {
+      const ch = gmChunks(c.words);
+      const hi = ch.findIndex((x) => gmCaps(x.t));
+      const x = c.side === "left" ? 0.32 : c.side === "right" ? 0.68 : 0.5;
+      return finish([{ kind: "game", game: "kinetic", x, y: c.y ?? 0.32, w: 1, h: 1, items: ch.map((q) => q.t),
+        times: ch.map((q) => c.wt(q.i, 0.04, 0.34)), hi: hi >= 0 ? hi : undefined, size: 0.17 * c.scale, color: k.colors.text,
+        emphColor: gmGold(k), label: c.r(4) > 0.72 ? "type" : "cut", seed: Math.round(c.r(5) * 90) }], c, "fade");
+    },
+  },
+  {
+    id: "ml-gm-boxed", name: "Boxed words", family: "emphasis",
+    about: "Mono words typed one by one inside green-outlined dark boxes, the last word in the accent - a terminal-like punchline.",
+    use: "A two-to-four-word punchline that turns the line round (\"you had\", \"it never changed\", \"you got better\").",
+    sample: { text: "you had" },
+    build: (p, k, c) => {
+      const words = c.words.slice(0, 4);
+      return finish([{ kind: "game", game: "boxed", x: c.side === "right" ? 0.55 : 0.07, y: c.y ?? 0.42, w: 1, h: 1, items: words,
+        times: words.map((_, i) => c.wt(i, 0.05, 0.3)), size: 0.13 * c.scale, fill: k.colors.primary }], c, "fade");
+    },
+  },
+  {
+    id: "ml-gm-meter", name: "Difficulty meter", family: "data",
+    about: "An Easy -> Hard pill fills with glowing segments sweeping green to red to the level said, its caption words land on their times and a hand-drawn arrow points down at the action.",
+    use: "Difficulty talk: hard / easy / skill / challenge / forgiving / punishing (\"made driving hard\", \"a skill again\"); value = how hard (0-100), text = the caption words as said.",
+    sample: { text: "driving a SKILL again", value: 90 },
+    build: (p, k, c) => {
+      const words = c.words.slice(0, 6);
+      const hi = words.findIndex(gmCaps);
+      const v = typeof p.value === "number" && Number.isFinite(p.value) ? Math.max(5, Math.min(100, p.value <= 1 ? p.value * 100 : p.value)) : 88;
+      return finish([{ kind: "game", game: "meter", x: c.side === "right" ? 0.62 : 0.4, y: c.y ?? 0.22, w: 0.34 * c.scale, h: 0.085 * c.scale,
+        valueTo: v, bdur: c.s(1.15), items: words, times: words.map((_, i) => c.wt(i, 0.7, 0.18)), hi: hi >= 0 ? hi : undefined,
+        label: T(p.kicker || "Easy"), meta: T(p.sub || "Hard"), text: c.r(6) > 0.25 ? "arrow" : "plain" }], c, "fade");
+    },
+  },
+  {
+    id: "ml-gm-article", name: "Article clipping", family: "callout",
+    about: "A newspaper clipping in tight close-up: soft depth-of-field lines around one sharp line, the quoted phrase swept with a yellow highlighter, a slow push.",
+    use: "A press or critic phrase the narration quotes or names (\"arcade style\", \"boat-like\", \"too floaty\"); text = the phrase, kicker / sub = the words before / after it in that sentence.",
+    sample: { text: "arcade style", kicker: "interest in", sub: "games," },
+    build: (p, k, c) => finish([{ kind: "game", game: "article", x: 0.5, y: 0.5, w: 1, h: 1, text: T(p.text), label: T(p.kicker || ""), meta: T(p.sub || ""),
+      items: p.items?.length ? p.items : ["the series that defined a", "decade of open-world design", "and the studio's next move is", "watched closely by fans who"],
+      mid: c.s(0.45), size: 0.1 * c.scale, fill: "#f4e22b", seed: 1 + Math.round(c.r(7) * 400) }], c, "fade"),
+  },
+  {
+    id: "ml-gm-versus", name: "Versus split", family: "title",
+    about: "A white divider draws down the middle of a split, two big slab titles crown the halves; the side being talked about stays lit, the other dims, and a curved arrow swings over when the talk switches.",
+    use: "Two games, versions or eras compared (\"GTA 4 ... GTA 6\", \"Souls vs Elden Ring\"); kicker = the left title, sub = the right title (short: \"IV\", \"VI\"), itemAt = when each is said.",
+    sample: { text: "IV vs VI", kicker: "IV", sub: "VI" },
+    build: (p, k, c) => finish([{ kind: "game", game: "versus", x: 0.5, y: 0.5, w: 1, h: 1, label: T(p.kicker || c.words[0] || ""),
+      meta: T(p.sub || c.words[c.words.length - 1] || ""), times: gmTimes(p, c, 2, 0, 0.9), size: 0.16 * c.scale,
+      color2: k.id === "gaming" ? "#ff4fd8" : k.colors.secondary, emphColor: k.id === "gaming" ? "#ff9a3c" : k.colors.primary }], c, "fade"),
+  },
+  {
+    id: "ml-gm-board", name: "Cork-board chapter", family: "transition",
+    about: "Out of black onto a map-textured cork board: a big chapter number, the chapter's taped label, polaroids that show the shot through them, red strings to a \"?\" card; the camera pushes in.",
+    use: "Each new chapter of a gaming essay (about one a minute); text = the chapter title, value or kicker = its number, items = the other chapters' titles, sub = the question card's tape (\"THE ANSWER\").",
+    sample: { text: "Driving you had to learn", kicker: "1", items: ["The solution", "The third attempt"] },
+    build: (p, k, c) => trans([{ kind: "game", game: "board", x: 0.5, y: 0.5, w: 1, h: 1, text: T(p.text),
+      label: typeof p.value === "number" ? String(Math.round(p.value)) : T(p.kicker || "1"), meta: T(p.sub || "The answer"),
+      items: p.items || [], seed: 1 + Math.round(c.r(8) * 300) }]),
+  },
+  {
+    id: "ml-gm-curve", name: "Learning curve", family: "data",
+    about: "A curve draws itself over the footage, flat and red along the bottom then sweeping up green, with a glowing head and its label fading in letter by letter.",
+    use: "Getting better over time: learning curve, practice, mastery, skill growing, \"your first hour vs your 100th\"; text = the label (\"Learning curve\").",
+    sample: { text: "Learning curve" },
+    build: (p, k, c) => finish([{ kind: "game", game: "curve", x: 0.14, y: c.y ?? 0.84, w: 0.68 * c.scale, h: 0.5 * c.scale, text: T(p.text),
+      bdur: c.s(1.15), fill: k.id === "gaming" ? "#3dff4e" : k.colors.primary, color2: k.id === "gaming" ? "#ff2b2b" : k.colors.secondary, size: 0.045 * c.scale }], c, "fade"),
+  },
+  {
+    id: "ml-gm-zone", name: "Map zone", family: "callout",
+    about: "A glowing neon-green outline draws round a district of a map (the shot's own in-game map, or a drawn dark game map), the place's name typing on above it.",
+    use: "A place in the game world named (a city, district, region, track: \"Liberty City\", \"Limgrave\", \"the corners\"); kicker \"map\" draws the dark game map when the shot is not one; anchor = the district.",
+    sample: { text: "Corners", kicker: "map" },
+    build: (p, k, c) => {
+      const pt = gmPoint(p, 0.42, 0.56);
+      return finish([{ kind: "game", game: "zone", x: pt.x, y: pt.y, w: 0.2 * c.scale, h: 0.3 * c.scale, text: T(p.text), label: /map/i.test(p.kicker || "") ? "map" : "",
+        items: p.items || [], fill: k.id === "gaming" ? "#31ff45" : k.colors.region, bdur: c.s(0.9), size: 0.1 * c.scale, seed: 2 + Math.round(c.r(9) * 200) }], c, "fade");
+    },
+  },
+  {
+    id: "ml-gm-wireframe", name: "Wireframe tracker", family: "emphasis",
+    about: "A green wireframe box draws itself edge by edge round the subject (a car, a character), following it, with a label laid on the ground plane in perspective.",
+    use: "Physics, hitboxes, weight, handling, collision - the mechanics of a thing on screen (\"PHYSICS\", \"WEIGHT\", \"HITBOX\"); anchor = the subject (a chase-cam car sits low centre).",
+    sample: { text: "PHYSICS" },
+    build: (p, k, c) => {
+      const pt = gmPoint(p, 0.52, 0.6);
+      return finish([{ kind: "game", game: "wire", x: pt.x, y: pt.y, w: 0.28 * c.scale, h: 0.36 * c.scale, text: T(p.text), fill: k.id === "gaming" ? "#3cff3c" : k.colors.primary,
+        size: 0.065 * c.scale, seed: Math.round(c.r(10) * 9) }], c, "fade");
+    },
+  },
+  {
+    id: "ml-gm-formulas", name: "Floating formulas", family: "emphasis",
+    about: "Chalk formulas and triangles fade in and float over the shot round its subject - the \"thinking hard\" look.",
+    use: "Calculation, understanding, figuring a system out, theory-crafting (\"you learn\", \"understood what the car would do\", \"the math behind it\").",
+    sample: { text: "understood" },
+    build: (p, k, c) => finish([{ kind: "game", game: "formula", x: 0.5, y: 0.5, w: 1, h: 1, items: p.items || [], seed: 3 + Math.round(c.r(11) * 500) }], c, "fade"),
+  },
+  {
+    id: "ml-gm-thumbs", name: "Verdict thumbs", family: "emphasis",
+    about: "A glowing green thumbs-up or red thumbs-down disc pops on the verdict word and slowly grows; a second verdict replaces it on its own word.",
+    use: "A verdict or reaction: loved / hated, good / bad, worked / failed, fans for and against; items = \"up\" / \"down\" in the order said, itemAt = their words.",
+    sample: { text: "loved hated", items: ["up", "down"] },
+    build: (p, k, c) => {
+      const v = (p.items?.length ? p.items : c.words.map((w) => (/hate|bad|worse|fail|wrong|broke|annoy|frustrat|^no$/i.test(w) ? "down" : "up")).slice(0, 1)).slice(0, 3);
+      const pt = gmPoint(p, c.side === "left" ? 0.3 : 0.68, 0.5);
+      return finish([{ kind: "game", game: "thumbs", x: pt.x, y: pt.y, w: 0.2, h: 0.27 * c.scale, items: v, times: gmTimes(p, c, v.length, 0.05, 1.2),
+        size: 0.26 * c.scale, fill: k.id === "gaming" ? "#22d63a" : k.colors.primary }], c, "scale", { shade: { kind: "full", amount: 0.22 } });
+    },
+  },
+  {
+    id: "ml-gm-manual", name: "Game manual", family: "callout",
+    about: "An old game manual rises in and opens: aged pages, the guide's title, numbered sections written on as they are said, a red pen circle round the one that matters, a sticky note.",
+    use: "Rules, a system, a guide or steps the player had to learn (\"the basics\", \"braking\", \"cornering\"); text = the guide's title, items = the sections as said, sub = a sticky note.",
+    sample: { text: "Driving guide", kicker: "Liberty City manual", items: ["The basics", "Braking", "Cornering", "Different cars"], sub: "Slow in, fast out" },
+    build: (p, k, c) => {
+      const items = (p.items || []).slice(0, 4);
+      return finish([{ kind: "game", game: "manual", x: 0.5, y: 0.52, w: 1, h: 1, text: T(p.text), label: T(p.kicker || ""), meta: T(p.sub || ""),
+        items, times: gmTimes(p, c, items.length, 0.8, 0.55), hi: items.length > 1 ? 1 : 0, mid: Math.max(c.s(2), p.dur - c.s(1.4)) }], c, "drop",
+      { shade: { kind: "full", amount: 0.45 } });
+    },
+  },
+  {
+    id: "ml-gm-summary", name: "Summary card", family: "callout",
+    about: "A dark summary card: the lead line typed on with its key phrase in the accent, then bold-led bullets typed one by one, the card slowly pushing in.",
+    use: "Two camps or a debate summed up (\"Team Realistic: ...\", \"Team Arcade: ...\"), what fans say, the state of an argument; text = the lead, kicker = its key phrase, items = \"Name: point\" bullets.",
+    sample: { text: "Fans are still fighting over it 20 years later.", kicker: "20 years later", items: ["Team Realistic: praises the weight", "Team Arcade: calls them boats"] },
+    build: (p, k, c) => {
+      const items = (p.items || []).slice(0, 4);
+      return finish([{ kind: "game", game: "summary", x: 0.5, y: 0.5, w: 1, h: 1, text: T(p.text), label: T(p.kicker || ""), items,
+        times: gmTimes(p, c, items.length, 1.0, 1.0), emphColor: gmGold(k) }], c, "fade");
+    },
+  },
+  {
+    id: "ml-gm-neon", name: "Neon question", family: "title",
+    about: "A neon question box flickers on (pink-to-cyan frame, palm silhouette, a title badge) and the question types itself in with its letters closing up.",
+    use: "A question the essay asks the viewer (\"Does braking too late punish you?\"); text = the question as said, sub = a bold second line, kicker = a short badge (\"VI\").",
+    sample: { text: "Does a heavy SUV force you", sub: "to drive differently?", kicker: "VI" },
+    build: (p, k, c) => finish([{ kind: "game", game: "neon", x: 0.36, y: c.y ?? 0.68, w: 0.6 * c.scale, h: 0.16 * c.scale, text: T(p.text), meta: T(p.sub || ""),
+      label: T(p.kicker || ""), size: 0.034 * c.scale, mid: c.s(0.3) + T(p.text).length * 0.03 }], c, "blur"),
+  },
+  {
+    id: "ml-gm-static", name: "TV static cut", family: "transition",
+    about: "The picture breaks into TV static and jittering colour bars for a beat, then the next shot comes through.",
+    use: "A cut to an old game, a flashback, a hard topic switch or a joke beat (\"back in 2008\", \"and then everything changed\").",
+    sample: { text: "" },
+    build: () => trans([{ kind: "game", game: "static", x: 0.5, y: 0.5, w: 1, h: 1 }]),
+  },
+  {
+    id: "ml-gm-endline", name: "End line", family: "title",
+    about: "On black: a small white lead line, then the closing words in bold gold capitals.",
+    use: "The essay's last line (\"they'll make getting good at it - MATTER AGAIN\"); sub = the small lead, text = the gold words.",
+    sample: { text: "Matter again", sub: "They'll make getting good at it" },
+    build: (p, k, c) => finish([{ kind: "game", game: "endline", x: 0.5, y: 0.5, w: 1, h: 1, text: T(p.text), meta: T(p.sub || ""),
+      mid: c.s(0.75), emphColor: gmGold(k), size: 0.044 * c.scale }], c, "fade"),
+  },
+];
+
 
 export const RECIPES: MxRecipe[] = [
   // ============================== TITLES ==============================
@@ -1541,6 +1731,8 @@ export const RECIPES: MxRecipe[] = [
   },
   // Motion pack 2 (2026-10-14): kinetic type, data, callouts, emphasis marks and transitions - see PACK2 above.
   ...PACK2,
+  // The gaming video-essay pack (2026-10-15) - see GAMING above.
+  ...GAMING,
 ];
 
 export const RECIPE_BY_ID: Record<string, MxRecipe> = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
