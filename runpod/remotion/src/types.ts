@@ -454,8 +454,12 @@ export interface Overlay {
   locations?: MapLocation[];
   /** Maps v2: the countries / states a look highlights (MapArea). */
   areas?: MapArea[];
-  /** Maps v2: the brand kit id the map draws with (royal, noir, bulletin, atlas - components/maps2/kit.ts). */
-  kit?: string;
+  /**
+   * The brand kit: Maps v2 draws with a kit id (royal, noir, bulletin, atlas - components/maps2/kit.ts); Editor v2's
+   * motion library also takes a Style Kit's brand tokens (components/smart/library.ts).
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  kit?: any;
   /** Maps v2 flows: "out" (from the first place to the others, default) or "in" (the others into the first). */
   direction?: string;
   /** Only used by "split": the two visuals to show, top then bottom. */
@@ -489,7 +493,6 @@ export interface Overlay {
    * royal, noir, bulletin, atlas - or a Style Kit's brand tokens), the seconds from the look's first frame each word
    * of `text` is spoken, and a seed that varies the design between uses. Absent: the video's accent, a stagger.
    */
-  kit?: unknown;
   wordAt?: number[];
   seed?: number;
   labelPosition?: { x: number; y: number };
