@@ -122,3 +122,35 @@ class VoAlignTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReelTest(unittest.TestCase):
+    def test_specs_and_swears(self):
+        from src.celeb import reel
+        self.assertEqual(reel.spec('"HA HA HA"@10.4@largest'), ("HA HA HA", 10.4, "largest"))
+        self.assertEqual(reel.spec('"OMG..."@center'), ("OMG...", 0.0, "center"))
+        self.assertEqual(reel.starred("Fucking"), "F***ing")
+        self.assertTrue(reel.SWEAR.search("Motherf***er!"))
+        self.assertFalse(reel.UNCENSORED.search("F***."))
+        sid, rng, opts = reel._montage_item('XG_CimbpVMQ@42.3-43.3 pop="HA HA HA"@left speed')
+        self.assertEqual((sid, rng), ("XG_CimbpVMQ", (42.3, 43.3)))
+        self.assertEqual(opts, ['pop="HA HA HA"@left', "speed"])
+
+    def test_captions_break_at_camera_cuts(self):
+        from src.celeb import reel
+        ws = [{"text": t, "start": s, "end": s + 0.3} for t, s in
+              (("You", 10.0), ("got", 10.3), ("a", 10.6), ("spider", 10.9), ("web.", 11.2), ("Spider", 12.0), ("-Man", 12.3))]
+        caps = reel.caption_phrases(ws, 10.0, 14.0, [10.75], offset=100.0)
+        self.assertEqual([c[2] for c in caps], ["YOU GOT A", "SPIDER WEB.", "SPIDER-MAN"])
+        self.assertAlmostEqual(caps[0][0], 100.0)
+        self.assertTrue(all(a < b for a, b, _ in caps))
+
+    def test_elements_draw(self):
+        from src.celeb import fx
+        for e in (fx.Pop("pop", 0, 1.4, text='"F***"'), fx.NameLabel("name", 0, 1.9, text="ZENDAYA"),
+                  fx.Circle("c", 0, 1.9), fx.Pointer("p", 0, 1.6), fx.Arrow3D("a", 0, 1.0), fx.SpeedLines("s", 0, 0.8)):
+            for t in (0.02, 0.2, 0.9):
+                got = e.draw(t)
+                if got:
+                    im, x, y = got
+                    self.assertGreater(im.getbbox()[2] if im.getbbox() else 1, 0)

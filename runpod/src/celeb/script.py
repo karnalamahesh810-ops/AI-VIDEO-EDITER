@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-_CLIP = re.compile(r"\[\s*CLIP\s*:(.*?)\]", re.I | re.S)
+_CLIP = re.compile(r"\[\s*(CLIP|MONTAGE|FLASH)\s*:?(.*?)\]", re.I | re.S)
 
 
 @dataclass
@@ -30,6 +30,11 @@ class Block:
     end: Optional[float] = None
     label: str = ""                # show / person label drawn at the clip's start
     cold: bool = False             # this clip gives the cold open (default: the plan picks one)
+    film: str = ""                 # "Title / Subtitle / Year": a title card when the film changes
+    names: List[str] = field(default_factory=list)    # "NAME@seconds@hint": name label + circle
+    pops: List[str] = field(default_factory=list)     # "\"TEXT\"@seconds@hint": punchline pop
+    points: List[str] = field(default_factory=list)   # "@seconds@hint": pointer triangle above a head
+    shots: List[str] = field(default_factory=list)    # montage: "VIDEOID@a-b [pop=..|speed|arrow]"
 
     @property
     def video_id(self) -> str:
@@ -69,10 +74,11 @@ def parse_clip(body: str) -> Block:
         if not part:
             continue
         # key=value fields; several may share one segment ("url=... start=1:12 end=1:31")
-        kvs = re.findall(r"(\w+)\s*=\s*(\"[^\"]*\"|.*?)(?=\s+\w+\s*=|$)", part)
+        kvs = re.findall(r"(\w+)\s*=\s*(.*?)(?=\s+\w+\s*=|$)", part)
         if kvs and re.match(r"^\w+\s*=", part):
             for k, v in kvs:
-                v = v.strip().strip('"')
+                raw = v.strip()
+                v = raw.strip('"')
                 k = k.lower()
                 if k == "who":
                     b.who = [w.strip() for w in re.split(r",|&| and ", v) if w.strip()]
@@ -90,6 +96,14 @@ def parse_clip(body: str) -> Block:
                     b.end = timecode(v)
                 elif k == "label":
                     b.label = v
+                elif k == "film":
+                    b.film = v
+                elif k == "name":
+                    b.names.append(raw)
+                elif k == "pop":
+                    b.pops.append(raw)
+                elif k == "point":
+                    b.points.append(raw)
                 elif k == "cold":
                     b.cold = v.lower() not in ("0", "no", "false")
             continue
@@ -112,7 +126,13 @@ def parse(script: str) -> List[Block]:
     pos = 0
     for m in _CLIP.finditer(script or ""):
         _narr(blocks, script[pos:m.start()])
-        blocks.append(parse_clip(m.group(1)))
+        kind = m.group(1).upper()
+        if kind == "CLIP":
+            blocks.append(parse_clip(m.group(2)))
+        elif kind == "FLASH":
+            blocks.append(Block(kind="flash"))
+        else:
+            blocks.append(Block(kind="montage", shots=[x.strip() for x in m.group(2).split(",") if x.strip()]))
         pos = m.end()
     _narr(blocks, (script or "")[pos:])
     return blocks

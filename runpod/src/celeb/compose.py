@@ -86,7 +86,7 @@ def _pill(w: float, h: float, r: float) -> str:
 
 def _clean(text: str) -> str:
     text = re.sub(r"\[[^\]]*\]", "", text)                 # [Laughter]
-    text = re.sub(r"(\w) -(\w)", r"-", text)          # whisper's "Spider -Man"
+    text = re.sub(r"(\w) -(\w)", r"\1-\2", text)          # whisper's "Spider -Man"
     return re.sub(r"\s+", " ", text.replace("{", "(").replace("}", ")")).strip()
 
 

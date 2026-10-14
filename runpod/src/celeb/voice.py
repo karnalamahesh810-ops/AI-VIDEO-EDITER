@@ -37,6 +37,11 @@ def level(src: str, dst: str, target: float = TARGET_LUFS, tail: float = TAIL) -
     return dst
 
 
+def cache_key(text: str, ref: dict, speed: float) -> str:
+    import hashlib
+    return hashlib.sha1(f"{text}|{ref.get('url', '')}|{speed:.3f}".encode()).hexdigest()[:12]
+
+
 def body(text: str, voice: dict, seed: int, speed: float = 1.0) -> dict:
     return {"action": "tts", "text": text, "language": "en", "voice": voice, "seed": int(seed),
             "speed": round(float(speed), 3), "pause": 0.4, "format": "mp3", "return": "url",
@@ -51,8 +56,11 @@ def synthesize(texts: List[str], work: str, *, voice: str = "doc-male", speed: f
     ref = PRESETS.get(voice, voice if isinstance(voice, dict) else PRESETS["doc-male"])
 
     def one(i: int) -> str:
+        done = os.path.join(work, f"narr_{cache_key(texts[i], ref, speed)}.wav")
+        if os.path.isfile(done) and os.path.getsize(done) > 1000:      # same line, same voice: reuse it
+            return done
         out = server.voice(body(texts[i], ref, seed + i, speed), timeout=420)
-        raw = os.path.join(work, f"narr_{i:02d}.mp3")
+        raw = os.path.join(work, f"narr_{cache_key(texts[i], ref, speed)}.mp3")
         if out.get("audio_url"):
             r = requests.get(out["audio_url"], timeout=120)
             r.raise_for_status()
@@ -63,7 +71,7 @@ def synthesize(texts: List[str], work: str, *, voice: str = "doc-male", speed: f
                 fh.write(base64.b64decode(out["audio_b64"]))
         else:
             raise RuntimeError("the voice job finished without audio")
-        return level(raw, os.path.join(work, f"narr_{i:02d}.wav"))
+        return level(raw, done)
 
     with ThreadPoolExecutor(max_workers=max(1, min(parallel, len(texts)))) as pool:
         return list(pool.map(one, range(len(texts))))
