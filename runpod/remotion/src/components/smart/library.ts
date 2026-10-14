@@ -1,5 +1,6 @@
 /**
- * Editor v2's motion library (2026-10-14): 33 premium looks - titles, lower thirds, figures, emphasis marks and
+ * Editor v2's motion library (2026-10-14): 35 premium looks (pack 1) + 32 more (pack 2: kinetic type, data charts,
+ * mock-up callouts, hand-drawn emphasis, effect transitions) - titles, lower thirds, figures, emphasis marks and
  * overlay transitions - each a RECIPE that designs a motion spec (specMath.ts) for its words, the narration's
  * word times and the video's brand kit. One renderer (SmartSpec's SpecStage) draws them all, in the worker's
  * render and in the editor's Player alike.
@@ -21,7 +22,7 @@
 import { KITS, type BrandKit } from "./brandKits";
 import { cleanSpec, FONT_KEYS, type MotionSpec } from "./specMath";
 
-export type MxFamily = "title" | "lower-third" | "number" | "emphasis" | "transition";
+export type MxFamily = "title" | "lower-third" | "number" | "emphasis" | "transition" | "data" | "callout";
 
 export interface MxParams {
   /** The main words. */
@@ -34,8 +35,12 @@ export interface MxParams {
   prefix?: string;
   suffix?: string;
   decimals?: number;
-  /** Short items (tiles, steps). */
+  /** Short items (tiles, steps; a chart's "Label 41" rows). */
   items?: string[];
+  /** Each item's figure when the editor has it (overlay items' own values; else parsed from the label). */
+  values?: (number | undefined)[];
+  /** Seconds from the look's first frame each item is spoken, when known. */
+  itemAt?: number[];
   /** Seconds from the look's first frame each word of `text` is spoken (the narration's own times), when known. */
   wordAt?: number[];
   /** The look's length in seconds. */
@@ -60,6 +65,8 @@ export interface MxRecipe {
   family: MxFamily;
   /** One line for the look picker. */
   about: string;
+  /** When the edit director should reach for it (trigger notes for Smart edit and the AI director). */
+  use?: string;
   /** Sample words for the picker's preview (on black). */
   sample: Partial<MxParams>;
   build: (p: Required<Pick<MxParams, "text" | "dur">> & MxParams, k: BrandKit, c: Ctx) => Raw;
@@ -119,7 +126,7 @@ export const fontKeyFor = (family: string): string => {
 
 // ------------------------------------------------------------------ type measure
 /** Average advance of one character, in em, per face (measured on the renderer's faces, rounded up). */
-const CH: Record<string, number> = { narrow: 0.45, grotesk: 0.6, kinetic: 0.56, display: 0.58, serif: 0.52, "serif-italic": 0.5, mono: 0.62, inter: 0.56 };
+const CH: Record<string, number> = { narrow: 0.45, grotesk: 0.6, kinetic: 0.56, display: 0.58, serif: 0.52, "serif-italic": 0.5, mono: 0.62, inter: 0.56, hand: 0.42 };
 
 /** The size (share of the frame height) at which `lines` fit `maxW` of the frame's width, within [lo, hi]. */
 const fitSize = (lines: string[], font: string, maxW: number, aspect: number, hi: number, lo: number, upper = false, tracking = 0): number => {
@@ -232,6 +239,671 @@ const figure = (p: MxParams) => {
   const v = typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null;
   return v;
 };
+
+// ------------------------------------------------------------------ motion pack 2 (2026-10-14)
+/** A colour mixed toward white (f > 0) or black (f < 0). */
+const mix = (c: string, f: number): string => {
+  const m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (!m) return c;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => Math.round(f >= 0 ? v + (255 - v) * f : v * (1 + f)).toString(16).padStart(2, "0");
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+};
+
+const UNIT: Record<string, string> = { million: "M", millions: "M", m: "M", billion: "B", billions: "B", b: "B", bn: "B", thousand: "K", k: "K", trillion: "T", t: "T" };
+/** A chart row from a short label: "Texas 41", "France: 89 million", "41% Ohio", "$2.5B Apple" (the overlay's own value wins). */
+export const parseItem = (raw: string, value?: number): { l: string; v: number | null; pre?: string; suf?: string; dec?: number } => {
+  const s = String(raw || "").replace(/\s+/g, " ").trim();
+  const num = (x: string) => Number(x.replace(/[,$£€]/g, ""));
+  const dec = (x: string) => { const d = /\.(\d+)$/.exec(x); return d ? Math.min(3, d[1].length) : 0; };
+  const unit = (u?: string) => {
+    if (!u) return undefined;
+    const k = u.toLowerCase();
+    if (k === "%" || k === "percent") return "%";
+    return UNIT[k] || (/^[a-z]{1,5}$/i.test(u) ? ` ${u}` : undefined);
+  };
+  let m = /^(.*?)[\s:=–-]+(-?[$£€]?\d[\d,]*(?:\.\d+)?)\s*(%|percent|[a-z]{1,9})?$/i.exec(s);
+  if (m && m[1].trim() && !/^\d{4}$/.test(m[2])) {
+    const pre = /^-?[$£€]/.exec(m[2]) ? m[2].replace(/^-/, "")[0] : undefined;
+    return { l: m[1].trim(), v: typeof value === "number" ? value : num(m[2]), pre, suf: unit(m[3]), dec: dec(m[2]) };
+  }
+  m = /^(-?[$£€]?\d[\d,]*(?:\.\d+)?)\s*(%|percent|million|billion|thousand|bn|[kmb])?\s+(.+)$/i.exec(s);
+  if (m && !/^\d{4}$/.test(m[1])) {
+    const pre = /^-?[$£€]/.exec(m[1]) ? m[1].replace(/^-/, "")[0] : undefined;
+    return { l: m[3].trim(), v: typeof value === "number" ? value : num(m[1]), pre, suf: unit(m[2]), dec: dec(m[1]) };
+  }
+  return { l: s, v: typeof value === "number" ? value : null };
+};
+
+/** The items a data look draws (at most `max`). */
+const rowsOf = (p: MxParams, max: number) => (p.items || []).slice(0, max).map((it, i) => parseItem(it, p.values?.[i]));
+
+/** When each of n items lands: its spoken time when the editor found it, else spread over the look from `start`. */
+const itemTimes = (p: MxParams, c: Ctx, n: number, start: number, dur: number): number[] => {
+  const gap = Math.max(0.28, Math.min(0.75, (dur - start - 2.2) / Math.max(1, n)));
+  return Array.from({ length: n }, (_, i) => {
+    const at = p.itemAt?.[i];
+    return typeof at === "number" && Number.isFinite(at) && at >= 0 && at < dur ? at : c.s(start + i * gap);
+  });
+};
+
+/** A data look's title: a small accent rule and the words, top left of the chart. */
+const chartTitle = (p: MxParams, k: BrandKit, c: Ctx, x: number, y: number, size = 0.062): Lay[] => {
+  const lines = balance(p.text, 34, 2);
+  const s = fitSize(lines, k.fonts.title, 0.62, c.aspect, size, 0.03, true) * c.scale;
+  return [text({ lines, font: k.fonts.title, size: s, weight: k.titleWeight, color: k.colors.text, upper: true, x, y, anchor: "l", align: "left",
+    tracking: k.titleTracking, animator: wordAnim(c, { y: 1.1, blur: 3 }, 0.05, 0.06, 0.6, "expoOut", true),
+    extra: { deco: { rule: k.colors.primary, at: 0 }, sub: p.sub ? { text: T(p.sub), size: s * 0.5, font: k.fonts.body, weight: 500, color: k.colors.muted,
+      tracking: 0.01, upper: false, at: c.s(0.5) } : undefined } })];
+};
+
+const trans = (layers: Lay[]): Raw => ({ v: 1, persp: 1400, exit: { kind: "fade", dur: 0 }, drift: { x: 0, y: 0, rotY: 0 }, layers });
+const verdictColor = (word: string, k: BrandKit) => (/fact[- ]?check/i.test(word) ? k.colors.primary : /\b(false|fake|myth|wrong|no|misleading|debunked|untrue|lie)\b/i.test(word) ? "#e5484d"
+  : /\b(true|real|fact|confirmed|yes|correct|verified|accurate)\b/i.test(word) ? "#2fbf71" : k.colors.primary);
+
+const PACK2: MxRecipe[] = [
+  // ============================== KINETIC TYPE ==============================
+  {
+    id: "ml-title-stack", name: "Word stack slam", family: "title",
+    about: "A justified block of stacked words, each line sized to the same width and slammed in on its spoken word; the stack jolts as each lands.",
+    use: "A punchy hook or a three-to-six word verdict said with force (\"they lost everything\"); the hook and big turns only.",
+    sample: { text: "They lost everything overnight" },
+    build: (p, k, c) => {
+      const lines = balance(p.text, 9, 5);
+      const block = 0.36;
+      let sizes = lines.map((l) => fitSize([l], k.fonts.title, block, c.aspect, 0.15, 0.05, true));
+      // The whole stack stays within ~62% of the frame's height.
+      const fit = Math.min(1, 0.62 / sizes.reduce((a, b) => a + b * 0.98, 0));
+      sizes = sizes.map((s) => s * fit);
+      const lh = sizes.map((s) => s * 0.98 * c.scale);
+      const total = lh.reduce((a, b) => a + b, 0);
+      const pl = placeX(c.side);
+      let y = (c.y ?? 0.5) - total / 2;
+      let wi = 0;
+      const lands = lines.map((l) => { const at = c.wt(wi, 0.1, 0.24); wi += l.split(/\s+/).length; return at; });
+      const big = sizes.indexOf(Math.max(...sizes));
+      return finish(lines.map((line, i) => {
+        const yy = y + lh[i] / 2;
+        y += lh[i];
+        const t = lands[i];
+        const bump: unknown[] = [[0, 0]];
+        for (let j = i + 1; j < lines.length && bump.length < 14; j++) bump.push([lands[j], 0], [lands[j] + 0.05, 0.007], [lands[j] + 0.24, 0, "out"]);
+        return text({ lines: [line], font: k.fonts.title, size: sizes[i] * c.scale, weight: Math.max(800, k.titleWeight), color: i === big ? k.colors.primary : k.colors.text,
+          upper: true, tracking: -0.01, x: pl.x, y: yy, anchor: pl.anchor, align: pl.align, lineH: 0.92,
+          extra: { mb: 0.7, keys: { scale: [[0, 1.9], [t, 1.9], [t + c.s(0.3), 1, "expoOut"]], opacity: [[0, 0], [t, 0], [t + 0.07, 1]],
+            blur: [[0, 14], [t, 14], [t + c.s(0.26), 0, "out"]], y: bump } } });
+      }), c, "blur", { shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.5 } });
+    },
+  },
+  {
+    id: "ml-title-slice", name: "Split reveal", family: "title",
+    about: "One line cut through the middle: its top half slides in from one side, its bottom half from the other, and they lock together with a bright seam.",
+    use: "A short line that turns the story (\"everything changed\", a name reveal); one line, at most five words.",
+    sample: { text: "Everything changed" },
+    build: (p, k, c) => {
+      const line = T(p.text);
+      const size = fitSize([line], k.fonts.title, 0.66, c.aspect, 0.13, 0.035, true) * c.scale;
+      const y = c.y ?? 0.5;
+      const dir = c.r(1) > 0.5 ? 1 : -1;
+      const t0 = Math.max(0, c.wt(0, 0.1, 0) - c.s(0.15)), join = t0 + c.s(0.7);
+      const half = (cut: [number, number], d: number) => text({ lines: [line], font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true,
+        tracking: k.titleTracking, x: 0.5, y, anchor: "c", align: "center", emph: c.words.length > 1 ? [c.words.length - 1] : [], emphColor: k.colors.primary,
+        extra: { cut, mb: 1, keys: { x: [[0, 0.4 * d], [t0, 0.4 * d], [join, 0, "expoOut"]], opacity: [[0, 0], [t0, 0], [t0 + 0.12, 1]] } } });
+      const w = Math.min(0.9, widthOf(line, k.fonts.title, size, c.aspect, true) * 1.08);
+      return finish([
+        half([0, 0.5], -dir), half([0.5, 0], dir),
+        { kind: "rect", x: 0.5, y: y + size * 0.02, w, h: 0.004, fill: k.colors.primary, color: k.colors.primary, blend: "screen",
+          keys: { sx: [[0, 0], [join - c.s(0.12), 0], [join + c.s(0.3), 1, "expoOut"]], opacity: [[0, 0], [join - c.s(0.12), 1], [join + c.s(0.5), 1], [join + c.s(1.1), 0, "out"]] } },
+      ], c, "blur", { shade: { kind: "vignette", amount: 0.45 } });
+    },
+  },
+  {
+    id: "ml-title-wipe", name: "Spoken mask wipe", family: "title",
+    about: "A soft mask wipes the words on left to right in step with the voice, a glowing accent edge riding the reveal.",
+    use: "A full sentence worth reading along (a thesis, the stakes); lines up to about 8 words, any section.",
+    sample: { text: "The deal that built a city", wordAt: [0.2, 0.5, 0.75, 1.0, 1.2, 1.6] },
+    build: (p, k, c) => {
+      const lines = balance(p.text, 22, 2);
+      const size = fitSize(lines, k.fonts.title, 0.66, c.aspect, 0.09, 0.045, true) * c.scale;
+      const y0 = (c.y ?? 0.5) - ((lines.length - 1) * size * 1.15) / 2;
+      const layers: Lay[] = [];
+      let wi = 0;
+      lines.forEach((line, li) => {
+        const words = line.split(/\s+/);
+        const lw = Math.min(0.92, widthOf(line, k.fonts.title, size, c.aspect, true));
+        const left = 0.5 - lw / 2;
+        const keys: unknown[] = [[0, 0]], bar: unknown[] = [[0, 0]];
+        let chars = 0;
+        const first = c.wt(wi, 0.15 + li * 0.5, 0.18);
+        keys.push([Math.max(0, first - c.s(0.22)), 0]);
+        bar.push([Math.max(0, first - c.s(0.22)), 0]);
+        words.forEach((w, j) => {
+          chars += w.length + (j < words.length - 1 ? 1 : 0);
+          const f = Math.min(1, chars / line.length);
+          const t = c.wt(wi + j, 0.15 + li * 0.5, 0.18) + c.s(0.16);
+          if (keys.length < 15) { keys.push([t, f, "inOut"]); bar.push([t, f * lw, "inOut"]); }
+        });
+        const end = (keys[keys.length - 1] as number[])[0];
+        wi += words.length;
+        const yy = y0 + li * size * 1.15;
+        layers.push(text({ lines: [line], font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true, tracking: k.titleTracking,
+          x: left, y: yy, anchor: "l", align: "left", extra: { keys: { wipe: keys } } }));
+        layers.push({ kind: "rect", x: left, y: yy, w: 0.0035, h: size * 1.05, fill: k.colors.primary, color: k.colors.primary, mb: 0.6,
+          keys: { x: bar, opacity: [[0, 0], [Math.max(0, first - c.s(0.22)), 1], [end, 1], [end + c.s(0.35), 0, "out"]] } });
+      });
+      return finish(layers, c, "blur", { shade: { kind: "vignette", amount: 0.45 } });
+    },
+  },
+  {
+    id: "ml-title-cardflip", name: "3D card flip", family: "title",
+    about: "An accent card with a short setup turns over in 3D on the spoken word and shows the answer on its back.",
+    use: "A setup and its answer (kicker = the setup, e.g. \"The cause\"; text = the reveal); question-then-answer moments.",
+    sample: { text: "A single loose bolt", kicker: "The cause" },
+    build: (p, k, c) => {
+      const back = balance(p.text, 16, 3);
+      const size = fitSize(back, k.fonts.title, 0.46, c.aspect, 0.085, 0.045, true) * c.scale;
+      const front = T(p.kicker || "?");
+      const fsz = fitSize([front], k.fonts.title, 0.4, c.aspect, 0.11, 0.05, true) * c.scale;
+      const tf = Math.max(c.s(1.25), c.wt(0, 1.3, 0) - c.s(0.25));
+      const half = c.s(0.26);
+      const y = c.y ?? 0.5;
+      return finish([
+        text({ lines: [front], font: k.fonts.title, size: fsz, weight: k.titleWeight, color: k.colors.pillText, upper: true, x: 0.5, y, anchor: "c", align: "center",
+          extra: { shadow: "none", panel: { color: k.colors.primary, opacity: 1, pad: 0.04, radius: 0.012, blur: 0, padY: 0.03 },
+            keys: { rotY: [[0, 0], [tf, 0], [tf + half, 90, "in"]], opacity: [[0, 0], [c.s(0.3), 1, "out"], [tf + half, 1], [tf + half + 0.01, 0]],
+              scale: [[0, 0.82], [c.s(0.7), 1, "expoOut"]], y: [[0, 0.04], [c.s(0.7), 0, "expoOut"]] } } }),
+        text({ lines: back, font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true, x: 0.5, y, anchor: "c", align: "center",
+          emph: [c.words.length - 1], emphColor: k.colors.primary,
+          extra: { shadow: "none", panel: { color: k.colors.bg2, opacity: 0.92, pad: 0.04, radius: 0.012, blur: 10, padY: 0.03 },
+            keys: { rotY: [[0, -90], [tf + half, -90], [tf + half + c.s(0.55), 0, "quintOut"]], opacity: [[0, 0], [tf + half - 0.01, 0], [tf + half, 1]] } } }),
+      ], c, "blur", { persp: 1000, shade: { kind: "vignette", amount: 0.42 } });
+    },
+  },
+  {
+    id: "ml-title-extrude", name: "Extruded 3D title", family: "title",
+    about: "A heavy title with real depth swings round in perspective and settles, its sides in a deep shade of the kit accent.",
+    use: "An episode / topic title or a name that deserves a monument (\"Burj Khalifa\", \"The Great Fire\"); one to four words, openings and chapter starts.",
+    sample: { text: "The Great Fire" },
+    build: (p, k, c) => {
+      const lines = balance(p.text, 12, 2);
+      const size = fitSize(lines, k.fonts.title, 0.62, c.aspect, 0.17, 0.06, true) * c.scale;
+      const dir = c.r(2) > 0.5 ? 1 : -1;
+      return finish([
+        text({ lines, font: k.fonts.title, size, weight: 900, color: k.colors.text, upper: true, tracking: -0.01, x: 0.5, y: c.y ?? 0.48, anchor: "c", align: "center",
+          lineH: 0.95, emph: lines.length > 1 || c.words.length > 2 ? [c.words.length - 1] : [], emphColor: k.colors.primary,
+          animator: wordAnim(c, { opacity: 0, scale: 1.35, blur: 6 }, 0.15, 0.12, 0.6, "expoOut"),
+          extra: { extrude: 12, extrudeColor: mix(k.colors.primary, -0.55), shadow: "none",
+            keys: { rotX: [[0, 38], [c.s(1.2), 9, "expoOut"], [p.dur, 5, "linear"]], rotY: [[0, -42 * dir], [c.s(1.3), -11 * dir, "expoOut"], [p.dur, 7 * dir, "linear"]],
+              scale: [[0, 0.62], [c.s(1.2), 1, "expoOut"], [p.dur, 1.04, "linear"]], blur: [[0, 10], [c.s(0.5), 0, "out"]] } } }),
+      ], c, "scale", { persp: 900, shade: { kind: "vignette", amount: 0.5 } });
+    },
+  },
+  {
+    id: "ml-title-redact", name: "Declassified", family: "title",
+    about: "A typed paper slip with every word blacked out; each bar pulls away the moment its word is spoken.",
+    use: "A secret, a leak, a hidden fact or a document quote coming out (\"the report admitted...\"); crime, history, politics, business.",
+    sample: { text: "The test was never approved", kicker: "Declassified", wordAt: [0.4, 0.7, 1.0, 1.3, 1.6] },
+    build: (p, k, c) => {
+      const lines = balance(p.text, 22, 3);
+      const size = fitSize(lines, "mono", 0.5, c.aspect, 0.06, 0.032) * c.scale;
+      const pl = placeX(c.side);
+      return finish([
+        text({ lines, font: "mono", size, weight: 700, color: "#151515", x: pl.x, y: c.y ?? 0.5, anchor: pl.anchor, align: "left", lineH: 1.35,
+          animator: wordAnim(c, { y: 0 }, 0.6, 0.28, 0.32, "inOut"),
+          extra: { redact: "#0c0c0c", shadow: "none", panel: { color: "#efe9dc", opacity: 0.97, pad: 0.03, radius: 0.002, blur: 0, padY: 0.03 },
+            kicker: p.kicker ? { text: T(p.kicker).toUpperCase(), size: size * 0.55, color: "#ffffff", bg: "#b3261e", at: c.s(0.2) } : undefined,
+            keys: { y: [[0, 0.05], [c.s(0.7), 0, "expoOut"]], rot: [[0, -4], [c.s(0.8), -1.2, "expoOut"]], opacity: [[0, 0], [c.s(0.25), 1, "out"]] } } }),
+      ], c, "drop", { shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.45 } });
+    },
+  },
+  // ============================== DATA ==============================
+  {
+    id: "ml-data-race", name: "Bar race", family: "data",
+    about: "Horizontal bars grow on their spoken names, figures counting along, then re-sort themselves into rank order.",
+    use: "Three to six things compared by one figure (countries, companies, players); items as \"Name 41\" in the narration's order.",
+    sample: { text: "Most visited countries", sub: "International arrivals, millions", items: ["Spain 85", "France 100", "Italy 57", "USA 66"] },
+    build: (p, k, c) => {
+      const data = rowsOf(p, 6);
+      if (!data.length) return finish([], c);
+      return finish([
+        ...chartTitle(p, k, c, 0.19, 0.2),
+        { kind: "chart", chart: "race", data, times: itemTimes(p, c, data.length, 0.8, p.dur), x: 0.5, y: 0.6, w: 0.7 * c.scale, h: Math.min(0.62, 0.125 * data.length) * c.scale,
+          fill: k.colors.primary, color: k.colors.text, color2: k.colors.secondary, offColor: hexA(k.colors.text, 0.08), emphColor: k.colors.pillText,
+          font: k.fonts.label, font2: k.fonts.number, size: 0.042 * c.scale, prefix: p.prefix || "", suffix: p.suffix || "", decimals: p.decimals || 0, bdur: c.s(0.9) },
+      ], c, "fade", { shade: { kind: "full", amount: 0.58 } });
+    },
+  },
+  {
+    id: "ml-data-line", name: "Line draw-on", family: "data",
+    about: "A trend line draws itself point by point under a soft fill; the last point pulses and a callout lands with its figure.",
+    use: "A figure changing over time (rose, fell, doubled, grew since...); items as \"2010 4.2\" (period then figure), three to eight points.",
+    sample: { text: "Global smartphone users", sub: "Billions", items: ["2012 1.1", "2015 1.9", "2018 2.9", "2021 3.6", "2024 4.6"], suffix: "B", decimals: 1 },
+    build: (p, k, c) => {
+      const data = (p.items || []).slice(0, 8).map((it, i) => {
+        const m = /^(\S+)\s+(.+)$/.exec(String(it).trim());
+        const r = m ? parseItem(`x ${m[2]}`, p.values?.[i]) : parseItem(String(it), p.values?.[i]);
+        return { l: m ? m[1] : r.l, v: r.v, pre: r.pre, suf: r.suf };
+      }).filter((d) => d.v !== null);
+      if (data.length < 2) return finish([], c);
+      return finish([
+        ...chartTitle(p, k, c, 0.15, 0.17),
+        { kind: "chart", chart: "line", data, times: itemTimes(p, c, data.length, 0.7, p.dur), x: 0.5, y: 0.6, w: 0.76 * c.scale, h: 0.6 * c.scale,
+          fill: k.colors.primary, color: k.colors.text, color2: k.colors.muted, offColor: hexA(k.colors.text, 0.12), emphColor: k.colors.pillText,
+          font: k.fonts.label, font2: k.fonts.number, size: 0.036 * c.scale, prefix: p.prefix || "", suffix: p.suffix || "", decimals: p.decimals || 0, hi: data.length - 1 },
+      ], c, "fade", { shade: { kind: "full", amount: 0.58 } });
+    },
+  },
+  {
+    id: "ml-data-donut", name: "Donut build", family: "data",
+    about: "A donut builds slice by slice on the spoken parts; the first slice pops out and its share counts up in the middle.",
+    use: "A whole split into two to five parts (shares, budgets, sources); items as \"Coal 36%\", the part the line is about first.",
+    sample: { text: "Where the power comes from", items: ["Coal 36%", "Gas 22%", "Hydro 15%", "Other 27%"], suffix: "%" },
+    build: (p, k, c) => {
+      const data = rowsOf(p, 5).filter((d) => d.v !== null);
+      if (!data.length) return finish([], c);
+      return finish([
+        ...chartTitle(p, k, c, 0.17, 0.18),
+        { kind: "chart", chart: "donut", data, times: itemTimes(p, c, data.length, 0.7, p.dur), x: 0.5, y: 0.6, w: 0.7 * c.scale, h: 0.6 * c.scale, hi: 0,
+          fill: k.colors.primary, color: k.colors.text, color2: k.colors.muted, offColor: hexA(k.colors.text, 0.3), emphColor: k.colors.pillText,
+          palette: [k.colors.secondary, k.colors.muted, mix(k.colors.primary, -0.35), k.colors.region], font: k.fonts.label, font2: k.fonts.number,
+          size: 0.04 * c.scale, prefix: p.prefix || "", suffix: p.suffix || "", decimals: p.decimals || 0, bdur: c.s(0.7) },
+      ], c, "fade", { shade: { kind: "full", amount: 0.6 } });
+    },
+  },
+  {
+    id: "ml-data-grid", name: "Stat grid", family: "data",
+    about: "Two to four glass tiles rise in turn, each figure counting up over its label, a kit-accent rule drawing across its top.",
+    use: "Several figures said close together (a scorecard: cost, time, people, distance); items as \"Workers 3,000\" - two to four.",
+    sample: { text: "The project in numbers", items: ["Workers 12,000", "Years 6", "Cost $1.5B", "Floors 163"] },
+    build: (p, k, c) => {
+      const data = rowsOf(p, 4).filter((d) => d.v !== null);
+      if (!data.length) return finish([], c);
+      const h = (data.length > 3 ? 0.54 : 0.34) * c.scale;
+      return finish([
+        ...chartTitle(p, k, c, 0.17, 0.2),
+        { kind: "chart", chart: "grid", data, times: itemTimes(p, c, data.length, 0.6, p.dur), x: 0.5, y: 0.61, w: 0.7 * c.scale, h, hi: 0,
+          fill: k.colors.primary, color: k.colors.number, color2: k.colors.muted, font: k.fonts.label, font2: k.fonts.number, size: 0.036 * c.scale,
+          prefix: p.prefix || "", suffix: p.suffix || "", decimals: p.decimals || 0 },
+      ], c, "fade", { shade: { kind: "full", amount: 0.5 } });
+    },
+  },
+  {
+    id: "ml-data-timeline", name: "Timeline scrubber", family: "data",
+    about: "A track draws across, then a playhead scrubs from date to date as each is spoken, lighting it and its caption.",
+    use: "Three to six dated events in order (a history, a career, a build); items as \"1872 First park\" - the date first.",
+    sample: { text: "How it happened", items: ["1903 First flight", "1927 Atlantic", "1969 Moon", "2004 Private space"] },
+    build: (p, k, c) => {
+      const data = (p.items || []).slice(0, 6).map((l) => ({ l: String(l).trim(), v: null }));
+      if (!data.length) return finish([], c);
+      return finish([
+        ...chartTitle(p, k, c, 0.1, 0.22),
+        { kind: "chart", chart: "timeline", data, times: itemTimes(p, c, data.length, 1.0, p.dur), x: 0.5, y: 0.6, w: 0.84 * c.scale, h: 0.42 * c.scale,
+          fill: k.colors.primary, color: k.colors.text, color2: k.colors.muted, offColor: hexA(k.colors.text, 0.25), font: k.fonts.label, font2: k.fonts.number,
+          size: 0.042 * c.scale },
+      ], c, "fade", { shade: { kind: "full", amount: 0.55 } });
+    },
+  },
+  {
+    id: "ml-data-ladder", name: "Ranking ladder", family: "data",
+    about: "A top-five ladder that fills from the bottom rung up; number one lands last, in the accent, with a glow.",
+    use: "A countdown or a top list (\"the five biggest...\", \"number one is...\"); items #1 first (\"Tokyo 37\" or just names), up to six.",
+    sample: { text: "Largest cities", items: ["Tokyo 37M", "Delhi 33M", "Shanghai 29M", "Dhaka 23M", "Cairo 22M"] },
+    build: (p, k, c) => {
+      const data = rowsOf(p, 6);
+      if (!data.length) return finish([], c);
+      const n = data.length;
+      const spread = itemTimes({ ...p, itemAt: undefined }, c, n, 0.8, p.dur);
+      const times = data.map((_, i) => {
+        const at = p.itemAt?.[i];
+        return typeof at === "number" && Number.isFinite(at) && at >= 0 && at < p.dur ? at : spread[n - 1 - i];
+      });
+      return finish([
+        ...chartTitle(p, k, c, 0.21, 0.13),
+        { kind: "chart", chart: "ladder", data, times, x: 0.5, y: 0.58, w: 0.58 * c.scale, h: Math.min(0.68, 0.125 * n) * c.scale,
+          fill: k.colors.primary, color: k.colors.text, color2: k.colors.muted, emphColor: k.colors.pillText, font: k.fonts.label, font2: k.fonts.number,
+          size: 0.042 * c.scale, prefix: p.prefix || "", suffix: p.suffix || "", decimals: p.decimals || 0 },
+      ], c, "fade", { shade: { kind: "full", amount: 0.55 } });
+    },
+  },
+  {
+    id: "ml-data-split", name: "Before / after slider", family: "data",
+    about: "A slider handle sweeps across the shot: one side turns into an old black-and-white print, the other stays as it is now, labelled.",
+    use: "Then versus now, before versus after, old versus new over one shot (items = the two labels, e.g. \"1950\", \"Today\").",
+    sample: { text: "The same street, seventy years apart", items: ["1950", "Today"] },
+    build: (p, k, c) => {
+      const items = (p.items || []).slice(0, 2);
+      const lines = balance(p.text, 40, 2);
+      const size = fitSize(lines, k.fonts.body, 0.6, c.aspect, 0.04, 0.026) * c.scale;
+      return finish([
+        { kind: "fx", effect: "split", x: c.side === "left" ? 0.42 : c.side === "right" ? 0.58 : 0.5, y: 0.5, w: 1, h: 1, items: items.length === 2 ? items : ["Before", "After"],
+          fill: k.colors.primary, color: k.colors.text, font: k.fonts.label, size: 0.032 * c.scale },
+        text({ lines, font: k.fonts.body, size, weight: 600, color: k.colors.text, x: 0.5, y: 0.86, anchor: "c", align: "center",
+          animator: wordAnim(c, { opacity: 0, y: 0.3, blur: 4 }, 0.9, 0.08, 0.5, "out"), extra: { shadow: "soft" } }),
+      ], c, "fade", { shade: { kind: "bottom", amount: 0.45 } });
+    },
+  },
+  // ============================== CALLOUTS ==============================
+  {
+    id: "ml-co-lens", name: "Magnifier focus", family: "callout",
+    about: "A magnifying glass glides onto one point of the shot as it is named: everything else blurs and dims, the lens stays crisp and richer.",
+    use: "Pointing at a detail the viewer must find in the picture (a crack, a face in a crowd, a line on a map); give point when known.",
+    sample: { text: "The crack", point: { x: 0.6, y: 0.45 } },
+    build: (p, k, c) => {
+      const pt = p.point || { x: c.r(3) > 0.5 ? 0.6 : 0.4, y: 0.46 };
+      const r = 0.17 * c.scale;
+      const hit = c.wt(0, 0.3, 0);
+      const right = pt.x < 0.62;
+      const rx = r / c.aspect;
+      return finish([
+        { kind: "fx", effect: "lens", x: pt.x, y: pt.y, w: r, h: 1, mid: hit, fill: k.colors.primary, color2: k.colors.bg2, seed: Math.round(c.r(4) * 100) },
+        ...(p.text ? [{ kind: "pill", text: T(p.text).toUpperCase(), size: 0.036 * c.scale, fill: k.colors.pillBg, color: k.colors.pillText, font: k.fonts.label,
+          x: right ? pt.x + rx * 1.1 : pt.x - rx * 1.1, y: pt.y - r * 0.85, anchor: right ? "l" : "r", wipeFrom: right ? "l" : "r",
+          keys: { wipe: [[0, 0], [hit + c.s(0.7), 0], [hit + c.s(1.1), 1, "expoOut"]] } }] : []),
+      ], c, "fade");
+    },
+  },
+  {
+    id: "ml-co-sticky", name: "Sticky note", family: "callout",
+    about: "A sticky note in a light tint of the kit accent slaps onto the frame and the words write themselves in by hand.",
+    use: "A reminder, a takeaway or a to-do the narrator states (\"remember this\", \"rule number one\"); up to about 10 words.",
+    sample: { text: "Never sell in a panic", sub: "Rule one" },
+    build: (p, k, c) => {
+      const chars = p.text.length;
+      const w = 0.21 * c.scale;
+      const inner = 0.8 * w * c.aspect;
+      const size = Math.max(0.026, Math.min(0.066, Math.sqrt((inner * inner * 0.7) / Math.max(4, chars * 0.42 * 1.08))));
+      const dir = c.side === "left" ? -1 : 1;
+      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.24 : 0.76;
+      return finish([
+        { kind: "card", card: "sticky", x, y: c.y ?? 0.45, w, text: T(p.text), label: p.sub ? T(p.sub) : "", fill: mix(k.colors.primary, 0.62), color: "#1d1d1f",
+          emphColor: mix(k.colors.primary, -0.25), size, mid: Math.max(c.s(0.45), c.wt(0, 0.5, 0)),
+          keys: { scale: [[0, 1.35], [c.s(0.5), 1, "expoOut"]], opacity: [[0, 0], [c.s(0.12), 1]], blur: [[0, 10], [c.s(0.35), 0]],
+            rot: [[0, 12 * dir], [c.s(0.7), -2.5 * dir, "backOut"], [p.dur, -1 * dir, "sine"]], y: [[0, -0.05], [c.s(0.5), 0, "expoOut"]] } },
+      ], c, "drop");
+    },
+  },
+  {
+    id: "ml-co-polaroid", name: "Polaroid drop", family: "callout",
+    about: "A polaroid frame tumbles onto the shot and the moment inside it develops from white, a handwritten caption underneath.",
+    use: "Freezing a moment as a memory (a person, a place, a year: \"summer 1969\"); caption up to four words.",
+    sample: { text: "Summer, 1969" },
+    build: (p, k, c) => {
+      const dir = c.side === "left" ? -1 : 1;
+      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.3 : 0.7;
+      const w = 0.25 * c.scale;
+      return finish([
+        { kind: "card", card: "polaroid", x, y: c.y ?? 0.48, w, text: T(p.text), size: Math.min(0.05, fitSize([T(p.text)], "hand", w * 0.8, c.aspect, 0.05, 0.022)),
+          mid: c.s(0.55), emphColor: k.colors.primary, color: "#222",
+          keys: { y: [[0, -0.75], [c.s(0.8), 0, "expoOut"]], rot: [[0, -18 * dir], [c.s(1.0), 4 * dir, "backOut"], [p.dur, 3 * dir, "sine"]],
+            scale: [[0, 1.12], [c.s(0.85), 1, "expoOut"]] }, mb: 0.6 },
+      ], c, "drop", { shade: { kind: "vignette", amount: 0.35 } });
+    },
+  },
+  {
+    id: "ml-co-document", name: "Document zoom", family: "callout",
+    about: "A typed document page rises into the frame, then the camera pushes in while a marker highlights the line being read.",
+    use: "Quoting a report, a letter, a ruling, a contract or a study (the narrator reads its line); kicker = the source, sub = a date.",
+    sample: { text: "The levees will not hold", kicker: "Army Corps report", sub: "1965" },
+    build: (p, k, c) => {
+      const mid = Math.max(c.s(1.1), c.wt(0, 1.1, 0));
+      return finish([
+        { kind: "card", card: "doc", x: 0.5, y: 0.52, w: 0.36 * c.scale, h: 0.86, text: T(p.text), label: p.kicker ? T(p.kicker) : "Document", meta: p.sub ? T(p.sub) : "",
+          fill: "#f5f2ea", color: "#151515", emphColor: k.colors.primary, mid, seed: Math.round(c.r(5) * 1000),
+          keys: { y: [[0, 0.12], [c.s(0.9), 0, "expoOut"]], rotX: [[0, 28], [c.s(1.0), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.3), 1, "out"]],
+            scale: [[0, 0.9], [c.s(0.9), 1, "expoOut"], [mid, 1], [mid + c.s(1.4), 1.42, "inOut"], [p.dur, 1.48, "linear"]], rot: [[0, -2]] } },
+      ], c, "fade", { persp: 1200, shade: { kind: "full", amount: 0.55 } });
+    },
+  },
+  {
+    id: "ml-co-quote", name: "Quote card with portrait", family: "callout",
+    about: "A glass quote card: a portrait ring draws round the speaker's initials, the words arrive as they are said, the name tracks in under them.",
+    use: "Someone's own words quoted in the narration with the speaker named (sub = speaker, kicker = their role); up to about 20 words.",
+    sample: { text: "We did not know the river could rise that fast", sub: "Maria Lopez", kicker: "Resident" },
+    build: (p, k, c) => {
+      const size = Math.max(0.04, Math.min(0.054, 2 / Math.max(20, p.text.length))) * c.scale;
+      const times = c.words.map((_, i) => c.wt(i, 0.5, 0.1));
+      return finish([
+        { kind: "card", card: "quote", x: 0.5, y: c.y ?? 0.64, w: 0.62 * c.scale, text: T(p.text), label: p.sub ? T(p.sub) : "", meta: p.kicker ? T(p.kicker) : "",
+          times, mid: (times[times.length - 1] || 0.5) + c.s(0.3), emphColor: k.colors.primary, color: k.colors.text, font: k.fonts.title, font2: k.fonts.label, size,
+          keys: { y: [[0, 0.05], [c.s(0.7), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.3), 1, "out"]], blur: [[0, 8], [c.s(0.5), 0]] } },
+      ], c, "blur", { shade: { kind: "bottom", amount: 0.5 } });
+    },
+  },
+  {
+    id: "ml-co-post", name: "Social post", family: "callout",
+    about: "A social post card slides up, its words lighting as they are read; the heart pops (and counts, when the likes are said).",
+    use: "A post, tweet or comment the narration quotes (sub = the account's name, kicker = a date, value = likes only when said).",
+    sample: { text: "This is the worst traffic I have ever seen in this city", sub: "Daniel Reyes", kicker: "2h", value: 48200 },
+    build: (p, k, c) => {
+      const times = c.words.map((_, i) => c.wt(i, 0.5, 0.1));
+      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.28 : 0.72;
+      return finish([
+        { kind: "card", card: "social", x, y: c.y ?? 0.5, w: 0.4 * c.scale, text: T(p.text), label: p.sub ? T(p.sub) : "", meta: p.kicker ? T(p.kicker) : "",
+          times, mid: (times[times.length - 1] || 0.6) + c.s(0.3), fill: "#ffffff", color: "#0f1419", emphColor: k.colors.primary,
+          size: Math.max(0.034, Math.min(0.048, 1.8 / Math.max(30, p.text.length))) * c.scale,
+          ...(typeof p.value === "number" ? { valueTo: p.value } : {}),
+          keys: { y: [[0, 0.08], [c.s(0.75), 0, "expoOut"]], rotX: [[0, -20], [c.s(0.8), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.25), 1, "out"]],
+            scale: [[0, 0.94], [c.s(0.8), 1, "expoOut"], [p.dur, 1.02, "linear"]] } },
+      ], c, "drop", { persp: 1100, shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.45 } });
+    },
+  },
+  {
+    id: "ml-co-phone", name: "Phone messages", family: "callout",
+    about: "A phone tilts into frame in 3D and a chat plays out on it, typing dots first, each bubble popping in on its time.",
+    use: "Texts, DMs or messages the narration reads out (items = the messages in order, sub = the contact's name); one to four short messages.",
+    sample: { text: "Are you safe?", sub: "Mom", items: ["Are you safe?", "We are on the roof", "Help is coming"] },
+    build: (p, k, c) => {
+      const items = (p.items && p.items.length ? p.items : [p.text]).slice(0, 4).map((s) => String(s).slice(0, 90));
+      const times = itemTimes(p, c, items.length, 1.1, p.dur).map((t, i) => Math.max(t, c.s(1.1 + i * 0.3)));
+      const dir = c.side === "left" ? -1 : 1;
+      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.3 : 0.7;
+      return finish([
+        { kind: "card", card: "phone", x, y: c.y ?? 0.52, w: 0.22 * c.scale, items, times, label: p.sub ? T(p.sub) : p.kicker ? T(p.kicker) : "",
+          emphColor: k.colors.primary, color: "#ffffff", size: 0.03 * c.scale,
+          keys: { y: [[0, 0.5], [c.s(0.9), 0, "expoOut"]], rotY: [[0, 34 * dir], [c.s(1.0), 12 * dir, "expoOut"], [p.dur, 6 * dir, "linear"]],
+            rotX: [[0, 14], [c.s(1.0), 4, "expoOut"]], rot: [[0, 6 * dir], [c.s(1.0), 0, "expoOut"]] } },
+      ], c, "drop", { persp: 1100, shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.5 } });
+    },
+  },
+  {
+    id: "ml-co-browser", name: "Browser window", family: "callout",
+    about: "A browser window rises with its address typing in; the headline appears and a marker sweeps under it as it is read.",
+    use: "A headline, article, website or search result the narration cites (kicker = the site, sub = a section or date; text = the headline as said).",
+    sample: { text: "Record heat closes schools across the region", kicker: "dailynews.com", sub: "Breaking" },
+    build: (p, k, c) => {
+      const mid = Math.max(c.s(0.9), c.wt(0, 0.9, 0));
+      return finish([
+        { kind: "card", card: "browser", x: 0.5, y: c.y ?? 0.52, w: 0.54 * c.scale, h: 0.5 * c.scale, text: T(p.text), label: p.kicker ? T(p.kicker) : "",
+          meta: p.sub ? T(p.sub) : "", fill: "#ffffff", color: "#111111", emphColor: k.colors.primary, font2: k.fonts.label, mid, seed: Math.round(c.r(6) * 1000),
+          size: Math.max(0.038, Math.min(0.062, 2.3 / Math.max(30, p.text.length))) * c.scale,
+          keys: { y: [[0, 0.06], [c.s(0.8), 0, "expoOut"]], rotX: [[0, 16], [c.s(0.9), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.3), 1, "out"]],
+            scale: [[0, 0.92], [c.s(0.85), 1, "expoOut"], [p.dur, 1.05, "linear"]] } },
+      ], c, "fade", { persp: 1200, shade: { kind: "full", amount: 0.5 } });
+    },
+  },
+  // ============================== EMPHASIS ==============================
+  {
+    id: "ml-em-scribble", name: "Scribble loop", family: "emphasis",
+    about: "A fast marker scribble loops twice round the point as it is named, a handwritten note riding beside it.",
+    use: "Circling something on screen in a loose, human way (a person, a car, a building); point when known, text = two or three words.",
+    sample: { text: "That's him", point: { x: 0.55, y: 0.45 } },
+    build: (p, k, c) => {
+      const pt = p.point || { x: 0.5, y: 0.48 };
+      const h = 0.3 * c.scale, w = (h / c.aspect) * 1.35;
+      const hit = c.wt(0, 0.15, 0);
+      const right = pt.x < 0.6;
+      return finish([
+        { kind: "scribble", scribble: "loop", x: pt.x, y: pt.y, w, h, color: k.colors.primary, stroke: 0.011, seed: 3 + Math.round(c.r(7) * 50),
+          keys: { draw: [[0, 0], [hit, 0], [hit + c.s(0.75), 1, "inOut"]] } },
+        ...(p.text ? [text({ lines: [T(p.text)], font: "hand", size: 0.07 * c.scale, weight: 700, color: k.colors.primary, x: right ? pt.x + w * 0.56 : pt.x - w * 0.56,
+          y: pt.y - h * 0.62, anchor: right ? "l" : "r", align: right ? "left" : "right",
+          animator: { unit: "char", stagger: c.s(0.03), dur: c.s(0.18), ease: "out", from: { opacity: 0, y: 0.15 } }, extra: { from: hit + c.s(0.5), keys: { rot: [[0, right ? -5 : 5]] } } })] : []),
+      ], c, "fade");
+    },
+  },
+  {
+    id: "ml-em-swoosh", name: "Brush swoosh", family: "emphasis",
+    about: "The line sets in large and a tapered brush stroke in the accent sweeps under it as its last word lands.",
+    use: "A short line with a strong final word (\"and it worked\", \"completely free\"); up to six words, any section.",
+    sample: { text: "And it actually worked" },
+    build: (p, k, c) => {
+      const pl = placeX(c.side);
+      const lines = balance(p.text, 20, 2);
+      const size = fitSize(lines, k.fonts.title, 0.6, c.aspect, 0.1, 0.05, true) * c.scale;
+      const y = c.y ?? 0.48;
+      const lw = Math.min(0.9, Math.max(...lines.map((l) => widthOf(l, k.fonts.title, size, c.aspect, true))));
+      const last = c.wt(c.words.length - 1, 0.1, 0.1);
+      const sx = pl.anchor === "l" ? pl.x + lw / 2 : pl.anchor === "r" ? pl.x - lw / 2 : 0.5;
+      const by = y + (lines.length * size * 1.02) / 2 + size * 0.05;
+      return finish([
+        { kind: "scribble", scribble: "swoosh", x: sx, y: by - size * 0.1, w: lw * 1.06, h: size * 0.8, color: k.colors.primary, seed: 1 + Math.round(c.r(8) * 9),
+          keys: { draw: [[0, 0], [last, 0], [last + c.s(0.5), 1, "expoOut"]] } },
+        text({ lines, font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true, tracking: k.titleTracking, x: pl.x, y, anchor: pl.anchor, align: pl.align,
+          animator: wordAnim(c, { opacity: 0, y: 0.35, blur: 5 }, 0.1, 0.1, 0.55, "expoOut") }),
+      ], c, "blur", { shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.42 } });
+    },
+  },
+  {
+    id: "ml-em-looparrow", name: "Loop arrow", family: "emphasis",
+    about: "A handwritten note, then a marker arrow that loops once on its way to the point on screen, its head snapping on.",
+    use: "Naming something on screen with a bit of personality (\"the original\", \"still there today\"); point when known, two to four words.",
+    sample: { text: "Still there today", point: { x: 0.64, y: 0.36 } },
+    build: (p, k, c) => {
+      const pt = p.point || { x: 0.62, y: 0.38 };
+      const toLeft = pt.x > 0.5;
+      const bw = 0.2 * c.scale, bh = 0.24 * c.scale;
+      const cx = toLeft ? pt.x - bw / 2 : pt.x + bw / 2, cy = pt.y + bh / 2;
+      const start = c.wt(0, 0.15, 0);
+      const seed = 2 * (1 + Math.round(c.r(9) * 20)) + (toLeft ? 0 : 1);
+      const nx = toLeft ? pt.x - bw : pt.x + bw;
+      return finish([
+        text({ lines: [T(p.text)], font: "hand", size: 0.07 * c.scale, weight: 700, color: k.colors.text, x: nx, y: pt.y + bh + 0.045,
+          anchor: toLeft ? "r" : "l", align: toLeft ? "right" : "left",
+          animator: { unit: "char", stagger: c.s(0.03), dur: c.s(0.18), ease: "out", from: { opacity: 0, y: 0.15 }, at: undefined }, extra: { keys: { rot: [[0, toLeft ? 4 : -4]] }, shadow: "hard" } }),
+        { kind: "scribble", scribble: "looparrow", x: cx, y: cy, w: bw, h: bh, color: k.colors.primary, stroke: 0.01, seed,
+          keys: { draw: [[0, 0], [start + c.s(0.45), 0], [start + c.s(1.35), 1, "inOut"]] } },
+      ], c, "fade");
+    },
+  },
+  {
+    id: "ml-em-countdown", name: "Countdown ring", family: "emphasis",
+    about: "A ring drains in steps while the figure in it ticks down; the last steps pulse and the ring flashes at zero.",
+    use: "A countdown, a deadline or time running out (\"ten seconds\", \"three days left\"); value = the starting figure said, text = its unit.",
+    sample: { text: "seconds", value: 10 },
+    build: (p, k, c) => {
+      const v = Math.max(1, Math.min(999, Math.round(typeof p.value === "number" ? p.value : 10)));
+      const steps = v <= 12 ? v : 10;
+      const t0 = Math.max(c.s(0.5), c.wt(0, 0.5, 0));
+      const span = Math.max(1.5, Math.min(p.dur - t0 - 0.9, steps * 1.0));
+      const st = span / steps;
+      const R = 0.32 * c.scale;
+      const cx = 0.5, cy = c.y ?? 0.47;
+      const pk: unknown[] = [[0, 0], [t0, 0]];
+      for (let i = 1; i <= steps && pk.length < 16; i++) pk.push([t0 + i * st, i / steps, "hold"]);
+      const pulse: unknown[] = [[0, 1]];
+      for (let i = Math.max(1, steps - 4); i <= steps && pulse.length < 15; i++) pulse.push([t0 + i * st - 0.01, 1], [t0 + i * st + 0.02, 1.14], [t0 + i * st + 0.3, 1, "out"]);
+      const end = t0 + span;
+      return finish([
+        { kind: "ellipse", x: cx, y: cy, w: R / c.aspect, h: R, color: hexA(k.colors.text, 0.16), stroke: 0.016, keys: { draw: [[0, 0], [c.s(0.5), 1, "expoOut"]], rot: [[0, 38]] } },
+        { kind: "ellipse", x: cx, y: cy, w: R / c.aspect, h: R, color: k.colors.primary, stroke: 0.016, keys: { draw: [[0, 0], [c.s(0.6), 1, "expoOut"], [t0, 1], [end, 0, "linear"]], rot: [[0, 38]] } },
+        { kind: "ellipse", x: cx, y: cy, w: (R * 1.12) / c.aspect, h: R * 1.12, fill: hexA(k.colors.primary, 0.5), color: k.colors.primary, stroke: 0,
+          keys: { opacity: [[0, 0], [end, 0], [end + 0.05, 0.9], [end + 0.6, 0, "out"]], scale: [[0, 0.9], [end, 0.9], [end + 0.6, 1.3, "out"]] } },
+        { kind: "counter", valueFrom: v, valueTo: 0, group: false, font: k.fonts.number, size: R * 0.42, weight: 800, color: k.colors.number, x: cx, y: cy - R * 0.03, anchor: "c", align: "center",
+          keys: { p: pk, scale: pulse, opacity: [[0, 0], [c.s(0.4), 1, "out"]] } },
+        text({ lines: [T(p.text).toUpperCase()], font: k.fonts.label, size: R * 0.14, weight: 800, color: k.colors.primary, tracking: 0.16, x: cx, y: cy + R * 0.25,
+          anchor: "c", align: "center", extra: { keys: { opacity: [[0, 0], [c.s(0.5), 0], [c.s(0.9), 1, "out"]] } } }),
+      ], c, "scale", { shade: { kind: "vignette", amount: 0.5 } });
+    },
+  },
+  {
+    id: "ml-em-stamp", name: "Fact-check stamp", family: "emphasis",
+    about: "The claim sets in as a quote, then a rubber stamp slams onto it with the verdict - red for false, green for true, the accent otherwise.",
+    use: "A claim being checked, a myth busted or confirmed (text = the claim as said; kicker = the verdict word said: False, Myth, True...).",
+    sample: { text: "You only use ten percent of your brain", kicker: "Myth" },
+    build: (p, k, c) => {
+      const lines = balance(`“${T(p.text)}”`, 26, 3);
+      const size = fitSize(lines, "serif-italic", 0.56, c.aspect, 0.065, 0.036) * c.scale;
+      const y = c.y ?? 0.46;
+      const hit = c.wt(c.words.length - 1, 0.2, 0.08) + c.s(0.45);
+      const label = T(p.kicker || "Fact check").toUpperCase();
+      const col = verdictColor(label, k);
+      const ss = Math.min(0.15, fitSize([label], "kinetic", 0.4, c.aspect, 0.15, 0.06, true)) * c.scale;
+      const sw = Math.min(0.8, widthOf(label, "kinetic", ss, c.aspect, true, 0.08) * 1.05 + 0.04);
+      const slam = { scale: [[0, 2.6], [hit, 2.6], [hit + 0.2, 0.96, "expoIn"], [hit + 0.34, 1, "out"]], opacity: [[0, 0], [hit, 0], [hit + 0.08, 0.94]],
+        blur: [[0, 8], [hit, 8], [hit + 0.2, 0]], rot: [[0, -11]] };
+      const bad = col === "#e5484d";
+      return finish([
+        text({ lines, font: "serif-italic", size, weight: 500, color: k.colors.text, x: 0.5, y, anchor: "c", align: "center", lineH: 1.18,
+          animator: wordAnim(c, { opacity: 0, y: 0.25, blur: 4 }, 0.2, 0.08, 0.5, "out"),
+          extra: { keys: { x: [[0, 0], [hit + 0.2, 0], [hit + 0.23, 0.006], [hit + 0.27, -0.005], [hit + 0.32, 0.003], [hit + 0.4, 0, "out"]],
+            opacity: bad ? [[0, 1], [hit + 0.3, 1], [hit + 0.8, 0.55, "out"]] : [[0, 1]] } } }),
+        { kind: "rect", x: 0.56, y: y + size * lines.length * 0.35, w: sw, h: ss * 1.45, fill: "rgba(0,0,0,0)", color: col, stroke: 0.012, radius: 0.01, keys: slam },
+        text({ lines: [label], font: "kinetic", size: ss, weight: 900, color: col, upper: true, tracking: 0.08, x: 0.56, y: y + size * lines.length * 0.35, anchor: "c", align: "center",
+          extra: { shadow: "none", keys: slam } }),
+      ], c, "fade", { shade: { kind: "vignette", amount: 0.55 } });
+    },
+  },
+  {
+    id: "ml-em-strike", name: "Strike and correct", family: "emphasis",
+    about: "The wrong words are set, a marker strikes them through, and the correction writes itself in by hand above in the accent.",
+    use: "Correcting a belief or a figure (\"not 10 million - 30 million\", \"it wasn't an accident\"); text = the struck words, sub = the correction, both as said.",
+    sample: { text: "An accident", sub: "A decision" },
+    build: (p, k, c) => {
+      const line = T(p.text);
+      const size = fitSize([line], k.fonts.title, 0.5, c.aspect, 0.1, 0.045, true) * c.scale;
+      const y = (c.y ?? 0.5) + size * 0.4;
+      const lw = Math.min(0.85, widthOf(line, k.fonts.title, size, c.aspect, true));
+      const hit = c.wt(c.words.length - 1, 0.2, 0.1) + c.s(0.35);
+      const fix = T(p.sub || "");
+      return finish([
+        text({ lines: [line], font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true, x: 0.5, y, anchor: "c", align: "center",
+          animator: wordAnim(c, { opacity: 0, y: 0.3, blur: 4 }, 0.15, 0.1, 0.5, "expoOut"),
+          extra: { keys: { opacity: [[0, 1], [hit + c.s(0.3), 1], [hit + c.s(0.8), 0.5, "out"]] } } }),
+        { kind: "scribble", scribble: "strike", x: 0.5, y, w: lw * 1.04, h: size * 0.7, color: k.colors.primary, stroke: 0.012, seed: 5 + Math.round(c.r(10) * 30),
+          keys: { draw: [[0, 0], [hit, 0], [hit + c.s(0.45), 1, "out"]] } },
+        ...(fix ? [text({ lines: [fix], font: "hand", size: size * 1.05, weight: 700, color: k.colors.primary, x: 0.5 + lw * 0.08, y: y - size * 1.25, anchor: "c", align: "center",
+          animator: { unit: "char", stagger: c.s(0.035), dur: c.s(0.2), ease: "out", from: { opacity: 0, y: 0.2 } },
+          extra: { from: hit + c.s(0.4), keys: { rot: [[0, -4]] } } })] : []),
+      ], c, "blur", { shade: { kind: "vignette", amount: 0.45 } });
+    },
+  },
+  // ============================== TRANSITIONS (over a cut) ==============================
+  {
+    id: "ml-tr-ink", name: "Ink bleed", family: "transition",
+    about: "Blots of ink in the kit's deep colour bloom across the shot until it is covered, then the next shot bleeds through from the middle.",
+    use: "A soft, artful change of place or time (a memory, a new chapter of a life story); calm or emotional sections.",
+    sample: { text: "" },
+    build: (p, k, c) => trans([{ kind: "fx", effect: "ink", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.bg2, color2: k.colors.primary, mid: p.dur / 2, seed: 1 + Math.round(c.r(11) * 90) }]),
+  },
+  {
+    id: "ml-tr-burn", name: "Film burn", family: "transition",
+    about: "Hot orange film-burn blooms flare in from the edges, flicker and white out the cut, then cool away onto the next shot.",
+    use: "A jump in time or a flashback (\"years earlier\", \"back in 1985\"), archive and nostalgic footage, emotional peaks.",
+    sample: { text: "" },
+    build: (p, k, c) => trans([{ kind: "fx", effect: "burn", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.primary, mid: p.dur / 2, seed: 1 + Math.round(c.r(12) * 90) }]),
+  },
+  {
+    id: "ml-tr-glitch", name: "Glitch slices", family: "transition",
+    about: "The frame tears into jittering inverted slices and kit-coloured bands with scanlines, peaking on the cut.",
+    use: "Tech, hacking, internet, breaking news, a sudden twist or a system failing; energetic sections, never in calm ones.",
+    sample: { text: "" },
+    build: (p, k, c) => trans([{ kind: "fx", effect: "glitch", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.primary, color2: k.colors.bg2, fill: k.colors.secondary, mid: p.dur / 2, seed: 1 + Math.round(c.r(13) * 90) }]),
+  },
+  {
+    id: "ml-tr-tear", name: "Paper tear", family: "transition",
+    about: "A sheet in the kit colour with ragged torn edges rips across the frame, covering the cut and tearing away onto the next shot.",
+    use: "Moving to a new topic or case in an explainer, scrapbook or history piece; playful or documentary.",
+    sample: { text: "" },
+    build: (p, k, c) => trans([{ kind: "fx", effect: "tear", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.bg, mid: p.dur / 2, seed: 1 + Math.round(c.r(14) * 90) }]),
+  },
+  {
+    id: "ml-tr-blocks", name: "Block dissolve", family: "transition",
+    about: "The frame fills with kit-coloured blocks in a scattered left-to-right wave, then they pop away in a new order onto the next shot.",
+    use: "A modern, data or tech change of section (a new list item, a new chapter in an explainer).",
+    sample: { text: "" },
+    build: (p, k, c) => trans([{ kind: "fx", effect: "blocks", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.bg, color2: k.colors.bg2, fill: k.colors.primary, mid: p.dur / 2, seed: 1 + Math.round(c.r(15) * 90) }]),
+  },
+];
 
 // ------------------------------------------------------------------ the recipes
 const T = (s: string) => s.trim();
@@ -867,6 +1539,8 @@ export const RECIPES: MxRecipe[] = [
       ] };
     },
   },
+  // Motion pack 2 (2026-10-14): kinetic type, data, callouts, emphasis marks and transitions - see PACK2 above.
+  ...PACK2,
 ];
 
 export const RECIPE_BY_ID: Record<string, MxRecipe> = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
@@ -905,14 +1579,17 @@ export const buildMotionLook = (id: string, params: MxParams, kit: BrandKit): Mo
 
 /** The params a library overlay carries (the editor's fields), as a recipe reads them. */
 export const paramsFromOverlay = (ov: Record<string, unknown>, fps: number, aspect: number): MxParams => {
-  const items = Array.isArray(ov.items) ? (ov.items as Record<string, unknown>[]).map((i) => String(i?.label ?? i?.text ?? i?.value ?? "")).filter(Boolean) : undefined;
+  const rows = Array.isArray(ov.items) ? (ov.items as Record<string, unknown>[]).filter((i) => String(i?.label ?? i?.text ?? i?.value ?? "")) : [];
+  const items = rows.length ? rows.map((i) => String(i?.label ?? i?.text ?? i?.value ?? "")) : undefined;
+  const values = rows.length ? rows.map((i) => (typeof i?.value === "number" && Number.isFinite(i.value) && (i?.label ?? i?.text) ? i.value as number : undefined)) : undefined;
   const anchor = ov.anchor && typeof ov.anchor === "object" ? ov.anchor as { x?: number; y?: number } : null;
   return {
     text: String(ov.text ?? ""), sub: typeof ov.subtitle === "string" ? ov.subtitle : undefined,
     kicker: typeof ov.label === "string" ? ov.label : undefined,
     value: typeof ov.value === "number" ? ov.value : undefined, prefix: typeof ov.prefix === "string" ? ov.prefix : undefined,
     suffix: typeof ov.suffix === "string" ? ov.suffix : undefined, decimals: typeof ov.decimals === "number" ? ov.decimals : undefined,
-    items, wordAt: Array.isArray(ov.wordAt) ? (ov.wordAt as number[]) : undefined,
+    items, values, wordAt: Array.isArray(ov.wordAt) ? (ov.wordAt as number[]) : undefined,
+    itemAt: Array.isArray(ov.itemAt) ? (ov.itemAt as number[]) : undefined,
     dur: Math.max(0.5, Number(ov.durationInFrames) / (fps || 30)), position: typeof ov.position === "string" ? ov.position : undefined,
     point: anchor && typeof anchor.x === "number" && typeof anchor.y === "number" ? { x: anchor.x, y: anchor.y } : undefined,
     seed: typeof ov.seed === "number" ? ov.seed : Math.round(Number(ov.startFrame) || 0), speed: typeof ov.speed === "number" ? ov.speed : 1,
