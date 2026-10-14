@@ -13,10 +13,11 @@
  */
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import { DISPLAY, GROTESK, INTER, KINETIC, MONO, NARROW, SERIF, SERIF_ITALIC } from "../fonts";
+import { DISPLAY, GROTESK, HAND, INTER, KINETIC, MONO, NARROW, SERIF, SERIF_ITALIC } from "../fonts";
 import { SafeImg } from "../motion/safePicture";
 import { cleanSpec, easeOf, formatCount, rand, unitProgress, valueAt, type Layer, type MotionSpec } from "./specMath";
 import { styleFont } from "./styleFonts";
+import { CardBody, ChartBody, FxBody, ScribbleBody } from "./SpecPack2";
 
 /** A measured outline (and the band round it) as a ring of hard text-shadows: one stroke on every glyph. */
 const ringShadows = (w: number, color: string, steps = 16, blur = 0): string[] => {
@@ -30,7 +31,7 @@ const ringShadows = (w: number, color: string, steps = 16, blur = 0): string[] =
 
 const FONTS: Record<string, string> = {
   grotesk: GROTESK, kinetic: KINETIC, display: DISPLAY, serif: SERIF, "serif-italic": SERIF_ITALIC, mono: MONO,
-  narrow: NARROW, inter: INTER,
+  narrow: NARROW, inter: INTER, hand: HAND,
 };
 
 class Guard extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
@@ -133,6 +134,12 @@ const TextBody: React.FC<{ layer: Layer; ctx: Ctx; counterText?: string }> = ({ 
         } else {
           wStyle.color = layer.emphColor;
         }
+      }
+      // A redacted word (layer.redact): a bar over it pulls away to the right the moment the word lands.
+      if (layer.redact) {
+        const rp = a ? (a.unit === "char" ? 1 : wp) : 1;
+        deco = <>{deco}<span style={{ position: "absolute", left: "-0.08em", right: "-0.08em", top: "0.06em", bottom: "0.02em", zIndex: 2,
+          background: layer.redact, transform: `scaleX(${(1 - Math.max(0, Math.min(1, rp))).toFixed(4)})`, transformOrigin: "100% 50%" }} /></>;
       }
       const span = <span style={{ ...wStyle, position: "relative", zIndex: 0 }}>{deco}{inner}</span>;
       return (
@@ -560,7 +567,7 @@ const LayerView: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
   const px = spec.drift.x * life * z * 2 * W;
   const py = spec.drift.y * life * z * 2 * H;
   const fullFrame = layer.kind === "line" || layer.kind === "arrow" || layer.kind === "spot" || layer.kind === "particles"
-    || layer.kind === "backdrop" || layer.kind === "measure";
+    || layer.kind === "backdrop" || layer.kind === "measure" || layer.kind === "fx";
   const tx = layer.anchor === "l" ? "0%" : layer.anchor === "r" ? "-100%" : "-50%";
   const transform = fullFrame
     ? `translate3d(${(v("x", 0) * W + px).toFixed(2)}px, ${(v("y", 0) * H + py).toFixed(2)}px, ${(z * 200).toFixed(1)}px) scale(${scale.toFixed(4)})`
@@ -617,13 +624,18 @@ const LayerView: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
     case "loupe": body = <LoupeBody layer={layer} ctx={ctx} />; break;
     case "tiles": body = <TilesBody layer={layer} ctx={ctx} />; break;
     case "pill": body = <PillBody layer={layer} ctx={ctx} />; break;
+    case "chart": body = <ChartBody layer={layer} ctx={ctx} />; break;
+    case "card": body = <CardBody layer={layer} ctx={ctx} />; break;
+    case "fx": body = <FxBody layer={layer} ctx={ctx} />; break;
+    case "scribble": body = <ScribbleBody layer={layer} ctx={ctx} draw={draw} />; break;
     default:
       return null;
   }
   return (
     <div style={{ ...base, transform, opacity: Math.min(1, opacity), transformStyle: "preserve-3d",
       filter: [blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "", mbX + mbY > 0.6 ? `url(#mb${mbId})` : ""].filter(Boolean).join(" ") || undefined,
-      clipPath: wipe < 0.999 ? wipeClip(layer.wipeFrom, wipe) : undefined,
+      clipPath: layer.cut ? `inset(${(layer.cut[0] * 100).toFixed(2)}% -30% ${(layer.cut[1] * 100).toFixed(2)}% -30%)`
+        : wipe < 0.999 ? wipeClip(layer.wipeFrom, wipe) : undefined,
       mixBlendMode: layer.kind !== "particles" ? (layer.blend as React.CSSProperties["mixBlendMode"]) : undefined }}>
       {mbX + mbY > 0.6 ? (
         <svg width={0} height={0} style={{ position: "absolute" }}>
@@ -658,6 +670,8 @@ const shadeBg = (kind: string, a: number): string => {
   }
 };
 
+const onShot = (l: Layer) => l.kind === "fx" && (l.effect === "lens" || l.effect === "split" || l.effect === "glitch");
+
 /** Draws a cleaned spec at second `t` of a graphic that lasts `dur` seconds. */
 export const SpecStage: React.FC<{ spec: MotionSpec; t: number; dur: number }> = ({ spec, t, dur }) => {
   const { width: W, height: H } = useVideoConfig();
@@ -674,10 +688,15 @@ export const SpecStage: React.FC<{ spec: MotionSpec; t: number; dur: number }> =
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
       {spec.shade ? <AbsoluteFill style={{ background: shadeBg(spec.shade.kind, spec.shade.amount), opacity: into * (1 - e) }} /> : null}
+      {/* Effects that process the shot itself (backdrop-filter: a magnifier, a before / after split, glitch slices) sit
+          outside the 3D stage - a transformed / faded ancestor would cut them off from the footage they filter. */}
+      {spec.layers.filter((l) => onShot(l) && t >= l.from && t <= l.to).map((l, i) => (
+        <AbsoluteFill key={`shot-${l.id}-${i}`}><FxBody layer={l} ctx={ctx} /></AbsoluteFill>
+      ))}
       <AbsoluteFill style={{ ...stage, perspective: `${(spec.persp * H / 1080).toFixed(0)}px` }}>
         <AbsoluteFill style={{ transformStyle: "preserve-3d",
           transform: `translate3d(${(spec.drift.x * life * W).toFixed(2)}px, ${(spec.drift.y * life * H).toFixed(2)}px, 0) rotateY(${(spec.drift.rotY * life).toFixed(3)}deg)` }}>
-          {spec.layers.map((l, i) => <LayerView key={`${l.id}-${i}`} layer={l} ctx={ctx} />)}
+          {spec.layers.map((l, i) => (onShot(l) ? null : <LayerView key={`${l.id}-${i}`} layer={l} ctx={ctx} />))}
         </AbsoluteFill>
       </AbsoluteFill>
     </AbsoluteFill>

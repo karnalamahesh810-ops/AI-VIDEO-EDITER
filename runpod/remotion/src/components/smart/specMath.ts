@@ -24,7 +24,21 @@ export type LayerKind =
   // The brand-kit primitives (2026-10-14): a full-frame kit backdrop, a flat vector illustration that builds
   // piece by piece, a waffle / unit chart, a measurement arrow with its value, a circular loupe on a picture,
   // a row of tiles that pop in one by one, a label pill.
-  | "backdrop" | "shape" | "waffle" | "measure" | "loupe" | "tiles" | "pill";
+  | "backdrop" | "shape" | "waffle" | "measure" | "loupe" | "tiles" | "pill"
+  // Motion pack 2 (2026-10-14): a data chart that builds item by item (bar race, line draw-on, donut, stat grid,
+  // timeline scrubber, ranking ladder), a mock-up card (sticky note, polaroid, document page, social post, phone,
+  // browser window, quote with portrait), a full-frame effect (ink bleed, film burn, glitch slices, paper tear,
+  // block dissolve, magnifier focus, before / after split) and a hand-drawn mark (scribble loop, brush swoosh,
+  // strike-through, loop arrow).
+  | "chart" | "card" | "fx" | "scribble";
+
+export const CHARTS = ["race", "line", "donut", "grid", "timeline", "ladder"] as const;
+export const CARDS = ["sticky", "polaroid", "doc", "social", "phone", "browser", "quote"] as const;
+export const FXS = ["ink", "burn", "glitch", "tear", "blocks", "lens", "split"] as const;
+export const SCRIBBLES = ["loop", "swoosh", "strike", "looparrow"] as const;
+
+/** One item of a chart: its label, its value (absent for a ranking without figures), its own unit. */
+export interface DataItem { l: string; v: number | null; pre?: string; suf?: string; dec?: number }
 
 /** One piece of a flat vector illustration, in the layer's own box (0..1 of its w / h). */
 export interface ShapePart {
@@ -154,6 +168,28 @@ export interface Layer {
   // backdrop
   color2?: string;
   grid?: boolean;
+  // motion pack 2
+  chart?: (typeof CHARTS)[number];
+  card?: (typeof CARDS)[number];
+  effect?: (typeof FXS)[number];
+  scribble?: (typeof SCRIBBLES)[number];
+  data?: DataItem[];
+  /** Seconds (from the layer's start) each item / word lands - the narration's own times when known. */
+  times?: number[];
+  palette?: string[];
+  /** The item a chart singles out (accent). */
+  hi?: number;
+  /** A second face (a chart's figures). */
+  font2?: string;
+  /** A card's name / handle / address and its small line (a date, a role). */
+  label?: string;
+  meta?: string;
+  /** The moment (seconds from the layer's start) a card highlights / an effect peaks (the cut). */
+  mid?: number;
+  /** Text: every word sits under a bar of this colour that pulls away the moment the word lands. */
+  redact?: string;
+  /** Any layer: only the band between these shares of its box (top, bottom) is drawn (a split reveal). */
+  cut?: [number, number];
 }
 
 export interface MotionSpec {
@@ -172,8 +208,8 @@ export interface MotionSpec {
 }
 
 const KINDS = new Set<LayerKind>(["text", "counter", "rect", "ellipse", "line", "arrow", "bracket", "pin", "spot",
-  "image", "particles", "backdrop", "shape", "waffle", "measure", "loupe", "tiles", "pill"]);
-export const FONT_KEYS = ["grotesk", "kinetic", "display", "serif", "serif-italic", "mono", "narrow", "inter"] as const;
+  "image", "particles", "backdrop", "shape", "waffle", "measure", "loupe", "tiles", "pill", "chart", "card", "fx", "scribble"]);
+export const FONT_KEYS = ["grotesk", "kinetic", "display", "serif", "serif-italic", "mono", "narrow", "inter", "hand"] as const;
 const KEYED = new Set(["x", "y", "scale", "sx", "sy", "rot", "rotX", "rotY", "z", "opacity", "blur", "draw", "wipe",
   "glow", "p", "tracking", "shake", "dim"]);
 const BLENDS = new Set(["normal", "screen", "overlay", "multiply", "lighten", "soft-light", "difference", "plus-lighter"]);
@@ -293,6 +329,10 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
   };
   if (r.wipeFrom === "r" || r.wipeFrom === "t" || r.wipeFrom === "b") L.wipeFrom = r.wipeFrom;
   if (typeof r.mb === "number" && Number.isFinite(r.mb) && r.mb > 0) L.mb = num(r.mb, 0, 1.5, 0.5);
+  if (Array.isArray(r.cut) && r.cut.length === 2) {
+    const a = num(r.cut[0], 0, 1, 0), b = num(r.cut[1], 0, 1, 0);
+    if (a + b < 0.98) L.cut = [a, b];
+  }
   if (kind === "text" || kind === "counter" || kind === "pin") {
     L.text = str(r.text, 160);
     if (kind === "text" && !L.text.trim()) return null;
@@ -350,6 +390,7 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
       const c = (v: unknown) => (v === undefined ? undefined : color(v, "#f2c14e"));
       L.deco = { bar: c(u.bar), underline: c(u.underline), rule: c(u.rule), bracket: c(u.bracket), at: num(u.at, 0, dur, 0.3) };
     }
+    if (kind === "text" && r.redact !== undefined) L.redact = color(r.redact, "#0b0b0b");
     if (kind === "text" && r.sweep && typeof r.sweep === "object") {
       const u = r.sweep as Record<string, unknown>;
       L.sweep = { color: color(u.color, "#f2c14e"), at: num(u.at, 0, dur, 0), dur: num(u.dur, 0.2, 2, 0.7) };
@@ -444,6 +485,10 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
     L.fill = color(r.fill, "#ffffff");
     L.color = color(r.color, "#141414");
   }
+  if (kind === "chart" || kind === "card" || kind === "fx" || kind === "scribble") {
+    cleanPack2(L, r, dur);
+    if (kind === "chart" && !L.chart) return null;
+  }
   if (kind === "particles") {
     L.count = Math.round(num(r.count, 1, 120, 40));
     L.seed = Math.round(num(r.seed, 0, 1e6, i * 7 + 1));
@@ -451,6 +496,54 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
     L.size = num(r.size, 0.001, 0.05, 0.004);
   }
   return L;
+};
+
+/** Motion pack 2's layers: a chart, a card, a full-frame effect, a hand-drawn mark (in place; may empty the layer). */
+const cleanPack2 = (L: Layer, r: Record<string, unknown>, dur: number) => {
+  const pick = <T extends string>(v: unknown, list: readonly T[]): T | undefined => (list as readonly string[]).includes(v as string) ? v as T : undefined;
+  const face = (v: unknown, d: string) => FONT_KEYS.includes(v as never) || (typeof v === "string" && /^lib:[A-Za-z0-9 ]{2,40}$/.test(v)) ? v as string : d;
+  L.chart = L.kind === "chart" ? pick(r.chart, CHARTS) || "race" : undefined;
+  L.card = L.kind === "card" ? pick(r.card, CARDS) || "sticky" : undefined;
+  L.effect = L.kind === "fx" ? pick(r.effect, FXS) || "ink" : undefined;
+  L.scribble = L.kind === "scribble" ? pick(r.scribble, SCRIBBLES) || "loop" : undefined;
+  L.data = (Array.isArray(r.data) ? r.data : []).slice(0, 8).map((d): DataItem | null => {
+    if (!d || typeof d !== "object") return null;
+    const o = d as Record<string, unknown>;
+    const v = typeof o.v === "number" && Number.isFinite(o.v) ? num(o.v, -1e12, 1e12, 0) : null;
+    const it: DataItem = { l: str(o.l, 40), v };
+    if (typeof o.pre === "string") it.pre = o.pre.slice(0, 4);
+    if (typeof o.suf === "string") it.suf = o.suf.slice(0, 12);
+    if (typeof o.dec === "number") it.dec = Math.round(num(o.dec, 0, 3, 0));
+    return it.l.trim() || v !== null ? it : null;
+  }).filter((d): d is DataItem => !!d);
+  if (L.kind === "chart" && !L.data.length) { L.chart = undefined; return; }
+  L.times = Array.isArray(r.times) ? r.times.slice(0, 80).map((v) => num(v, 0, dur, 0)) : undefined;
+  L.palette = (Array.isArray(r.palette) ? r.palette : []).slice(0, 8).map((c) => color(c, "")).filter(Boolean);
+  L.hi = r.hi === undefined ? undefined : Math.round(num(r.hi, -1, 7, -1));
+  L.text = str(r.text, 200);
+  L.label = str(r.label, 60);
+  L.meta = str(r.meta, 60);
+  L.items = (Array.isArray(r.items) ? r.items : []).slice(0, 6).map((v) => str(v, 90)).filter((v) => v.trim());
+  L.font = face(r.font, "grotesk");
+  L.font2 = face(r.font2, L.font);
+  L.size = num(r.size, 0.012, 0.2, 0.032);
+  L.fill = color(r.fill, L.kind === "card" ? "#ffffff" : "#f2b630");
+  L.color2 = color(r.color2, "rgba(255,255,255,0.7)");
+  L.offColor = color(r.offColor, "rgba(255,255,255,0.18)");
+  L.emphColor = color(r.emphColor, "#f2b630");
+  L.prefix = str(r.prefix, 8);
+  L.suffix = str(r.suffix, 24);
+  L.decimals = Math.round(num(r.decimals, 0, 3, 0));
+  L.valueTo = r.valueTo === undefined ? undefined : num(r.valueTo, -1e12, 1e12, 0);
+  L.mid = num(r.mid, 0, dur, dur / 2);
+  L.stagger = num(r.stagger, 0, 2, 0.35);
+  L.bdur = num(r.bdur, 0.05, 3, 0.8);
+  L.ease = typeof r.ease === "string" && EASES[r.ease] ? r.ease : "expoOut";
+  L.seed = Math.round(num(r.seed, 0, 1e6, 1));
+  if (r.src !== undefined) {
+    const src = str(r.src, 2000);
+    if (/^https?:\/\//.test(src) || src.startsWith("data:image/")) L.src = src;
+  }
 };
 
 /** The spec cleaned for drawing, or null when nothing in it can be drawn. `dur` = the graphic's seconds. */

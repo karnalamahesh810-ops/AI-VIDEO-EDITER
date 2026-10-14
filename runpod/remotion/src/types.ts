@@ -494,6 +494,8 @@ export interface Overlay {
    * of `text` is spoken, and a seed that varies the design between uses. Absent: the video's accent, a stagger.
    */
   wordAt?: number[];
+  /** Motion pack 2: the seconds from the look's first frame each of `items` is spoken (charts, messages), when found. */
+  itemAt?: number[];
   seed?: number;
   labelPosition?: { x: number; y: number };
   /**
