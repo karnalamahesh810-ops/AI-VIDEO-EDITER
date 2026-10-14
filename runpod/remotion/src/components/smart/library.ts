@@ -912,7 +912,7 @@ const T = (s: string) => s.trim();
 // catalogue.md): every look draws a "game" layer (SpecGaming.tsx); the gaming_essay style's planner
 // (src/gaming.py) places them on their trigger words. They work in any kit; the "gaming" kit is the reference's own.
 const GM_STOP = new Set(("a an the to of and or but in on at by for with from that this it its is was were be been are as so if than then " +
-  "you your we our they their he his she her i my me just still even not no").split(" "));
+  "you your we our they their he his she her i my me just still even not no had have has do did does can could would will").split(" "));
 /** A line's words as the reference shows them: lead-in small words together, every stressed word alone. */
 export const gmChunks = (words: string[]): { t: string; i: number }[] => {
   const out: { t: string; i: number }[] = [];
