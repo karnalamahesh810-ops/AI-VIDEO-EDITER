@@ -690,9 +690,14 @@ def fit_start(start_at: float, seconds: float, duration: float) -> float:
     return start_at
 
 
-def _fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float) -> List[str]:
+# A section WITH its sound (the celeb style plays a clip's own audio); footage is fetched silent.
+_WITH_AUDIO = ("bv*[height<=1080][ext=mp4][protocol^=https]+ba[ext=m4a][protocol^=https]"
+               "/bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]")
+
+
+def _fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float, audio: bool = False) -> List[str]:
     """The section download's yt-dlp command, before its network arguments."""
-    return [
+    cmd = [
         "yt-dlp", f"https://www.youtube.com/watch?v={video_id}",
         "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
         "--force-keyframes-at-cuts",
@@ -709,6 +714,9 @@ def _fetch_cmd(video_id: str, out_tpl: str, start_at: float, seconds: float) -> 
         # starts (so a failed one still says them): see _dlinfo.
         "--print", "before_dl:DLINFO %(duration)s|%(format_id)s",
     ]
+    if audio:
+        cmd[cmd.index("-f") + 1] = _WITH_AUDIO
+    return cmd
 
 
 def probe_download(video_id: str = "ka2S39HhLsM", start: float = 30.0, seconds: float = 3.0,
@@ -784,7 +792,7 @@ def _dlinfo(stdout: str) -> tuple:
 
 
 def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
-              timeout: int = 300, hls_fix: bool = False, refit: bool = True) -> str:
+              timeout: int = 300, hls_fix: bool = False, refit: bool = True, audio: bool = False) -> str:
     """Download one section of one known video. Returns the local path or ''.
     A start at or past the video's known end moves back inside it (fit_start);
     a start found past the end only by the download itself is fitted and tried
@@ -796,7 +804,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     # source/time range; yt-dlp otherwise races over one partial output file.
     fetch_id = uuid.uuid4().hex[:10]
     out_tpl = os.path.join(out_dir, f"yt_%(id)s_{range_key}_{fetch_id}.%(ext)s")
-    cmd = _fetch_cmd(video_id, out_tpl, start_at, seconds)
+    cmd = _fetch_cmd(video_id, out_tpl, start_at, seconds, audio=audio)
     if _video_unavailable(video_id):
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
@@ -845,7 +853,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             fitted = fit_start(start_at, seconds, duration)
             print(f"[media] {video_id} is {duration:.0f} s long; the section at {start_at:.1f}s "
                   f"moves to {fitted:.1f}s", flush=True)
-            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False)
+            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False, audio=audio)
         first = classify_ytdlp(p.stderr, p.returncode)
         cls = _note_failure(video_id, first, proxy, why)
         _release_proxy(proxy, False, cls, started)
@@ -880,7 +888,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             _release_proxy(proxy, True, None, started)
             print(f"[media] HLS connection reuse failed ({video_id} @{start_at:.0f}s); "
                   "fetching again without reuse", flush=True)
-            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True, refit=refit)
+            return _yt_fetch(video_id, out_dir, start_at, seconds, timeout, hls_fix=True, refit=refit, audio=audio)
         if refit and duration and fit_start(start_at, seconds, duration) != start_at:
             # A frameless section from the video's last second: asked at its end.
             try:
@@ -891,7 +899,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             fitted = fit_start(start_at, seconds, duration)
             print(f"[media] {video_id} is {duration:.0f} s long; the empty section at {start_at:.1f}s "
                   f"moves to {fitted:.1f}s", flush=True)
-            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False)
+            return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False, audio=audio)
         events.emit("source", "empty_download", level="warning", provider="youtube",
                     failure="INVALID_MEDIA", data={"video": video_id, "proxy": _proxy_index(proxy),
                                                    "start": round(start_at, 1), "format": fmt,
