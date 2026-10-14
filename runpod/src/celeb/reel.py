@@ -42,6 +42,9 @@ class Source:
     words: List[dict]
     cuts: List[float]
     dur: float = 0.0
+    # Seconds at the file's start / end never used as b-roll: a whole official reel opens and closes on logos;
+    # a downloaded window around one clip (src/celeb/pipeline.py) is footage edge to edge.
+    guard: Tuple[float, float] = (3.0, 6.0)
 
     def words_in(self, a: float, b: float) -> List[dict]:
         return [w for w in self.words if a - 0.05 <= w["start"] < b - 0.05]
@@ -169,7 +172,10 @@ def content_crop(path: str, a: float, b: float, _cache: Dict = {}) -> str:
 
 
 # ------------------------------------------------------------------ the timeline
-def build(blocks: Sequence, narr_paths: Sequence[str], sources: Dict[str, Source], *, seed: int = 7) -> Timeline:
+def build(blocks: Sequence, narr_paths: Sequence[str], sources: Dict[str, Source], *, seed: int = 7,
+          featured_colour: str = "yellow") -> Timeline:
+    """`featured_colour`: the clip's named celebrity's caption colour, "yellow" (2 of the 3 references) or "white";
+    everyone else gets the other one (speakers.colour_phrases)."""
     tl = Timeline()
     rnd = random.Random(seed)
     t = 0.0
@@ -197,7 +203,7 @@ def build(blocks: Sequence, narr_paths: Sequence[str], sources: Dict[str, Source
         spans = []
         for x, y in zip(cuts, cuts[1:]):
             x, y = x + 0.25, y - 0.25
-            if y - x < 1.0 or x < 3.0 or y > src.dur - 6.0:
+            if y - x < 1.0 or x < src.guard[0] or y > src.dur - src.guard[1]:
                 continue
             if any(not (y <= u0 or x >= u1) for u0, u1 in used.get(src.id, [])):
                 continue
@@ -301,9 +307,14 @@ def build(blocks: Sequence, narr_paths: Sequence[str], sources: Dict[str, Source
         mutes = [(w["start"] - b.start - 0.03, w["end"] - b.start + 0.03) for w in src.words_in(b.start, b.end)
                  if UNCENSORED.search(str(w["text"]))]
         tl.sounds.append(Sound("clip", t, src.path, b.start, length, mutes=mutes))
-        from . import speakers                       # the reference colours captions by speaker
-        tl.captions += speakers.colour_phrases(src.path, b.start, caption_phrases(src.words, b.start, b.end,
-                                                                                  src.cuts, t), t, src.cuts)
+        from . import speakers                       # the reference colours captions by WHO speaks:
+        phrases = caption_phrases(src.words, b.start, b.end, src.cuts, t)   # the clip's celebrity white, others yellow
+        featured = b.who[0] if b.who else ""
+        coloured = speakers.colour_phrases(src.path, b.start, phrases, t, src.cuts, featured=featured)
+        if featured_colour == "yellow":              # the channel shows its celebrity in yellow, the rest white
+            swap = {tuple(speakers.COLOURS[0]): speakers.COLOURS[1], tuple(speakers.COLOURS[1]): speakers.COLOURS[0]}
+            coloured = [(a, e, x, swap.get(tuple(c), c)) for a, e, x, c in coloured]
+        tl.captions += coloured
         tl.clip_spans.append((t, t + length))
         tl.log.append({"video": b.video_id, "url": f"https://www.youtube.com/watch?v={b.video_id}",
                        "in": round(b.start, 2), "out": round(b.end, 2), "at": round(t, 2)})
@@ -351,11 +362,11 @@ def render_shot(s: Shot, dst: str) -> str:
         vf = "format=yuv420p"
     else:
         crop = content_crop(s.src, s.src_in, s.src_in + s.dur)
-        vf = (crop + "," if crop else "") + f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}," \
-                                            f"fps={FPS},setsar=1,format=yuv420p"
+        vf = (crop + "," if crop else "") + f"scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos," \
+                                            f"crop={W}:{H},fps={FPS},setsar=1,format=yuv420p"
         cmd = ["ffmpeg", "-y", "-v", "error", "-ss", f"{s.src_in:.3f}", "-i", s.src]
-    subprocess.run(cmd + ["-vf", vf, "-an", "-frames:v", str(n), "-c:v", "libx264", "-preset", "veryfast",
-                          "-crf", "16", "-pix_fmt", "yuv420p", dst], check=True, timeout=600)
+    subprocess.run(cmd + ["-vf", vf, "-an", "-frames:v", str(n), "-c:v", "libx264", "-preset", "fast",
+                          "-crf", "15", "-pix_fmt", "yuv420p", dst], check=True, timeout=600)
     return dst
 
 
@@ -471,13 +482,29 @@ class Caption(fx.Element):
         return self._im, self._xy[0], self._xy[1]
 
 
+class Logo(fx.Element):
+    """The channel's logo top-left for the whole video (celeb-elements.md: ~6 % of the height, always on)."""
+
+    def __init__(self, path: str, total: float, size: float = 0.06):
+        super().__init__("logo", 0.0, total)
+        im = fx.Image.open(path).convert("RGBA")
+        h = max(8, int(H * size))
+        self._im = im.resize((max(1, int(im.width * h / im.height)), h), fx.Image.LANCZOS)
+        self._xy = (int(H * 0.035), int(H * 0.035))
+
+    def draw(self, t):
+        return self._im, self._xy[0], self._xy[1]
+
+
 def _next_cut(cuts: Sequence[float], t: float) -> float:
     return next((c for c in cuts if c > t + 0.05), 1e9)
 
 
-def elements(tl: Timeline, base: str, posters: Dict[str, str]) -> List[fx.Element]:
+def elements(tl: Timeline, base: str, posters: Dict[str, str], logo: str = "") -> List[fx.Element]:
     """Marks -> positioned elements: faces looked up on the rendered base at each mark's frame."""
     out: List[fx.Element] = [Caption(c[0], c[1] - c[0], c[2], *(c[3:4] or [])) for c in tl.captions if c[1] - c[0] > 0.1]
+    if logo and os.path.isfile(logo):
+        out.append(Logo(logo, tl.total))
     rnd = random.Random(11)
 
     def caption_at(t0: float, t1: float) -> bool:
@@ -497,9 +524,11 @@ def elements(tl: Timeline, base: str, posters: Dict[str, str]) -> List[fx.Elemen
         hint = m.hint if m.hint in ("left", "right", "center") else "largest"
         if F.local_available():                       # free, frame-by-frame: the element follows the head
             track = F.track(base, m.at, m.at + dur, hint)
-        else:                                         # fallback: one vision call, a still position
+        elif os.environ.get("CELEB_VISION_FACES"):   # opt-in fallback: one paid vision call, a still position
             one = F.pick(F.faces(base, m.at + 0.12), m.hint)
             track = [one] if one else None
+        else:
+            track = None
         if not track or not any(track):
             if m.kind in ("name", "point", "arrow"):  # an element on a person needs the person: leave it out
                 continue

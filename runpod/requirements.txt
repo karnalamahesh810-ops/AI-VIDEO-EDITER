@@ -16,3 +16,6 @@ curl_cffi==0.13.0
 pillow-heif==1.8.0
 # Style Match (src/style_match/measure.py): cuts, text lines, marks and layouts of a reference video.
 opencv-python-headless==4.12.0.88
+# Celeb style speaker colours (src/celeb/speakers.py): 3D-Speaker ERes2Net voice embeddings, local CPU,
+# torch-free (Apache-2.0; manylinux x86_64 wheel + sherpa-onnx-core ~14 MB). Also has Spleeter separation.
+sherpa-onnx==1.13.8

@@ -3043,6 +3043,8 @@ def _dm_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
             "--force-keyframes-at-cuts",
             "-f", "b[height<=1080]/bv*[height<=1080]+ba", *_ytdlp.best_bitrate(),
+            # The section's one re-encode at the download's quality (ytdlp._encode_args), not ffmpeg's crf 23.
+            *(["--downloader-args", _ytdlp._encode_args(True, False), "--remux-video", "mp4"] if _ytdlp.high_quality() else []),
             "--merge-output-format", "mp4", "--no-playlist", "--no-warnings",
             "--ignore-config", "--socket-timeout", "20", "--retries", "2",
             "-o", out_tpl, "--print", "after_move:filepath"]
@@ -3190,7 +3192,7 @@ def _web_fetch(url: str, out_dir: str, start_at: float, seconds: float, timeout:
     out_tpl = os.path.join(out_dir, f"web_%(extractor)s_%(id)s_{int(start_at)}_{uuid.uuid4().hex[:6]}.%(ext)s")
     cmd = ["yt-dlp", url, "--download-sections", f"*{start_at:.1f}-{start_at + seconds:.1f}",
            "--force-keyframes-at-cuts", "-f", "bv*[height<=1080][ext=mp4]/bv*[height<=1080]/b[height<=1080]/b",
-           *_ytdlp.best_bitrate(),
+           *_ytdlp.best_bitrate(), *(["--downloader-args", _ytdlp._encode_args(True, False), "--remux-video", "mp4"] if _ytdlp.high_quality() else []),
            "--no-playlist", "--no-warnings", "--quiet", "--max-filesize", "300M",
            "--merge-output-format", "mp4", "-o", out_tpl, "--print", "after_move:filepath"]
     domain = (urllib.parse.urlparse(url).hostname or "web").removeprefix("www.")

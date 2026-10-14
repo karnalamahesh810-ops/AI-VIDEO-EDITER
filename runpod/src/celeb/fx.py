@@ -9,10 +9,12 @@ circle, pointer or arrow follows the head the way the references' do.
 Measured on the 720p references (fractions of the frame HEIGHT H; pixel sampling in celeb-elements.md):
   type         Komika Axis (KOMIKAX.ttf, the owner's installed copy; CELEB_FONT overrides). Bangers @130 % is the
                fallback where Komika is not installed (Linux workers until the licence is settled).
-  pop text     fill #FFFF00, black line 0.3 %, then a dark olive band (#7D7608) out to 1.55 % with a 0.5 % feather;
-               per-letter pop, 1-frame stagger; slow grow to 112 %
-  circle       ring #FDFE00 2.1 % thick, orange-yellow glow (#FFC800) ~2.8 %; radius 0.94 x the face box height,
-               centred on the face; drawn on clockwise from 7 o'clock in 0.6 s
+  pop text     fill #FFFF00, dark line 0.3 %, then an opaque dark band (#201E00) whose 50 % edge is 1.47 % out,
+               lit by a yellow glow of the letters (blur 1.1 %, gain 1.07: olive near the letters, dark at the
+               edge), plus a soft dark tail 0.5 x blur 0.83 %; per-letter pop, 1-frame stagger; slow grow to 112 %
+  circle       ring #FDFE00 2.1 % thick, orange-yellow glow (#FFD600) at 64 % next to the core fading to 0 at
+               6 % on both sides (a touch broader inside); radius 0.94 x the face box height, centred on the face;
+               drawn on clockwise from 7 o'clock in 0.6 s
   pointer      solid triangle #FFFC00 (down, above the head) / #FF0000 (right, beside the face), 8.6 % tall,
                tip 4 % above the head; enters 125 % -> 100 % in 3 frames; follows the head
   red arrow    #FF0000 with a #990000 extruded right side (1.2 %), 2 px dark line, 32 % long, head 64 % of the length
@@ -39,9 +41,18 @@ XSCALE = 1.0 if "komika" in os.path.basename(FONT).lower() else 1.3
 W, H, FPS = 1920, 1080, 30
 YELLOW = (255, 255, 0, 255)
 CAPTION_YELLOW = (252, 255, 4, 255)
-POP_BAND = (116, 105, 0, 255)
+POP_BAND = (116, 105, 0, 255)            # the band's average look where letters are close (kept for other colours)
+POP_DARK = (32, 30, 0, 255)              # r5: the band itself, solved from the dark (u 288.95) and skin (r 18.3) refs
+POP_GLOW = (255, 240, 0, 255)            # r5: the yellow that lights the band near the letters (G/R 0.91-0.99)
 RING = (253, 254, 0, 255)
-RING_GLOW = (255, 200, 0, 255)
+RING_GLOW = (255, 214, 0, 255)           # r5: (160,137,8) next to the core over (31,27,7) -> #FFD600 at ~58 %
+# r5 ring glow: alpha by distance from the ring core's edge (px at 720p), median of 43 radial profiles, u 736.3
+_GLOW_D = (0.0, 2.5, 4.5, 6.5, 8.5, 10.5, 12.5, 14.5, 16.5, 18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 30.5, 32.5, 34.5,
+           36.5, 38.5, 40.5, 43.0)
+_GLOW_OUT = (0.62, 0.576, 0.509, 0.462, 0.427, 0.393, 0.357, 0.327, 0.292, 0.262, 0.227, 0.197, 0.166, 0.138, 0.116,
+             0.093, 0.077, 0.054, 0.035, 0.019, 0.010, 0.0)
+_GLOW_IN = (0.64, 0.593, 0.526, 0.476, 0.442, 0.413, 0.380, 0.345, 0.311, 0.276, 0.244, 0.213, 0.178, 0.146, 0.120,
+            0.093, 0.075, 0.053, 0.039, 0.021, 0.013, 0.0)
 POINTER_YELLOW = (255, 252, 0, 255)
 GREEN = (60, 230, 60, 255)
 RED = (255, 0, 0, 255)
@@ -155,6 +166,20 @@ def grow_round(alpha: Image.Image, r: float) -> Image.Image:
     return alpha.filter(ImageFilter.GaussianBlur(sigma)).point(lambda v: 255 if v > 8 else int(v * 30))
 
 
+def grow_exact(alpha: Image.Image, r: float) -> Image.Image:
+    """The alpha grown by r px with round joins and a 1 px anti-aliased edge (Euclidean distance; OpenCV)."""
+    if r <= 0:
+        return alpha
+    try:
+        import cv2
+    except Exception:  # noqa: BLE001 - no OpenCV: the blur-threshold grow (a softer ~2 px edge)
+        return grow_round(alpha, r)
+    a = np.asarray(alpha, np.uint8)
+    d = cv2.distanceTransform((a < 128).astype(np.uint8), cv2.DIST_L2, cv2.DIST_MASK_PRECISE) - 0.5
+    g = np.clip((r + 0.5 - d) * 255.0, 0, 255)
+    return Image.fromarray(np.maximum(g, a).astype(np.uint8), "L")
+
+
 def banded(canvas: Image.Image, band_px: float, feather_px: float, color=POP_BAND, line_px: float = 2.0,
            line_color=(50, 46, 0, 255), band_alpha: float = 0.92) -> Image.Image:
     """
@@ -179,6 +204,52 @@ def banded(canvas: Image.Image, band_px: float, feather_px: float, color=POP_BAN
     return out
 
 
+def lit_band(canvas: Image.Image, band_px: float, feather_px: float, tail_px: float, tail_alpha: float,
+             glow_px: float, glow_gain: float, dark=POP_DARK, glow_color=YELLOW, line_px: float = 2.0,
+             line_color=(50, 46, 0, 255)) -> Image.Image:
+    """
+    The reference pop outline as measured in r5 (u 288.95, r 18.3, u 287.6 "OMG"), outside in:
+      a soft dark tail (tail_alpha x the band blurred by tail_px) -> an opaque dark band (#201E00) lit by a yellow
+      glow of the letters (gain x the fill blurred by glow_px: olive between letters, dark at the outer edge;
+      the glow also lifts a dark background a little past the band) -> a thin dark line -> the fill.
+    """
+    m = int(band_px + 2.5 * max(tail_px, glow_px) + line_px + 2)      # past 2.5 sigma both blurs are < 1 level
+    big = Image.new("RGBA", (canvas.width + 2 * m, canvas.height + 2 * m), (0, 0, 0, 0))
+    big.alpha_composite(canvas, (m, m))
+    a = big.getchannel("A")
+    band = grow_exact(a, line_px + band_px)
+    if feather_px:
+        band = band.filter(ImageFilter.GaussianBlur(feather_px))
+    b = np.asarray(band, np.float32) / 255.0
+    tail = np.asarray(band.filter(ImageFilter.GaussianBlur(tail_px)), np.float32) * (tail_alpha / 255.0)
+    ad = 1.0 - (1.0 - b) * (1.0 - tail)
+    g = np.clip(np.asarray(a.filter(ImageFilter.GaussianBlur(glow_px)), np.float32) * (glow_gain / 255.0), 0, 1)
+    at = ad + g * (1.0 - ad)
+    D = np.array(dark[:3], np.float32)
+    Y = np.array(glow_color[:3], np.float32)
+    rgb = (D[None, None] * (ad * (1.0 - g))[..., None] + Y[None, None] * g[..., None]) / np.maximum(at, 1e-6)[..., None]
+    arr = np.dstack([np.clip(rgb + 0.5, 0, 255), np.clip(at * 255.0 + 0.5, 0, 255)]).astype(np.uint8)
+    out = Image.fromarray(arr, "RGBA")
+    line = Image.new("RGBA", big.size, line_color[:3] + (0,))
+    line.putalpha(grow_exact(a, line_px))
+    out.alpha_composite(line)
+    out.alpha_composite(big)
+    return out
+
+
+def scale_rotate(im: Image.Image, k: float, deg: float) -> Image.Image:
+    """Scale by k and rotate deg counter-clockwise about the centre in ONE bilinear resample (expanded canvas)."""
+    w, h = im.size
+    th = math.radians(deg)
+    c, s = math.cos(th), math.sin(th)
+    ow = max(1, int(math.ceil(k * (w * abs(c) + h * abs(s)))))
+    oh = max(1, int(math.ceil(k * (w * abs(s) + h * abs(c)))))
+    a, b, d, e = c / k, -s / k, s / k, c / k                  # output -> input (inverse of the forward map)
+    ox, oy, ix, iy = ow / 2.0, oh / 2.0, w / 2.0, h / 2.0
+    return im.transform((ow, oh), Image.AFFINE, (a, b, ix - a * ox - b * oy, d, e, iy - d * ox - e * oy),
+                        resample=Image.BILINEAR)
+
+
 @dataclass
 class Pop(Element):
     """Quoted punchline / laugh text near the speaker: per-letter pop, then a slow grow; hard cut out."""
@@ -193,12 +264,16 @@ class Pop(Element):
     def __post_init__(self):
         cap = int(H * self.cap)
         self._glyphs, self._w, self._h = word_layout(self.text, cap, self.color, 0, self.stroke_color)
-        self._line = H * 0.0021                      # ~1.5 px at 720p
-        self._band = H * 0.012                       # olive plateau (ref: ~9 px at 720p incl. the line)
-        self._feather = H * 0.0015                   # short soft edge (ref: ~3-4 px at 720p)
+        self._line = H * 0.0028                      # r5: ~2 px at 720p
+        # r5 (px at 720p, measured from the yellow fill's edge): band 50 % at 10.6, 96 % -> 21 % over d 9-12,
+        # then a dark tail 17 % -> 0 over d 13-22; glow of the letters ~ 0.14 at d 9 -> 0 at d 23
+        self._band = H * 0.0092
+        self._feather = 0.0
+        self._tail, self._tail_a = H * 0.011, 0.55
+        self._glow, self._gain = H * 0.014, 0.93
+        self._settled = None                         # the outline is static once every glyph has landed
 
-    def draw(self, t):
-        f = t * FPS
+    def _outlined(self, f: float) -> Image.Image:
         canvas = Image.new("RGBA", (self._w + 40, self._h + 40), (0, 0, 0, 0))
         for i, (g, x, y) in enumerate(self._glyphs):
             s = _pop_scale(f - i * 1.0)
@@ -208,13 +283,23 @@ class Pop(Element):
             gs = g.resize((gw, gh), Image.BILINEAR) if s != 1.0 else g
             drop = int((1.0 - min(1.0, s)) * 0.25 * g.height) if s < 1 else 0
             canvas.alpha_composite(gs, (20 + x + (g.width - gw) // 2, 20 + y + (g.height - gh) // 2 - drop))
-        band = POP_BAND if self.color == YELLOW else ((40, 90, 40, 255) if self.color == GREEN else WHITE)
-        im = banded(canvas, self._band, self._feather, band, self._line)
+        if self.color == YELLOW:
+            return lit_band(canvas, self._band, self._feather, self._tail, self._tail_a, self._glow, self._gain,
+                            glow_color=POP_GLOW, line_px=self._line)
+        band = (40, 90, 40, 255) if self.color == GREEN else WHITE
+        return banded(canvas, H * 0.012, H * 0.0015, band, self._line)
+
+    def draw(self, t):
+        f = t * FPS
+        if f >= len(self._glyphs) + 2:
+            if self._settled is None:
+                self._settled = self._outlined(f)
+            im = self._settled
+        else:
+            im = self._outlined(f)
         grow = 1.0 + 0.12 * min(1.0, t / max(0.5, self.dur))
         if grow != 1.0 or self.tilt:
-            im = im.resize((int(im.width * grow), int(im.height * grow)), Image.BILINEAR)
-            if self.tilt:
-                im = im.rotate(self.tilt, resample=Image.BICUBIC, expand=True)
+            im = scale_rotate(im, grow, self.tilt)
         fc = self.face(t)
         cx, cy = (fc["cx"], min(0.76, fc["cy"] + fc["h"] * 0.78)) if fc else (self.cx, self.cy)
         x = int(cx * W - im.width / 2)
@@ -232,11 +317,26 @@ class NameLabel(Element):
 
     def __post_init__(self):
         cap = int(H * 0.074)                 # ref: white 53 px of 720
-        self._stroke = cap * 0.19            # black outer stroke, round joins (8.5-10 px at 720p)
+        # r5 (u 736.3, px at 720p from the white's edge): solid black to d 9 (0.97), 0.76 at d 9, 0.17 at d 10 on
+        # every side (below = above = left = right); nothing measurable beyond (< 0.03): no drop shadow
+        self._stroke = cap * 0.161
         self._glyphs, self._w, self._h = word_layout(self.text, cap, WHITE, 0, BLACK)
+        self._settled = None
 
     def draw(self, t):
         f = t * FPS
+        if f >= (len(self._glyphs) - 1) * 0.9 + 4.0:
+            if self._settled is None:
+                self._settled = self._stroked(f)
+            out = self._settled
+        else:
+            out = self._stroked(f)
+        fc = self.face(0.0)
+        x = int((fc["cx"] if fc else self.cx) * W - out.width / 2)
+        x = max(int(W * 0.03), min(W - out.width - int(W * 0.03), x))
+        return out, x, int(self.y * H - out.height / 2)
+
+    def _stroked(self, f: float) -> Image.Image:
         canvas = Image.new("RGBA", (self._w + 60, self._h + 80), (0, 0, 0, 0))
         for i, (g, x, y) in enumerate(self._glyphs):
             p = (f - i * 0.9) / 4.0                 # 4 frames per letter, 0.9-frame stagger
@@ -250,26 +350,71 @@ class NameLabel(Element):
                 gg = gg.copy()
                 gg.putalpha(gg.getchannel("A").point(lambda v, e=e: int(v * min(1.0, 0.3 + e))))
             canvas.alpha_composite(gg, (30 + x - (gg.width - g.width) // 2, 30 + y + rise - (gg.height - g.height) // 2))
-        # reference (u 736.3): a black outer stroke with round joins, 16 % of the cap height, and a near-hard
-        # black drop shadow ~7 % of the cap straight down (the black reaches 12 px under the letters at 720p)
+        # a black outer stroke with round joins and a crisp edge, the same width on every side
         pad = int(self._stroke) + 12
         big = Image.new("RGBA", (canvas.width + 2 * pad, canvas.height + 2 * pad), (0, 0, 0, 0))
         big.alpha_composite(canvas, (pad, pad))
-        a = big.getchannel("A")
-        stroke = grow_round(a, self._stroke)
         out = Image.new("RGBA", big.size, (0, 0, 0, 0))
-        drop = int(round(self._stroke * 0.45))
-        sh = Image.new("RGBA", big.size, (0, 0, 0, 0))
-        sh.putalpha(stroke.filter(ImageFilter.GaussianBlur(1.2)).point(lambda v: int(v * 0.9)))
-        out.alpha_composite(sh, (0, drop))
-        st = Image.new("RGBA", big.size, (0, 0, 0, 0))
-        st.putalpha(stroke)
-        out.alpha_composite(st)
+        out.putalpha(grow_exact(big.getchannel("A"), self._stroke))
         out.alpha_composite(big)
-        fc = self.face(0.0)
-        x = int((fc["cx"] if fc else self.cx) * W - out.width / 2)
-        x = max(int(W * 0.03), min(W - out.width - int(W * 0.03), x))
-        return out, x, int(self.y * H - out.height / 2)
+        return out
+
+
+RING_HALF = 0.0104                       # half the core: 15 px of 720 thick
+RING_START = 120.0                       # 7 o'clock; angles run clockwise from 3 o'clock (image y is down)
+
+
+@lru_cache(maxsize=4)
+def _ring_geom(R: int):
+    """Pixel geometry of the annulus a ring of radius R (px) can touch: flat indices, offsets, radius, angle."""
+    hw = RING_HALF * H
+    m = int(math.ceil(hw + _GLOW_D[-1] * H / 720.0)) + 2
+    size = 2 * (R + m)
+    c = size / 2.0 - 0.5
+    yy, xx = np.mgrid[0:size, 0:size]
+    dx = (xx - c).astype(np.float32)
+    dy = (yy - c).astype(np.float32)
+    r = np.hypot(dx, dy)
+    idx = np.flatnonzero(np.abs(r - R) <= m)
+    dx, dy, r = dx.ravel()[idx], dy.ravel()[idx], r.ravel()[idx]
+    theta = np.degrees(np.arctan2(dy, dx)) % 360.0
+    return size, idx, dx, dy, r, theta
+
+
+def _ring_rgba(R: int, sweep: float, start: float = RING_START) -> Image.Image:
+    """The ring core + its glow as one RGBA, from the signed distance to the drawn arc (butt ends, as measured)."""
+    size, idx, dx, dy, r, theta = _ring_geom(R)
+    hw = RING_HALF * H
+    if sweep >= 360.0:
+        sd = np.abs(r - R) - hw
+    else:
+        within = ((theta - start) % 360.0) <= sweep
+        sd = np.empty_like(r)
+        sd[within] = np.abs(r[within] - R) - hw
+        o = ~within
+        best = None
+        for phi in (math.radians(start), math.radians(start + sweep)):
+            s = dx[o] * math.cos(phi) + dy[o] * math.sin(phi)
+            tt = -dx[o] * math.sin(phi) + dy[o] * math.cos(phi)
+            d = np.hypot(tt, np.maximum(0.0, np.abs(s - R) - hw))
+            best = d if best is None else np.minimum(best, d)
+        sd[o] = best
+    cov = np.clip(0.5 - sd, 0.0, 1.0)
+    d720 = np.maximum(sd, 0.0) * (720.0 / H)
+    g = np.where(r < R, np.interp(d720, _GLOW_D, _GLOW_IN), np.interp(d720, _GLOW_D, _GLOW_OUT))
+    a = cov + (1.0 - cov) * g
+    ring = np.array(RING[:3], np.float32)
+    gl = np.array(RING_GLOW[:3], np.float32)
+    rgb = (ring[None] * cov[:, None] + gl[None] * (g * (1.0 - cov))[:, None]) / np.maximum(a, 1e-6)[:, None]
+    out = np.zeros((size * size, 4), np.uint8)
+    out[idx, :3] = np.clip(rgb + 0.5, 0, 255).astype(np.uint8)
+    out[idx, 3] = np.clip(a * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    return Image.fromarray(out.reshape(size, size, 4), "RGBA")
+
+
+@lru_cache(maxsize=12)
+def _ring_full(R: int) -> Image.Image:
+    return _ring_rgba(R, 360.0)
 
 
 @dataclass
@@ -283,20 +428,12 @@ class Circle(Element):
     def draw(self, t):
         fc = self.face(t)
         cx, cy, r = (fc["cx"], fc["cy"], fc["h"] * 0.94) if fc else (self.cx, self.cy, self.r)
-        R = int(r * H)
-        sw = max(8, int(round(H * 0.021)))
-        g = max(8, int(round(H * 0.028)))
-        m = sw + 3 * g
-        size = 2 * (R + m)
+        R = max(8, int(round(r * H / 2.0)) * 2)          # 2 px buckets: the full ring is cached per radius
         sweep = 360.0 * ease_out(t / self.draw_s)
         if sweep < 1:
             return None
-        start = 120.0                     # 7 o'clock; PIL angles run clockwise from 3 o'clock
-        im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        ImageDraw.Draw(im).arc([m - sw // 2, m - sw // 2, size - m + sw // 2, size - m + sw // 2], start,
-                               start + sweep, fill=RING, width=sw)
-        im = glow(im, RING_GLOW, g // 2, 1.25)
-        return im, int(cx * W - im.width / 2), int(cy * H - im.height / 2)
+        im = _ring_full(R) if sweep >= 359.95 else _ring_rgba(R, sweep)
+        return im, int(round(cx * W - im.width / 2)), int(round(cy * H - im.height / 2))
 
 
 @dataclass
@@ -366,101 +503,226 @@ class Arrow3D(Element):
 
 @dataclass
 class SpeedLines(Element):
-    """Manga radial lines from the frame edge towards a face (black + a few white), re-drawn every 2 frames."""
-    cx: float = 0.5
-    cy: float = 0.45
+    """
+    Manga speed lines round the frame edge (r5, r2op 12 s): ~32 light wedges converging on the frame centre,
+    widest at the frame edge, tips 58-95 % of the way out. Re-drawn every 2 frames.
+    Measured at 720p: centre (624, 367) = 0.488 W, 0.509 H (the face was 100 px left: the lines ignore it);
+    25 lines on the 78 % of the border not covered by the person/logo -> ~32 round the frame; perpendicular base
+    width 8-19 px (median 11.5 = 1.6 % H); tips at 290-620 px (0.58-0.95 of the ray to the edge); colour
+    (60,59,63) over the (8,7,12) curtain = white at 21 %; no dark lines are visible on that black background.
+    """
+    cx: float = 0.488
+    cy: float = 0.509
     seed: int = 1
+    count: int = 32
+    alpha: float = 0.21
+    on_face: bool = False                # True: converge on the tracked face instead of the frame centre
 
     def draw(self, t):
         k = int(t * FPS) // 2
+        cache = self.__dict__.setdefault("_cache", {})
+        if k in cache:
+            return cache[k], 0, 0
         rnd = random.Random(self.seed * 1000 + k)
         im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
-        fc = self.face(t)
+        fc = self.face(t) if self.on_face else None
         cx, cy = ((fc["cx"], fc["cy"]) if fc else (self.cx, self.cy))
         cx, cy = cx * W, cy * H
-        far = math.hypot(W, H)
-        for i in range(90):
-            a = rnd.uniform(0, 2 * math.pi)
-            inner = rnd.uniform(0.36, 0.52) * H
-            spread = rnd.uniform(0.004, 0.012)
-            col = (255, 255, 255, 230) if rnd.random() < 0.25 else (0, 0, 0, 235)
-            p1 = (cx + math.cos(a - spread) * far, cy + math.sin(a - spread) * far)
-            p2 = (cx + math.cos(a + spread) * far, cy + math.sin(a + spread) * far)
-            p0 = (cx + math.cos(a) * inner, cy + math.sin(a) * inner)
+        col = (255, 255, 255, int(round(255 * self.alpha)))
+        for _ in range(self.count):
+            # spread evenly along the frame's border (the reference has more lines on the long sides)
+            u = rnd.uniform(0, 2 * (W + H))
+            bx, by = ((u, 0) if u < W else (W, u - W) if u < W + H else (W - (u - W - H), H) if u < 2 * W + H
+                      else (0, H - (u - 2 * W - H)))
+            n = max(1e-6, math.hypot(bx - cx, by - cy))
+            ux, uy = (bx - cx) / n, (by - cy) / n
+            ex = (W - cx) / ux if ux > 1e-6 else (-cx / ux if ux < -1e-6 else 1e9)
+            ey = (H - cy) / uy if uy > 1e-6 else (-cy / uy if uy < -1e-6 else 1e9)
+            e = min(ex, ey)                                     # centre -> frame edge along this ray
+            tip = e * rnd.uniform(0.58, 0.95)
+            half = H * rnd.uniform(0.008, 0.024) / 2            # half the base width, at the frame edge
+            far = e * 1.15                                      # run past the edge so the base is not cut short
+            hf = half * (far - tip) / max(1.0, e - tip)
+            p0 = (cx + ux * tip, cy + uy * tip)
+            p1 = (cx + ux * far - uy * hf, cy + uy * far + ux * hf)
+            p2 = (cx + ux * far + uy * hf, cy + uy * far - ux * hf)
             d.polygon([p0, p1, p2], fill=col)
+        cache.clear()
+        cache[k] = im
         return im, 0, 0
+
+
+# Film title card (r5, u 260.6-263.0; px at 720p -> fractions of H):
+TC_POSTER_H = 0.3167                     # poster picture 228 px tall
+TC_BORDER = 0.0047                       # white border 3.4 px
+TC_OUTLINE = 0.0014                      # then a 1 px black line
+TC_MARGIN_R, TC_MARGIN_B = 0.0403, 0.0417   # outer edge 29 px from the right, 30 px from the bottom
+TC_SHADOW = (0.0083, 0.0097, 0.70)       # offset down-right 6 px, blur 7 px, 70 %: shows right/bottom only
+TC_CAP = 0.0563                          # AVENGERS: white rows 40.5 px, 242 px wide
+TC_SUB_CAP = 0.0572                      # AGE OF ULTRON: outline 42.5 px tall, 366 px wide
+TC_YEAR_CAP = 0.0199                     # 2015: 14 px
+TC_BAR = (107, 116, 134, 255)            # #6B7485, opaque (the same over pink, blue and dark backgrounds)
+TC_BAR_H = 0.0701                        # 50.5 px
+TC_BAR_TOP = 0.2007                      # bar top 144.5 px under the poster's outer top
+TC_GAP_TEXT = 0.0111                     # text right edge 8 px left of the poster
+TC_GAP_TITLE = 0.0132                    # title baseline 9.5 px above the bar
+TC_GAP_YEAR = 0.0097                     # year top 7 px under the bar
+TC_BAR_LEAD = 0.0083                     # the bar starts 6 px left of the subtitle
+TC_SUB_LINE = 0.0028                     # subtitle: hollow letters, white outline 2 px
+
+
+def _alpha_box(im: Image.Image) -> Tuple[int, int, int, int]:
+    return im.getchannel("A").point(lambda v: 255 if v > 96 else 0).getbbox() or (0, 0, im.width, im.height)
+
+
+def _white_box(im: Image.Image) -> Tuple[int, int, int, int]:
+    """The box of the white letters only (the references were measured on their white pixels)."""
+    a = np.asarray(im)
+    ys, xs = np.nonzero((a[..., :3].min(-1) > 215) & (a[..., 3] > 200))
+    if not len(xs):
+        return _alpha_box(im)
+    return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+
+
+def _edged(text: str, cap: int, r: float, opacity: float, blur: float) -> Image.Image:
+    """White text with a faint dark edge (r px grown, `opacity` black, softened by `blur`)."""
+    t = text_image(text, cap, WHITE, 0)
+    p = int(r + 3 * blur + 3)
+    big = Image.new("RGBA", (t.width + 2 * p, t.height + 2 * p), (0, 0, 0, 0))
+    big.alpha_composite(t, (p, p))
+    e = grow_exact(big.getchannel("A"), r)
+    if blur:
+        e = e.filter(ImageFilter.GaussianBlur(blur))
+    out = Image.new("RGBA", big.size, (0, 0, 0, 0))
+    out.putalpha(e.point(lambda v: int(v * opacity)))
+    out.alpha_composite(big)
+    return out
+
+
+def _hollow(text: str, cap: int, line: float) -> Image.Image:
+    """Hollow letters: a white outline `line` px wide centred on the glyph edge, a faint dark fringe outside it."""
+    t = text_image(text, cap, WHITE, 0)
+    p = int(line + 4)
+    a = Image.new("L", (t.width + 2 * p, t.height + 2 * p), 0)
+    a.paste(t.getchannel("A"), (p, p))
+    outer = grow_exact(a, line / 2)
+    inner = Image.eval(grow_exact(Image.eval(a, lambda v: 255 - v), line / 2), lambda v: 255 - v)
+    o16 = np.asarray(outer, np.int16)
+    ring = np.clip(o16 - np.asarray(inner, np.int16), 0, 255).astype(np.uint8)
+    fringe = np.asarray(grow_exact(a, line / 2 + 1.0), np.float32) * 0.18
+    out = Image.new("RGBA", a.size, (0, 0, 0, 0))
+    out.putalpha(Image.fromarray(np.clip(fringe - o16, 0, 255).astype(np.uint8)))
+    white = Image.new("RGBA", a.size, (255, 255, 255, 0))
+    white.putalpha(Image.fromarray(ring))
+    out.alpha_composite(white)
+    return out
+
+
+def _paste_into(dst: Image.Image, im: Image.Image, x: int, y: int) -> None:
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(dst.width, x + im.width), min(dst.height, y + im.height)
+    if x1 > x0 and y1 > y0:
+        dst.alpha_composite(im.crop((x0 - x, y0 - y, x1 - x, y1 - y)), (x0, y0))
 
 
 @dataclass
 class TitleCard(Element):
-    """Film poster bottom-right that scales in, then the title wipes out of it to the left; reverse to exit."""
+    """Film poster bottom-right that scales in, then the title slides out of it to the left over a grey bar."""
     poster: str = ""
     title: str = ""
     subtitle: str = ""
     year: str = ""
 
     def __post_init__(self):
-        ph = int(H * 0.32)
+        ph = int(round(H * TC_POSTER_H))
         p = Image.open(self.poster).convert("RGBA")
-        p = p.resize((int(p.width * ph / p.height), ph), Image.LANCZOS)
-        b = max(4, int(H * 0.0055))
-        card = Image.new("RGBA", (p.width + 2 * b, p.height + 2 * b), WHITE)
-        card.alpha_composite(p, (b, b))
-        sh = Image.new("RGBA", (card.width + 30, card.height + 30), (0, 0, 0, 0))
-        sh.putalpha(Image.new("L", sh.size, 0))
+        p = p.resize((max(1, int(round(p.width * ph / p.height))), ph), Image.LANCZOS)
+        b = max(2, int(round(H * TC_BORDER)))
+        o = max(1, int(round(H * TC_OUTLINE)))
+        cw, ch = p.width + 2 * (b + o), p.height + 2 * (b + o)
+        card = Image.new("RGBA", (cw, ch), (0, 0, 0, 235))
+        ImageDraw.Draw(card).rectangle([o, o, cw - 1 - o, ch - 1 - o], fill=WHITE)
+        card.alpha_composite(p, (b + o, b + o))
+        off, blur, op = int(round(H * TC_SHADOW[0])), H * TC_SHADOW[1], TC_SHADOW[2]
+        pad = int(3 * blur) + off + 2
+        sh = Image.new("RGBA", (cw + 2 * pad, ch + 2 * pad), (0, 0, 0, 0))
         mask = Image.new("L", sh.size, 0)
-        ImageDraw.Draw(mask).rectangle([15, 15, 15 + card.width, 15 + card.height], fill=170)
-        sh.putalpha(mask.filter(ImageFilter.GaussianBlur(8)))
-        sh.alpha_composite(card, (9, 9))
-        self._card = sh
-        cap = int(H * 0.07)
-        self._t1 = text_image(self.title.upper(), cap, WHITE, max(3, int(H * 0.005)), BLACK)
-        self._t2 = text_image(self.subtitle.upper(), int(cap * 0.82), (205, 205, 205, 255), max(2, int(H * 0.003)), (60, 60, 60, 255)) if self.subtitle else None
-        self._t3 = text_image(self.year, int(H * 0.025), WHITE, 2, BLACK) if self.year else None
-        tw = max(self._t1.width, self._t2.width if self._t2 else 0) + 30
-        th = self._t1.height + (self._t2.height + 6 if self._t2 else 0) + (self._t3.height if self._t3 else 0)
-        block = Image.new("RGBA", (tw + 20, th + 20), (0, 0, 0, 0))
-        y = 10
-        block.alpha_composite(self._t1, (block.width - self._t1.width - 10, y))
-        y += self._t1.height + 4
-        if self._t2:
-            bar = Image.new("RGBA", (block.width - 4, self._t2.height + 4), (110, 110, 110, 190))
-            block.alpha_composite(bar, (4, y - 2))
-            block.alpha_composite(self._t2, (block.width - self._t2.width - 10, y))
-            y += self._t2.height + 6
-        if self._t3:
-            block.alpha_composite(self._t3, (block.width - self._t3.width - 10, y))
-        self._block = block
-        self._x = W - int(W * 0.03) - self._card.width
-        self._y = H - int(H * 0.10) - self._card.height
+        ImageDraw.Draw(mask).rectangle([pad + off, pad + off, pad + off + cw - 1, pad + off + ch - 1],
+                                       fill=int(255 * op))
+        sh.putalpha(mask.filter(ImageFilter.GaussianBlur(blur)))
+        sh.alpha_composite(card, (pad, pad))
+        self._card, self._pad = sh, pad
+        self._cx0 = W - int(round(H * TC_MARGIN_R)) - cw          # the card's outer left / top edge
+        self._cy0 = H - int(round(H * TC_MARGIN_B)) - ch
+        # the text, right-aligned against the poster (frame coordinates)
+        cap = int(round(H * TC_CAP))
+        right = self._cx0 - int(round(H * TC_GAP_TEXT))
+        bar_top = self._cy0 + int(round(H * TC_BAR_TOP))
+        bar_h = int(round(H * TC_BAR_H))
+        # each line slides out from behind the poster on its own; u 260.7 (mid-wipe): bar 24 % out, title 12 %,
+        # subtitle not yet -> bar first, the title ~1 frame later, the subtitle and year ~2 frames later
+        parts = []                                                 # (image, x, y, lag in s)
+        t1 = _edged(self.title.upper(), cap, H * 0.0016, 0.5, H * 0.0012)     # a faint dark edge: 0.2, 0.16, 0.06
+        l1, _, r1, b1 = _white_box(t1)
+        parts.append((t1, right - r1, bar_top - int(round(H * TC_GAP_TITLE)) - b1, 1.0 / FPS))
+        left = right - (r1 - l1)
+        if self.subtitle:
+            t2 = _hollow(self.subtitle.upper(), int(round(H * TC_SUB_CAP)), H * TC_SUB_LINE)
+            l2, tp2, r2, _ = _white_box(t2)
+            parts.append((t2, right - r2, bar_top + int(round(H * 0.0014)) - tp2, 2.0 / FPS))
+            left = min(left, right - (r2 - l2))
+        if self.year:
+            t3 = _edged(self.year, int(round(H * TC_YEAR_CAP)), H * 0.0021, 0.5, H * 0.0012)   # 0.32 0.23 0.12
+            _, tp3, r3, _ = _white_box(t3)
+            parts.append((t3, right - r3, bar_top + bar_h + int(round(H * TC_GAP_YEAR)) - tp3, 2.0 / FPS))
+        self._bar = (left - int(round(H * TC_BAR_LEAD)), bar_top, self._cx0 + 2, bar_top + bar_h) if self.subtitle else None
+        self._lines = parts
+        self._tx0 = min(x for _, x, _, _ in parts)
+        self._ty0 = min(y for _, _, y, _ in parts)
+
+    def _progress(self, t: float, lag: float) -> float:
+        left = self.dur - t
+        if left > 0.65:
+            return ease_out((t - 0.2 - lag) / 0.4)
+        return ease_out((left - 0.2 - lag) / 0.45)
 
     def draw(self, t):
         left = self.dur - t
-        # poster scale: in over 0.2 s (overshoot), out over the last 0.2 s
+        # poster scale: in over 0.2 s (105 % overshoot), out over the last 0.2 s
         if t < 0.2:
             s = 1.05 * ease_out(t / 0.2) if t < 0.15 else 1.05 - 0.05 * (t - 0.15) / 0.05
         elif left < 0.2:
             s = max(0.0, left / 0.2)
         else:
             s = 1.0
-        reveal = ease_out((t - 0.2) / 0.4) if left > 0.65 else ease_out((left - 0.2) / 0.45)
-        frame = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        if reveal > 0:
-            bw = int(self._block.width * reveal)
+        bar_p = self._progress(t, 0.0)
+        X0 = min(self._tx0, self._bar[0] if self._bar else W, self._cx0 - self._pad)
+        Y0 = min(self._ty0, self._bar[1] if self._bar else H, self._cy0 - self._pad)
+        frame = Image.new("RGBA", (W - X0, H - Y0), (0, 0, 0, 0))
+        if self._bar and bar_p > 0:
+            bx0, by0, bx1, by1 = self._bar
+            bw = int(round((bx1 - bx0) * bar_p))
             if bw > 0:
-                part = self._block.crop((self._block.width - bw, 0, self._block.width, self._block.height))
-                bx = self._x - bw
-                by = self._y + self._card.height // 2 - self._block.height // 2
-                frame.alpha_composite(part, (max(0, bx), by))
+                ImageDraw.Draw(frame).rectangle([bx1 - bw - X0, by0 - Y0, bx1 - 1 - X0, by1 - 1 - Y0], fill=TC_BAR)
+        for im, x, y, lag in self._lines:
+            p = self._progress(t, lag)
+            if p <= 0:
+                continue
+            travel = self._cx0 - x                                   # fully hidden: its left edge at the poster
+            shift = int(round((1.0 - p) * travel))
+            vis = min(im.width, self._cx0 - (x + shift))             # the part already out from behind the poster
+            if vis > 0:
+                _paste_into(frame, im.crop((0, 0, vis, im.height)), x + shift - X0, y - Y0)
         if s > 0.02:
             cw, ch = max(1, int(self._card.width * s)), max(1, int(self._card.height * s))
-            c = self._card.resize((cw, ch), Image.BILINEAR)
-            frame.alpha_composite(c, (self._x + (self._card.width - cw) // 2, self._y + (self._card.height - ch) // 2))
+            c = self._card.resize((cw, ch), Image.BILINEAR) if s != 1.0 else self._card
+            _paste_into(frame, c, self._cx0 - self._pad + (self._card.width - cw) // 2 - X0,
+                        self._cy0 - self._pad + (self._card.height - ch) // 2 - Y0)
         box = frame.getbbox()
         if not box:
             return None
-        return frame.crop(box), box[0], box[1]
+        return frame.crop(box), box[0] + X0, box[1] + Y0
 
 
 # ------------------------------------------------------------------ compositor

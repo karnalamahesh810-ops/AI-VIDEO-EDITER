@@ -51,6 +51,7 @@ class Moment:
     source: str = ""                 # how the match was found: captions | whisper | given
     window: str = ""                 # the padded download around the clip (b-roll comes from it)
     window_at: float = 0.0           # the window's start in the source video (s)
+    window_words: List[W] = field(default_factory=list)   # every word of the window, on the window's clock
 
     @property
     def url(self) -> str:
@@ -282,9 +283,30 @@ def rms_levels(path: str, hop: float = 0.05) -> List[float]:
 
 
 # ------------------------------------------------------------------ the whole finder
+_CLIP_MODEL: list = [None]
+_MODEL_LOCK = __import__("threading").Lock()
+
+
 def _whisper(path: str) -> List[W]:
-    from .. import transcribe
-    return [W(w.text, w.start, w.end) for w in transcribe.transcribe_words(path, language="en")]
+    """
+    Clip speech word by word. The clip's captions are read off these words, so they use a stronger model than the
+    narration's alignment (CELEB_WHISPER_MODEL, default small.en; the narration model when they are the same).
+    """
+    from .. import config, transcribe
+    name = os.environ.get("CELEB_WHISPER_MODEL", "small.en").strip()
+    if not name or name == config.WHISPER_MODEL:
+        return [W(w.text, w.start, w.end) for w in transcribe.transcribe_words(path, language="en")]
+    with _MODEL_LOCK:
+        if _CLIP_MODEL[0] is None:
+            from faster_whisper import WhisperModel
+            _CLIP_MODEL[0] = WhisperModel(name, device="cpu", compute_type="int8")
+    segs, _ = _CLIP_MODEL[0].transcribe(path, language="en", word_timestamps=True, vad_filter=True, beam_size=5)
+    out = []
+    for s in segs:
+        for w in s.words or []:
+            if str(w.word).strip():
+                out.append(W(str(w.word).strip(), float(w.start), float(w.end)))
+    return out
 
 
 def trim(src: str, dst: str, start: float, end: float, fade: float = 0.06) -> str:
@@ -314,13 +336,13 @@ def moment_in_window(window: str, offset: float, quote: str, *, min_s: float = 0
         tail = max(0.15, min(tail, nxt - end - 0.08))
     end += tail
     inside = [W(w.text, w.start - start, w.end - start) for w in words if w.start >= start - 0.05 and w.start < end - 0.15]
-    return {"start": start, "end": end, "score": score, "words": inside,
+    return {"start": start, "end": end, "score": score, "words": inside, "all": list(words),
             "quote_at": (words[qi].start - start, words[qj].end - start), "abs": (offset + start, offset + end)}
 
 
 def find(who: Sequence[str], quote: str, where: str, work: str, *, min_s: float = 0.0, max_s: float = 0.0,
          video_id: str = "", start: Optional[float] = None, end: Optional[float] = None,
-         max_candidates: int = 6, log: Callable = print) -> Optional[Moment]:
+         max_candidates: int = 6, log: Callable = print, trim_clip: bool = True) -> Optional[Moment]:
     """The clip for one spot: a given URL (+ in/out), else search -> captions -> window -> whisper -> snap."""
     os.makedirs(work, exist_ok=True)
     pad_before, pad_after = SETUP_GROW + 3.0, 10.0
@@ -352,26 +374,34 @@ def find(who: Sequence[str], quote: str, where: str, work: str, *, min_s: float 
             at, source = (caps[qi].start, caps[qj].end), "captions"
         w0 = max(0.0, at[0] - pad_before)
         seconds = (at[1] + pad_after) - w0
-        win = ytdlp._yt_fetch(vid, work, w0, seconds, audio=True)
+        # A hero clip: the best picture the source has (ytdlp hero tier: AV1/VP9, 1440p downscaled when worth it).
+        win = ytdlp._yt_fetch(vid, work, w0, seconds, timeout=600, audio=True, hero=True)
         if not win:
             log(f"[celeb] {vid}: window download failed")
             continue
+        w0 = window_start(win, w0)                            # where the section really starts (fitted near an end)
         if source == "given":
-            got = moment_in_window(win, w0, "", words=None)
-            if got:                                            # the owner's own in/out win; words for captions
-                s_rel, e_rel = start - w0, end - w0
-                got.update(start=s_rel, end=e_rel, abs=(start, end),
-                           words=[W(w.text, w.start - s_rel, w.end - s_rel) for w in _whisper(win)
-                                  if s_rel - 0.05 <= w.start and w.end <= e_rel + 0.3])
+            heard = _whisper(win)
+            s_rel, e_rel = start - w0, end - w0                # the owner's own in/out win; words for captions
+            got = {"start": s_rel, "end": e_rel, "score": 1.0, "abs": (start, end), "quote_at": (0.0, 0.0),
+                   "all": heard, "words": [W(w.text, w.start - s_rel, w.end - s_rel) for w in heard
+                                           if s_rel - 0.05 <= w.start and w.end <= e_rel + 0.3]}
         else:
             got = moment_in_window(win, w0, quote, min_s=min_s, max_s=max_s)
         if not got:
             log(f"[celeb] {vid}: quote not heard in the window")
             continue
-        dst = os.path.join(work, f"clip_{vid}_{int(got['abs'][0] * 1000)}.mp4")
-        trim(win, dst, got["start"], got["end"])
+        dst = os.path.join(work, f"clip_{vid}_{int(got['abs'][0] * 1000)}.mp4") if trim_clip else ""
+        if dst:                                                # (the reel plays from the window itself)
+            trim(win, dst, got["start"], got["end"])
         return Moment(video_id=vid, title=meta.get("title", ""), channel=meta.get("channel", ""),
                       start=round(got["abs"][0], 2), end=round(got["abs"][1], 2), score=round(got["score"], 3),
                       path=dst, words=got["words"], quote_at=got["quote_at"], source=source,
-                      window=win, window_at=w0)
+                      window=win, window_at=w0, window_words=list(got.get("all") or []))
     return None
+
+
+def window_start(path: str, asked: float) -> float:
+    """The section's real start in the source video: ytdlp._yt_fetch names its file yt_<id>_<start ms>_<len ms>_..."""
+    m = re.search(r"yt_[\w-]{11}_(\d+)_(\d+)_", os.path.basename(path or ""))
+    return int(m.group(1)) / 1000.0 if m else asked

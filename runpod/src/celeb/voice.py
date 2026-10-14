@@ -53,7 +53,7 @@ def synthesize(texts: List[str], work: str, *, voice: str = "doc-male", speed: f
     """One levelled wav per narration block, in order."""
     os.makedirs(work, exist_ok=True)
     server = server or langversion.VoiceServer()
-    ref = PRESETS.get(voice, voice if isinstance(voice, dict) else PRESETS["doc-male"])
+    ref = voice if isinstance(voice, dict) else PRESETS.get(str(voice), PRESETS["doc-male"])
 
     def one(i: int) -> str:
         done = os.path.join(work, f"narr_{cache_key(texts[i], ref, speed)}.wav")

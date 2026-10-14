@@ -150,6 +150,17 @@ STYLES: Dict[str, dict] = {
                    "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False, "GENERATED_IMAGES_IN_HOOK": False,
                    "MARKS_ENABLED": False, "REFRAME_CLIPS": False, "MOTION_PREFERENCE": 0.12},
     },
+    # The celeb compilation (2026-10-15; docs/style-refs/celeb-compilation-STYLE.md, celeb-elements.md, measured
+    # from Celebs Goat): the owner's script with [CLIP: ...] spots; each real clip plays with its own sound between
+    # narration lines, with the reference's captions, name labels, rings, pops, arrows and title cards on top. Its
+    # plan and render are src/celeb/pipeline.py (handler.py routes it before the sourcing path); nothing below the
+    # style's own code reads this config, it only keeps the shared steps quiet.
+    "celeb_compilation": {
+        "label": "Celeb compilation",
+        "transitions": "compilation", "graphics": "minimal",
+        "config": {"IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False, "MARKS_ENABLED": False,
+                   "AI_REVIEW": False},
+    },
     # The AI presenter (src/presenter/, docs/ai-avatar-style-plan-2026-10-07.md): a made-up presenter talks
     # to camera from one believable set (HeyGen Avatar IV, lip-synced to the job's own voice track), cut with
     # AI stills that move and AI clips animated from them - all through OpenRouter, no footage search. Its
@@ -243,7 +254,9 @@ _ALIASES = {"news": "trending_news", "news-compilation": "news_compilation", "co
             "presenter": "ai_presenter", "ai-presenter": "ai_presenter", "ai_avatar": "ai_presenter",
             "ai-avatar": "ai_presenter", "avatar": "ai_presenter",
             "gaming": "gaming_essay", "gaming-essay": "gaming_essay", "game_essay": "gaming_essay",
-            "gaming_video_essay": "gaming_essay", "video_game_essay": "gaming_essay"}
+            "gaming_video_essay": "gaming_essay", "video_game_essay": "gaming_essay",
+            "celeb": "celeb_compilation", "celebrity": "celeb_compilation", "celeb-compilation": "celeb_compilation",
+            "celebrity_compilation": "celeb_compilation", "celebs": "celeb_compilation"}
 
 
 def resolve(name: str) -> str:

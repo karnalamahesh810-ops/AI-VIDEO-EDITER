@@ -35,9 +35,18 @@ class Block:
     pops: List[str] = field(default_factory=list)     # "\"TEXT\"@seconds@hint": punchline pop
     points: List[str] = field(default_factory=list)   # "@seconds@hint": pointer triangle above a head
     shots: List[str] = field(default_factory=list)    # montage: "VIDEOID@a-b [pop=..|speed|arrow]"
+    key: str = ""                  # the worker's own source name for this clip (src/celeb/pipeline.py)
+
+    @property
+    def youtube_id(self) -> str:
+        m = re.search(r"(?:v=|youtu\.be/|shorts/)([\w-]{11})", self.url or "")
+        return m.group(1) if m else ""
 
     @property
     def video_id(self) -> str:
+        """The source this clip plays from: the pipeline's downloaded window once found, else the URL's id."""
+        if self.key:
+            return self.key
         m = re.search(r"(?:v=|youtu\.be/|shorts/)([\w-]{11})", self.url or "")
         return m.group(1) if m else ""
 

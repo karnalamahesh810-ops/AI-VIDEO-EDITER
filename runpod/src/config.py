@@ -1225,6 +1225,21 @@ MAX_PICTURE_MAGNIFICATION = float(os.getenv("MAX_PICTURE_MAGNIFICATION", "1.86")
 # gate. Archive film is exempt (MIN_ARCHIVE_HEIGHT).
 CLIP_SHARPNESS_CHECK = _flag("CLIP_SHARPNESS_CHECK", True)
 MIN_CLIP_REAL_HEIGHT = int(os.getenv("MIN_CLIP_REAL_HEIGHT", "720"))
+# DOWNLOAD_QUALITY: how a YouTube section is fetched (src/ytdlp.py _fetch_cmd).
+# A section cut at exact frames (--force-keyframes-at-cuts) is always re-encoded
+# by ffmpeg inside yt-dlp; "legacy" left that to ffmpeg's defaults (x264 crf 23,
+# aac 128k) on an H.264-only pick: a second lossy generation on YouTube's
+# thinnest 1080p stream. "high": AV1 > VP9 > H.264 (SDR, up to 1080 lines,
+# 30 fps preferred), re-encoded once at x264 crf DOWNLOAD_CRF (yuv420p mp4,
+# aac 192k with sound); hero clips may take a 1440p/2160p source under
+# HERO_MAX_TBR kbps, downscaled to 1080 (lanczos) in the same pass.
+DOWNLOAD_QUALITY = os.getenv("DOWNLOAD_QUALITY", "high").strip().lower()
+DOWNLOAD_CRF = int(os.getenv("DOWNLOAD_CRF", "16"))
+# x264 preset of that re-encode: "medium" is what legacy already spent (ffmpeg's
+# default) and at crf 16 gives +0.5 VMAF over "veryfast" at the same size
+# (Hot Ones 1080p AV1 vs a 2160p reference, 2026-10-15: 97.0 vs 96.5; legacy 95.3).
+DOWNLOAD_PRESET = os.getenv("DOWNLOAD_PRESET", "medium").strip() or "medium"
+HERO_MAX_TBR = int(os.getenv("HERO_MAX_TBR", "9000"))
 
 # --- local vision + upscaling (CPU, no API) -----------------------------------
 # CLIP (ONNX, baked into the image under /opt/models) judges every candidate
