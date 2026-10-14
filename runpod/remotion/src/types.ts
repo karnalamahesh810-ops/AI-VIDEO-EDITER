@@ -454,6 +454,11 @@ export interface Overlay {
    * the frame's shorter side, its box w / h as shares of the frame).
    */
   anchor?: { x: number; y: number; r?: number; w?: number; h?: number; confidence?: number };
+  /**
+   * The Smart Editor's motion spec (type "motion", variant "smart-spec"): layers, keyframes, word-synced text
+   * animators and a camera move, designed by src/smart_editor.py and drawn by components/smart/SmartSpec.tsx.
+   */
+  spec?: unknown;
   labelPosition?: { x: number; y: number };
   /**
    * The places a several-point look marks (an-multi-point), frame shares,

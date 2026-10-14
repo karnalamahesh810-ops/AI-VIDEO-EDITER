@@ -2017,3 +2017,24 @@ LANG_TRANSLATE_MAX_USD = float(os.getenv("LANG_TRANSLATE_MAX_USD", "1.0"))
 # What hears the new narration for its word times (the captions, the scene cuts): its own model beside the worker's
 # WHISPER_MODEL - "base" heard a clean Spanish narration at 0.89 of its words, large-v3-turbo at 0.99 (2026-10-09).
 LANG_WHISPER_MODEL = os.getenv("LANG_WHISPER_MODEL", "small").strip()
+
+# ---------------------------------------------------------------- the Smart Editor (2026-10-14)
+# An AI edit director designs NEW graphics per moment (src/smart_editor.py: text animations tied to the
+# narration's words, marks on the point of a shot found by vision, camera moves on the clip, sound cues,
+# transitions) instead of picking the same looks again; one renderer draws them (remotion components/smart).
+# Off by default: A/B it against today's looks. A job's "smart_editor" (true/false) wins over this.
+SMART_EDITOR = _flag("SMART_EDITOR", False)
+# The director's model (OpenRouter). A strong, cheap planner: gemini-3.8-flash measured ~$0.01/min of video.
+SMART_EDITOR_MODEL = os.getenv("SMART_EDITOR_MODEL", "google/gemini-3.8-flash").strip()
+SMART_EDITOR_FALLBACK_MODEL = os.getenv("SMART_EDITOR_FALLBACK_MODEL", "openai/gpt-5.4-mini").strip()
+SMART_EDITOR_REASONING = os.getenv("SMART_EDITOR_REASONING", "low").strip().lower()
+# The whole pass's ceiling per video (director + marks + critic), US dollars; past it the rest keeps its looks.
+SMART_EDITOR_MAX_USD = float(os.getenv("SMART_EDITOR_MAX_USD", "0.20"))
+# Beats per director call (a call designs ~3-4 minutes of narration; calls run in parallel).
+SMART_EDITOR_CHUNK = int(os.getenv("SMART_EDITOR_CHUNK", "40"))
+# Vision marks: at most one per this many seconds of narration (each is one small vision call, ~$0.001).
+SMART_EDITOR_MARK_EVERY = float(os.getenv("SMART_EDITOR_MARK_EVERY", "30"))
+# The critic: render stills of up to N graphics, a vision model scores them, the weak ones are revised.
+SMART_EDITOR_CRITIC = _flag("SMART_EDITOR_CRITIC", True)
+SMART_EDITOR_CRITIC_MAX = int(os.getenv("SMART_EDITOR_CRITIC_MAX", "8"))
+SMART_EDITOR_CRITIC_MODEL = os.getenv("SMART_EDITOR_CRITIC_MODEL", "google/gemini-3.8-flash").strip()

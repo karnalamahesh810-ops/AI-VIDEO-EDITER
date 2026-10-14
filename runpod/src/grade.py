@@ -70,6 +70,16 @@ def clean_settings(value: Any) -> Optional[Dict[str, Any]]:
         strength = 1.0
     out = {"preset": preset, "strength": round(max(0.0, min(1.0, strength)), 3),
            "normalize": value.get("normalize") is not False}
+    look = value.get("look")
+    if isinstance(look, dict):
+        # a Style Kit's measured look (src/style_match/apply.py); the renderer clamps each value again
+        keep = {k: float(look[k]) for k in ("lift", "gain", "pivot", "contrast", "sat")
+                if isinstance(look.get(k), (int, float)) and math.isfinite(float(look[k]))}
+        tint = look.get("tint")
+        if isinstance(tint, (list, tuple)) and len(tint) == 3 and all(isinstance(x, (int, float)) for x in tint):
+            keep["tint"] = [round(float(x), 4) for x in tint]
+        if keep:
+            out["look"] = keep
     frozen = value.get("medians")
     if isinstance(frozen, dict) and _valid_tone({**frozen, "lo": 0.0, "hi": 1.0}):
         out["medians"] = {k: frozen[k] for k in ("l", "s", "rg", "bg", "n") if k in frozen}

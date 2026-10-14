@@ -3328,6 +3328,13 @@ def handler(job):
         vstyle = styles.apply(inp)
         if vstyle:
             print(f"[worker] video style: {vstyle}", flush=True)
+        # Style Match (src/style_match): a measured Style Kit sets the pace here and draws the graphics,
+        # transitions, grade and mix in timeline.build.
+        if isinstance(inp.get("style_kit"), dict):
+            from src.style_match import apply as style_apply
+            sk = style_apply.prepare_input(inp)
+            if sk:
+                print(f"[worker] style kit: {sk.get('name')} ({len(sk.get('elements') or [])} elements)", flush=True)
     # The AI presenter inside a footage style (src/presenter/hybrid.py) is real footage around the presenter and
     # nothing else generated: no AI pictures in its search, its gap fills, a Replace Clip or a render's repairs.
     if (act in ("plan", "build") and presenter_hybrid.block(inp)) or (
@@ -3588,6 +3595,17 @@ def handler(job):
                 traceback.print_exc()
                 out = {"ok": False, "error": f"{type(e).__name__}: {e}"[:800]}
             return {**out, "action": "presenter_set", "costs": costs.summary(time.time() - started),
+                    "elapsed": round(time.time() - started, 1)}
+
+        if action == "style_match":
+            # Style Match (src/style_match): measure a reference video's editing style into a Style Kit.
+            from src.style_match import run as style_run
+            try:
+                out = style_run.run(inp)
+            except Exception as e:  # noqa: BLE001 - reported in the result
+                traceback.print_exc()
+                out = {"ok": False, "action": "style_match", "error": f"{type(e).__name__}: {e}"[:800]}
+            return {**out, "costs": costs.summary(time.time() - started),
                     "elapsed": round(time.time() - started, 1)}
 
         if action == "presenter_info":
