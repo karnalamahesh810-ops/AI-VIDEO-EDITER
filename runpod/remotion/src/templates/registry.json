@@ -90639,6 +90639,2813 @@
    ]
   },
   {
+   "id": "M2_ZOOM_DIVE",
+   "name": "Globe Dive",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The globe turns to the place and dives in: the flat relief map takes over at the same scale, flies to the country (filled in the brand's region colour, its name on a gold pill on its word), then on to its state or province (lit, the country stepping back) and the place's dot and pill.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "areas": {
+     "type": "list",
+     "label": "Areas",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 7.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-zoom-dive",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 92,
+    "types": false,
+    "leastSeconds": 6.5,
+    "sample": {
+     "text": "",
+     "label": "",
+     "locations": [
+      {
+       "label": "Kyoto, Japan",
+       "lat": 35.0116,
+       "lon": 135.7681
+      }
+     ],
+     "items": [
+      {
+       "label": "Japan",
+       "at": 2.9
+      },
+      {
+       "label": "Kyoto",
+       "at": 4.6
+      }
+     ],
+     "kit": "royal"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 52
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 92
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 150
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_REGION_PULSE",
+   "name": "Region Pulse",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "One to three countries or states fill in the region colour on the dark relief map, the rest dimmed, each outline pulsing outward three times, each name on a gold pill on its word; a figure said with it counts beside (number over its small-caps unit).",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "areas": {
+     "type": "list",
+     "label": "Areas",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-region-pulse",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 20,
+    "types": false,
+    "leastSeconds": 4.5,
+    "sample": {
+     "text": "",
+     "label": "Residents",
+     "areas": [
+      {
+       "id": "US-TX",
+       "label": "Texas",
+       "at": 0.6
+      }
+     ],
+     "value": 30.5,
+     "suffix": "M",
+     "kit": "bulletin"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 20
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_RELIEF_TILT",
+   "name": "Relief Tilt",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The relief map lays back in 3D while the camera pushes in, and the country or region rises out of it as an extruded block in the region colour (lit walls, a soft top), its name pill above it; an elevation said counts beside.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "areas": {
+     "type": "list",
+     "label": "Areas",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-relief-tilt",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 40,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "text": "",
+     "label": "",
+     "areas": [
+      {
+       "id": "NPL",
+       "label": "Nepal",
+       "at": 0.9
+      }
+     ],
+     "value": 29032,
+     "suffix": "ft",
+     "kit": "royal"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "boom-soft",
+      "alt": [
+       "hit-deep",
+       "impact"
+      ],
+      "gain_db": -15,
+      "at": 40
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 56
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_ROUTE",
+   "name": "Dotted Route",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Two to six places in order: the camera eases out from the first stop as a white dotted line draws along the great circle, a glowing marker at its head reaching each stop on its word (a dot ping and a gold pill), the distance (as said, else measured) counting beside.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-route",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 62,
+    "types": false,
+    "leastSeconds": 5.5,
+    "sample": {
+     "text": "",
+     "label": "By rail",
+     "locations": [
+      {
+       "label": "Lisbon, Portugal",
+       "lat": 38.7223,
+       "lon": -9.1393
+      },
+      {
+       "label": "Madrid, Spain",
+       "lat": 40.4168,
+       "lon": -3.7038
+      },
+      {
+       "label": "Paris, France",
+       "lat": 48.8566,
+       "lon": 2.3522
+      }
+     ],
+     "items": [
+      {
+       "label": "Lisbon"
+      },
+      {
+       "label": "Madrid",
+       "at": 1.9
+      },
+      {
+       "label": "Paris",
+       "at": 3.6
+      }
+     ],
+     "kit": "royal"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "pin-drop",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "gain_db": -10,
+      "at": 62
+     },
+     {
+      "name": "pin-drop",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "gain_db": -10,
+      "at": 108
+     },
+     {
+      "name": "count-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "gain_db": -14,
+      "at": 44
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_PLACES",
+   "name": "Places",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Two to eight places on the relief map, their countries softly lit: a dot and a gold pill for each, staggered on their words, the pills placed clear of each other.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-places",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 18,
+    "types": false,
+    "leastSeconds": 4.5,
+    "sample": {
+     "text": "",
+     "label": "Gigafactories",
+     "locations": [
+      {
+       "label": "Fremont, California",
+       "lat": 37.5485,
+       "lon": -121.9886
+      },
+      {
+       "label": "Austin, Texas",
+       "lat": 30.2672,
+       "lon": -97.7431
+      },
+      {
+       "label": "Berlin, Germany",
+       "lat": 52.52,
+       "lon": 13.405
+      },
+      {
+       "label": "Shanghai, China",
+       "lat": 31.2304,
+       "lon": 121.4737
+      }
+     ],
+     "items": [
+      {
+       "label": "Fremont",
+       "at": 0.7
+      },
+      {
+       "label": "Austin",
+       "at": 1.2
+      },
+      {
+       "label": "Berlin",
+       "at": 1.8
+      },
+      {
+       "label": "Shanghai",
+       "at": 2.4
+      }
+     ],
+     "kit": "noir"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 18
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 32
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 46
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_BORDER_TRACE",
+   "name": "Border Trace",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "A country's or state's border (or coastline) draws on in gold with a soft glow as the camera pushes in, then the area fills in the region colour and its name pill lands.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "areas": {
+     "type": "list",
+     "label": "Areas",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-border-trace",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 14,
+    "types": false,
+    "leastSeconds": 4.8,
+    "sample": {
+     "text": "",
+     "label": "1945",
+     "areas": [
+      {
+       "id": "POL",
+       "label": "Poland",
+       "at": 0.4
+      }
+     ],
+     "kit": "noir"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "marker-draw",
+      "alt": [
+       "pen-scribble",
+       "marker"
+      ],
+      "gain_db": -15,
+      "at": 14
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 100
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_CHOROPLETH",
+   "name": "Choropleth",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Three to fourteen areas shaded by their figures (a ramp to the region colour), each lighting on its word with its value on a pill, a legend with the range, the leader's figure counting beside.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "subtitle": {
+     "type": "string",
+     "label": "Subtitle",
+     "max": 200
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "areas": {
+     "type": "list",
+     "label": "Areas",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-choropleth",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 18,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "text": "Coffee grown",
+     "subtitle": "Million tonnes, 2022",
+     "label": "",
+     "suffix": "",
+     "areas": [
+      {
+       "id": "BRA",
+       "label": "Brazil",
+       "value": 3.17,
+       "at": 0.6
+      },
+      {
+       "id": "VNM",
+       "label": "Vietnam",
+       "value": 1.95,
+       "at": 1.2
+      },
+      {
+       "id": "IDN",
+       "label": "Indonesia",
+       "value": 0.79,
+       "at": 1.7
+      },
+      {
+       "id": "COL",
+       "label": "Colombia",
+       "value": 0.67,
+       "at": 2.1
+      },
+      {
+       "id": "ETH",
+       "label": "Ethiopia",
+       "value": 0.5,
+       "at": 2.5
+      },
+      {
+       "id": "HND",
+       "label": "Honduras",
+       "value": 0.36,
+       "at": 2.8
+      }
+     ],
+     "kit": "atlas"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "count-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "gain_db": -14,
+      "at": 18
+     },
+     {
+      "name": "count-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "gain_db": -14,
+      "at": 36
+     },
+     {
+      "name": "count-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "gain_db": -14,
+      "at": 51
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_COMPARE",
+   "name": "True-Scale Compare",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Two countries or states side by side at one true scale (each drawn round its own middle), their names on pills, said figures counting under them; then one glides over the other and the size ratio counts.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "prefix": {
+     "type": "string",
+     "label": "Before the number",
+     "default": ""
+    },
+    "areas": {
+     "type": "list",
+     "label": "Areas",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-compare",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 18,
+    "types": false,
+    "leastSeconds": 5.5,
+    "sample": {
+     "text": "",
+     "label": "",
+     "areas": [
+      {
+       "id": "US-TX",
+       "label": "Texas",
+       "at": 0.4
+      },
+      {
+       "id": "FRA",
+       "label": "France",
+       "at": 1.2
+      }
+     ],
+     "kit": "royal"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 18
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 40
+     },
+     {
+      "name": "whoosh-soft",
+      "alt": [
+       "swipe",
+       "ui-swipe"
+      ],
+      "gain_db": -14,
+      "at": 130
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_RADIUS",
+   "name": "Radius",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "A true-distance circle grows round a place on its word - the radius line and its figure counting, sonar rings, a dashed rim - then the cities inside are named and the big ones round it shown for scale.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "value": {
+     "type": "number",
+     "label": "Value"
+    },
+    "suffix": {
+     "type": "string",
+     "label": "Unit",
+     "max": 12
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-radius",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 20,
+    "types": false,
+    "leastSeconds": 4.5,
+    "sample": {
+     "text": "",
+     "label": "Exclusion zone",
+     "locations": [
+      {
+       "label": "Chernobyl, Ukraine",
+       "lat": 51.2763,
+       "lon": 30.2219
+      }
+     ],
+     "value": 30,
+     "suffix": "km",
+     "items": [
+      {
+       "label": "30 km",
+       "at": 0.8
+      }
+     ],
+     "kit": "noir"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "radar-ping",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "gain_db": -14,
+      "at": 20
+     },
+     {
+      "name": "count-tick",
+      "alt": [
+       "ui-tick",
+       "tick"
+      ],
+      "gain_db": -14,
+      "at": 26
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_FLOWS",
+   "name": "Flow Arrows",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Curved arrows draw from one place to the others (or into it) on their words, thickness by the said amounts, white dashes streaming along them once drawn; the hub's country lit, every place pilled.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "direction": {
+     "type": "enum",
+     "label": "Flow direction",
+     "options": [
+      "out",
+      "in"
+     ],
+     "default": "out"
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-flows",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 27,
+    "types": false,
+    "leastSeconds": 4.5,
+    "sample": {
+     "text": "",
+     "label": "Exports",
+     "locations": [
+      {
+       "label": "Shanghai, China",
+       "lat": 31.2304,
+       "lon": 121.4737
+      },
+      {
+       "label": "Los Angeles, California",
+       "lat": 34.0522,
+       "lon": -118.2437
+      },
+      {
+       "label": "Rotterdam, Netherlands",
+       "lat": 51.9244,
+       "lon": 4.4777
+      },
+      {
+       "label": "Singapore",
+       "lat": 1.3521,
+       "lon": 103.8198
+      },
+      {
+       "label": "Sydney, Australia",
+       "lat": -33.8688,
+       "lon": 151.2093
+      }
+     ],
+     "items": [
+      {
+       "label": "Shanghai"
+      },
+      {
+       "label": "Los Angeles",
+       "at": 0.9
+      },
+      {
+       "label": "Rotterdam",
+       "at": 1.4
+      },
+      {
+       "label": "Singapore",
+       "at": 1.9
+      },
+      {
+       "label": "Sydney",
+       "at": 2.4
+      }
+     ],
+     "kit": "royal"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "whoosh-fast",
+      "alt": [
+       "swoosh-text",
+       "swipe"
+      ],
+      "gain_db": -16,
+      "at": 27
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_PIN_DROP",
+   "name": "Pin Drop",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "\"You are here\": the camera flies from the country to the place, a gold pin drops and bounces on its word with ripples, its state lit; its name on a pill and its coordinates under it.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-pin-drop",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 60,
+    "types": false,
+    "leastSeconds": 4.5,
+    "sample": {
+     "text": "",
+     "label": "",
+     "locations": [
+      {
+       "label": "Machu Picchu, Peru",
+       "lat": -13.1631,
+       "lon": -72.545
+      }
+     ],
+     "items": [
+      {
+       "label": "Machu Picchu",
+       "at": 1.6
+      }
+     ],
+     "kit": "atlas"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "pin-drop",
+      "alt": [
+       "ui-pop",
+       "pop"
+      ],
+      "gain_db": -10,
+      "at": 60
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 68
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
+   "id": "M2_SAT_FLAT",
+   "name": "Satellite to Map",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "Real satellite imagery of the place (NASA Blue Marble, USGS in the US) pushes in, then a light sweep turns it into the branded relief map on its word, the area filling and its name pill landing.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "areas": {
+     "type": "list",
+     "label": "Areas",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "kit": {
+     "type": "enum",
+     "label": "Brand kit",
+     "options": [
+      "auto",
+      "royal",
+      "noir",
+      "bulletin",
+      "atlas"
+     ],
+     "default": "auto"
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 5.5,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "m2-sat-flat",
+    "sfx": {
+     "name": "map-swoop",
+     "volume": 0.3
+    },
+    "sfxAt": 72,
+    "types": false,
+    "leastSeconds": 5.0,
+    "sample": {
+     "text": "",
+     "label": "",
+     "areas": [
+      {
+       "id": "ISL",
+       "label": "Iceland",
+       "at": 2.4
+      }
+     ],
+     "items": [
+      {
+       "label": "Iceland",
+       "at": 2.4
+      }
+     ],
+     "kit": "royal"
+    },
+    "sounds": [
+     {
+      "name": "map-swoop",
+      "alt": [
+       "whoosh-cinematic-for-maps",
+       "whoosh-soft"
+      ],
+      "gain_db": -12,
+      "at": 0
+     },
+     {
+      "name": "light-shimmer",
+      "alt": [
+       "magnifier-glide",
+       "whoosh-soft"
+      ],
+      "gain_db": -15,
+      "at": 66
+     },
+     {
+      "name": "ui-pop",
+      "alt": [
+       "pop",
+       "pin-drop"
+      ],
+      "gain_db": -12,
+      "at": 98
+     }
+    ],
+    "soundTiming": "look"
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "maps-v2"
+   ],
+   "tags": [
+    "lib",
+    "maps2",
+    "own-backdrop"
+   ]
+  },
+  {
    "id": "LIB_NX_STAT_CONTEXT",
    "name": "Figure in Context",
    "category": "NUMBERS",

@@ -1272,6 +1272,10 @@ REFRAME_ENABLED = _flag("REFRAME_ENABLED", False)
 # geodata bundled in src/geodata. Off by default until the owner has seen the stills; a job turns it on with
 # config {"AUTO_MAPS": true}.
 AUTO_MAPS = _flag("AUTO_MAPS", False)
+# Maps v2 (src/mapsv2.py, remotion LibMaps2.tsx): the plan's map looks become the branded relief maps (globe dive,
+# region pulse, 3D relief, dotted route, places, border trace, choropleth, true-scale compare, radius, flows, pin
+# drop, satellite-to-map) by what their line says. On by default; config {"MAPS_V2": false} keeps the older maps.
+MAPS_V2 = _flag("MAPS_V2", True)
 # Seconds an auto map keeps from any other map before it, so maps never crowd the cut.
 AUTO_MAP_GAP = float(os.getenv("AUTO_MAP_GAP", "15"))
 # On-screen sources (src/sources.py): a line that states a fact and NAMES where it comes from ("according to the
