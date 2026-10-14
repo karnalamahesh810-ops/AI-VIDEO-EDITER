@@ -1829,7 +1829,14 @@ def _build(segments: List[Segment], shots: List[dict],
     # The Smart Editor (src/smart_editor.py, SMART_EDITOR / the job's "smart_editor"): an AI edit director
     # designs new graphics, marks, camera moves and sounds over the planned looks; any failure keeps them.
     from . import smart_editor
-    if smart_editor.enabled(inp):
+    if isinstance(inp.get("style_kit"), dict) and inp["style_kit"].get("elements"):
+        # Style Match: the measured kit is the design system - its elements on their triggers, its transitions,
+        # camera, grade and mix (src/style_match/apply.py). It replaces the Smart Editor's free design.
+        from .style_match import apply as style_apply
+        rep = style_apply.apply(doc, inp["style_kit"], face_at=style_apply.thumb_faces(doc))
+        doc["meta"]["overlayCount"] = len(doc["overlays"])
+        print(f"[timeline] style kit: {json.dumps(rep)[:400]}", flush=True)
+    elif smart_editor.enabled(inp):
         from . import brandkits
         kit = brandkits.choose(inp, inp.get("brand_kit") if isinstance(inp.get("brand_kit"), dict) else None,
                                str(inp.get("video_style") or ""))

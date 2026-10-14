@@ -88,7 +88,13 @@ export interface Layer {
   glow?: number;
   extrude?: number;
   extrudeColor?: string;
-  panel?: { color: string; opacity: number; pad: number; radius: number; blur: number };
+  panel?: { color: string; opacity: number; pad: number; radius: number; blur: number; padY?: number };
+  // Style Match looks (2026-10-14): a measured outline, a second band round it (the "glow" of a comic pop),
+  // the face's horizontal stretch and slant (a matched substitute set to the reference's proportions).
+  outline?: { w: number; color: string };
+  band?: { w: number; color: string; soft: number };
+  stretch?: number;
+  skew?: number;
   animator?: Animator;
   /** A second line under the words, arriving at `at` seconds. */
   sub?: { text: string; size: number; font: string; weight: number; color: string; tracking: number; upper: boolean; at: number };
@@ -277,7 +283,8 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
   if (kind === "text" || kind === "counter" || kind === "pin") {
     L.text = str(r.text, 160);
     if (kind === "text" && !L.text.trim()) return null;
-    L.font = FONT_KEYS.includes(r.font as never) ? (r.font as string) : "grotesk";
+    L.font = FONT_KEYS.includes(r.font as never) || (typeof r.font === "string" && /^lib:[A-Za-z0-9 ]{2,40}$/.test(r.font))
+      ? (r.font as string) : "grotesk";
     L.size = num(r.size, 0.012, 0.4, 0.06);
     L.weight = Math.round(num(r.weight, 300, 900, 800) / 100) * 100;
     L.tracking = num(r.tracking, -0.1, 0.6, 0);
@@ -296,8 +303,21 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
     if (r.panel && typeof r.panel === "object") {
       const p = r.panel as Record<string, unknown>;
       L.panel = { color: color(p.color, "#0c0e12"), opacity: num(p.opacity, 0, 1, 0.72), pad: num(p.pad, 0, 0.1, 0.018),
-        radius: num(p.radius, 0, 0.05, 0.006), blur: num(p.blur, 0, 40, 14) };
+        radius: num(p.radius, 0, 0.05, 0.006), blur: num(p.blur, 0, 40, 14),
+        padY: p.padY === undefined ? undefined : num(p.padY, 0, 0.1, 0.018) };
     }
+    if (r.outline && typeof r.outline === "object") {
+      const o = r.outline as Record<string, unknown>;
+      const w = num(o.w, 0, 0.03, 0);
+      if (w > 0) L.outline = { w, color: color(o.color, "#000000") };
+    }
+    if (r.band && typeof r.band === "object") {
+      const o = r.band as Record<string, unknown>;
+      const w = num(o.w, 0, 0.04, 0);
+      if (w > 0) L.band = { w, color: color(o.color, "#000000"), soft: num(o.soft, 0, 1, 0.3) };
+    }
+    if (r.stretch !== undefined) L.stretch = num(r.stretch, 0.6, 1.6, 1);
+    if (r.skew !== undefined) L.skew = num(r.skew, -20, 20, 0);
     L.animator = cleanAnimator(r.animator, dur);
     if (r.sub && typeof r.sub === "object") {
       const u = r.sub as Record<string, unknown>;
@@ -391,7 +411,8 @@ const cleanLayer = (raw: unknown, i: number, dur: number): Layer | null => {
     if (L.points.length < 2) return null;
     L.text = str(r.text, 30);
     L.size = num(r.size, 0.016, 0.08, 0.034);
-    L.font = FONT_KEYS.includes(r.font as never) ? (r.font as string) : "grotesk";
+    L.font = FONT_KEYS.includes(r.font as never) || (typeof r.font === "string" && /^lib:[A-Za-z0-9 ]{2,40}$/.test(r.font))
+      ? (r.font as string) : "grotesk";
   }
   if (kind === "loupe") {
     L.src = str(r.src, 2000);

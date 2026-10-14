@@ -16,6 +16,17 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { DISPLAY, GROTESK, INTER, KINETIC, MONO, NARROW, SERIF, SERIF_ITALIC } from "../fonts";
 import { SafeImg } from "../motion/safePicture";
 import { cleanSpec, easeOf, formatCount, rand, unitProgress, valueAt, type Layer, type MotionSpec } from "./specMath";
+import { styleFont } from "./styleFonts";
+
+/** A measured outline (and the band round it) as a ring of hard text-shadows: one stroke on every glyph. */
+const ringShadows = (w: number, color: string, steps = 16, blur = 0): string[] => {
+  const out: string[] = [];
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    out.push(`${(Math.cos(a) * w).toFixed(2)}px ${(Math.sin(a) * w).toFixed(2)}px ${blur.toFixed(1)}px ${color}`);
+  }
+  return out;
+};
 
 const FONTS: Record<string, string> = {
   grotesk: GROTESK, kinetic: KINETIC, display: DISPLAY, serif: SERIF, "serif-italic": SERIF_ITALIC, mono: MONO,
@@ -69,11 +80,16 @@ const TextBody: React.FC<{ layer: Layer; ctx: Ctx; counterText?: string }> = ({ 
     for (let i = 1; i <= layer.extrude; i++) shadows.push(`${(i * 0.9 * H / 1080).toFixed(1)}px ${(i * 1.1 * H / 1080).toFixed(1)}px 0 ${layer.extrudeColor}`);
   }
   if (glow > 0.2) shadows.push(`0 0 ${glow.toFixed(1)}px ${layer.emphColor || layer.color}`);
+  if (layer.outline) shadows.push(...ringShadows(layer.outline.w * H, layer.outline.color));
+  if (layer.band) {
+    const bw = ((layer.outline?.w || 0) + layer.band.w) * H;
+    shadows.push(...ringShadows(bw, layer.band.color, 20, layer.band.soft * layer.band.w * H));
+  }
   if (layer.shadow === "soft") shadows.push(SHADOW_SOFT(H));
   if (layer.shadow === "hard") shadows.push(`${(0.003 * H).toFixed(1)}px ${(0.003 * H).toFixed(1)}px 0 rgba(0,0,0,0.85)`);
   const tracking = valueAt(layer.keys, "tracking", lt, layer.tracking || 0);
   const style: React.CSSProperties = {
-    fontFamily: FONTS[layer.font || "grotesk"] || GROTESK, fontWeight: layer.weight || 800, fontSize: sizePx,
+    fontFamily: styleFont(layer.font) || FONTS[layer.font || "grotesk"] || GROTESK, fontWeight: layer.weight || 800, fontSize: sizePx,
     fontStyle: layer.italic ? "italic" : undefined, lineHeight: layer.lineH || 1.05, color: layer.color,
     letterSpacing: `${tracking.toFixed(3)}em`, textAlign: layer.align || "center", maxWidth: (layer.maxW || 0.8) * ctx.W,
     textShadow: shadows.length ? shadows.join(", ") : undefined, fontVariantNumeric: "tabular-nums",
@@ -136,8 +152,11 @@ const TextBody: React.FC<{ layer: Layer; ctx: Ctx; counterText?: string }> = ({ 
   const dp = (delay: number, len = 0.5) => easeOf("expoOut")((lt - dAt - delay) / len);
   const side = layer.align === "right" ? "flex-end" : layer.align === "center" ? "center" : "flex-start";
   const sw = Math.max(2, 0.0045 * H);
+  const shape = (layer.stretch && Math.abs(layer.stretch - 1) > 0.01) || layer.skew
+    ? `scaleX(${(layer.stretch || 1).toFixed(3)}) skewX(${(-(layer.skew || 0)).toFixed(2)}deg)` : undefined;
   const main = (
-    <div style={{ ...style, position: "relative", width: "max-content" }}>
+    <div style={{ ...style, position: "relative", width: "max-content", transform: panel ? undefined : shape,
+      transformOrigin: layer.align === "left" ? "0% 50%" : layer.align === "right" ? "100% 50%" : "50% 50%" }}>
       {body}
       {D?.underline ? <div style={{ position: "absolute", left: 0, right: 0, bottom: "-0.12em", height: sw * 1.3,
         background: D.underline, transform: `scaleX(${dp(0.1, 0.55).toFixed(4)})`,
@@ -166,7 +185,10 @@ const TextBody: React.FC<{ layer: Layer; ctx: Ctx; counterText?: string }> = ({ 
     <div style={{
       display: "flex", flexDirection: "column", alignItems: side, position: "relative", width: "max-content",
       maxWidth: (layer.maxW || 0.8) * ctx.W, transformStyle: "preserve-3d", fontSize: sizePx,
-      ...(panel ? { background: hexA(panel.color, panel.opacity), padding: `${(pad * 0.7).toFixed(1)}px ${pad.toFixed(1)}px`,
+      // a stretched face in a box: the box stretches with it, its side padding divided back to the measured size
+      ...(panel && shape ? { transform: shape, transformOrigin: "50% 50%" } : {}),
+      ...(panel ? { background: hexA(panel.color, panel.opacity),
+        padding: `${(panel.padY !== undefined ? panel.padY * H : pad * 0.7).toFixed(1)}px ${(pad / (layer.stretch || 1)).toFixed(1)}px`,
         borderRadius: panel.radius * H, backdropFilter: panel.blur ? `blur(${panel.blur}px)` : undefined } : {}),
     }}>
       {D?.bar ? <div style={{ position: "absolute", top: "0.05em", bottom: "0.05em", width: sw * 1.2, background: D.bar,
@@ -522,7 +544,9 @@ const LayerView: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
     : `translate(${tx}, -50%) translate3d(${px.toFixed(2)}px, ${py.toFixed(2)}px, ${(z * 200).toFixed(1)}px) rotateX(${v("rotX", 0).toFixed(2)}deg) rotateY(${v("rotY", 0).toFixed(2)}deg) rotate(${v("rot", 0).toFixed(2)}deg) scale(${(scale * v("sx", 1)).toFixed(4)}, ${(scale * v("sy", 1)).toFixed(4)})`;
   const base: React.CSSProperties = fullFrame
     ? { position: "absolute", left: 0, top: 0, width: W, height: H }
-    : { position: "absolute", left: (layer.x + v("x", 0)) * W, top: (layer.y + v("y", 0)) * H };
+    // max-content: a block wider than the space right of its anchor keeps its own width (shrink-to-fit would
+    // squeeze it to that space and the -50% / -100% shift would then put it off its anchor)
+    : { position: "absolute", left: (layer.x + v("x", 0)) * W, top: (layer.y + v("y", 0)) * H, width: "max-content" };
   let body: React.ReactNode = null;
   switch (layer.kind) {
     case "text":

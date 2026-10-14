@@ -66,6 +66,9 @@ COPY src/ src/
 # itself: `python -m unittest discover -s tests -t .` inside a running worker.
 COPY tests/ tests/
 COPY scripts/ scripts/
+# Style Match's font library (Google Fonts, OFL / Apache, ~6 MB): matched against a reference's text.
+# A failed fetch leaves the worker fetching each face on first use instead.
+RUN python scripts/fetch_style_fonts.py /opt/style_fonts || true
 # The seven benchmark narrations (bench/README.md): ~2.5 MB, so a benchmark
 # run needs no upload and no credentials (audio_url "bench://<case>").
 COPY bench/ bench/
