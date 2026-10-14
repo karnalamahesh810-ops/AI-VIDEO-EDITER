@@ -143,3 +143,32 @@ It plays in the Program monitor with our captions over the picture. (File > Impo
 - **RunPod:** $0 (TTS lines cached).
 - **OpenRouter:** $0 (local face detector).
 - **Rendering:** all local.
+
+## Round 5 (2026-10-15): through the real pipeline, new download quality
+**Files** (in `C:\ThumGenius\docs\style-refs\`, not committed):
+- `celeb_test_5min_r5.mp4`: 4:29, 1080p30, H.264 crf 17, 169 MB.
+- `celeb_test_5min_r5_phone.mp4`: 720p at 1.6 Mbps, 55 MB. Under 30 MB is not possible at 1.5 Mbps or more for a 4.5-minute video (30 MB is about 0.9 Mbps in total), so quality won over size.
+
+**In the branch:** `celeb_checklist.md` (round 5 score), `celeb_zoom_compare_400_r5.jpg` (400 % sheet), `celeb_download_compare_r5.jpg` (old vs new download, the same frame at 400 %).
+
+**How it was made:**
+- `handler.handler({"action": "build", "video_style": "celeb_compilation", "script": <celeb_test_5min_script.txt>})`. This is the worker's own entry point, the same one RunPod calls.
+- Every clip spot was downloaded by the worker itself as a hero window. Nothing came from local copies this time.
+- **Run on the laptop:** direct YouTube route (no proxy), our own TTS endpoint on RunPod, kept media and the final video on R2.
+- **Result:** 16 of 16 clips, 11 of 12 montage shots, 125 captions, 26 elements, 17.3 minutes wall time.
+- **Bytes:** 141 MB in total from YouTube (16 windows of about 30-45 s each, plus the montage shots). On the worker these go through the proxies, so that is about 0.14 GB of proxy traffic per 4.5-minute video.
+- **First run:** one window failed on a laptop ffmpeg crash (exit 3436169992, intermittent; the same command passes on a retry). The pipeline now retries a given source once.
+
+**The editor path:**
+- `action: "render"` on the saved document re-composites from the base picture and mix kept on R2. It downloads nothing from YouTube.
+- Tested by flipping caption 3 ("I F\*\*\*ING KNEW IT.", Mark Ruffalo) to white.
+
+**Caption colours in this test:**
+- All 125 lines came out yellow. The default featured colour is yellow.
+- The voice clusters did not split any of these blooper clips with enough confidence, so each clip took the featured colour, as the rule says.
+- The swap button and click-to-cycle in the editor are the fix for such clips.
+
+**Cost:**
+- RunPod TTS: 17 lines, 144 s (cached for re-runs).
+- OpenRouter: $0.
+- Proxies: $0 for this laptop run (on the worker: about 0.14 GB).

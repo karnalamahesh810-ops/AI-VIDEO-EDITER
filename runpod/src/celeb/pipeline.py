@@ -111,8 +111,12 @@ def find_clip(b, k: int, work: str, log: Callable = print) -> Optional[dict]:
     if not given and not (b.quote or vid):
         log(f"[celeb] spot {k}: no quote and no url+start+end")
         return None
-    m = quotes.find(b.who, b.quote, b.where, d, min_s=b.min_s, max_s=b.max_s, video_id=vid,
-                    start=b.start if given else None, end=b.end if given else None, log=log, trim_clip=False)
+    m = None
+    for _ in range(2 if given else 1):          # a given source has no other candidate: one more try on a failed fetch
+        m = quotes.find(b.who, b.quote, b.where, d, min_s=b.min_s, max_s=b.max_s, video_id=vid,
+                        start=b.start if given else None, end=b.end if given else None, log=log, trim_clip=False)
+        if m is not None:
+            break
     if m is None or not m.window:
         return None
     from ..filters import scene_cuts
@@ -132,7 +136,11 @@ def fetch_montage(item: str, n: int, work: str) -> Optional[Tuple[dict, str]]:
     from .reel import _montage_item
     sid, (a, b), opts = _montage_item(item)
     w0 = max(0.0, a - MONTAGE_PAD)
-    path = ytdlp._yt_fetch(sid, os.path.join(work, "montage"), w0, (b + MONTAGE_PAD) - w0, timeout=300, hero=True)
+    path = ""
+    for _ in range(2):                           # one more try on a failed fetch
+        path = ytdlp._yt_fetch(sid, os.path.join(work, "montage"), w0, (b + MONTAGE_PAD) - w0, timeout=300, hero=True)
+        if path:
+            break
     if not path:
         return None
     w0 = quotes.window_start(path, w0)
