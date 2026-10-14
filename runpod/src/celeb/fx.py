@@ -3,16 +3,21 @@ The Celebs Goat on-screen elements, drawn to match the measured references (docs
 
 Every element is a function of time: `Element.draw(t)` returns (RGBA image, x, y) or None. `composite()` runs
 the base video through Python once, pasting the active elements on each frame, and re-encodes it.
+Elements that sit on a person carry `track`: one face per frame (faces.track, the local YuNet detector), so a
+circle, pointer or arrow follows the head the way the references' do.
 
-Sizes below are fractions of the frame HEIGHT (H), measured on the 720p references:
-  pop text     cap 7 %, yellow #FFFF00, black stroke ~0.55 %, yellow glow ~1.4 %, per-letter pop 1-frame stagger
-  name label   cap 6 %, white, black stroke + soft shadow, per-letter rise + rotate
-  circle       stroke 1.1 %, yellow + glow, drawn on clockwise from 7 o'clock in 0.6 s (ease-out)
-  pointer      solid triangle 3.5 % (yellow, down) / 6 % (red, right), small bob
-  red arrow    chunky 3D arrow ~12 %, grows in 0.2 s, wobbles
-  title card   poster 32 % with white border + shadow, scale-in 0.2 s, title wipes out of it, 2.6 s
-  speed lines  manga radial lines at the frame edge, re-drawn every 2 frames
-The face is Komika Axis in the references; Bangers (OFL) stretched to 130 % width is the closest free match.
+Measured on the 720p references (fractions of the frame HEIGHT H; pixel sampling in celeb-elements.md):
+  type         Komika Axis (KOMIKAX.ttf, the owner's installed copy; CELEB_FONT overrides). Bangers @130 % is the
+               fallback where Komika is not installed (Linux workers until the licence is settled).
+  pop text     fill #FFFF00, black line 0.3 %, then a dark olive band (#7D7608) out to 1.55 % with a 0.5 % feather;
+               per-letter pop, 1-frame stagger; slow grow to 112 %
+  circle       ring #FDFE00 2.1 % thick, orange-yellow glow (#FFC800) ~2.8 %; radius 0.94 x the face box height,
+               centred on the face; drawn on clockwise from 7 o'clock in 0.6 s
+  pointer      solid triangle #FFFC00 (down, above the head) / #FF0000 (right, beside the face), 8.6 % tall,
+               tip 4 % above the head; enters 125 % -> 100 % in 3 frames; follows the head
+  red arrow    #FF0000 with a #990000 extruded right side (1.2 %), 2 px dark line, 32 % long, head 64 % of the length
+               wide, shaft 30 %; leans 21 deg (tip up-left), tip just under the chin; scale per frame
+               0.22 .47 .70 .89 1.04 1.10 1.077 1.049 1.026 1.008 1.0 (r2op 13.55-13.89), no wobble, out on the cut
 """
 import math
 import os
@@ -26,15 +31,24 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FONT = os.environ.get("CELEB_FONT") or os.path.join(HERE, "fonts", "Bangers-Regular.ttf")
+_KOMIKA = [os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts", "KOMIKAX.ttf"),
+           r"C:\Windows\Fonts\KOMIKAX.ttf", os.path.join(HERE, "fonts", "KOMIKAX.ttf")]
+FONT = os.environ.get("CELEB_FONT") or next((f for f in _KOMIKA if os.path.isfile(f)),
+                                            os.path.join(HERE, "fonts", "Bangers-Regular.ttf"))
 XSCALE = 1.0 if "komika" in os.path.basename(FONT).lower() else 1.3
 W, H, FPS = 1920, 1080, 30
 YELLOW = (255, 255, 0, 255)
 CAPTION_YELLOW = (252, 255, 4, 255)
+POP_BAND = (116, 105, 0, 255)
+RING = (253, 254, 0, 255)
+RING_GLOW = (255, 200, 0, 255)
+POINTER_YELLOW = (255, 252, 0, 255)
 GREEN = (60, 230, 60, 255)
-RED = (255, 20, 20, 255)
+RED = (255, 0, 0, 255)
+RED_SIDE = (153, 0, 0, 255)
 WHITE = (255, 255, 255, 255)
 BLACK = (0, 0, 0, 255)
+ARROW_SCALE = (0.22, 0.47, 0.70, 0.89, 1.04, 1.10, 1.077, 1.049, 1.026, 1.008, 1.0)
 
 
 # ------------------------------------------------------------------ type
@@ -58,7 +72,7 @@ def glyph(ch: str, cap_px: int, fill: tuple, stroke: int, stroke_fill: tuple) ->
     ImageDraw.Draw(im).text((pad - l, pad - t), ch, font=f, fill=fill, stroke_width=stroke, stroke_fill=stroke_fill)
     if XSCALE != 1.0:
         im = im.resize((max(1, int(w * XSCALE)), h), Image.LANCZOS)
-    adv = int(round(f.getlength(ch) * XSCALE)) + max(1, cap_px // 40)
+    adv = int(round(f.getlength(ch) * XSCALE))       # the references use the font's own spacing
     return im, adv, pad - t
 
 
@@ -118,12 +132,51 @@ class Element:
     kind: str
     start: float
     dur: float
+    track: Optional[list] = None          # one face per frame ({cx, cy, w, h} fractions) or None
 
     def active(self, t: float) -> bool:
         return self.start <= t < self.start + self.dur
 
+    def face(self, t: float) -> Optional[dict]:
+        if not self.track:
+            return None
+        k = min(len(self.track) - 1, max(0, int(t * FPS)))
+        return self.track[k] or next((f for f in self.track[k::-1] if f), None)
+
     def draw(self, t: float):            # -> (Image, x, y) | None ; t = seconds since the element began
         raise NotImplementedError
+
+
+def grow_round(alpha: Image.Image, r: float) -> Image.Image:
+    """The alpha grown by r px with ROUND joins (blur, then threshold at the r contour)."""
+    if r <= 0:
+        return alpha
+    sigma = max(0.5, r / 1.86)
+    return alpha.filter(ImageFilter.GaussianBlur(sigma)).point(lambda v: 255 if v > 8 else int(v * 30))
+
+
+def banded(canvas: Image.Image, band_px: float, feather_px: float, color=POP_BAND, line_px: float = 2.0,
+           line_color=(50, 46, 0, 255), band_alpha: float = 0.92) -> Image.Image:
+    """
+    The reference pop outline, outside in (pixel-sampled, u 288.95 / r 18.3):
+      a soft falloff -> an olive band (#746900 at 88 %) -> a thin dark line -> the yellow fill.
+    All grown with round joins.
+    """
+    m = int(band_px + feather_px * 3 + line_px + 4)
+    big = Image.new("RGBA", (canvas.width + 2 * m, canvas.height + 2 * m), (0, 0, 0, 0))
+    big.alpha_composite(canvas, (m, m))
+    a = big.getchannel("A")
+    band = grow_round(a, line_px + band_px)
+    if feather_px:
+        band = band.filter(ImageFilter.GaussianBlur(feather_px))
+    band = band.point(lambda v: int(v * band_alpha))
+    out = Image.new("RGBA", big.size, color[:3] + (0,))
+    out.putalpha(band)
+    line = Image.new("RGBA", big.size, line_color[:3] + (0,))
+    line.putalpha(grow_round(a, line_px))
+    out.alpha_composite(line)
+    out.alpha_composite(big)
+    return out
 
 
 @dataclass
@@ -135,14 +188,14 @@ class Pop(Element):
     tilt: float = 0.0
     color: tuple = YELLOW
     stroke_color: tuple = BLACK
-    cap: float = 0.07
+    cap: float = 0.092                   # MOTHERF*** M 71 px of 720 at +10 % grow, Komika cap
 
     def __post_init__(self):
         cap = int(H * self.cap)
-        stroke = max(3, int(H * 0.0055))
-        glyph_color = self.color
-        self._glyphs, self._w, self._h = word_layout(self.text, cap, glyph_color, stroke, self.stroke_color)
-        self._glow_r = max(6, int(H * 0.012))
+        self._glyphs, self._w, self._h = word_layout(self.text, cap, self.color, 0, self.stroke_color)
+        self._line = H * 0.0021                      # ~1.5 px at 720p
+        self._band = H * 0.012                       # olive plateau (ref: ~9 px at 720p incl. the line)
+        self._feather = H * 0.0015                   # short soft edge (ref: ~3-4 px at 720p)
 
     def draw(self, t):
         f = t * FPS
@@ -155,14 +208,17 @@ class Pop(Element):
             gs = g.resize((gw, gh), Image.BILINEAR) if s != 1.0 else g
             drop = int((1.0 - min(1.0, s)) * 0.25 * g.height) if s < 1 else 0
             canvas.alpha_composite(gs, (20 + x + (g.width - gw) // 2, 20 + y + (g.height - gh) // 2 - drop))
-        im = glow(canvas, self.color, self._glow_r) if self.color != RED else glow(canvas, WHITE, self._glow_r // 2, 1.0)
+        band = POP_BAND if self.color == YELLOW else ((40, 90, 40, 255) if self.color == GREEN else WHITE)
+        im = banded(canvas, self._band, self._feather, band, self._line)
         grow = 1.0 + 0.12 * min(1.0, t / max(0.5, self.dur))
         if grow != 1.0 or self.tilt:
             im = im.resize((int(im.width * grow), int(im.height * grow)), Image.BILINEAR)
             if self.tilt:
                 im = im.rotate(self.tilt, resample=Image.BICUBIC, expand=True)
-        x = int(self.cx * W - im.width / 2)
-        y = int(self.cy * H - im.height / 2)
+        fc = self.face(t)
+        cx, cy = (fc["cx"], min(0.76, fc["cy"] + fc["h"] * 0.78)) if fc else (self.cx, self.cy)
+        x = int(cx * W - im.width / 2)
+        y = int(cy * H - im.height / 2)
         x = max(10, min(W - im.width - 10, x))
         return im, x, y
 
@@ -175,9 +231,9 @@ class NameLabel(Element):
     y: float = 0.905                     # centre line (fraction of H)
 
     def __post_init__(self):
-        cap = int(H * (0.06 if XSCALE == 1.0 else 0.068))   # Bangers reads smaller than Komika at one cap height
-        stroke = max(3, int(H * 0.0055))
-        self._glyphs, self._w, self._h = word_layout(self.text, cap, WHITE, stroke, BLACK)
+        cap = int(H * 0.074)                 # ref: white 53 px of 720
+        self._stroke = cap * 0.19            # black outer stroke, round joins (8.5-10 px at 720p)
+        self._glyphs, self._w, self._h = word_layout(self.text, cap, WHITE, 0, BLACK)
 
     def draw(self, t):
         f = t * FPS
@@ -194,88 +250,118 @@ class NameLabel(Element):
                 gg = gg.copy()
                 gg.putalpha(gg.getchannel("A").point(lambda v, e=e: int(v * min(1.0, 0.3 + e))))
             canvas.alpha_composite(gg, (30 + x - (gg.width - g.width) // 2, 30 + y + rise - (gg.height - g.height) // 2))
-        sh = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-        sh.putalpha(canvas.getchannel("A").filter(ImageFilter.GaussianBlur(5)).point(lambda v: int(v * 0.6)))
-        out = Image.new("RGBA", (canvas.width + 6, canvas.height + 6), (0, 0, 0, 0))
-        out.alpha_composite(sh, (6, 6))
-        out.alpha_composite(canvas, (0, 0))
-        x = int(self.cx * W - out.width / 2)
+        # reference (u 736.3): a black outer stroke with round joins, 16 % of the cap height, and a near-hard
+        # black drop shadow ~7 % of the cap straight down (the black reaches 12 px under the letters at 720p)
+        pad = int(self._stroke) + 12
+        big = Image.new("RGBA", (canvas.width + 2 * pad, canvas.height + 2 * pad), (0, 0, 0, 0))
+        big.alpha_composite(canvas, (pad, pad))
+        a = big.getchannel("A")
+        stroke = grow_round(a, self._stroke)
+        out = Image.new("RGBA", big.size, (0, 0, 0, 0))
+        drop = int(round(self._stroke * 0.45))
+        sh = Image.new("RGBA", big.size, (0, 0, 0, 0))
+        sh.putalpha(stroke.filter(ImageFilter.GaussianBlur(1.2)).point(lambda v: int(v * 0.9)))
+        out.alpha_composite(sh, (0, drop))
+        st = Image.new("RGBA", big.size, (0, 0, 0, 0))
+        st.putalpha(stroke)
+        out.alpha_composite(st)
+        out.alpha_composite(big)
+        fc = self.face(0.0)
+        x = int((fc["cx"] if fc else self.cx) * W - out.width / 2)
         x = max(int(W * 0.03), min(W - out.width - int(W * 0.03), x))
         return out, x, int(self.y * H - out.height / 2)
 
 
 @dataclass
 class Circle(Element):
-    """A glowing yellow ring drawn on clockwise around a face."""
+    """A ring (#FDFE00, 2.1 % thick, orange-yellow glow) drawn on clockwise around the tracked face."""
     cx: float = 0.5
     cy: float = 0.4
-    r: float = 0.18                      # radius, fraction of H
+    r: float = 0.18                      # radius, fraction of H (when there is no track)
     draw_s: float = 0.6
 
     def draw(self, t):
-        R = int(self.r * H)
-        sw = max(8, int(H * 0.015))
-        m = sw * 4
+        fc = self.face(t)
+        cx, cy, r = (fc["cx"], fc["cy"], fc["h"] * 0.94) if fc else (self.cx, self.cy, self.r)
+        R = int(r * H)
+        sw = max(8, int(round(H * 0.021)))
+        g = max(8, int(round(H * 0.028)))
+        m = sw + 3 * g
         size = 2 * (R + m)
-        im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         sweep = 360.0 * ease_out(t / self.draw_s)
         if sweep < 1:
             return None
         start = 120.0                     # 7 o'clock; PIL angles run clockwise from 3 o'clock
-        ImageDraw.Draw(im).arc([m, m, size - m, size - m], start, start + sweep, fill=YELLOW, width=sw)
-        im = glow(im, YELLOW, max(6, int(sw * 0.8)), 1.8)
-        return im, int(self.cx * W - im.width / 2), int(self.cy * H - im.height / 2)
+        im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        ImageDraw.Draw(im).arc([m - sw // 2, m - sw // 2, size - m + sw // 2, size - m + sw // 2], start,
+                               start + sweep, fill=RING, width=sw)
+        im = glow(im, RING_GLOW, g // 2, 1.25)
+        return im, int(cx * W - im.width / 2), int(cy * H - im.height / 2)
 
 
 @dataclass
 class Pointer(Element):
-    """A solid flat triangle above a head (down, yellow) or beside a face (right, red); small bob."""
+    """A solid flat triangle that follows a head: yellow pointing down above it, or red pointing right beside it."""
     cx: float = 0.5
-    cy: float = 0.2                      # the tip
+    cy: float = 0.2                      # the tip (when there is no track)
     direction: str = "down"
-    color: tuple = YELLOW
-    size: float = 0.035
+    color: tuple = POINTER_YELLOW
+    size: float = 0.086
 
     def draw(self, t):
-        s = int(self.size * H) * _pop_scale(t * FPS)
-        if s < 2:
-            return None
-        bob = 0.006 * H * math.sin(2 * math.pi * 2.2 * t)
-        w = int(s * 1.15)
+        f = t * FPS
+        k = 1.25 if f < 1 else (1.1 if f < 2 else 1.0)       # measured: 88 -> 69 -> 73 px (u 564.65-565.2)
+        s = int(self.size * H * k)
+        w = int(s * 1.18)
         im = Image.new("RGBA", (w + 4, w + 4), (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
+        fc = self.face(t)
         if self.direction == "down":
+            tx, ty = (fc["cx"], fc["cy"] - fc["h"] / 2 - 0.04) if fc else (self.cx, self.cy)
             d.polygon([(2, 2), (w + 2, 2), (w / 2 + 2, s + 2)], fill=self.color)
-            return im, int(self.cx * W - im.width / 2), int(self.cy * H - s - 2 + bob)
-        d.polygon([(2, 2), (s + 2, w / 2 + 2), (2, w + 2)], fill=self.color)          # pointing right
-        return im, int(self.cx * W - s - 2 + bob), int(self.cy * H - im.height / 2)
+            return im, int(tx * W - im.width / 2), int(ty * H - s - 2)
+        tx, ty = (fc["cx"] - fc["w"] / 2 - 0.03, fc["cy"]) if fc else (self.cx, self.cy)
+        d.polygon([(2, 2), (s + 2, w / 2 + 2), (2, w + 2)], fill=self.color)
+        return im, int(tx * W - s - 2), int(ty * H - im.height / 2)
 
 
 @dataclass
 class Arrow3D(Element):
-    """A chunky red arrow with a darker extruded side, pointing up-left at a face from below-right."""
+    """The reference's red 3D arrow: flat #FF0000 face, #990000 extruded right side, pointing up at a face."""
     tip_x: float = 0.5
     tip_y: float = 0.5
-    size: float = 0.13
-    angle: float = 35.0                  # degrees from straight up, leaning so it comes from the lower right
+    size: float = 0.32                   # length, fraction of H
+    angle: float = 21.0                  # leans so the tip is up-left of the tail
 
     def draw(self, t):
-        g = 0.3 + 0.7 * ease_out(t / 0.2)
-        L = int(self.size * H * g)
-        if L < 8:
-            return None
-        hw, sw_ = L * 0.42, L * 0.17   # head half-width, shaft half-width
-        pts = [(0, 0), (hw, L * 0.45), (sw_, L * 0.45), (sw_, L), (-sw_, L), (-sw_, L * 0.45), (-hw, L * 0.45)]
-        pad = L
-        im = Image.new("RGBA", (3 * L, 3 * L), (0, 0, 0, 0))
+        f = int(t * FPS)
+        k = ARROW_SCALE[min(f, len(ARROW_SCALE) - 1)]
+        fc = self.face(min(t, 0.4))      # placed on the face as it settles (r2op 13.92: John's face box)
+        if fc:   # measured: tip 0.27 face-widths right of the face centre, 0.22 face-heights under the chin,
+                 # length 1.03 face-heights (233 px for a 226 px face at 720p)
+            tip_x, tip_y = fc["cx"] + fc["w"] * 0.27 * (W and 1), fc["cy"] + fc["h"] * 0.72
+            L = max(0.18, min(0.42, fc["h"] * 1.03)) * H
+        else:
+            tip_x, tip_y = self.tip_x, self.tip_y
+            L = self.size * H
+        hw, sw_, hl = 0.32 * L, 0.15 * L, 0.42 * L   # head 64 %, shaft 30 % of the length (reference)
+        pts = [(0, 0), (hw, hl), (sw_, hl), (sw_, L), (-sw_, L), (-sw_, hl), (-hw, hl)]
+        a = math.radians(-self.angle)
+        rot = [(x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a)) for x, y in pts]
+        cxl = sum(p[0] for p in rot) / len(rot)
+        cyl = sum(p[1] for p in rot) / len(rot)
+        sc = [((x - cxl) * k, (y - cyl) * k) for x, y in rot]           # scaled about its centre (measured)
+        dep = H * 0.012 * k
+        size = int(L * 1.7)
+        im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
-        ox, oy = pad + L * 0.5, pad * 0.5
-        dep = max(3, int(L * 0.08))
-        d.polygon([(x + ox + dep, y + oy + dep) for x, y in pts], fill=(150, 0, 0, 255))
-        d.polygon([(x + ox, y + oy) for x, y in pts], fill=(235, 25, 25, 255))
-        wob = 4 * math.sin(2 * math.pi * 3 * t)
-        im = im.rotate(self.angle + wob, center=(ox, oy), resample=Image.BICUBIC)
-        return im, int(self.tip_x * W - ox), int(self.tip_y * H - oy)
+        o = size / 2
+        d.polygon([(x + o + dep, y + o + dep * 0.35) for x, y in sc], fill=RED_SIDE)
+        d.polygon([(x + o, y + o) for x, y in sc], fill=RED, outline=(40, 0, 0, 255))
+        tip_c = (rot[0][0] - cxl, rot[0][1] - cyl)                      # the k=1 tip lands on (tip_x, tip_y)
+        cx = tip_x * W - tip_c[0]
+        cy = tip_y * H - tip_c[1]
+        return im, int(cx - o), int(cy - o)
 
 
 @dataclass
@@ -290,7 +376,9 @@ class SpeedLines(Element):
         rnd = random.Random(self.seed * 1000 + k)
         im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
-        cx, cy = self.cx * W, self.cy * H
+        fc = self.face(t)
+        cx, cy = ((fc["cx"], fc["cy"]) if fc else (self.cx, self.cy))
+        cx, cy = cx * W, cy * H
         far = math.hypot(W, H)
         for i in range(90):
             a = rnd.uniform(0, 2 * math.pi)

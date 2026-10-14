@@ -301,7 +301,9 @@ def build(blocks: Sequence, narr_paths: Sequence[str], sources: Dict[str, Source
         mutes = [(w["start"] - b.start - 0.03, w["end"] - b.start + 0.03) for w in src.words_in(b.start, b.end)
                  if UNCENSORED.search(str(w["text"]))]
         tl.sounds.append(Sound("clip", t, src.path, b.start, length, mutes=mutes))
-        tl.captions += caption_phrases(src.words, b.start, b.end, src.cuts, t)
+        from . import speakers                       # the reference colours captions by speaker
+        tl.captions += speakers.colour_phrases(src.path, b.start, caption_phrases(src.words, b.start, b.end,
+                                                                                  src.cuts, t), t, src.cuts)
         tl.clip_spans.append((t, t + length))
         tl.log.append({"video": b.video_id, "url": f"https://www.youtube.com/watch?v={b.video_id}",
                        "in": round(b.start, 2), "out": round(b.end, 2), "at": round(t, 2)})
@@ -453,10 +455,10 @@ def mix(tl: Timeline, work: str, music: str = "", sfx: str = "") -> str:
 class Caption(fx.Element):
     """The clip caption: yellow comic caps on an opaque black box (radius 1.7 %), bottom centre; instant."""
 
-    def __init__(self, start: float, dur: float, text: str):
+    def __init__(self, start: float, dur: float, text: str, colour: tuple = fx.CAPTION_YELLOW):
         super().__init__("caption", start, dur)
-        cap = int(H * 0.035)
-        t = fx.text_image(text, cap, fx.CAPTION_YELLOW, 1, fx.CAPTION_YELLOW)
+        cap = int(H * 0.0375)               # ref: 27 px of 720, Komika, no stroke
+        t = fx.text_image(text, cap, colour, 0, colour)
         pad = int(H * 0.038)
         bh = int(H * 0.108)
         box = fx.Image.new("RGBA", (t.width + 2 * pad, bh), (0, 0, 0, 0))
@@ -475,11 +477,11 @@ def _next_cut(cuts: Sequence[float], t: float) -> float:
 
 def elements(tl: Timeline, base: str, posters: Dict[str, str]) -> List[fx.Element]:
     """Marks -> positioned elements: faces looked up on the rendered base at each mark's frame."""
-    out: List[fx.Element] = [Caption(a, b - a, txt) for a, b, txt in tl.captions if b - a > 0.1]
+    out: List[fx.Element] = [Caption(c[0], c[1] - c[0], c[2], *(c[3:4] or [])) for c in tl.captions if c[1] - c[0] > 0.1]
     rnd = random.Random(11)
 
     def caption_at(t0: float, t1: float) -> bool:
-        return any(a < t1 and b > t0 for a, b, _ in tl.captions)
+        return any(c[0] < t1 and c[1] > t0 for c in tl.captions)
 
     for m in tl.marks:
         end = min(m.at + m.dur, _next_cut(tl.cuts, m.at))        # elements leave on the next camera cut
@@ -492,23 +494,27 @@ def elements(tl: Timeline, base: str, posters: Dict[str, str]) -> List[fx.Elemen
                 out.append(fx.TitleCard("title", m.at, m.dur, poster=p, title=m.text,
                                         subtitle=m.extra.get("subtitle", ""), year=m.extra.get("year", "")))
             continue
-        face = F.pick(F.faces(base, m.at + 0.12), m.hint)
-        if face is None:
-            face = {"cx": 0.5, "cy": 0.4, "w": 0.15, "h": 0.28}
-        fcx, fcy, fh = face["cx"], face["cy"], face["h"]
+        hint = m.hint if m.hint in ("left", "right", "center") else "largest"
+        if F.local_available():                       # free, frame-by-frame: the element follows the head
+            track = F.track(base, m.at, m.at + dur, hint)
+        else:                                         # fallback: one vision call, a still position
+            one = F.pick(F.faces(base, m.at + 0.12), m.hint)
+            track = [one] if one else None
+        if not track or not any(track):
+            if m.kind in ("name", "point", "arrow"):  # an element on a person needs the person: leave it out
+                continue
+            track = None
         if m.kind == "name":
-            out.append(fx.Circle("circle", m.at + 0.05, dur, cx=fcx, cy=fcy, r=min(0.32, max(0.11, fh * 0.72))))
+            out.append(fx.Circle("circle", m.at + 0.05, dur - 0.05, track=track[1:] if track else None))
             y = 0.80 if caption_at(m.at, m.at + dur) else 0.905
-            out.append(fx.NameLabel("name", m.at, dur, text=m.text, cx=fcx, y=y))
+            out.append(fx.NameLabel("name", m.at, dur, text=m.text, y=y, track=track))
         elif m.kind == "pop":
-            cy = min(0.76, fcy + fh * 0.72)
             out.append(fx.Pop("pop", m.at, dur, text=m.text if m.text.startswith('"') else f'"{m.text}"',
-                              cx=fcx, cy=cy, tilt=rnd.uniform(-5, 5)))
+                              tilt=rnd.uniform(-5, 5), track=track))
         elif m.kind == "point":
-            out.append(fx.Pointer("point", m.at, min(dur, 1.6), cx=fcx, cy=max(0.06, fcy - fh * 0.62)))
+            out.append(fx.Pointer("point", m.at, min(dur, 1.6), track=track))
         elif m.kind == "speed":
-            out.append(fx.SpeedLines("speed", m.at, dur, cx=fcx, cy=fcy, seed=int(m.at * 10)))
+            out.append(fx.SpeedLines("speed", m.at, dur, seed=int(m.at * 10), track=track))
         elif m.kind == "arrow":
-            out.append(fx.Arrow3D("arrow", m.at, min(dur, 1.0), tip_x=fcx + face["w"] * 0.45,
-                                  tip_y=min(0.85, fcy + fh * 0.45)))
+            out.append(fx.Arrow3D("arrow", m.at, min(dur, 1.0), track=track))
     return out

@@ -154,3 +154,28 @@ class ReelTest(unittest.TestCase):
                 if got:
                     im, x, y = got
                     self.assertGreater(im.getbbox()[2] if im.getbbox() else 1, 0)
+
+
+class Round3Test(unittest.TestCase):
+    def test_arrow_follows_measured_scale_curve(self):
+        from src.celeb import fx
+        track = [{"cx": 0.4, "cy": 0.35, "w": 0.15, "h": 0.3}] * 40
+        a = fx.Arrow3D("a", 0, 1.0, track=track)
+        sizes = [a.draw(f / fx.FPS)[0].getbbox() for f in (0, 5, 10)]
+        widths = [b[2] - b[0] for b in sizes]
+        self.assertLess(widths[0], widths[2])           # grows in from 22 %
+        self.assertGreater(widths[1], widths[2])        # overshoots to 110 % on frame 6, settles
+        im, x, y = a.draw(0.5)
+        self.assertGreater(y + im.height / 2, 0.35 * fx.H)  # sits below the face centre: never covers the face
+
+    def test_circle_frames_the_tracked_face(self):
+        from src.celeb import fx
+        c = fx.Circle("c", 0, 2, track=[{"cx": 0.3, "cy": 0.4, "w": 0.15, "h": 0.3}] * 70)
+        im, x, y = c.draw(1.5)
+        self.assertAlmostEqual((x + im.width / 2) / fx.W, 0.3, places=2)
+        self.assertAlmostEqual((y + im.height / 2) / fx.H, 0.4, places=2)
+
+    def test_premiere_levels_are_linear(self):
+        from src.celeb import premiere
+        self.assertIn("<value>1.00000</value>", premiere._level(0.0))
+        self.assertIn("<value>0.50119</value>", premiere._level(-6.0))

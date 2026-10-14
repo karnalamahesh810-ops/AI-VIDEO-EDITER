@@ -144,3 +144,29 @@ r_speed_lines, r2op 12 s, 17 s, 20 s.
 | **Blooper video segments** | One narrator line over the film's own shots + a film title card → the blooper with its own audio → a flash → the next. |
 | **Clip choice** | Visible breaking (laughing, corpsing), swears (starred), slips, props failing, cast pranking each other, and cameos. Cut in on the setup line and out about 1-2 s into the laugh. Bloopers run 4-15 s. Story clips run 12-31 s. |
 | **Shot pace** | Median 1.6-1.9 s. First 60 s at 35-42 cuts/min. |
+
+
+## 12. Round 3 re-measurements (2026-10-14, pixel sampling + local face detector)
+Faces were measured with YuNet (OpenCV DNN, local and free) on the same reference frames.
+
+- **Font.** It is confirmed as Komika Axis. The owner's installed `KOMIKAX.ttf` carries this name table: "© 1999-2001 WolfBainX & Apostrophic Labs. All rights reserved", fsType 0 (installable).
+  - The file has no licence text embedded.
+  - Apostrophic Labs distributes it as freeware, but that readme is not in the file.
+  - The font is NOT committed. The laptop renders use the installed copy. A Linux worker needs the owner to confirm the licence and place the file (`CELEB_FONT`). Otherwise it falls back to Bangers.
+- **Pop text** (u 288.95 "MOTHERF\*\*\*", r 18.3 "HA HA HA"). There is no bright glow. The layers are:
+  - fill #FFFF00 (255,254,0);
+  - a thin black line (~2 px at 720p, 0.3 %);
+  - a dark olive band #7D7608 → #79720A, about 11 px at 720p (1.5 %), with a ~3-4 px soft outer edge. Over a dark background it reads as a "yellow glow"; over skin it reads as a dark outline.
+- **Name label.** White, with a thin black line and a soft dark drop shadow. It is 52 px tall incl. the line at 720p (7.2 %).
+- **Circle** (u 736.3). The ring core is #FDFE00, **15 px at 720p (2.1 %)**. The outer glow is orange-yellow (163,133,4 just outside), fading over ~20 px (2.8 %).
+  - Ring radius = 0.94 × the face box height (YuNet face 210×289 px, ring diameter 542 px).
+  - The ring is centred on the face.
+- **Yellow pointer** (u 564.65-565.5). Solid #FFFC00, 73×62 px at 720p (**8.6 % tall**).
+  - The tip sits ~30 px (4 %) above the face box top.
+  - It follows the head frame by frame.
+  - Entrance: 88 px → 69 → 73 (125 % → 95 % → 100 % over 3 frames). There is no bob of its own.
+- **Red 3D arrow** (r 13.55-13.89). Flat #FF0000, with a #990000 extruded right side 7-10 px (1.2 %).
+  - Size: 233 px long at 720p (32 %); head 64 % of the length wide, shaft 30 %.
+  - It leans 21° (tip up-left) and points at the face from the chest; the tip sits just under the chin and never covers the face.
+  - Scale per frame (sqrt of mask area): 0.22, 0.47, 0.70, 0.89, 1.04, **1.10**, 1.077, 1.049, 1.026, 1.008, 1.0. It grows about its centre (the centre drifts < 6 px).
+  - No wobble after it settles. It goes out on the camera cut (0.87 s).

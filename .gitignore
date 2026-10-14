@@ -9,3 +9,4 @@ node_modules/
 .remotion/
 tsconfig.tsbuildinfo
 proxies.txt
+runpod/src/celeb/models/wespeaker_*.onnx
