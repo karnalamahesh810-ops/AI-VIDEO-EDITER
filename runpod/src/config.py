@@ -323,6 +323,21 @@ VISION_PROMPT_CACHE = _flag("VISION_PROMPT_CACHE", True)
 # quick retry lost 56 of 101 verdicts on the parent alone.
 VISION_RETRIES = int(os.getenv("VISION_RETRIES", "2"))
 VISION_RETRY_WAIT = float(os.getenv("VISION_RETRY_WAIT", "2"))
+# A rate limit (429, "call frequency is too high": src/aiguard.py) waits at least this long before the same model is
+# asked again, doubling - backing off, not a reason to stop (418 such refusals on the Yellowstone build).
+VISION_RATE_WAIT = float(os.getenv("VISION_RATE_WAIT", "5"))
+# Off-topic candidates turned down by their title, channel and metadata before any download or vision call
+# (src/offtopic.py, 2026-10-09): video games, kids' animation, TV drama / film clips and trailers, music uploads,
+# sports broadcasts, tutorials - unless the story or the line is about that kind of thing. Off = the old title rules.
+OFFTOPIC_FILTER = _flag("OFFTOPIC_FILTER", True)
+# The weak signs only ("Episode 4", "| Trailer |", "showcase", a streaming network's channel) are asked to a cheap
+# text model, once per search, cached by video (~$0.0001 a call on gemini-2.5-flash-lite). Off = they stay.
+OFFTOPIC_AI = _flag("OFFTOPIC_AI", True)
+OFFTOPIC_MODEL = os.getenv("OFFTOPIC_MODEL", "google/gemini-2.5-flash-lite").strip()
+# Vision calls on OpenRouter ask for one JSON object (response_format json_object): every vision answer here is one,
+# and a model asked for JSON escapes its quotes (an unescaped quote in a description cost a second, paid call on the
+# Yellowstone build). OpenRouter drops the field for a provider that does not take it. Off = no response_format.
+VISION_JSON_MODE = _flag("VISION_JSON_MODE", True)
 # How long a model that failed twice in a row sits out. A provider-wide 503
 # burst is over in a minute or two; five minutes benched every model at once.
 VISION_MODEL_COOLDOWN_SECONDS = float(os.getenv("VISION_MODEL_COOLDOWN_SECONDS", "90"))
@@ -378,6 +393,12 @@ VISION_BROADCAST_ERA = int(os.getenv("VISION_BROADCAST_ERA", "1950"))
 # other when the free pixel signal (filters.text_signal) or the judge's own description says text may be there - at
 # most TEXT_SECOND_LOOK_MAX calls a video (~$0.0003 each). Off = the judge's verdict alone.
 VISION_TEXT_SECOND_LOOK = _flag("VISION_TEXT_SECOND_LOOK", True)
+# The owner's rule (2026-10-09): a broadcaster's banners, chyrons, tickers and logos are fine on a news line;
+# burned-in subtitles - what someone says, a translation, word-by-word captions, meme text - never are, in any story.
+# The news rule no longer welcomes "news subtitles" (vision._NEWS_TEXT_RULE), and a news line's clip with a sign of
+# subtitles (the judge's own words, the free caption-band signal) gets the second look, which turns down subtitles
+# only. Off = the news rule as before (subtitles welcome on a news line, no second look there).
+VISION_NEWS_SUBTITLES = _flag("VISION_NEWS_SUBTITLES", True)
 TEXT_SECOND_LOOK_MAX = int(os.getenv("TEXT_SECOND_LOOK_MAX", "120"))
 TEXT_SECOND_LOOK_WIDTH = int(os.getenv("TEXT_SECOND_LOOK_WIDTH", "768"))
 # Candidates judged per search before giving up on that query. Each judged
@@ -513,11 +534,25 @@ FRESH_MOMENT_SECONDS = float(os.getenv("FRESH_MOMENT_SECONDS", "90"))
 # each with one pool of shots laid out by an editor call) before the
 # line-by-line search. Off ("0") restores line-by-line sourcing only.
 SEQUENCE_SOURCING = _flag("SEQUENCE_SOURCING", True)
-# When the AI account reports it is out of credits. Off (the default, the
-# creator's call): keep going - plan from the story rules, source from every
-# free source, and flag the timeline so the gap is visible. On ("1"): stop
-# the job with a clear "top up" error before spending on footage.
-REQUIRE_AI = _flag("REQUIRE_AI", False)
+# When the AI account reports it is out of credits, the key is refused, or no AI call has answered for
+# AI_OUTAGE_SECONDS (src/aiguard.py). On (the default since 2026-10-09, the owner: quality never drops): the job
+# stops at once - no footage search after it, nothing placed that no judge saw, the work done kept for a Retry
+# (src/resume.py) - and fails with a plain "top up, then press Retry" message. The Yellowstone build of 2026-10-07
+# went on with it off: 109 lines planned from the video's title and clips placed unjudged (a Minecraft cartoon on
+# a line about ground uplift); fd58f969 (2026-10-08) placed 176 of 181 clips and every picture unjudged after one
+# 402. Off ("0"): keep going as before.
+REQUIRE_AI = _flag("REQUIRE_AI", True)
+# The outage stop (aiguard.note_failure): no AI call answered for this long, with at least this many failed calls in
+# a row - every model down, not a burst of 503s the retries ride out. 0 = never.
+AI_OUTAGE_SECONDS = float(os.getenv("AI_OUTAGE_SECONDS", "600"))
+AI_OUTAGE_MIN_FAILS = int(os.getenv("AI_OUTAGE_MIN_FAILS", "40"))
+# A key refused (HTTP 401) this many times in a row with no answer between is the key itself: the job stops.
+AI_AUTH_STOP_AFTER = int(os.getenv("AI_AUTH_STOP_AFTER", "3"))
+# No stock clip or web picture reaches the timeline (or a scene's choices) without a vision verdict while vision is
+# configured (media._judge_gate, the rescue pass, other moments): "no verdict" - the account empty, every model down
+# - is a no, never a keep by the local model or the title. The user's own clips, maps, charts and the worker's own
+# pictures are trusted by design. Off ("0"): the old fallbacks (the local CLIP model, then the title).
+NO_UNJUDGED_STOCK = _flag("NO_UNJUDGED_STOCK", True)
 MOMENT_SELECTION = _flag("MOMENT_SELECTION", True)
 MOMENT_TILES = int(os.getenv("MOMENT_TILES", "20"))
 # The fine pass (src/moments.refine): a second sheet of the seconds around
@@ -1054,6 +1089,20 @@ MIN_AI_CREDIT = float(os.getenv("MIN_AI_CREDIT", "5"))
 # $1-2). 0 = never refused. A small job (a scene's new shot) asks for OPENROUTER_MIN_CREDIT_SMALL.
 OPENROUTER_MIN_CREDIT = float(os.getenv("OPENROUTER_MIN_CREDIT", "2"))
 OPENROUTER_MIN_CREDIT_SMALL = float(os.getenv("OPENROUTER_MIN_CREDIT_SMALL", "0.2"))
+# The video's own estimate on top of that floor (aiguard.estimate_usd, 2026-10-09): planning per minute of narration
+# (fd58f969: $0.866 for 20.8 min on openai/gpt-5.2), clip checks per line (Lake Mead a197: $0.0066 a line before the
+# 2026-10-07 cuts, -39% on a line's search since), lines per minute (4.6 s a line on the last builds), the words a
+# minute a script is read at (a script-only job's length before its voice is made), and a margin on the sum. A
+# 20-minute video comes to about $2.8; it starts only with that much left on the account and the key.
+AI_EST_PLAN_USD_PER_MIN = float(os.getenv("AI_EST_PLAN_USD_PER_MIN", "0.045"))
+AI_EST_CHECK_USD_PER_SCENE = float(os.getenv("AI_EST_CHECK_USD_PER_SCENE", "0.005"))
+AI_EST_SCENES_PER_MIN = float(os.getenv("AI_EST_SCENES_PER_MIN", "13"))
+AI_EST_WORDS_PER_MIN = float(os.getenv("AI_EST_WORDS_PER_MIN", "150"))
+AI_EST_MARGIN = float(os.getenv("AI_EST_MARGIN", "1.2"))
+# Keep what a stopped plan or build made for its Retry (src/resume.py): the narration's word timings, the story
+# brief, the planner's shots and the judged clips, on R2 under projects/<id>/resume/. A Retry with the same inputs
+# reads them instead of paying for them again. Off ("0"): every Retry starts from scratch.
+AI_RESUME = _flag("AI_RESUME", True)
 # Refuse to start sourcing when no connection can download from YouTube
 # (every search still "works" from a blocked IP; the downloads fail and the
 # gaps became paid AI images - two real videos got 0 YouTube clips).

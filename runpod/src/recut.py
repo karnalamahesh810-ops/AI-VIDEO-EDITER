@@ -544,9 +544,12 @@ def runner_ups(scene: dict) -> List[Tuple[int, dict]]:
     """(place in the scene's choices, choice) of every runner-up a piece could show."""
     sem = scene.get("semanticMetadata") if isinstance(scene.get("semanticMetadata"), dict) else {}
     out = []
+    judged_only = media.must_judge()
     for n, alt in enumerate(sem.get("alternatives") or []):
         if not isinstance(alt, dict):
             continue
+        if judged_only and _num(alt.get("score")) is None:
+            continue                # a choice no judge saw is never shown (NO_UNJUDGED_STOCK, 2026-10-09)
         m = alt.get("media") if isinstance(alt.get("media"), dict) else {}
         vid, start = _alt_youtube(alt)
         if m.get("url") or (vid and start is not None) or _alt_picture(alt):

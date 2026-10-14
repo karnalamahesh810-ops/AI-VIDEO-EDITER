@@ -308,9 +308,12 @@ def _runner_up_asset(i: int, job: dict, donor, how: str, used, starts: Dict[int,
     from . import gapfill, media
     need = float(job.get("seconds") or 0.0)
     at = starts.get(i)
+    judged_only = media.must_judge()
     for alt in list(getattr(donor, "alternatives", None) or []):
         if not isinstance(alt, dict):
             continue
+        if judged_only and not _number(alt.get("score")):
+            continue                            # no verdict on it: never placed (NO_UNJUDGED_STOCK)
         path = str(alt.get("localPath") or "")
         if not path or not os.path.isfile(path):
             continue                            # not kept, or on a fan-out part's own machine
@@ -587,6 +590,7 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
     need = int(s.get("durationInFrames") or 0) / fps
     at = int(s.get("startFrame") or 0) / fps
     options = []
+    judged_only = _media.must_judge()
     for reach in range(0, DONOR_REACH + 1):
         for k in ((i,) if reach == 0 else (i - reach, i + reach)):
             # (A cold-open flash of a later shot is not a shot of this part of the story.)
@@ -596,6 +600,8 @@ def alternative_for(doc: dict, i: int, used) -> Optional[dict]:
             for alt in sem.get("alternatives") or []:
                 if not isinstance(alt, dict) or not (alt.get("localPath") or (alt.get("media") or {}).get("url")):
                     continue
+                if judged_only and not _number(alt.get("score")):
+                    continue                    # a choice no judge saw is never placed (NO_UNJUDGED_STOCK)
                 score = alt.get("finalScore") if isinstance(alt.get("finalScore"), (int, float)) else alt.get("score")
                 options.append((reach, -(float(score) if isinstance(score, (int, float)) else 0.0),
                                 len(options), k, alt))
@@ -727,7 +733,7 @@ def find_moment(doc: dict, i: int, used, work: str, stop: float) -> Optional[Tup
                     print(f"[shotcap] scene {i + 1}: moment {at:.0f}s of {vid} too short for its scene", flush=True)
                     asset = None                # it would be slowed (or freeze) to fill the scene
                 else:
-                    turned = _opening_turned_down(doc, i, asset, seconds)
+                    turned = _opening_turned_down(doc, i, asset, seconds) or _judged_out(doc, i, asset, seconds)
                     if turned:
                         asset = None            # a hook line: its first frame (or the clip) does not fit the line
                         # A verdict about the clip itself (text, AI-made, poor footage) holds for every line; one
@@ -768,6 +774,9 @@ def _opening_turned_down(doc: dict, i: int, asset, seconds: float) -> str:
         return ""
     job = dict(gapfill.job_for(s, i, fps, gapfill.known_jobs(doc)), hook=True, seconds=seconds)
     keep, verdict = hookcheck.judge(asset.local_path, job, seconds)
+    from . import media
+    if keep is None and media.must_judge():
+        keep = False            # no verdict while vision is meant to judge (NO_UNJUDGED_STOCK): never placed
     if keep is False:
         print(f"[shotcap] scene {i + 1}: another moment turned down by the opening check "
               f"({hookcheck.why(verdict)})", flush=True)
@@ -783,6 +792,37 @@ def _opening_turned_down(doc: dict, i: int, asset, seconds: float) -> str:
     if verdict:
         asset.apply_verdict(verdict, str(job.get("intent") or ""))
     return ""
+
+
+def _judged_out(doc: dict, i: int, asset, seconds: float) -> str:
+    """
+    Another moment for a line outside the hook, while vision is meant to judge the job (media.must_judge,
+    NO_UNJUDGED_STOCK, 2026-10-09): the judge looks at it against the line before it is placed - it used to go on
+    with no check at all (judgedBy "none"). "" when it was kept (the verdict stays with the asset), else
+    TURNED_FOR_ANY_LINE / TURNED_FOR_THIS_LINE as _opening_turned_down says (its file is gone). Nothing to do
+    (returns "") in the hook - _opening_turned_down judged it - or with vision not configured.
+    """
+    from . import gapfill, hookcheck, media
+    scenes = doc.get("scenes") or []
+    fps = max(1, int(doc.get("fps") or 30))
+    s = scenes[i]
+    if not media.must_judge() or hookcheck.in_hook(int(s.get("startFrame") or 0) / fps):
+        return ""
+    job = dict(gapfill.job_for(s, i, fps, gapfill.known_jobs(doc)), seconds=seconds)
+    keep, verdict = media.judge_clip(asset.local_path, job, str(asset.attribution or ""), source_url=asset.url)
+    if keep:
+        asset.apply_verdict(verdict, str(job.get("intent") or ""))
+        return ""
+    print(f"[shotcap] scene {i + 1}: another moment turned down by the judge", flush=True)
+    try:
+        os.remove(asset.local_path)
+    except OSError:
+        pass
+    v = verdict or {}
+    q = v.get("quality")
+    if v.get("has_text_or_watermark") or v.get("ai_generated") or (q is not None and q < config.VISION_MIN_QUALITY):
+        return TURNED_FOR_ANY_LINE
+    return TURNED_FOR_THIS_LINE
 
 
 def put_moment(doc: dict, i: int, asset, donor: dict) -> dict:

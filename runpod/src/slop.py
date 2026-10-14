@@ -377,6 +377,25 @@ def caption_bands(grays: list) -> dict:
     return out
 
 
+def subtitle_signal(path: str) -> bool:
+    """
+    A free sign that a clip may carry subtitles (2026-10-09): a centred caption band in two or more of six frames
+    whose words change between frames while the rest of the picture holds - the subtitle's signature, where a news
+    chyron's box stays put and a ticker spans the whole width. Never a reason to turn a clip down on its own; it
+    only sends a news line's clip to the second look at text (media.second_look).
+    """
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        grays = _gray_frames(path, 6, 320, 180)
+        if len(grays) < 3:
+            return False
+        c = caption_bands(grays)
+        return c["frames"] >= 2 and c["changing"] >= 1
+    except Exception:  # noqa: BLE001 - no finding
+        return False
+
+
 def captions_verdict(path: str) -> str:
     """"another creator's burned-in captions" when a clip carries them, else ""."""
     if not path or not os.path.isfile(path):

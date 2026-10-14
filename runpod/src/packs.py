@@ -881,6 +881,18 @@ def pick(job: dict, used, work: str, stop: float, *, require_cc: bool = False, f
         if got is None:
             used.release(i, shot)
             continue
+        if media.must_judge():
+            # A pack clip was matched to the line by the local model only: judged like any clip while vision is
+            # meant to judge the job (NO_UNJUDGED_STOCK, 2026-10-09) - no verdict, no clip.
+            keep, verdict = media.judge_clip(got.local_path, job, got.attribution, source_url=got.url)
+            if not keep:
+                used.release(i, shot)
+                try:
+                    os.remove(got.local_path)
+                except OSError:
+                    pass
+                continue
+            got.apply_verdict(verdict, str(job.get("intent") or job.get("query") or ""))
         print(f"[packs] scene {i + 1}: {hit.entry.id} ({hit.entry.niche}: {', '.join(hit.entry.topics[:2])}; "
               f"fit {hit.similarity:.2f})", flush=True)
         return got
@@ -943,9 +955,24 @@ def first_pass(jobs: List[dict], work: str, *, require_cc: bool = False, seconds
                 chosen.append((i, job, hit, shot))
                 break
 
+    judging = media.must_judge()
+
     def get(item):
         _i, job, hit, _shot = item
-        return None if time.time() > deadline else fetch(hit.entry, work, job, hit.similarity)
+        if time.time() > deadline:
+            return None
+        got = fetch(hit.entry, work, job, hit.similarity)
+        if got is not None and judging:
+            # Judged like any clip while vision is meant to judge the job (NO_UNJUDGED_STOCK): no verdict, no clip.
+            keep, verdict = media.judge_clip(got.local_path, job, got.attribution, source_url=got.url)
+            if not keep:
+                try:
+                    os.remove(got.local_path)
+                except OSError:
+                    pass
+                return None
+            got.apply_verdict(verdict, str(job.get("intent") or job.get("query") or ""))
+        return got
 
     out: Dict[int, Any] = {}
     if chosen:

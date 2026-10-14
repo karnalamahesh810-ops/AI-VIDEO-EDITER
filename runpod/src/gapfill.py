@@ -1160,8 +1160,9 @@ def _no_text_last(doc: dict, cards: List[dict], out: Dict[str, int], *, fresh: b
                 stop = min(until, time.time() + float(config.FALLBACK_SCENE_SECONDS))
                 try:
                     # In the opening a moment is judged (and kept to the variety rules): the hook is what a
-                    # viewer stays for; elsewhere it is the last thing before a hold, unjudged and flagged.
-                    got = _from_moment(job, used, work, stop, donors, judged=_hook(s, fps))
+                    # viewer stays for; elsewhere it was the last thing before a hold, unjudged and flagged -
+                    # judged too since 2026-10-09 while vision is meant to judge the job (media.must_judge).
+                    got = _from_moment(job, used, work, stop, donors, judged=_hook(s, fps) or media.must_judge())
                 except Exception as e:  # noqa: BLE001 - the hold below
                     print(f"[fill] scene {k + 1}: last moment skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
                     got = None

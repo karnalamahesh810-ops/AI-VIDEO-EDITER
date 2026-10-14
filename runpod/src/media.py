@@ -1332,8 +1332,16 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: s
     """
     if _stock_seller(title or "", channel or ""):
         return False
-    from . import topics
+    from . import offtopic, topics
+    seen_as = f"{title or ''}|{channel or ''}".lower()
     if topics.off_topic_title(title or "", channel or "", line=context or ""):
+        offtopic.note("a music upload", "search", key=seen_as)
+        return False
+    # Not footage of the real world (src/offtopic.py): a video game, kids' animation, a TV drama's or film's clip
+    # or trailer, a sports broadcast, a tutorial - unless the story or the line is about it. Before any download.
+    why = offtopic.reason(title or "", channel or "", line=context or "")
+    if why:
+        offtopic.note(why, "search", key=seen_as)
         return False
     if _talking_head(title or "", context or ""):
         return False
@@ -1744,6 +1752,10 @@ _TEXT_WORDS = re.compile(
     r"banners?|chyrons?|tickers?|overlays?|overlaid|graphics?|charts?|maps?|diagrams?|documents?|dates?|dated|"
     r"timestamps?|time stamps?|watermarks?|credits?|lettering|headlines?|split[- ]screen|inset|on[- ]screen|"
     r"lower[- ]third)\b", re.I)
+# What in the judge's description says subtitles may be on screen (a news line's second look: second_look).
+_SUBTITLE_WORDS = re.compile(
+    r"\b(?:subtitles?|subtitled|captions?|captioned|closed[- ]captions?|lyrics|words? (?:on|at|across) the "
+    r"(?:screen|bottom)|text (?:at|along|across|near) the bottom|on[- ]screen (?:text|words)|white text)\b", re.I)
 
 
 def second_look(path: str, verdict: dict, label: str = "") -> tuple:
@@ -1759,18 +1771,32 @@ def second_look(path: str, verdict: dict, label: str = "") -> tuple:
     if not getattr(config, "VISION_TEXT_SECOND_LOOK", False) or _is_still(path):
         return True, verdict
     mode = str(verdict.get("text_mode") or vision.TEXT_MODE.get() or vision.text_mode(_SCENE_INTENT.get()))
-    if mode == "news" or vision.text_check_left() <= 0:
+    if vision.text_check_left() <= 0:
         return True, verdict
-    why = "hook" if _IN_HOOK.get() else ""
-    if not why and _TEXT_WORDS.search(str(verdict.get("description") or "")):
-        why = "description"
-    if not why:
-        try:
-            why = "pixels" if _filters.text_signal(path).get("likely") else ""
-        except Exception:  # noqa: BLE001 - a failed signal is no reason to look
-            why = ""
-    if not why:
-        return True, verdict
+    if mode == "news":
+        # A news line keeps a broadcaster's banners, chyrons, tickers and logos - but never subtitles (the owner,
+        # 2026-10-09; VISION_NEWS_SUBTITLES). The look is asked only on a sign of subtitles: the judge's own words
+        # ("subtitles", "captions", "text at the bottom") or the free caption-band signal (words that change
+        # between frames in a centred band, slop.subtitle_signal) - never for every news clip with a banner.
+        if not getattr(config, "VISION_NEWS_SUBTITLES", True):
+            return True, verdict
+        why = "subtitle words" if _SUBTITLE_WORDS.search(str(verdict.get("description") or "")) else ""
+        if not why:
+            from . import slop
+            why = "caption band" if slop.subtitle_signal(path) else ""
+        if not why:
+            return True, verdict
+    else:
+        why = "hook" if _IN_HOOK.get() else ""
+        if not why and _TEXT_WORDS.search(str(verdict.get("description") or "")):
+            why = "description"
+        if not why:
+            try:
+                why = "pixels" if _filters.text_signal(path).get("likely") else ""
+            except Exception:  # noqa: BLE001 - a failed signal is no reason to look
+                why = ""
+        if not why:
+            return True, verdict
     got = vision.text_check(path, mode, described=str(verdict.get("description") or ""))
     if not got:
         return True, verdict
@@ -1780,6 +1806,31 @@ def second_look(path: str, verdict: dict, label: str = "") -> tuple:
         return True, dict(verdict, text_check=seen)
     print(f"[vision] REJECT on the second look at text ({got['reject']}): {label[:60]!r}", flush=True)
     return False, dict(verdict, has_text_or_watermark=True, text_check=seen)
+
+
+def must_judge() -> bool:
+    """
+    A stock clip or web picture reaches the timeline - or a scene's choices - only with a vision verdict
+    (NO_UNJUDGED_STOCK, 2026-10-09): vision is meant to judge this job (vision.configured), so "no verdict" - the
+    account empty, the key refused, every model down - is a no. The Yellowstone build of 2026-10-07 kept the local
+    model's and the title's word instead: "JJ is LEFT FOREVER in Minecraft! (Maizen)" on a line about ground uplift.
+    Trusted by design, never asked: the user's own clips and links, maps, charts and data looks, the worker's own
+    pictures, a chain shot's next seconds of an approved clip.
+    """
+    return bool(getattr(config, "NO_UNJUDGED_STOCK", True)) and vision.configured()
+
+
+# Candidates turned down because no model could judge them while vision was meant to (must_judge): the job stops
+# on a credit / key / outage failure (src/aiguard.py), so these are the few in flight when it happened.
+UNJUDGED_REFUSED = {"n": 0}
+
+
+def _no_verdict_no(label: str, why: str) -> tuple:
+    """(False, None): no verdict while vision is meant to judge - the candidate never reaches the timeline."""
+    with _CACHE_LOCK:
+        UNJUDGED_REFUSED["n"] += 1
+    print(f"[vision] no verdict ({why}): REJECT - nothing unjudged is placed {label[:60]!r}", flush=True)
+    return False, None
 
 
 def _judge_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
@@ -1804,6 +1855,8 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         print(f"[vision] REJECT locally: {local['reject']} {label[:50]!r}", flush=True)
         return False, None
     if not vision.enabled():
+        if must_judge():
+            return _no_verdict_no(label, "the AI stopped")
         if local is not None:
             return _local_keep(local, label, intent, "no remote model"), None
         return True, None
@@ -1827,11 +1880,13 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
                            **({"wants": wants} if wants in ("map", "chart") else {}),
                            **({"span": span} if span else {}))
     if verdict is None and not config.ACCEPT_UNJUDGED:
-        # Every model failed on this clip. Google answered "high demand" for
-        # half an hour on 2026-09-29 and rejecting all of those left most of a
-        # 22-minute video empty (then filled with repeats). The local model
-        # decides now; without it, the title: a video named after what the
-        # line is about stays, anything else goes.
+        # Every model failed on this clip. Since 2026-10-09 (NO_UNJUDGED_STOCK) that is a no: a clip no judge saw
+        # never reaches the timeline, and a lasting outage stops the job (src/aiguard.py) instead of filling it
+        # with the local model's or the title's picks. Off: Google answered "high demand" for half an hour on
+        # 2026-09-29 and rejecting all of those left most of a 22-minute video empty (then filled with repeats),
+        # so the local model decided; without it, the title: a video named after what the line is about stayed.
+        if must_judge():
+            return _no_verdict_no(label, "no model answered")
         if local is not None:
             return _local_keep(local, label, intent, "models busy"), None
         keep = _title_fits(label, intent)
@@ -2543,6 +2598,8 @@ def _plan_grabs(eligible: List[dict], grab: float, start_at: float,
     before any footage is downloaded. Videos with no readable storyboard keep
     the old fixed grab point, ranked after every scored match.
     """
+    if must_judge() and not vision.enabled():
+        return []           # nothing it downloads could be judged (the AI stopped): no download at all
     if not (intent and config.MOMENT_SELECTION and vision.enabled()):
         return [(c, _fixed_point(c, grab, start_at), None) for c in eligible]
 
@@ -3276,13 +3333,22 @@ def _better_pick(first: Optional[MediaAsset], later: Optional[MediaAsset]) -> Op
 
 def _music_upload(info: Optional[dict], line: str = "") -> str:
     """A music video or performance by its YouTube metadata (category Music, title, channel) in a story and
-    a line not about music (src/topics.py; "" = not one, or the story is about music)."""
+    a line not about music (src/topics.py; "" = not one, or the story is about music) - and, since 2026-10-09,
+    any other upload that is not footage of the real world by its full metadata (src/offtopic.py: its title,
+    channel and YouTube category - a game in the Gaming category, a studio's clip channel), read before its
+    storyboard, download or judge."""
     if not info:
         return ""
-    from . import topics
-    return topics.off_topic_title(str(info.get("title") or ""),
-                                  str(info.get("channel") or info.get("uploader") or ""),
-                                  info.get("categories") or [], line=line)
+    from . import offtopic, topics
+    title = str(info.get("title") or "")
+    channel = str(info.get("channel") or info.get("uploader") or "")
+    why = topics.off_topic_title(title, channel, info.get("categories") or [], line=line)
+    if not why:
+        why = offtopic.reason(title, channel, description=str(info.get("description") or ""),
+                              tags=info.get("tags") or [], categories=info.get("categories") or [], line=line)
+    if why:
+        offtopic.note(why, "metadata", key=str(info.get("id") or f"{title}|{channel}".lower()))
+    return why
 
 
 def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: float = 0.0,
@@ -3408,6 +3474,15 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
               if c.id not in tried and _usable_title(c.title, c.channel, c.aspect, f"{intent_text} {context}")
               and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")
               and not _video_unavailable(c.id)]
+    if ranked:
+        # The weak signs among the ones that could be scouted ("Episode 4", "| Trailer |", "showcase", a streaming
+        # network's channel): one cheap text call for the search, cached by video (src/offtopic.py). A clear case
+        # never gets here (_usable_title); without an answer they stay and the judge decides.
+        from . import offtopic
+        flagged = offtopic.screen([{"id": c.id, "title": c.title, "channel": c.channel} for c in ranked[:12]],
+                                  line=f"{intent_text} {context}")
+        if flagged:
+            ranked = [c for c in ranked if c.id not in flagged]
     if config.EYEWITNESS_SEARCHES:
         # Phone, drone, chaser and helicopter titles first, compilations last
         # (the Nature & Weather edit), on top of the metadata score.
@@ -3946,6 +4021,9 @@ def reset_cache():
     _SERPAPI_VIDEO_USED["n"] = 0
     _IMAGE_NO_CREDIT["hit"] = False
     UNJUDGED_KEPT.update(n=0, rejected=0)
+    UNJUDGED_REFUSED["n"] = 0
+    from . import offtopic
+    offtopic.reset()                    # the job's count of candidates turned down before any download
     _ytdlp.reset()
     vision.reset()  # per-job call/failure counts for the job result
     moments.reset_cache()  # storyboard sheets, cached per video across beats
@@ -6069,14 +6147,20 @@ def fresh_moments(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]
                 if local is not None and local["reject"]:
                     continue
                 asset.judged_by = "local" if local is not None else "none"
-                if vision.enabled() and job.get("intent"):
+                if must_judge() and not vision.enabled():
+                    unreserve(vid, scene_at)
+                    return None                     # nothing could judge it (the AI stopped): no other moment
+                if (vision.enabled() or must_judge()) and job.get("intent"):
                     # A hook line's moment gets the opening check on what its scene shows (src/hookcheck.py).
                     hook_span = float(job.get("seconds") or need) if job.get("hook") and \
                         getattr(config, "HOOK_CUT_CHECK", False) else None
                     verdict = vision.judge(path, job.get("intent", ""), job.get("query", ""),
                                            **({"span": hook_span} if hook_span else {}))
+                    if verdict is None and must_judge():
+                        continue                    # no verdict, no clip (NO_UNJUDGED_STOCK)
                     if verdict is not None and (float(verdict.get("score") or 0) < config.VISION_SOFT_MIN_SCORE
                                                 or verdict.get("ai_generated") or verdict.get("studio")
+                                                or verdict.get("has_text_or_watermark")
                                                 or verdict.get("opening") is False
                                                 or off_story(verdict, f"{job.get('intent', '')} "
                                                                       f"{job.get('context', '')}")):
@@ -6197,6 +6281,21 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 ok, _why = _asset_ok(asset)
                 if not ok:
                     continue
+                if must_judge():
+                    # Judged like any clip (NO_UNJUDGED_STOCK, 2026-10-09): the last pass used to place the
+                    # best-titled result with no check at all; no verdict is no clip.
+                    keep, verdict = judge_clip(path, dict(job, intent=intent_text), c.get("title") or "",
+                                               source_url=asset.url)
+                    if not keep:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
+                        continue
+                    asset.apply_verdict(verdict, intent_text)
+                    asset.review_required = True
+                    asset.review_reason = "Found in the last pass (judged) - check it fits the line"
+                    return asset
                 if not _rescue_local_ok(path, intent_text):
                     continue
                 asset.judged_by = "local" if config.LOCAL_VISION_ENABLED and _localvision.available() else "none"
@@ -6256,7 +6355,8 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                 # agency's credit bar (free, first) and stamp (the slow one, last,
                 # once everything else has passed).
                 mark = watermark_reason(got.local_path, "rescue", stamp=False) if got else ""
-                if got and (mark or not _rescue_local_ok(got.local_path, intent_text)
+                judging = must_judge()
+                if got and (mark or (not judging and not _rescue_local_ok(got.local_path, intent_text))
                             or _photo_seen_before(got.local_path)
                             or slop_reason(got.local_path, _image_label(got), source_url=got.url)):
                     got = None
@@ -6266,6 +6366,25 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
                         got = None
                 if mark:
                     _mark_bad(cand.identity, "", mark)  # every other scene skips it
+                verdict = None
+                if got and judging:
+                    # Judged like any picture (NO_UNJUDGED_STOCK, 2026-10-09): no verdict, no picture.
+                    _GATE_SLOP.set("")
+                    keep, verdict = judge_clip(got.local_path, dict(job, intent=intent_text), _image_label(got),
+                                               source_url=got.url)
+                    if not keep:
+                        _mark_bad(cand.identity, "", _GATE_SLOP.get())     # line-free reasons only
+                        got = None
+                if got and judging:
+                    with lock:
+                        if room[0] is not None:
+                            if room[0] <= 0:
+                                return None
+                            room[0] -= 1
+                    got.apply_verdict(verdict, intent_text)
+                    got.review_required = True
+                    got.review_reason = "Picture found in the last pass (judged) - check it fits"
+                    return got
                 if got:
                     with lock:
                         if room[0] is not None:

@@ -71,7 +71,8 @@ class OpenRouterErrors(_Planner):
     def test_a_429_is_waited_out_on_the_same_model(self):
         self.assertEqual(self.run_with({"openai/gpt-5.2": [or_error(429, "rate limited"), OK]}), {"ok": 1})
         self.assertEqual(self.asked, ["openai/gpt-5.2", "openai/gpt-5.2"])
-        self.assertEqual(self.pauses(), [3.0])
+        # A rate limit backs off at least VISION_RATE_WAIT (src/aiguard.py, 2026-10-09), never less than the retry wait.
+        self.assertEqual(self.pauses(), [max(3.0, config.VISION_RATE_WAIT)])
         self.assertTrue(vision.model_available("openai/gpt-5.2"))
 
     def test_5xx_retried_with_backoff_then_the_next_model_takes_the_call(self):
