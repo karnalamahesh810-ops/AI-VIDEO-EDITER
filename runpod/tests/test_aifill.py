@@ -154,8 +154,10 @@ class Prompts(unittest.TestCase):
 class Unchanged(_Fresh):
     def test_last_resort_without_a_block_is_the_base_commits_byte_for_byte(self):
         for name, cap in (("last_resort_capped", 7.0), ("last_resort", 0.0)):
-            doc = fixture.last_resort(timeline, gapfill, quality, config, mock, Segment, Word, MediaAsset,
-                                      self.work, shot_max=cap)
+            # (The base commit's text look every time: TEXT_LOOK_VARY, 2026-10-14, takes turns between them.)
+            with mock.patch.object(config, "TEXT_LOOK_VARY", False):
+                doc = fixture.last_resort(timeline, gapfill, quality, config, mock, Segment, Word, MediaAsset,
+                                          self.work, shot_max=cap)
             self.assertEqual(dumps(doc, self.work), golden(name), name)
 
     def test_the_plan_without_a_block_is_the_base_commits_byte_for_byte(self):

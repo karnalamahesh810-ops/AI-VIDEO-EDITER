@@ -1041,10 +1041,10 @@ def _fill_missing_media(doc: dict, fresh: bool = True) -> int:
     exactly what the other machines draw - also leaves out the runner-ups and
     other moments (src/shotcap.py), whose checks go over the network.
     """
-    got = gapfill.hold_or_animate(doc, label="before the render", laddered=True, fresh=fresh)
+    got = gapfill.hold_or_animate(doc, label="before the render", laddered=True, fresh=fresh, rescue=False)
     # ("alternative", "moment" and "ladder": the fresh shots a line gets when holding
     # the shot beside it would run past SHOT_MAX_SECONDS, src/shotcap.py.)
-    return sum(int(got.get(k, 0)) for k in ("graphic", "held", "card", "alternative", "moment", "ladder"))
+    return sum(int(got.get(k, 0)) for k in ("graphic", "held", "card", "alternative", "moment", "ladder", "rescue"))
 
 
 def _store_narration(local: str, ext: str, inp: dict) -> str:
