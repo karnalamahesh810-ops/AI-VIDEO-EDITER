@@ -26,6 +26,7 @@ import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve, type Amb
 import { BrandVideo, EndCard, Watermark } from "./components/brand/BrandLayers";
 import { brandFrames, brandOf } from "./components/brand/brandLayout";
 import { musicPasses, musicVolume as makeMusicVolume, trackSeconds } from "./components/musicMix";
+import { keepRanges, narrationPieces } from "./edit/narration";
 
 // The music beds were replaced by the owner's own tracks (2026-10-01); a
 // document planned before names the old bed, which no longer ships (its 404
@@ -472,6 +473,12 @@ const Body: React.FC<TimelineProps> = (props) => {
     return ambience.beds.map((b, i) => bedNode(b, i, fps, on.master, on.duck, speech));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ambience, scenes, props.sfxEnabled, props.durationInFrames, fps]);
+  // The narration: the whole file, or the stretches the editor's ripple deletes kept (edit/narration.ts),
+  // each straight after the one before.
+  const narration = React.useMemo(
+    () => narrationPieces(keepRanges(audio), fps, Math.max(1, Math.ceil(props.durationInFrames))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [audio?.keep, fps, props.durationInFrames]);
   const sfxNodes = React.useMemo(() => {
     if (props.sfxEnabled === false) return [];
     const doubles = builtIn ? doublesLook(overlays || [], lookSounds) : () => false;
@@ -546,7 +553,11 @@ const Body: React.FC<TimelineProps> = (props) => {
       {captions.enabled ? <CaptionTrack props={props} /> : null}
 
       {/* Audio: narration drives the whole timeline; bgm sits well under it */}
-      {audio?.url ? <Audio src={audio.url} volume={audio.volume ?? 1} /> : null}
+      {audio?.url ? (narration ? narration.map((p) => (
+        <Sequence key={`vo-${p.from}`} from={p.from} durationInFrames={p.frames} name="Narration">
+          <Audio src={audio.url} volume={audio.volume ?? 1} trimBefore={p.trimBefore > 0 ? p.trimBefore : undefined} />
+        </Sequence>
+      )) : <Audio src={audio.url} volume={audio.volume ?? 1} />) : null}
       {bgmNodes}
       {bedNodes}
       {sfxNodes}
