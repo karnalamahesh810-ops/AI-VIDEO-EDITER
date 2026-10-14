@@ -9,6 +9,7 @@ import { MotionWrap } from "./components/MotionWrap";
 import { motionClass } from "./components/motion/lookClass";
 import { StageFx, stageWindows } from "./components/motion/stage";
 import { SmartSpec } from "./components/smart/SmartSpec";
+import { Windowed, type WindowItem } from "./components/windowed";
 import { CameraFx, cameraWindows } from "./components/smart/camera";
 import { sceneAvoid, sceneBusy, sceneSubject } from "./components/motion/avoid";
 import { PictureGuard } from "./components/motion/pictureGuard";
@@ -485,6 +486,48 @@ const Body: React.FC<TimelineProps> = (props) => {
     return (props.sfx || []).map((fx, i) => (doubles(fx) ? null : sfxNode(fx, i, fps, props.sfxVolume)));
   }, [props.sfx, props.sfxEnabled, props.sfxVolume, fps, builtIn, overlays, lookSounds]);
 
+  // Only what is near the playhead is mounted (components/windowed.tsx): hundreds of idle Sequences cost
+  // ~50 ms a frame on a long video. The same nodes as before, each with its span.
+  const sceneItems = React.useMemo<WindowItem[]>(() => scenes.map((scene, i) => {
+    const frames = scene.durationInFrames + (scenes[i + 1]?.transition === "crossfade" ? CROSSFADE_FRAMES : 0);
+    return {
+      from: scene.startFrame, frames,
+      node: (
+        <Sequence
+          key={scene.id}
+          from={scene.startFrame}
+          // A cross-dissolve into the next scene: this one plays on underneath
+          // for the length of the dissolve (the next scene is drawn on top).
+          durationInFrames={frames}
+          premountFor={premount}
+        >
+          {/* The next scene's transition starts over this scene's last frames. */}
+          <CrossfadeIn active={scene.transition === "crossfade" && i > 0}>
+            {/* A full-screen animation scene plays its look's own sound too. */}
+            {withSound(<SceneClip scene={scene} accent={captions.accent} accent2={accent2} backdrop={backdrops[scene.id]}
+              nextTransition={scenes[i + 1]?.transition} />, lookSounds[`s${i}`])}
+          </CrossfadeIn>
+        </Sequence>
+      ),
+    };
+  }), [scenes, premount, captions.accent, accent2, backdrops, lookSounds]);
+  const overlayItems = React.useMemo<WindowItem[]>(() => (overlays || []).map((ov, i) => {
+    // Never past the end of the video: the look's own exit (MotionWrap, inside its duration) then
+    // always plays whole instead of the outer sequence cutting it mid-exit.
+    const frames = Math.max(1, Math.min(ov.durationInFrames, bodyFrames - ov.startFrame));
+    return {
+      from: ov.startFrame, frames,
+      node: (
+        <Sequence key={`ov-${i}`} from={ov.startFrame} durationInFrames={frames} premountFor={premount}>
+          {overlayNodes[i]}
+        </Sequence>
+      ),
+    };
+  }), [overlays, overlayNodes, bodyFrames, premount]);
+  const sfxItems = React.useMemo<WindowItem[]>(() => (props.sfx || []).map((fx, i) => ({
+    from: Math.max(0, Math.round(fx.startFrame || 0)), frames: Math.ceil(SFX_MAX_SECONDS * fps) + 1, node: sfxNodes[i],
+  })), [props.sfx, sfxNodes, fps]);
+
   return (
     <AbsoluteFill className="tg-composition" style={{ backgroundColor: "#000" }}>
       {/* The page's own CSS must not resize the pictures (the editor's Player). */}
@@ -495,24 +538,7 @@ const Body: React.FC<TimelineProps> = (props) => {
           settles back as it leaves (components/motion/stage.tsx): no map or chart ever cuts in on a clip. */}
       <CameraFx windows={showOverlays ? cameraWins : []}>
       <StageFx windows={showOverlays ? stageWins : []}>
-      {scenes.map((scene, i) => (
-        <Sequence
-          key={scene.id}
-          from={scene.startFrame}
-          // A cross-dissolve into the next scene: this one plays on underneath
-          // for the length of the dissolve (the next scene is drawn on top).
-          durationInFrames={scene.durationInFrames
-            + (scenes[i + 1]?.transition === "crossfade" ? CROSSFADE_FRAMES : 0)}
-          premountFor={premount}
-        >
-          {/* The next scene's transition starts over this scene's last frames. */}
-          <CrossfadeIn active={scene.transition === "crossfade" && i > 0}>
-            {/* A full-screen animation scene plays its look's own sound too. */}
-            {withSound(<SceneClip scene={scene} accent={captions.accent} accent2={accent2} backdrop={backdrops[scene.id]}
-              nextTransition={scenes[i + 1]?.transition} />, lookSounds[`s${i}`])}
-          </CrossfadeIn>
-        </Sequence>
-      ))}
+      <Windowed items={sceneItems} lead={premount + fps} bucket={fps * 2} />
       </StageFx>
       </CameraFx>
       </GradeContext.Provider>
@@ -532,18 +558,7 @@ const Body: React.FC<TimelineProps> = (props) => {
       {/* Overlay track — graphics sit on top of the visuals (a look in the
           bottom strip, the source tag, reads CaptionsOn to stay clear of the captions) */}
       <CaptionsOn.Provider value={Boolean(captions.enabled)}>
-      {showOverlays && (overlays || []).map((ov, i) => (
-        <Sequence
-          key={`ov-${i}`}
-          from={ov.startFrame}
-          // Never past the end of the video: the look's own exit (MotionWrap, inside its duration) then
-          // always plays whole instead of the outer sequence cutting it mid-exit.
-          durationInFrames={Math.max(1, Math.min(ov.durationInFrames, bodyFrames - ov.startFrame))}
-          premountFor={premount}
-        >
-          {overlayNodes[i]}
-        </Sequence>
-      ))}
+      {showOverlays ? <Windowed items={overlayItems} lead={premount + fps} bucket={fps * 2} /> : null}
       </CaptionsOn.Provider>
 
       {/* Caption track, burned in on top, as a player draws subtitles: one track over the whole
@@ -560,7 +575,7 @@ const Body: React.FC<TimelineProps> = (props) => {
       )) : <Audio src={audio.url} volume={audio.volume ?? 1} />) : null}
       {bgmNodes}
       {bedNodes}
-      {sfxNodes}
+      <Windowed items={sfxItems} lead={fps} bucket={fps * 2} />
     </AbsoluteFill>
   );
 };
