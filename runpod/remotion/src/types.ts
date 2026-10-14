@@ -1,3 +1,6 @@
+import type { ClipKeyframes } from "./edit/keyframes";
+import type { ClipEffect, ClipMask } from "./edit/effects";
+
 export type Motion = "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right"
   // Stills (VidRush): the photo slides in from a side while it settles from a
   // close zoom, then keeps pushing; or a slow push with a slight turn.
@@ -320,6 +323,15 @@ export interface Scene {
   speedRamp?: { t: number; v: number }[];
   /** The scene this one was cut from by the editor's split: it continues that shot (never a repeat). */
   splitFrom?: string;
+  /**
+   * Editor v2 (edit/ClipFx.tsx; all optional, cleaned by edit/effects.ts and src/clipfx.py): the clip's
+   * keyframes (x / y shares of the frame, 0 = centred; scale 1 = as drawn; rotation degrees; opacity; anchor),
+   * its effects stack drawn after its look, a mask, and a motion blur along the keyframed move.
+   */
+  keyframes?: ClipKeyframes;
+  effects?: ClipEffect[];
+  mask?: ClipMask;
+  motionBlur?: boolean | number;
 }
 
 /** One row of a chart, comparison or timeline. */
@@ -453,6 +465,14 @@ export interface Overlay {
    * animators and a camera move, designed by src/smart_editor.py and drawn by components/smart/SmartSpec.tsx.
    */
   spec?: unknown;
+  /**
+   * Editor v2's motion library (components/smart/library.ts, variants "ml-*"): the look's brand kit (a kit id -
+   * royal, noir, bulletin, atlas - or a Style Kit's brand tokens), the seconds from the look's first frame each word
+   * of `text` is spoken, and a seed that varies the design between uses. Absent: the video's accent, a stagger.
+   */
+  kit?: unknown;
+  wordAt?: number[];
+  seed?: number;
   labelPosition?: { x: number; y: number };
   /**
    * The places a several-point look marks (an-multi-point), frame shares,

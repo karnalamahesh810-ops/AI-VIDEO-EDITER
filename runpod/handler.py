@@ -97,7 +97,7 @@ from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
-from src import brandkit, stockblock
+from src import brandkit, clipfx, stockblock
 from src import recut, reclip, relook, restore
 from src import topics
 from src import batch, sources
@@ -2478,6 +2478,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # to repair first (below); the render requires every one after that.
     timeline.drop_invalid_overlays(doc)
     timeline.validate(doc, require_media=False, allow_stock=inp.get("allow_stock"))
+    # The editor's keyframes, effects, masks and motion blur (src/clipfx.py): cleaned as the renderer does,
+    # a bad value dropped - never a failed render.
+    clipfx.clean(doc)
 
     # A plan can sit in the editor for days; any signed URL in it has long
     # since expired. Re-resolve the narration from the reference the plan

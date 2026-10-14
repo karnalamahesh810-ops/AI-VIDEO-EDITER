@@ -13,6 +13,7 @@ import { reframeStyle, resolveAim, resolveMove } from "./reframe";
 import { BlurredHold, SafeImg } from "./motion/safePicture";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
 import { clipPlan, type ClipSegment } from "../edit/clipTime";
+import { ClipFx } from "../edit/ClipFx";
 
 /**
  * A scene's clip: Remotion's OffthreadVideo (frame-exact, decoded by Remotion's own compositor), or with
@@ -183,12 +184,13 @@ export const SceneClip: React.FC<{
           {grade?.defs}
           <PlayerWindow tone={tone} seed={scene.startFrame % 7}
             title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
-            {media.type === "video" ? (
-              <PlannedVideo src={media.url} style={media100} plan={plan} html5={media.html5} />
-            ) : (
-              <SafeImg src={media.url} style={media100} fallback={hold} />
-            )}
-            <FilmLayer treatment={treatment} />
+            <ClipFx fx={scene} still={media.type !== "video"} over={<FilmLayer treatment={treatment} />}>
+              {media.type === "video" ? (
+                <PlannedVideo src={media.url} style={media100} plan={plan} html5={media.html5} />
+              ) : (
+                <SafeImg src={media.url} style={media100} fallback={hold} />
+              )}
+            </ClipFx>
           </PlayerWindow>
           <TransitionLayer transition={transition} />
         </AbsoluteFill>
@@ -227,6 +229,7 @@ export const SceneClip: React.FC<{
             </filter>
             <rect width="100%" height="100%" filter={`url(#grain-${scene.id})`} />
           </svg>
+          <ClipFx fx={scene} still={media.type !== "video"}>
           <AbsoluteFill
             style={{
               justifyContent: "center",
@@ -242,6 +245,7 @@ export const SceneClip: React.FC<{
               <SafeImg src={media.url} style={inset} fallback={hold} />
             )}
           </AbsoluteFill>
+          </ClipFx>
           <FilmLayer treatment={treatment} />
           <TransitionLayer transition={transition} />
         </AbsoluteFill>
@@ -263,6 +267,11 @@ export const SceneClip: React.FC<{
     <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
       <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#000" }}>
         {grade?.defs}
+        {/* The editor's keyframes, effects stack, mask and motion blur (../edit/ClipFx.tsx), after the look. */}
+        <ClipFx fx={scene} still={media.type !== "video"} over={<>
+          <EffectLayer effect={effect} durationInFrames={durationInFrames} />
+          <FilmLayer treatment={treatment} />
+        </>}>
         <AbsoluteFill
           style={{
             opacity: entrance.opacity ?? 1,
@@ -292,8 +301,7 @@ export const SceneClip: React.FC<{
               fps={fps} width={width} filter={filters || undefined} subject={aim} fallbackStill={holdStill} />
           )}
         </AbsoluteFill>
-        <EffectLayer effect={effect} durationInFrames={durationInFrames} />
-        <FilmLayer treatment={treatment} />
+        </ClipFx>
         <TransitionLayer transition={transition} />
       </AbsoluteFill>
     </TransitionFrame>

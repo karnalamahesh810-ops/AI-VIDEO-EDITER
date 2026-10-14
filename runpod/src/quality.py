@@ -83,7 +83,7 @@ from urllib.request import url2pathname
 
 import requests
 
-from . import cliptime, config, events, gapfill, r2, templates
+from . import clipfx, cliptime, config, events, gapfill, r2, templates
 from .aifill import AI_SOURCE, is_ai_scene
 from .presenter import PRESENTER_SOURCE, is_presenter_scene
 
@@ -800,6 +800,8 @@ def classify(doc: dict, res: dict) -> Tuple[List[dict], List[dict]]:
                 continue
             if (s.get("media") or {}).get("type") == "animation":
                 graphic = True                               # a dark graphic is drawn that way
+            elif clipfx.dark_on_purpose(s):
+                graphic = True                               # the editor faded, crushed or masked it (src/clipfx.py)
             else:
                 parts.append((part, k))
         # Black over clips or pictures, outside every transition's frames, for long
@@ -1659,6 +1661,8 @@ class Gate:
             if not url or s.get("teaser") or str(s.get("frame") or "full") != "full" or is_presenter_scene(s) \
                     or is_ai_scene(s):
                 continue                    # (an AI fill picture or clip is made at its size: src/aifill.py)
+            if clipfx.blurs_on_purpose(s):
+                continue                    # the editor blurred it on purpose (src/clipfx.py): soft is the edit
             sem = s.get("semanticMetadata") if isinstance(s.get("semanticMetadata"), dict) else {}
             source = str(m.get("source") or sem.get("provider") or "")
             if m.get("type") == "image" and sharpness.picture_on() and source != "generated":

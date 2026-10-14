@@ -10,6 +10,8 @@ import { motionClass } from "./components/motion/lookClass";
 import { StageFx, stageWindows } from "./components/motion/stage";
 import { SmartSpec } from "./components/smart/SmartSpec";
 import { Windowed, type WindowItem } from "./components/windowed";
+import { LIBRARY } from "./components/lib";
+import { ClipFx } from "./edit/ClipFx";
 import { CameraFx, cameraWindows } from "./components/smart/camera";
 import { sceneAvoid, sceneBusy, sceneSubject } from "./components/motion/avoid";
 import { PictureGuard } from "./components/motion/pictureGuard";
@@ -155,6 +157,16 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
   // moment. It carries its own entrance, keys and exit, so no MotionWrap; a bad spec draws nothing.
   if (raw && raw.type === "motion" && raw.variant === "smart-spec") {
     return withSound(<SmartSpec overlay={raw} />, sound);
+  }
+  // Editor v2's motion library (components/smart/library.ts): a recipe places, scales, enters and leaves on its
+  // own (position, scale, speed are its params), so no MotionWrap - it would move and fade it a second time.
+  if (raw && raw.type === "motion" && /^ml-/.test(raw.variant || "")) {
+    const ovL = resolveOverlay(raw);
+    const Look = LIBRARY[ovL.variant || ""];
+    if (!Look) return null;
+    const look = <Look overlay={ovL} accent={accentFor(ovL, accent, accent2)} />;
+    const op = typeof ovL.opacity === "number" && ovL.opacity < 1 ? Math.max(0.2, ovL.opacity) : 1;
+    return withSound(op < 1 ? <AbsoluteFill style={{ opacity: op }}>{look}</AbsoluteFill> : look, sound);
   }
   let ov = resolveOverlay(raw);
   // An image look's pictures, every slot a real picture (lookPictures): the
@@ -453,7 +465,12 @@ const Body: React.FC<TimelineProps> = (props) => {
   // The smart graphics' camera moves on the footage (components/smart/camera.tsx); none = untouched.
   const cameraWins = React.useMemo(() => cameraWindows(overlays || [], fps), [overlays, fps]);
   const overlayNodes = React.useMemo(
-    () => (overlays || []).map((ov, i) => renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`], accent2)),
+    () => (overlays || []).map((ov, i) => {
+      const node = renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`], accent2);
+      // Editor v2: a graphic's own keyframes / effects / mask / motion blur (edit/ClipFx.tsx), as a clip's.
+      const fx = ov as { keyframes?: unknown; effects?: unknown; mask?: unknown; motionBlur?: unknown };
+      return fx.keyframes || fx.effects || fx.mask || fx.motionBlur ? <ClipFx fx={{ ...fx, id: `ov-${i}` }}>{node}</ClipFx> : node;
+    }),
     [overlays, captions.accent, scenes, lookSounds, accent2]);
   // Built once per sfx list: each sound plays for its planned span (a typing
   // run lasts exactly as long as the letters appear) or, unplanned, for the
