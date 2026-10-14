@@ -944,7 +944,7 @@ const GAMING: MxRecipe[] = [
       const hi = ch.findIndex((x) => gmCaps(x.t));
       const x = c.side === "left" ? 0.32 : c.side === "right" ? 0.68 : 0.5;
       return finish([{ kind: "game", game: "kinetic", x, y: c.y ?? 0.32, w: 1, h: 1, items: ch.map((q) => q.t),
-        times: ch.map((q) => c.wt(q.i, 0.04, 0.34)), hi: hi >= 0 ? hi : undefined, size: 0.13 * c.scale, color: k.colors.text,
+        times: ch.map((q) => c.wt(q.i, 0.04, 0.34)), hi: hi >= 0 ? hi : undefined, size: 0.17 * c.scale, color: k.colors.text,
         emphColor: gmGold(k), label: c.r(4) > 0.72 ? "type" : "cut", seed: Math.round(c.r(5) * 90) }], c, "fade");
     },
   },
