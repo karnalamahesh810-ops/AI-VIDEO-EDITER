@@ -528,9 +528,32 @@ _SLOTS = threading.BoundedSemaphore(max(1, min(config.VISION_CONCURRENCY, config
                                              else config.VISION_CONCURRENCY))
 
 
+# The gaming essay (config.GAMEPLAY_FOOTAGE, src/styles.py gaming_essay): clean in-game footage of the game the line
+# names IS the footage; what still fails is another creator's furniture over it (the owner, 2026-10-15: no other
+# creator's watermark or facecam) and screens that are not play.
+_GAME_REJECT = ("a streamer's facecam or webcam box, another creator's channel logo, watermark or subscribe button, a game "
+                "menu, map screen or loading screen,")
+_GAMEPLAY_RULE = (" GAMEPLAY: this video is a gaming essay - clean in-game footage (gameplay, cutscenes, an official trailer) "
+                  "of the game the line names IS the footage wanted and scores like real footage; the game's own HUD (a "
+                  "minimap, a speedometer, a health bar) is fine. Still score 0 for " + _GAME_REJECT.rstrip(",") +
+                  ", a reaction or commentary video's layout, or a different game than the line names.")
+
+
+def gameplay_messages(messages: list) -> list:
+    """The judge's messages for a gaming essay: games are footage, other creators' facecams and logos are not."""
+    if not config.GAMEPLAY_FOOTAGE or not messages or not isinstance(messages[0], dict) or messages[0].get("role") != "system":
+        return messages
+    text = messages[0].get("content")
+    if not isinstance(text, str) or "GAMEPLAY:" in text:
+        return messages
+    text = text.replace("software UI, a video game,", "software UI, " + _GAME_REJECT)
+    return [dict(messages[0], content=text + _GAMEPLAY_RULE)] + list(messages[1:])
+
+
 def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
               key: str = "", main: bool = True) -> Tuple[Optional[str], bool]:
     """(text, retryable): one call to one model; retryable when the failure was transient."""
+    messages = gameplay_messages(messages)
     box = _SENT.get()
     if box is not None:
         box["queued"] = True            # waiting for one of this worker's slots: not sent yet

@@ -18,6 +18,7 @@ import { SafeImg } from "../motion/safePicture";
 import { cleanSpec, easeOf, formatCount, rand, unitProgress, valueAt, type Layer, type MotionSpec } from "./specMath";
 import { styleFont } from "./styleFonts";
 import { CardBody, ChartBody, FxBody, ScribbleBody } from "./SpecPack2";
+import { GameBody } from "./SpecGaming";
 
 /** A measured outline (and the band round it) as a ring of hard text-shadows: one stroke on every glyph. */
 const ringShadows = (w: number, color: string, steps = 16, blur = 0): string[] => {
@@ -567,7 +568,7 @@ const LayerView: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
   const px = spec.drift.x * life * z * 2 * W;
   const py = spec.drift.y * life * z * 2 * H;
   const fullFrame = layer.kind === "line" || layer.kind === "arrow" || layer.kind === "spot" || layer.kind === "particles"
-    || layer.kind === "backdrop" || layer.kind === "measure" || layer.kind === "fx";
+    || layer.kind === "backdrop" || layer.kind === "measure" || layer.kind === "fx" || layer.kind === "game";
   const tx = layer.anchor === "l" ? "0%" : layer.anchor === "r" ? "-100%" : "-50%";
   const transform = fullFrame
     ? `translate3d(${(v("x", 0) * W + px).toFixed(2)}px, ${(v("y", 0) * H + py).toFixed(2)}px, ${(z * 200).toFixed(1)}px) scale(${scale.toFixed(4)})`
@@ -628,6 +629,7 @@ const LayerView: React.FC<{ layer: Layer; ctx: Ctx }> = ({ layer, ctx }) => {
     case "card": body = <CardBody layer={layer} ctx={ctx} />; break;
     case "fx": body = <FxBody layer={layer} ctx={ctx} />; break;
     case "scribble": body = <ScribbleBody layer={layer} ctx={ctx} draw={draw} />; break;
+    case "game": body = <GameBody layer={layer} ctx={ctx} />; break;
     default:
       return null;
   }

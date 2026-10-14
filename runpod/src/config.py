@@ -1125,6 +1125,19 @@ NEWS_CHANNELS = [c.strip() for c in os.getenv(
     "@Reuters,@AssociatedPress,@weatherchannel,@FOXWeather,@usbr,@8NewsNow,@USGS"
 ).split(",") if c.strip()]
 
+# --- the gaming video essay (src/styles.py: gaming_essay, src/gaming.py) -------
+# Gameplay IS the footage of a gaming essay (the owner's GTA 6 reference, 2026-10-15): the off-topic, slop and
+# talking-head filters stop turning games away, searches ask for clean gameplay, the publishers' own channels are
+# searched first, and a candidate titled as somebody's reaction, stream, commentary or facecam is never taken (another
+# creator's face and watermark). The vision judge keeps rejecting facecams, channel logos and menus on the frames.
+GAMEPLAY_FOOTAGE = _flag("GAMEPLAY_FOOTAGE", False)
+GAMEPLAY_SEARCH_SUFFIX = os.getenv("GAMEPLAY_SEARCH_SUFFIX", "gameplay 4K no commentary").strip()
+GAME_CHANNELS = [c.strip() for c in os.getenv(
+    "GAME_CHANNELS",
+    "@RockstarGames,@PlayStation,@Xbox,@NintendoAmerica,@BandaiNamcoEU,@BandaiNamcoEnt,@Ubisoft,@EA,@Bethesda,"
+    "@CDPROJEKTRED,@EpicGames,@CapcomUSA,@SquareEnix,@SEGA,@Activision,@CallofDuty,@riotgames,@WBGames"
+).split(",") if c.strip()]
+
 # --- clip library (src/library.py) ------------------------------------------
 # Every approved clip is kept, with its subject and description, and reused
 # by later videos about the same subjects: no search, no download from
