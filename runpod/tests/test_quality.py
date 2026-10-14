@@ -445,7 +445,7 @@ class Repairs(unittest.TestCase):
             gate.before_render()
         s = doc["scenes"][1]
         self.assertEqual(s["media"]["type"], "animation")
-        self.assertEqual(s["animation"]["template"], "TEXT_SENTENCE_HIGHLIGHT_V1")
+        self.assertIn(s["animation"]["template"], quality.TEXT_LOOKS)        # the looks take turns (TEXT_LOOK_VARY)
         self.assertEqual([o for o in doc["overlays"] if o.get("type") == "highlight"], [])  # words shown once
         self.assertEqual(gate.fixed["text"], 1)
         timeline.validate(doc, require_media=True)

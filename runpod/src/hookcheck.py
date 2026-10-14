@@ -685,7 +685,8 @@ def check(doc: dict, *, work: str = "", label: str = "the hook check") -> Dict[s
             # Only the lines this round cleared: the text cards the plan left elsewhere had their ladder and
             # their last resort, and another pass over them would be time and model calls outside this cap.
             got = gapfill.hold_or_animate(doc, label=label, laddered=not fresh, fresh=fresh,
-                                          search=fresh, work=work, only=cleared)
+                                          search=fresh, work=work, only=cleared,
+                                          rescue=False)   # its own ladder ran just now, inside its cap
         except Exception as e:  # noqa: BLE001 - a text card is what is left
             print(f"[hook] last resort failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             got = {}

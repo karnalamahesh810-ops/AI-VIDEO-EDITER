@@ -43,6 +43,8 @@ unreadable or slow ledger is an empty one: it never fails a video.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import datetime
 import json
 import os
@@ -74,9 +76,32 @@ def window_days() -> int:
     return max(0, int(getattr(config, "CROSS_VIDEO_REUSE_DAYS", 0) or 0))
 
 
+# The last step before a line would be shown as text (gapfill._rescue_cards): a shot an earlier video showed
+# beats a text card. Set only inside relaxed(), for the current thread and the pool threads it starts
+# (contextvars.copy_context), never for the job's saving or its other steps.
+_RELAXED: contextvars.ContextVar = contextvars.ContextVar("ledger_relaxed", default=False)
+
+
 def on() -> bool:
-    """The rule is on (sourcing checks what is loaded; tests load by hand)."""
-    return window_days() > 0
+    """The rule is on (sourcing checks what is loaded; tests load by hand) - and not relaxed()."""
+    return window_days() > 0 and not _RELAXED.get()
+
+
+@contextlib.contextmanager
+def relaxed():
+    """
+    Inside: the cross-video rule is off - the rescue of a line that would otherwise be a text card may take a
+    moment or a photo an earlier video showed (the owner: never a text card while anything real can stand
+    in). LEDGER_RELAX_LAST_RESORT=0 keeps the rule on here too.
+    """
+    if not getattr(config, "LEDGER_RELAX_LAST_RESORT", True):
+        yield
+        return
+    token = _RELAXED.set(True)
+    try:
+        yield
+    finally:
+        _RELAXED.reset(token)
 
 
 def enabled() -> bool:

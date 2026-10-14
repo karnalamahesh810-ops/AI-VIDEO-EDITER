@@ -1242,10 +1242,119 @@ def _hold_long(doc: dict, cards: List[dict], out: Dict[str, int]) -> List[dict]:
     return left
 
 
+def _rescue_cards(doc: dict, cards: List[dict], out: Dict[str, int], *, fresh: bool, search: Optional[bool],
+                  work: str, banned: Sequence[Shot], label: str = "") -> List[dict]:
+    """
+    (NO_EMPTY_RESCUE) The lines about to become text cards - after every hold, moment and AI picture - get the
+    fallback ladder once more, on their own: the story's spare pool moments (the line's own subject first,
+    then any subject of the story: they are all its b-roll), another moment of a clip the video shows, a
+    picture. The first ladder ran every empty line of the video at once (Mount St. Helens 38f630df: 191 lines,
+    16 at a time, 45 s each against 78 s YouTube downloads - 20 filled); a handful gets the whole bandwidth.
+    The cross-video ledger is relaxed here (ledger.relaxed, LEDGER_RELAX_LAST_RESORT): a moment or a photo an
+    earlier video showed beats a text card - the second video on one story found its subject taken.
+    Only where this job may fetch (`fresh`, a work directory, `search` or a plan). Never anything another
+    scene shows, never a shot in `banned`. Returns the scenes still empty, in the order given.
+    """
+    from . import ledger, media
+    if not getattr(config, "NO_EMPTY_RESCUE", False) or not cards or not fresh or not config.FALLBACK_FILL:
+        return cards
+    work = work or CONTEXT.get("work") or media._WORK.get("dir") or ""
+    may_fetch = bool(work) and (bool(search) if search is not None else bool(CONTEXT.get("jobs")))
+    if not may_fetch:
+        return cards
+    scenes = doc.get("scenes") or []
+    fps = max(1, int(doc.get("fps") or 30))
+    todo = sorted(k for k, sc in enumerate(scenes) if _empty(sc) and any(sc is x for x in cards))
+    if not todo:
+        return [s for s in cards if _empty(s)]
+    used = Used()
+    for k, sc in enumerate(scenes):
+        shot = Shot.of_scene(sc, fps)
+        if shot is not None:
+            used.add(k, shot)
+    for n, shot in enumerate(banned or ()):
+        used.add(-1 - n, shot)
+    known = known_jobs(doc)
+    jobs = []
+    for k, sc in enumerate(scenes):
+        job = job_for(sc, k, fps, known)
+        if k in todo:
+            job["place"] = ""           # any subject's spare moment of this story, the line's own first
+        jobs.append(job)
+    rounds = -(-len(todo) // max(1, int(config.FALLBACK_PARALLEL)))
+    window = min(float(getattr(config, "NO_EMPTY_RESCUE_SECONDS", 150.0)),
+                 max(float(config.FALLBACK_SCENE_SECONDS), float(config.FALLBACK_SCENE_SECONDS) * rounds))
+    results: Dict[int, Any] = {}
+    try:
+        with ledger.relaxed():
+            got = fill_empty(jobs, results, work, library=CONTEXT.get("library"),
+                             require_cc=CONTEXT.get("require_cc", False),
+                             youtube_only=CONTEXT.get("youtube_only", False), indices=todo, used=used,
+                             seconds=window, keep_order=True, label=f"rescue before a text card ({label})",
+                             donors=donors_from_doc(doc) if getattr(config, "FALLBACK_MOMENTS", False) else None)
+        LAST.setdefault("rescue", {}).update(got)
+    except Exception as e:  # noqa: BLE001 - the text card below
+        print(f"[fill] the rescue before a text card failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+    for k, a in results.items():
+        if a is None or not 0 <= k < len(scenes) or not _empty(scenes[k]):
+            continue
+        apply_asset(scenes[k], a, "")
+        scenes[k]["reviewReason"] = ("Found by the last search before this line became a text card (it may have "
+                                     "been shown in an earlier video) - check it fits")
+        _living(doc, k, a)
+        out["rescue"] = out.get("rescue", 0) + 1
+    return [s for s in cards if _empty(s)]
+
+
+def _plain(text: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", " ", str(text or "").lower()).split())
+
+
+def drop_stale_cards(doc: dict) -> int:
+    """
+    (STALE_CARD_SWEEP) A line's text card (_card: a template-less "highlight" overlay of the line's own words
+    over its frames) stays only while nothing real shows there. Once every scene under it shows a clip, a
+    picture or a graphic - a later pass filled the line (another moment, the ladder, the quality gate, the hook
+    check), or the shot beside it was held over it - the card goes: the same red card sat over 27 shots of
+    38f630df. A card whose words are not the words of the lines under it is never touched (not a line's card).
+    Returns how many cards were dropped.
+    """
+    if not getattr(config, "STALE_CARD_SWEEP", False):
+        return 0
+    overlays = doc.get("overlays")
+    scenes = doc.get("scenes") or []
+    if not isinstance(overlays, list) or not overlays or not scenes:
+        return 0
+
+    def frame(v) -> int:
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return -1
+
+    keep, dropped = [], 0
+    for ov in overlays:
+        if isinstance(ov, dict) and ov.get("type") == "highlight" and not ov.get("template"):
+            a, n = frame(ov.get("startFrame")), frame(ov.get("durationInFrames"))
+            under = [sc for sc in scenes if a >= 0 and n > 0
+                     and frame(sc.get("startFrame")) < a + n
+                     and a < frame(sc.get("startFrame")) + max(0, frame(sc.get("durationInFrames")))]
+            words = _plain(ov.get("text"))
+            if under and words and not any(_empty(sc) for sc in under) \
+                    and words in _plain(" ".join(str(sc.get("text") or "") for sc in under)):
+                dropped += 1
+                continue
+        keep.append(ov)
+    if dropped:
+        overlays[:] = keep
+        print(f"[fill] {dropped} text card(s) left over lines that now show a shot: dropped", flush=True)
+    return dropped
+
+
 def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
                     search: Optional[bool] = None, work: str = "",
                     banned: Sequence[Shot] = (), fresh: bool = True,
-                    only: Optional[Sequence[dict]] = None) -> Dict[str, int]:
+                    only: Optional[Sequence[dict]] = None, rescue: bool = True) -> Dict[str, int]:
     """
     (d) Every empty scene: the planner's own graphic for its line (numbers,
     money, maps), else the neighbouring shot held over it while the clip
@@ -1328,11 +1437,18 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     if no_text and cards:
         # Never a text card while anything real can stand in (the owner, 2026-10-06).
         cards = _no_text_last(doc, cards, out, fresh=fresh, search=search, work=work, banned=banned)
+    if cards and rescue:
+        # The last rescue before a text card: the ladder once more for just these lines, the ledger relaxed.
+        cards = _rescue_cards(doc, cards, out, fresh=fresh, search=search, work=work, banned=banned, label=label)
     for s in reversed(cards):                   # story order
         if _card(doc, s):
             out["card"] += 1
             if capped:
                 shotcap.note("card")
+    # A card laid by an earlier pass over a line that now shows a shot (filled since, or held over): gone.
+    stale = drop_stale_cards(doc)
+    if stale:
+        out["staleCards"] = out.get("staleCards", 0) + stale
     if any(out.values()):
         print(f"[fill] {label or 'last resort'}: {out['graphic']} graphic(s), {out['held']} held over from "
               f"a neighbour, {out['card']} text card(s)"
@@ -1342,6 +1458,7 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
                  if out.get("alternative") or out.get("moment") or out.get("ladder") else "")
               + (f"; {out['long']} of the holds run past {shotcap.limit():g} s (at most {shotcap.CEILING:g} s) "
                  "instead of a text card" if out.get("long") else "")
+              + (f"; {out['rescue']} rescued by the last search before a text card" if out.get("rescue") else "")
               + (f"; {out['hook']} in the hook (nothing else was left)" if out["hook"] else ""), flush=True)
     return out
 

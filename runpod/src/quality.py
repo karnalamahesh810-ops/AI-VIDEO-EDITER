@@ -588,18 +588,22 @@ def _web_photo_look(ov: dict) -> bool:
 def text_scene(doc: dict, s: dict) -> None:
     """The scene's own line as a full-screen text graphic: what shows when nothing could be found for it."""
     text = " ".join(str(s.get("text") or "").split())[:160]
+    # TEXT_LOOK_VARY: the looks take turns by the scene's place (never the same card every time).
+    turn = next((k for k, x in enumerate(doc.get("scenes") or []) if x is s), 0) \
+        if getattr(config, "TEXT_LOOK_VARY", False) else 0
     try:
         tid = ""
         if templates.allowed() is not None:
             # A brand kit: a full-screen text look it allows, when it allows one.
+            kit = []
             for cue in ("headline", "statement", "fact", "key-phrase"):
-                tid = next((t["id"] for t in templates.for_cue(cue) if t.get("kind") == "card"
-                            and "text" in (t.get("props") or {})
-                            and not ({"still", "stills"} & set(t.get("tags") or []))), "")
-                if tid:
-                    break
+                kit += [t["id"] for t in templates.for_cue(cue) if t.get("kind") == "card"
+                        and "text" in (t.get("props") or {})
+                        and not ({"still", "stills"} & set(t.get("tags") or [])) and t["id"] not in kit]
+            tid = kit[turn % len(kit)] if kit else ""
         # (Else the renderer's own text look: a line is never left empty.)
-        tid = tid or next((x for x in TEXT_LOOKS if templates.get(x)), "")
+        own = [x for x in TEXT_LOOKS if templates.get(x)]
+        tid = tid or (own[turn % len(own)] if own else "")
         anim = templates.resolve(tid, props={"text": text}) if tid else {}
     except Exception:  # noqa: BLE001 - an unreadable registry: the renderer's own default text look
         anim = {}
@@ -1035,6 +1039,12 @@ class Gate:
             self._broke("the check before the render", e)
             self.no_empty_scenes()          # a scene cleared before the step broke still gets a picture
             return 0
+        finally:
+            try:
+                # A line's text card over a scene that shows a shot by now (repaired here, or long ago).
+                gapfill.drop_stale_cards(self.doc)
+            except Exception as e:  # noqa: BLE001
+                self._broke("the stale text cards", e)
 
     def _before_render(self) -> int:
         t0 = time.time()
@@ -1577,7 +1587,7 @@ class Gate:
         # (The ladder above is this repair's own search; whether it may fetch at all is CONTEXT["ladder"];
         # what failed is never taken again there either.)
         gapfill.hold_or_animate(self.doc, label=f"quality gate, {stage}", laddered=True, search=self._ladder_ok(),
-                                work=self.work, banned=banned)
+                                work=self.work, banned=banned, rescue=False)
         now = {str(s.get("id")): s for s in self.doc.get("scenes") or []}
         for sid in empties:
             s = now.get(sid)

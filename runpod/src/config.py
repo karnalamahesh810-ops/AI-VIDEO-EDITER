@@ -910,6 +910,23 @@ NO_TEXT_FILL = _flag("NO_TEXT_FILL", True)
 # The longest a still beside an empty line may stay on screen in the no-text last resort (past the shot
 # cap and shotcap.CEILING: a documentary holds a photo that long; a text card is what it replaces).
 NO_TEXT_HOLD_MAX = float(os.getenv("NO_TEXT_HOLD_MAX", "18"))
+# The rescue before a text card (src/gapfill._rescue_cards, 2026-10-14): the few lines still empty after
+# every hold get the fallback ladder once more on their own - the story's spare pool moments (any subject's),
+# another moment of a clip the video shows, a picture - with the full download bandwidth (the first ladder
+# runs every empty line of the video at once and most time out) and with the cross-video ledger relaxed
+# (LEDGER_RELAX_LAST_RESORT: a shot an earlier video showed beats a text card; a second video on the same
+# story found its subject's photos and moments all taken - Mount St. Helens 38f630df, 17 text cards that the
+# render's quality gate, which reads no ledger, then filled). NO_EMPTY_RESCUE_SECONDS is its time box (the
+# render's gate then has nothing to repair: the time moves, it is not added).
+NO_EMPTY_RESCUE = _flag("NO_EMPTY_RESCUE", True)
+NO_EMPTY_RESCUE_SECONDS = float(os.getenv("NO_EMPTY_RESCUE_SECONDS", "150"))
+LEDGER_RELAX_LAST_RESORT = _flag("LEDGER_RELAX_LAST_RESORT", True)
+# A line's text card (gapfill._card) leaves the timeline the moment anything real shows on its frames (a later
+# pass filled the line, or the shot beside it was held over it): the same red card over 27 shots of 38f630df.
+STALE_CARD_SWEEP = _flag("STALE_CARD_SWEEP", True)
+# The very last resort (a full-screen text look of the line) takes turns between the text looks, never the
+# same card each time.
+TEXT_LOOK_VARY = _flag("TEXT_LOOK_VARY", True)
 # The last resort for a scene nothing filled (never in the hook while
 # anything else is possible): the planner's own number/map graphic for the
 # line, else the neighbouring shot held over it (the scenes merge) while the
