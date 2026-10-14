@@ -321,11 +321,17 @@ class PersonSafetyNet(unittest.TestCase):
         shot = director._rule_shot(seg, 1, "Lake Mead")
         self.assertEqual(shot["subjectType"], "")
 
-    def test_the_project_title_alone_can_signal_a_person(self):
-        # A beat that never re-says the name, in a project ABOUT that person.
-        seg = Segment(text="He never spoke of it again.", start=0, end=3, words=[])
-        shot = director._rule_shot(seg, 1, "Barack Obama Sr.")
-        self.assertEqual(shot["subjectType"], "person")
+    def test_the_title_alone_never_tags_a_person_the_story_does(self):
+        # 2026-10-09: "Yellowstone Just EXPLODED Again" read as a person's name ("Yellowstone Just") and tagged every
+        # rule-planned Yellowstone line a person's. The title says nothing now; the story's own people do.
+        line = Segment(text="He never spoke of it again.", start=6, end=9, words=[])
+        self.assertEqual(director._rule_shot(line, 1, "Yellowstone Just EXPLODED Again")["subjectType"], "")
+        segs = [Segment(text="Barack Obama Sr. left Hawaii in 1963.", start=0, end=3, words=[]),
+                Segment(text="Barack Obama Sr. went to Harvard.", start=3, end=6, words=[]), line]
+        shots = [director._rule_shot(s, i, "Barack Obama Sr.") for i, s in enumerate(segs)]
+        director.story_rule_queries(segs, shots, {"kind": "biography", "people": ["Barack Obama Sr."]})
+        self.assertEqual(shots[2]["subjectType"], "person")
+        self.assertIn("Barack Obama Sr", shots[2]["query"])
 
     def test_ai_pass_falls_back_to_the_rule_shots_own_tag_when_the_model_omits_one(self):
         person_shot = director._rule_shot(
@@ -1345,10 +1351,30 @@ class DirectorRules(unittest.TestCase):
         self.assertTrue(all(s["query"] for s in shots))
         self.assertTrue(any("not configured" in w for w in warnings))
 
-    def test_project_title_is_folded_into_every_query(self):
-        segments = [seg("The river rose again overnight.", 0, 3)]
-        shots, _, _ = director.plan(segments, title="Cauca Valley", allow_maps=False)
-        self.assertIn("Cauca", shots[0]["query"])
+    def test_the_title_never_leads_a_rule_query(self):
+        # 2026-10-09: "Yellowstone Just EXPLODED Again - Boiling Water Shoots 100 FEET Into the Air" was the search,
+        # the subject and the "entity" of 109 rule-planned lines - a Minecraft cartoon came back for ground uplift.
+        title = "Yellowstone Just EXPLODED Again - Boiling Water Shoots 100 FEET Into the Air"
+        segments = [seg("Yellowstone sits on a hot spot.", 0, 3), seg("Yellowstone has erupted three times.", 3, 6),
+                    seg("Geologists at Yellowstone watch it closely.", 6, 9),
+                    seg("uplift of about three inches a year at its peak, then subsidence after 2010.", 9, 13)]
+        shots, _, _ = director.plan(segments, title=title, allow_maps=False)
+        for s in shots:
+            words = " ".join([s["query"], s.get("subject") or "", s.get("intent") or ""] + list(s.get("fallbacks") or [])
+                             + list((s.get("sceneIntent") or {}).get("entities") or []))
+            self.assertNotIn("EXPLODED", words)
+            self.assertNotEqual(s.get("subjectType"), "person")
+        # The nameless line takes the subject its own narration names most, with its own year.
+        self.assertIn("Yellowstone", shots[3]["query"])
+        self.assertIn("2010", shots[3]["query"])
+
+    def test_a_nameless_line_takes_the_storys_own_place(self):
+        segments = [seg("The flood reached Cali, in the Cauca Valley, on Monday.", 0, 3),
+                    seg("The river rose again overnight.", 3, 6)]
+        brief = {"kind": "news", "places": ["Cauca Valley"], "people": []}
+        shots, _, _ = director.plan(segments, title="Unrelated Clickbait TITLE", allow_maps=False, brief=brief)
+        self.assertIn("Cauca", shots[1]["query"])
+        self.assertNotIn("Clickbait", shots[1]["query"])
 
     def test_numbers_become_a_callout(self):
         segments = [seg("Opening line about the town.", 0, 3),
@@ -1949,16 +1975,21 @@ class QueryRelaxation(unittest.TestCase):
     progressively broader fallbacks, ending at the project title.
     """
 
-    def test_fallbacks_get_broader_and_end_at_the_title(self):
+    def test_fallbacks_get_broader_and_never_end_at_the_title(self):
         s = seg("The concrete ramp under his tires runs downhill and stops.", 0, 3)
         shots, _, _ = director.plan([s], title="Lake Powell", allow_maps=False)
         query, fallbacks = shots[0]["query"], shots[0]["fallbacks"]
-        self.assertTrue(query.startswith("Lake Powell"))
+        self.assertIn("ramp", query)                              # the line's own words
         self.assertTrue(fallbacks, "a specific query needs a way down")
-        self.assertEqual(fallbacks[-1], "Lake Powell")
+        self.assertNotIn("Lake Powell", [query] + fallbacks)      # never the title (2026-10-09)
         # Strictly shorter each step.
         lengths = [len(query.split())] + [len(f.split()) for f in fallbacks]
         self.assertEqual(lengths, sorted(lengths, reverse=True))
+        # A story whose narration names its place gives a nameless line that place instead.
+        named = [seg("Lake Powell has a marina.", 0, 2), seg("Lake Powell is low.", 2, 4),
+                 seg("Lake Powell keeps falling.", 4, 6), s]
+        shots, _, _ = director.plan(named, title="Clickbait", allow_maps=False)
+        self.assertTrue(shots[3]["query"].startswith("Lake Powell"))
 
     def test_the_primary_query_stays_short_enough_to_match(self):
         s = seg("The concrete ramp under his tires runs downhill and simply stops "
@@ -2133,7 +2164,8 @@ class GeneratedImages(unittest.TestCase):
         s = seg("The concrete ramp under his tires runs downhill and stops.", 0, 3)
         shots, _, _ = director.plan([s], title="Lake Powell", allow_maps=False)
         self.assertIn("concrete ramp under his tires", shots[0]["prompt"])
-        self.assertTrue(shots[0]["prompt"].startswith("Lake Powell"))
+        # The spoken line itself - never the video's title in front of it (2026-10-09).
+        self.assertTrue(shots[0]["prompt"].startswith("The concrete ramp"))
         self.assertNotEqual(shots[0]["prompt"], shots[0]["query"])
 
 
@@ -3107,16 +3139,18 @@ class NoAIFallbacks(unittest.TestCase):
         self.assertEqual(shots[2]["overlay"]["type"], "stat")
         self.assertEqual(shots[3]["overlay"], {"type": "lower-third", "text": "Lolo Soetoro"})
 
-    def test_out_of_credits_keeps_the_job_going_by_default(self):
+    def test_out_of_credits_stops_the_job_by_default(self):
+        # Since 2026-10-09 (src/aiguard.py) the job stops with the plain message; REQUIRE_AI=0 keeps going as before.
         from src import vision
         vision.reset()
         vision.note_out_of_credits()
         try:
-            vision.require_credits()                      # no raise: REQUIRE_AI is off
-            with mock.patch.object(config, "REQUIRE_AI", True), \
-                    mock.patch.object(config, "AI_FALLBACK_API_KEY", ""):
-                with self.assertRaises(vision.OutOfCredits):
+            with mock.patch.object(config, "AI_FALLBACK_API_KEY", ""):
+                with self.assertRaises(vision.OutOfCredits) as e:
                     vision.require_credits()
+                self.assertIn("Top up OpenRouter, then press Retry", str(e.exception))
+                with mock.patch.object(config, "REQUIRE_AI", False):
+                    vision.require_credits()              # no raise: REQUIRE_AI off
         finally:
             vision.reset()
 

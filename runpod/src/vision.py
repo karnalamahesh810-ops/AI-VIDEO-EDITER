@@ -35,7 +35,7 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
-from . import config, costs, events, intent as scene_intent
+from . import aiguard, config, costs, events, intent as scene_intent
 
 _CACHE: Dict[str, dict] = {}
 _LOCK = threading.Lock()
@@ -179,7 +179,7 @@ _STAMP_RULE = (
 _NEWS_TEXT_RULE = (
     "TV NEWS FOOTAGE IS WELCOME: field video, aerials, interviews and press "
     "conferences from a news report are exactly what this documentary uses, WITH "
-    "their station logo, headline banner, lower-third name, ticker or subtitles - do "
+    "their station logo, headline banner, chyron, lower-third name or ticker - do "
     "not flag those and do not lower the score for them. The studio itself is NOT "
     "welcome: a weather presenter at a map or radar wall, an anchor desk, a TV "
     "forecast graphic, and a YouTuber's or streamer's screen with their big captions "
@@ -190,7 +190,13 @@ _NEWS_TEXT_RULE = (
     "news anchor at a studio desk, a thumbnail/title card, an advertisement (a QR "
     "code, a website or phone number to visit, a product offer), a product listing or "
     "poster for sale, a website screenshot, or a meme or collage with text." + _STAMP_RULE + " Small "
-    "incidental real-world text (a street sign) is fine.\n")
+    "incidental real-world text (a street sign) is fine.\n"
+    # The owner's rule (2026-10-09): "some random clips with subtitles on them look weird" - a broadcaster's
+    # overlays are fine on a news line, burned-in subtitles never are, in any story.
+    "SUBTITLES ARE NEVER WELCOME, news included: burned-in subtitles or captions of what someone says (even one "
+    "line at the bottom), word-by-word Shorts or TikTok captions, a translation's subtitles and meme or caption "
+    "text all set has_text_or_watermark true and score 0. A station's banner, chyron, lower-third name or ticker "
+    "is not subtitles.\n")
 
 
 # The news rule, spelt out (VISION_NEWS_OVERLAYS_OK). Told only that news overlays are welcome, the judge still
@@ -203,9 +209,20 @@ _NEWS_OVERLAY_RULE = (
     " In this video has_text_or_watermark is true ONLY for the things listed above. Answer it false for a TV "
     "station's or a news outlet's logo or credit (FOX 31, CNN, The Guardian, Reuters), a government agency's mark "
     "or a camera's ID and timestamp (USGS, NOAA, a park webcam), a 'video courtesy of' credit, and a headline "
-    "banner, chyron, ticker, lower-third or news subtitles over real footage of the subject - none of them lowers "
-    "the score either. Another YouTube channel's own logo or watermark stamped over footage it re-uploads, and a "
-    "creator's big captions or subscribe overlays, are still has_text_or_watermark true.")
+    "banner, chyron, ticker or lower-third over real footage of the subject - none of them lowers the score "
+    "either. Another YouTube channel's own logo or watermark stamped over footage it re-uploads, a creator's "
+    "captions or subscribe overlays, and subtitles of any kind (what someone says, a translation, word-by-word "
+    "captions) are still has_text_or_watermark true.")
+# The news rule as it was before 2026-10-09 (VISION_NEWS_SUBTITLES off): subtitles welcome on a news line.
+_NEWS_TEXT_RULE_LEGACY = (
+    _NEWS_TEXT_RULE.split("SUBTITLES ARE NEVER WELCOME")[0]
+    .replace("headline banner, chyron, lower-third name or ticker", "headline banner, lower-third name, ticker or "
+             "subtitles"))
+_NEWS_OVERLAY_RULE_LEGACY = (
+    _NEWS_OVERLAY_RULE.replace("banner, chyron, ticker or lower-third over", "banner, chyron, ticker, lower-third or "
+                               "news subtitles over")
+    .replace(", a creator's captions or subscribe overlays, and subtitles of any kind (what someone says, a "
+             "translation, word-by-word captions) are", ", and a creator's big captions or subscribe overlays, are"))
 
 
 # What anyone ADDED over the footage, spelt out for a line held to the strict or the event rule (2026-10-09). The
@@ -303,9 +320,12 @@ def text_mode(scene: Optional[dict] = None, brief: Optional[dict] = None) -> str
 def _system(mode: str = "") -> str:
     mode = mode if mode in TEXT_MODES else ("news" if config.NEWS_FOOTAGE else "strict")
     if mode == "news":
-        rule = _NEWS_TEXT_RULE
+        # Subtitles never welcome (VISION_NEWS_SUBTITLES, 2026-10-09); off: the rule as it was.
+        new = getattr(config, "VISION_NEWS_SUBTITLES", True)
+        base = _NEWS_TEXT_RULE if new else _NEWS_TEXT_RULE_LEGACY
+        rule = base
         if getattr(config, "VISION_NEWS_OVERLAYS_OK", False):
-            rule = _NEWS_TEXT_RULE.rstrip(chr(10)) + _NEWS_OVERLAY_RULE + chr(10)
+            rule = base.rstrip(chr(10)) + (_NEWS_OVERLAY_RULE if new else _NEWS_OVERLAY_RULE_LEGACY) + chr(10)
         return _SYSTEM.replace(_STRICT_TEXT_RULE, rule)
     if not config.NEWS_FOOTAGE or not getattr(config, "VISION_TEXT_BY_STORY", False):
         return _SYSTEM                  # the strict rule as it always was (NEWS_FOOTAGE off: every line, unchanged)
@@ -349,41 +369,64 @@ _EVENT_RULE = (
 # Kie shares one balance across vision, the director and image generation.
 # When it answers "402 Credits insufficient" every later call fails the same
 # way: a 362-scene job made 2,631 failed calls after its balance ran out.
+# Since 2026-10-09 the job's stop lives in src/aiguard.py (it outlives the per-sourcing vision.reset); this flag
+# keeps the old per-call view for the callers that read it.
 _OUT_OF_CREDITS = {"hit": False}
+# The backup provider's own account ran dry (a credit failure on a non-main route): it is not asked again this job.
+_FALLBACK_DRY = {"hit": False}
 
 
 def is_credit_error(code, msg: str = "") -> bool:
-    return code == 402 or "credits insufficient" in str(msg or "").lower()
+    """The account or the key cannot pay (aiguard.classify): HTTP 402, "credits insufficient", "requires more
+    credits", "would exceed your available credits", "Prompt tokens limit exceeded", "key limit"..."""
+    return aiguard.classify(code if isinstance(code, int) and not isinstance(code, bool) else 0,
+                            str(msg or "")) == aiguard.CREDIT
 
 
-def note_out_of_credits() -> None:
+def note_out_of_credits(provider: str = "", detail: str = "") -> None:
+    """The main AI account ran dry: no vision or planning call goes to it again in this job - and, with no backup
+    provider left to answer (fallback_configured, read again at every aiguard.stopping), the job stops
+    (aiguard.trip; REQUIRE_AI)."""
     with _LOCK:
         _OUT_OF_CREDITS["hit"] = True
+    aiguard.trip(aiguard.CREDIT, provider or "openrouter", detail or "insufficient credits")
+
+
+def _note_fallback_dry(provider: str = "", detail: str = "") -> None:
+    """The backup provider's account ran dry: it is not asked again; with the main one dry too (or none), the job
+    stops (aiguard.stopping reads fallback_configured, now False)."""
+    with _LOCK:
+        _FALLBACK_DRY["hit"] = True
+        main_dry = _OUT_OF_CREDITS["hit"]
+    if main_dry or not main_configured():
+        aiguard.trip(aiguard.CREDIT, provider or "backup provider", detail or "insufficient credits")
+        if aiguard.tripped() == aiguard.CREDIT and aiguard.stopping():
+            print("[ai] STOP (credit): the backup provider ran dry too", flush=True)
 
 
 def out_of_credits() -> bool:
-    return _OUT_OF_CREDITS["hit"]
+    return _OUT_OF_CREDITS["hit"] or aiguard.tripped() == aiguard.CREDIT
 
 
 OUT_OF_CREDITS_MESSAGE = (
-    "The AI account (OpenRouter) is out of credits, so shots could not be planned or "
-    "checked and the video would be random clips. Top up the OpenRouter account whose "
-    "key is set on the RunPod endpoint (DIRECTOR_API_KEY / VISION_API_KEY), then run it again.")
+    "Your AI balance ran out while this video was being made. It stopped instead of placing clips nobody "
+    "checked. Top up OpenRouter, then press Retry.")
 
 
-class OutOfCredits(RuntimeError):
+class OutOfCredits(aiguard.AIStopped):
     """The AI account ran dry and REQUIRE_AI is on: stop the job, say why."""
 
 
 def require_credits() -> None:
     if config.REQUIRE_AI and ai_exhausted():
-        raise OutOfCredits(OUT_OF_CREDITS_MESSAGE)
+        raise OutOfCredits(aiguard.message() or OUT_OF_CREDITS_MESSAGE)
 
 
 def fallback_configured() -> bool:
-    """The backup provider is set - and is not Kie while Kie is off (config.kie_blocked)."""
+    """The backup provider is set - and is not Kie while Kie is off (config.kie_blocked) - and has not run dry."""
     return bool(config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY
-                and config.AI_FALLBACK_VISION_MODEL and not config.kie_blocked(config.AI_FALLBACK_API_BASE))
+                and config.AI_FALLBACK_VISION_MODEL and not config.kie_blocked(config.AI_FALLBACK_API_BASE)
+                and not _FALLBACK_DRY["hit"])
 
 
 def main_configured() -> bool:
@@ -391,14 +434,28 @@ def main_configured() -> bool:
     return bool(config.VISION_API_KEY) and not config.kie_blocked(config.VISION_API_BASE)
 
 
+# A main account out of credit stops the job only while no backup provider answers (aiguard.stopping).
+aiguard.set_backup_check(lambda: fallback_configured())
+
+
+def configured() -> bool:
+    """Vision is meant to judge this job's clips: switched on, with a provider that can be asked. While it is, a
+    clip or picture no judge has seen never reaches the timeline (media._judge_gate, NO_UNJUDGED_STOCK) - whatever
+    happened to the account since."""
+    return bool(config.VISION_ENABLED and (main_configured() or (
+        config.AI_FALLBACK_API_BASE and config.AI_FALLBACK_API_KEY and config.AI_FALLBACK_VISION_MODEL
+        and not config.kie_blocked(config.AI_FALLBACK_API_BASE))))
+
+
 def ai_exhausted() -> bool:
-    """The main AI account is out of credits and there is no backup provider."""
-    return _OUT_OF_CREDITS["hit"] and not fallback_configured()
+    """The main AI account is out of credits and there is no backup provider - or the job's AI stopped
+    (aiguard: the key refused, every model down)."""
+    return (out_of_credits() and not fallback_configured()) or aiguard.stopping()
 
 
 def enabled() -> bool:
-    main = main_configured() and not _OUT_OF_CREDITS["hit"]
-    return bool(config.VISION_ENABLED and (main or fallback_configured()))
+    main = main_configured() and not out_of_credits()
+    return bool(config.VISION_ENABLED and (main or fallback_configured()) and not aiguard.stopping())
 
 
 def calls_made() -> int:
@@ -426,9 +483,14 @@ def reset() -> None:
         _FAILS["n"] = 0
         _UNJUDGED["n"] = 0
         _OUT_OF_CREDITS["hit"] = False
+        _FALLBACK_DRY["hit"] = False
         _ERRORS.clear()
         _TILE_MODEL.update(model="", asked=0, answered=0)
         _TEXT_CHECKS.update(n=0, flagged=0)
+        _NO_TILE["n"] = 0
+    # The job's AI stop too: every caller that resets vision mid-job (the footage search's media.reset_cache, a
+    # Replace Clip, a re-clip) has raised on a stop before it (aiguard.raise_if_stopped).
+    aiguard.reset()
 
 
 def _fail(model: str, why: str) -> None:
@@ -445,12 +507,18 @@ def stats() -> dict:
         out = {"enabled": enabled(), "model": config.VISION_MODEL,
                "calls": _CALLS["n"], "failures": _FAILS["n"],
                "unjudged": _UNJUDGED["n"],
-               "outOfCredits": _OUT_OF_CREDITS["hit"],
+               "outOfCredits": _OUT_OF_CREDITS["hit"] or aiguard.tripped() == aiguard.CREDIT,
                "recentErrors": list(_ERRORS)}
         if _TILE_MODEL["asked"]:
             # The cheaper storyboard model (VISION_TILE_MODEL): how many of its calls it answered.
             out["tileModel"] = dict(_TILE_MODEL)
-        return out
+        if _NO_TILE["n"]:
+            # Storyboard answers that said no tile fits (a refusal, a null tile): answers, not failures.
+            out["noTile"] = _NO_TILE["n"]
+    stopped = aiguard.state()
+    if stopped.get("kind"):
+        out["aiStop"] = {k: stopped[k] for k in ("kind", "provider", "detail")}
+    return out
 
 
 # At most VISION_CONCURRENCY requests in flight per worker (see config), and
@@ -460,9 +528,32 @@ _SLOTS = threading.BoundedSemaphore(max(1, min(config.VISION_CONCURRENCY, config
                                              else config.VISION_CONCURRENCY))
 
 
+# The gaming essay (config.GAMEPLAY_FOOTAGE, src/styles.py gaming_essay): clean in-game footage of the game the line
+# names IS the footage; what still fails is another creator's furniture over it (the owner, 2026-10-15: no other
+# creator's watermark or facecam) and screens that are not play.
+_GAME_REJECT = ("a streamer's facecam or webcam box, another creator's channel logo, watermark or subscribe button, a game "
+                "menu, map screen or loading screen,")
+_GAMEPLAY_RULE = (" GAMEPLAY: this video is a gaming essay - clean in-game footage (gameplay, cutscenes, an official trailer) "
+                  "of the game the line names IS the footage wanted and scores like real footage; the game's own HUD (a "
+                  "minimap, a speedometer, a health bar) is fine. Still score 0 for " + _GAME_REJECT.rstrip(",") +
+                  ", a reaction or commentary video's layout, or a different game than the line names.")
+
+
+def gameplay_messages(messages: list) -> list:
+    """The judge's messages for a gaming essay: games are footage, other creators' facecams and logos are not."""
+    if not config.GAMEPLAY_FOOTAGE or not messages or not isinstance(messages[0], dict) or messages[0].get("role") != "system":
+        return messages
+    text = messages[0].get("content")
+    if not isinstance(text, str) or "GAMEPLAY:" in text:
+        return messages
+    text = text.replace("software UI, a video game,", "software UI, " + _GAME_REJECT)
+    return [dict(messages[0], content=text + _GAMEPLAY_RULE)] + list(messages[1:])
+
+
 def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
               key: str = "", main: bool = True) -> Tuple[Optional[str], bool]:
     """(text, retryable): one call to one model; retryable when the failure was transient."""
+    messages = gameplay_messages(messages)
     box = _SENT.get()
     if box is not None:
         box["queued"] = True            # waiting for one of this worker's slots: not sent yet
@@ -570,12 +661,47 @@ def _error_of(r, body) -> Tuple[int, str]:
     return code, str(msg or "")[:200]
 
 
+# The kind of the calling thread's last failed request (aiguard.classify), for the retry pause in _route_call: a
+# rate limit waits VISION_RATE_WAIT (doubling) before the same model is asked again, a 5xx VISION_RETRY_WAIT.
+_LAST_KIND = threading.local()
+
+
+def _failed(model: str, kind: str, why: str, main: bool) -> Tuple[None, bool]:
+    """(None, retryable) for one failed request of `kind` (aiguard.classify). A credit or key failure on the main
+    provider stops the job's AI (note_out_of_credits / aiguard.trip; on the backup provider only that provider is
+    left out); a rate limit or a server error is asked again."""
+    _LAST_KIND.kind = kind
+    if kind == aiguard.CREDIT:
+        if main:
+            note_out_of_credits(model, why)
+        else:
+            _note_fallback_dry(model, why)
+        return None, False
+    if kind == aiguard.AUTH:
+        # One refused key is a model's problem until it repeats (aiguard.note_auth: AI_AUTH_STOP_AFTER in a row).
+        if main:
+            aiguard.note_auth(model, why)
+        return None, False
+    return None, kind in (aiguard.RATE, aiguard.RETRY)
+
+
+def _json_mode(model: str, url: str) -> dict:
+    """OpenRouter's JSON mode for a vision call (VISION_JSON_MODE): every vision answer here is one JSON object,
+    and asked for one, the model escapes its quotes - the unescaped quote in "a cruise ship with "CORNATEL" written
+    on its side" (Yellowstone, 2026-10-07) cost a second, paid call. OpenRouter leaves the field out for a provider
+    that does not take it, so nothing else changes."""
+    if not getattr(config, "VISION_JSON_MODE", True) or "openrouter.ai" not in (url or ""):
+        return {}
+    return {"response_format": {"type": "json_object"}}
+
+
 def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
                    key: str, main: bool) -> Tuple[Optional[str], bool]:
     target = url or _endpoint(model)
     budget, extra = _extra(model, target, max_tokens)
     if "openrouter.ai" in target:
-        extra = dict(extra, usage={"include": True})     # the call's real price, for the cost ledger
+        extra = dict(extra, usage={"include": True}, **_json_mode(model, target))   # the call's real price
+    _LAST_KIND.kind = ""
     try:
         r = requests.post(
             target,
@@ -586,37 +712,31 @@ def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
             timeout=config.VISION_TIMEOUT)
     except requests.RequestException as e:
         _fail(model, f"request failed: {type(e).__name__}")
-        return None, True
+        return _failed(model, aiguard.RETRY, type(e).__name__, main)
     try:
         body = r.json()
     except ValueError:
         _fail(model, f"HTTP {r.status_code}, not JSON: {r.text[:120]!r}")
-        return None, r.status_code >= 500 or r.status_code == 429
+        return _failed(model, aiguard.classify(r.status_code, r.text[:300]), r.text[:160], main)
     _note_usage(body)
     # Kie wraps failures in a 200: {"code": 422, "msg": ...}.
     if isinstance(body, dict) and isinstance(body.get("code"), int) and body["code"] >= 400:
-        _fail(model, f"code {body['code']}: {str(body.get('msg') or '')[:150]}")
-        if is_credit_error(body["code"], body.get("msg")):
-            if main:
-                note_out_of_credits()
-            return None, False
-        return None, body["code"] >= 500 or body["code"] == 429
+        msg = str(body.get("msg") or "")
+        _fail(model, f"code {body['code']}: {msg[:150]}")
+        return _failed(model, aiguard.classify(body["code"], msg), msg[:160], main)
     code, msg = _error_of(r, body)
     if code:
-        # OpenRouter's own error shape. 402 is the account (or the key's limit) out of credit: every later
-        # call fails the same way - the Yellowstone build of 2026-10-07 made thousands of such calls after
-        # its balance ran out - so the main provider is not asked again in this job (as a Kie 402 was).
+        # OpenRouter's own error shape. 402 is the account (or the key's limit) out of credit - as are "requires
+        # more credits", "would exceed your available credits" and "Prompt tokens limit exceeded" (aiguard): every
+        # later call fails the same way, so the job stops (the Yellowstone build of 2026-10-07 made thousands of
+        # such calls after its balance ran out). 429 is backed off and asked again.
         _fail(model, f"HTTP {r.status_code}, error {code}: {msg[:150]}")
-        if code == 402 or is_credit_error(code, msg):
-            if main:
-                note_out_of_credits()
-            return None, False
-        return None, code >= 500 or code in (408, 429)
+        return _failed(model, aiguard.classify(code, msg), msg[:160], main)
     try:
         text = body["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
         _fail(model, f"HTTP {r.status_code}, no choices: {json.dumps(body)[:150]}")
-        return None, r.status_code >= 500 or r.status_code == 429
+        return _failed(model, aiguard.classify(r.status_code, json.dumps(body)[:300]), "no choices", main)
     if isinstance(text, list):
         text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
     if not (text or "").strip():
@@ -628,7 +748,7 @@ def _ask_once_slot(model: str, messages: list, max_tokens: int, url: str,
         # Kie's gpt-5-2 under load: "You've hit your attachment limit. Please try
         # again later." A rate limit, not a verdict - the next model is asked.
         _fail(model, f"rate limited: {text.strip()[:80]}")
-        return None, True
+        return _failed(model, aiguard.RATE, text.strip()[:80], main)
     return text, False
 
 
@@ -688,10 +808,13 @@ def _route_call(route: tuple, messages: list, max_tokens: int, deadline: float) 
     for attempt in range(1 + config.VISION_RETRIES):
         if attempt:
             wait = config.VISION_RETRY_WAIT * (2 ** (attempt - 1))
+            if getattr(_LAST_KIND, "kind", "") == aiguard.RATE:
+                # A rate limit: back off longer before the same model is asked again (aiguard: never a stop).
+                wait = max(wait, float(getattr(config, "VISION_RATE_WAIT", 5.0) or 0.0) * (2 ** (attempt - 1)))
             if time.time() + wait >= deadline or not model_available(model):
                 break
             time.sleep(wait)
-        if main and _OUT_OF_CREDITS["hit"]:
+        if (main and out_of_credits()) or aiguard.stopping() or (not main and _FALLBACK_DRY["hit"]):
             break
         text, retryable = _ask_once(model, messages, max_tokens, url, key, main)
         if text:
@@ -747,8 +870,26 @@ def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple
     On the 111-line job 16c80a8b a stalled channel cost the full 90 s timeout
     twice per model before the next was tried, and the worker sat idle.
     """
+    heard: List[bool] = []
+    text, model = _ask_routes(messages, max_tokens, accept, first, heard)
+    # The outage clock (aiguard): any answer - even one this call could not use - starts it again; a call no model
+    # answered at all counts toward the outage stop. A credit or key failure has already stopped the job (_failed).
+    if text or heard:
+        aiguard.note_ok()
+    elif not aiguard.tripped():
+        aiguard.note_failure(aiguard.OTHER, "vision", (list(_ERRORS)[-1:] or ["no model answered"])[0])
+    return text, model
+
+
+def _ask_routes(messages: list, max_tokens: int, accept=None, first: str = "",
+                heard: Optional[List[bool]] = None) -> Tuple[Optional[str], str]:
+    """_ask's routes: (text, model) of the first that answers, (None, "") when none did. `heard` gets a True for
+    every answer that came back, used or not."""
+    heard = heard if heard is not None else []
+    if aiguard.stopping():
+        return None, ""
     queue = [r for r in (_routes(first) if first else _routes())
-             if not (r[3] and _OUT_OF_CREDITS["hit"]) and model_available(r[0])]
+             if not (r[3] and out_of_credits()) and model_available(r[0])]
     if not queue:
         return None, ""
     started = time.time()
@@ -756,9 +897,11 @@ def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple
     hedge = _hedge_seconds() * (1.6 if max_tokens > 600 else 1.0)
     if hedge <= 0:
         for route in queue:
-            if time.time() >= deadline:
+            if time.time() >= deadline or aiguard.stopping():
                 break
             text = _route_call(route, messages, max_tokens, deadline)
+            if text:
+                heard.append(True)
             if text and (accept is None or accept(text)):
                 return text, route[0]
             if text:
@@ -817,10 +960,14 @@ def _ask(messages: list, max_tokens: int, accept=None, first: str = "") -> Tuple
                 text = fut.result()
             except Exception:  # noqa: BLE001 - a crashed route is a failed one
                 text = None
+            if text:
+                heard.append(True)
             if text and (accept is None or accept(text)):
                 return text, route[0]
             if text:
                 _fail(route[0], f"unusable answer: {text[:120]!r}")
+        if aiguard.stopping():
+            break
         if nxt < len(queue):
             at = hedge_at()
             if not running or (at is not None and time.time() >= at):
@@ -991,19 +1138,17 @@ def _endpoint(model: str) -> str:
     return f"{base}/chat/completions"
 
 
-def _parse(text: str) -> Optional[dict]:
+def _first_object(text: str) -> str:
+    """The first complete {...} in a model's answer (a code fence, a sentence or a JS wrapper around it dropped),
+    or "" when there is none. Quotes are tracked so braces inside strings do not count; an unescaped quote pair
+    inside a string ("a ship with "CORNATEL" on its side") toggles twice and leaves the count right."""
     text = re.sub(r"^\s*```(?:json)?|```\s*$", "", text or "").strip()
-    # Some OpenAI-compatible gateways occasionally return a JS expression such
-    # as JSON.stringify({description: "..."}) despite the JSON-only instruction.
-    # Extract the first complete object, then accept its common JS object-literal
-    # form without weakening the required fields or score validation.
     start = text.find("{")
     if start < 0:
-        return None
+        return ""
     depth = 0
     quote = ""
     escaped = False
-    end = -1
     for i in range(start, len(text)):
         ch = text[i]
         if quote:
@@ -1021,23 +1166,66 @@ def _parse(text: str) -> Optional[dict]:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                end = i + 1
-                break
-    if end < 0:
+                return text[start:i + 1]
+    return ""
+
+
+def _escape_inner_quotes(raw: str) -> str:
+    """A model's JSON with the quotes inside its strings escaped: a quote closes a string only when the next
+    non-space character is , } ] or : - 'with "CORNATEL" written on its side' becomes 'with \\"CORNATEL\\" written
+    on its side' (Yellowstone, 2026-10-07: that answer cost a second, paid call)."""
+    out = []
+    in_str = escaped = False
+    n = len(raw)
+    for i, ch in enumerate(raw):
+        if not in_str:
+            in_str = ch == '"'
+            out.append(ch)
+            continue
+        if escaped:
+            escaped = False
+        elif ch == "\\":
+            escaped = True
+        elif ch == '"':
+            j = i + 1
+            while j < n and raw[j] in " \t\r\n":
+                j += 1
+            if j >= n or raw[j] in ",}]:":
+                in_str = False
+            else:
+                out.append('\\"')
+                continue
+        out.append(ch)
+    return "".join(out)
+
+
+def _loads_lenient(raw: str) -> Optional[dict]:
+    """json.loads, then the usual slips repaired one after another: unquoted keys (JSON.stringify({key: value})),
+    trailing commas, unescaped quotes inside strings. None when it is still not an object."""
+    if not raw:
         return None
-    raw = text[start:end]
-    try:
-        data = json.loads(raw)
-    except ValueError:
-        # Quote unquoted object keys (the usual JSON.stringify({key: value})
-        # slip), and remove trailing commas. Restrict the key match to object
-        # separators so colons in description strings are left untouched.
-        repaired = re.sub(r'([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)', r'\1"\2"\3', raw)
-        repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+    attempts = [raw]
+    # Quote unquoted object keys, and remove trailing commas. Restrict the key match to object
+    # separators so colons in description strings are left untouched.
+    keyed = re.sub(r",\s*([}\]])", r"\1", re.sub(r'([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)', r'\1"\2"\3', raw))
+    attempts += [keyed, _escape_inner_quotes(keyed)]
+    for attempt in attempts:
         try:
-            data = json.loads(repaired)
+            data = json.loads(attempt, strict=False)
         except ValueError:
-            return None
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
+def _parse(text: str) -> Optional[dict]:
+    # Some OpenAI-compatible gateways occasionally return a JS expression such
+    # as JSON.stringify({description: "..."}) despite the JSON-only instruction.
+    # Extract the first complete object, then accept its common JS object-literal
+    # form (and a description with unescaped quotes in it) without weakening the
+    # required fields or score validation.
+    data = _loads_lenient(_first_object(text))
     if not isinstance(data, dict):
         return None
     try:
@@ -1299,6 +1487,9 @@ _TEXT_SYSTEM = (
     "web address in a corner, a TV station's bug, banner, lower-third or ticker, a map, chart, document or second "
     "picture laid over or beside the footage (a split screen, picture-in-picture, a frame around it), a subscribe "
     "button or a face-cam.\n"
+    "KINDS: \"subtitles\" is any text of what someone says or a caption of the moment - a line or two at the bottom, "
+    "word-by-word Shorts or TikTok captions, a translation's subtitles, meme or caption text. A TV station's bug, "
+    "headline banner, chyron, lower-third name box or ticker is \"tv_graphics\", never \"subtitles\".\n"
     "NOT ADDED - part of what was filmed: street and shop signs, a ship's, train's or plane's name and numbers, a "
     "scoreboard, a newspaper or book, writing on clothes or vehicles, an old film's own border, sprocket edge and "
     "scratches, and anything on a screen, monitor, projector or stage display the camera is filming - a keynote's or "
@@ -1315,13 +1506,7 @@ _TEXT_CHECKS = {"n": 0, "flagged": 0}
 
 
 def _parse_text_check(text: str) -> Optional[dict]:
-    m = re.search(r"\{[\s\S]*\}", text or "")
-    if not m:
-        return None
-    try:
-        data = json.loads(m.group(0))
-    except ValueError:
-        return None
+    data = _loads_lenient(_first_object(text))
     if not isinstance(data, dict) or "added" not in data:
         return None
     items = []
@@ -1336,12 +1521,19 @@ def _parse_text_check(text: str) -> Optional[dict]:
 
 def text_check_decision(got: Optional[dict], mode: str) -> str:
     """Why the second look turns a clip down under the line's text rule ("" = it does not): the strict rule any
-    added text or mark; the event rule anything but a broadcaster's logo or TV graphics; the news rule nothing."""
-    if not got or not got.get("added") or mode == "news":
+    added text or mark; the event rule anything but a broadcaster's logo or TV graphics; the news rule subtitles
+    only (the owner, 2026-10-09: a broadcaster's banners, chyrons, tickers and logos are fine on a news line,
+    burned-in subtitles never are - VISION_NEWS_SUBTITLES)."""
+    if not got or not got.get("added"):
         return ""
     items = got.get("items") or [{"kind": "other", "where": "", "text": ""}]
-    bad = [it for it in items if mode == "strict" or not (
-        it["kind"] in _EVENT_OK_KINDS or _COURTESY.match(str(it.get("text") or "")))]
+    if mode == "news":
+        if not getattr(config, "VISION_NEWS_SUBTITLES", True):
+            return ""
+        bad = [it for it in items if it["kind"] == "subtitles" and not _COURTESY.match(str(it.get("text") or ""))]
+    else:
+        bad = [it for it in items if mode == "strict" or not (
+            it["kind"] in _EVENT_OK_KINDS or _COURTESY.match(str(it.get("text") or "")))]
     if not bad:
         return ""
     it = bad[0]
@@ -1651,14 +1843,24 @@ def rate_tiles(sheet_b64: str, count: int, subject: str, context: str = "",
     _note_tile_model(first, model)
     _counted()
     if not text:
+        if not checked and getattr(config, "NO_UNJUDGED_STOCK", True) and configured():
+            # A subject pool's rating puts its moments on the timeline with no judge after it (POOL_JUDGE_CLIPS
+            # off): no model answered, so no moment is approved - never the local model's (NO_UNJUDGED_STOCK).
+            return None
         # Every model failed: the local CLIP pass rates the tiles instead, so
-        # the video still gets its best moments rather than none.
+        # the video still gets its best moments rather than none (a fine pass:
+        # the judge looks at the clip cut there before it can be placed).
         from . import localvision
         return localvision.rate_sheet(sheet_b64, count, intent or subject)
     costs.record("vision.rate_tiles")
+    if _no_tile_answer(text):
+        # "None of these tiles show ..." / a refusal / {"tiles": null}: an answer - no tile fits - not a failure
+        # that would send the sheet to the next, paid model (VISION task 5, 2026-10-09).
+        _note_no_tile()
+        return []
     m = re.search(r"\{[\s\S]*\}", text)
     try:
-        data = json.loads(m.group(0)) if m else {}
+        data = _loads_lenient(_first_object(text)) or (json.loads(m.group(0)) if m else {})
         rows = data.get("tiles") or []
         out = []
         for r in rows:
@@ -1729,13 +1931,79 @@ def pick_tile(sheet_b64: str, count: int, intent: str, context: str = "",
             return dict(best, model="local-clip")
         return None
     costs.record("vision.pick_tile")
-    m = re.search(r"\{[\s\S]*\}", text)
-    try:
-        data = json.loads(m.group(0)) if m else {}
-        tile = int(data.get("tile"))
-        score = max(0.0, min(1.0, float(data.get("score", 0))))
-    except (ValueError, TypeError):
+    got = _parse_pick(text)
+    if got is None:
         _fail(model, f"unparseable tile pick: {text[:120]!r}")
         return None
-    return {"tile": tile, "score": score,
-            "description": str(data.get("description") or "")[:400], "model": model}
+    if got.get("none"):
+        _note_no_tile()
+    return dict(got, model=model)
+
+
+# A storyboard answer that says no tile fits - in words, as a refusal, or as {"tile": null} - is an answer: the
+# candidate is skipped before any download, as a pick under the floor is. It used to count as a failure (the next,
+# paid model was asked, and the candidate was downloaded at a fixed point: "The images provided are not relevant to
+# the user's intent...", Yellowstone 2026-10-07).
+_REFUSAL = re.compile(
+    r"^\W*(?:i'?m sorry|i am sorry|sorry[,.!]|apologies|i apologi[sz]e|i can(?:'|no)t|i cannot|i'?m (?:not able|unable)|"
+    r"i am (?:not able|unable)|unfortunately|as an ai)|"
+    r"\b(?:can(?:'|no)t|cannot|unable to|not able to) (?:fulfil+|assist|help|comply|provide|process|analy[sz]e|"
+    r"identify|view|see|determine|choose|select|pick)\b", re.I)
+_NO_TILE_WORDS = re.compile(
+    r"\b(?:none of (?:the|these) (?:tiles|images|frames|thumbnails|shots)|no (?:single )?(?:tile|image|frame|thumbnail)s? "
+    r"(?:clearly |actually |really )?(?:show|shows|fit|fits|match|matches|depict|depicts)|no suitable|"
+    r"(?:is|are) not relevant|nothing (?:in (?:the|this) grid )?(?:fits|matches|shows))\b", re.I)
+_NO_TILE = {"n": 0}
+
+
+def _note_no_tile() -> None:
+    with _LOCK:
+        _NO_TILE["n"] += 1
+
+
+def _no_tile_answer(text: str) -> bool:
+    """An answer that is not JSON and says no tile fits (or refuses): the sheet's answer is "none"."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    data = _loads_lenient(_first_object(t))
+    if isinstance(data, dict):
+        for key in ("tile", "tiles"):
+            if key in data and data[key] in (None, "", "none", "null", 0, "0", [], False):
+                return key == "tile" or not data.get(key)
+        return False
+    return bool(_REFUSAL.search(t[:300]) or _NO_TILE_WORDS.search(t[:600]))
+
+
+def _parse_pick(text: str) -> Optional[dict]:
+    """
+    {"tile", "score", "description"} from a storyboard pick, or {"tile": 0, "score": 0.0, "none": True, ...} when
+    the answer says no tile fits (a null tile, a refusal, "none of the tiles..."), or None when it says nothing
+    usable. Tolerant: a code fence, a JS object literal, unescaped quotes in the description, and an answer cut off
+    after its "tile" and "score" (a long description hitting max_tokens) all still give the pick.
+    """
+    data = _loads_lenient(_first_object(text))
+    if isinstance(data, dict):
+        tile = data.get("tile")
+        if tile in (None, "", "none", "null", 0, "0", False):
+            return {"tile": 0, "score": 0.0, "none": True,
+                    "description": str(data.get("description") or "no tile fits")[:400]}
+        try:
+            return {"tile": int(tile), "score": max(0.0, min(1.0, float(data.get("score", 0) or 0))),
+                    "description": str(data.get("description") or "")[:400]}
+        except (TypeError, ValueError):
+            pass
+    t = text or ""
+    mt = re.search(r'"tile"\s*:\s*(null|"?\d+"?)', t)
+    if mt:
+        if mt.group(1) == "null":
+            return {"tile": 0, "score": 0.0, "none": True, "description": "no tile fits"}
+        ms = re.search(r'"score"\s*:\s*(\d+(?:\.\d+)?)', t)
+        try:
+            return {"tile": int(mt.group(1).strip('"')),
+                    "score": max(0.0, min(1.0, float(ms.group(1)))) if ms else 0.0, "description": ""}
+        except ValueError:
+            pass
+    if _no_tile_answer(t):
+        return {"tile": 0, "score": 0.0, "none": True, "description": t.strip()[:160]}
+    return None

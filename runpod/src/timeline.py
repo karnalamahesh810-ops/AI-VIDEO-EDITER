@@ -12,6 +12,7 @@ so it assumes nothing about where a field came from. A render is minutes of
 GPU time; failing here with a sentence the UI can show beats failing inside
 headless Chrome with a stack trace.
 """
+import json
 import math
 import os
 import re
@@ -1825,6 +1826,36 @@ def _build(segments: List[Segment], shots: List[dict],
                   f"{report['shortAfter']}", flush=True)
         except Exception as e:  # noqa: BLE001 - the plan as it was is still a video
             print(f"[timeline] data looks skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+    # The gaming video essay (src/styles.py gaming_essay, src/gaming.py): the motion library's gaming pack on its
+    # trigger words, the way the owner's reference places it (kinetic words, meter, versus split, chapter boards ...).
+    from . import styles as _styles
+    if _styles.resolve(str(inp.get("video_style") or "")) == "gaming_essay" and doc.get("scenes"):
+        from . import gaming
+        try:
+            rep = gaming.plan(doc)
+            doc.setdefault("meta", {})["gaming"] = rep
+            doc["meta"]["overlayCount"] = len(doc["overlays"])
+            print(f"[timeline] gaming pack: {json.dumps(rep)[:300]}", flush=True)
+        except Exception as e:  # noqa: BLE001 - the planner's looks are still a video
+            print(f"[timeline] gaming pack skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+    # The Smart Editor (src/smart_editor.py, SMART_EDITOR / the job's "smart_editor"): an AI edit director
+    # designs new graphics, marks, camera moves and sounds over the planned looks; any failure keeps them.
+    from . import smart_editor
+    if isinstance(inp.get("style_kit"), dict) and inp["style_kit"].get("elements"):
+        # Style Match: the measured kit is the design system - its elements on their triggers, its transitions,
+        # camera, grade and mix (src/style_match/apply.py). It replaces the Smart Editor's free design.
+        from .style_match import apply as style_apply
+        rep = style_apply.apply(doc, inp["style_kit"], face_at=style_apply.thumb_faces(doc))
+        doc["meta"]["overlayCount"] = len(doc["overlays"])
+        print(f"[timeline] style kit: {json.dumps(rep)[:400]}", flush=True)
+    elif smart_editor.enabled(inp):
+        from . import brandkits
+        kit = brandkits.choose(inp, inp.get("brand_kit") if isinstance(inp.get("brand_kit"), dict) else None,
+                               str(inp.get("video_style") or ""))
+        rep = smart_editor.edit(doc, dict(brief or {}, _kit=kit), render_stills=smart_editor.render_stills_worker)
+        doc["meta"]["overlayCount"] = len(doc["overlays"])
+        print(f"[timeline] smart editor: {json.dumps({k: rep.get(k) for k in ('graphics', 'droppedLooks', 'marks', 'usd', 'error', 'skipped')})}",
+              flush=True)
     return doc
 
 

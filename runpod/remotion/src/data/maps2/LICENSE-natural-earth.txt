@@ -1,0 +1,22 @@
+Map data of the maps-v2 looks (components/lib/LibMaps2.tsx), all from Natural Earth (https://www.naturalearthdata.com).
+
+Natural Earth terms of use: "All versions of Natural Earth raster + vector map data found on this website are in
+the public domain. You may use the maps in any manner, including modifying the content and design, electronic
+dissemination, and offset printing. The primary authors, Tom Patterson and Nathaniel Vaughn Kelso, and all other
+contributors renounce all financial claim to the maps and invites you to use them for personal, educational, and
+commercial purposes. No permission is needed to use Natural Earth. Crediting the authors is unnecessary."
+(https://www.naturalearthdata.com/about/terms-of-use/) - commercial use allowed, no attribution required.
+Credit, voluntarily: "Made with Natural Earth. Free vector and raster map data @ naturalearthdata.com."
+
+Files (downloaded 2026-10-14 from https://naciscdn.org/naturalearth/, built by scripts/build_maps2.py):
+  ne_countries.json      ne_50m_admin_0_countries v5.1.2 -> TopoJSON (mapshaper 0.6.102: fields ADM0_A3 a, NAME n,
+                         NAME_LONG l, ISO_A2 i, CONTINENT k; -simplify 35% keep-shapes; quantization 60000)
+  ne_regions.json        ne_10m_admin_1_states_provinces v5.1.1 -> TopoJSON (fields name n, adm0_a3 a,
+                         iso_3166_2 c, type_en t, name_en e; -simplify 6% weighting=0.7 keep-shapes; quantization 80000)
+  ne_cities.json         ne_10m_populated_places_simple v5.1.1: 1,684 places (scalerank <= 5, or 400k+ people, or a
+                         national capital): name, lat, lon, adm0, rank, pop, capital
+  relief_manifest.json + public/maps2/relief/<z>/<x>_<y>.jpg
+                         SR_HR (Shaded Relief, high resolution, 1:10m) v2.0.0, reprojected to Web Mercator 256 px
+                         tiles z0-z5 (grey 128 = flat; flat tiles and south of 60 S left out; relief gain 1.7)
+
+Country and border depictions follow Natural Earth's de-facto boundaries.

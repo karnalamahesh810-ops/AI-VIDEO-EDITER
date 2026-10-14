@@ -338,6 +338,11 @@ class Maps(unittest.TestCase):
         self.assertEqual((o["value"], o["suffix"]), (336, "MI"))
 
     def test_a_two_place_route_takes_the_pack_route_every_other_time_and_a_plain_line_keeps_its_map(self):
+        # (with maps v2 off: on, the old map's turn goes to a maps-v2 look - tests/test_maps_v2.py)
+        from src import config
+        before = config.MAPS_V2
+        config.MAPS_V2 = False
+        self.addCleanup(setattr, config, "MAPS_V2", before)
         line = "From Phoenix the water runs on to Tucson."
         a, b = 2.0, 150.0
         doc = doc_for([(a, line), (b, line)], [self._map("MAP_ROUTE_SAT_V1", [PHOENIX, TUCSON], at=a + 0.3),

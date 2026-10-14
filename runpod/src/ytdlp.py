@@ -23,7 +23,7 @@ from typing import Dict, List, Optional
 
 import requests
 
-from . import config, costs, events, proxies
+from . import aiguard, config, costs, events, proxies
 from .errors import FailureClass, classify_ytdlp, from_reason, ytdlp_reason
 from .filters import playable_video
 
@@ -102,8 +102,12 @@ STOP: contextvars.ContextVar = contextvars.ContextVar("stop", default=None)
 
 
 def stopped() -> bool:
-    """The job's sourcing deadline is past, or this scene's pass or own time is up."""
+    """The job's sourcing deadline is past, or this scene's pass or own time is up - or the job's AI stopped
+    (src/aiguard.py: the account ran dry, the key was refused, every model down), so nothing found now could be
+    judged: no search, metadata call or download starts after it."""
     if past_deadline():
+        return True
+    if aiguard.stopping():
         return True
     got = STOP.get()
     if not got:

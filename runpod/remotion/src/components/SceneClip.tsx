@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  AbsoluteFill, OffthreadVideo, Video,
+  AbsoluteFill, OffthreadVideo, Sequence, Video,
   useCurrentFrame, useVideoConfig,
 } from "remotion";
 import { FilmLayer, cssFilterFor } from "./FilmLayer";
@@ -12,16 +12,43 @@ import { LivingPicture, StillPicture, TransitionFrame, resolveLiving } from "../
 import { reframeStyle, resolveAim, resolveMove } from "./reframe";
 import { BlurredHold, SafeImg } from "./motion/safePicture";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
+import { clipPlan, type ClipSegment } from "../edit/clipTime";
+import { ClipFx } from "../edit/ClipFx";
 
 /**
  * A scene's clip: Remotion's OffthreadVideo (frame-exact, decoded by Remotion's own compositor), or with
  * `html5` the browser's own video element - for a machine whose security blocks Remotion's unsigned compositor
  * (Windows Smart App Control on the owner's laptop, 2026-10-07). Sound always off: the narration is the sound.
  */
-const ClipVideo: React.FC<{ src: string; style?: React.CSSProperties; playbackRate?: number; html5?: boolean }> = (
-  { src, style, playbackRate, html5 }) => (html5
-  ? <Video src={src} style={style} muted playbackRate={playbackRate} />
-  : <OffthreadVideo src={src} style={style} muted playbackRate={playbackRate} />);
+const ClipVideo: React.FC<{ src: string; style?: React.CSSProperties; playbackRate?: number; html5?: boolean;
+  trimBefore?: number }> = ({ src, style, playbackRate, html5, trimBefore }) => (html5
+  ? <Video src={src} style={style} muted playbackRate={playbackRate} trimBefore={trimBefore} />
+  : <OffthreadVideo src={src} style={style} muted playbackRate={playbackRate} trimBefore={trimBefore} />);
+
+/**
+ * A clip played by its plan (../edit/clipTime.ts): one stretch - the clip from its in-point at one speed,
+ * exactly the element an unedited clip always had - or a speed ramp's stretches, each its own Sequence
+ * (mounted a second early in the editor's Player so its picture is there on its first frame).
+ */
+const PlannedVideo: React.FC<{ src: string; style?: React.CSSProperties; plan: ClipSegment[]; html5?: boolean;
+  wrap?: React.CSSProperties }> = ({ src, style, plan, html5, wrap }) => {
+  const { fps } = useVideoConfig();
+  if (plan.length <= 1) {
+    const s = plan[0];
+    return <ClipVideo src={src} style={style} playbackRate={s ? s.rate : 1} html5={html5}
+      trimBefore={s && s.trimBefore > 0 ? s.trimBefore : undefined} />;
+  }
+  return (
+    <>
+      {plan.map((s, i) => (
+        <Sequence key={i} from={s.from} durationInFrames={s.frames} premountFor={Math.round(fps)} style={wrap}>
+          <ClipVideo src={src} style={style} playbackRate={s.rate} html5={html5}
+            trimBefore={s.trimBefore > 0 ? s.trimBefore : undefined} />
+        </Sequence>
+      ))}
+    </>
+  );
+};
 
 /**
  * One visual for one spoken clause.
@@ -101,9 +128,10 @@ export const SceneClip: React.FC<{
   // just enough to fill the scene, never below 0.6x.
   // (useVideoConfig was called again here, after the early returns above - a
   // conditional hook. The values from the top of the component are the same.)
-  const sceneSeconds = durationInFrames / fps;
-  const clip = media.type === "video" ? media.clipSeconds ?? 0 : 0;
-  const rate = clip > 0 && clip < sceneSeconds ? Math.max(0.6, clip / sceneSeconds) : 1;
+  // An unedited clip plays as it always did; the editor's in-point, speed or speed ramp is its plan
+  // (../edit/clipTime.ts, src/cliptime.py on the worker): slip, split and slow motion.
+  const plan = clipPlan({ clipSeconds: media.type === "video" ? media.clipSeconds ?? 0 : 0, trimStart: media.trimStart,
+    speed: scene.speed, speedRamp: scene.speedRamp }, durationInFrames, fps);
   const filters = [grade?.filter, cssFilterFor(treatment), effectFilter(effect, frame), entrance.filter]
     .filter((f) => f && f !== "none")
     .join(" ");
@@ -126,7 +154,7 @@ export const SceneClip: React.FC<{
         <AbsoluteFill style={{ backgroundColor: "#000", flexDirection: "row" }}>
           {grade?.defs}
           <div style={half}>
-            <ClipVideo src={media.url} playbackRate={rate} html5={media.html5}
+            <PlannedVideo src={media.url} plan={plan} html5={media.html5}
               style={{ ...fill, objectPosition: `${split.focusX ?? 50}% 50%` }} />
           </div>
           <div style={half}>
@@ -156,12 +184,13 @@ export const SceneClip: React.FC<{
           {grade?.defs}
           <PlayerWindow tone={tone} seed={scene.startFrame % 7}
             title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
-            {media.type === "video" ? (
-              <ClipVideo src={media.url} style={media100} playbackRate={rate} html5={media.html5} />
-            ) : (
-              <SafeImg src={media.url} style={media100} fallback={hold} />
-            )}
-            <FilmLayer treatment={treatment} />
+            <ClipFx fx={scene} still={media.type !== "video"} over={<FilmLayer treatment={treatment} />}>
+              {media.type === "video" ? (
+                <PlannedVideo src={media.url} style={media100} plan={plan} html5={media.html5} />
+              ) : (
+                <SafeImg src={media.url} style={media100} fallback={hold} />
+              )}
+            </ClipFx>
           </PlayerWindow>
           <TransitionLayer transition={transition} />
         </AbsoluteFill>
@@ -200,6 +229,7 @@ export const SceneClip: React.FC<{
             </filter>
             <rect width="100%" height="100%" filter={`url(#grain-${scene.id})`} />
           </svg>
+          <ClipFx fx={scene} still={media.type !== "video"}>
           <AbsoluteFill
             style={{
               justifyContent: "center",
@@ -209,11 +239,13 @@ export const SceneClip: React.FC<{
             }}
           >
             {media.type === "video" ? (
-              <ClipVideo src={media.url} style={inset} playbackRate={rate} html5={media.html5} />
+              <PlannedVideo src={media.url} style={inset} plan={plan} html5={media.html5}
+                wrap={{ justifyContent: "center", alignItems: "center" }} />
             ) : (
               <SafeImg src={media.url} style={inset} fallback={hold} />
             )}
           </AbsoluteFill>
+          </ClipFx>
           <FilmLayer treatment={treatment} />
           <TransitionLayer transition={transition} />
         </AbsoluteFill>
@@ -235,6 +267,11 @@ export const SceneClip: React.FC<{
     <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
       <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#000" }}>
         {grade?.defs}
+        {/* The editor's keyframes, effects stack, mask and motion blur (../edit/ClipFx.tsx), after the look. */}
+        <ClipFx fx={scene} still={media.type !== "video"} over={<>
+          <EffectLayer effect={effect} durationInFrames={durationInFrames} />
+          <FilmLayer treatment={treatment} />
+        </>}>
         <AbsoluteFill
           style={{
             opacity: entrance.opacity ?? 1,
@@ -245,10 +282,10 @@ export const SceneClip: React.FC<{
           {media.type === "video" ? (
             moved ? (
               <AbsoluteFill style={moved}>
-                <ClipVideo src={media.url} style={fill} playbackRate={rate} html5={media.html5} />
+                <PlannedVideo src={media.url} style={fill} plan={plan} html5={media.html5} />
               </AbsoluteFill>
             ) : (
-              <ClipVideo src={media.url} style={fill} playbackRate={rate} html5={media.html5} />
+              <PlannedVideo src={media.url} style={fill} plan={plan} html5={media.html5} />
             )
           ) : moved ? (
             // A still the editor framed by hand: the boxes replace its motion.
@@ -264,8 +301,7 @@ export const SceneClip: React.FC<{
               fps={fps} width={width} filter={filters || undefined} subject={aim} fallbackStill={holdStill} />
           )}
         </AbsoluteFill>
-        <EffectLayer effect={effect} durationInFrames={durationInFrames} />
-        <FilmLayer treatment={treatment} />
+        </ClipFx>
         <TransitionLayer transition={transition} />
       </AbsoluteFill>
     </TransitionFrame>

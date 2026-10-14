@@ -371,7 +371,11 @@ class TextCheck(unittest.TestCase):
         self.assertTrue(vision.text_check_decision(bug, "strict"))
         self.assertEqual(vision.text_check_decision(bug, "event"), "")
         self.assertTrue(vision.text_check_decision(subs, "event"))
-        self.assertEqual(vision.text_check_decision(subs, "news"), "")
+        # The owner's rule (2026-10-09): subtitles never, a news line included; its broadcaster's marks stay.
+        self.assertTrue(vision.text_check_decision(subs, "news").startswith("added text: subtitles"))
+        self.assertEqual(vision.text_check_decision(bug, "news"), "")
+        with mock.patch.object(config, "VISION_NEWS_SUBTITLES", False):
+            self.assertEqual(vision.text_check_decision(subs, "news"), "")      # off: the news rule as it was
         self.assertEqual(vision.text_check_decision(none, "strict"), "")
         credit = {"added": True, "items": [{"kind": "typed_text", "where": "top-left",
                                             "text": "Courtesy Southern Nevada Water Authority"}]}

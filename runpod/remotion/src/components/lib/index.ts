@@ -59,6 +59,8 @@ import { LOOKS as L_LibKtPack3 } from "./LibKtPack3";
 import { LOOKS as L_LibKtMaps3 } from "./LibKtMaps3";
 import { LOOKS as L_LibKtPack4 } from "./LibKtPack4";
 import { LOOKS as L_LibKtCards4 } from "./LibKtCards4";
+import { LOOKS as L_LibMaps2 } from "./LibMaps2";
+import { LOOKS as L_LibMotionX } from "./LibMotionX";
 
 export type Look = React.FC<{ overlay: Overlay; accent: string }>;
 
@@ -187,4 +189,9 @@ export const LIBRARY: Record<string, Look> = {
   // its word; the planner's rules in src/lookpack4.py.
   ...pick(L_LibKtPack4, ["kt-price", "kt-money", "kt-table", "kt-proscons", "kt-podium", "kt-versus"]),
   ...pick(L_LibKtCards4, ["kt-profile", "kt-steps", "kt-chain", "kt-case", "kt-post", "kt-factcheck"]),
+  // Maps v2 (LibMaps2, 2026-10-14): branded relief maps on Natural Earth geography, any niche (src/mapsv2.py).
+  ...pick(L_LibMaps2, ["m2-zoom-dive", "m2-region-pulse", "m2-relief-tilt", "m2-route", "m2-places", "m2-border-trace",
+    "m2-choropleth", "m2-compare", "m2-radius", "m2-flows", "m2-pin-drop", "m2-sat-flat"]),
+  // Editor v2 (2026-10-14): the brand-kit motion library (components/smart/library.ts), every recipe.
+  ...L_LibMotionX,
 };

@@ -231,7 +231,9 @@ class Hedging(unittest.TestCase):
                 mock.patch.object(credit.requests, "get", return_value=R()) as get:
             self.assertAlmostEqual(credit.openrouter_left(), 2.73)
             self.assertAlmostEqual(credit.openrouter_left(), 2.73)
-        self.assertEqual(get.call_count, 1)
+        # The account's credits and the key's own limit, each read once (2026-10-09), then the cache.
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(sorted(c.args[0].rsplit("/", 1)[-1] for c in get.call_args_list), ["credits", "key"])
 
 
 class ThePlannerForTheReplan(unittest.TestCase):

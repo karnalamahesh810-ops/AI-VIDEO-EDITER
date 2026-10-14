@@ -235,12 +235,42 @@ def agency(url: str = "", page_url: str = "", thumbnail: str = "", title: str = 
 # benchmark of 2026-10-08: an NDTV upload's "ICONIC SUNSET BOULEVARD IN RUINS, MANY CELEBS LOSE HOMES"
 # thumbnail, i.ytimg.com/vi/<id>/maxresdefault.jpg, filled a wildfire line as a "picture", judged 0.9). Its
 # address, or a page that is the video itself, says so before any download.
-_VIDEO_THUMB_HOSTS = ("ytimg.com", "img.youtube.com", "youtube.com", "youtu.be", "youtube-nocookie.com")
+# fd58f969 (2026-10-08) placed 10 of them (all i.ytimg.com/vi/<id>/maxresdefault.jpg, 1280x720: an AI eruption,
+# "DANGER FOR YELLOWSTONE! BREAKING NEWS", a map with a pink arrow, a webcam screen, a "Monthly Update" title card) -
+# its plan ran on an image from before this rule (no "youtube thumbnail" in its stockBlocked count); each of its two
+# renders then flagged and repaired all ten again. Every one is turned down here by its address, before any download.
+_VIDEO_THUMB_HOSTS = ("ytimg.com", "img.youtube.com", "youtube.com", "youtu.be", "youtube-nocookie.com",
+                      # Other video sites' thumbnails and watch pages: a title card the same way (2026-10-09).
+                      "vimeocdn.com", "vumbnail.com", "dmcdn.net", "dailymotion.com", "dai.ly", "tiktokcdn.com",
+                      "tiktok.com", "rumble.com", "rmbl.ws", "bitchute.com")
+# A thumbnail's own file name, kept when a blog or a CDN re-hosts it ("i0.wp.com/i.ytimg.com/vi/<id>/hqdefault.jpg",
+# ".../uploads/2024/05/maxresdefault-1.jpg"), and a video site's watch page named in a link or a credit.
+_THUMB_NAME = re.compile(r"/(?:maxresdefault|hqdefault|sddefault|mqdefault|hq720)(?:[-_]\d+)?\.(?:jpe?g|webp|png)\b|"
+                         r"/(?:hq|maxres)[1-3]\.jpg\b|/vi(?:_webp)?/[\w-]{11}/", re.I)
+_VIDEO_PAGE = re.compile(r"(?:youtube\.com/(?:watch|shorts|live)|youtu\.be/|vimeo\.com/\d|dailymotion\.com/video|"
+                         r"tiktok\.com/@[^/]+/video|rumble\.com/v|facebook\.com/(?:watch|[^/]+/videos))", re.I)
+# A page title a search engine copies with the picture: "... - YouTube" / "... | YouTube".
+_VIDEO_PAGE_TITLE = re.compile(r"[-|–]\s*YouTube\s*(?:—|$|\|)", re.I)
 
 
 def video_thumbnail(*urls) -> bool:
-    """One of these addresses is a YouTube video's thumbnail or the video's own page."""
-    return any(host == d or host.endswith("." + d) for u in urls for host in _hosts(u) for d in _VIDEO_THUMB_HOSTS)
+    """One of these addresses is a video's thumbnail (YouTube's, or another video site's) or the video's own page -
+    by its host, a thumbnail's own file name kept on a re-hosted copy, or a watch page named in it."""
+    if any(host == d or host.endswith("." + d) for u in urls for host in _hosts(u) for d in _VIDEO_THUMB_HOSTS):
+        return True
+    for u in urls:
+        text = str(u or "")
+        if not text:
+            continue
+        if "ytimg" in text.lower() or _THUMB_NAME.search(text) or _VIDEO_PAGE.search(text):
+            return True
+    return False
+
+
+def video_page_title(*texts) -> bool:
+    """A credit or title copied from a video's page ("Scientist Found Something ALARMING Underneath Yellowstone! -
+    YouTube")."""
+    return any(_VIDEO_PAGE_TITLE.search(str(t or "")) for t in texts if t)
 
 
 def reason(url: str = "", page_url: str = "", thumbnail: str = "", title: str = "", attribution: str = "") -> str:
@@ -249,7 +279,7 @@ def reason(url: str = "", page_url: str = "", thumbnail: str = "", title: str = 
     found = agency(url, page_url, thumbnail, title, attribution)
     if found:
         return f"a stock-agency picture ({found})"
-    if enabled() and video_thumbnail(url, page_url, attribution):
+    if enabled() and (video_thumbnail(url, page_url, attribution) or video_page_title(title, attribution)):
         return "a video's thumbnail (youtube thumbnail)"
     return ""
 

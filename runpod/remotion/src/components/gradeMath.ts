@@ -45,7 +45,7 @@ export interface Tone {
   v?: number;
 }
 
-export interface GradeSettings { preset?: string; strength?: number; normalize?: boolean }
+export interface GradeSettings { preset?: string; strength?: number; normalize?: boolean; look?: Partial<Look> }
 
 export interface GradeMedians { l: number; s: number; rg: number; bg: number; n: number }
 
@@ -141,6 +141,17 @@ export const validMedians = (m: unknown): m is GradeMedians => {
     && o.rg > 0 && o.bg > 0;
 };
 
+/** A Style Kit's measured look (doc.grade.look, src/style_match/apply.py) over the neutral one, clamped. */
+export const customLook = (settings: GradeSettings | null | undefined): Look | null => {
+  const l = settings?.look;
+  if (!l || typeof l !== "object") return null;
+  const n = (v: unknown, lo: number, hi: number, d: number) => (typeof v === "number" && Number.isFinite(v) ? clamp(v, lo, hi) : d);
+  const t = Array.isArray(l.tint) && l.tint.length === 3 ? l.tint : [1, 1, 1];
+  return { lift: n(l.lift, 0, 0.12, 0.01), gain: n(l.gain, 0.85, 1, 0.985), pivot: n(l.pivot, 0.3, 0.6, 0.42),
+    contrast: n(l.contrast, 0.8, 1.35, 1.1), sat: n(l.sat, 0, 1.4, 1),
+    tint: [n(t[0], 0.9, 1.1, 1), n(t[1], 0.9, 1.1, 1), n(t[2], 0.9, 1.1, 1)] };
+};
+
 export const presetOf = (settings: GradeSettings | null | undefined): GradePreset | null => {
   if (!settings || typeof settings !== "object") return null;
   const p = String(settings.preset || "documentary").toLowerCase();
@@ -194,7 +205,7 @@ export const normalizeFor = (tone: Tone, medians: GradeMedians, strength: number
 export const sceneGrade = (scene: GradedScene, settings: GradeSettings | null | undefined,
   medians: GradeMedians | null): SceneGrade | null => {
   const preset = presetOf(settings);
-  const look = preset ? LOOKS[preset] : null;
+  const look = customLook(settings) ?? (preset ? LOOKS[preset] : null);
   const strength = strengthOf(settings);
   if (!look || strength <= 0) return null;
   const type = scene.media?.type;

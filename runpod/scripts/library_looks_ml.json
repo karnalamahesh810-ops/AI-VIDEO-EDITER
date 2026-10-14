@@ -1,0 +1,3494 @@
+[
+  {
+    "id": "ml-title-rise",
+    "template": "ML_TITLE_RISE",
+    "name": "Masked rise",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): Each word rises out of its own line on the beat it is spoken, an accent rule draws under the last one.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "The river ran dry",
+      "subtitle": "For the first time in 1,200 years"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 4,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "swoosh-text",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 4,
+        "gain_db": -14
+      }
+    ]
+  },
+  {
+    "id": "ml-title-track",
+    "template": "ML_TITLE_TRACK",
+    "name": "Cinematic track-in",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): Letters drift together from wide tracking and soft focus - a slow, filmic title for an opening or a reveal.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "whoosh-cinematic",
+    "types": false,
+    "sample": {
+      "text": "Ten years later",
+      "label": "Chapter two"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 22,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-cinematic",
+        "alt": [
+          "whoosh-soft"
+        ],
+        "at": 0,
+        "gain_db": -13
+      },
+      {
+        "name": "light-shimmer",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 22,
+        "gain_db": -17
+      }
+    ]
+  },
+  {
+    "id": "ml-title-split",
+    "template": "ML_TITLE_SPLIT",
+    "name": "Split lines",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): Two lines slide in from opposite sides and meet on a divider that draws out from the centre.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "Same water, two countries"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 14,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 3,
+        "gain_db": -13
+      },
+      {
+        "name": "swipe",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 14,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-title-flip",
+    "template": "ML_TITLE_FLIP",
+    "name": "3D flip-up",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): Words hinge up from below in 3D, one after another, and settle flat with a soft shadow.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "ui-swipe",
+    "types": false,
+    "sample": {
+      "text": "Nobody saw it coming"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 6,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-swipe",
+        "alt": [
+          "swipe"
+        ],
+        "at": 3,
+        "gain_db": -14
+      },
+      {
+        "name": "page-flip",
+        "alt": [
+          "paper-slide"
+        ],
+        "at": 6,
+        "gain_db": -18
+      }
+    ]
+  },
+  {
+    "id": "ml-title-focus",
+    "template": "ML_TITLE_FOCUS",
+    "name": "Focus pull",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): The whole line comes into focus as the camera pulls back a touch - for a quiet, heavy statement.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "reverse-swell",
+    "types": false,
+    "sample": {
+      "text": "It was never about the money"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 0,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "reverse-swell",
+        "alt": [
+          "riser-soft"
+        ],
+        "at": 0,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-title-sweep",
+    "template": "ML_TITLE_SWEEP",
+    "name": "Bar sweep reveal",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): An accent bar sweeps across each line and leaves the words behind it - a news-desk reveal, line by line.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "swipe",
+    "types": false,
+    "sample": {
+      "text": "Three cities. One deadline."
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 13,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "swipe",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 3,
+        "gain_db": -13
+      },
+      {
+        "name": "ui-swipe",
+        "alt": [
+          "swipe"
+        ],
+        "at": 13,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-title-karaoke",
+    "template": "ML_TITLE_KARAOKE",
+    "name": "Spoken words",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): The line is set faintly, and each word lights up in the accent exactly as it is said.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "none",
+    "types": false,
+    "sample": {
+      "text": "Every single drop was already promised",
+      "wordAt": [
+        0.1,
+        0.4,
+        0.75,
+        1,
+        1.3,
+        1.6
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sound_timing": "look",
+    "sounds": []
+  },
+  {
+    "id": "ml-title-card",
+    "template": "ML_TITLE_CARD",
+    "name": "Kit title card",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): A full-screen card on the kit's ground: a huge condensed title in the accent, built word by word, a quiet sub line.",
+    "kind": "card",
+    "own_backdrop": true,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "whoosh-cinematic",
+    "types": false,
+    "sample": {
+      "text": "Burj Khalifa",
+      "subtitle": "The tallest building ever built"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 9,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-cinematic",
+        "alt": [
+          "whoosh-soft"
+        ],
+        "at": 0,
+        "gain_db": -12
+      },
+      {
+        "name": "hit-deep",
+        "alt": [
+          "boom-soft"
+        ],
+        "at": 9,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-title-quote",
+    "template": "ML_TITLE_QUOTE",
+    "name": "Pull quote",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): A large serif quotation mark settles, the words follow in italic, the speaker's name tracks in under them.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "paper-slide",
+    "types": false,
+    "sample": {
+      "text": "We had no idea how bad it was",
+      "subtitle": "Former site engineer"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 0,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "paper-slide",
+        "alt": [
+          "paper-slide-v2"
+        ],
+        "at": 0,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-title-question",
+    "template": "ML_TITLE_QUESTION",
+    "name": "Open question",
+    "category": "HEADLINES",
+    "description": "Motion library (brand-kit aware): The question writes itself in word by word; the last word and its question mark land in the accent with a soft glow.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "So where did it all go?"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 2,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 2,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-lt-bar",
+    "template": "ML_LT_BAR",
+    "name": "Accent bar",
+    "category": "LOWER_THIRDS",
+    "description": "Motion library (brand-kit aware): A thin accent bar grows, the name slides out from behind it, the role fades up underneath.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-lower-third"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "ui-swipe",
+    "types": false,
+    "sample": {
+      "text": "Dr. Maya Okafor",
+      "subtitle": "Hydrologist, University of Arizona"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 3,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-swipe",
+        "alt": [
+          "swipe"
+        ],
+        "at": 3,
+        "gain_db": -14
+      }
+    ]
+  },
+  {
+    "id": "ml-lt-glass",
+    "template": "ML_LT_GLASS",
+    "name": "Frosted card",
+    "category": "LOWER_THIRDS",
+    "description": "Motion library (brand-kit aware): A frosted glass card slides in low on the calm side carrying the name and role; the edge catches the accent.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-lower-third"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "Elena Ruiz",
+      "subtitle": "Lost her farm in 2022"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 0,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 0,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-lt-pill",
+    "template": "ML_LT_PILL",
+    "name": "Tag and name",
+    "category": "LOWER_THIRDS",
+    "description": "Motion library (brand-kit aware): A pill tag in the kit colours wipes on, then the name rises beside it - for a place, a date or a category.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-lower-third"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "ui-pop",
+    "types": false,
+    "sample": {
+      "text": "Lake Mead, Nevada",
+      "label": "Location"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 10,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-pop",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 3,
+        "gain_db": -15
+      },
+      {
+        "name": "swoosh-text",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 10,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-lt-underline",
+    "template": "ML_LT_UNDERLINE",
+    "name": "Underline",
+    "category": "LOWER_THIRDS",
+    "description": "Motion library (brand-kit aware): Minimal: the name fades up out of soft focus and an accent line draws under it from the left.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-lower-third"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "marker-underline",
+    "types": false,
+    "sample": {
+      "text": "Marcus Bell",
+      "subtitle": "Former county sheriff"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 8,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "marker-underline",
+        "alt": [
+          "marker"
+        ],
+        "at": 8,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-lt-two-tone",
+    "template": "ML_LT_TWO_TONE",
+    "name": "Two-tone blocks",
+    "category": "LOWER_THIRDS",
+    "description": "Motion library (brand-kit aware): Two solid blocks slide in one after the other - the label in the accent, the name in white - and lock together.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-lower-third"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "swipe",
+    "types": false,
+    "sample": {
+      "text": "Hoover Dam",
+      "label": "Built 1936"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 4,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "swipe",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 0,
+        "gain_db": -13
+      },
+      {
+        "name": "ui-swipe",
+        "alt": [
+          "swipe"
+        ],
+        "at": 4,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-lt-location",
+    "template": "ML_LT_LOCATION",
+    "name": "Place marker",
+    "category": "LOWER_THIRDS",
+    "description": "Motion library (brand-kit aware): A map-pin ring pulses once, the place name tracks in beside it and the coordinates type on in mono.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-lower-third"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "pin-drop",
+    "types": false,
+    "sample": {
+      "text": "Glen Canyon",
+      "subtitle": "36.94° N, 111.48° W"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 19,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "pin-drop",
+        "alt": [
+          "ui-pop"
+        ],
+        "at": 2,
+        "gain_db": -13
+      },
+      {
+        "name": "keys-type",
+        "alt": [
+          "typing text"
+        ],
+        "at": 19,
+        "gain_db": -20,
+        "until": 40
+      }
+    ]
+  },
+  {
+    "id": "ml-lt-source",
+    "template": "ML_LT_SOURCE",
+    "name": "Source credit",
+    "category": "LOWER_THIRDS",
+    "description": "Motion library (brand-kit aware): A small, quiet credit in the corner - a short rule, SOURCE in caps, the name - for footage and figures.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-lower-third"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "ui-tick",
+    "types": false,
+    "sample": {
+      "text": "U.S. Bureau of Reclamation",
+      "label": "Source"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 0,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-tick",
+        "alt": [
+          "tick"
+        ],
+        "at": 0,
+        "gain_db": -17
+      }
+    ]
+  },
+  {
+    "id": "ml-num-hero",
+    "template": "ML_NUM_HERO",
+    "name": "Hero figure",
+    "category": "NUMBERS",
+    "description": "Motion library (brand-kit aware): A big figure counts up on the beat it is said, its unit tracks in in small caps under it, a rule draws on.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "value",
+      "prefix",
+      "suffix",
+      "subtitle",
+      "items"
+    ],
+    "cues": [
+      "ml-number"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "count-roll",
+    "types": false,
+    "sample": {
+      "text": "kilometres",
+      "value": 130,
+      "suffix": "",
+      "subtitle": "wide at its narrowest"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 40,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "count-roll",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 4,
+        "gain_db": -9,
+        "until": 40
+      },
+      {
+        "name": "count-final",
+        "alt": [
+          "tick"
+        ],
+        "at": 40,
+        "gain_db": -11
+      }
+    ]
+  },
+  {
+    "id": "ml-num-card",
+    "template": "ML_NUM_CARD",
+    "name": "Kit figure card",
+    "category": "NUMBERS",
+    "description": "Motion library (brand-kit aware): A full-screen card on the kit's ground: the figure huge in the number colour, what it is of in the accent.",
+    "kind": "card",
+    "own_backdrop": true,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "value",
+      "prefix",
+      "suffix",
+      "subtitle",
+      "items"
+    ],
+    "cues": [
+      "ml-number"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "whoosh-cinematic",
+    "types": false,
+    "sample": {
+      "text": "Cost of the project",
+      "value": 1.5,
+      "prefix": "$",
+      "suffix": "B",
+      "decimals": 1
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 9,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-cinematic",
+        "alt": [
+          "whoosh-soft"
+        ],
+        "at": 0,
+        "gain_db": -12
+      },
+      {
+        "name": "count-roll",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 9,
+        "gain_db": -9,
+        "until": 50
+      },
+      {
+        "name": "count-final",
+        "alt": [
+          "tick"
+        ],
+        "at": 50,
+        "gain_db": -11
+      }
+    ]
+  },
+  {
+    "id": "ml-num-ring",
+    "template": "ML_NUM_RING",
+    "name": "Percent ring",
+    "category": "NUMBERS",
+    "description": "Motion library (brand-kit aware): A ring draws round to the percentage as the figure counts to it inside - for any share, rate or chance.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "value",
+      "prefix",
+      "suffix",
+      "subtitle",
+      "items"
+    ],
+    "cues": [
+      "ml-number"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "count-roll",
+    "types": false,
+    "sample": {
+      "text": "of the river is used up",
+      "value": 37,
+      "suffix": "%"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 45,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "count-roll",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 6,
+        "gain_db": -9,
+        "until": 45
+      },
+      {
+        "name": "count-final",
+        "alt": [
+          "tick"
+        ],
+        "at": 45,
+        "gain_db": -11
+      }
+    ]
+  },
+  {
+    "id": "ml-num-waffle",
+    "template": "ML_NUM_WAFFLE",
+    "name": "Unit grid",
+    "category": "NUMBERS",
+    "description": "Motion library (brand-kit aware): A 10 x 10 grid settles in, then the share fills cell by cell from the bottom in the accent - a percentage you can see.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "value",
+      "prefix",
+      "suffix",
+      "subtitle",
+      "items"
+    ],
+    "cues": [
+      "ml-number"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "count-roll",
+    "types": false,
+    "sample": {
+      "text": "of the climbs reach the summit",
+      "value": 37,
+      "suffix": "%"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 52,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "count-roll",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 14,
+        "gain_db": -10,
+        "until": 52
+      },
+      {
+        "name": "ding",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 52,
+        "gain_db": -17
+      }
+    ]
+  },
+  {
+    "id": "ml-num-year",
+    "template": "ML_NUM_YEAR",
+    "name": "Year roll",
+    "category": "NUMBERS",
+    "description": "Motion library (brand-kit aware): The year rolls up through the decades and lands on its word; a hairline and the event settle under it.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "value",
+      "prefix",
+      "suffix",
+      "subtitle",
+      "items"
+    ],
+    "cues": [
+      "ml-number"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "count-roll",
+    "types": false,
+    "sample": {
+      "text": "The dam is finished",
+      "value": 1966
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 34,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "count-roll",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 4,
+        "gain_db": -9,
+        "until": 34
+      },
+      {
+        "name": "count-final",
+        "alt": [
+          "tick"
+        ],
+        "at": 34,
+        "gain_db": -11
+      }
+    ]
+  },
+  {
+    "id": "ml-num-compare",
+    "template": "ML_NUM_COMPARE",
+    "name": "Then and now",
+    "category": "NUMBERS",
+    "description": "Motion library (brand-kit aware): Two figures side by side: the first lands, the second counts past it in the accent, a divider between them.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "value",
+      "prefix",
+      "suffix",
+      "subtitle",
+      "items"
+    ],
+    "cues": [
+      "ml-number"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "count-roll",
+    "types": false,
+    "sample": {
+      "text": "1990",
+      "value": 31,
+      "prefix": "",
+      "suffix": "M",
+      "items": [
+        {
+          "label": "12"
+        }
+      ],
+      "subtitle": "Today"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 39,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "count-roll",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 6,
+        "gain_db": -10,
+        "until": 39
+      },
+      {
+        "name": "count-final",
+        "alt": [
+          "tick"
+        ],
+        "at": 39,
+        "gain_db": -12
+      },
+      {
+        "name": "count-final",
+        "alt": [
+          "tick"
+        ],
+        "at": 66,
+        "gain_db": -11
+      }
+    ]
+  },
+  {
+    "id": "ml-em-circle",
+    "template": "ML_EM_CIRCLE",
+    "name": "Drawn circle",
+    "category": "CALLOUTS",
+    "description": "Motion library (brand-kit aware): A hand-drawn ring circles the thing on screen as it is named, with a label pill riding beside it.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4,
+    "least": 3,
+    "sfx": "marker-draw",
+    "types": false,
+    "sample": {
+      "text": "Intake tower",
+      "anchor": {
+        "x": 0.56,
+        "y": 0.48
+      }
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 3,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "marker-draw",
+        "alt": [
+          "marker"
+        ],
+        "at": 3,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-em-arrow",
+    "template": "ML_EM_ARROW",
+    "name": "Curved arrow",
+    "category": "CALLOUTS",
+    "description": "Motion library (brand-kit aware): A curved arrow draws from a short label to the point on screen, its head snapping in at the end.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4,
+    "least": 3,
+    "sfx": "marker",
+    "types": false,
+    "sample": {
+      "text": "The old waterline",
+      "anchor": {
+        "x": 0.6,
+        "y": 0.4
+      }
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 9,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "marker",
+        "alt": [
+          "marker-draw"
+        ],
+        "at": 9,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-em-highlight",
+    "template": "ML_EM_HIGHLIGHT",
+    "name": "Marker highlight",
+    "category": "CALLOUTS",
+    "description": "Motion library (brand-kit aware): A line on the footage; the key word gets a marker block swept behind it in the accent as it is said.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4,
+    "least": 3,
+    "sfx": "marker-underline",
+    "types": false,
+    "sample": {
+      "text": "The water simply ran out",
+      "wordAt": [
+        0.1,
+        0.3,
+        0.55,
+        0.8,
+        1
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 12,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "marker-underline",
+        "alt": [
+          "marker"
+        ],
+        "at": 12,
+        "gain_db": -14
+      }
+    ]
+  },
+  {
+    "id": "ml-em-brackets",
+    "template": "ML_EM_BRACKETS",
+    "name": "Focus brackets",
+    "category": "CALLOUTS",
+    "description": "Motion library (brand-kit aware): Four corner brackets close in on a spot like a camera locking focus, then a small label types under it.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4,
+    "least": 3,
+    "sfx": "camera-shutter",
+    "types": false,
+    "sample": {
+      "text": "Target",
+      "anchor": {
+        "x": 0.5,
+        "y": 0.45
+      }
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 21,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "camera-shutter",
+        "alt": [
+          "shutter"
+        ],
+        "at": 9,
+        "gain_db": -13
+      },
+      {
+        "name": "letter-tick",
+        "alt": [
+          "tick"
+        ],
+        "at": 21,
+        "gain_db": -20,
+        "until": 36
+      }
+    ]
+  },
+  {
+    "id": "ml-em-spotlight",
+    "template": "ML_EM_SPOTLIGHT",
+    "name": "Spotlight",
+    "category": "CALLOUTS",
+    "description": "Motion library (brand-kit aware): Everything but one spot dims slowly, so the eye goes where the narrator points; a soft label settles by it.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4,
+    "least": 3,
+    "sfx": "reverse-swell",
+    "types": false,
+    "sample": {
+      "text": "Here",
+      "anchor": {
+        "x": 0.42,
+        "y": 0.5
+      }
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 0,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "reverse-swell",
+        "alt": [
+          "riser-soft"
+        ],
+        "at": 0,
+        "gain_db": -18
+      }
+    ]
+  },
+  {
+    "id": "ml-em-statement",
+    "template": "ML_EM_STATEMENT",
+    "name": "Statement with rule",
+    "category": "CALLOUTS",
+    "description": "Motion library (brand-kit aware): A short statement on the footage: an accent rule draws first, then the words slide off it, the key word in the accent.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4,
+    "least": 3,
+    "sfx": "swoosh-text",
+    "types": false,
+    "sample": {
+      "text": "It was a warning",
+      "wordAt": [
+        0.2,
+        0.4,
+        0.55,
+        0.75
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 9,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "swoosh-text",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 9,
+        "gain_db": -14
+      }
+    ]
+  },
+  {
+    "id": "ml-em-tiles",
+    "template": "ML_EM_TILES",
+    "name": "Name tiles",
+    "category": "CALLOUTS",
+    "description": "Motion library (brand-kit aware): Two to five names arrive as tiles one after another under a short header - organisations, places, products.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4,
+    "least": 3,
+    "sfx": "ui-pop",
+    "types": false,
+    "sample": {
+      "text": "Who controls it",
+      "items": [
+        {
+          "label": "Arizona"
+        },
+        {
+          "label": "Nevada"
+        },
+        {
+          "label": "California"
+        },
+        {
+          "label": "Mexico"
+        }
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 24,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-pop",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 14,
+        "gain_db": -14
+      },
+      {
+        "name": "ui-pop",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 24,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-panel",
+    "template": "ML_TR_PANEL",
+    "name": "Panel sweep",
+    "category": "TRANSITIONS",
+    "description": "Motion library (brand-kit aware): A full-height accent panel sweeps across the cut with motion blur, a darker panel close behind it.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 1.2,
+    "least": 1,
+    "sfx": "whoosh-fast",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 8,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-fast",
+        "alt": [
+          "whoosh"
+        ],
+        "at": 8,
+        "gain_db": -11
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-bars",
+    "template": "ML_TR_BARS",
+    "name": "Staggered bars",
+    "category": "TRANSITIONS",
+    "description": "Motion library (brand-kit aware): Five vertical bars in the kit colours drop in one after another to cover the cut, then lift away.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 1.2,
+    "least": 1,
+    "sfx": "whoosh",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 9,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh",
+        "alt": [
+          "whoosh-fast"
+        ],
+        "at": 9,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-iris",
+    "template": "ML_TR_IRIS",
+    "name": "Iris",
+    "category": "TRANSITIONS",
+    "description": "Motion library (brand-kit aware): A soft disc in the kit ground grows from the centre to swallow the shot, then opens out onto the next.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 1.2,
+    "least": 1,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 6,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 6,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-chapter",
+    "template": "ML_TR_CHAPTER",
+    "name": "Chapter wipe",
+    "category": "TRANSITIONS",
+    "description": "Motion library (brand-kit aware): The kit ground wipes across the cut carrying a chapter title; it holds a beat, then wipes off onto the next shot.",
+    "kind": "card",
+    "own_backdrop": true,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 3,
+    "least": 1,
+    "sfx": "whoosh-cinematic",
+    "types": false,
+    "sample": {
+      "text": "Part two: the deal",
+      "label": "Chapter 2"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 14,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-cinematic",
+        "alt": [
+          "whoosh-soft"
+        ],
+        "at": 0,
+        "gain_db": -11
+      },
+      {
+        "name": "hit-deep",
+        "alt": [
+          "boom-soft"
+        ],
+        "at": 14,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-flash",
+    "template": "ML_TR_FLASH",
+    "name": "Light sweep",
+    "category": "TRANSITIONS",
+    "description": "Motion library (brand-kit aware): A warm band of light rakes across the cut in screen blend - a soft, filmic way between two shots.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 1.2,
+    "least": 1,
+    "sfx": "light-shimmer",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 10,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "light-shimmer",
+        "alt": [
+          "whoosh-soft"
+        ],
+        "at": 10,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-title-stack",
+    "template": "ML_TITLE_STACK",
+    "name": "Word stack slam",
+    "category": "HEADLINES",
+    "description": "Motion library pack 2 (brand-kit aware): A justified block of stacked words, each line sized to the same width and slammed in on its spoken word; the stack jolts as each lands. Use: A punchy hook or a three-to-six word verdict said with force (\"they lost everything\"); the hook and big turns only.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "impact",
+    "types": false,
+    "sample": {
+      "text": "They lost everything overnight"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 12,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "impact",
+        "alt": [
+          "hit-deep"
+        ],
+        "at": 3,
+        "gain_db": -14
+      },
+      {
+        "name": "boom-soft",
+        "alt": [
+          "impact"
+        ],
+        "at": 12,
+        "gain_db": -18
+      }
+    ]
+  },
+  {
+    "id": "ml-title-slice",
+    "template": "ML_TITLE_SLICE",
+    "name": "Split reveal",
+    "category": "HEADLINES",
+    "description": "Motion library pack 2 (brand-kit aware): One line cut through the middle: its top half slides in from one side, its bottom half from the other, and they lock together with a bright seam. Use: A short line that turns the story (\"everything changed\", a name reveal); one line, at most five words.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "whoosh-fast",
+    "types": false,
+    "sample": {
+      "text": "Everything changed"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 24,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-fast",
+        "alt": [
+          "whoosh"
+        ],
+        "at": 3,
+        "gain_db": -13
+      },
+      {
+        "name": "flash-hit",
+        "alt": [
+          "impact"
+        ],
+        "at": 24,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-title-wipe",
+    "template": "ML_TITLE_WIPE",
+    "name": "Spoken mask wipe",
+    "category": "HEADLINES",
+    "description": "Motion library pack 2 (brand-kit aware): A soft mask wipes the words on left to right in step with the voice, a glowing accent edge riding the reveal. Use: A full sentence worth reading along (a thesis, the stakes); lines up to about 8 words, any section.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "swoosh-text",
+    "types": false,
+    "sample": {
+      "text": "The deal that built a city",
+      "wordAt": [
+        0.2,
+        0.5,
+        0.75,
+        1,
+        1.2,
+        1.6
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 3,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "swoosh-text",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 3,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-title-cardflip",
+    "template": "ML_TITLE_CARDFLIP",
+    "name": "3D card flip",
+    "category": "HEADLINES",
+    "description": "Motion library pack 2 (brand-kit aware): An accent card with a short setup turns over in 3D on the spoken word and shows the answer on its back. Use: A setup and its answer (kicker = the setup, e.g. \"The cause\"; text = the reveal); question-then-answer moments.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "ui-pop",
+    "types": false,
+    "sample": {
+      "text": "A single loose bolt",
+      "label": "The cause"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 26,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-pop",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 4,
+        "gain_db": -15
+      },
+      {
+        "name": "page-flip",
+        "alt": [
+          "paper-slide"
+        ],
+        "at": 26,
+        "gain_db": -14
+      }
+    ]
+  },
+  {
+    "id": "ml-title-extrude",
+    "template": "ML_TITLE_EXTRUDE",
+    "name": "Extruded 3D title",
+    "category": "HEADLINES",
+    "description": "Motion library pack 2 (brand-kit aware): A heavy title with real depth swings round in perspective and settles, its sides in a deep shade of the kit accent. Use: An episode / topic title or a name that deserves a monument (\"Burj Khalifa\", \"The Great Fire\"); one to four words, openings and chapter starts.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "whoosh-cinematic",
+    "types": false,
+    "sample": {
+      "text": "The Great Fire"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 30,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-cinematic",
+        "alt": [
+          "whoosh-soft"
+        ],
+        "at": 0,
+        "gain_db": -12
+      },
+      {
+        "name": "hit-deep",
+        "alt": [
+          "boom-soft"
+        ],
+        "at": 30,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-title-redact",
+    "template": "ML_TITLE_REDACT",
+    "name": "Declassified",
+    "category": "HEADLINES",
+    "description": "Motion library pack 2 (brand-kit aware): A typed paper slip with every word blacked out; each bar pulls away the moment its word is spoken. Use: A secret, a leak, a hidden fact or a document quote coming out (\"the report admitted...\"); crime, history, politics, business.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label"
+    ],
+    "cues": [
+      "ml-title"
+    ],
+    "duration": 5,
+    "least": 3,
+    "sfx": "paper-slide",
+    "types": false,
+    "sample": {
+      "text": "The test was never approved",
+      "wordAt": [
+        0.4,
+        0.7,
+        1,
+        1.3,
+        1.6
+      ],
+      "label": "Declassified"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 18,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "paper-slide",
+        "alt": [
+          "paper"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "tape-rip",
+        "alt": [
+          "paper-tear"
+        ],
+        "at": 18,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-data-race",
+    "template": "ML_DATA_RACE",
+    "name": "Bar race",
+    "category": "CHARTS",
+    "description": "Motion library pack 2 (brand-kit aware): Horizontal bars grow on their spoken names, figures counting along, then re-sort themselves into rank order. Use: Three to six things compared by one figure (countries, companies, players); items as \"Name 41\" in the narration's order.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "value",
+      "prefix",
+      "suffix",
+      "items"
+    ],
+    "cues": [
+      "ml-data"
+    ],
+    "duration": 6.5,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "Most visited countries",
+      "items": [
+        {
+          "label": "Spain 85"
+        },
+        {
+          "label": "France 100"
+        },
+        {
+          "label": "Italy 57"
+        },
+        {
+          "label": "USA 66"
+        }
+      ],
+      "subtitle": "International arrivals, millions"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 24,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "count-roll",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 24,
+        "gain_db": -11,
+        "until": 80
+      },
+      {
+        "name": "swipe",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 90,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-data-line",
+    "template": "ML_DATA_LINE",
+    "name": "Line draw-on",
+    "category": "CHARTS",
+    "description": "Motion library pack 2 (brand-kit aware): A trend line draws itself point by point under a soft fill; the last point pulses and a callout lands with its figure. Use: A figure changing over time (rose, fell, doubled, grew since...); items as \"2010 4.2\" (period then figure), three to eight points.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "value",
+      "prefix",
+      "suffix",
+      "items"
+    ],
+    "cues": [
+      "ml-data"
+    ],
+    "duration": 6.5,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "Global smartphone users",
+      "items": [
+        {
+          "label": "2012 1.1"
+        },
+        {
+          "label": "2015 1.9"
+        },
+        {
+          "label": "2018 2.9"
+        },
+        {
+          "label": "2021 3.6"
+        },
+        {
+          "label": "2024 4.6"
+        }
+      ],
+      "suffix": "B",
+      "decimals": 1,
+      "subtitle": "Billions"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 20,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "marker-draw",
+        "alt": [
+          "marker"
+        ],
+        "at": 20,
+        "gain_db": -14
+      },
+      {
+        "name": "ding",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 100,
+        "gain_db": -17
+      }
+    ]
+  },
+  {
+    "id": "ml-data-donut",
+    "template": "ML_DATA_DONUT",
+    "name": "Donut build",
+    "category": "CHARTS",
+    "description": "Motion library pack 2 (brand-kit aware): A donut builds slice by slice on the spoken parts; the first slice pops out and its share counts up in the middle. Use: A whole split into two to five parts (shares, budgets, sources); items as \"Coal 36%\", the part the line is about first.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "value",
+      "prefix",
+      "suffix",
+      "items"
+    ],
+    "cues": [
+      "ml-data"
+    ],
+    "duration": 6.5,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "Where the power comes from",
+      "items": [
+        {
+          "label": "Coal 36%"
+        },
+        {
+          "label": "Gas 22%"
+        },
+        {
+          "label": "Hydro 15%"
+        },
+        {
+          "label": "Other 27%"
+        }
+      ],
+      "suffix": "%"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 21,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "ui-pop",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 21,
+        "gain_db": -15
+      },
+      {
+        "name": "count-final",
+        "alt": [
+          "tick"
+        ],
+        "at": 50,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-data-grid",
+    "template": "ML_DATA_GRID",
+    "name": "Stat grid",
+    "category": "CHARTS",
+    "description": "Motion library pack 2 (brand-kit aware): Two to four glass tiles rise in turn, each figure counting up over its label, a kit-accent rule drawing across its top. Use: Several figures said close together (a scorecard: cost, time, people, distance); items as \"Workers 3,000\" - two to four.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "value",
+      "prefix",
+      "suffix",
+      "items"
+    ],
+    "cues": [
+      "ml-data"
+    ],
+    "duration": 6.5,
+    "least": 3,
+    "sfx": "ui-pop",
+    "types": false,
+    "sample": {
+      "text": "The project in numbers",
+      "items": [
+        {
+          "label": "Workers 12,000"
+        },
+        {
+          "label": "Years 6"
+        },
+        {
+          "label": "Cost $1.5B"
+        },
+        {
+          "label": "Floors 163"
+        }
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 20,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-pop",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 18,
+        "gain_db": -15
+      },
+      {
+        "name": "count-roll",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 20,
+        "gain_db": -11,
+        "until": 70
+      },
+      {
+        "name": "count-final",
+        "alt": [
+          "tick"
+        ],
+        "at": 70,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-data-timeline",
+    "template": "ML_DATA_TIMELINE",
+    "name": "Timeline scrubber",
+    "category": "CHARTS",
+    "description": "Motion library pack 2 (brand-kit aware): A track draws across, then a playhead scrubs from date to date as each is spoken, lighting it and its caption. Use: Three to six dated events in order (a history, a career, a build); items as \"1872 First park\" - the date first.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "value",
+      "prefix",
+      "suffix",
+      "items"
+    ],
+    "cues": [
+      "ml-data"
+    ],
+    "duration": 6.5,
+    "least": 3,
+    "sfx": "swipe",
+    "types": false,
+    "sample": {
+      "text": "How it happened",
+      "items": [
+        {
+          "label": "1903 First flight"
+        },
+        {
+          "label": "1927 Atlantic"
+        },
+        {
+          "label": "1969 Moon"
+        },
+        {
+          "label": "2004 Private space"
+        }
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 30,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "swipe",
+        "alt": [
+          "ui-swipe"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "ui-tick",
+        "alt": [
+          "tick"
+        ],
+        "at": 30,
+        "gain_db": -16
+      },
+      {
+        "name": "ui-tick",
+        "alt": [
+          "tick"
+        ],
+        "at": 52,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-data-ladder",
+    "template": "ML_DATA_LADDER",
+    "name": "Ranking ladder",
+    "category": "CHARTS",
+    "description": "Motion library pack 2 (brand-kit aware): A top-five ladder that fills from the bottom rung up; number one lands last, in the accent, with a glow. Use: A countdown or a top list (\"the five biggest...\", \"number one is...\"); items #1 first (\"Tokyo 37\" or just names), up to six.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "value",
+      "prefix",
+      "suffix",
+      "items"
+    ],
+    "cues": [
+      "ml-data"
+    ],
+    "duration": 6.5,
+    "least": 3,
+    "sfx": "ui-swipe",
+    "types": false,
+    "sample": {
+      "text": "Largest cities",
+      "items": [
+        {
+          "label": "Tokyo 37M"
+        },
+        {
+          "label": "Delhi 33M"
+        },
+        {
+          "label": "Shanghai 29M"
+        },
+        {
+          "label": "Dhaka 23M"
+        },
+        {
+          "label": "Cairo 22M"
+        }
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 60,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-swipe",
+        "alt": [
+          "swipe"
+        ],
+        "at": 24,
+        "gain_db": -15
+      },
+      {
+        "name": "ui-pop",
+        "alt": [
+          "ui-tick"
+        ],
+        "at": 60,
+        "gain_db": -15
+      },
+      {
+        "name": "hit-deep",
+        "alt": [
+          "boom-soft"
+        ],
+        "at": 110,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-data-split",
+    "template": "ML_DATA_SPLIT",
+    "name": "Before / after slider",
+    "category": "CHARTS",
+    "description": "Motion library pack 2 (brand-kit aware): A slider handle sweeps across the shot: one side turns into an old black-and-white print, the other stays as it is now, labelled. Use: Then versus now, before versus after, old versus new over one shot (items = the two labels, e.g. \"1950\", \"Today\").",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "value",
+      "prefix",
+      "suffix",
+      "items"
+    ],
+    "cues": [
+      "ml-data"
+    ],
+    "duration": 6,
+    "least": 3,
+    "sfx": "shutter-slide",
+    "types": false,
+    "sample": {
+      "text": "The same street, seventy years apart",
+      "items": [
+        {
+          "label": "1950"
+        },
+        {
+          "label": "Today"
+        }
+      ]
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 3,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "shutter-slide",
+        "alt": [
+          "swipe"
+        ],
+        "at": 3,
+        "gain_db": -14
+      }
+    ]
+  },
+  {
+    "id": "ml-co-lens",
+    "template": "ML_CO_LENS",
+    "name": "Magnifier focus",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A magnifying glass glides onto one point of the shot as it is named: everything else blurs and dims, the lens stays crisp and richer. Use: Pointing at a detail the viewer must find in the picture (a crack, a face in a crowd, a line on a map); give point when known.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-callout"
+    ],
+    "duration": 5.5,
+    "least": 3,
+    "sfx": "magnifier-glide",
+    "types": false,
+    "sample": {
+      "text": "The crack",
+      "anchor": {
+        "x": 0.6,
+        "y": 0.45
+      }
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 0,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "magnifier-glide",
+        "alt": [
+          "whoosh-soft"
+        ],
+        "at": 0,
+        "gain_db": -13
+      }
+    ]
+  },
+  {
+    "id": "ml-co-sticky",
+    "template": "ML_CO_STICKY",
+    "name": "Sticky note",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A sticky note in a light tint of the kit accent slaps onto the frame and the words write themselves in by hand. Use: A reminder, a takeaway or a to-do the narrator states (\"remember this\", \"rule number one\"); up to about 10 words.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-callout"
+    ],
+    "duration": 5.5,
+    "least": 3,
+    "sfx": "paper-pin",
+    "types": false,
+    "sample": {
+      "text": "Never sell in a panic",
+      "subtitle": "Rule one"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 16,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "paper-pin",
+        "alt": [
+          "paper"
+        ],
+        "at": 4,
+        "gain_db": -13
+      },
+      {
+        "name": "pen-scribble",
+        "alt": [
+          "marker"
+        ],
+        "at": 16,
+        "gain_db": -16,
+        "until": 60
+      }
+    ]
+  },
+  {
+    "id": "ml-co-polaroid",
+    "template": "ML_CO_POLAROID",
+    "name": "Polaroid drop",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A polaroid frame tumbles onto the shot and the moment inside it develops from white, a handwritten caption underneath. Use: Freezing a moment as a memory (a person, a place, a year: \"summer 1969\"); caption up to four words.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-callout"
+    ],
+    "duration": 5.5,
+    "least": 3,
+    "sfx": "camera-shutter",
+    "types": false,
+    "sample": {
+      "text": "Summer, 1969"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 18,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "camera-shutter",
+        "alt": [
+          "shutter"
+        ],
+        "at": 0,
+        "gain_db": -14
+      },
+      {
+        "name": "paper-slide",
+        "alt": [
+          "paper"
+        ],
+        "at": 18,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-co-document",
+    "template": "ML_CO_DOCUMENT",
+    "name": "Document zoom",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A typed document page rises into the frame, then the camera pushes in while a marker highlights the line being read. Use: Quoting a report, a letter, a ruling, a contract or a study (the narrator reads its line); kicker = the source, sub = a date.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-callout"
+    ],
+    "duration": 6,
+    "least": 3,
+    "sfx": "paper-slide",
+    "types": false,
+    "sample": {
+      "text": "The levees will not hold",
+      "subtitle": "1965",
+      "label": "Army Corps report"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 33,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "paper-slide",
+        "alt": [
+          "paper-slide-v2"
+        ],
+        "at": 0,
+        "gain_db": -14
+      },
+      {
+        "name": "marker-underline",
+        "alt": [
+          "marker"
+        ],
+        "at": 33,
+        "gain_db": -14
+      }
+    ]
+  },
+  {
+    "id": "ml-co-quote",
+    "template": "ML_CO_QUOTE",
+    "name": "Quote card with portrait",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A glass quote card: a portrait ring draws round the speaker's initials, the words arrive as they are said, the name tracks in under them. Use: Someone's own words quoted in the narration with the speaker named (sub = speaker, kicker = their role); up to about 20 words.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-callout"
+    ],
+    "duration": 5.5,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "We did not know the river could rise that fast",
+      "subtitle": "Maria Lopez",
+      "label": "Resident"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 0,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 0,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-co-post",
+    "template": "ML_CO_POST",
+    "name": "Social post",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A social post card slides up, its words lighting as they are read; the heart pops (and counts, when the likes are said). Use: A post, tweet or comment the narration quotes (sub = the account's name, kicker = a date, value = likes only when said).",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-callout"
+    ],
+    "duration": 5.5,
+    "least": 3,
+    "sfx": "ui-swipe",
+    "types": false,
+    "sample": {
+      "text": "This is the worst traffic I have ever seen in this city",
+      "value": 48200,
+      "subtitle": "Daniel Reyes",
+      "label": "2h"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 60,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-swipe",
+        "alt": [
+          "swipe"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "pop",
+        "alt": [
+          "ui-pop"
+        ],
+        "at": 60,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-co-phone",
+    "template": "ML_CO_PHONE",
+    "name": "Phone messages",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A phone tilts into frame in 3D and a chat plays out on it, typing dots first, each bubble popping in on its time. Use: Texts, DMs or messages the narration reads out (items = the messages in order, sub = the contact's name); one to four short messages.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-callout"
+    ],
+    "duration": 7,
+    "least": 3,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": "Are you safe?",
+      "items": [
+        {
+          "label": "Are you safe?"
+        },
+        {
+          "label": "We are on the roof"
+        },
+        {
+          "label": "Help is coming"
+        }
+      ],
+      "subtitle": "Mom"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 33,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "phone-buzz",
+        "alt": [
+          "ui-pop"
+        ],
+        "at": 33,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-co-browser",
+    "template": "ML_CO_BROWSER",
+    "name": "Browser window",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A browser window rises with its address typing in; the headline appears and a marker sweeps under it as it is read. Use: A headline, article, website or search result the narration cites (kicker = the site, sub = a section or date; text = the headline as said).",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-callout"
+    ],
+    "duration": 5.5,
+    "least": 3,
+    "sfx": "ui-swipe",
+    "types": false,
+    "sample": {
+      "text": "Record heat closes schools across the region",
+      "subtitle": "Breaking",
+      "label": "dailynews.com"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 9,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "ui-swipe",
+        "alt": [
+          "swipe"
+        ],
+        "at": 0,
+        "gain_db": -15
+      },
+      {
+        "name": "keys-type",
+        "alt": [
+          "typing text"
+        ],
+        "at": 9,
+        "gain_db": -20,
+        "until": 36
+      },
+      {
+        "name": "marker-underline",
+        "alt": [
+          "marker"
+        ],
+        "at": 30,
+        "gain_db": -15
+      }
+    ]
+  },
+  {
+    "id": "ml-em-scribble",
+    "template": "ML_EM_SCRIBBLE",
+    "name": "Scribble loop",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A fast marker scribble loops twice round the point as it is named, a handwritten note riding beside it. Use: Circling something on screen in a loose, human way (a person, a car, a building); point when known, text = two or three words.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "pen-scribble",
+    "types": false,
+    "sample": {
+      "text": "That's him",
+      "anchor": {
+        "x": 0.55,
+        "y": 0.45
+      }
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 3,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "pen-scribble",
+        "alt": [
+          "marker-draw"
+        ],
+        "at": 3,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-em-swoosh",
+    "template": "ML_EM_SWOOSH",
+    "name": "Brush swoosh",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): The line sets in large and a tapered brush stroke in the accent sweeps under it as its last word lands. Use: A short line with a strong final word (\"and it worked\", \"completely free\"); up to six words, any section.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "swoosh-text",
+    "types": false,
+    "sample": {
+      "text": "And it actually worked"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 9,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "swoosh-text",
+        "alt": [
+          "marker-underline"
+        ],
+        "at": 9,
+        "gain_db": -13
+      }
+    ]
+  },
+  {
+    "id": "ml-em-looparrow",
+    "template": "ML_EM_LOOPARROW",
+    "name": "Loop arrow",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A handwritten note, then a marker arrow that loops once on its way to the point on screen, its head snapping on. Use: Naming something on screen with a bit of personality (\"the original\", \"still there today\"); point when known, two to four words.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "marker-draw",
+    "types": false,
+    "sample": {
+      "text": "Still there today",
+      "anchor": {
+        "x": 0.64,
+        "y": 0.36
+      }
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 15,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "marker-draw",
+        "alt": [
+          "marker"
+        ],
+        "at": 15,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-em-countdown",
+    "template": "ML_EM_COUNTDOWN",
+    "name": "Countdown ring",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): A ring drains in steps while the figure in it ticks down; the last steps pulse and the ring flashes at zero. Use: A countdown, a deadline or time running out (\"ten seconds\", \"three days left\"); value = the starting figure said, text = its unit.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 9,
+    "least": 3,
+    "sfx": "tick",
+    "types": false,
+    "sample": {
+      "text": "seconds",
+      "value": 10
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 255,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "tick",
+        "alt": [
+          "count-tick"
+        ],
+        "at": 15,
+        "gain_db": -12,
+        "until": 255
+      },
+      {
+        "name": "alert-tone",
+        "alt": [
+          "ding"
+        ],
+        "at": 255,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-em-stamp",
+    "template": "ML_EM_STAMP",
+    "name": "Fact-check stamp",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): The claim sets in as a quote, then a rubber stamp slams onto it with the verdict - red for false, green for true, the accent otherwise. Use: A claim being checked, a myth busted or confirmed (text = the claim as said; kicker = the verdict word said: False, Myth, True...).",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "stamp",
+    "types": false,
+    "sample": {
+      "text": "You only use ten percent of your brain",
+      "label": "Myth"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 45,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "stamp",
+        "alt": [
+          "impact"
+        ],
+        "at": 45,
+        "gain_db": -9
+      }
+    ]
+  },
+  {
+    "id": "ml-em-strike",
+    "template": "ML_EM_STRIKE",
+    "name": "Strike and correct",
+    "category": "CALLOUTS",
+    "description": "Motion library pack 2 (brand-kit aware): The wrong words are set, a marker strikes them through, and the correction writes itself in by hand above in the accent. Use: Correcting a belief or a figure (\"not 10 million - 30 million\", \"it wasn't an accident\"); text = the struck words, sub = the correction, both as said.",
+    "kind": "tag",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "subtitle",
+      "label",
+      "value",
+      "items"
+    ],
+    "cues": [
+      "ml-emphasis"
+    ],
+    "duration": 4.5,
+    "least": 3,
+    "sfx": "marker",
+    "types": false,
+    "sample": {
+      "text": "An accident",
+      "subtitle": "A decision"
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 30,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "marker",
+        "alt": [
+          "marker-draw"
+        ],
+        "at": 18,
+        "gain_db": -12
+      },
+      {
+        "name": "pen-scribble",
+        "alt": [
+          "marker"
+        ],
+        "at": 30,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-ink",
+    "template": "ML_TR_INK",
+    "name": "Ink bleed",
+    "category": "TRANSITIONS",
+    "description": "Motion library pack 2 (brand-kit aware): Blots of ink in the kit's deep colour bloom across the shot until it is covered, then the next shot bleeds through from the middle. Use: A soft, artful change of place or time (a memory, a new chapter of a life story); calm or emotional sections.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 1.4,
+    "least": 0.8,
+    "sfx": "whoosh-soft",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 6,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-soft",
+        "alt": [
+          "whoosh-soft-v2"
+        ],
+        "at": 6,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-burn",
+    "template": "ML_TR_BURN",
+    "name": "Film burn",
+    "category": "TRANSITIONS",
+    "description": "Motion library pack 2 (brand-kit aware): Hot orange film-burn blooms flare in from the edges, flicker and white out the cut, then cool away onto the next shot. Use: A jump in time or a flashback (\"years earlier\", \"back in 1985\"), archive and nostalgic footage, emotional peaks.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 1.3,
+    "least": 0.8,
+    "sfx": "whoosh-cinematic",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 19,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "whoosh-cinematic",
+        "alt": [
+          "riser-short"
+        ],
+        "at": 3,
+        "gain_db": -12
+      },
+      {
+        "name": "flash-hit",
+        "alt": [
+          "light-shimmer"
+        ],
+        "at": 19,
+        "gain_db": -16
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-glitch",
+    "template": "ML_TR_GLITCH",
+    "name": "Glitch slices",
+    "category": "TRANSITIONS",
+    "description": "Motion library pack 2 (brand-kit aware): The frame tears into jittering inverted slices and kit-coloured bands with scanlines, peaking on the cut. Use: Tech, hacking, internet, breaking news, a sudden twist or a system failing; energetic sections, never in calm ones.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 0.9,
+    "least": 0.8,
+    "sfx": "glitch-short",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 6,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "glitch-short",
+        "alt": [
+          "glitch-digital"
+        ],
+        "at": 6,
+        "gain_db": -12
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-tear",
+    "template": "ML_TR_TEAR",
+    "name": "Paper tear",
+    "category": "TRANSITIONS",
+    "description": "Motion library pack 2 (brand-kit aware): A sheet in the kit colour with ragged torn edges rips across the frame, covering the cut and tearing away onto the next shot. Use: Moving to a new topic or case in an explainer, scrapbook or history piece; playful or documentary.",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 1.2,
+    "least": 0.8,
+    "sfx": "paper-tear",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 3,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "paper-tear",
+        "alt": [
+          "tape-rip"
+        ],
+        "at": 3,
+        "gain_db": -11
+      }
+    ]
+  },
+  {
+    "id": "ml-tr-blocks",
+    "template": "ML_TR_BLOCKS",
+    "name": "Block dissolve",
+    "category": "TRANSITIONS",
+    "description": "Motion library pack 2 (brand-kit aware): The frame fills with kit-coloured blocks in a scattered left-to-right wave, then they pop away in a new order onto the next shot. Use: A modern, data or tech change of section (a new list item, a new chapter in an explainer).",
+    "kind": "card",
+    "own_backdrop": false,
+    "needs_media": 0,
+    "props": [
+      "text",
+      "label"
+    ],
+    "cues": [
+      "ml-transition"
+    ],
+    "duration": 1.3,
+    "least": 0.8,
+    "sfx": "glitch-digital",
+    "types": false,
+    "sample": {
+      "text": ""
+    },
+    "registry_sample": true,
+    "family": "ml",
+    "file": "LibMotionX",
+    "exit": "fade",
+    "auto_pick": false,
+    "sfx_at": 12,
+    "sound_timing": "look",
+    "sounds": [
+      {
+        "name": "glitch-digital",
+        "alt": [
+          "whoosh-fast"
+        ],
+        "at": 6,
+        "gain_db": -16
+      },
+      {
+        "name": "whoosh-fast",
+        "alt": [
+          "whoosh"
+        ],
+        "at": 12,
+        "gain_db": -13
+      }
+    ]
+  }
+]

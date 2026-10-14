@@ -97,7 +97,7 @@ from src import intent as scene_intent_mod
 from src import templates
 from src import ledger, localvision, marks, r2, reframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
-from src import brandkit, stockblock
+from src import brandkit, clipfx, stockblock
 from src import recut, reclip, relook, restore
 from src import topics
 from src import batch, sources
@@ -111,6 +111,7 @@ from src import langversion
 from src import aifill
 from src import personera
 from src import gputools
+from src import aiguard, offtopic, resume
 from src.presenter import hybrid as presenter_hybrid
 
 
@@ -460,26 +461,54 @@ def _require_ai_credit() -> None:
             "would be random footage. Top up at kie.ai, then run this again.")
 
 
-def _require_openrouter_credit(floor: Optional[float] = None) -> None:
+def _require_openrouter_credit(floor: Optional[float] = None, minutes: float = 0.0, extra: float = 0.0,
+                               what: str = "this video") -> float:
     """
     Refuse to start with less on the OpenRouter account (the director and vision since 2026-10-02) than a
-    video needs (OPENROUTER_MIN_CREDIT; `floor` for a smaller job). The Yellowstone build of 2026-10-07 ran it
-    dry mid-way: 109 of 253 lines planned without the model, 152 of 182 clips never judged, thousands of
-    refused calls - a video nobody would publish, and its RunPod time paid all the same. An unknown balance
-    (no OpenRouter key, the endpoint not answering) never blocks a job.
+    video needs (OPENROUTER_MIN_CREDIT; `floor` for a smaller job) - and, since 2026-10-09, than this video's own
+    estimate when its length is known (`minutes`: aiguard.estimate_usd; `extra`: an AI fill block's budget). The
+    balance is what the key may still spend: the account's credits or the key's own limit, the lower
+    (credit.openrouter_left). The Yellowstone build of 2026-10-07 ran it dry mid-way: 109 of 253 lines planned
+    without the model, 152 of 182 clips never judged, thousands of refused calls - a video nobody would publish,
+    and its RunPod time paid all the same. An unknown balance (no OpenRouter key, the endpoint not answering)
+    never blocks a job. Raises aiguard.AIStopped ("Your AI balance is too low for this video: about $X left, it
+    needs about $Y..."); returns the dollars asked for (0 = no check).
     """
-    need = float(config.OPENROUTER_MIN_CREDIT if floor is None else floor)
+    need = aiguard.need_for(minutes, extra=extra, floor=floor) if (floor is None or minutes > 0) else float(floor)
     if need <= 0:
+        return 0.0
+    aiguard.preflight(need, what)
+    return need
+
+
+def _ai_checkpoint(where: str, assets=None) -> None:
+    """
+    The job's AI stopped (src/aiguard.py: the account ran dry, the key was refused, every model down; REQUIRE_AI):
+    keep what this plan or build made for its Retry (src/resume.py: the word timings, the brief, the planner's
+    shots and - `assets`, the lines' finds so far - every judged clip and picture) and stop here with the plain
+    message. Never a line planned by the rules or a clip placed unjudged after the stop. Nothing when the AI is fine.
+    """
+    if not aiguard.stopping():
         return
-    from src import credit as _credit
-    if not _credit.uses_openrouter():
-        return
-    left = _credit.openrouter_left(max_age=0)
-    if left is not None and left < need:
-        raise RuntimeError(
-            f"The OpenRouter account has ${left:.2f} left; a video needs about ${need:.2f} of planning and "
-            "clip checks. Without it the director cannot read the story and nothing checks the clips, so "
-            "the video would be random footage. Top up at openrouter.ai, then run this again. Nothing was spent.")
+    if assets is not None:
+        resume.note_assets(assets)
+    kept = False
+    if resume.active():
+        try:
+            kept = resume.save(aiguard.tripped())
+        except Exception as e:  # noqa: BLE001 - the Retry pays again, the stop still happens
+            print(f"[resume] not saved: {type(e).__name__}: {str(e)[:120]}", flush=True)
+    aiguard.mark_kept(kept)
+    aiguard.raise_if_stopped(where)
+
+
+def _ai_fill_budget(inp: dict) -> float:
+    """The AI fill block's own budget (src/aifill.py; 0 without one): it spends on the same OpenRouter account."""
+    try:
+        b = aifill.block(inp)
+        return float((b or {}).get("budget_usd") or 0.0)
+    except Exception:  # noqa: BLE001
+        return 0.0
 
 
 def _require_youtube(quick: bool = False) -> None:
@@ -1133,6 +1162,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if presenter_hybrid.block(inp):
         # A presenter block naming no usable kit fails now, before anything is paid for (src/presenter/hybrid.py).
         presenter_hybrid.kit_for(inp)
+    # The script as the job got it (the free voice may rewrite it below): a Retry's resume key (src/resume.py).
+    inp.setdefault("_script0", inp.get("script") or "")
     raw_audio = inp.get("audio_url") or inp.get("audio_path")
     made = None
     if not raw_audio and tts.configured() and tts.wanted(inp):
@@ -1167,15 +1198,40 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     audio_duration = renderer.probe_duration(audio_path)
     if audio_duration:
         report.estimate(audio_duration)
+        # This video's own AI estimate, now that its length is known (src/aiguard.py) - before the first paid
+        # call. The job's start asked only for the floor (or the script's estimate).
+        extra = _ai_fill_budget(inp)
+        if aiguard.need_for(audio_duration / 60.0, extra=extra) > float(inp.get("_ai_need") or 0.0) + 0.01:
+            inp["_ai_need"] = _require_openrouter_credit(minutes=audio_duration / 60.0, extra=extra)
+
+    # What a stopped run of this same video kept for its Retry (src/resume.py): its word timings, its story
+    # brief, the planner's shots and the judged clips - each used only where it still fits.
+    project_id = inp.get("project_id") or ""
+    sig = resume.signature(dict(inp, script=inp.get("_script0", inp.get("script"))), raw_audio)
+    loaded = (resume.load(project_id, sig)
+              if resume.enabled(project_id) and not inp.get("fresh") and not presenter_hybrid.block(inp) else None)
+    if resume.enabled(project_id) and not presenter_hybrid.block(inp):
+        resume.start(project_id, sig, loaded)
+    else:
+        resume.reset()
 
     report("Aligning narration", 8)
     events.phase("transcribe")
-    words = transcribe.transcribe_words(
-        audio_path, language=inp.get("language"),
-        # 8 -> 13%: the band between download and the planner.
-        on_progress=lambda f: report("Aligning narration", 8 + int(5 * f)))
+    words = None
+    if loaded and loaded.get("words"):
+        try:
+            words = [transcribe.Word(text=str(w[0]), start=float(w[1]), end=float(w[2])) for w in loaded["words"]]
+            print(f"[resume] {len(words)} word timings kept from the stopped run: no transcription", flush=True)
+        except (TypeError, ValueError, IndexError):
+            words = None
+    if not words:
+        words = transcribe.transcribe_words(
+            audio_path, language=inp.get("language"),
+            # 8 -> 13%: the band between download and the planner.
+            on_progress=lambda f: report("Aligning narration", 8 + int(5 * f)))
     if not words:
         raise ValueError("no speech detected in the narration audio")
+    resume.note_words(words)
     # Cut where an editor would (src/transcribe.py human_cuts): the visual
     # track runs from frame 0 to the narration's end.
     segments = transcribe.segment_words(words, origin=0.0, until=audio_duration or None)
@@ -1189,7 +1245,14 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     title = director.clean_title(inp.get("title") or inp.get("title_overlay") or "")
     report("Reading the whole story", 13)
     events.phase("plan")
-    brief = director.story_brief(segments, title, configured=director.is_configured())
+    if loaded and isinstance(loaded.get("brief"), dict) and loaded.get("segSig") == resume.segment_sig(segments):
+        brief = dict(loaded["brief"])
+        print("[resume] the story brief kept from the stopped run: no planning call", flush=True)
+    else:
+        brief = director.story_brief(segments, title, configured=director.is_configured())
+    resume.note_brief(brief, segments)
+    # The account ran dry (or the key was refused) on the brief: stop now - never a plan from the rules.
+    _ai_checkpoint("the story brief")
     if presenter_hybrid.block(inp):
         # The AI presenter is a made-up person: never the story's cast, to cut on or find footage of
         # (src/presenter/hybrid.py). Without a presenter block the brief is as the planner wrote it.
@@ -1230,16 +1293,28 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Shot plan: what is on screen while each beat is spoken.
     geocode.reset_cache()
     director.CHAT_CALLS["n"] = 0   # per-job AI usage count
-    shots, planner, warnings = director.plan(
-        segments,
-        title=title,
-        report=report,
-        allow_maps=bool(inp.get("maps", True)),
-        brief=brief,
-    )
+    plan_sig = resume.segment_sig(segments)
+    resume.note_plan_segments(segments)
+    planned = (loaded.get("shots") if loaded and loaded.get("planSig") == plan_sig
+               and isinstance(loaded.get("shots"), dict) else None)
+    if planned:
+        print(f"[resume] {len(planned)} planned lines kept from the stopped run", flush=True)
+    try:
+        shots, planner, warnings = director.plan(
+            segments,
+            title=title,
+            report=report,
+            allow_maps=bool(inp.get("maps", True)),
+            brief=brief,
+            planned=planned,
+        )
+    except aiguard.AIStopped:
+        _ai_checkpoint("planning")       # keeps the lines planned so far, then raises the plain message
+        raise
     # ...and a beat that opens with a named person shows that person.
     mentions.apply_focus(shots, segments, mention_focus, brief)
     # Out of AI credits already: stop before a single footage search is paid for.
+    _ai_checkpoint("planning")
     vision.require_credits()
     # The AI presenter inside this footage style (src/presenter/hybrid.py), only for a job with a presenter
     # block: the lines it says on camera are chosen now and its takes made beside the footage search. None
@@ -1298,6 +1373,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # The lines the footage search is for: every line, but the presenter's full-screen ones with a presenter
     # block (a split screen's line keeps its search: its real clip or picture is the right half).
     search_jobs = hy.search_jobs(jobs) if hy is not None else jobs
+    # The lines a stopped run of this same video already found judged clips and pictures for (src/resume.py):
+    # taken back as they were, never searched or judged again.
+    restored = {i: a for i, a in (resume.restore_assets(loaded, work, plan_sig) if loaded else {}).items()
+                if 0 <= i < len(jobs)}
+    if restored:
+        search_jobs = [j for j in search_jobs if j["index"] not in restored]
 
     last_pct = [22]
 
@@ -1407,9 +1488,15 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     pool_stats = dict(media.LAST_STATS.get("pools") or {}, covered_lines=len(pooled))
     if packed:
         pool_stats["packs_first"] = len(packed)
-    taken = {a.identity for a in pooled.values()} | pools.video_ids(pooled) | {a.identity for a in packed.values()}
+    if restored:
+        pool_stats["resumed"] = len(restored)
+    taken = ({a.identity for a in pooled.values()} | pools.video_ids(pooled) | {a.identity for a in packed.values()}
+             | {a.identity for a in restored.values()} | pools.video_ids(restored))
     rest = [j for j in open_jobs if j["index"] not in pooled]
-    assets = [pooled.get(j["index"]) or packed.get(j["index"]) for j in jobs]
+    assets = [pooled.get(j["index"]) or packed.get(j["index"]) or restored.get(j["index"]) for j in jobs]
+    # The account ran dry (or the key was refused, or the AI went quiet) during the subject pools: keep what was
+    # found for the Retry and stop here (src/aiguard.py, src/resume.py).
+    _ai_checkpoint("the subject pools", assets)
     if in_parts:
         # Every worker starts now: each part pools its own subjects, sources
         # the rest and fills from its spare moments; the parent's own share
@@ -1443,6 +1530,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         got = local(rest, set(taken), seqs=sequences, single=True)
         for j, a in zip(sorted(rest, key=lambda j: j["index"]), got):
             assets[j["index"]] = a
+    # The AI stopped during the footage search (src/aiguard.py): every search ended at its next step, nothing
+    # unjudged was placed; the judged finds are kept for the Retry and the job stops with the plain message.
+    _ai_checkpoint("the footage search", assets)
     # The presenter's takes were made beside the search (src/presenter/hybrid.py). A full-screen presenter line
     # whose take failed gets its real footage now, searched like every other line; the presenter's own lines stay
     # out of every fill below. Without a presenter block fill_jobs is jobs: nothing changes.
@@ -1494,6 +1584,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     results_by_index = [None] * (max(j["index"] for j in jobs) + 1)
     for j in jobs:
         results_by_index[j["index"]] = assets[j["index"]]
+    _ai_checkpoint("the spare pool moments", results_by_index)
     held = media.hold_violations(fill_jobs, results_by_index)
     if held and pools_wanted:
         extra = pools.fill_from_reserve(fill_jobs, sorted(held), work, require_cc=require_cc,
@@ -1510,6 +1601,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
                                     footage_only={j["index"] for j in fill_jobs
                                                   if j.get("hook") and j.get("subject_type") != "document"
                                                   and not j.get("person_era")})
+    _ai_checkpoint("the last pass", results_by_index)
     if held:
         pool_stats["variety"] = dict(media.restore_held(fill_jobs, results_by_index, held), held=len(held),
                                      reasons=dict(collections.Counter(r for _a, r, _k in held.values())))
@@ -1548,6 +1640,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         assets[j["index"]] = results_by_index[j["index"]]
     if rescued:
         pool_stats["rescue"] = rescued
+    _ai_checkpoint("the fallback fill", assets)
     _ytdlp_mod.set_deadline(0.0)               # later steps (resource, render) are not time boxed here
     # Small photos get Real-ESRGAN detail and soft clips a sharpen pass to
     # 1080p, before anything is uploaded or rendered (time-boxed; a failure
@@ -1578,6 +1671,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # What was restored, how, and how long it took (meta.sourcing.archiveRestore).
         media.LAST_STATS["archiveRestore"] = (pool_stats.get("upscale") or {}).pop(
             "archiveRestore", None) or {"on": True, "restored": 0}
+    _ai_checkpoint("the footage search", assets)
     vision.require_credits()
 
     # No percentage: the sourcing bands already reach the mid 60s.
@@ -1690,10 +1784,21 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     doc["meta"]["sourceStats"] = media.source_stats()
     doc["meta"]["vision"] = vision.stats()
     if vision.out_of_credits():
+        # (Only with REQUIRE_AI off: on, the job stopped at the first refusal - src/aiguard.py.)
         doc["meta"]["warnings"].insert(0, (
-            "The AI account (Kie) ran out of credits during this job, so vision "
-            "checks, AI rescue and AI images stopped partway. Top up Kie and "
+            "The AI account (OpenRouter) ran out of credits during this job, so vision "
+            "checks, AI rescue and AI images stopped partway. Top up OpenRouter and "
             "re-run for full quality."))
+    # Candidates turned down before any download for being off the story (src/offtopic.py), and the ones no judge
+    # could see while vision was meant to (media.must_judge): the job result's view of both guards.
+    doc["meta"]["selectionGuard"] = {"offTopic": offtopic.stats(),
+                                     "unjudgedRefused": int(media.UNJUDGED_REFUSED.get("n", 0))}
+    if loaded:
+        # What a stopped run of this video kept and this one used (src/resume.py).
+        doc["meta"]["resumed"] = {"words": bool(loaded.get("words")), "brief": bool(loaded.get("brief")),
+                                  "plannedLines": len(planned or {}), "clips": len(restored)}
+        resume.clear(project_id, sig)           # used: the next run of this video starts fresh
+    resume.reset()
     doc["meta"]["audioSource"] = raw_audio
     if made:
         # The narration was made from the script by the free voice (src/tts.py):
@@ -1805,8 +1910,15 @@ def _replan_beat(scene: dict, doc: dict, story: dict, title: str) -> dict:
     seg = transcribe.Segment(text=str(scene.get("text") or ""), start=start, end=end)
     title = director.clean_title(title or story.get("event") or "")
     shots = [director._rule_shot(seg, 0, title)]
+    enriched = 0
     if director.is_configured():
-        director._ai_pass([seg], title, shots, brief=story)
+        enriched, _warnings = director._ai_pass([seg], title, shots, brief=story)
+        # The account ran dry or the key was refused: stop with the plain message, never a rule-planned search.
+        aiguard.raise_if_stopped("planning the scene again")
+    if not enriched and shots[0].get("rule"):
+        # No model planned it (none configured, or every model failed for another reason): the line's own names
+        # and places, then the story's own people and places - never the video's title (src/director.py).
+        director.story_rule_queries([seg], shots, story)
     director.anchor_to_story(shots, [seg], story)
     shot = shots[0]
     si = (scene_intent_mod.SceneIntent.from_dict(shot["sceneIntent"]) if shot.get("sceneIntent")
@@ -1878,10 +1990,13 @@ def _publish_choices(doc: dict, project_id: str, bucket: str, job_id: str, work:
     if not getattr(config, "PICK_A_SHOT", False):
         return 0
     todo = []
+    judged_only = media.must_judge()
     for s in doc.get("scenes") or []:
         sem = s.get("semanticMetadata") if isinstance(s, dict) else None
+        # Only runner-ups a judge approved become choices (media.must_judge): one with no verdict is never offered.
         alts = [a for a in ((sem or {}).get("alternatives") or []) if isinstance(a, dict)
-                and a.get("localPath") and os.path.isfile(a.get("localPath") or "")]
+                and a.get("localPath") and os.path.isfile(a.get("localPath") or "")
+                and (not judged_only or a.get("score") is not None)]
         if alts:
             todo.append((s, alts[:config.PICK_A_SHOT_CHOICES]))
     if not todo:
@@ -2004,6 +2119,9 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
     finally:
         media._KEEP_ALT_FILES.reset(keep)
         _restore_config(overrides)
+    # The account ran dry (or the key was refused) during the search: say so, not "nothing found" - and nothing
+    # it found unjudged is offered (src/aiguard.py, media.must_judge).
+    aiguard.raise_if_stopped("finding a new shot")
     if not asset:
         raise ValueError(f"no usable media found for '{query}' - try different wording")
 
@@ -2053,7 +2171,9 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
             print(f"[living] replacement left flat: {type(e).__name__}: {str(e)[:100]}", flush=True)
     scene["reviewRequired"] = bool(asset.review_required)
     scene["reviewReason"] = asset.review_reason or ""
-    alternatives = list(asset.alternatives or [])
+    # Only choices a judge approved are offered (media.must_judge): a runner-up with no verdict never is.
+    alternatives = [a for a in (asset.alternatives or []) if isinstance(a, dict)
+                    and (not media.must_judge() or a.get("score") is not None)]
     scene["semanticMetadata"] = {
         **sem,
         "intent": intent,
@@ -2478,6 +2598,9 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # to repair first (below); the render requires every one after that.
     timeline.drop_invalid_overlays(doc)
     timeline.validate(doc, require_media=False, allow_stock=inp.get("allow_stock"))
+    # The editor's keyframes, effects, masks and motion blur (src/clipfx.py): cleaned as the renderer does,
+    # a bad value dropped - never a failed render.
+    clipfx.clean(doc)
 
     # A plan can sit in the editor for days; any signed URL in it has long
     # since expired. Re-resolve the narration from the reference the plan
@@ -2929,7 +3052,7 @@ def _done_fields(out: dict) -> dict:
 # Settings a job may override for itself ({"config": {...}} in the input), so
 # the benchmark can A/B a selection change on one image. Coerced to the type
 # the setting already has; anything else is ignored.
-CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
+CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
                       "POOL_EXTRA_QUERIES", "POOL_SCOUT", "INTENT_QUERIES_MAX",
                       "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS",
                       "TREATMENTS", "STYLE_PACK", "MOMENT_FINE_PASS", "CLEAN_CUTS",
@@ -3328,6 +3451,13 @@ def handler(job):
         vstyle = styles.apply(inp)
         if vstyle:
             print(f"[worker] video style: {vstyle}", flush=True)
+        # Style Match (src/style_match): a measured Style Kit sets the pace here and draws the graphics,
+        # transitions, grade and mix in timeline.build.
+        if isinstance(inp.get("style_kit"), dict):
+            from src.style_match import apply as style_apply
+            sk = style_apply.prepare_input(inp)
+            if sk:
+                print(f"[worker] style kit: {sk.get('name')} ({len(sk.get('elements') or [])} elements)", flush=True)
     # The AI presenter inside a footage style (src/presenter/hybrid.py) is real footage around the presenter and
     # nothing else generated: no AI pictures in its search, its gap fills, a Replace Clip or a render's repairs.
     if (act in ("plan", "build") and presenter_hybrid.block(inp)) or (
@@ -3361,6 +3491,11 @@ def handler(job):
     reports_to = "" if action in ("restore_media", "recut", "relook", "reclip", "shorts") else project_id
     applying = action in ("recut", "reclip") and bool(inp.get("apply"))
     events.start_job(job_id, reports_to, part=("part" if action in ("source_part", "render_chunk") else ""))
+    # Every job starts with its AI on (src/aiguard.py) - a warm worker's last job may have run its account dry -
+    # and with nothing of another job's to resume (src/resume.py).
+    vision.reset()
+    aiguard.reset()
+    resume.reset()
     if action in ("plan", "build", "render", "resource", "translate_version") or applying:
         costs.measure_start()
     report = Reporter(reports_to, job=job)
@@ -3590,6 +3725,17 @@ def handler(job):
             return {**out, "action": "presenter_set", "costs": costs.summary(time.time() - started),
                     "elapsed": round(time.time() - started, 1)}
 
+        if action == "style_match":
+            # Style Match (src/style_match): measure a reference video's editing style into a Style Kit.
+            from src.style_match import run as style_run
+            try:
+                out = style_run.run(inp)
+            except Exception as e:  # noqa: BLE001 - reported in the result
+                traceback.print_exc()
+                out = {"ok": False, "action": "style_match", "error": f"{type(e).__name__}: {e}"[:800]}
+            return {**out, "costs": costs.summary(time.time() - started),
+                    "elapsed": round(time.time() - started, 1)}
+
         if action == "presenter_info":
             # The AI presenter style for the app (src/presenter): its tiers, $ per 10/15/20-minute video per
             # tier, the presenter kits, the script preset. No paid call, no project write.
@@ -3679,8 +3825,14 @@ def handler(job):
 
         if action in ("plan", "build", "resource"):
             _require_ai_credit()
-            # A scene's new shot (resource) needs cents, a whole video dollars (OPENROUTER_MIN_CREDIT).
-            _require_openrouter_credit(config.OPENROUTER_MIN_CREDIT_SMALL if action == "resource" else None)
+            # A scene's new shot (resource) needs cents; a whole video its own estimate - from the script's length
+            # here, from the narration's once it is downloaded (do_plan) - and never less than
+            # OPENROUTER_MIN_CREDIT (src/aiguard.py).
+            if action == "resource":
+                _require_openrouter_credit(config.OPENROUTER_MIN_CREDIT_SMALL, what="a new shot for this scene")
+            else:
+                inp["_ai_need"] = _require_openrouter_credit(
+                    minutes=aiguard.minutes_from_script(inp.get("script") or ""), extra=_ai_fill_budget(inp))
             if inp.get("allow_youtube") is not False:
                 report("Checking the YouTube connection", 2)
                 _require_youtube()

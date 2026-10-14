@@ -190,6 +190,11 @@ def pick(info: dict, intent: str, context: str, seconds: float,
     verdict = vision.pick_tile(sheet_b64, len(times), intent, context, checked=True)
     if not verdict:
         return None
+    if verdict.get("none"):
+        # The model says no tile fits (a null tile, "none of these...", a refusal): a pick under the floor - the
+        # candidate is skipped before any download, never downloaded at the old fixed point.
+        return {"start": 0.0, "score": 0.0, "description": str(verdict.get("description") or "no tile fits")[:200],
+                "tile": 0}
     idx = verdict["tile"] - 1
     if not 0 <= idx < len(times):
         return None

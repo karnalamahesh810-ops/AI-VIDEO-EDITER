@@ -1160,8 +1160,9 @@ def _no_text_last(doc: dict, cards: List[dict], out: Dict[str, int], *, fresh: b
                 stop = min(until, time.time() + float(config.FALLBACK_SCENE_SECONDS))
                 try:
                     # In the opening a moment is judged (and kept to the variety rules): the hook is what a
-                    # viewer stays for; elsewhere it is the last thing before a hold, unjudged and flagged.
-                    got = _from_moment(job, used, work, stop, donors, judged=_hook(s, fps))
+                    # viewer stays for; elsewhere it was the last thing before a hold, unjudged and flagged -
+                    # judged too since 2026-10-09 while vision is meant to judge the job (media.must_judge).
+                    got = _from_moment(job, used, work, stop, donors, judged=_hook(s, fps) or media.must_judge())
                 except Exception as e:  # noqa: BLE001 - the hold below
                     print(f"[fill] scene {k + 1}: last moment skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
                     got = None
@@ -1467,6 +1468,25 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
 # The check before publishing: no file, asset or moment twice
 # --------------------------------------------------------------------------- #
 
+def editor_split(scenes: List[dict], i: int) -> bool:
+    """
+    Scene i is the second part of a shot the editor's split cut in two (the pro editor: scene.splitFrom names
+    the part before it, which shows the same file): it continues that shot, so it is never a repeat to replace.
+    """
+    s = scenes[i] if 0 <= i < len(scenes) and isinstance(scenes[i], dict) else {}
+    src = s.get("splitFrom")
+    if not isinstance(src, str) or not src or i == 0:
+        return False
+    url = str((s.get("media") or {}).get("url") or "")
+    for j in range(i - 1, -1, -1):
+        p = scenes[j] if isinstance(scenes[j], dict) else {}
+        if str((p.get("media") or {}).get("url") or "") != url:
+            return False
+        if p.get("id") == src:
+            return True
+    return False
+
+
 def find_repeats(doc: dict) -> List[Tuple[int, str]]:
     """
     [(scene index, why)] for every scene that repeats an EARLIER scene: the
@@ -1478,10 +1498,13 @@ def find_repeats(doc: dict) -> List[Tuple[int, str]]:
     fps = max(1, int(doc.get("fps") or 30))
     used = Used()
     out = []
-    for i, s in enumerate(doc.get("scenes") or []):
+    scenes = doc.get("scenes") or []
+    for i, s in enumerate(scenes):
         shot = Shot.of_scene(s, fps)
         if shot is None:
             continue
+        if editor_split(scenes, i):
+            continue                # the editor cut one shot in two (src/cliptime.py splitFrom): it continues
         why = used.why_not(i, shot)
         if why and not is_presenter_scene(s):
             out.append((i, why))

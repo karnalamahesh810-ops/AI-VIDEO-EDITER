@@ -210,6 +210,12 @@ class Stopper:
     def check(self) -> str:
         if self.reason:
             return self.reason
+        from . import aiguard
+        if aiguard.stopping():
+            # The account ran dry, the key was refused or the AI went quiet (src/aiguard.py): no target starts a
+            # paid step after it, and nothing found from now could be judged.
+            self.stop(aiguard.message() or "the AI stopped answering")
+            return self.reason
         now = time.time()
         with self.lock:
             due = now >= self._next

@@ -45,10 +45,10 @@ _MUSIC_TITLE = re.compile(
     r"vevo\b|\bfreestyle\b|\bdiss(?:\s+track)?\b|\brappers?\b|\bremix(?:es)?\b|\bprod\.\s|\bcypher\b", re.I)
 # "Song ft. Artist", "(feat. Artist)" - never "24 ft. seas".
 _FEAT = re.compile(r"(?<!\d)[\s(\[](?:ft|feat)\.\s*\S", re.I)
-# "Freestyle" is a rap word - and a swimming, skiing or BMX one.
+# "Freestyle" is a rap word - and a swimming, skiing, BMX or FPV drone one.
 _SPORT = re.compile(r"\b(swim\w*|ski|skis|skiing|skier\w*|bmx|motocross|fmx|snowboard\w*|wrestl\w*|relay|"
                     r"olympic\w*|medley|backstroke|butterfly|breaststroke|skat\w*|scooter|football|soccer|"
-                    r"chess|kayak\w*|\d+\s*m)\b", re.I)
+                    r"chess|kayak\w*|fpv|drones?|parkour|\d+\s*m)\b", re.I)
 # A scenery upload filed under YouTube's Music category (a 4K drone film over a lake, set to music): footage,
 # not a music video - the judge still looks at its frames.
 _SCENERY = re.compile(r"\b(drone|aerial|4k|8k|scenery|scenic|nature|relax\w*|ambient|ambience|sounds? of|"

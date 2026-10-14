@@ -30,7 +30,7 @@ import math
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from . import lookpack3, lookpack4, templates
+from . import config, lookpack3, lookpack4, mapsv2, templates
 from .presenter import is_presenter_scene
 
 # --------------------------------------------------------------------------- #
@@ -235,6 +235,8 @@ def family_of(ov: dict) -> str:
         return lookpack3.FAMILY[tid]
     if tid in P4:
         return lookpack4.FAMILY[tid]
+    if tid in mapsv2.IDS:
+        return "map"
     typ = str(ov.get("type") or "")
     if typ == "map" or tid.startswith("MAP_") or tid == "LIB_PR_MAP_PATH":
         return "map"
@@ -287,6 +289,8 @@ def landing_seconds(ov: dict) -> float:
         return lookpack3.landing_seconds(ov)
     if tid in P4:
         return lookpack4.landing_seconds(ov)
+    if tid in mapsv2.IDS:
+        return mapsv2.landing_seconds(ov)
     if tid in DATE_LAND:
         # a timeline (a counter) that moves on to a year said later in its run lands when that leg (roll) lands
         return max(DATE_LAND[tid], _item_at(ov) + DATE_LEG[tid]) if tid in DATE_LEG else DATE_LAND[tid]
@@ -305,6 +309,9 @@ def min_seconds(ov: dict) -> float:
         return lookpack3.min_seconds(ov, EXIT)
     if str(ov.get("template") or "") in P4:
         return lookpack4.min_seconds(ov, EXIT)
+    if str(ov.get("template") or "") in mapsv2.IDS:
+        # never shorter than any map look (the map family's own least), longer when its parts land later
+        return max(mapsv2.min_seconds(ov, EXIT), round(ENTRY + LANDING.get("map", 0.0) + MIN_HOLD["map"] + EXIT, 3))
     fam = family_of(ov)
     return round(landing_seconds(ov) + MIN_HOLD.get(fam, MIN_HOLD["other"]) + EXIT, 3)
 
@@ -1864,6 +1871,42 @@ def _upgrade_maps(kept: List[dict], nar: "Narration", fps: int, allowed: Optiona
     return rows
 
 
+def _upgrade_maps_v2(kept: List[dict], nar: "Narration", fps: int, allowed: Optional[frozenset], doc: dict) -> List[dict]:
+    """
+    Maps v2 (src/mapsv2.py) in place of the plan's older map looks whose line fits one: each keeps its start and
+    its places (the gazetteer's), takes the areas its line names, and lands each part on its word. Looks pack 3's
+    maps (upgraded just before) keep theirs. Returns what changed.
+    """
+    rows: List[dict] = []
+    state = mapsv2.State()
+    kit = mapsv2.kit_of(doc)
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    region = str(meta.get("region") or meta.get("country") or "")
+    ctx = {mapsv2.a3_of_iso2(region)} - {""} if len(region) == 2 else set()
+
+    def ok(tid: str) -> bool:
+        return _p3_ok(tid) and (allowed is None or tid in allowed)
+
+    for i, ov in enumerate(kept):
+        if not isinstance(ov, dict) or _scene_card(ov) or ov.get("dataLook"):
+            continue
+        tid = str(ov.get("template") or "")
+        if not mapsv2.upgradable(tid):
+            continue
+        start = int(ov.get("startFrame") or 0) / fps
+        span = _window_text(nar, start - 3.0, start + 9.0)
+        if span is None:
+            continue
+        a, b = span
+        got = mapsv2.upgrade(ov, nar.text[a:b], lambda j, a=a: nar.time_at(a + j), start, state, ok, ctx, kit)
+        if got is None:
+            continue
+        got["durationInFrames"] = max(int(ov.get("durationInFrames") or 0), min_frames(got, fps))
+        kept[i] = got
+        rows.append({"from": tid, "to": got["template"], "at": round(start, 2)})
+    return rows
+
+
 def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
     """
     Re-plan the data looks of a timeline in place and give every overlay its full animation:
@@ -2007,6 +2050,8 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
             # the totals map shows the ranking's values on their places: the ranking said nearby stands down
             new = [o for o in new if not (o.get("template") == lookpack3.RANKING
                                           and any(abs(float(o["_at"]) - a) <= 6.0 for a in ups))]
+        if config.MAPS_V2:
+            upgraded += _upgrade_maps_v2(kept, Narration(words), fps, allowed, doc)
     # a scene's own text card is its picture: it keeps its frames, outside the lane
     cards = [o for o in kept if _scene_card(o)]
     if presenter:
@@ -2026,6 +2071,13 @@ def finish(doc: dict, *, plan_data: bool = True) -> Dict[str, Any]:
             for it, at in zip(o["items"], o["_items_at"]):
                 if at is not None and isinstance(it, dict):
                     it["at"] = round(max(0.0, float(at) - start), 2)
+        if o.get("_areas_at") and isinstance(o.get("areas"), list):
+            # a maps-v2 look's areas land on their names from where the look really starts
+            start = int(o.get("startFrame") or 0) / fps
+            o["areas"] = [dict(x) for x in o["areas"]]
+            for x, at in zip(o["areas"], o["_areas_at"]):
+                if at is not None and isinstance(x, dict):
+                    x["at"] = round(max(0.0, float(at) - start), 2)
     # a person's card shows their portrait when a scene on screen around it is of that person (else their initials)
     portraits = lookpack4.bind_portraits([o for o in placed if o.get("dataLook")], doc.get("scenes") or [], fps)
     doc["overlays"] = sorted([strip_private(o) for o in placed] + cards, key=lambda o: int(o.get("startFrame") or 0))

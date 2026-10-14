@@ -31,7 +31,9 @@ from typing import Dict, List, Optional, Tuple
 import requests
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
-from . import config, costs, geocode, vision
+import threading
+
+from . import aiguard, config, costs, geocode, vision
 from . import intent as scene_intent
 from .transcribe import Segment, keywords_for
 
@@ -539,42 +541,53 @@ def _mentions_a_person(*texts: str) -> bool:
 
 def _rule_shot(seg: Segment, index: int, title: str) -> dict:
     """
-    One beat's plan from the text alone.
-
-    The title is prepended to every query because a clause like "the river rose
-    again" is meaningless to a search engine on its own; with the project title
-    in front it resolves to the actual subject.
+    One beat's plan from the text alone: the line's own names, places and
+    words - never the video's title (2026-10-09). The title used to lead every
+    query and stand as the beat's subject: the Yellowstone build of 2026-10-07
+    searched "Yellowstone Just EXPLODED Again — Boiling Water Shoots 100 FEET
+    Into the Air 2010" for a line about ground uplift, judged its clips against
+    that headline as their "entity", and tagged the line a person's ("Yellowstone
+    Just" read as a name). A beat that names nothing gets its subject from the
+    story itself (story_rule_queries: the last person named, the story's own
+    people and places). The title stays only as the opening's chapter hint.
     """
     # Four terms, not seven. A search engine given "Lake Powell houseboat
     # trailer concrete ramp tires downhill" matches nothing at all — measured
     # on real narration, where a 7-term query left 30 of 55 scenes with no
     # media. Fallbacks relax the query step by step so a scene ends up with a
     # broader but still on-topic visual rather than a black frame.
+    text = seg.text.strip()
+    names = _proper_phrases(text)
+    lead = names[0] if names else ""
     terms = keywords_for(seg, max_terms=4)
-    query = f"{title} {terms}".strip()[:240]
-    fallbacks = []
     narrow = terms.split()
+    if lead:
+        have = {w.lower() for w in lead.split()}
+        extra = [w for w in narrow if w.lower() not in have]
+        query = " ".join(lead.split() + extra[:max(1, 4 - len(lead.split()))])
+    else:
+        query = terms
+    query = query.strip()[:240]
+    fallbacks = []
     if len(narrow) > 2:
-        fallbacks.append(f"{title} {' '.join(narrow[:2])}".strip()[:240])
-    if title:
-        fallbacks.append(title[:240])
+        fallbacks.append(" ".join(narrow[:2]).strip()[:240])
+    if lead:
+        fallbacks.append(lead[:240])
     elif narrow:
         fallbacks.append(narrow[0])
     # Drop repeats while keeping order.
     seen_q = {query}
     fallbacks = [q for q in fallbacks if q and not (q in seen_q or seen_q.add(q))]
 
-    text = seg.text.strip()
     # Separate from `query` on purpose. A search engine wants keywords; an
-    # image model wants a description, so it gets the spoken line plus the
-    # subject for context.
-    prompt = f"{title}. {text}".strip(". ")[:600] if title else text[:600]
+    # image model wants a description: the spoken line itself.
+    prompt = text[:600]
     shot = {"query": query, "fallbacks": fallbacks, "prompt": prompt,
             "visualType": "footage", "overlay": None, "rule": True,
             # What the shot should SHOW, for the vision judge. Without a model
             # the best available description is the line itself.
-            "intent": prompt[:300], "subject": title[:120],
-            "subjectType": "person" if _mentions_a_person(text, title) else ""}
+            "intent": prompt[:300], "subject": lead[:120],
+            "subjectType": "person" if _mentions_a_person(text) else ""}
 
     dated = _names_a_date(text)
     if index == 0 and title:
@@ -803,8 +816,15 @@ def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
     # The person the story is about: the most-named person in the script.
     named = Counter(n for seg in segments for n in people_in(seg.text))
     lead = [n for n, _ in named.most_common(1)]
-    main = (([title] if title else []) + (brief.get("people") or []) + lead
-            + (brief.get("places") or []) + [""])[0]
+    # The story's main subject: its own people and places - never the video's title (2026-10-09: "Yellowstone
+    # Just EXPLODED Again - Boiling Water Shoots 100 FEET Into the Air" was the subject and the search of every
+    # nameless line of the Yellowstone build). `title` stays in the signature for the callers.
+    places = list(brief.get("places") or []) + [brief.get("subject") or _story_subject(segments)]
+    people = list(brief.get("people") or []) + lead
+    # A biography's nameless line is about its person; any other story's about its place or subject (a Yellowstone
+    # line about uplift is about Yellowstone, not about the geologist the story quotes once).
+    main = ((people + places) if str(brief.get("kind") or "") == "biography" else (places + people) + [""])
+    main = ([m for m in main if m] + [""])[0]
     carry = main
     changed = 0
     for shot, seg in zip(shots, segments):
@@ -817,6 +837,8 @@ def story_rule_queries(segments: List[Segment], shots: List[dict], brief: dict,
             continue
         years = _YEAR.findall(text)
         subject = names[0] if names else (carry if _PRONOUN.search(text) or not main else main)
+        if not names and not subject:
+            continue                # nothing named here or in the story: the line's own words (_rule_shot) stand
         words = list(dict.fromkeys(names[:2] + ([subject] if subject and subject not in names else [])))
         words += years[:1]
         # An event story's rule query names its medium: the interview with
@@ -947,9 +969,45 @@ def _rule_brief(segments: List[Segment], title: str,
     places = [p for p, _ in counts.most_common(5)]
     people = [n for n, c in Counter(_named_people(blob)).most_common(5) if c >= 2]
 
-    return {"kind": kind, "summary": "", "event": (title or "")[:120] if is_event else "",
+    # The event's searchable name from the narration - its main place, what happened, the year ("Davenport, Iowa
+    # flood 2026") - never the video's title, which every nameless line used to search (2026-10-09).
+    event = ""
+    if is_event:
+        cues = Counter(_EVENT_NOUNS[m.group(1).lower().rstrip("s")]
+                       for m in _EVENT_CUES.finditer(" ".join(s.text for s in segments))
+                       if m.group(1).lower().rstrip("s") in _EVENT_NOUNS)
+        cue = cues.most_common(1)[0][0] if cues else ""
+        event = " ".join(p for p in (places[0] if places else "", cue, str(year) if year else "") if p)[:120]
+        if not (places and cue):
+            event = ""              # a place or a happening alone is no event name: the lines' own words instead
+    return {"kind": kind, "summary": "", "event": event,
             "year": year, "recent": recent, "places": places, "people": people,
+            "subject": _story_subject(segments),
             "hookBeats": _hook_beats(segments), "cast": [], "sections": []}
+
+
+def _story_subject(segments: List[Segment], least: int = 3) -> str:
+    """The name the narration itself says most ("Yellowstone", "Lake Powell"), at least `least` times - the story's
+    own subject for a line that names nothing, read from what is said, never from the video's title."""
+    script = " ".join(s.text for s in segments or [])
+    known = _known_names(script)
+    counts = Counter()
+    for s in segments or []:
+        for name in _proper_phrases(s.text, known):
+            if len(name) > 3 and not _YEAR.fullmatch(name):
+                counts[name] += 1
+    best = [n for n, c in counts.most_common(3) if c >= least]
+    return best[0] if best else ""
+
+
+# The event words of _EVENT_CUES that name what happened (not "this week", "evacuated" or a weekday), each as the
+# event's searchable noun (a levee's or floodwater's story is a flood).
+_EVENT_NOUNS = {"flood": "flooding", "flooding": "flooding", "floodwater": "flooding", "levee": "flooding",
+                "hurricane": "hurricane", "tornado": "tornado", "tornadoe": "tornado", "tropical storm": "tropical storm",
+                "blizzard": "blizzard", "wildfire": "wildfire", "earthquake": "earthquake", "tsunami": "tsunami",
+                "heat wave": "heat wave", "heatwave": "heat wave", "landslide": "landslide", "mudslide": "mudslide",
+                "storm surge": "storm surge", "derecho": "derecho", "ice storm": "ice storm",
+                "power outage": "power outage"}
 
 
 def _validate_brief(raw, fallback: dict, n_beats: int,
@@ -1148,6 +1206,8 @@ def _note_usage(body) -> None:
 # Answers worth another try on the same model after a pause: a timeout, a conflict, "too
 # early", rate limited - and any 5xx (_retryable).
 _RETRY_STATUS = (408, 409, 425, 429)
+# The kind of this thread's last failed planning request (aiguard.classify), for the pause before the next try.
+_LAST_KIND = threading.local()
 
 
 def _retryable(status: int) -> bool:
@@ -1210,11 +1270,20 @@ def _chat_try(base: str, key: str, model: str, main: bool, attempt: int, system:
         _note_usage(body)
         status, msg = _failure(r, body)
         if status:
-            if main and vision.is_credit_error(status, msg):
-                vision.note_out_of_credits()
+            # The account or the key cannot pay (402, "requires more credits", "Prompt tokens limit exceeded"...):
+            # the job's AI stops (aiguard) - never a fall back to planning from the rules. A refused key the same.
+            # A rate limit backs off and asks again (_chat_route).
+            kind = aiguard.classify(status, msg)
+            _LAST_KIND.kind = kind
+            if main and kind == aiguard.CREDIT:
+                vision.note_out_of_credits(model, msg)
+            elif kind == aiguard.CREDIT:
+                vision._note_fallback_dry(model, msg)
+            elif main and kind == aiguard.AUTH:
+                aiguard.note_auth(model, msg)
             if errors is not None:
                 errors.append(f"{model}#{attempt}: HTTP {status}")
-            return None, _retryable(status)
+            return None, (_retryable(status) or kind in (aiguard.RATE, aiguard.RETRY)) and not aiguard.is_fatal(kind)
         if body is None:
             raise ValueError("not JSON")
         data = _json_reply(body["choices"][0]["message"]["content"])
@@ -1249,13 +1318,17 @@ def _chat_route(route: tuple, system: str, payload: dict, timeout: int,
     base, key, model, main = route
     tries = 1 + max(0, int(config.DIRECTOR_RETRIES))
     failed = False
+    _LAST_KIND.kind = ""
     for attempt in range(1, tries + 1):
         if attempt > 1:
             pause = max(0.0, config.DIRECTOR_RETRY_WAIT) * (2 ** (attempt - 2))
+            if getattr(_LAST_KIND, "kind", "") == aiguard.RATE:
+                # A rate limit: a longer pause before the same model is asked again (aiguard: never a stop).
+                pause = max(pause, float(getattr(config, "VISION_RATE_WAIT", 5.0) or 0.0) * (2 ** (attempt - 2)))
             if time.time() + pause >= deadline or not vision.model_available(model):
                 break
             time.sleep(pause)
-        if main and vision.out_of_credits():
+        if (main and vision.out_of_credits()) or aiguard.stopping():
             return None
         data, transient = _chat_try(base, key, model, main, attempt, system, payload,
                                     int(max(5, min(timeout, deadline - time.time()))), errors,
@@ -1286,11 +1359,19 @@ def _chat_json(system: str, payload: dict, timeout: int = 120,
     the first valid answer wins; the call ends after DIRECTOR_BUDGET_FACTOR x
     its timeout.
     """
+    if aiguard.stopping():
+        return None                 # the job's AI stopped (aiguard): nothing more is asked, nothing planned by rules
     token = _LLM_KIND.set(_kind_of(system))
     try:
-        return _chat_json_kind(system, payload, timeout, errors, routine)
+        data = _chat_json_kind(system, payload, timeout, errors, routine)
     finally:
         _LLM_KIND.reset(token)
+    # The outage clock (aiguard): an answer starts it again; a planning call nothing answered counts toward it.
+    if data is not None:
+        aiguard.note_ok()
+    elif not aiguard.tripped() and _routes(routine):
+        aiguard.note_failure(aiguard.OTHER, "director", "; ".join((errors or [])[-2:]) or "no model answered")
+    return data
 
 
 def _kind_of(system: str) -> str:
@@ -1306,7 +1387,8 @@ def _chat_json_kind(system: str, payload: dict, timeout: int = 120,
                     errors: Optional[List[str]] = None, routine: bool = False) -> Optional[dict]:
     """_chat_json under its kind (_LLM_KIND)."""
     queue = [r for r in _routes(routine)
-             if not (r[3] and vision.out_of_credits()) and vision.model_available(r[2])]
+             if not (r[3] and vision.out_of_credits()) and not (not r[3] and vision._FALLBACK_DRY["hit"])
+             and vision.model_available(r[2])]
     if not queue:
         return None
     started = time.time()
@@ -2431,20 +2513,37 @@ def _balance_visuals(shots: List[dict], story: dict) -> int:
     return changed
 
 
+# The model's own shots of the last plan, as the AI pass wrote them (before the rule passes rewrite their
+# searches): {beat index: shot}. A stopped plan or build keeps them for its Retry (src/resume.py), which hands
+# them back as `planned` - those batches are not asked again.
+LAST_AI_SHOTS: Dict[int, dict] = {}
+_AI_SHOTS_LOCK = threading.Lock()
+
+
 def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
-             report=None, brief: Optional[dict] = None) -> Tuple[int, List[str]]:
-    """Overwrite rule shots with model choices where the call succeeds."""
+             report=None, brief: Optional[dict] = None,
+             planned: Optional[Dict[int, dict]] = None) -> Tuple[int, List[str]]:
+    """Overwrite rule shots with model choices where the call succeeds. `planned`: shots a model already wrote
+    for these beats (a Retry's saved plan, src/resume.py) - a batch they all cover is taken as it is."""
     warnings: List[str] = []
     enriched = 0
     total = len(segments)
     story = {k: v for k, v in (brief or {}).items() if k != "hookBeats"}
     hooks = set((brief or {}).get("hookBeats") or [])
+    planned = {int(k): v for k, v in (planned or {}).items() if isinstance(v, dict)}
 
     def one(offset: int) -> Tuple[int, List[str]]:
         """Plan one batch of beats; writes only its own shots[offset:offset+_BATCH]."""
         warnings: List[str] = []
         enriched = 0
         batch = segments[offset:offset + _BATCH]
+        if batch and all(offset + i in planned for i in range(len(batch))):
+            # Planned already (the saved plan of a stopped job): no call, the same shots.
+            for i in range(len(batch)):
+                shots[offset + i] = json.loads(json.dumps(planned[offset + i]))
+                with _AI_SHOTS_LOCK:
+                    LAST_AI_SHOTS[offset + i] = json.loads(json.dumps(planned[offset + i]))
+            return len(batch), []
         payload = {
             "title": title,
             "story": story,
@@ -2454,7 +2553,7 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
         }
         tried: List[str] = []
         data = _chat_json(_SYSTEM_PROMPT, payload, timeout=120, errors=tried, routine=True)
-        if data is None and not vision.out_of_credits():
+        if data is None and not vision.out_of_credits() and not aiguard.stopping():
             time.sleep(10)
             data = _chat_json(_SYSTEM_PROMPT, payload, timeout=150, errors=tried, routine=True)
         if data is None:
@@ -2514,6 +2613,8 @@ def _ai_pass(segments: List[Segment], title: str, shots: List[dict],
             # The subject alone is the last fallback: broad, but always on topic.
             if subject and subject not in shots[idx]["fallbacks"]:
                 shots[idx]["fallbacks"] = shots[idx]["fallbacks"] + [subject]
+            with _AI_SHOTS_LOCK:
+                LAST_AI_SHOTS[idx] = json.loads(json.dumps(shots[idx], default=str))
             enriched += 1
         if len(seen) < len(batch):
             warnings.append(
@@ -3217,16 +3318,22 @@ LAST_STORY: dict = {}
 
 
 def plan(segments: List[Segment], title: str = "", report=None,
-         allow_maps: bool = True, brief: Optional[dict] = None
-         ) -> Tuple[List[dict], str, List[str]]:
+         allow_maps: bool = True, brief: Optional[dict] = None,
+         planned: Optional[Dict[int, dict]] = None) -> Tuple[List[dict], str, List[str]]:
     """
     Plan every beat. Returns (shots, planner_kind, warnings).
 
     planner_kind is "ai", "mixed" or "rules" so the UI can tell the user how
     much of the plan a model chose and how much fell back to rules. `brief`
     is the story brief when the caller already has it (it also drives the
-    post-sourcing recheck); otherwise it is read here.
+    post-sourcing recheck); otherwise it is read here. `planned`: the model's
+    shots a stopped job saved for its Retry (src/resume.py; LAST_AI_SHOTS).
+
+    The job's AI stopping (aiguard: the account ran dry, the key was refused)
+    raises AIStopped here, before a single line is planned by the rules.
     """
+    with _AI_SHOTS_LOCK:
+        LAST_AI_SHOTS.clear()
     if not segments:
         return [], "rules", []
 
@@ -3250,9 +3357,12 @@ def plan(segments: List[Segment], title: str = "", report=None,
     enriched = 0
     LAST_STORY.clear()
     LAST_STORY.update(brief)
+    aiguard.raise_if_stopped("the story brief")
     if configured:
         enriched, ai_warnings = _ai_pass(segments, title, shots, report=report,
-                                         brief=brief)
+                                         brief=brief, planned=planned)
+        # Out of credit (or the key refused) mid-plan: stop here, never plan the rest from the rules.
+        aiguard.raise_if_stopped("planning")
         warnings.extend(ai_warnings)
         changed = _balance_visuals(shots, brief)
         date_shots(shots, brief)

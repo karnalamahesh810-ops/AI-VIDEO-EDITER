@@ -127,6 +127,8 @@ _AI_TERMS = re.compile(
     r"\btext[- ]to[- ]video\b|\bimage[- ]to[- ]video\b|\bdeepfake\b|\bfaceswap\b|\bcgi\b|\b3d animation\b|"
     r"\bgta ?(?:v|5|6)?\b|\bgame ?play\b|\bunreal engine\b|\bbeamng\b|\bteardown\b|\bsimulat(?:ion|or)\b)",
     re.I)
+# The game words of _AI_TERMS (a gaming essay's footage is the game: src/styles.py gaming_essay).
+_GAME_TERMS = re.compile(r"gta ?(?:v|5|6)?|game ?play|unreal engine|beamng|teardown|simulat(?:ion|or)", re.I)
 # Hosts of AI picture galleries and prompt sites (image search results).
 _AI_HOSTS = ("lexica.art", "openart.ai", "civitai.com", "midjourney.com", "nightcafe.studio", "playgroundai.com",
              "pixai.art", "tensor.art", "seaart.ai", "leonardo.ai", "ideogram.ai", "krea.ai", "starryai.com",
@@ -141,8 +143,12 @@ def metadata_reason(*texts) -> str:
         return ""
     if ai_host(blob):
         return "an AI picture site"
-    m = _AI_TERMS.search(re.sub(r"https?://\S+", " ", blob))       # words, not URL paths ("cgi-bin")
-    return f"AI-made or a game ({m.group(0).strip()[:30]})" if m else ""
+    words = re.sub(r"https?://\S+", " ", blob)       # words, not URL paths ("cgi-bin")
+    for m in _AI_TERMS.finditer(words):
+        if config.GAMEPLAY_FOOTAGE and _GAME_TERMS.fullmatch(m.group(0).strip()):
+            continue                        # the gaming essay: a game is the footage, AI is still not
+        return f"AI-made or a game ({m.group(0).strip()[:30]})"
+    return ""
 
 
 def ai_host(*urls) -> bool:
@@ -375,6 +381,25 @@ def caption_bands(grays: list) -> dict:
         if band > max(6.0, 1.5 * rest) and moved > 0.08:
             out["changing"] += 1
     return out
+
+
+def subtitle_signal(path: str) -> bool:
+    """
+    A free sign that a clip may carry subtitles (2026-10-09): a centred caption band in two or more of six frames
+    whose words change between frames while the rest of the picture holds - the subtitle's signature, where a news
+    chyron's box stays put and a ticker spans the whole width. Never a reason to turn a clip down on its own; it
+    only sends a news line's clip to the second look at text (media.second_look).
+    """
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        grays = _gray_frames(path, 6, 320, 180)
+        if len(grays) < 3:
+            return False
+        c = caption_bands(grays)
+        return c["frames"] >= 2 and c["changing"] >= 1
+    except Exception:  # noqa: BLE001 - no finding
+        return False
 
 
 def captions_verdict(path: str) -> str:

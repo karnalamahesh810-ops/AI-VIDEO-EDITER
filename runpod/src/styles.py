@@ -133,6 +133,23 @@ STYLES: Dict[str, dict] = {
         "config": {"MIN_SCENE_SECONDS": 3.0, "TARGET_SCENE_SECONDS": 5.0, "MAX_SCENE_SECONDS": 9.0,
                    "ALLOW_VERTICAL": True},
     },
+    # The gaming video essay (2026-10-15): measured from the owner's reference "Why GTA 6 Is Making Driving HARD
+    # Again!" (docs/style-refs/gta6_driving/catalogue.md): gameplay under every line (the publishers' own trailers
+    # and clean no-commentary play, never another creator's facecam or logo: config.GAMEPLAY_FOOTAGE), hard cuts
+    # every ~2.6 s (p10 1.0 s, p90 6.5 s), a 25 s hook, one cork-board chapter about a minute, and the gaming pack
+    # of the motion library on its trigger words (src/gaming.py): kinetic words, a difficulty meter, versus
+    # splits, a learning curve, map zones, a wireframe, verdict thumbs ... Music sits ~10 dB under the voice (the
+    # reference: speech -19 dB RMS, gaps -29.5 dB). No AI pictures; no marks (the pack draws its own).
+    "gaming_essay": {
+        "label": "Gaming video essay",
+        "transitions": "documentary", "graphics": "rich",
+        "config": {"MIN_SCENE_SECONDS": 1.4, "TARGET_SCENE_SECONDS": 2.8, "MAX_SCENE_SECONDS": 6.5,
+                   "SHOT_MAX_SECONDS": 6.5, "CUT_HOOK_FACTOR": 0.85, "HUMAN_CUTS": True,
+                   "CHAIN_SHOTS": True, "CHAIN_MAX": 4,
+                   "GAMEPLAY_FOOTAGE": True, "ALLOW_VERTICAL": False, "NEWS_FOOTAGE": False,
+                   "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False, "GENERATED_IMAGES_IN_HOOK": False,
+                   "MARKS_ENABLED": False, "REFRAME_CLIPS": False, "MOTION_PREFERENCE": 0.12},
+    },
     # The AI presenter (src/presenter/, docs/ai-avatar-style-plan-2026-10-07.md): a made-up presenter talks
     # to camera from one believable set (HeyGen Avatar IV, lip-synced to the job's own voice track), cut with
     # AI stills that move and AI clips animated from them - all through OpenRouter, no footage search. Its
@@ -196,6 +213,9 @@ PACK_TRANSITIONS: Dict[str, dict] = {
     "news_compilation": {"gap": 10.0, "every": 30.0, "fill": 60.0, "impact": 1.5, "clear": 2.5,
                          "characters": {"flash": 3.0, "glitch": 2.2, "streak": 2.2, "leak": 1.4, "burn": 0.8,
                                         "film": 0.6}},
+    # The gaming essay cuts hard; its chapter boards and the one static cut are the pack's (src/gaming.py).
+    "gaming_essay": {"gap": 20.0, "every": 70.0, "fill": 0.0, "impact": 1.0, "clear": 3.0,
+                     "characters": {"glitch": 3.0, "flash": 2.0, "streak": 1.0, "leak": 0.2, "burn": 0.2, "film": 0.2}},
     "nature_weather": {"gap": 15.0, "every": 60.0, "fill": 0.0, "impact": 0.0, "clear": 2.5,
                        "only": ("region", "hook"),
                        "characters": {"flash": 3.0, "leak": 3.0, "streak": 1.0, "burn": 0.4, "film": 0.2,
@@ -221,7 +241,9 @@ _ALIASES = {"news": "trending_news", "news-compilation": "news_compilation", "co
             "nature_and_weather": "nature_weather", "nature-weather": "nature_weather",
             "nature/weather": "nature_weather", "nature_/_weather": "nature_weather",
             "presenter": "ai_presenter", "ai-presenter": "ai_presenter", "ai_avatar": "ai_presenter",
-            "ai-avatar": "ai_presenter", "avatar": "ai_presenter"}
+            "ai-avatar": "ai_presenter", "avatar": "ai_presenter",
+            "gaming": "gaming_essay", "gaming-essay": "gaming_essay", "game_essay": "gaming_essay",
+            "gaming_video_essay": "gaming_essay", "video_game_essay": "gaming_essay"}
 
 
 def resolve(name: str) -> str:
