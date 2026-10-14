@@ -8,6 +8,8 @@ import { CaptionsOn } from "./components/layout";
 import { MotionWrap } from "./components/MotionWrap";
 import { motionClass } from "./components/motion/lookClass";
 import { StageFx, stageWindows } from "./components/motion/stage";
+import { SmartSpec } from "./components/smart/SmartSpec";
+import { CameraFx, cameraWindows } from "./components/smart/camera";
 import { sceneAvoid, sceneBusy, sceneSubject } from "./components/motion/avoid";
 import { PictureGuard } from "./components/motion/pictureGuard";
 import { resolveOverlay, templateFor } from "./templates";
@@ -147,6 +149,11 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
   accent2?: string) => {
   // An overlay that names a template gets its unset fields from the
   // registry, so the editor's pick and the planner's draw the same way.
+  // The Smart Editor's own graphic (components/smart): a motion spec the AI edit director designed for this
+  // moment. It carries its own entrance, keys and exit, so no MotionWrap; a bad spec draws nothing.
+  if (raw && raw.type === "motion" && raw.variant === "smart-spec") {
+    return withSound(<SmartSpec overlay={raw} />, sound);
+  }
   let ov = resolveOverlay(raw);
   // An image look's pictures, every slot a real picture (lookPictures): the
   // planner's, else the scene's own (on a clip, a frame of it), else its
@@ -441,6 +448,8 @@ const Body: React.FC<TimelineProps> = (props) => {
     [overlays, scenes, props.lookSounds, props.meta, props.sfxEnabled, props.sfxVolume, fps]);
   // The frames each full-screen graphic holds the screen (the clip under it moves: StageFx).
   const stageWins = React.useMemo(() => stageWindows((overlays || []).map((o) => resolveOverlay(o))), [overlays]);
+  // The smart graphics' camera moves on the footage (components/smart/camera.tsx); none = untouched.
+  const cameraWins = React.useMemo(() => cameraWindows(overlays || [], fps), [overlays, fps]);
   const overlayNodes = React.useMemo(
     () => (overlays || []).map((ov, i) => renderOverlay(ov, captions.accent, scenes, lookSounds[`o${i}`], accent2)),
     [overlays, captions.accent, scenes, lookSounds, accent2]);
@@ -477,6 +486,7 @@ const Body: React.FC<TimelineProps> = (props) => {
       <GradeContext.Provider value={grade}>
       {/* Under a full-screen graphic the clip pushes in, softens and dims as the graphic grows in, and
           settles back as it leaves (components/motion/stage.tsx): no map or chart ever cuts in on a clip. */}
+      <CameraFx windows={showOverlays ? cameraWins : []}>
       <StageFx windows={showOverlays ? stageWins : []}>
       {scenes.map((scene, i) => (
         <Sequence
@@ -497,6 +507,7 @@ const Body: React.FC<TimelineProps> = (props) => {
         </Sequence>
       ))}
       </StageFx>
+      </CameraFx>
       </GradeContext.Provider>
 
       {/* The owner's overlay transitions ("pack:<name>"): a clip screen-blended
