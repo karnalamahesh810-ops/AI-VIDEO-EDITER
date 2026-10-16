@@ -69,20 +69,68 @@ def action_of(inp: Dict[str, Any]) -> str:
 
 
 def check_upscale(inp: Dict[str, Any]) -> Dict[str, Any]:
-    """url (https), lines 720-2160 (default 1080), start / seconds (the used section; 0 = from the start / all),
-    fps 0 or 24-120 (also retime the result with RIFE in the same job), sparse 1.5-2.5, local_range 9 or 11,
-    text_guard (default true)."""
+    """url (https), lines 720-2160 (default 1080; Real-ESRGAN 2160), start / seconds (the used section; 0 = from
+    the start / all), fps 0 or 24-120 (also retime the result with RIFE in the same job), sparse 1.5-2.5,
+    local_range 9 or 11, text_guard (default true).
+    engine "flashvsr" (default: the video worker's HD boost) or "realesrgan" (Studio's Enhance to 4K, cloud mode),
+    with strength light / medium / strong (Real-ESRGAN's clean-up), steady (default true), codec h264 / hevc and
+    bitrate_mbps (default by size: 2160 lines 45, 1440 lines 24, else 16)."""
     url = _url(inp)
+    engine = str(inp.get("engine") or "flashvsr").strip().lower()
+    if engine not in ENGINES:
+        raise InputError(f"engine must be one of {', '.join(ENGINES)}")
+    esr = engine == "realesrgan"
     start = _num(inp.get("start"), 0.0, 36000.0, 0.0)
-    seconds = _num(inp.get("seconds"), 0.0, UPSCALE_MAX_SECONDS, 0.0)
+    seconds = _num(inp.get("seconds"), 0.0, ESRGAN_MAX_SECONDS if esr else UPSCALE_MAX_SECONDS, 0.0)
     fps = _num(inp.get("fps"), 0.0, 120.0, 0.0)
-    return {"url": url, "lines": int(round(_num(inp.get("lines"), 720, 2160, UPSCALE_DEFAULT_LINES))),
+    lines = int(round(_num(inp.get("lines"), 720, 2160, ESRGAN_DEFAULT_LINES if esr else UPSCALE_DEFAULT_LINES)))
+    strength = str(inp.get("strength") or "light").strip().lower()
+    codec = str(inp.get("codec") or "h264").strip().lower()
+    return {"url": url, "engine": engine, "lines": lines,
             "start": start, "seconds": seconds, "fps": fps if fps >= 24.0 else 0.0,
             "sparse": _num(inp.get("sparse"), 1.5, 2.5, 2.0),
             "local_range": 9 if int(_num(inp.get("local_range"), 9, 11, 11)) < 10 else 11,
             "seed": _seed(inp.get("seed"), 0),
             # lettering keeps the faithful picture (textguard.py); false = FlashVSR everywhere (tests only)
-            "text_guard": inp.get("text_guard") is not False}
+            "text_guard": inp.get("text_guard") is not False,
+            "strength": strength if strength in ESRGAN_STRENGTH else "light",
+            "steady": inp.get("steady") is not False,
+            "codec": codec if codec in ("h264", "hevc") else "h264",
+            "bitrate_mbps": _num(inp.get("bitrate_mbps"), 4.0, 100.0, default_bitrate(lines))}
+
+
+# Real-ESRGAN realesr-general-x4v3 (BSD-3): Studio's "Enhance to 4K" in the cloud. The same model and clean-up mix
+# as Studio's local mode (C:\ThumGenius-desktop src/ai/enhance.ts): dn * x4v3 + (1 - dn) * wdn-x4v3.
+ENGINES = ("flashvsr", "realesrgan")
+ESRGAN_STRENGTH = {"light": 0.25, "medium": 0.5, "strong": 1.0}
+ESRGAN_DEFAULT_LINES = 2160
+ESRGAN_MAX_SECONDS = 300.0          # one job: the endpoint's execution timeout is 600 s
+ESRGAN_MAX_FRAMES = 9000            # 5 min at 30 fps, 2.5 min at 60
+ESRGAN_MAX_SOURCE_LINES = 1080      # the source's short side; the target must be above it
+STEADY_TILE = 192                   # source pixels per steadiness tile (Studio's local tile)
+STEADY_LEVELS = 1.2                 # mean |change| (0-255) under which a tile counts as still
+STEADY_KEEP = 0.4                   # a still tile's share of the previous output
+
+
+def default_bitrate(lines: int) -> float:
+    """Mbit/s of the enhanced file (Studio's local encoder: 45 at 2160p, 24 at 1440p)."""
+    return 45.0 if lines >= 2000 else 24.0 if lines >= 1300 else 16.0
+
+
+def esrgan_plan(w: int, h: int, fps: float, frames: int, lines: int) -> Tuple[int, int]:
+    """The output size for a Real-ESRGAN job, after the checks: a source that is too big, too long or already at
+    the target is refused (InputError)."""
+    short = min(int(w or 0), int(h or 0))
+    if short <= 0:
+        raise InputError("the clip has no picture")
+    if short > ESRGAN_MAX_SOURCE_LINES:
+        raise InputError(f"the clip has {short} lines; the enhancer takes up to {ESRGAN_MAX_SOURCE_LINES}")
+    if short >= lines:
+        raise InputError(f"the clip already has {short} lines")
+    if frames > ESRGAN_MAX_FRAMES:
+        raise InputError(f"the section has {frames} frames; send at most {ESRGAN_MAX_FRAMES} "
+                         f"({ESRGAN_MAX_FRAMES / max(1.0, fps):.0f} s at {fps:.0f} fps)")
+    return target_size(w, h, lines)
 
 
 def check_interpolate(inp: Dict[str, Any]) -> Dict[str, Any]:

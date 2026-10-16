@@ -11,8 +11,10 @@ Bakes the GPU tools' weights into the image (run in the Dockerfile; the worker r
   textdet   PaddleOCR PP-OCRv4 text detector (Apache-2.0) as RapidOCR ships it in ONNX (rapidocr-onnxruntime
             1.4.4 wheel on PyPI, Apache-2.0), checked against its SHA-256 - the HD boost's text guard
                                                                                        -> /models/ppocr
+  realesrgan  Real-ESRGAN realesr-general-x4v3 + realesr-general-wdn-x4v3 (BSD-3, xinntao/Real-ESRGAN release
+            v0.2.5.0), checked against their SHA-256 - Studio's Enhance to 4K (cloud)  -> /models/realesrgan
 
-    python download_models.py flashvsr|rife|acestep|textdet|all
+    python download_models.py flashvsr|rife|acestep|textdet|realesrgan|all
 """
 import hashlib
 import io
@@ -25,6 +27,9 @@ RIFE_ZIP_ID = "1ZKjcbmt1hypiFprJPIKW0Tt0lr_2i7bg"              # RIFEv4.25_0919.
 RIFE_ZIP_SHA256 = "e63d481b7ae5d4a4e6ad7ac5b410ff78f3bf7be3b51b2e38ca8152747abde5b4"
 TEXTDET_MEMBER = "rapidocr_onnxruntime/models/ch_PP-OCRv4_det_infer.onnx"
 TEXTDET_SHA256 = "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9"
+ESRGAN_URL = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/{}.pth"
+ESRGAN_SHA256 = {"realesr-general-x4v3": "8dc7edb9ac80ccdc30c3a5dca6616509367f05fbc184ad95b731f05bece96292",
+                 "realesr-general-wdn-x4v3": "1641f8c4464b9f097c9fdda5589273713f67cf59f3d909e0bd688f0cee269dca"}
 
 
 def flashvsr():
@@ -93,8 +98,23 @@ def textdet():
     print("ch_PP-OCRv4_det_infer.onnx", len(data), flush=True)
 
 
+def realesrgan():
+    import requests
+    dst = os.path.join(MODELS, "realesrgan")
+    os.makedirs(dst, exist_ok=True)
+    for name, sha in ESRGAN_SHA256.items():
+        r = requests.get(ESRGAN_URL.format(name), timeout=300)
+        if r.status_code != 200 or hashlib.sha256(r.content).hexdigest() != sha:
+            raise SystemExit(f"{name}: HTTP {r.status_code}, {len(r.content)} bytes, sha256 mismatch or missing")
+        open(os.path.join(dst, name + ".pth"), "wb").write(r.content)
+        print(name, len(r.content), flush=True)
+    open(os.path.join(dst, "LICENSE.txt"), "w").write(
+        "Real-ESRGAN realesr-general-x4v3 / wdn-x4v3 weights: BSD 3-Clause License, Copyright (c) 2021, Xintao Wang" + chr(10))
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
-    for step in (("flashvsr", flashvsr), ("rife", rife), ("acestep", acestep), ("textdet", textdet)):
+    for step in (("flashvsr", flashvsr), ("rife", rife), ("acestep", acestep), ("textdet", textdet),
+                 ("realesrgan", realesrgan)):
         if what in (step[0], "all"):
             step[1]()

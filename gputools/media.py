@@ -188,6 +188,59 @@ class Encoder:
             pass
 
 
+class YuvEncoder:
+    """Planar YUV 4:2:0 frames (BT.709, limited range, made on the GPU) in -> an MP4 at a fixed bitrate (H.264 or
+    H.265; NVENC when it works, else x264 / x265), with the source section's sound. A 4K frame is 12 MB as YUV
+    against 25 MB as RGB, and the CPU does no colour conversion - a serverless GPU worker has few vCPUs."""
+
+    def __init__(self, out_path: str, w: int, h: int, fps: float, bitrate_mbps: float = 45.0, codec: str = "h264",
+                 audio_from: str = "", audio_start: float = 0.0, audio_seconds: float = 0.0,
+                 video_seconds: float = 0.0):
+        self.out_path, self.w, self.h = out_path, int(w), int(h)
+        self.tmp = out_path + ".part.mp4"
+        self.frame_bytes = self.w * self.h * 3 // 2
+        cmd = [FFMPEG, "-v", "error", "-y", "-nostdin", "-f", "rawvideo", "-pix_fmt", "yuv420p",
+               "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+               "-s", f"{self.w}x{self.h}", "-r", f"{fps:.6f}", "-i", "-"]
+        if audio_from:
+            if audio_start > 0:
+                cmd += ["-ss", f"{audio_start:.3f}"]
+            if audio_seconds > 0:
+                cmd += ["-t", f"{audio_seconds:.3f}"]
+            cmd += ["-i", audio_from, "-map", "0:v:0", "-map", "1:a:0?", "-c:a", "aac", "-b:a", "192k", "-af", "apad"]
+            if video_seconds > 0:
+                cmd += ["-t", f"{video_seconds:.3f}"]
+        b = f"{float(bitrate_mbps):.1f}M"
+        mx, buf = f"{float(bitrate_mbps) * 1.35:.1f}M", f"{float(bitrate_mbps) * 2:.1f}M"
+        gop = str(max(12, int(round(2 * fps))))                  # a key frame every 2 s (Studio's local encoder)
+        hevc = str(codec).lower() == "hevc"
+        if nvenc_ok():
+            enc = "hevc_nvenc" if hevc else "h264_nvenc"
+            vc = ["-c:v", enc, "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-b:v", b, "-maxrate", mx,
+                  "-bufsize", buf, "-g", gop, "-spatial-aq", "1"]
+            vc += ["-tag:v", "hvc1"] if hevc else ["-profile:v", "high"]
+        elif hevc:
+            vc = ["-c:v", "libx265", "-preset", "fast", "-b:v", b, "-maxrate", mx, "-bufsize", buf,
+                  "-x265-params", f"keyint={gop}:log-level=error", "-tag:v", "hvc1"]
+        else:
+            vc = ["-c:v", "libx264", "-preset", PRESET, "-b:v", b, "-maxrate", mx, "-bufsize", buf, "-g", gop,
+                  "-profile:v", "high"]
+        self.codec = vc[1]
+        cmd += [*vc, "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+                "-color_range", "tv", "-movflags", "+faststart", self.tmp]
+        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.frames = 0
+
+    def write(self, yuv: bytes) -> None:
+        if len(yuv) != self.frame_bytes:
+            raise ValueError(f"frame of {len(yuv)} bytes != {self.frame_bytes}")
+        self.proc.stdin.write(yuv)
+        self.frames += 1
+
+    close = Encoder.close
+    abort = Encoder.abort
+
+
 # ------------------------------------------------------------------ audio (the music bed)
 def loudness(path: str, pre: str = "", target: float = -27.0) -> Dict[str, float]:
     """EBU R128 integrated loudness / true peak / LRA of an audio file after the filters `pre` (ffmpeg loudnorm,

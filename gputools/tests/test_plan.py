@@ -30,6 +30,29 @@ class Inputs(unittest.TestCase):
             with self.assertRaises(plan.InputError):
                 plan.check_upscale(bad)
 
+    def test_upscale_realesrgan(self):
+        got = plan.check_upscale({"url": "https://x/c.mp4", "engine": "realesrgan"})
+        self.assertEqual((got["engine"], got["lines"], got["strength"], got["steady"], got["codec"], got["bitrate_mbps"]),
+                         ("realesrgan", 2160, "light", True, "h264", 45.0))
+        got = plan.check_upscale({"url": "https://x/c.mp4", "engine": "REALESRGAN", "lines": 1440, "seconds": 999,
+                                  "strength": "strong", "steady": False, "codec": "hevc", "bitrate_mbps": 500})
+        self.assertEqual((got["lines"], got["seconds"], got["strength"], got["steady"], got["codec"], got["bitrate_mbps"]),
+                         (1440, plan.ESRGAN_MAX_SECONDS, "strong", False, "hevc", 100.0))
+        self.assertEqual(plan.check_upscale({"url": "https://x/c.mp4", "lines": 1440})["bitrate_mbps"], 24.0)
+        self.assertEqual(plan.check_upscale({"url": "https://x/c.mp4", "strength": "x", "codec": "vp9"})["strength"],
+                         "light")
+        self.assertEqual(plan.check_upscale({"url": "https://x/c.mp4"})["engine"], "flashvsr")
+        with self.assertRaises(plan.InputError):
+            plan.check_upscale({"url": "https://x/c.mp4", "engine": "gfpgan"})
+
+    def test_esrgan_plan(self):
+        self.assertEqual(plan.esrgan_plan(640, 360, 29.97, 900, 2160), (3840, 2160))
+        self.assertEqual(plan.esrgan_plan(854, 480, 30, 900, 1440), (2560, 1440))
+        self.assertEqual(plan.esrgan_plan(360, 640, 30, 900, 2160), (2160, 3840))
+        for w, h, n, lines in ((2560, 1440, 10, 2160), (1920, 1080, 10, 1080), (1280, 720, 10, 720), (640, 360, 9001, 2160), (0, 0, 1, 2160)):
+            with self.assertRaises(plan.InputError):
+                plan.esrgan_plan(w, h, 30, n, lines)
+
     def test_interpolate(self):
         got = plan.check_interpolate({"url": "https://x/c.mp4"})
         self.assertEqual((got["fps"], got["scene"], got["seconds"]), (60.0, plan.SCENE_SSIM, 0.0))

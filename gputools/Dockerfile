@@ -3,6 +3,8 @@
 #   FlashVSR v1.1 (Apache-2.0) + Block-Sparse-Attention (BSD-3)  - clips under 720 lines -> 1080 lines
 #   RIFE 4.25 / Practical-RIFE (MIT)                               - real 60 fps
 #   ACE-Step 1.5 (MIT, code and weights)                           - a music bed made for each video
+#   Real-ESRGAN realesr-general-x4v3 (BSD-3)                       - Studio's Enhance to 4K (cloud mode)
+# Dockerfile.update builds a code / small-weights update on top of a published full image (minutes, not an hour).
 # One torch for all three: ACE-Step 1.5's locked environment (Python 3.11, torch 2.10 / CUDA 12.8, flash-attn
 # 2.8.3). Needs a driver for CUDA >= 12.8 (the endpoint's allowed CUDA versions). Ampere / Ada GPUs (sm_80-89):
 # Block-Sparse-Attention is built for sm_80 (+PTX); exclude Blackwell MIG slices from the endpoint's GPU list.
@@ -82,6 +84,7 @@ RUN python download_models.py flashvsr
 RUN python download_models.py rife
 RUN python download_models.py acestep && rm -rf /root/.cache/huggingface
 RUN python download_models.py textdet
+RUN python download_models.py realesrgan
 
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1

@@ -12,7 +12,7 @@ sys.path[:0] = [os.environ.get("FLASHVSR_DIR", "/opt/FlashVSR"),
                 os.environ.get("ACESTEP_DIR", "/opt/ACE-Step-1.5")]
 
 MODULES = ["torch", "runpod", "requests", "numpy", "onnxruntime", "plan", "media", "r2", "rife_net", "textguard",
-           "handler",
+           "handler", "esrgan",
            "diffsynth", "utils.utils", "utils.TCDecoder", "block_sparse_attn",
            "acestep.handler", "acestep.llm_inference", "acestep.inference", "nanovllm", "flash_attn"]
 bad = []
@@ -28,7 +28,8 @@ for name in MODULES:
 for f in ("/models/FlashVSR-v1.1/diffusion_pytorch_model_streaming_dmd.safetensors",
           "/models/FlashVSR-v1.1/LQ_proj_in.ckpt", "/models/FlashVSR-v1.1/TCDecoder.ckpt",
           os.environ.get("RIFE_MODEL", "/models/rife-4.25/flownet.pkl"),
-          os.environ.get("TEXT_DET_MODEL", "/models/ppocr/ch_PP-OCRv4_det_infer.onnx")):
+          os.environ.get("TEXT_DET_MODEL", "/models/ppocr/ch_PP-OCRv4_det_infer.onnx"),
+          "/models/realesrgan/realesr-general-x4v3.pth", "/models/realesrgan/realesr-general-wdn-x4v3.pth"):
     if not os.path.isfile(f):
         bad.append(f"missing weights {f}")
 if bad:

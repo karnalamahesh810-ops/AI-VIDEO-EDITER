@@ -8,6 +8,11 @@ worker lives (FlashBoot keeps the process between jobs):
                         (1080), start / seconds (cut first), fps (0, or 60: retime the result with RIFE in the same
                         job), sparse, local_range, seed
                         -> {"ok", "url", "size", "source", "frames", "fps", "seconds", "gpu_seconds", "timings"}
+                        engine "realesrgan" (Studio's Enhance to 4K, cloud): Real-ESRGAN x4v3 to lines 2160 / 1440,
+                        strength light / medium / strong, steady, codec h264 / hevc, bitrate_mbps; <= 300 s,
+                        <= 9000 frames, a source of <= 1080 lines. FlashVSR with lines above 1080 (Studio's Max
+                        quality) runs at 1080 and is encoded at the asked size the same way.
+                        -> also {"key", "bytes", "width", "height", "engine"}; progress_update {stage, progress}
   action "interpolate"  RIFE 4.25: url (https, <= 60 s), fps (60), start / seconds, scene (cut threshold)
                         -> {"ok", "url", "frames_in", "frames_out", "interpolated", "cuts", "gpu_seconds", ...}
   action "music"        ACE-Step 1.5: caption, seconds (10-600), seed, bpm, keyscale, steps, lm, lufs (-27)
@@ -34,7 +39,7 @@ BOOT = time.time()
 import plan  # noqa: E402
 import r2  # noqa: E402
 
-MAX_INPUT_BYTES = 400 * 1024 * 1024
+MAX_INPUT_BYTES = 600 * 1024 * 1024         # Studio uploads up to 500 MB
 UA = {"User-Agent": "Mozilla/5.0 (ThumbGenius gpu-tools worker)"}
 # GiB free each engine needs on the GPU (to load and then run a job at 1080p) beyond what is already resident;
 # measured on an A40, 2026-10-09: FlashVSR tiny peaked at 30.3 GB on an 8 s 16:9 clip (the long pipeline 20.6 GB),
@@ -42,10 +47,12 @@ UA = {"User-Agent": "Mozilla/5.0 (ThumbGenius gpu-tools worker)"}
 # used first) until that much is free - three engines share one card.
 _TINY = os.environ.get("FLASHVSR_PIPELINE", "tiny").strip().lower() == "tiny"
 NEED_GB = {"vsr": float(os.environ.get("NEED_GB_VSR", "31" if _TINY else "21")),
+           "esrgan": float(os.environ.get("NEED_GB_ESRGAN", "4")),
            "music": float(os.environ.get("NEED_GB_MUSIC", "13")),
            "rife": float(os.environ.get("NEED_GB_RIFE", "2"))}
 # GiB an engine that is already loaded still needs free to run (its working set).
 WORK_GB = {"vsr": float(os.environ.get("WORK_GB_VSR", "27" if _TINY else "17")),
+           "esrgan": float(os.environ.get("WORK_GB_ESRGAN", "3")),
            "music": float(os.environ.get("WORK_GB_MUSIC", "2")),
            "rife": float(os.environ.get("WORK_GB_RIFE", "1"))}
 USED: dict = {}
@@ -94,6 +101,9 @@ def engine(name: str):
         elif name == "rife":
             from rife import Rife
             ENGINES[name] = Rife()
+        elif name == "esrgan":
+            from esrgan import RealESRGAN
+            ENGINES[name] = RealESRGAN()
         elif name == "music":
             from music import Music
             ENGINES[name] = Music()
@@ -136,9 +146,82 @@ def _clip_ext(url: str) -> str:
     return ext if ext in (".mp4", ".mov", ".webm", ".mkv", ".m4v") else ".mp4"
 
 
-def do_upscale(job_id: str, inp: dict) -> dict:
+def _reporter(job):
+    """progress_update(job, {stage, progress}) for the caller's status polls (at most every 2 s)."""
+    last = [0.0]
+
+    def report(p: float, stage: str) -> None:
+        if job is None or time.time() - last[0] < 2.0:
+            return
+        last[0] = time.time()
+        try:
+            import runpod
+            runpod.serverless.progress_update(job, {"stage": stage, "progress": round(float(p), 3)})
+        except Exception:  # noqa: BLE001 - progress is optional
+            pass
+    return report
+
+
+def do_enhance(job_id: str, args: dict, job=None) -> dict:
+    """Studio's Enhance to 4K: Real-ESRGAN (Fast) or FlashVSR at 1080 lines (Max quality), encoded at the asked
+    size and bitrate."""
+    import media
+    report = _reporter(job)
+    work = tempfile.mkdtemp(prefix="enh_")
+    try:
+        t_fetch = time.time()
+        report(0.0, "Fetching the clip")
+        src = fetch(args["url"], os.path.join(work, "in" + _clip_ext(args["url"])))
+        t_fetch = time.time() - t_fetch
+        info = media.probe(src)
+        if not info["w"] or not info["h"]:
+            raise plan.InputError("the clip has no picture")
+        t0 = time.time()
+        out = os.path.join(work, "out.mp4")
+        if args["engine"] == "realesrgan":
+            report(0.01, "Starting the GPU")
+            got = engine("esrgan").upscale(src, out, lines=args["lines"], start=args["start"],
+                                           seconds=args["seconds"], strength=args["strength"], steady=args["steady"],
+                                           codec=args["codec"], bitrate_mbps=args["bitrate_mbps"], info=info,
+                                           progress=report)
+            name = "realesrgan-x4v3-" + args["strength"]
+        else:
+            import esrgan
+            short = min(info["w"], info["h"])
+            if short > plan.UPSCALE_MAX_SOURCE_LINES or short >= args["lines"]:
+                raise plan.InputError(f"the clip already has {short} lines")
+            report(0.02, "Enhancing (max quality)")
+            vsr = engine("vsr")
+            got = vsr.upscale(src, None, lines=min(1080, args["lines"]), start=args["start"],
+                              seconds=args["seconds"], sparse=args["sparse"], local_range=args["local_range"],
+                              seed=args["seed"], info=info, text_guard=args["text_guard"])
+            frames = got.pop("rgb")
+            got.pop("info", None)
+            report(0.9, "Writing the file")
+            W, H = plan.target_size(info["w"], info["h"], args["lines"])
+            enc = esrgan.encode_frames(frames, float(got["fps"]), W, H, out, bitrate_mbps=args["bitrate_mbps"],
+                                       codec=args["codec"], audio_from=src if info.get("audio") else "",
+                                       audio_start=args["start"], audio_seconds=args["seconds"])
+            del frames
+            got.update({"size": plan.summary_size(W, H), "width": W, "height": H, "codec": enc["codec"],
+                        "vsr_size": got.get("size")})
+            name = "flashvsr-1.1-" + ("long" if vsr.long else "tiny")
+        report(0.97, "Uploading the result")
+        t_up = time.time()
+        url = publish(out, job_id, "mp4", "video/mp4")
+        got.setdefault("timings", {})["upload"] = round(time.time() - t_up, 2)
+        got["timings"]["fetch"] = round(t_fetch, 2)
+        return {"ok": True, "url": url, "key": plan.out_key(job_id, "mp4"), "bytes": os.path.getsize(out), **got,
+                "gpu_seconds": round(time.time() - t0, 1), "engine": name}
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def do_upscale(job_id: str, inp: dict, job=None) -> dict:
     import media
     args = plan.check_upscale(inp)
+    if args["engine"] == "realesrgan" or args["lines"] > 1080:
+        return do_enhance(job_id, args, job)
     work = tempfile.mkdtemp(prefix="up_")
     try:
         src = fetch(args["url"], os.path.join(work, "in" + _clip_ext(args["url"])))
@@ -249,6 +332,8 @@ def handler(job: dict) -> dict:
         act = plan.action_of(inp)
         if act == "health":
             return health()
+        if act == "upscale":
+            return do_upscale(str(job.get("id") or "job"), inp, job)
         return ACTIONS[act](str(job.get("id") or "job"), inp)
     except plan.InputError as e:
         return {"ok": False, "error": f"input: {e}"}

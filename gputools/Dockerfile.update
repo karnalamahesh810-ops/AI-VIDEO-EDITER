@@ -1,0 +1,13 @@
+# ThumbGenius GPU tools - an update image: the last full image (Dockerfile: CUDA kernels, ~14 GB of weights) plus
+# this commit's code and small new weights. Minutes to build instead of ~1 h; the result is the same as a full build
+# of this commit (the full Dockerfile has every step below too). The workflow uses it unless asked for a full build.
+ARG BASE=ghcr.io/karnalamahesh810-ops/thumbgenius-video-worker:gputools-abd4ccfad86245ad13985ac196b5ed9847959035
+FROM ${BASE}
+WORKDIR /app
+COPY download_models.py ./
+# Real-ESRGAN realesr-general-x4v3 + wdn (BSD-3, ~10 MB, SHA-256 checked): Studio's Enhance to 4K, cloud mode
+RUN HF_HUB_OFFLINE=0 python download_models.py realesrgan
+COPY *.py ./
+COPY tests/ tests/
+RUN python -m unittest discover -s tests -t . -v && python smoke_imports.py
+CMD ["python", "-u", "/app/handler.py"]

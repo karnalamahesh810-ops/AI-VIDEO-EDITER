@@ -87,7 +87,7 @@ class FlashVSR:
         return lq
 
     @torch.inference_mode()
-    def upscale(self, src: str, out: str, lines: int = 1080, start: float = 0.0, seconds: float = 0.0,
+    def upscale(self, src: str, out: Optional[str], lines: int = 1080, start: float = 0.0, seconds: float = 0.0,
                 sparse: float = 2.0, local_range: int = 11, seed: int = 0, info: Optional[Dict] = None,
                 keep_frames: bool = False, crf: int = 17, text_guard: bool = True) -> Dict:
         """`src` -> `out` at `lines` (the short side). With keep_frames, the upscaled frames (RGB uint8) are also
@@ -143,10 +143,11 @@ class FlashVSR:
             lq = None
         t2 = time.time()
         masks: Dict[int, torch.Tensor] = {}
+        # out None: no file here, the frames come back (Studio's Max quality encodes them at its own size)
         enc = media.Encoder(out, W, H, fps, crf=crf, preset=media.PRESET,
                             audio_from=src if info.get("audio") else "", audio_start=start, audio_seconds=seconds,
-                            video_seconds=n / fps)
-        kept = [] if keep_frames else None
+                            video_seconds=n / fps) if out else None
+        kept = [] if (keep_frames or enc is None) else None
         try:
             for k in range(n):
                 fr = video[:, k, :H, :W].to(self.device, non_blocking=True)     # the long pipeline's are on the CPU
@@ -163,12 +164,15 @@ class FlashVSR:
                         fr = fr * (1.0 - mt) + safe * mt
                 fr = ((fr + 1.0) * 127.5 + 0.5).clamp(0, 255).byte()
                 rgb = fr.permute(1, 2, 0).contiguous().cpu().numpy()
-                enc.write(rgb)
+                if enc is not None:
+                    enc.write(rgb)
                 if kept is not None:
                     kept.append(rgb)
-            enc.close()
+            if enc is not None:
+                enc.close()
         except BaseException:
-            enc.abort()
+            if enc is not None:
+                enc.abort()
             raise
         del video, lq
         peak = torch.cuda.max_memory_allocated() / 2 ** 30
