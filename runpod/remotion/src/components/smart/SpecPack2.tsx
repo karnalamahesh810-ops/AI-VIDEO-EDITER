@@ -664,27 +664,71 @@ export const FxBody: React.FC<{ layer: Layer; ctx: XCtx }> = ({ layer: L, ctx })
   }
 
   if (L.effect === "glitch") {
-    const env = 1 - Math.min(1, Math.abs(lt - mid) / (D * 0.5));
+    // Polished 2026-10-18 (round 2): it was nine full-width bands of flat kit colour and inverted strips at half
+    // strength over the whole second - it read as coloured stripes, not as a signal failing. Now a digital tear built
+    // from the shot itself: it builds over ~0.3 s into the cut (sound at its onset), a few torn bands of the picture
+    // blown out and smeared with red / cyan channel fringes, compression macroblocks near the peak, a 2-frame signal
+    // drop with one bright scan line that hides the cut, then it decays in ~0.2 s (faster out than in). The kit accent
+    // is one thin line at the drop; everything else is the picture's own light.
+    const pre = 0.32, post = 0.2;
+    const env = lt < mid ? c01(1 - (mid - lt) / pre) ** 1.4 : 1 - easeOf("expoOut")(c01((lt - mid) / post));
+    if (env <= 0.001) return null;
     const frame = Math.floor(lt * 24);
-    const slices = 9;
+    const R = (n: number) => rand(seed * 131 + frame * 17 + n);
     const out: React.ReactNode[] = [];
-    for (let k = 0; k < slices; k++) {
-      const r1 = rand(seed * 101 + frame * 13 + k), r2 = rand(seed * 37 + frame * 7 + k * 3);
-      if (r1 > 0.35 + 0.55 * env) continue;
-      const y = r2 * H, h = (0.01 + 0.07 * rand(frame * 3 + k)) * H;
-      const dx = (rand(frame * 17 + k) - 0.5) * 0.12 * W * env;
-      const kind = k % 3;
-      out.push(<div key={k} style={{ position: "absolute", left: kind === 0 ? 0 : dx, top: y, width: W, height: h,
-        ...(kind === 0 ? { backdropFilter: `invert(1) hue-rotate(${Math.round(rand(frame + k) * 180)}deg)` }
-          : { background: kind === 1 ? col : acc, opacity: 0.55, backdropFilter: "saturate(3) contrast(1.4)" }) }} />);
+    // torn bands: 1-4, more and taller as it peaks, clustered round one or two seams that move each frame
+    const nb = 2 + Math.round(3 * env);
+    const seamA = (0.2 + 0.6 * rand(seed * 7 + Math.floor(frame / 3))) * H;
+    for (let k = 0; k < nb; k++) {
+      const yy = c01((seamA + (R(k) - 0.5) * 0.55 * H) / H) * H;
+      const hh = (0.02 + (0.03 + 0.1 * env) * R(k + 10)) * H;
+      const x0 = R(k + 20) < 0.5 ? 0 : R(k + 30) * 0.45 * W;
+      const ww = W - x0 - (R(k + 40) < 0.5 ? 0 : R(k + 50) * 0.3 * W);
+      const fr = Math.max(2, 0.0035 * H);
+      // one band in three shifts the picture's hue (a channel slipping); the others blow out and smear
+      const shift = R(k + 70) < 0.34;
+      const bf = shift
+        ? `hue-rotate(${Math.round(90 + 180 * R(k + 80))}deg) saturate(2.6) contrast(1.4)`
+        : `blur(${(0.004 * H * env).toFixed(1)}px) contrast(${(1.5 + 0.6 * env).toFixed(2)}) saturate(${(1.6 + env).toFixed(2)}) brightness(${(1.3 + 0.4 * R(k + 60)).toFixed(2)})`;
+      out.push(
+        <div key={`b${k}`} style={{ position: "absolute", left: x0, top: yy, width: ww, height: hh, backdropFilter: bf, opacity: Math.min(1, 0.55 + env) }}>
+          {/* pixels stretched sideways: fine vertical streaks in screen */}
+          <div style={{ position: "absolute", inset: 0, mixBlendMode: "screen", opacity: 0.5,
+            backgroundImage: `repeating-linear-gradient(90deg, rgba(255,255,255,0.22) 0px, rgba(255,255,255,0.22) ${Math.max(1, 0.002 * W).toFixed(1)}px, transparent ${Math.max(1, 0.002 * W).toFixed(1)}px, transparent ${(0.004 + 0.012 * R(k + 90)) * W}px)` }} />
+          <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: fr, background: "#ff2a55", mixBlendMode: "screen", opacity: 0.9, transform: `translateX(${(0.01 * W).toFixed(1)}px)` }} />
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: fr, background: "#22e4ff", mixBlendMode: "screen", opacity: 0.9, transform: `translateX(${(-0.01 * W).toFixed(1)}px)` }} />
+        </div>,
+      );
     }
-    const flash = env > 0.92 ? (env - 0.92) / 0.08 : 0;
+    // macroblocks near the peak: the codec losing the picture - smeared tiles, a few dropped to black
+    if (env > 0.35) {
+      const cs = W / 20;
+      const nm = Math.round(12 * (env - 0.35) / 0.65);
+      for (let k = 0; k < nm; k++) {
+        const cx = Math.floor(R(k + 100) * 20) * cs, cy = Math.floor(R(k + 120) * (H / cs)) * cs;
+        const span = 1 + Math.floor(R(k + 140) * 3);
+        out.push(<div key={`m${k}`} style={{ position: "absolute", left: cx, top: cy, width: cs * span, height: cs,
+          ...(R(k + 160) < 0.25 ? { background: "rgba(5,6,9,0.9)" } : { backdropFilter: `blur(${(0.012 * H).toFixed(1)}px) saturate(2.2) contrast(1.3)` }) }} />);
+      }
+    }
+    const cutDrop = Math.abs(lt - mid) < 0.045;
+    const scanY = (0.3 + 0.4 * rand(seed * 3)) * H;
     return (
       <div style={{ position: "absolute", inset: 0 }}>
-        <div style={{ position: "absolute", inset: 0, background: col2, opacity: 0.35 * env * env }} />
+        {/* the whole frame loses a little colour and gains contrast as the signal goes */}
+        <div style={{ position: "absolute", inset: 0, backdropFilter: `contrast(${(1 + 0.25 * env).toFixed(3)}) saturate(${(1 - 0.35 * env).toFixed(3)})` }} />
         {out}
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 2px, transparent 2px, transparent 5px)", opacity: env }} />
-        <div style={{ position: "absolute", inset: 0, background: "#fff", opacity: flash * 0.7, mixBlendMode: "screen" }} />
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.3) 0px, rgba(0,0,0,0.3) 1px, transparent 1px, transparent 4px)", opacity: 0.5 * env }} />
+        {cutDrop ? (
+          <>
+            {/* signal lost: near black whatever the kit (a kit's deep blue here read as a blue screen) */}
+            <div style={{ position: "absolute", inset: 0, background: "rgba(5,6,9,0.95)" }} />
+            <div style={{ position: "absolute", left: 0, right: 0, top: scanY - 0.004 * H, height: 0.008 * H, background: "#ff2a55", opacity: 0.7, transform: `translateX(${(0.008 * W).toFixed(1)}px)`, mixBlendMode: "screen" }} />
+            <div style={{ position: "absolute", left: 0, right: 0, top: scanY - 0.004 * H, height: 0.008 * H, background: "#22e4ff", opacity: 0.7, transform: `translateX(${(-0.008 * W).toFixed(1)}px)`, mixBlendMode: "screen" }} />
+            <div style={{ position: "absolute", left: 0, right: 0, top: scanY - 0.0015 * H, height: 0.003 * H, background: "#ffffff", boxShadow: `0 0 ${(0.02 * H).toFixed(1)}px rgba(255,255,255,0.8)` }} />
+            <div style={{ position: "absolute", left: 0.08 * W, width: 0.22 * W, top: scanY + 0.03 * H, height: Math.max(2, 0.004 * H), background: acc }} />
+          </>
+        ) : null}
       </div>
     );
   }

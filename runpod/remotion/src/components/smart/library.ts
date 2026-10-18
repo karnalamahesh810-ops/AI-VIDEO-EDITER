@@ -1094,7 +1094,7 @@ const PACK2: MxRecipe[] = [
   },
   {
     id: "ml-tr-glitch", name: "Glitch slices", family: "transition",
-    about: "The frame tears into jittering inverted slices and kit-coloured bands with scanlines, peaking on the cut.",
+    about: "A digital signal tear made of the shot itself: torn bands of the picture blow out with red / cyan channel fringes and compression blocks as it builds, a two-frame signal drop with one bright scan line hides the cut, and it clears fast onto the next shot.",
     use: "Tech, hacking, internet, breaking news, a sudden twist or a system failing; energetic sections, never in calm ones.",
     sample: { text: "" },
     build: (p, k, c) => trans([{ kind: "fx", effect: "glitch", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.primary, color2: k.colors.bg2, fill: k.colors.secondary, mid: p.dur / 2, seed: 1 + Math.round(c.r(13) * 90) }]),
