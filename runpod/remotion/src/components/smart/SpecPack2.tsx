@@ -395,27 +395,37 @@ export const CardBody: React.FC<{ layer: Layer; ctx: XCtx }> = ({ layer: L, ctx 
   }
 
   if (L.card === "doc") {
-    const h = (L.h || 0.9) * H;
-    const lines = 16;
-    const hlRow = 7;
-    const hl = pr(lt, mid, 0.7, "inOut");
-    const rows = Array.from({ length: lines }, (_, i) => i);
-    const lh = (h * 0.62) / lines;
+    // Polished 2026-10-18 (round 2): the quoted line is the page's centre and its largest type (layer.size); the
+    // typed rows around it are quiet grey; the accent marker lands under each word on its time (layer.times, never
+    // before `mid`), so the push-in - which scales about the page's centre - always lands on the line being read.
+    const h = (L.h || 0.8) * H;
+    const padX = w * 0.09;
+    const head = Math.max(0.03 * H, fs * 0.46);
+    const marker = hexA(acc.startsWith("#") ? acc : "#f2b630", 0.7);
+    const row = (i: number, k: number) => (
+      <div key={`${k}-${i}`} style={{ height: fs * 0.2, margin: `${(fs * 0.24).toFixed(1)}px 0`, width: `${(58 + 40 * rand((L.seed || 1) * 97 + k * 31 + i)).toFixed(1)}%`,
+        background: hexA("#000000", 0.13), borderRadius: fs }} />
+    );
     return (
-      <div style={{ position: "relative", width: w, height: h, background: paper, boxShadow: drop(H), padding: `${(w * 0.09).toFixed(1)}px`, boxSizing: "border-box", overflow: "hidden" }}>
-        <div style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: lh * 0.62, letterSpacing: "0.12em", color: hexA("#000000", 0.75),
-          textTransform: "uppercase", borderBottom: `2px solid ${hexA("#000000", 0.6)}`, paddingBottom: lh * 0.4, marginBottom: lh * 0.6,
-          display: "flex", justifyContent: "space-between" }}><span>{L.label || "Report"}</span><span>{L.meta || ""}</span></div>
-        {rows.map((i) => i === hlRow ? (
-          <div key={i} style={{ position: "relative", height: lh * 2.2, display: "flex", alignItems: "center", margin: `${(lh * 0.2).toFixed(1)}px 0` }}>
-            <div style={{ position: "absolute", left: -lh * 0.3, top: lh * 0.25, bottom: lh * 0.25, width: `calc(${(hl * 100).toFixed(2)}% + ${(lh * 0.6).toFixed(1)}px)`,
-              background: hexA(acc.startsWith("#") ? acc : "#f2b630", 0.62), mixBlendMode: "multiply", borderRadius: 2 }} />
-            <div style={{ position: "relative", fontFamily: TYPEWRITER, fontWeight: 700, fontSize: lh * 0.95, color: "#141414", lineHeight: 1.05 }}>{L.text}</div>
+      <div style={{ position: "relative", width: w, height: h, background: `linear-gradient(178deg, ${lift(paper.startsWith("#") ? paper : "#f6f2e8", 0.25)} 0%, ${paper} 55%, #ece6d8 100%)`,
+        boxShadow: `${drop(H)}, inset 0 0 ${(0.05 * H).toFixed(1)}px rgba(120,100,60,0.18)`, padding: `${(h * 0.07).toFixed(1)}px ${padX.toFixed(1)}px`,
+        boxSizing: "border-box", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: head, letterSpacing: "0.14em", color: hexA("#000000", 0.78), lineHeight: 1,
+          textTransform: "uppercase", borderBottom: `${Math.max(2, 0.003 * H).toFixed(1)}px solid ${hexA("#000000", 0.7)}`, paddingBottom: head * 0.55,
+          display: "flex", justifyContent: "space-between", gap: head, whiteSpace: "nowrap", flex: "none" }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{L.label || "Report"}</span><span>{L.meta || ""}</span></div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          {[0, 1, 2].map((i) => row(i, 0))}
+          <div style={{ fontFamily: TYPEWRITER, fontWeight: 700, fontSize: fs, lineHeight: 1.3, color: ink, margin: `${(fs * 0.45).toFixed(1)}px 0`, letterSpacing: "-0.01em" }}>
+            {words.map((wd, i) => {
+              const p = pr(lt, Math.max(mid, wordsAt(i)) - 0.02, 0.22);
+              return <span key={i} style={{ backgroundImage: `linear-gradient(${marker}, ${marker})`, backgroundRepeat: "no-repeat",
+                backgroundSize: `${(c01(p) * 100).toFixed(2)}% 78%`, backgroundPosition: "0 70%", boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone",
+                padding: "0 0.06em", margin: "0 -0.06em" }}>{wd}{i < words.length - 1 ? " " : ""}</span>;
+            })}
           </div>
-        ) : (
-          <div key={i} style={{ height: lh * 0.36, margin: `${(lh * 0.32).toFixed(1)}px 0`, width: `${(62 + 36 * rand((L.seed || 1) * 97 + i)).toFixed(1)}%`,
-            background: hexA("#000000", 0.16), borderRadius: lh }} />
-        ))}
+          {[0, 1, 2, 3].map((i) => row(i, 1))}
+        </div>
       </div>
     );
   }
@@ -423,37 +433,42 @@ export const CardBody: React.FC<{ layer: Layer; ctx: XCtx }> = ({ layer: L, ctx 
   if (L.card === "social") {
     const likes = L.valueTo ?? 0;
     const counts = L.valueTo !== undefined;
-    const lp = pr(lt, mid, 1.4, "expoOut");
-    const heart = pr(lt, mid, 0.45, "backOut");
+    // Polished 2026-10-18 (round 2): words wait at 32% (a readable ghost) and light in 0.12 s on their time; the heart
+    // fills with one short pulse (no overshoot) on `mid`, the likes rolling up; furniture never under 3% of the height.
+    const lp = pr(lt, mid, 0.9, "expoOut");
+    const heart = c01((lt - mid) / 0.24);
     const dark = /^#(0|1|2)/.test(paper);
     const sub = dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)";
     const initial = (L.label || "?").replace(/^@/, "").charAt(0).toUpperCase();
-    const ico: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: fs * 0.3 };
+    const small = Math.max(0.03 * H, fs * 0.6);
+    const ico: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: small * 0.35 };
     const icon = (dd: string, fill = "none") => (
-      <svg width={fs * 0.85} height={fs * 0.85} viewBox="0 0 24 24" style={{ overflow: "visible" }}>
+      <svg width={small * 1.05} height={small * 1.05} viewBox="0 0 24 24" style={{ overflow: "visible" }}>
         <path d={dd} fill={fill} stroke="currentColor" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       </svg>
     );
     return (
-      <div style={{ width: w, background: paper, borderRadius: 0.018 * H, padding: w * 0.06, boxSizing: "border-box", boxShadow: drop(H), fontFamily: INTER, color: ink }}>
-        <div style={{ display: "flex", alignItems: "center", gap: fs * 0.5 }}>
-          <div style={{ width: fs * 1.9, height: fs * 1.9, borderRadius: "50%", background: acc, color: "#111", display: "flex", alignItems: "center",
-            justifyContent: "center", fontWeight: 800, fontSize: fs * 0.95, flex: "none", overflow: "hidden" }}>
+      <div style={{ width: w, background: paper, borderRadius: 0.02 * H, padding: `${(w * 0.055).toFixed(1)}px ${(w * 0.06).toFixed(1)}px`, boxSizing: "border-box",
+        boxShadow: `${drop(H)}, 0 0 0 1px rgba(0,0,0,0.06)`, fontFamily: INTER, color: ink }}>
+        <div style={{ display: "flex", alignItems: "center", gap: small * 0.6 }}>
+          <div style={{ width: small * 2.3, height: small * 2.3, borderRadius: "50%", background: dark ? "#3a3f48" : "#dfe3e8", color: dark ? "#fff" : "#4a5361",
+            display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: small * 1.05, flex: "none", overflow: "hidden" }}>
             {L.src ? <SafeImg src={L.src} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initial}</div>
-          <div style={{ lineHeight: 1.15 }}>
-            <div style={{ fontWeight: 800, fontSize: fs * 0.82 }}>{(L.label || "").replace(/^@/, "")}</div>
-            <div style={{ fontSize: fs * 0.66, color: sub }}>@{(L.label || "user").replace(/^@/, "").replace(/\s+/g, "").toLowerCase()}{L.meta ? ` · ${L.meta}` : ""}</div>
+          <div style={{ lineHeight: 1.15, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: Math.max(0.032 * H, fs * 0.72), whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>{(L.label || "").replace(/^@/, "")}</div>
+            <div style={{ fontSize: small, color: sub, whiteSpace: "nowrap" }}>@{(L.label || "user").replace(/^@/, "").replace(/\s+/g, "").toLowerCase()}{L.meta ? ` · ${L.meta}` : ""}</div>
           </div>
         </div>
-        <div style={{ fontSize: fs, lineHeight: 1.28, fontWeight: 500, margin: `${(fs * 0.6).toFixed(1)}px 0` }}>
-          {words.map((wd, i) => <span key={i} style={{ opacity: c01((lt - wordsAt(i) + 0.05) / 0.2) * 0.85 + 0.15 }}>{wd} </span>)}
+        <div style={{ fontSize: fs, lineHeight: 1.22, fontWeight: 600, letterSpacing: "-0.012em", margin: `${(fs * 0.5).toFixed(1)}px 0 ${(fs * 0.55).toFixed(1)}px` }}>
+          {words.map((wd, i) => <span key={i} style={{ opacity: 0.32 + 0.68 * c01((lt - wordsAt(i) + 0.02) / 0.12) }}>{wd}{i < words.length - 1 ? " " : ""}</span>)}
         </div>
-        <div style={{ display: "flex", gap: fs * 1.6, fontSize: fs * 0.7, color: sub, alignItems: "center", borderTop: `1px solid ${hexA(dark ? "#ffffff" : "#000000", 0.12)}`, paddingTop: fs * 0.5 }}>
+        <div style={{ display: "flex", gap: small * 1.8, fontSize: small, color: sub, alignItems: "center", borderTop: `1px solid ${hexA(dark ? "#ffffff" : "#000000", 0.1)}`,
+          paddingTop: small * 0.6, fontVariantNumeric: "tabular-nums" }}>
           <span style={ico}>{icon("M3 5h18v11H8l-5 4z")}</span>
           <span style={ico}>{icon("M5 9l3-3 3 3M8 6v9h8M19 15l-3 3-3-3M16 18V9H8")}</span>
-          <span style={{ ...ico, color: heart > 0.05 ? "#f4245e" : sub }}>
-            <span style={{ display: "inline-flex", transform: `scale(${(1 + 0.6 * Math.sin(Math.PI * c01(heart))).toFixed(3)})` }}>
-              {icon("M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z", heart > 0.05 ? "#f4245e" : "none")}</span>
+          <span style={{ ...ico, color: heart > 0 ? "#f4245e" : sub, fontWeight: heart > 0 ? 700 : 500 }}>
+            <span style={{ display: "inline-flex", transform: `scale(${(1 + 0.22 * Math.sin(Math.PI * heart)).toFixed(3)})` }}>
+              {icon("M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z", heart > 0 ? "#f4245e" : "none")}</span>
             {counts ? formatCount(Math.round(likes * lp), 0) : ""}</span>
         </div>
       </div>
@@ -464,37 +479,42 @@ export const CardBody: React.FC<{ layer: Layer; ctx: XCtx }> = ({ layer: L, ctx 
     const ph = w * 2.05;
     const items = L.items && L.items.length ? L.items : [L.text || ""];
     const scr = "#0f1115";
+    // Polished 2026-10-18 (round 2): bubbles rise 0.4 em into place in 0.22 s (they popped from scale 0 with an
+    // overshoot) and stack from the bottom like a real chat above a reply bar; the contact's name never under 3%.
+    const name = Math.max(0.03 * H, w * 0.075);
     return (
-      <div style={{ position: "relative", width: w, height: ph, borderRadius: w * 0.16, background: "#050506", padding: w * 0.035, boxSizing: "border-box",
-        boxShadow: `${drop(H)}, inset 0 0 0 ${(w * 0.012).toFixed(1)}px #2a2c31` }}>
-        <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: w * 0.13, background: scr, overflow: "hidden", fontFamily: INTER }}>
+      <div style={{ position: "relative", width: w, height: ph, borderRadius: w * 0.16, background: "linear-gradient(145deg, #2b2d33, #050506 40%)", padding: w * 0.032,
+        boxSizing: "border-box", boxShadow: `${drop(H)}, inset 0 0 0 ${(w * 0.01).toFixed(1)}px #3a3c42` }}>
+        <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: w * 0.13, background: scr, overflow: "hidden", fontFamily: INTER,
+          display: "flex", flexDirection: "column" }}>
           <div style={{ position: "absolute", left: "50%", top: w * 0.03, width: w * 0.3, height: w * 0.075, borderRadius: w, background: "#000", transform: "translateX(-50%)" }} />
-          <div style={{ paddingTop: w * 0.17, textAlign: "center", color: "#fff", fontWeight: 700, fontSize: w * 0.06, borderBottom: "1px solid rgba(255,255,255,0.08)",
-            paddingBottom: w * 0.04 }}>
-            <div style={{ width: w * 0.16, height: w * 0.16, borderRadius: "50%", background: acc, margin: "0 auto", marginBottom: w * 0.02, color: "#111",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: w * 0.075 }}>{(L.label || "?").charAt(0).toUpperCase()}</div>
+          <div style={{ paddingTop: w * 0.15, textAlign: "center", color: "#fff", fontWeight: 700, fontSize: name, letterSpacing: "-0.01em", flex: "none",
+            borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: w * 0.035, background: "rgba(255,255,255,0.03)" }}>
+            <div style={{ width: name * 1.9, height: name * 1.9, borderRadius: "50%", background: "#3a3f48", margin: "0 auto", marginBottom: w * 0.02, color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: name * 0.9 }}>{(L.label || "?").charAt(0).toUpperCase()}</div>
             {L.label || ""}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: w * 0.03, padding: w * 0.05 }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: w * 0.03, padding: `${(w * 0.05).toFixed(1)}px` }}>
             {items.map((m, i) => {
               const at = L.times?.[i] ?? 0.5 + i * 0.9;
               const typing = lt > at - 0.6 && lt < at;
-              const p = pr(lt, at, 0.45, "backOut");
+              const p = pr(lt, at, 0.22);
               const me = i % 2 === 1;
               if (typing) return (
-                <div key={i} style={{ alignSelf: me ? "flex-end" : "flex-start", background: me ? acc : "#262a31", borderRadius: w * 0.06, padding: `${w * 0.035}px ${w * 0.05}px`, display: "flex", gap: w * 0.015 }}>
-                  {[0, 1, 2].map((k) => <div key={k} style={{ width: w * 0.022, height: w * 0.022, borderRadius: "50%", background: me ? "#111" : "#aab",
+                <div key={i} style={{ alignSelf: me ? "flex-end" : "flex-start", background: me ? acc : "#262a31", borderRadius: w * 0.06, padding: `${w * 0.04}px ${w * 0.055}px`, display: "flex", gap: w * 0.018 }}>
+                  {[0, 1, 2].map((k) => <div key={k} style={{ width: w * 0.026, height: w * 0.026, borderRadius: "50%", background: me ? "#111" : "#aab",
                     opacity: 0.35 + 0.65 * Math.abs(Math.sin(lt * 7 - k * 0.8)) }} />)}
                 </div>
               );
               if (p <= 0) return null;
               return (
-                <div key={i} style={{ alignSelf: me ? "flex-end" : "flex-start", maxWidth: "80%", background: me ? acc : "#262a31", color: me ? "#111" : "#f2f3f5",
-                  borderRadius: w * 0.06, padding: `${(w * 0.035).toFixed(1)}px ${(w * 0.05).toFixed(1)}px`, fontSize: fs, lineHeight: 1.25, fontWeight: 500,
-                  transform: `scale(${p.toFixed(3)})`, transformOrigin: me ? "100% 100%" : "0% 100%", opacity: c01(p * 2) }}>{m}</div>
+                <div key={i} style={{ alignSelf: me ? "flex-end" : "flex-start", maxWidth: "84%", background: me ? acc : "#262a31", color: me ? "#111" : "#f2f3f5",
+                  borderRadius: w * 0.06, padding: `${(w * 0.035).toFixed(1)}px ${(w * 0.05).toFixed(1)}px`, fontSize: fs, lineHeight: 1.2, fontWeight: 600,
+                  letterSpacing: "-0.01em", transform: `translateY(${((1 - p) * 0.4 * fs).toFixed(2)}px)`, opacity: c01(p * 1.6) }}>{m}</div>
               );
             })}
           </div>
+          <div style={{ flex: "none", margin: `0 ${(w * 0.05).toFixed(1)}px ${(w * 0.06).toFixed(1)}px`, height: w * 0.11, borderRadius: w, border: "1px solid rgba(255,255,255,0.16)" }} />
         </div>
       </div>
     );

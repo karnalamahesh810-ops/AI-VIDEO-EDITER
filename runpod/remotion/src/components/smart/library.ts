@@ -768,17 +768,29 @@ const PACK2: MxRecipe[] = [
   },
   {
     id: "ml-co-document", name: "Document zoom", family: "callout",
-    about: "A typed document page rises into the frame, then the camera pushes in while a marker highlights the line being read.",
+    about: "A typed page settles into the frame with its quoted line set large in the middle; an accent marker sweeps under each word as it is read while the camera pushes in on the line.",
     use: "Quoting a report, a letter, a ruling, a contract or a study (the narrator reads its line); kicker = the source, sub = a date.",
     sample: { text: "The levees will not hold", kicker: "Army Corps report", sub: "1965" },
     build: (p, k, c) => {
+      // Polished 2026-10-18 (round 2): the quoted line was 3% type in row 7 of a tall page that rose for 0.9 s from
+      // 28 degrees, and the push-in (to 1.42x) cropped the page off-centre; now the line is set at up to 6% in the
+      // middle of the page, the page settles in 0.3 s, the marker lands word by word on the voice (never before the
+      // registry's marker sound at `mid`), and the push centres on the line. Off-centre on auto when a face is there.
       const mid = Math.max(c.s(1.1), c.wt(0, 1.1, 0));
+      const quote = T(p.text);
+      const w = (c.side === "center" ? 0.44 : Math.min(0.44, Math.max(0.3, c.room + 0.02))) * c.scale;
+      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.06 + w / 2 : 0.94 - w / 2;
+      // typed face, ~0.62 em per character; at most ~3 lines of 14-26 characters inside the page's 82%
+      const cpl = Math.max(14, Math.min(26, Math.ceil(quote.length / 3)));
+      const size = Math.max(0.036, Math.min(0.062, (w * 0.82 * c.aspect) / (cpl * 0.62))) * Math.min(1.15, c.scale);
+      let prev = 0;
+      const times = c.words.map((_, i) => (prev = Math.max(prev, mid, c.wt(i, 1.1, 0.12))));
       return finish([
-        { kind: "card", card: "doc", x: 0.5, y: 0.52, w: 0.36 * c.scale, h: 0.86, text: T(p.text), label: p.kicker ? T(p.kicker) : "Document", meta: p.sub ? T(p.sub) : "",
-          fill: "#f5f2ea", color: "#151515", emphColor: k.colors.primary, mid, seed: Math.round(c.r(5) * 1000),
-          keys: { y: [[0, 0.12], [c.s(0.9), 0, "expoOut"]], rotX: [[0, 28], [c.s(1.0), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.3), 1, "out"]],
-            scale: [[0, 0.9], [c.s(0.9), 1, "expoOut"], [mid, 1], [mid + c.s(1.4), 1.42, "inOut"], [p.dur, 1.48, "linear"]], rot: [[0, -2]] } },
-      ], c, "fade", { persp: 1200, shade: { kind: "full", amount: 0.55 } });
+        { kind: "card", card: "doc", x, y: c.y ?? 0.5, w, h: 0.8, text: quote, label: p.kicker ? T(p.kicker) : "Document", meta: p.sub ? T(p.sub) : "",
+          fill: "#f6f2e8", color: "#141414", emphColor: k.colors.primary, mid, times, size, seed: Math.round(c.r(5) * 1000),
+          keys: { y: [[0, 0.035], [c.s(0.3), 0, "expoOut"]], rotX: [[0, 10], [c.s(0.32), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.14), 1, "out"]],
+            scale: [[0, 0.97], [c.s(0.3), 1, "expoOut"], [mid, 1], [mid + c.s(1.3), 1.18, "inOut"], [p.dur, 1.22, "linear"]], rot: [[0, c.side === "right" ? 1 : -1]] } },
+      ], c, "fade", { ...quick("fade"), persp: 1200, shade: c.side === "center" ? { kind: "full", amount: 0.5 } : { kind: c.side, amount: 0.6 } });
     },
   },
   {
@@ -820,38 +832,50 @@ const PACK2: MxRecipe[] = [
   },
   {
     id: "ml-co-post", name: "Social post", family: "callout",
-    about: "A social post card slides up, its words lighting as they are read; the heart pops (and counts, when the likes are said).",
+    about: "A clean social post card settles in, its words set large and lighting from a ghost grey as they are read; then the heart fills (and the likes count up, when they are said).",
     use: "A post, tweet or comment the narration quotes (sub = the account's name, kicker = a date, value = likes only when said).",
     sample: { text: "This is the worst traffic I have ever seen in this city", sub: "Daniel Reyes", kicker: "2h", value: 48200 },
     build: (p, k, c) => {
+      // Polished 2026-10-18 (round 2): 3.4% text with unread words at 15% (unreadable), a 0.8 s rise from a 20 degree
+      // tilt and a bouncing heart; now the words are set at up to 5.8% in at most ~4 lines, unread words wait at 32%
+      // (the timeline's ghost state), the card settles in 0.3 s and the heart fills without a bounce on `mid` (the
+      // registry's pop sound).
       const times = c.words.map((_, i) => c.wt(i, 0.5, 0.1));
-      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.28 : 0.72;
+      const w = (c.side === "center" ? 0.42 : Math.min(0.42, Math.max(0.32, c.room))) * c.scale;
+      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.06 + w / 2 : 0.94 - w / 2;
+      const cpl = Math.max(16, Math.ceil(T(p.text).length / 4));
+      const size = Math.max(0.038, Math.min(0.058, (w * 0.88 * c.aspect) / (cpl * 0.5))) * Math.min(1.15, c.scale);
       return finish([
-        { kind: "card", card: "social", x, y: c.y ?? 0.5, w: 0.4 * c.scale, text: T(p.text), label: p.sub ? T(p.sub) : "", meta: p.kicker ? T(p.kicker) : "",
-          times, mid: (times[times.length - 1] || 0.6) + c.s(0.3), fill: "#ffffff", color: "#0f1419", emphColor: k.colors.primary,
-          size: Math.max(0.034, Math.min(0.048, 1.8 / Math.max(30, p.text.length))) * c.scale,
+        { kind: "card", card: "social", x, y: c.y ?? 0.5, w, text: T(p.text), label: p.sub ? T(p.sub) : "", meta: p.kicker ? T(p.kicker) : "",
+          times, mid: (times[times.length - 1] || 0.6) + c.s(0.3), fill: "#ffffff", color: "#0f1419", emphColor: k.colors.primary, size,
           ...(typeof p.value === "number" ? { valueTo: p.value } : {}),
-          keys: { y: [[0, 0.08], [c.s(0.75), 0, "expoOut"]], rotX: [[0, -20], [c.s(0.8), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.25), 1, "out"]],
-            scale: [[0, 0.94], [c.s(0.8), 1, "expoOut"], [p.dur, 1.02, "linear"]] } },
-      ], c, "drop", { persp: 1100, shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.45 } });
+          keys: { y: [[0, 0.035], [c.s(0.3), 0, "expoOut"]], rotX: [[0, -8], [c.s(0.32), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.14), 1, "out"]],
+            scale: [[0, 0.97], [c.s(0.3), 1, "expoOut"], [p.dur, 1.025, "linear"]] } },
+      ], c, "drop", { ...quick("drop"), persp: 1100, shade: c.side === "center" ? { kind: "full", amount: 0.42 } : { kind: c.side, amount: 0.55 } });
     },
   },
   {
     id: "ml-co-phone", name: "Phone messages", family: "callout",
-    about: "A phone tilts into frame in 3D and a chat plays out on it, typing dots first, each bubble popping in on its time.",
+    about: "A phone settles into frame at a slight 3D angle and a chat plays out on it from the bottom up, typing dots first, each bubble rising in on its time.",
     use: "Texts, DMs or messages the narration reads out (items = the messages in order, sub = the contact's name); one to four short messages.",
     sample: { text: "Are you safe?", sub: "Mom", items: ["Are you safe?", "We are on the roof", "Help is coming"] },
     build: (p, k, c) => {
+      // Polished 2026-10-18 (round 2): 3% bubbles popping from scale 0 with an overshoot on a phone that flew up half
+      // the frame in 0.9 s from 34 degrees; now 3.6% bubbles rise in over 0.22 s, stacked from the bottom like a real
+      // chat, on a phone that settles in 0.32 s and keeps a gentle turn. The first bubble stays at >= 1.1 s (the
+      // registry's buzz).
       const items = (p.items && p.items.length ? p.items : [p.text]).slice(0, 4).map((s) => String(s).slice(0, 90));
       const times = itemTimes(p, c, items.length, 1.1, p.dur).map((t, i) => Math.max(t, c.s(1.1 + i * 0.3)));
       const dir = c.side === "left" ? -1 : 1;
-      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.3 : 0.7;
+      const w = 0.235 * c.scale;
+      const x = c.side === "center" ? 0.5 : c.side === "left" ? 0.1 + w / 2 : 0.9 - w / 2;
       return finish([
-        { kind: "card", card: "phone", x, y: c.y ?? 0.52, w: 0.22 * c.scale, items, times, label: p.sub ? T(p.sub) : p.kicker ? T(p.kicker) : "",
-          emphColor: k.colors.primary, color: "#ffffff", size: 0.03 * c.scale,
-          keys: { y: [[0, 0.5], [c.s(0.9), 0, "expoOut"]], rotY: [[0, 34 * dir], [c.s(1.0), 12 * dir, "expoOut"], [p.dur, 6 * dir, "linear"]],
-            rotX: [[0, 14], [c.s(1.0), 4, "expoOut"]], rot: [[0, 6 * dir], [c.s(1.0), 0, "expoOut"]] } },
-      ], c, "drop", { persp: 1100, shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.5 } });
+        { kind: "card", card: "phone", x, y: c.y ?? 0.5, w, items, times, label: p.sub ? T(p.sub) : p.kicker ? T(p.kicker) : "",
+          emphColor: k.colors.primary, color: "#ffffff", size: 0.036 * Math.min(1.15, c.scale),
+          keys: { y: [[0, 0.06], [c.s(0.32), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.14), 1, "out"]],
+            rotY: [[0, 16 * dir], [c.s(0.4), 9 * dir, "expoOut"], [p.dur, 5 * dir, "linear"]],
+            rotX: [[0, 7], [c.s(0.4), 2, "expoOut"]], rot: [[0, 2 * dir], [c.s(0.4), 0, "expoOut"]] } },
+      ], c, "drop", { ...quick("drop"), persp: 1100, shade: c.side === "center" ? { kind: "full", amount: 0.42 } : { kind: c.side, amount: 0.55 } });
     },
   },
   {
