@@ -238,9 +238,9 @@ class QwenHost:
         """One generate call; a batch that runs out of GPU memory is halved and made again (smaller from then on)."""
         try:
             import torch
-            oom = torch.OutOfMemoryError
+            oom: tuple = (torch.OutOfMemoryError, MemoryError)
         except Exception:  # noqa: BLE001 - no torch (the unit tests' fake model)
-            torch, oom = None, MemoryError
+            torch, oom = None, (MemoryError,)
         try:
             return self.model.generate_voice_clone(text=texts, language=[language] * len(texts), voice_clone_prompt=prompts, **p)
         except oom:
