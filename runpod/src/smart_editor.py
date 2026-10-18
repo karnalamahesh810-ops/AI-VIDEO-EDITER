@@ -909,7 +909,12 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
     if critic and render_stills and new_ovs and budget.left() > 0.01:
         report["critic"] = _critic(doc, new_ovs, ctx, budget, render_stills, fps)
         if report["critic"].get("dropped"):
-            left = [o for o in maybe if not any(o is k for k in kept)]
+            # ... and so does the planner's own words look a dropped design had replaced (2026-10-18 proof: the
+            # critic dropped "THE OFFICIAL MYTH" and left the moment with nothing, not even the planner's line).
+            gone = [_overlay_window(o, fps) for o in new_ovs if not any(o is k for k in doc["overlays"])]
+            left = [o for o in maybe if not any(o is k for k in kept)] + [
+                o for o in words_dropped if not any(o is k for k in kept)
+                and any(_overlay_window(o, fps)[0] < b and _overlay_window(o, fps)[1] > a for a, b in gone)]
             back, tr = _fit_back(left, [_overlay_window(o, fps) for o in doc["overlays"]], fps)
             if back:
                 for ov in back:

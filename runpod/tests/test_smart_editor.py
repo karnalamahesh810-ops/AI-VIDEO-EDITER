@@ -451,3 +451,22 @@ class CriticDropTests(unittest.TestCase):
         self.assertEqual([o["smart"]["design"]["kind"] for o in smart], ["date"])
         sounds = [r for r in doc["sfx"] if r.get("kind") == "smart"]
         self.assertEqual([r["startFrame"] for r in sounds], [smart[0]["startFrame"]])
+
+    def test_a_dropped_design_gives_its_moment_back_to_the_planner_line(self):
+        import tempfile
+        doc = _doc()
+        s1 = doc["scenes"][1]
+        line = {"type": "motion", "variant": "kt-statement", "template": "KT_STATEMENT", "text": "a small sensor",
+                "startFrame": s1["startFrame"] + 20, "durationInFrames": 90}
+        doc["overlays"] = [line]
+        a = {"beat": 1, "at": "sensor", "kind": "statement", "text": "a small sensor"}
+        p = os.path.join(tempfile.mkdtemp(), "s0.jpg")
+        with open(p, "wb") as fh:
+            fh.write(b"\xff\xd8\xff\xd9")
+        reviews = json.dumps({"reviews": [{"i": 0, "score": 3, "fix": "move-up"}]})
+        with mock.patch.object(smart_editor, "_direct_chunk", side_effect=_answer_with(a)), \
+                mock.patch.object(smart_editor, "_chat", return_value=reviews):
+            rep = smart_editor.edit(doc, {"title": "t"}, critic=True, render_stills=lambda d, ovs: [p])
+        self.assertEqual(rep["critic"]["dropped"], 1)
+        self.assertFalse(any(o.get("variant") == "smart-spec" for o in doc["overlays"]))
+        self.assertTrue(any(o is line for o in doc["overlays"]))      # the planner's own line is back
