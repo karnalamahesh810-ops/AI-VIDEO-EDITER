@@ -163,7 +163,7 @@ export const SceneClip: React.FC<{
             ) : (
               <StillPicture src={split.url} motion={split.motion || "zoom-in"} frame={frame}
                 durationInFrames={durationInFrames} fps={fps} width={width / 2} filter={filters || undefined}
-                fallbackStill={holdStill} />
+                fallbackStill={holdStill} seed={`${scene.id}:split`} />
             )}
           </div>
         </AbsoluteFill>
@@ -295,10 +295,11 @@ export const SceneClip: React.FC<{
           ) : living ? (
             <LivingPicture src={media.url} living={living} motion={stillMotion} frame={frame}
               durationInFrames={durationInFrames} fps={fps} width={width} height={height}
-              filter={filters || undefined} subject={aim} fallbackStill={holdStill} />
+              filter={filters || undefined} subject={aim} fallbackStill={holdStill} seed={scene.id} />
           ) : (
             <StillPicture src={media.url} motion={stillMotion} frame={frame} durationInFrames={durationInFrames}
-              fps={fps} width={width} filter={filters || undefined} subject={aim} fallbackStill={holdStill} />
+              fps={fps} width={width} filter={filters || undefined} subject={aim} fallbackStill={holdStill}
+              seed={scene.id} />
           )}
         </AbsoluteFill>
         </ClipFx>

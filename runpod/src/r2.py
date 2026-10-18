@@ -220,8 +220,26 @@ def get_bytes(key: str, bucket: str = "", timeout: int = 60) -> Optional[bytes]:
     return r.content
 
 
+def copy(src_key: str, key: str, bucket: str = "", src_bucket: str = "", replace_metadata: bool = False) -> None:
+    """
+    Copy an object inside R2 (CopyObject: nothing travels through this
+    machine). `replace_metadata` copies an object onto itself to start its age
+    again (an age-based lifecycle rule then keeps what is still used).
+    Raises when R2 refuses.
+    """
+    headers = {"x-amz-copy-source": "/" + urllib.parse.quote(f"{src_bucket or bucket or config.R2_BUCKET}/{src_key}",
+                                                             safe=_SAFE)}
+    if replace_metadata:
+        headers["x-amz-metadata-directive"] = "REPLACE"
+        headers["x-amz-meta-touched"] = str(int(time.time()))
+    signed = _auth_headers("PUT", key, headers, hashlib.sha256(b"").hexdigest(), bucket=bucket)
+    r = requests.put(_object_url(key, bucket), headers=signed, timeout=(20, 300))
+    if r.status_code != 200 or b"<Error>" in (r.content or b"")[:200]:
+        raise RuntimeError(f"R2 copy {src_key} -> {key}: HTTP {r.status_code}: {r.text[:200]}")
+
+
 def list_keys(prefix: str = "", bucket: str = "", limit: int = 10000) -> List[dict]:
-    """[{"key", "size"}] under `prefix` (ListObjectsV2, paged)."""
+    """[{"key", "size", "modified"}] under `prefix` (ListObjectsV2, paged; modified: ISO 8601 LastModified)."""
     out: List[dict] = []
     token = ""
     while len(out) < limit:
@@ -236,7 +254,10 @@ def list_keys(prefix: str = "", bucket: str = "", limit: int = 10000) -> List[di
         root = ET.fromstring(r.content)
         ns = root.tag.split("}")[0] + "}" if root.tag.startswith("{") else ""
         for c in root.findall(f"{ns}Contents"):
-            out.append({"key": c.findtext(f"{ns}Key") or "", "size": int(c.findtext(f"{ns}Size") or 0)})
+            row = {"key": c.findtext(f"{ns}Key") or "", "size": int(c.findtext(f"{ns}Size") or 0)}
+            if c.findtext(f"{ns}LastModified"):
+                row["modified"] = c.findtext(f"{ns}LastModified")
+            out.append(row)
         token = root.findtext(f"{ns}NextContinuationToken") or ""
         if (root.findtext(f"{ns}IsTruncated") or "").lower() != "true" or not token:
             break

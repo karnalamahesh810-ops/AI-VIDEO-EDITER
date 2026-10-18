@@ -158,14 +158,21 @@ export const StillPicture: React.FC<{
   subject?: Box;
   /** Drawn blurred instead when `src` cannot be drawn (the shot before it; the first of several that can be). */
   fallbackStill?: string | string[];
-}> = ({ src, motion, frame, durationInFrames, fps, width, filter, subject, fallbackStill }) => {
+  /**
+   * What the move is seeded by (its direction, its corner): the scene's id. Never the link alone - a render
+   * serves every picture from a loopback address with its own port (and the editor from storage), so a
+   * picture's move changed with every render and every machine, and the editor showed another one.
+   */
+  seed?: string;
+}> = ({ src, motion, frame, durationInFrames, fps, width, filter, subject, fallbackStill, seed }) => {
   const k = width / 1920;
-  const move = stillTransform(motion, frame, durationInFrames, fps, src, subject);
+  const key = seed || src;
+  const move = stillTransform(motion, frame, durationInFrames, fps, key, subject);
   const hold = <BlurredHold still={fallbackStill} />;
   if (motion === "parallax") {
     const p = interpolate(frame, [0, Math.max(1, durationInFrames)], [0, 1], clamp);
     const sp = smooth(p);
-    const dir = hashStr(src) % 2 ? 1 : -1;
+    const dir = hashStr(key) % 2 ? 1 : -1;
     // The front print drifts against the back layer and a little faster: the
     // depth cue. It keeps its own shape (contain), so a portrait stays whole.
     const front = `translateX(${(dir * interpolate(sp, [0, 1], [-1.6, 1.6])).toFixed(3)}%) scale(${(0.99 + sp * 0.05).toFixed(4)})`;

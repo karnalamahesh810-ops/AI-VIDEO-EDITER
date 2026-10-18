@@ -197,14 +197,20 @@ class ServerlessParent(unittest.TestCase):
         doc["scenes"][3]["semanticMetadata"] = {"alternatives": [{"localPath": repaired, "url": repaired}]}
         workers = FakeWorkers()
         with _serverless("ep"), mock.patch.object(config, "FANOUT_PARTS", 10):
-            out, calls = _spread(doc, workers, POD_RENDER_CHUNKS=12, POD_RENDER_MIN_CHUNK_FRAMES=900)
+            out, calls = _spread(doc, workers, POD_RENDER_CHUNKS=12, POD_RENDER_MIN_CHUNK_FRAMES=900,
+                                 POD_RENDER_CHUNK_SECONDS=90)
         self.assertTrue(out.get("ok"), out)
-        # One chunk a machine: the parent draws the first itself, nine go to the other workers.
-        self.assertEqual(len(workers.payloads), 9)
+        # Chunks follow the timeline, ~90 s each (src/rendercache.py stable_chunks: the same cut on every
+        # render, so a re-render reuses what did not change): the parent draws the first, the workers the rest.
+        with _pod_env(POD_RENDER_CHUNK_SECONDS=90, POD_RENDER_MIN_CHUNK_FRAMES=900):
+            from src import rendercache
+            ranges = rendercache.stable_chunks(doc, rendercache.chunk_frames(doc), 900)
+        self.assertTrue(18 <= len(ranges) <= 21, len(ranges))    # 52,000 frames in ~2,700-frame chunks
+        self.assertEqual(len(workers.payloads), len(ranges) - 1)
         self.assertEqual(len(calls["render"]), 1)
         self.assertEqual(calls["render"][0][0], 0)
         self.assertEqual(calls["concurrency"], {12})             # at the job's own concurrency
-        self.assertEqual(calls["stats"]["onWorkers"], 9)
+        self.assertEqual(calls["stats"]["onWorkers"], len(ranges) - 1)
         self.assertEqual(calls["stats"]["onPod"], 1)
         # Every local file went up under the job's chunk folder, and the workers' document has links only.
         assets = {os.path.basename(p or "") for k, p in calls["uploads"].items() if "/assets/" in k}
@@ -280,8 +286,8 @@ class StopsWithTheReason(unittest.TestCase):
         """The Yellowstone size (~29 minutes, 52,000 frames) and its chunk ranges in _spread's settings."""
         doc = _doc([260] * 200)
         with _pod_env():
-            ranges = fanout.plan_chunks(doc, fanout.spread_chunks(doc["durationInFrames"], 12),
-                                        config.POD_RENDER_MIN_CHUNK_FRAMES)
+            from src import rendercache
+            ranges = rendercache.stable_chunks(doc, rendercache.chunk_frames(doc), config.POD_RENDER_MIN_CHUNK_FRAMES)
         return doc, ranges
 
     def test_a_chunk_that_failed_on_every_machine_still_falls_back_to_the_whole_video(self):
