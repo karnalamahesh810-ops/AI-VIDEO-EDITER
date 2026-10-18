@@ -66,7 +66,8 @@ _FIGURES = re.compile(r"^(kt-(year|date|number|percent|money|price)|pr-number-re
 RESTORE_MIN_S = 2.0         # a planner look comes back only when this much of it fits before the next graphic
 HOOK_BARE_S = 15.0          # the first seconds always carry a graphic: the planner's hook look when no design landed
 NAME_KINDS = ("label", "spot")      # name pills: only over a shot known to show the person; yield to picture looks
-CRITIC_DROP_AT = 4          # a design the critic scores this or lower is dropped, not nudged
+CRITIC_DROP_AT = 3          # a design the critic scores this or lower is dropped, not nudged
+CRITIC_DROP_IF_ASKED = 4    # ... and at this score when the critic's own fix is "drop"
 
 _PRICES = {  # USD per token (OpenRouter list prices, 2026-10): only for the pre-call budget estimate
     "google/gemini-3.8-flash": (0.75e-6, 3.75e-6), "openai/gpt-5.4-mini": (0.75e-6, 4.5e-6),
@@ -1002,22 +1003,21 @@ def _critic(doc: dict, ovs: List[dict], ctx: dict, budget: Budget, render_stills
         fix = str(r.get("fix") or "ok")
         ov = ovs[picks[r["i"]]]
         score = r.get("score")
-        if isinstance(score, (int, float)) and not isinstance(score, bool) and score <= CRITIC_DROP_AT:
-            # Weak is weak: a nudge does not make a 4/10 graphic good (2026-10-18 proof: scores 3-7, mean 5.4).
+        num = isinstance(score, (int, float)) and not isinstance(score, bool)
+        kit_card = (ov["smart"]["design"] or {}).get("kind") in motionspec.KIT_KINDS
+        # The critic is noisy (2026-10-18 proof: the same two graphics scored 5 and 4, then 4 and 4, with
+        # fixable advice - "move-left", "panel"): a design goes only at <= CRITIC_DROP_AT, or at
+        # <= CRITIC_DROP_IF_ASKED when the critic itself says "drop" (a kit card is never dropped on that ask).
+        if num and (score <= CRITIC_DROP_AT or (score <= CRITIC_DROP_IF_ASKED and fix == "drop" and not kit_card)):
             _drop_smart(doc, ov)
             ov["smart"]["critic"] = f"dropped ({score}/10)"
             dropped += 1
             continue
-        if fix == "ok":
-            continue
+        if fix in ("ok", "drop"):
+            continue                            # a "drop" on a better score (or no score) is not enough
         d = json.loads(json.dumps(ov["smart"]["design"]))
-        if d.get("kind") in motionspec.KIT_KINDS and fix in ("drop", "move-left", "move-right", "move-up",
-                                                               "move-down", "no-mark"):
+        if kit_card and fix in ("move-left", "move-right", "move-up", "move-down", "no-mark"):
             continue                            # a kit card is laid out by the kit, not moved about
-        if fix == "drop":
-            _drop_smart(doc, ov)
-            dropped += 1
-            continue
         if fix in shift:
             d["layout"] = shift[fix]
         elif fix in ("smaller", "bigger"):

@@ -228,7 +228,14 @@ stranger).
    - It gave the same two graphics 5 and 4 in round 1, then 4 and 4 twice in round 2.
    - Its 4s came with fixable advice ("move-left", "panel"). With the ≤ 4 rule it removed the two graphics a human would call the best in the Obama slice.
    - Suggestion: drop at ≤ 3, or at ≤ 4 only when its fix is "drop". The other option is to apply the fix and score again (+$0.004).
-   - Kept at ≤ 4 as asked.
+   - **Changed afterwards (round 2b, coordinator's call):**
+     - A design is now dropped only at ≤ 3 (`CRITIC_DROP_AT`), or at 4 when the critic's own fix is
+       "drop" (`CRITIC_DROP_IF_ASKED`; a kit card is never dropped on that ask).
+     - A 4 with fixable advice is nudged and kept. A "drop" on a 5+ score, or with no score, does
+       nothing.
+     - The sound-cue removal and the planner-look restore are unchanged.
+     - Offline tests: `CriticDropTests` (5). No re-render was done for this change. In the Obama replay
+       both 4s carried fixable advice, so under this rule they would stay, moved.
 2. **Paraphrase refusals.** Half the tech designs were refused for not being verbatim. That is correct, but it wastes the call. Tell the director in the prompt to copy the narration's exact words for figures.
 3. **Words-only planner looks** (keywords, side notes) are still replaced even where no design lands, as with "Harvard". Restoring them into free room would keep density, at the cost of the template sameness the owner disliked. This is the owner's call.
 

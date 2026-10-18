@@ -428,11 +428,13 @@ class TwoFontsTests(unittest.TestCase):
 
 
 class CriticDropTests(unittest.TestCase):
-    def test_four_or_less_is_dropped_with_its_sound(self):
+    def _run(self, score, fix):
+        """Two designs; the critic reviews the first with (score, fix) and gives the second 8/ok."""
         import tempfile
         doc = _doc()
         doc["overlays"] = []
-        a = {"beat": 1, "at": "sensor", "kind": "statement", "text": "a small sensor", "sfx": "whoosh-soft"}
+        a = {"beat": 1, "at": "sensor", "kind": "statement", "text": "a small sensor", "sfx": "whoosh-soft",
+             "layout": "center"}
         b = {"beat": 3, "at": "1906", "kind": "date", "value": 1906, "text": "Roosevelt signed it",
              "sfx": "whoosh-soft"}
         tmp = tempfile.mkdtemp()
@@ -442,15 +444,41 @@ class CriticDropTests(unittest.TestCase):
             with open(p, "wb") as fh:
                 fh.write(b"\xff\xd8\xff\xd9")
             stills.append(p)
-        reviews = json.dumps({"reviews": [{"i": 0, "score": 4, "fix": "move-up"}, {"i": 1, "score": 8, "fix": "ok"}]})
+        reviews = json.dumps({"reviews": [{"i": 0, "score": score, "fix": fix}, {"i": 1, "score": 8, "fix": "ok"}]})
         with mock.patch.object(smart_editor, "_direct_chunk", side_effect=_answer_with(a, b)), \
                 mock.patch.object(smart_editor, "_chat", return_value=reviews):
             rep = smart_editor.edit(doc, {"title": "t"}, critic=True, render_stills=lambda d, ovs: stills[:len(ovs)])
-        self.assertEqual(rep["critic"]["dropped"], 1)
         smart = [o for o in doc["overlays"] if o.get("variant") == "smart-spec"]
+        return rep, doc, smart
+
+    def test_three_or_less_is_dropped_with_its_sound(self):
+        rep, doc, smart = self._run(3, "move-up")
+        self.assertEqual(rep["critic"]["dropped"], 1)
         self.assertEqual([o["smart"]["design"]["kind"] for o in smart], ["date"])
         sounds = [r for r in doc["sfx"] if r.get("kind") == "smart"]
         self.assertEqual([r["startFrame"] for r in sounds], [smart[0]["startFrame"]])
+
+    def test_four_is_dropped_only_when_the_critic_says_drop(self):
+        rep, doc, smart = self._run(4, "drop")
+        self.assertEqual(rep["critic"]["dropped"], 1)
+        self.assertEqual([o["smart"]["design"]["kind"] for o in smart], ["date"])
+        self.assertEqual(len([r for r in doc["sfx"] if r.get("kind") == "smart"]), 1)
+        rep, doc, smart = self._run(4, "move-up")                    # fixable advice: nudged, kept
+        self.assertEqual(rep["critic"]["dropped"], 0)
+        self.assertEqual(rep["critic"]["fixed"], 1)
+        self.assertEqual(len(smart), 2)
+        moved = next(o for o in smart if o["smart"]["design"]["kind"] == "statement")
+        self.assertEqual(moved["smart"].get("critic"), "move-up")
+        self.assertEqual(len([r for r in doc["sfx"] if r.get("kind") == "smart"]), 2)
+
+    def test_a_drop_ask_on_a_better_score_or_no_score_keeps_it(self):
+        for score in (5, 6, None, "4"):
+            rep, doc, smart = self._run(score, "drop")
+            self.assertEqual(rep["critic"]["dropped"], 0, score)
+            self.assertEqual(len(smart), 2, score)
+
+    def test_drop_thresholds(self):
+        self.assertEqual((smart_editor.CRITIC_DROP_AT, smart_editor.CRITIC_DROP_IF_ASKED), (3, 4))
 
     def test_a_dropped_design_gives_its_moment_back_to_the_planner_line(self):
         import tempfile
