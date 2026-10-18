@@ -57,6 +57,11 @@ export interface MxParams {
   scale?: number;
   /** Frame width / height. */
   aspect?: number;
+  /**
+   * What the words must keep off on the shot under the look (faces, logos, burned-in lettering: shares of the
+   * frame, components/motion/avoid.ts). On "auto" placement the look takes the side that stays clear of them.
+   */
+  avoid?: { x: number; y: number; w: number; h: number }[];
 }
 
 export interface MxRecipe {
@@ -88,6 +93,8 @@ interface Ctx {
   /** The time word i lands (its spoken time, else a stagger from `start`). */
   wt: (i: number, start: number, stagger: number) => number;
   words: string[];
+  /** The share of the frame's width a side-placed block may take before it reaches a face / logo (avoid). */
+  room: number;
 }
 
 // ------------------------------------------------------------------ kits
@@ -185,6 +192,47 @@ const sideOf = (position: string | undefined, dflt: Ctx["side"], seed: number): 
   if (p.endsWith("right")) return "right";
   if (p === "center" || p === "top" || p === "bottom") return "center";
   return dflt === "center" ? "center" : (seed % 2 ? "right" : "left");
+};
+type Box = { x: number; y: number; w: number; h: number };
+/** The share of the region [x0, x1] x [y0, y1] of the frame the boxes cover (overlaps counted once per box, capped at 1). */
+const coveredShare = (boxes: Box[], x0: number, x1: number, y0: number, y1: number): number => {
+  let a = 0;
+  for (const b of boxes) {
+    const w = Math.min(x1, b.x + b.w) - Math.max(x0, b.x), h = Math.min(y1, b.y + b.h) - Math.max(y0, b.y);
+    if (w > 0 && h > 0) a += w * h;
+  }
+  return Math.min(1, a / Math.max(1e-6, (x1 - x0) * (y1 - y0)));
+};
+/**
+ * On "auto" placement, the side whose text region stays clearest of the shot's faces / logos / lettering (2026-10-18):
+ * the look's own side while that is clear (under 4% covered), else the clearest other side. An explicit position
+ * is the user's choice and is never moved.
+ */
+export const sideAway = (side: Ctx["side"], position: string | undefined, avoid: Box[] | undefined, y: number | null): Ctx["side"] => {
+  if (!avoid || !avoid.length || (position && position !== "auto")) return side;
+  const yc = y ?? 0.5;
+  const y0 = Math.max(0, yc - 0.25), y1 = Math.min(1, yc + 0.25);
+  const R: Record<Ctx["side"], [number, number]> = { left: [0.04, 0.52], center: [0.2, 0.8], right: [0.48, 0.96] };
+  const cov = (s: Ctx["side"]) => coveredShare(avoid, R[s][0], R[s][1], y0, y1);
+  let best = side, bc = cov(side);
+  if (bc < 0.04) return side;
+  const others: Ctx["side"][] = side === "center" ? ["left", "right"] : [side === "left" ? "right" : "left", "center"];
+  for (const s of others) { const v = cov(s); if (v < bc - 0.02) { best = s; bc = v; } }
+  return best;
+};
+/** How much of the width a block on `side` has before the first avoid box in its band (1 = no limit). */
+export const roomOn = (side: Ctx["side"], avoid: Box[] | undefined, y: number | null): number => {
+  if (!avoid || !avoid.length || side === "center") return 1;
+  const yc = y ?? 0.5;
+  const y0 = Math.max(0, yc - 0.25), y1 = Math.min(1, yc + 0.25);
+  let room = 1;
+  for (const b of avoid) {
+    if (b.y + b.h <= y0 || b.y >= y1) continue;
+    const r = side === "left" ? b.x - 0.075 - 0.025 : 0.925 - (b.x + b.w) - 0.025;
+    if (r > 0.08) room = Math.min(room, r);
+  }
+  // x0.88: the face table under-measures heavy caps by ~10-15%, and this is a limit, not a target
+  return room >= 1 ? 1 : Math.max(0.3, room * 0.88);
 };
 const bandOf = (position: string | undefined): number | null => {
   const p = String(position || "auto");
@@ -1752,12 +1800,16 @@ export const buildMotionLook = (id: string, params: MxParams, kit: BrandKit): Mo
   const tempo = kit.tempo || 1;
   const seed = Math.round(Number(params.seed) || 0);
   const wordAt = Array.isArray(params.wordAt) ? params.wordAt.filter((v) => typeof v === "number" && Number.isFinite(v)) : [];
+  const band = bandOf(params.position);
+  const side = recipe.family === "transition" ? sideOf(params.position, "center", seed)
+    : sideAway(sideOf(params.position, recipe.family === "lower-third" ? "left" : "center", seed), params.position, params.avoid, band);
   const c: Ctx = {
     s: (sec) => (sec * tempo) / speed,
     aspect: Math.max(0.4, Math.min(3, Number(params.aspect) || 16 / 9)),
     scale: Math.max(0.5, Math.min(1.8, Number(params.scale) || 1)),
-    side: sideOf(params.position, recipe.family === "lower-third" ? "left" : "center", seed),
-    y: bandOf(params.position),
+    side,
+    room: recipe.family === "transition" ? 1 : roomOn(side, params.avoid, band),
+    y: band,
     r: (n) => hash01(seed * 31 + n),
     wt: (i, start, stagger) => {
       const at = wordAt[i];
@@ -1786,5 +1838,6 @@ export const paramsFromOverlay = (ov: Record<string, unknown>, fps: number, aspe
     point: anchor && typeof anchor.x === "number" && typeof anchor.y === "number" ? { x: anchor.x, y: anchor.y } : undefined,
     seed: typeof ov.seed === "number" ? ov.seed : Math.round(Number(ov.startFrame) || 0), speed: typeof ov.speed === "number" ? ov.speed : 1,
     scale: typeof ov.scale === "number" ? ov.scale : 1, aspect,
+    avoid: Array.isArray(ov.avoid) ? (ov.avoid as Box[]).filter((b) => b && [b.x, b.y, b.w, b.h].every((v) => typeof v === "number" && Number.isFinite(v))).slice(0, 12) : undefined,
   };
 };

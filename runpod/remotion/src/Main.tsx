@@ -161,7 +161,13 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
   // Editor v2's motion library (components/smart/library.ts): a recipe places, scales, enters and leaves on its
   // own (position, scale, speed are its params), so no MotionWrap - it would move and fade it a second time.
   if (raw && raw.type === "motion" && /^ml-/.test(raw.variant || "")) {
-    const ovL = resolveOverlay(raw);
+    let ovL = resolveOverlay(raw);
+    // Faces, logos and burned-in lettering on the shot under it (components/motion/avoid.ts): a look on "auto"
+    // placement takes the side of the frame that keeps its words off them (library.ts sideAway).
+    if (!ovL.avoid) {
+      const avoid = sceneAvoid(ovL, scenes);
+      if (avoid.length) ovL = { ...ovL, avoid };
+    }
     const Look = LIBRARY[ovL.variant || ""];
     if (!Look) return null;
     const look = <Look overlay={ovL} accent={accentFor(ovL, accent, accent2)} />;
