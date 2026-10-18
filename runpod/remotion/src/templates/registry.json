@@ -99463,7 +99463,7 @@
    "name": "Word stack slam",
    "category": "HEADLINES",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): A justified block of stacked words, each line sized to the same width and slammed in on its spoken word; the stack jolts as each lands. Use: A punchy hook or a three-to-six word verdict said with force (\"they lost everything\"); the hook and big turns only.",
+   "description": "Motion library pack 2 (brand-kit aware): A justified block of stacked words, every line set to the same width in tight heavy caps; each line rises out of its own mask on its spoken word and the stack settles a hair as it lands. Use: A punchy hook or a three-to-six word verdict said with force (\"they lost everything\"); the hook and big turns only.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -99634,7 +99634,7 @@
    "name": "Split reveal",
    "category": "HEADLINES",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): One line cut through the middle: its top half slides in from one side, its bottom half from the other, and they lock together with a bright seam. Use: A short line that turns the story (\"everything changed\", a name reveal); one line, at most five words.",
+   "description": "Motion library pack 2 (brand-kit aware): One big line cut through the middle: its top half slides in from one side, its bottom half from the other, and they lock together on a bright accent seam. Use: A short line that turns the story (\"everything changed\", a name reveal); one line, at most five words.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -99805,7 +99805,7 @@
    "name": "Spoken mask wipe",
    "category": "HEADLINES",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): A soft mask wipes the words on left to right in step with the voice, a glowing accent edge riding the reveal. Use: A full sentence worth reading along (a thesis, the stakes); lines up to about 8 words, any section.",
+   "description": "Motion library pack 2 (brand-kit aware): A mask wipes big heavy words on left to right in step with the voice, line by line; an accent rule and an optional sub line settle under the last word. Use: A full sentence worth reading along (a thesis, the stakes); lines up to about 8 words, any section.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -100148,7 +100148,7 @@
    "name": "Extruded 3D title",
    "category": "HEADLINES",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): A heavy title with real depth swings round in perspective and settles, its sides in a deep shade of the kit accent. Use: An episode / topic title or a name that deserves a monument (\"Burj Khalifa\", \"The Great Fire\"); one to four words, openings and chapter starts.",
+   "description": "Motion library pack 2 (brand-kit aware): A monumental title in tight heavy caps with a shallow, dark extrusion: the words rise on their spoken beats, the block settles from a gentle 3D angle and keeps turning slowly; an accent rule draws out under it. Use: An episode / topic title or a name that deserves a monument (\"Burj Khalifa\", \"The Great Fire\"); one to four words, openings and chapter starts.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -102691,7 +102691,7 @@
    "name": "Quote card with portrait",
    "category": "CALLOUTS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): A glass quote card: a portrait ring draws round the speaker's initials, the words arrive as they are said, the name tracks in under them. Use: Someone's own words quoted in the narration with the speaker named (sub = speaker, kicker = their role); up to about 20 words.",
+   "description": "Motion library pack 2 (brand-kit aware): An editorial pull quote: a big accent quotation mark, the words set large in italic as they are said, then the speaker's name in tracked caps and their role under a short accent rule. Use: Someone's own words quoted in the narration with the speaker named (sub = speaker, kicker = their role); up to about 20 words.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -104161,7 +104161,7 @@
    "name": "Fact-check stamp",
    "category": "CALLOUTS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): The claim sets in as a quote, then a rubber stamp slams onto it with the verdict - red for false, green for true, the accent otherwise. Use: A claim being checked, a myth busted or confirmed (text = the claim as said; kicker = the verdict word said: False, Myth, True...).",
+   "description": "Motion library pack 2 (brand-kit aware): The claim sets in large as a quote, word by word; on the verdict a solid badge hits beside it - red for false (the claim is struck through and dims), green for true, the accent otherwise. Use: A claim being checked, a myth busted or confirmed (text = the claim as said; kicker = the verdict word said: False, Myth, True...).",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -104521,7 +104521,7 @@
    "name": "Ink bleed",
    "category": "TRANSITIONS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): Blots of ink in the kit's deep colour bloom across the shot until it is covered, then the next shot bleeds through from the middle. Use: A soft, artful change of place or time (a memory, a new chapter of a life story); calm or emotional sections.",
+   "description": "Motion library pack 2 (brand-kit aware): Ink in the kit's deep colour blooms in from near one edge, its feathered edge led by a thin accent rim, until the shot is covered; the next shot bleeds through from the other side. Use: A soft, artful change of place or time (a memory, a new chapter of a life story); calm or emotional sections.",
    "kind": "card",
    "emphasis": "high",
    "props": {
@@ -104679,7 +104679,7 @@
    "name": "Film burn",
    "category": "TRANSITIONS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): Hot orange film-burn blooms flare in from the edges, flicker and white out the cut, then cool away onto the next shot. Use: A jump in time or a flashback (\"years earlier\", \"back in 1985\"), archive and nostalgic footage, emotional peaks.",
+   "description": "Motion library pack 2 (brand-kit aware): A warm light leak: a skewed band of film light sweeps across with a corner glow and gate streaks, flashing warm white for a moment over the cut, then cools away onto the next shot. Use: A jump in time or a flashback (\"years earlier\", \"back in 1985\"), archive and nostalgic footage, emotional peaks.",
    "kind": "card",
    "emphasis": "high",
    "props": {
@@ -105003,7 +105003,7 @@
    "name": "Paper tear",
    "category": "TRANSITIONS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): A sheet in the kit colour with ragged torn edges rips across the frame, covering the cut and tearing away onto the next shot. Use: Moving to a new topic or case in an explainer, scrapbook or history piece; playful or documentary.",
+   "description": "Motion library pack 2 (brand-kit aware): A grained sheet in the kit colour, its torn edges ragged with a white fibrous core, slides across at a slight tilt, covering the cut and tearing away onto the next shot. Use: Moving to a new topic or case in an explainer, scrapbook or history piece; playful or documentary.",
    "kind": "card",
    "emphasis": "high",
    "props": {
@@ -105161,7 +105161,7 @@
    "name": "Block dissolve",
    "category": "TRANSITIONS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): The frame fills with kit-coloured blocks in a scattered left-to-right wave, then they pop away in a new order onto the next shot. Use: A modern, data or tech change of section (a new list item, a new chapter in an explainer).",
+   "description": "Motion library pack 2 (brand-kit aware): A directional tile wipe in the kit's ground tones: tiles grow in as the wave reaches them, its front lit in the accent, cover the cut, then shrink away in the same direction onto the next shot. Use: A modern, data or tech change of section (a new list item, a new chapter in an explainer).",
    "kind": "card",
    "emphasis": "high",
    "props": {

@@ -140,3 +140,34 @@ Proof frames of both: `docs/motion-polish/bar_donut_timeline.jpg`.
     - the stamp at the last word + 0.45 s;
     - the swoosh on the last word.
 - **Contract.** Same ids, same params (text, sub, kicker, value, items, wordAt, position, seed, speed, scale) and the same layer kinds, so the planner, the registry and the editor are unchanged.
+
+## 5. Proof and status
+
+**Contact sheets** are in `docs/motion-polish/`. Each look has a before row (pack 2, base 81fc404) and an after row, 4 frames through the animation, rendered as stills at 1280x720 over neutral procedural backdrops.
+
+| Sheet | Contents |
+|---|---|
+| `before_after_titles.jpg` | stack, wipe, extrude, slice |
+| `before_after_emphasis_callouts.jpg` | swoosh, quote, stamp |
+| `before_after_transitions.jpg` | blocks, ink, tear, film burn |
+| `before_after_subject_safe.jpg` | a stand-in subject in the middle or on the left; after, the words take the clear side |
+| `bar_donut_timeline.jpg` | the two looks the owner liked, unchanged, for reference |
+
+The sample text spans finance, sports, history and science, tech, engineering and economics. It uses fictional speakers and no outside pictures.
+
+**Tests.**
+
+- `SKIP_DOTENV=1 python -m unittest discover -s tests -t .` ran 3540 tests. The only failures are the 2 known ones that fail on base too: test_data_graphics chart and test_style_match text.
+- `tsc --noEmit` is clean at every commit (each commit's index was checked out and type-checked).
+- The registry descriptions were re-synced, and `scripts/build_registry.py` rebuilds `registry.json` identically.
+
+**The app's `src/remotion` mirror must copy:**
+
+- `components/smart/library.ts`
+- `components/smart/SpecPack2.tsx`
+- `Main.tsx`: the ml- branch only, which adds `sceneAvoid`
+- `templates/registry.json`: the 10 descriptions
+
+The app's `src/test/motionLibrary.test.ts` should be re-run after the copy.
+
+**Not done yet (next):** ml-co-document and ml-tr-glitch, then the AI-director-only callouts (sticky, browser, cardflip).
