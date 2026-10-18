@@ -168,6 +168,14 @@ export const renderOverlay = (raw: Overlay, accent: string, scenes: TimelineProp
     const op = typeof ovL.opacity === "number" && ovL.opacity < 1 ? Math.max(0.2, ovL.opacity) : 1;
     return withSound(op < 1 ? <AbsoluteFill style={{ opacity: op }}>{look}</AbsoluteFill> : look, sound);
   }
+  // The source tag (LibSourceTag.tsx, docs/on-screen-sources.md): a small glass chip with its own short entry
+  // (under 250 ms) and quicker exit. No MotionWrap: its fades would stretch the entry and, as an opacity on the
+  // chip's parent, stop the glass from blurring the picture behind it.
+  if (raw && raw.type === "motion" && raw.variant === "src-tag") {
+    const ovS = resolveOverlay(raw);
+    const Look = LIBRARY["src-tag"];
+    return Look ? withSound(<Look overlay={ovS} accent={accentFor(ovS, accent, accent2)} />, sound) : null;
+  }
   let ov = resolveOverlay(raw);
   // An image look's pictures, every slot a real picture (lookPictures): the
   // planner's, else the scene's own (on a clip, a frame of it), else its

@@ -23,6 +23,12 @@ functions, no network, deterministic. settle() runs once the pictures are final
 (handler.do_plan, after smart reframing): a tag never sits over a face - it
 takes the other low corner, or is left out - and never over a full-screen
 graphic.
+
+The script's own research, when the job carries it ("research": the facts and the
+source of each, as the app's script writer v2 keeps them), is the other way a tag is
+made: a line that states one of those facts - its figure or date, said about the
+same thing - gets that fact's source (match_research). A source the narration names
+itself always wins. docs/on-screen-sources.md has the whole contract.
 """
 import re
 import time
@@ -99,6 +105,71 @@ _KNOWN: List[Tuple[str, str, List[str], List[str]]] = [
     ("science-advances", "SCIENCE ADVANCES", [], ["Science Advances"]),
     ("grl", "GEOPHYSICAL RESEARCH LETTERS", [], ["Geophysical Research Letters"]),
     ("wrr", "WATER RESOURCES RESEARCH", [], ["Water Resources Research"]),
+    # Every niche, not only water and weather (the owner, 2026-10-08: the tool is general): money, tech, crime,
+    # health, sports, history and science bodies a narration cites by name.
+    ("sec", "SEC", ["SEC"], ["Securities and Exchange Commission"]),
+    ("fdic", "FDIC", ["FDIC"], ["Federal Deposit Insurance Corporation"]),
+    ("irs", "IRS", ["IRS"], ["Internal Revenue Service"]),
+    ("ftc", "FTC", ["FTC"], ["Federal Trade Commission"]),
+    ("fcc", "FCC", ["FCC"], ["Federal Communications Commission"]),
+    ("cfpb", "CFPB", ["CFPB"], ["Consumer Financial Protection Bureau"]),
+    ("bea", "BEA", ["BEA"], ["Bureau of Economic Analysis"]),
+    ("treasury", "U.S. TREASURY", [], ["Treasury Department", "Department of the Treasury"]),
+    ("oecd", "OECD", ["OECD"], ["Organisation for Economic Co-operation and Development",
+                                 "Organization for Economic Cooperation and Development"]),
+    ("gallup", "GALLUP", [], ["Gallup"]),
+    ("nielsen", "NIELSEN", [], ["Nielsen"]),
+    ("statista", "STATISTA", [], ["Statista"]),
+    ("gartner", "GARTNER", [], ["Gartner"]),
+    ("idc", "IDC", ["IDC"], ["International Data Corporation"]),
+    ("canalys", "CANALYS", [], ["Canalys"]),
+    ("counterpoint", "COUNTERPOINT RESEARCH", [], ["Counterpoint Research"]),
+    ("goldman", "GOLDMAN SACHS", [], ["Goldman Sachs"]),
+    ("morgan-stanley", "MORGAN STANLEY", [], ["Morgan Stanley"]),
+    ("ft", "FINANCIAL TIMES", [], ["Financial Times"]),
+    ("forbes", "FORBES", [], ["Forbes"]),
+    ("cnbc", "CNBC", ["CNBC"], []),
+    ("fbi", "FBI", ["FBI"], ["Federal Bureau of Investigation"]),
+    ("doj", "U.S. DEPT. OF JUSTICE", ["DOJ"], ["Department of Justice", "Justice Department"]),
+    ("bjs", "BUREAU OF JUSTICE STATISTICS", ["BJS"], ["Bureau of Justice Statistics"]),
+    ("atf", "ATF", ["ATF"], ["Bureau of Alcohol, Tobacco, Firearms and Explosives"]),
+    ("dea", "DEA", ["DEA"], ["Drug Enforcement Administration"]),
+    ("interpol", "INTERPOL", [], ["Interpol", "INTERPOL"]),
+    ("europol", "EUROPOL", [], ["Europol"]),
+    ("nih", "NIH", ["NIH"], ["National Institutes of Health"]),
+    ("fda", "FDA", ["FDA"], ["Food and Drug Administration"]),
+    ("nhs", "NHS", ["NHS"], ["National Health Service"]),
+    ("nhtsa", "NHTSA", ["NHTSA"], ["National Highway Traffic Safety Administration"]),
+    ("ntsb", "NTSB", ["NTSB"], ["National Transportation Safety Board"]),
+    ("faa", "FAA", ["FAA"], ["Federal Aviation Administration"]),
+    ("mayo", "MAYO CLINIC", [], ["Mayo Clinic"]),
+    ("jama", "JAMA", ["JAMA"], ["Journal of the American Medical Association"]),
+    ("nejm", "NEJM", ["NEJM"], ["New England Journal of Medicine"]),
+    ("bmj", "THE BMJ", ["BMJ"], ["British Medical Journal"]),
+    ("ncaa", "NCAA", ["NCAA"], []),
+    ("nfl", "NFL", ["NFL"], []),
+    ("nba", "NBA", ["NBA"], []),
+    ("mlb", "MLB", ["MLB"], []),
+    ("nhl", "NHL", ["NHL"], []),
+    ("fifa", "FIFA", ["FIFA"], []),
+    ("ioc", "IOC", ["IOC"], ["International Olympic Committee"]),
+    ("espn", "ESPN", ["ESPN"], []),
+    ("opta", "OPTA", [], ["Opta"]),
+    ("elias", "ELIAS SPORTS BUREAU", [], ["Elias Sports Bureau"]),
+    ("guinness", "GUINNESS WORLD RECORDS", [], ["Guinness World Records", "Guinness Book of World Records"]),
+    ("smithsonian", "SMITHSONIAN", [], ["Smithsonian Institution", "Smithsonian"]),
+    ("archives", "NATIONAL ARCHIVES", [], ["National Archives"]),
+    ("loc", "LIBRARY OF CONGRESS", [], ["Library of Congress"]),
+    ("esa", "ESA", ["ESA"], ["European Space Agency"]),
+    ("cern", "CERN", ["CERN"], []),
+    ("nsf", "NSF", ["NSF"], ["National Science Foundation"]),
+    ("unicef", "UNICEF", ["UNICEF"], []),
+    ("unesco", "UNESCO", ["UNESCO"], []),
+    ("eurostat", "EUROSTAT", [], ["Eurostat"]),
+    ("ons", "ONS", ["ONS"], ["Office for National Statistics"]),
+    ("hrw", "HUMAN RIGHTS WATCH", [], ["Human Rights Watch"]),
+    ("amnesty", "AMNESTY INTERNATIONAL", [], ["Amnesty International"]),
+    ("red-cross", "RED CROSS", [], ["Red Cross"]),
 ]
 # A journal whose name is an everyday word: a source only where the line says it was published there
 # ("a study in Nature", "published in Science", "the journal Nature") - never "according to science".
@@ -106,6 +177,7 @@ _JOURNALS: List[Tuple[str, str, List[str]]] = [
     ("nature", "NATURE", ["Nature"]),
     ("science", "SCIENCE", ["Science"]),
     ("lancet", "THE LANCET", ["Lancet"]),
+    ("cell", "CELL", ["Cell"]),
 ]
 
 # A capitalised word that may stand before a name without being part of it ("But NOAA...", "In March the...").
@@ -120,7 +192,7 @@ _ORG_WORDS = frozenset("""Bureau Department Agency Administration Service Survey
 Institution University College Center Centre Board Office Council Association Laboratory Lab Observatory District
 Corps Foundation Society Organization Organisation Ministry Academy Committee Group Fund Times Post Journal Tribune
 Herald Gazette Chronicle News Magazine Review Union Federation Alliance Coalition Trust Consortium Panel
-Conservancy""".split())
+Conservancy Museum Clinic Hospital Library Archives Project Network Bank""".split())
 _CAP = r"(?:U\.S\.|[A-Z][A-Za-z0-9&'’-]*)"
 _PHRASE = re.compile(_CAP + r"(?:\s+(?:(?:of|for|on)\s+(?:the\s+)?|and\s+|&\s+)?" + _CAP + r"){1,7}")
 _US = r"(?:(?:(?i:United[\s-]+States)|U\.?\s?S\.?)\s+)?"
@@ -207,8 +279,11 @@ _L_A_DOC = re.compile(r"\b(?:(?:a|an|one)\s+(?:" + _ADJ + r"\s+)?(?:(?P<y0>" + _
                       r"(?:the|this|that|its|their)\s+(?:" + _ADJ + r"\s+)?(?P<y1>" + _Y + r")\s+)$", re.I)
 _L_YEAR = re.compile(r"\b(?:the|a|an|in|from|its|their|that|this|by)\s+(" + _Y + r")\s+$", re.I)
 _L_JOURNAL = re.compile(r"(?:\b(?:published|appeared|appearing|printed)\s+(?:in\s+(?P<y1>" + _Y + r")\s+)?in\s+"
-                        r"(?:the\s+journal\s+)?|\b(?:(?P<y0>" + _Y + r")\s+)?(?:study|paper|article|research|analysis|"
-                        r"report|review)\s+in\s+(?:the\s+journal\s+)?|\bthe\s+journal\s+)$", re.I)
+                        r"(?:the\s+journal\s+|the\s+)?|\b(?:(?P<y0>" + _Y + r")\s+)?(?:study|paper|article|research|"
+                        r"analysis|report|review)\s+in\s+(?:the\s+journal\s+|the\s+)?|\bthe\s+journal\s+)$", re.I)
+# The year of the paper itself, said before "published in": "a 2019 study published in Nature".
+_L_DOC_YEAR = re.compile(r"\b(?:a|an|the|one|this|that|its|their)\s+(?:new\s+)?(" + _Y + r")\s+(?:study|paper|article|"
+                         r"report|analysis|review|survey)\s*$", re.I)
 # ... and what stands AFTER it. (A report may say what kind it is: "the Bureau's 24-month study", "USGS streamflow data".)
 _KIND = (r"(?:\w+-\w+|seasonal|annual|monthly|weekly|daily|streamflow|satellite|radar|gauge|climate|weather|water|"
          r"drought|flood|snowpack|monitoring|historical|preliminary|internal|field|ground)")
@@ -271,6 +346,227 @@ def brief_sources(brief: Optional[dict]) -> List[dict]:
         out.append({"name": name, "tag": tag, "year": int(m.group(1)) if m else None,
                     "id": known or "brief:" + name.lower(), "rx": rx})
     return out
+
+
+# --------------------------------------------------------------------------- the switch
+def enabled() -> bool:
+    """The tags are on: config.SOURCE_TAGS or config.ON_SCREEN_SOURCES (both off by default; a job's own
+    "on_screen_sources" field is folded into both by fold_job_switch)."""
+    from . import config
+    return bool(getattr(config, "SOURCE_TAGS", False) or getattr(config, "ON_SCREEN_SOURCES", False))
+
+
+def fold_job_switch(inp: Optional[dict]) -> Optional[bool]:
+    """
+    A job's own {"on_screen_sources": false | true} into its config overrides (both flag names), so the job, its
+    parts and its pods read one answer: false turns the tags off whatever the flags say, true turns them on for
+    this job. Returns the job's choice, or None when it made none (the flags decide).
+    """
+    if not isinstance(inp, dict) or "on_screen_sources" not in inp or inp.get("on_screen_sources") is None:
+        return None
+    raw = inp.get("on_screen_sources")
+    on = raw if isinstance(raw, bool) else str(raw).strip().lower() in ("1", "true", "yes", "on")
+    cfg = dict(inp["config"]) if isinstance(inp.get("config"), dict) else {}
+    cfg["SOURCE_TAGS"] = on
+    cfg["ON_SCREEN_SOURCES"] = on
+    inp["config"] = cfg
+    return on
+
+
+# --------------------------------------------------------------------------- the script's own research
+# A script written with research (the app's script writer v2: _shared/scriptV2/facts.ts) carries its facts and the
+# source of each: {"facts": [{"id", "text", "number", "when", "source": "S1", "confidence"}], "sources": [{"id",
+# "org", "title", "url", "date"}]}. A job passes it as "research" (or "script_research"). A line that states one of
+# those facts - the same figure, said about the same thing - gets that fact's source. Nothing else: a line whose
+# figure matches no researched fact gets no tag, a fact whose source names no organisation gives none, and a fact the
+# fact check was not sure of ("confidence": "medium") is never cited.
+_RESEARCH: Dict[str, list] = {"facts": [], "listed": []}
+
+_NUM_WORDS = ("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+              "seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred").split()
+_SCALE_OF = {"thousand": 1e3, "million": 1e6, "billion": 1e9, "trillion": 1e12, "k": 1e3, "m": 1e6, "bn": 1e9}
+_FIG = re.compile(
+    r"(?<![\w.])\$?\s?(?P<d>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+    r"(?:\s*(?P<s>thousand|million|billion|trillion|bn|k|m)\b)?(?P<p>\s*(?:%|percent\b|per\s*cent\b))?"
+    r"|(?<![\w-])(?P<w>(?:(?:" + "|".join(_NUM_WORDS) + r")(?:[\s-]+(?:and[\s-]+)?|(?=\W|$)))+)"
+    r"(?:(?P<ws>thousand|million|billion|trillion)\b)?(?P<wp>\s*(?:percent\b|per\s*cent\b))?", re.I)
+_STOP = frozenset("""about above after again against almost along also although among another around because been
+before being below between both could during each either enough every from further have having here into itself
+just last least less many more most much near nearly never only other over same should since some still such than
+that their them then there these they this those through under until upon very were what when where which while
+with within without would year years percent people more than over said says according report reports study""".split())
+
+
+def _stem(w: str) -> str:
+    w = w.lower().replace("’", "'")
+    w = re.sub(r"'s$", "", w)
+    for tail, keep in (("ies", "y"), ("es", ""), ("s", "")):
+        if len(w) > 4 and w.endswith(tail) and not w.endswith("ss"):
+            return w[: -len(tail)] + keep
+    return w
+
+
+def _words(text: str) -> set:
+    """The words that say what a fact is about: four letters or more, not a number, not a filler."""
+    return {_stem(w) for w in re.findall(r"[A-Za-z][A-Za-z'’-]{3,}", text or "")
+            if w.lower() not in _STOP and w.lower() not in _NUM_WORDS and w.lower() not in _SCALE_OF}
+
+
+def figures(text: str) -> List[dict]:
+    """The figures a text says, in order: {"value", "year" (a bare four-digit year), "start", "end", "said"}."""
+    out: List[dict] = []
+    for m in _FIG.finditer(text or ""):
+        if m.group("d"):
+            raw = m.group("d").replace(",", "")
+            try:
+                v = float(raw)
+            except ValueError:
+                continue
+            scale = (m.group("s") or "").lower()
+            year = not scale and not m.group("p") and re.fullmatch(r"(1[5-9]\d\d|20\d\d)", raw) is not None
+            v *= _SCALE_OF.get(scale, 1.0)
+            start = m.start("d")
+        else:
+            from . import numwords
+            words = re.sub(r"[\s-]+(?:and[\s-]+)?$", "", m.group("w")).strip()
+            parsed = numwords.parse(words.replace("-", " "))
+            if parsed is None:
+                continue
+            scale = (m.group("ws") or "").lower()
+            v = float(parsed) * _SCALE_OF.get(scale, 1.0)
+            year = False
+            start = m.start("w")
+        if v == 0:
+            continue
+        out.append({"value": v, "year": bool(year), "start": start, "end": m.end(), "said": text[start:m.end()].strip()})
+    return out
+
+
+def _same(a: float, b: float) -> bool:
+    """The same figure, as a narration rounds it ("41 million" for 41.3 million): within 2.5 %."""
+    if a <= 0 or b <= 0:
+        return a == b
+    return abs(a - b) / max(a, b) <= 0.025
+
+
+def _org_tag(org: str) -> str:
+    """What the tag shows for a research source's organisation: the short form viewers know, else the name; ""
+    for a web address or a name too long for the corner."""
+    org = re.sub(r"\s+", " ", str(org or "")).strip(" ,.;:-")
+    org = re.sub(r"^the\s+", "", org, flags=re.I)
+    if not org or len(org) < 2:
+        return ""
+    if re.fullmatch(r"(?:www\.)?[\w-]+(?:\.[\w-]+)*\.(?:com|org|gov|net|edu|io|co|uk|int|info)(?:/\S*)?", org, re.I):
+        return ""                       # an address, not a name a viewer reads as a source
+    for _kid, tag, rx in _KNOWN_RX:
+        if rx.fullmatch(org) or rx.fullmatch(_titled(org)):
+            return tag
+    return org.upper() if len(org) <= MAX_NAME else ""
+
+
+def research_from(raw) -> Dict[str, list]:
+    """
+    A job's research into {"facts": [{"id", "name", "year", "values", "years", "words", "text"}], "listed":
+    brief_sources-style entries for the organisations (their names and years for the narration's own citations)}.
+    """
+    facts_out: List[dict] = []
+    listed: List[dict] = []
+    if not isinstance(raw, dict):
+        return {"facts": facts_out, "listed": listed}
+    by_id: Dict[str, dict] = {}
+    for s in raw.get("sources") if isinstance(raw.get("sources"), list) else []:
+        if not isinstance(s, dict):
+            continue
+        org = str(s.get("org") or s.get("publisher") or s.get("name") or "")
+        tag = _org_tag(org)
+        if not tag:
+            continue
+        m = re.search(r"(?<!\d)(" + _Y + r")(?!\d)", str(s.get("date") or s.get("year") or ""))
+        year = int(m.group(1)) if m and 1900 <= int(m.group(1)) <= _this_year() else None
+        entry = {"name": tag, "year": year, "org": org}
+        if s.get("id") is not None:
+            by_id[str(s["id"]).strip().upper()] = entry
+        listed.extend(brief_sources({"sources": [{"name": org, "year": year}]}))
+    for f in raw.get("facts") if isinstance(raw.get("facts"), list) else []:
+        if not isinstance(f, dict) or str(f.get("confidence") or "high").lower() not in ("high", ""):
+            continue
+        src = f.get("source")
+        entry = by_id.get(str(src).strip().upper()) if src is not None else None
+        if entry is None and isinstance(src, dict):
+            entry = {"name": _org_tag(str(src.get("org") or src.get("name") or "")), "year": None}
+        if entry is None and isinstance(src, str) and not re.fullmatch(r"[A-Za-z]{0,2}\d+", src.strip()):
+            entry = {"name": _org_tag(src), "year": None}           # the organisation written on the fact itself
+        if not entry or not entry.get("name"):
+            continue
+        text = " ".join(str(f.get(k) or "") for k in ("text", "number", "when"))
+        figs = figures(text)
+        values = [g["value"] for g in figs if not g["year"]]
+        years = [int(g["value"]) for g in figs if g["year"]]
+        words = _words(str(f.get("text") or ""))
+        if not (values or years) or not words:
+            continue                    # a fact with no figure or date to recognise it by is never matched
+        facts_out.append({"id": str(f.get("id") or len(facts_out)), "name": entry["name"], "year": entry.get("year"),
+                          "values": values, "years": years, "words": words, "text": str(f.get("text") or "")[:200]})
+    return {"facts": facts_out, "listed": listed}
+
+
+def use_research(inp: Optional[dict]) -> int:
+    """The job's research for the planner (handler.handler, per job; None clears it). Returns the facts kept."""
+    raw = None
+    if isinstance(inp, dict):
+        raw = inp.get("research") if isinstance(inp.get("research"), dict) else inp.get("script_research")
+    got = research_from(raw)
+    _RESEARCH["facts"], _RESEARCH["listed"] = got["facts"], got["listed"]
+    if got["facts"]:
+        print(f"[sources] the script's research: {len(got['facts'])} fact(s) with a named source", flush=True)
+    return len(got["facts"])
+
+
+def research() -> Dict[str, list]:
+    """The job's research as use_research left it."""
+    return {"facts": list(_RESEARCH["facts"]), "listed": list(_RESEARCH["listed"])}
+
+
+# Words a line must share with a researched fact besides its figure: two (three when only a year matches, since
+# years are said everywhere).
+FACT_WORDS = 2
+FACT_WORDS_YEAR = 3
+
+
+def match_research(text: str, facts: List[dict], used: Optional[set] = None) -> Optional[dict]:
+    """
+    The researched fact this line states, as a find()-style hit landing on its figure, or None. The line must say
+    the fact's figure (rounded as narrations round it) and at least FACT_WORDS of the words the fact is about; a
+    year alone needs FACT_WORDS_YEAR. A fact cited once is not cited again (`used`).
+    """
+    line = str(text or "")
+    if not line.strip() or not facts:
+        return None
+    figs = figures(line)
+    if not figs:
+        return None
+    said = _words(line)
+    best = None
+    for f in facts:
+        if used and f["id"] in used:
+            continue
+        shared = len(said & f["words"])
+        for g in figs:
+            if g["year"]:
+                hit = int(g["value"]) in f["years"] and shared >= FACT_WORDS_YEAR
+            else:
+                # a small count ("two", "7") is said everywhere: it needs a word more
+                need = FACT_WORDS + (1 if g["value"] < 13 else 0)
+                hit = any(_same(g["value"], v) for v in f["values"]) and shared >= need
+            if hit and (best is None or shared > best[0]):
+                best = (shared, f, g)
+                break
+    if best is None:
+        return None
+    _shared, f, g = best
+    key = line[g["start"]:].split()[0].strip(",;:()\"'”’")
+    return {"id": f["id"], "name": f["name"], "year": f.get("year"), "key": key, "start": g["start"],
+            "said": g["said"], "how": "research", "listed": True, "fact": f["text"]}
 
 
 # --------------------------------------------------------------------------- finding
@@ -379,7 +675,8 @@ def _cited(text: str, c: dict) -> Optional[Tuple[str, Optional[int]]]:
     m = _L_JOURNAL.search(left)
     if m:
         r = _R_IN_YEAR.match(right)                      # "appeared in Science in 2021"
-        return "published-in", _year(m.group("y0"), m.group("y1"), r.group(1) if r else None)
+        d = _L_DOC_YEAR.search(left[:m.start()])          # "a 2019 study published in Nature"
+        return "published-in", _year(m.group("y0"), m.group("y1"), r.group(1) if r else None, d.group(1) if d else None)
     if c["kind"] == "journal":
         return None                         # an everyday word: a source only where something was published in it
     m = _L_ACCORDING.search(left)
@@ -461,12 +758,13 @@ def label(found: dict) -> str:
 
 
 # --------------------------------------------------------------------------- never over a face
-# Where a tag is drawn (LibSourceTag.tsx), as shares of the frame: from the 96 px side margin, as wide as its
-# words in tracked caps (measured on the rendered stills: about 0.0086 of the width a character at 1080p, never
-# wider than ROOM), its rule and one line of small caps standing on the 96 px bottom margin - or on the caption
+# Where a tag is drawn (LibSourceTag.tsx), as shares of the frame: from the 96 px side margin, a glass chip as
+# wide as its words in 26 px tracked caps (about 0.0106 of the width a character at 1080p) plus its padding and
+# accent rule (37 px), never wider than ROOM; one line standing 88 px above the bottom edge - or on the caption
 # strip (layout.ts CAPTION_SAFE_ZONE) when captions are on. A face must keep clear of that box plus AIR.
 MARGIN_X = 96 / 1920.0
-CHAR_SHARE = 0.009
+CHAR_SHARE = 0.0106
+CHIP_PAD = 37 / 1920.0
 ROOM = 0.42
 AIR = 0.03
 ROWS = {False: (0.80, 0.98), True: (0.62, 0.80)}     # (y0, y1) with air: captions off / on
@@ -476,7 +774,7 @@ FACE_SECONDS = 20.0             # looking for faces under the tags never takes l
 
 def zone(side: str, line: str = "", captions: bool = False) -> Tuple[float, float, float, float]:
     """The box (x0, y0, x1, y1) a tag reading `line` takes in the `side` low corner, with air round it."""
-    width = min(ROOM, max(0.1, len(line) * CHAR_SHARE))
+    width = min(ROOM, max(0.1, len(line) * CHAR_SHARE + CHIP_PAD))
     y0, y1 = ROWS[bool(captions)]
     if side == "right":
         return 1.0 - MARGIN_X - width - AIR, y0, 1.0 - MARGIN_X + AIR, y1

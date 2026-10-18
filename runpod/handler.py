@@ -1770,8 +1770,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         doc["meta"]["living"] = living.place(doc)
     # The source tags (src/sources.py) with the pictures final: one whose corner has a face under it
     # takes the other low corner or is left out, and none stays on a scene that became a full-screen
-    # graphic. A no-op for a video with no source tag (every video while SOURCE_TAGS is off).
-    if config.SOURCE_TAGS:
+    # graphic. A no-op for a video with no source tag (every video while the tags are off).
+    if sources.enabled():
         settled = sources.settle(doc)
         if settled:
             doc["meta"].setdefault("sourceTags", {})["settled"] = settled
@@ -3119,7 +3119,8 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       # Auto maps (src/automaps.py): named rivers, reservoirs, dams and canals on real geography.
                       "AUTO_MAPS", "AUTO_MAP_GAP",
                       # On-screen sources (src/sources.py): "SOURCE: USBR, 2024" where the narration names its source.
-                      "SOURCE_TAGS", "SOURCE_TAG_GAP", "SOURCE_TAG_FIRST_SECONDS", "SOURCE_TAG_SECONDS",
+                      "SOURCE_TAGS", "ON_SCREEN_SOURCES", "SOURCE_TAG_GAP", "SOURCE_TAG_FIRST_SECONDS",
+                      "SOURCE_TAG_SECONDS", "SOURCE_TAG_FOLLOW_SECONDS",
                       # Real data graphics (src/datagraphics.py): official numbers charted where the narration
                       # states a water or weather fact.
                       "DATA_GRAPHICS", "DATA_GRAPHICS_GAP", "DATA_GRAPHICS_HOOK_SECONDS", "DATA_GRAPHICS_SECONDS",
@@ -3495,6 +3496,12 @@ def handler(job):
     if (act in ("plan", "build") and presenter_hybrid.block(inp)) or (
             act in ("resource", "render") and presenter_hybrid.is_hybrid_doc(inp.get("timeline"))):
         presenter_hybrid.force_config(inp)
+    # The job's own on-screen sources switch ({"on_screen_sources": false}) folded into its config, so every part
+    # and pod of the job reads the same, and the script's own research (its facts and the source of each) when the
+    # job carries it: the tags cite it where a line states one of those facts (src/sources.py). The research is
+    # kept out of the story brief, so no model call ever carries it.
+    sources.fold_job_switch(inp)
+    sources.use_research(inp)
     config_before = _apply_config(inp.get("config"))
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""
@@ -4144,6 +4151,7 @@ def handler(job):
         # before the work directory goes and the next job starts.
         media.drain_pools(config.DRAIN_SECONDS)
         _restore_config(config_before)
+        sources.use_research(None)
         kit_scope.__exit__(None, None, None)
         quality.reset()
         aifill.reset()

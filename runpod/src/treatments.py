@@ -90,7 +90,7 @@ TEXT_GAP = 10.0         # two text looks (headline, phrase, quote, question...) 
 SOFT_TEXT_GAP = 20.0    # a line's own typed / term / headline look waits this long after the last text look
 PERSON_FULL_GAP = 45.0  # at most one full-screen person introduction per this
 BREATH = 0.3            # a must-show graphic lands this long after the previous one leaves
-SOURCE_TAG_LEAST = 2.0  # a source tag (src/sources.py) that cannot stay this long is left out: nobody could read it
+SOURCE_TAG_LEAST = 3.0  # a source tag (src/sources.py) that cannot stay this long is left out: nobody could read it
 SLIDE_SLACK = 0.4       # ... and may wait at most this long after its word for it (else it cuts the other short)
 PHOTO_WINDOW = 300.0    # a photo look is used at most PHOTO_MAX times per this
 PHOTO_MAX = 2
@@ -2850,7 +2850,7 @@ class _Planner:
         screentext.audit(self.overlays)
         # A line that names where its fact comes from: a small citation tag in a low corner
         # (src/sources.py), laid only where the screen is free - no other graphic moves for it.
-        cited = self._source_tags() if config.SOURCE_TAGS else []
+        cited = self._source_tags() if sources.enabled() else []
         sfx = self._sfx()
         music = _plan_music(self.segments, self.brief, self.fps, self.total, self.hooks)
         for i, entry in enumerate(self.treatments):
@@ -2870,11 +2870,14 @@ class _Planner:
 
     def _source_tags(self) -> List[dict]:
         """
-        The on-screen sources (src/sources.py, behind config.SOURCE_TAGS): a line that NAMES where its
-        fact comes from gets "SOURCE: USBR, 2024" in a low corner, in on the name as it is said and
-        gone about SOURCE_TAG_SECONDS later. The tag is the last thing laid and the first to give
-        way: only where no other graphic is up (one graphic at a time - so never with another text
-        look), cut short where the next one lands (left out under SOURCE_TAG_LEAST), never on a
+        The on-screen sources (src/sources.py, behind config.SOURCE_TAGS / ON_SCREEN_SOURCES): a line
+        that NAMES where its fact comes from gets "SOURCE: USBR, 2024" in a low corner, in on the name
+        as it is said and gone about SOURCE_TAG_SECONDS later; with the script's research on the job, a
+        line that states one of its facts gets that fact's source, in on the figure. The tag is the
+        last thing laid and the first to give way: only where no other graphic is up (one graphic at a
+        time - so never with another text look; when the fact's own number look is up it lands as that
+        leaves, at most SOURCE_TAG_FOLLOW_SECONDS after its word, else not at all), cut short where the
+        next one lands (left out under SOURCE_TAG_LEAST), never on a
         full-screen graphic, never in the first SOURCE_TAG_FIRST_SECONDS (nor in the hook booster's
         quiet opening), at most one per SOURCE_TAG_GAP seconds, none in a news compilation. It makes
         no sound and takes no line's treatment. Returns what was placed.
@@ -2886,8 +2889,13 @@ class _Planner:
         if not t or templates.banned(sources.LOOK) or self.density == "minimal":
             return []
         fps = self.fps
-        listed = sources.brief_sources(self.brief)
+        # The script's own research (sources.use_research): its organisations count as names the narration may
+        # cite, and a line that states one of its facts is cited with that fact's source.
+        known = sources.research()
+        listed = sources.brief_sources(self.brief) + known["listed"]
+        facts, used_facts = known["facts"], set()
         seconds = max(SOURCE_TAG_LEAST, float(config.SOURCE_TAG_SECONDS))
+        follow = max(0.0, float(getattr(config, "SOURCE_TAG_FOLLOW_SECONDS", 0.0) or 0.0))
         taken = [(int(o["startFrame"]) / fps, (int(o["startFrame"]) + int(o["durationInFrames"])) / fps)
                  for o in self.overlays]
         # (Animation scenes and the job's title card: spans with no overlay of the plan's own.)
@@ -2901,19 +2909,34 @@ class _Planner:
             if (scene.get("media") or {}).get("type") == "animation" or is_presenter_scene(scene):
                 continue
             after = getattr(self.segments[i + 1], "text", "") if i + 1 < len(self.segments) else ""
+            # The narration's own words first (a source it names); else a researched fact the line states.
             found = sources.find(seg.text or "", after or "", listed)
+            if not found and facts:
+                found = sources.match_research(seg.text or "", facts, used_facts)
             if not found:
                 continue
             said = _said_at(seg, found["start"], found["key"])
             if said is None:
-                continue                    # its name is not in the line's timed words: no tag rather than an early one
+                continue                    # its word is not in the line's timed words: no tag rather than an early one
             t_in = max(float(seg.start), said - PRE_ROLL_FRAMES / float(fps or 30))
-            if t_in < float(config.SOURCE_TAG_FIRST_SECONDS) or t_in - last < float(config.SOURCE_TAG_GAP):
+            if t_in < float(config.SOURCE_TAG_FIRST_SECONDS):
+                continue
+            # Another graphic up, just left or about to land (most often the fact's own number or date look):
+            # the tag waits for the screen to clear and lands as that graphic leaves - never two at once, never
+            # before its word - or is left out when that comes too long after the word.
+            followed = False
+            for _ in range(len(taken) + 1):
+                # (up now, or landing before the tag could have been read)
+                hit = [b for a, b in taken if a - BREATH < t_in + SOURCE_TAG_LEAST and t_in < b + BREATH]
+                if not hit:
+                    break
+                t_in, followed = max(hit) + BREATH, True
+            if followed and t_in - said > follow + 1e-6:
+                continue
+            if t_in - last < float(config.SOURCE_TAG_GAP):
                 continue
             if hookboost.quiet(t_in, "normal", "caption", t, TEXT_BEAT_CUES):
                 continue
-            if any(a - BREATH <= t_in < b + BREATH for a, b in taken):
-                continue                    # another graphic is up, just left or about to land
             t_out = min([t_in + seconds, self.total / float(fps)] + [a - BREATH for a, _b in taken if a > t_in])
             if t_out - t_in < SOURCE_TAG_LEAST - SHORT_BY:
                 continue
@@ -2931,8 +2954,12 @@ class _Planner:
                                   "emphasis": "low"})
             taken.append((start / fps, (start + frames) / fps))
             last = t_in
+            if found["how"] == "research":
+                used_facts.add(found["id"])
             placed.append({"line": i, "at": round(start / fps, 2), "seconds": round(frames / fps, 2),
                            "text": sources.label(found), "said": found["said"], "how": found["how"],
+                           **({"saidAt": round(said, 2), "afterGraphic": True} if followed else {}),
+                           **({"fact": found["fact"]} if found.get("fact") else {}),
                            **({"fromBrief": True} if found.get("listed") else {})})
         return placed
 
