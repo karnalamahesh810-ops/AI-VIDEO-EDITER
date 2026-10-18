@@ -571,16 +571,22 @@ const PACK2: MxRecipe[] = [
     use: "A secret, a leak, a hidden fact or a document quote coming out (\"the report admitted...\"); crime, history, politics, business.",
     sample: { text: "The test was never approved", kicker: "Declassified", wordAt: [0.4, 0.7, 1.0, 1.3, 1.6] },
     build: (p, k, c) => {
-      const lines = balance(p.text, 22, 3);
-      const size = fitSize(lines, "mono", 0.5, c.aspect, 0.06, 0.032) * c.scale;
+      // Polished 2026-10-18 (round 2): 3-6% type on a slip that drifted in over 0.8 s from a 4 degree tilt, bars that
+      // took 0.32 s to ease off; now the typed words are set at up to 7.2% (fitted to the clear side on auto), the slip
+      // settles in 0.3 s and each bar snaps away in 0.2 s on its word (the first at ~0.6 s without word times: the
+      // registry's tape-rip). The red tag is the one accent.
+      const lines = balance(p.text, 20, 3);
+      const size = fitSize(lines, "mono", c.side === "center" ? 0.62 : Math.min(0.5, c.room), c.aspect, 0.072, 0.036) * c.scale;
       const pl = placeX(c.side);
+      const tilt = c.side === "right" ? 1 : -1;
       return finish([
-        text({ lines, font: "mono", size, weight: 700, color: "#151515", x: pl.x, y: c.y ?? 0.5, anchor: pl.anchor, align: "left", lineH: 1.35,
-          animator: wordAnim(c, { y: 0 }, 0.6, 0.28, 0.32, "inOut"),
-          extra: { redact: "#0c0c0c", shadow: "none", panel: { color: "#efe9dc", opacity: 0.97, pad: 0.03, radius: 0.002, blur: 0, padY: 0.03 },
-            kicker: p.kicker ? { text: T(p.kicker).toUpperCase(), size: size * 0.55, color: "#ffffff", bg: "#b3261e", at: c.s(0.2) } : undefined,
-            keys: { y: [[0, 0.05], [c.s(0.7), 0, "expoOut"]], rot: [[0, -4], [c.s(0.8), -1.2, "expoOut"]], opacity: [[0, 0], [c.s(0.25), 1, "out"]] } } }),
-      ], c, "drop", { shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.45 } });
+        text({ lines, font: "mono", size, weight: 700, color: "#141414", x: pl.x, y: c.y ?? 0.5, anchor: pl.anchor, align: "left", lineH: 1.3, tracking: -0.02,
+          animator: wordAnim(c, { y: 0 }, 0.6, 0.28, 0.2, "expoOut"),
+          extra: { redact: "#0b0b0c", shadow: "none", panel: { color: "#f1ebdd", opacity: 0.98, pad: Math.max(0.03, size * 0.6), radius: 0.003, blur: 0, padY: Math.max(0.03, size * 0.55) },
+            kicker: p.kicker ? { text: T(p.kicker).toUpperCase(), size: Math.max(0.03, size * 0.5), color: "#ffffff", bg: "#b3261e", at: c.s(0.06) } : undefined,
+            keys: { y: [[0, 0.03], [c.s(0.3), 0, "expoOut"]], rot: [[0, 2.5 * tilt], [c.s(0.3), 1 * tilt, "expoOut"], [p.dur, 0.6 * tilt, "linear"]],
+              opacity: [[0, 0], [c.s(0.12), 1, "out"]], scale: [[0, 1], [p.dur, 1.025, "linear"]] } } }),
+      ], c, "drop", { ...quick("drop"), shade: titleShade(c, 0.5, 0.34) });
     },
   },
   // ============================== DATA ==============================
@@ -1033,26 +1039,42 @@ const PACK2: MxRecipe[] = [
   },
   {
     id: "ml-em-strike", name: "Strike and correct", family: "emphasis",
-    about: "The wrong words are set, a marker strikes them through, and the correction writes itself in by hand above in the accent.",
+    about: "The wrong words are set in big heavy caps, a hard marker bar strikes them through and they dim; the correction then rises in above them, just as big, in the accent.",
     use: "Correcting a belief or a figure (\"not 10 million - 30 million\", \"it wasn't an accident\"); text = the struck words, sub = the correction, both as said.",
     sample: { text: "An accident", sub: "A decision" },
     build: (p, k, c) => {
+      // Polished 2026-10-18 (round 2): thin 4-10% caps drifting up over 0.5 s, a wobbly two-pass scribble and a small
+      // handwritten fix; now the struck words are tight heavy caps up to 12% rising on their words in 0.28 s, one
+      // hard marker bar draws through them in 0.2 s at `hit` (the registry's marker) and they dim to 40%, and the
+      // correction rises word by word in the accent from hit + 0.4 s (the registry's second sound).
+      const TR = -0.02;
+      const pl = placeX(c.side);
       const line = T(p.text);
-      const size = fitSize([line], k.fonts.title, 0.5, c.aspect, 0.1, 0.045, true) * c.scale;
-      const y = (c.y ?? 0.5) + size * 0.4;
-      const lw = Math.min(0.85, widthOf(line, k.fonts.title, size, c.aspect, true));
-      const hit = c.wt(c.words.length - 1, 0.2, 0.1) + c.s(0.35);
       const fix = T(p.sub || "");
+      const maxW = c.side === "center" ? 0.66 : Math.min(0.5, c.room);
+      const size = fitSize([line, fix].filter(Boolean), k.fonts.title, maxW, c.aspect, 0.12, 0.05, true, TR) * c.scale;
+      const weight = Math.max(800, k.titleWeight);
+      const y = (c.y ?? 0.5) + (fix ? size * 0.5 : 0);
+      // the face table's heavy-caps width, corrected per face on the proof stills (narrow caps set ~16% under it,
+      // Archivo-class kinetic ~12% over); the bar overshoots both ends a little, as a marker does
+      const ink = k.fonts.title === "narrow" ? 0.84 : k.fonts.title === "kinetic" ? 1.12 : 0.94;
+      const lw = Math.min(0.9, widthOf(line, k.fonts.title, size, c.aspect, true, TR) * ink);
+      const bw = lw * 1.08;
+      const bx = pl.anchor === "l" ? pl.x - lw * 0.04 : pl.anchor === "r" ? pl.x - lw * 1.04 : 0.5 - bw / 2;
+      const hit = c.wt(c.words.length - 1, 0.2, 0.1) + c.s(0.35);
+      const fixAt = hit + c.s(0.4);
+      const fixWords = fix ? fix.split(/\s+/).length : 0;
       return finish([
-        text({ lines: [line], font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true, x: 0.5, y, anchor: "c", align: "center",
-          animator: wordAnim(c, { opacity: 0, y: 0.3, blur: 4 }, 0.15, 0.1, 0.5, "expoOut"),
-          extra: { keys: { opacity: [[0, 1], [hit + c.s(0.3), 1], [hit + c.s(0.8), 0.5, "out"]] } } }),
-        { kind: "scribble", scribble: "strike", x: 0.5, y, w: lw * 1.04, h: size * 0.7, color: k.colors.primary, stroke: 0.012, seed: 5 + Math.round(c.r(10) * 30),
-          keys: { draw: [[0, 0], [hit, 0], [hit + c.s(0.45), 1, "out"]] } },
-        ...(fix ? [text({ lines: [fix], font: "hand", size: size * 1.05, weight: 700, color: k.colors.primary, x: 0.5 + lw * 0.08, y: y - size * 1.25, anchor: "c", align: "center",
-          animator: { unit: "char", stagger: c.s(0.035), dur: c.s(0.2), ease: "out", from: { opacity: 0, y: 0.2 } },
-          extra: { from: hit + c.s(0.4), keys: { rot: [[0, -4]] } } })] : []),
-      ], c, "blur", { shade: { kind: "vignette", amount: 0.45 } });
+        text({ lines: [line], font: k.fonts.title, size, weight, color: k.colors.text, upper: true, tracking: TR, lineH: 0.92, x: pl.x, y, anchor: pl.anchor, align: pl.align,
+          animator: riseIn(c, 0.15, 0.1),
+          extra: { keys: { opacity: [[0, 1], [hit + 0.08, 1], [hit + 0.33, 0.4, "out"]] } } }),
+        { kind: "rect", x: bx, y: y + size * 0.02, w: bw, h: Math.max(0.008, size * 0.13), anchor: "l", fill: k.colors.primary, color: k.colors.primary,
+          keys: { draw: [[0, 0], [hit, 0], [hit + c.s(0.2), 1, "expoOut"]], rot: [[0, c.r(10) > 0.5 ? -1.5 : 1.5]] } },
+        ...(fix ? [text({ lines: [fix], font: k.fonts.title, size, weight, color: k.colors.primary, upper: true, tracking: TR, lineH: 0.92,
+          x: pl.x, y: y - size * 1.34, anchor: pl.anchor, align: pl.align,
+          animator: { unit: "word", stagger: c.s(0.07), dur: c.s(0.28), ease: "expoOut", from: { y: 1.05, blur: 2 }, clip: true,
+            at: Array.from({ length: fixWords }, (_, i) => fixAt + c.s(0.07) * i) } })] : []),
+      ], c, "blur", { ...quick("blur"), shade: titleShade(c) });
     },
   },
   // ============================== TRANSITIONS (over a cut) ==============================
