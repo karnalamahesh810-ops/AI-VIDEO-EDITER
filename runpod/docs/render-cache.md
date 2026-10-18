@@ -1,5 +1,7 @@
 # Smart re-render (render cache)
 
+Status and rollout: docs/render-smart-2.md (off by default since 2026-10-18).
+
 A render keeps every chunk it draws in Cloudflare R2 under a hash of everything that draws
 those frames. The next render of the same project reuses every chunk whose hash did not change
 and draws only the rest. The sound is kept the same way, one slice per chunk: a chunk drawn now
@@ -12,7 +14,7 @@ Code: `src/rendercache.py` (boundaries, hashes, store, clean-up), `src/fanout.py
 
 ## Chunks
 
-`stable_chunks` cuts the video into chunks of about `POD_RENDER_CHUNK_SECONDS` (90 s), each
+With the cache on, `stable_chunks` cuts the video into chunks of about `POD_RENDER_CHUNK_SECONDS` (90 s), each
 ending on the cleanest scene cut near that length (no transition, sound effect or overlay
 entrance across it), chosen left to right. A boundary depends only on the cuts near it - never
 on the video's length or the machine - so an edit never moves a boundary before it.
@@ -36,7 +38,10 @@ over the whole narration at once).
 `picture_hash` (absolute frame positions: looks read them):
 
 - every scene drawn in the chunk's frames (a crossfade's tail included), all fields the renderer
-  reads; media by identity (a signed link without its signature, a local file by its bytes);
+  reads; media by identity (a local file by its bytes; a web link without its signature plus what its
+  server says of the file - ETag, size, Last-Modified - since a scene's clip keeps its storage key
+  `projects/<id>/media/<scene id>.<ext>` when it is replaced or the project is built again; a link no
+  server describes is never reused);
 - what the frames borrow from other scenes: an animation's backdrop, the next scene's transition,
   a pack transition's clip over a nearby cut, the scene an overlay starts on (its `media.focus`),
   and the pictures an image look shows (`look_pictures`, Main.tsx `lookPictures` ported line for
@@ -65,7 +70,8 @@ or outro. When more than half of the slices changed, the whole sound is drawn on
 
 | Setting | Default | |
 |---|---|---|
-| `RENDER_CACHE` | on | the smart re-render |
+| `RENDER_CACHE` | **off** (render-smart-2) | the smart re-render; off = chunks planned as before (`plan_chunks`) |
+| `RENDER_CACHE_HEAD_WORKERS` / `RENDER_CACHE_HEAD_TIMEOUT` | 16 / 10 s | asking each web link's server what file it holds |
 | `POD_RENDER_CHUNK_SECONDS` | 90 | chunk length |
 | `POD_RENDER_LOCAL_CHUNKS` | 2 | a re-render with at most this many chunks to draw draws them on its own machine (no worker woken) |
 | `RENDER_CACHE_PREFIX` | `render-cache/v1/` | where entries live in `R2_BUCKET` |

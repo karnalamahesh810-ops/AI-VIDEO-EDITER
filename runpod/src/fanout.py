@@ -2479,7 +2479,14 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     total = brandkit.total_frames(doc)
     if int(doc.get("durationInFrames") or 0) / fps < config.POD_RENDER_MIN_SECONDS:
         return False                                  # a short video renders whole, as before
-    ranges = rendercache.stable_chunks(doc, rendercache.chunk_frames(doc), config.POD_RENDER_MIN_CHUNK_FRAMES)
+    if cache is not None:
+        # Boundaries that follow the timeline alone: a re-render cuts the video the same way and reuses
+        # every chunk an edit did not touch.
+        ranges = rendercache.stable_chunks(doc, rendercache.chunk_frames(doc), config.POD_RENDER_MIN_CHUNK_FRAMES)
+    else:
+        # No cache: the chunks as before the smart re-render (POD_RENDER_CHUNKS evened over the video, one
+        # chunk a machine on a worker parent) - the same machines, the same number of waves.
+        ranges = plan_chunks(doc, spread_chunks(total, concurrency), config.POD_RENDER_MIN_CHUNK_FRAMES)
     if len(ranges) < 2:
         return False
     started = time.time()
@@ -2489,9 +2496,12 @@ def render_pod(doc: dict, out_path: str, *, job_id: str, work: str, report: Call
     if cache is not None:
         try:
             enc = renderer.encoder_settings(composition)
-            prepared = rendercache.Doc(doc)
-            hashes = [rendercache.picture_hash(doc, a, b, enc, prepared) for a, b in ranges]
-            slice_hashes = [rendercache.audio_slice_hash(doc, a, b, prepared) for a, b in ranges]
+            # Every web link counts with what its server says of the file (rendercache.links_described): a
+            # scene's clip keeps its storage key when it is replaced or the project is built again.
+            with rendercache.links_described(doc):
+                prepared = rendercache.Doc(doc)
+                hashes = [rendercache.picture_hash(doc, a, b, enc, prepared) for a, b in ranges]
+                slice_hashes = [rendercache.audio_slice_hash(doc, a, b, prepared) for a, b in ranges]
             cached = _from_cache(cache, [(i, a, b, h) for i, ((a, b), h) in enumerate(zip(ranges, hashes))], work)
         except Exception as e:  # noqa: BLE001 - the cache never costs a render: everything is drawn
             print(f"[render-cache] not used: {type(e).__name__}: {str(e)[:200]}", flush=True)

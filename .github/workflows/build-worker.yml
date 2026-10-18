@@ -6,8 +6,9 @@ name: Build video worker image
 
 on:
   push:
-    # feature/render-*: a test image of the branch (its commit sha only, never :latest) for a test pod.
-    branches: [thumbgenius-video-worker, "feature/render-*"]
+    # A feature branch builds a test image only when run by hand (workflow_dispatch on that branch):
+    # it is tagged with its commit sha alone, never :latest (see Tags below).
+    branches: [thumbgenius-video-worker]
     paths:
       - "runpod/**"
       - ".github/workflows/build-worker.yml"

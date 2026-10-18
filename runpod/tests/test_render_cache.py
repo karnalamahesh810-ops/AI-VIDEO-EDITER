@@ -651,6 +651,12 @@ class Reuse(unittest.TestCase):
 
     def setUp(self):
         self.store = FakeStore()
+        # What each web link's server says of its file (rendercache.describe_link, faked): the same file
+        # unless a test replaces it.
+        self.etags = {}
+
+    def describe(self, url):
+        return self.etags.get(url.split("?", 1)[0], '"e-1"|1000|Sat, 17 Oct 2026 10:00:00 GMT')
 
     def render(self, doc, workers=None, mode="on", helpers=True, odd=None, **env):
         work = tempfile.mkdtemp()
@@ -710,7 +716,8 @@ class Reuse(unittest.TestCase):
                    mock.patch.object(fanout.r2, "list_keys", side_effect=self.store.list_keys),
                    mock.patch.object(fanout.renderer, "render", side_effect=fake_render),
                    mock.patch.object(fanout.renderer, "renderer_fingerprint", return_value="fp1"),
-                   mock.patch.object(fanout.renderer, "finalize", side_effect=fake_finalize)]
+                   mock.patch.object(fanout.renderer, "finalize", side_effect=fake_finalize),
+                   mock.patch.object(rendercache, "describe_link", side_effect=self.describe)]
         if odd is not None:
             patches.append(mock.patch.object(fanout, "stream_config", side_effect=odd))
         if not helpers:
@@ -909,6 +916,238 @@ class Reuse(unittest.TestCase):
             out = self.render(doc)
         self.assertTrue(out["ok"])
         self.assertEqual(out["stats"]["fromCache"], 0)
+
+    def test_a_clip_replaced_under_the_same_link_is_drawn_again(self):
+        # projects/<id>/media/<scene id>.mp4 keeps its key when the clip is replaced or the project is built
+        # again: the link is the same, only its file (ETag, size, date) changed. Never the old picture.
+        doc = _doc([150] * 16)
+        self.render(doc)
+        url = doc["scenes"][9]["media"]["url"].split("?", 1)[0]
+        self.etags[url] = '"e-2"|2048|Sun, 18 Oct 2026 09:00:00 GMT'
+        again = self.render(copy.deepcopy(doc))
+        self.assertTrue(again["ok"])
+        self.assertEqual(again["render"], [((1200, 1799), False, True)])
+        self.assertEqual(again["stats"]["fromCache"], 3)
+
+    def test_a_link_its_server_does_not_describe_is_never_reused(self):
+        doc = _doc([150] * 16)
+        url = doc["scenes"][2]["media"]["url"].split("?", 1)[0]
+        self.etags[url] = ""                                      # no ETag, no Last-Modified, or no answer
+        self.render(doc)
+        for _ in range(2):
+            again = self.render(copy.deepcopy(doc))
+            self.assertTrue(again["ok"])
+            self.assertEqual(again["render"], [((0, 599), False, True)])       # its chunk, every time
+            self.assertEqual(again["stats"]["fromCache"], 3)
+
+    def test_the_cache_off_keeps_the_chunks_as_before(self):
+        # RENDER_CACHE off (the default): render_pod plans its chunks as before the smart re-render
+        # (plan_chunks over spread_chunks), keeps nothing and asks no server about the links.
+        doc = _doc([150] * 16)
+        asked = []
+
+        def draw(d, path, frames=None, audio_to=None, **k):
+            _frames_file(path, frames[1] - frames[0] + 1)
+            if audio_to:
+                with open(audio_to, "wb") as fh:
+                    fh.write(b"RIFF" + b"\0" * 100)
+            return path
+
+        def join_wavs(parts, fps, out):
+            with open(out, "wb") as fh:
+                fh.write(b"RIFF")
+            return out
+        with mock.patch.object(config, "RENDER_CACHE", False):
+            with mock.patch.object(rendercache, "describe_link", side_effect=lambda u: asked.append(u) or "x"):
+                ranges_off = None
+                workers = FakeWorkers()
+                with _pod_env(POD_RENDER_CHUNKS=4), \
+                        mock.patch.object(fanout, "_pod_submit", side_effect=workers.submit), \
+                        mock.patch.object(fanout, "_pod_status", side_effect=workers.status), \
+                        mock.patch.object(fanout, "_pod_cancel", side_effect=workers.cancel), \
+                        mock.patch.object(fanout, "_fetch",
+                                          side_effect=lambda *a, **k: self.store.fetch(workers, *a, **k)), \
+                        mock.patch.object(fanout, "_count_frames", side_effect=_fake_count), \
+                        mock.patch.object(fanout, "join_videos",
+                                          side_effect=lambda p, out, n: _frames_file(out, n) or out), \
+                        mock.patch.object(fanout, "join_wavs", side_effect=join_wavs), \
+                        mock.patch.object(fanout, "_delete_keys"), \
+                        mock.patch.object(fanout.r2, "upload", side_effect=self.store.upload), \
+                        mock.patch.object(fanout.r2, "upload_bytes", side_effect=self.store.upload_bytes), \
+                        mock.patch.object(fanout.renderer, "render", side_effect=draw), \
+                        mock.patch.object(fanout.renderer, "finalize", return_value={}):
+                    ranges_off = fanout.plan_chunks(doc, fanout.spread_chunks(doc["durationInFrames"], 8),
+                                                    config.POD_RENDER_MIN_CHUNK_FRAMES)
+                    ok = fanout.render_pod(doc, os.path.join(tempfile.mkdtemp(), "f.mp4"), job_id="rp-off",
+                                           work=tempfile.mkdtemp(), report=lambda *a, **k: None, concurrency=8,
+                                           cache_scope="proj-1")
+                    fanout.finish_cleanup(5)
+        self.assertTrue(ok)
+        m = fanout.media.LAST_STATS.get("render_manifest")
+        self.assertEqual([tuple(c["frames"]) for c in m["chunks"]], [tuple(r) for r in ranges_off])
+        self.assertFalse(m["cache"])
+        self.assertEqual(asked, [])
+        self.assertEqual(self.chunk_keys(), [])
+
+
+class LinksDescribed(unittest.TestCase):
+    """What a web link's server says of its file counts in the hash (rendercache.links_described)."""
+
+    def setUp(self):
+        self.doc = _doc([150] * 40)
+        self.ranges = _ranges(self.doc)
+
+    def hashes(self, doc, said):
+        with rendercache.links_described(doc, describe=lambda u: said.get(u.split("?", 1)[0], '"e"|1|d')):
+            return _hashes(doc, self.ranges)
+
+    def test_the_same_files_hash_the_same_and_a_new_file_under_the_same_link_does_not(self):
+        base = self.hashes(self.doc, {})
+        self.assertEqual(self.hashes(copy.deepcopy(self.doc), {}), base)
+        url = self.doc["scenes"][9]["media"]["url"].split("?", 1)[0]
+        self.assertEqual(_changed(base, self.hashes(self.doc, {url: '"other"|1|d'})),
+                         [_chunk_of(self.ranges, 9 * 150)])
+
+    def test_a_link_not_described_never_hashes_the_same_twice(self):
+        url = self.doc["scenes"][9]["media"]["url"].split("?", 1)[0]
+        a = self.hashes(self.doc, {url: ""})
+        b = self.hashes(self.doc, {url: ""})
+        self.assertEqual(_changed(a, b), [_chunk_of(self.ranges, 9 * 150)])
+
+    def test_a_re_signed_link_is_asked_once_and_counts_the_same(self):
+        asked = []
+        d1, d2 = copy.deepcopy(self.doc), copy.deepcopy(self.doc)
+        d1["scenes"][5]["media"]["url"] = "https://sb.example/storage/v1/object/sign/m/s5.mp4?token=aaa"
+        d2["scenes"][5]["media"]["url"] = "https://sb.example/storage/v1/object/sign/m/s5.mp4?token=bbb"
+        d1["scenes"][6]["media"]["url"] = d1["scenes"][5]["media"]["url"]
+
+        def ask(u):
+            asked.append(u)
+            return '"e"|1|d'
+        with rendercache.links_described(d1, describe=ask):
+            h1 = _hashes(d1, self.ranges)
+        self.assertEqual(sum(1 for u in asked if "/m/s5.mp4" in u), 1)
+        self.assertIn("token=aaa", next(u for u in asked if "/m/s5.mp4" in u))     # asked with its signature
+        with rendercache.links_described(d2, describe=lambda u: '"e"|1|d'):
+            h2 = _hashes(d2, self.ranges)
+        self.assertEqual(h1[0], h2[0])
+
+    def test_outside_a_render_the_link_alone_counts(self):
+        self.assertIsNone(rendercache._LINKS)
+        self.assertEqual(rendercache.identity("https://x.example/a.mp4?token=1"), "https://x.example/a.mp4")
+
+    def test_sound_counts_the_narration_file_too(self):
+        url = self.doc["audio"]["url"].split("?", 1)[0]
+        with mock.patch.object(render, "renderer_fingerprint", return_value="fp1"):
+            with rendercache.links_described(self.doc, describe=lambda u: '"e"|1|d'):
+                a = rendercache.audio_slice_hash(self.doc, *self.ranges[0])
+            with rendercache.links_described(self.doc, describe=lambda u: '"n2"|1|d' if u.startswith(url) else
+                                             '"e"|1|d'):
+                b = rendercache.audio_slice_hash(self.doc, *self.ranges[0])
+        self.assertNotEqual(a, b)
+
+    def test_describe_link(self):
+        class R:
+            def __init__(self, code, headers):
+                self.status_code, self.headers = code, headers
+
+            def close(self):
+                pass
+        ok = R(200, {"ETag": '"abc"', "Content-Length": "123", "Last-Modified": "Sat, 17 Oct 2026 10:00:00 GMT"})
+        with mock.patch("requests.head", return_value=ok):
+            self.assertEqual(rendercache.describe_link("https://r2.example/a.mp4"),
+                             '"abc"|123|Sat, 17 Oct 2026 10:00:00 GMT')
+        # A link signed for GET only refuses a HEAD: its first byte is asked for instead.
+        with mock.patch("requests.head", return_value=R(403, {})), \
+                mock.patch("requests.get", return_value=R(206, {"ETag": '"g"', "Content-Range": "bytes 0-0/999"})):
+            self.assertEqual(rendercache.describe_link("https://r2.example/a.mp4?X-Amz-Signature=1"), '"g"|999|')
+        with mock.patch("requests.head", return_value=R(200, {"Content-Length": "5"})):
+            self.assertEqual(rendercache.describe_link("https://x.example/a"), "")            # nothing to tell by
+        with mock.patch("requests.head", side_effect=OSError("down")):
+            self.assertEqual(rendercache.describe_link("https://x.example/a"), "")
+        with mock.patch("requests.head", return_value=R(404, {})), \
+                mock.patch("requests.get", return_value=R(404, {})):
+            self.assertEqual(rendercache.describe_link("https://x.example/a"), "")
+
+
+class KeysCoverWhatDraws(unittest.TestCase):
+    """A chunk's key changes with everything that changes its pixels - the frame, the settings, the brand,
+    the editor's and the newer styles' fields - and its sound slice with everything heard."""
+
+    def setUp(self):
+        self.doc = _doc([150] * 40)
+        self.ranges = _ranges(self.doc)
+        self.base = _hashes(self.doc, self.ranges)
+        self.every = list(range(len(self.ranges)))
+        self.at = _chunk_of(self.ranges, 9 * 150)
+
+    def edit(self, fn):
+        d = copy.deepcopy(self.doc)
+        fn(d)
+        return _changed(self.base, _hashes(d, self.ranges))
+
+    def test_frame_rate_size_and_subtitles_count_everywhere(self):
+        self.assertEqual(self.edit(lambda d: d.update(fps=60)), self.every)
+        self.assertEqual(self.edit(lambda d: d.update(width=1280, height=720)), self.every)
+        self.assertEqual(self.edit(lambda d: d.update(height=1920, width=1080)), self.every)
+        self.assertEqual(self.edit(lambda d: d.update(captions={"enabled": True, "style": "netflix"})), self.every)
+        doc = copy.deepcopy(self.doc)
+        doc["captions"] = {"enabled": True, "style": "netflix"}
+        base = _hashes(doc, self.ranges)
+        d = copy.deepcopy(doc)
+        d["captions"]["style"] = "karaoke"
+        self.assertEqual(_changed(base, _hashes(d, self.ranges)), self.every)
+
+    def test_the_brand_kit_and_any_new_top_level_field_count_everywhere(self):
+        self.assertEqual(self.edit(lambda d: d.update(brand={"colors": {"primary": "#ff0000"}})), self.every)
+        self.assertEqual(self.edit(lambda d: d.update(kit={"id": "atlas", "accent": "#00aaff"})), self.every)
+        self.assertEqual(self.edit(lambda d: d.update(look={"film": "grain"})), self.every)
+        self.assertEqual(self.edit(lambda d: d.update(overlaysEnabled=False)), self.every)
+        self.assertEqual(self.edit(lambda d: d.update(someFutureSetting=1)), self.every)   # unknown counts
+
+    def test_editor_v2_clip_fields_count_for_their_chunk(self):
+        for change in ({"keyframes": [{"t": 0, "scale": 1.2}]}, {"effects": [{"kind": "blur", "amount": 2}]},
+                       {"mask": {"shape": "circle"}}, {"motionBlur": True}, {"speed": 1.5}, {"inPoint": 2.0}):
+            self.assertEqual(self.edit(lambda d, c=change: d["scenes"][9].update(c)), [self.at], change)
+
+    def test_smart_editor_and_motion_library_graphics_count_where_they_play(self):
+        ov = {"type": "motion", "variant": "smart-spec", "startFrame": 1360, "durationInFrames": 60,
+              "spec": {"layers": [{"kind": "text", "text": "A"}], "camera": {"zoom": 1.1}}}
+        doc = copy.deepcopy(self.doc)
+        doc["overlays"] = [ov, {"type": "motion", "variant": "ml-gm-kinetic", "startFrame": 2500,
+                                "durationInFrames": 45, "text": "had to learn", "wordAt": [0.1, 0.4, 0.8]}]
+        base = _hashes(doc, self.ranges)
+        d = copy.deepcopy(doc)
+        d["overlays"][0]["spec"]["camera"]["zoom"] = 1.2
+        self.assertEqual(_changed(base, _hashes(d, self.ranges)), [_chunk_of(self.ranges, 1360)])
+        d = copy.deepcopy(doc)
+        d["overlays"][1]["wordAt"] = [0.1, 0.5, 0.8]
+        self.assertEqual(_changed(base, _hashes(d, self.ranges)), [_chunk_of(self.ranges, 2500)])
+
+    def test_the_ripple_cut_narration_is_heard_everywhere_and_never_seen(self):
+        with mock.patch.object(render, "renderer_fingerprint", return_value="fp1"):
+            p = rendercache.Doc(self.doc)
+            base = [rendercache.audio_slice_hash(self.doc, a, b, p) for a, b in self.ranges]
+            d = copy.deepcopy(self.doc)
+            d["audio"]["keep"] = [[0, 30.0], [31.5, 400.0]]
+            p2 = rendercache.Doc(d)
+            moved = [rendercache.audio_slice_hash(d, a, b, p2) for a, b in self.ranges]
+        self.assertEqual(_changed(base, moved), self.every)
+        self.assertEqual(self.edit(lambda d: d["audio"].update(keep=[[0, 30.0], [31.5, 400.0]])), [])
+
+    def test_the_renderer_fingerprint_changes_every_sound_slice(self):
+        with mock.patch.object(render, "renderer_fingerprint", return_value="fp1"):
+            a = rendercache.audio_slice_hash(self.doc, *self.ranges[0])
+        with mock.patch.object(render, "renderer_fingerprint", return_value="fp2"):
+            b = rendercache.audio_slice_hash(self.doc, *self.ranges[0])
+        self.assertNotEqual(a, b)
+
+    def test_the_flag_is_off_by_default(self):
+        with open(os.path.join(ROOT, "src", "config.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertRegex(src, r'RENDER_CACHE = _flag\("RENDER_CACHE", False\)')
+        self.assertRegex(src, r'RENDER_LOCAL_CHUNKED = _flag\("RENDER_LOCAL_CHUNKED", False\)')
+        self.assertRegex(src, r'RENDER_IMAGE_FORMAT = os.getenv\("RENDER_IMAGE_FORMAT", "jpeg"\)')
 
 
 class Store(unittest.TestCase):

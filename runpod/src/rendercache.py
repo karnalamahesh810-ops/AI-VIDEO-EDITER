@@ -31,7 +31,11 @@ many looks read them (a REC timecode, a style picked from the overlay's start):
     brand kit, the frame size and rate;
   * the renderer itself (render.renderer_fingerprint) and every encoder
     setting (render.encoder_settings): a cached chunk always joins the new
-    ones without re-encoding.
+    ones without re-encoding;
+  * every web link with what its server says of the file (links_described:
+    ETag, size, Last-Modified) - a scene's clip keeps its storage key when it
+    is replaced or the project is built again; a link no server describes is
+    never reused.
 A field is left out only when the renderer never reads it (SCENE_NOT_DRAWN,
 MEDIA_NOT_DRAWN; tests/test_render_cache.py checks that against remotion/src).
 Anything unknown counts: a false miss only costs a render, a false hit would
@@ -143,13 +147,118 @@ def _local_path(v: str) -> str:
     return v if len(v) < 1024 and os.path.isfile(v) else ""
 
 
+# While a render hashes its chunks (links_described): {link without its signature: what its server says of
+# the file}, "" when the server said nothing usable. None outside a render (tests, the app's signatures).
+_LINKS: Optional[Dict[str, str]] = None
+_LINKS_NONCE = ""
+_LINKS_LOCK = threading.Lock()
+
+
+def _unsigned(url: str) -> str:
+    base, _, query = url.partition("?")
+    return base if query and _SIGNED.search(query) else url
+
+
+def _links_in(node: Any, out: Dict[str, str]) -> None:
+    """Every web link anywhere in `node`: {unsigned link: one full link to ask its server with}."""
+    if isinstance(node, dict):
+        for v in node.values():
+            _links_in(v, out)
+    elif isinstance(node, (list, tuple)):
+        for v in node:
+            _links_in(v, out)
+    elif isinstance(node, str) and node.startswith(("http://", "https://")) and len(node) < 4096:
+        out.setdefault(_unsigned(node), node)
+
+
+def describe_link(url: str, timeout: float = None) -> str:
+    """
+    What a link's server says of its file - "<ETag>|<size>|<Last-Modified>" - or "" when it says neither an
+    ETag nor a Last-Modified, or cannot be asked. A HEAD first; a server that refuses one (a link signed for
+    GET only answers 403) is asked for its first byte instead.
+    """
+    import requests
+    timeout = float(timeout or getattr(config, "RENDER_CACHE_HEAD_TIMEOUT", 10) or 10)
+    try:
+        r = requests.head(url, allow_redirects=True, timeout=(timeout, timeout))
+        size = r.headers.get("Content-Length", "")
+        if r.status_code >= 400:
+            r.close()
+            r = requests.get(url, headers={"Range": "bytes=0-0"}, stream=True, allow_redirects=True,
+                             timeout=(timeout, timeout))
+            r.close()
+            if r.status_code >= 400:
+                return ""
+            whole = r.headers.get("Content-Range", "")
+            size = whole.rsplit("/", 1)[-1] if "/" in whole else r.headers.get("Content-Length", "")
+        etag = (r.headers.get("ETag") or "").strip()
+        modified = (r.headers.get("Last-Modified") or "").strip()
+    except Exception:  # noqa: BLE001 - not described: never reused
+        return ""
+    if not etag and not modified:
+        return ""
+    return f"{etag}|{size}|{modified}"
+
+
+def describe_links(doc: dict, describe=None) -> Dict[str, str]:
+    """{unsigned link: describe_link} for every web link in `doc`, RENDER_CACHE_HEAD_WORKERS at a time."""
+    from concurrent.futures import ThreadPoolExecutor
+    links: Dict[str, str] = {}
+    _links_in(doc, links)
+    if not links:
+        return {}
+    ask = describe or describe_link
+    n = max(1, min(int(getattr(config, "RENDER_CACHE_HEAD_WORKERS", 16) or 16), len(links)))
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        said = list(ex.map(lambda item: ask(item[1]), links.items()))
+    return {base: str(v or "") for base, v in zip(links, said)}
+
+
+class links_described:
+    """
+    `with links_described(doc):` - every web link hashed inside counts with what its server says of the file
+    (describe_links), and a link it could not describe with a value no other render repeats (never reused).
+    A scene's clip lives under projects/<id>/media/<scene id>.<ext>: replaced, or the project built again,
+    the link stays the same and only its file changes.
+    """
+
+    def __init__(self, doc: dict, describe=None):
+        self.doc, self.describe = doc, describe
+        self.prev = (None, "")
+
+    def __enter__(self) -> Dict[str, str]:
+        global _LINKS, _LINKS_NONCE
+        import uuid
+        said = describe_links(self.doc, self.describe)
+        _LINKS_LOCK.acquire()
+        self.prev = (_LINKS, _LINKS_NONCE)
+        _LINKS, _LINKS_NONCE = said, uuid.uuid4().hex[:12]
+        if said:
+            n = sum(1 for v in said.values() if v)
+            print(f"[render-cache] {n} of {len(said)} web links described by their servers", flush=True)
+        return said
+
+    def __exit__(self, *exc) -> bool:
+        global _LINKS, _LINKS_NONCE
+        _LINKS, _LINKS_NONCE = self.prev
+        _LINKS_LOCK.release()
+        return False
+
+
 def identity(v: Any) -> Any:
-    """What a string stands for across renders: a signed link without its signature, a local file by its bytes."""
+    """
+    What a string stands for across renders: a signed link without its signature (inside links_described:
+    with what its server says of the file), a local file by its bytes.
+    """
     if not isinstance(v, str):
         return v
     if v.startswith(("http://", "https://")):
-        base, _, query = v.partition("?")
-        return base if query and _SIGNED.search(query) else v
+        key = _unsigned(v)
+        links = _LINKS
+        if links is None:
+            return key
+        said = links.get(key)
+        return f"{key}#{said}" if said else f"{key}#unknown-{_LINKS_NONCE}"
     path = _local_path(v)
     if path:
         d = FILES.digest(path)

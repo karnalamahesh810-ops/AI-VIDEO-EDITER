@@ -1596,12 +1596,14 @@ POD_RENDER_KEEP_CHUNKS = _flag("POD_RENDER_KEEP_CHUNKS", False)
 # leaves a chunk running or queued for long. 0 = no policy.
 POD_RENDER_JOB_POLICY = _flag("POD_RENDER_JOB_POLICY", True)
 
-# --- smart re-render (src/rendercache.py) -------------------------------------------
-# A spread render cuts the video into chunks of about this many seconds, each
-# ending on the cleanest scene cut near that length (rendercache.stable_chunks):
-# the boundaries follow the timeline only, so a re-render cuts it the same way
-# and every chunk an edit did not touch is reused. Shorter chunks re-render less
-# after an edit; each chunk also costs a machine's start-up (~20-40 s).
+# --- smart re-render (src/rendercache.py, docs/render-smart-2.md) -----------------------
+# With the render cache on, a spread render cuts the video into chunks of about
+# this many seconds, each ending on the cleanest scene cut near that length
+# (rendercache.stable_chunks): the boundaries follow the timeline only, so a
+# re-render cuts it the same way and every chunk an edit did not touch is
+# reused. Shorter chunks re-render less after an edit; each chunk also costs a
+# machine's start-up (~20-40 s). With the cache off the chunks are planned as
+# before (fanout.plan_chunks: POD_RENDER_CHUNKS, evened over the video).
 POD_RENDER_CHUNK_SECONDS = float(os.getenv("POD_RENDER_CHUNK_SECONDS", "90"))
 # A re-render that needs at most this many chunks drawn draws them on its own
 # machine: no worker is woken (start-up, a second download of the media) for a
@@ -1611,7 +1613,17 @@ POD_RENDER_LOCAL_CHUNKS = int(os.getenv("POD_RENDER_LOCAL_CHUNKS", "2"))
 # what they draw (RENDER_CACHE_PREFIX/<project>/), and reused by the next render
 # of the project when their hash is unchanged. A job's input may say
 # render_cache "off" (neither) or "refresh" (draw everything, keep it).
-RENDER_CACHE = _flag("RENDER_CACHE", True)
+# OFF by default (2026-10-18, render-smart-2): a false hit would show an old
+# picture, so it goes on only after the post-deploy check in
+# docs/render-smart-2.md (a re-render compared frame by frame with a fresh one).
+RENDER_CACHE = _flag("RENDER_CACHE", False)
+# A web link counts in a chunk's hash with what its server says of the file
+# (ETag, size, Last-Modified: a HEAD per distinct link, RENDER_CACHE_HEAD_WORKERS
+# at a time). Scene media live under projects/<id>/media/<scene id>.<ext>, the
+# SAME key after a rebuild or a replaced clip: the link alone would reuse the
+# old picture. A link its server does not describe is never reused.
+RENDER_CACHE_HEAD_WORKERS = int(os.getenv("RENDER_CACHE_HEAD_WORKERS", "16"))
+RENDER_CACHE_HEAD_TIMEOUT = float(os.getenv("RENDER_CACHE_HEAD_TIMEOUT", "10"))
 RENDER_CACHE_PREFIX = os.getenv("RENDER_CACHE_PREFIX", "render-cache/v1/").strip()
 # Entries older than this are deleted by the clean-up (rendercache.cleanup, the
 # worker's render_cache_cleanup action) or an R2 lifecycle rule on the prefix; a
