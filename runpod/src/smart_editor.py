@@ -60,6 +60,15 @@ TRANSITIONS = ("whip-pan", "zoom-punch", "light-sweep", "soft-whip", "blur-disso
 _TEXT_ONLY = re.compile(r"^(kt-(keyword|chip|statement|year|date|number|percent|quote|question|name|word|phrase|label|"
                         r"stamp|money|price)|pr-number-reveal|ed-|tx-|bt-)")
 
+# Words-only looks that state a figure the narration says (a date, a year, a number): the director's design
+# replaces them where it made one, otherwise they come back where there is room (never dropped for nothing).
+_FIGURES = re.compile(r"^(kt-(year|date|number|percent|money|price)|pr-number-reveal)")
+RESTORE_MIN_S = 2.0         # a planner look comes back only when this much of it fits before the next graphic
+HOOK_BARE_S = 15.0          # the first seconds always carry a graphic: the planner's hook look when no design landed
+NAME_KINDS = ("label", "spot")      # name pills: only over a shot known to show the person; yield to picture looks
+CRITIC_DROP_AT = 3          # a design the critic scores this or lower is dropped, not nudged
+CRITIC_DROP_IF_ASKED = 4    # ... and at this score when the critic's own fix is "drop"
+
 _PRICES = {  # USD per token (OpenRouter list prices, 2026-10): only for the pre-call budget estimate
     "google/gemini-3.8-flash": (0.75e-6, 3.75e-6), "openai/gpt-5.4-mini": (0.75e-6, 4.5e-6),
 }
@@ -546,6 +555,44 @@ def _anchor(scene: dict, t_in: float, thing: str, context: str) -> Optional[dict
 
 
 # ------------------------------------------------------------------ the pass
+def _name_tokens(name: str) -> List[str]:
+    return [t for t in (_norm(w) for w in re.split(r"[\s\-]+", str(name or ""))) if len(t) >= 3 and t not in ("sr", "jr")]
+
+
+def person_shown_ok(d: dict, scene: dict, story: dict) -> bool:
+    """False when a mark's label (or the graphic's own words) names a person of the story and the shot's own
+    metadata (what the vision judge saw, its title / attribution) never names that person: the circle would
+    point at a stranger and call him by a real name, a name label would sit over someone else."""
+    hl = d.get("highlight") if isinstance(d.get("highlight"), dict) else {}
+    said = " ".join(str(v) for v in (hl.get("label"), d.get("text"), d.get("sub")) if v)
+    said_toks = set(_norm(w) for w in re.split(r"[\s\-]+", said))
+    cast = [c for c in (story.get("cast") or []) if isinstance(c, dict) and c.get("name")]
+    if not cast or not said_toks:
+        return True
+    counts: Dict[str, int] = {}
+    for c in cast:
+        for t in set(_name_tokens(c["name"])):
+            counts[t] = counts.get(t, 0) + 1
+    m = scene.get("media") or {}
+    meta = " ".join(str(m.get(k) or "") for k in ("contentDescription", "attribution", "title", "description",
+                                                  "caption", "label"))
+    meta_toks = set(_norm(w) for w in re.split(r"[\s\-]+", meta))
+    for c in cast:
+        toks = _name_tokens(c["name"])
+        if not toks or not (set(toks) & said_toks):
+            continue
+        own = [t for t in toks if counts.get(t, 0) == 1]             # "george", not the family name they share
+        if own and not (set(own) & said_toks):
+            continue                                                  # only a shared name was said
+        if not own:
+            own = toks                                                # Barack Obama vs Barack Obama Sr.:
+            if not set(own) <= said_toks:                             # named only by the whole name
+                continue
+        if not all(t in meta_toks for t in own):
+            return False
+    return True
+
+
 def _overlay_window(ov: dict, fps: float) -> Tuple[float, float]:
     return ov["startFrame"] / fps, (ov["startFrame"] + ov["durationInFrames"]) / fps
 
@@ -657,6 +704,18 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
         want = motionspec._f(d.get("hold"), MIN_HOLD, MAX_HOLD, 3.0)
         hold = max(want, reading, (last_word - t0) + AFTER_WORD * 0.75)
         hold = min(hold, max(MIN_HOLD, (last_word - t0) + AFTER_WORD + 1.0), MAX_HOLD)
+        if not person_shown_ok(d, _scene_at(scenes, t0, fps, b), story):
+            # 2026-10-18 proof: "GEORGE OBAMA" circled an anonymous man in a slum photo, "MALIK OBAMA" sat as a
+            # lower-third over a crowd he is not known to be in. A name label or a mark that names a person goes
+            # only on a shot whose own metadata names that person.
+            if str(d.get("kind") or "") in NAME_KINDS:
+                reject("names a person the shot does not show")
+                continue
+            if isinstance(d.get("highlight"), dict):
+                d.pop("highlight", None)
+                if d.get("camera") == "push-to-point":
+                    d["camera"] = "push-in"
+                reject("mark names a person the shot is not known to show")
         timed.append({"d": d, "t0": t0, "dur": hold, "beat": b, "at": at})
     timed.sort(key=lambda x: x["t0"])
 
@@ -665,7 +724,7 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
     def in_covered(t):
         return any(a <= t < b for a, b in covered)
 
-    kept, dropped, maybe = [], 0, []
+    kept, maybe, words_dropped = [], [], []
     for k, ov in enumerate(overlays):
         t = ov.get("startFrame", 0) / fps
         if ov.get("gaming"):
@@ -677,11 +736,14 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
             words_only = False                  # the job's own title card
         if not in_covered(t) or (not words_only and k in keep):
             kept.append(ov)
+        elif words_only and _FIGURES.match(str(ov.get("variant") or "")):
+            maybe.append(ov)                    # a date / year / figure the narration says: back where there is room
         elif words_only:
-            dropped += 1
+            words_dropped.append(ov)            # replaced by the director's designs (the hook may want one back)
         else:
             maybe.append(ov)                    # facts / pictures the director did not keep: only if room is left
     busy = sorted(_overlay_window(o, fps) for o in kept)
+    held = [_overlay_window(o, fps) for o in maybe]     # picture / date / figure looks: a plain label yields
 
     # 3. guard: one at a time, density, freshness
     accepted, used_anims, used_sigs, sig_times = [], [], [], []
@@ -691,6 +753,12 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
         gap = MIN_START_GAP * (0.75 if t0 < hook_until or ctx["kit"] in ("royal", "atlas") else 1.0)
         if t0 - last_start < gap:
             reject("too close to the previous graphic")
+            continue
+        if str(x["d"].get("kind") or "") in NAME_KINDS and not isinstance(x["d"].get("highlight"), dict) and \
+                any(a - MIN_GAP < t0 + dur and t0 < b + MIN_GAP for a, b in held):
+            # A plain name pill never pushes out a picture, file card, date or figure the planner placed there
+            # (the "WHO IS - KEZIA AYOKO" file card lost to a bare name label in the 2026-10-18 proof).
+            reject("a picture or figure look holds this moment")
             continue
         if accepted:
             prev = accepted[-1]
@@ -719,12 +787,21 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
         accepted.append(x)
         last_start = t0
 
-    for ov in maybe:
-        a, b = _overlay_window(ov, fps)
-        if any(x["t0"] - MIN_GAP < b and a < x["t0"] + x["dur"] + MIN_GAP for x in accepted):
-            dropped += 1
-        else:
-            kept.append(ov)
+    # The facts, pictures and figures the director did not redesign come back wherever their own start is free,
+    # cut short before the next graphic when at least RESTORE_MIN_S of them fits (2026-10-18 proof: the
+    # director's graphics had pushed out the "2011" and "1958 / 1960" dates and the who-is file card).
+    taken = [(x["t0"], x["t0"] + x["dur"]) for x in accepted] + list(busy)
+    back, trimmed = _fit_back(maybe, taken, fps)
+    kept += back
+    restored = len(back)
+    # The hook (the first HOOK_BARE_S) never stays bare: when no design and no look starts there - the director's
+    # hook designs were refused (words the narration does not say) - the planner's own hook looks come back.
+    hook_s = min(HOOK_BARE_S, video_s)
+    hook_back = []
+    if not any(x["t0"] < hook_s for x in accepted) and not any(o.get("startFrame", 0) / fps < hook_s for o in kept):
+        hook_back, tr = _fit_back([o for o in words_dropped if o.get("startFrame", 0) / fps < hook_s], taken, fps)
+        kept += hook_back
+        trimmed += tr
     kit_theme = {"royal": "gold", "noir": "gold", "bulletin": "red", "atlas": "teal"}.get(ctx["kit"])
     for ov in kept:
         if kit_theme and ov.get("type") != "title":
@@ -824,14 +901,55 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
     doc["overlays"] = sorted(kept + new_ovs, key=lambda o: o["startFrame"])
     doc["sfx"] = sorted(list(doc.get("sfx") or []) + sfx_rows, key=lambda r: r.get("startFrame", 0))
     report = {"model": sorted(m for m in models if m), "designs": len(designs), "graphics": len(new_ovs),
-              "keptLooks": len(kept), "droppedLooks": dropped, "marks": marks, "marksAsked": len(chosen),
+              "keptLooks": len(kept), "restoredLooks": restored, "trimmedLooks": trimmed,
+              "hookFallback": len(hook_back), "marks": marks, "marksAsked": len(chosen),
               "sounds": len(sfx_rows), "transitions": n_tr, "rejected": rejected,
               "varied": sum(1 for x in accepted if x.get("varied")), "ungrounded": samples[:8]}
 
-    # 7. the critic
+    # 7. the critic; where it drops a weak design, a picture / figure look left out for room may come back
     if critic and render_stills and new_ovs and budget.left() > 0.01:
         report["critic"] = _critic(doc, new_ovs, ctx, budget, render_stills, fps)
+        if report["critic"].get("dropped"):
+            # ... and so does the planner's own words look a dropped design had replaced (2026-10-18 proof: the
+            # critic dropped "THE OFFICIAL MYTH" and left the moment with nothing, not even the planner's line).
+            gone = [_overlay_window(o, fps) for o in new_ovs if not any(o is k for k in doc["overlays"])]
+            left = [o for o in maybe if not any(o is k for k in kept)] + [
+                o for o in words_dropped if not any(o is k for k in kept)
+                and any(_overlay_window(o, fps)[0] < b and _overlay_window(o, fps)[1] > a for a, b in gone)]
+            back, tr = _fit_back(left, [_overlay_window(o, fps) for o in doc["overlays"]], fps)
+            if back:
+                for ov in back:
+                    if kit_theme and ov.get("type") != "title":
+                        ov["theme"] = kit_theme
+                doc["overlays"] = sorted(doc["overlays"] + back, key=lambda o: o["startFrame"])
+                report["restoredLooks"] += len(back)
+                report["trimmedLooks"] += tr
+    report["droppedLooks"] = sum(1 for o in overlays if not any(o is k for k in doc["overlays"]))
     return report
+
+
+def _scene_at(scenes: List[dict], t: float, fps: float, beat: int) -> dict:
+    return next((s for s in scenes if s["startFrame"] <= t * fps < s["startFrame"] + s["durationInFrames"]),
+                scenes[max(0, min(beat, len(scenes) - 1))])
+
+
+def _fit_back(looks: List[dict], taken: list, fps: float) -> Tuple[List[dict], int]:
+    """Planner looks back on the timeline wherever their own start is free (MIN_GAP clear of every graphic in
+    `taken`), cut short before the next one when at least RESTORE_MIN_S of them fits. `taken` grows."""
+    back, trimmed = [], 0
+    for ov in sorted(looks, key=lambda o: o.get("startFrame", 0)):
+        a, b = _overlay_window(ov, fps)
+        if any(s - MIN_GAP < a < e + MIN_GAP for s, e in taken):
+            continue
+        end = min([b] + [s - MIN_GAP for s, e in taken if s >= a])
+        if end - a < RESTORE_MIN_S:
+            continue
+        if end < b - 1e-6:
+            ov["durationInFrames"] = int(round((end - a) * fps))
+            trimmed += 1
+        back.append(ov)
+        taken.append((a, end))
+    return back, trimmed
 
 
 def costs_snapshot() -> float:
@@ -883,17 +1001,23 @@ def _critic(doc: dict, ovs: List[dict], ctx: dict, budget: Budget, render_stills
             continue
         scores.append(r.get("score"))
         fix = str(r.get("fix") or "ok")
-        if fix == "ok":
-            continue
         ov = ovs[picks[r["i"]]]
-        d = json.loads(json.dumps(ov["smart"]["design"]))
-        if d.get("kind") in motionspec.KIT_KINDS and fix in ("drop", "move-left", "move-right", "move-up",
-                                                               "move-down", "no-mark"):
-            continue                            # a kit card is laid out by the kit, not moved about
-        if fix == "drop":
-            doc["overlays"] = [o for o in doc["overlays"] if o is not ov]
+        score = r.get("score")
+        num = isinstance(score, (int, float)) and not isinstance(score, bool)
+        kit_card = (ov["smart"]["design"] or {}).get("kind") in motionspec.KIT_KINDS
+        # The critic is noisy (2026-10-18 proof: the same two graphics scored 5 and 4, then 4 and 4, with
+        # fixable advice - "move-left", "panel"): a design goes only at <= CRITIC_DROP_AT, or at
+        # <= CRITIC_DROP_IF_ASKED when the critic itself says "drop" (a kit card is never dropped on that ask).
+        if num and (score <= CRITIC_DROP_AT or (score <= CRITIC_DROP_IF_ASKED and fix == "drop" and not kit_card)):
+            _drop_smart(doc, ov)
+            ov["smart"]["critic"] = f"dropped ({score}/10)"
             dropped += 1
             continue
+        if fix in ("ok", "drop"):
+            continue                            # a "drop" on a better score (or no score) is not enough
+        d = json.loads(json.dumps(ov["smart"]["design"]))
+        if kit_card and fix in ("move-left", "move-right", "move-up", "move-down", "no-mark"):
+            continue                            # a kit card is laid out by the kit, not moved about
         if fix in shift:
             d["layout"] = shift[fix]
         elif fix in ("smaller", "bigger"):
@@ -914,6 +1038,13 @@ def _critic(doc: dict, ovs: List[dict], ctx: dict, budget: Budget, render_stills
             ov["smart"]["critic"] = fix
             fixed += 1
     return {"reviewed": len(sent), "scores": scores, "fixed": fixed, "dropped": dropped}
+
+
+def _drop_smart(doc: dict, ov: dict) -> None:
+    """Take a smart graphic off the timeline together with the sound cue it brought."""
+    doc["overlays"] = [o for o in doc["overlays"] if o is not ov]
+    doc["sfx"] = [r for r in doc.get("sfx") or [] if not (r.get("kind") == "smart"
+                                                          and r.get("startFrame") == ov.get("startFrame"))]
 
 
 # ------------------------------------------------------------------ stills for the critic
