@@ -116357,7 +116357,7 @@
    "name": "Source Tag",
    "category": "CALLOUTS",
    "component": "motion",
-   "description": "LOW CORNER. The citation for a fact whose source the narration names: one thin rule draws out from the corner, then 'SOURCE: USBR, 2024' rises under it in small tracked caps (label = 'Source'; text = the source as said, or the short form viewers know; subtitle = the year, only when the narration says it). No box, no band: white on the picture with a soft shadow. It holds still and leaves in its last 9 frames. align left / right picks the corner; with captions on it sits clear above them. Silent. Placed only by the planner's source pass (src/sources.py, config.SOURCE_TAGS): a source is never invented, a figure with no named source gets no tag.",
+   "description": "LOW CORNER. The citation for a fact: 'SOURCE: NOAA, 2024' in white tracked caps on a small dark glass chip, one thin rule in the brand accent down its corner edge (label = 'Source'; text = the source as said, or the short form viewers know; subtitle = the year, only when the narration or the research gives it). In under 250 ms (a fade and a 14 px slide from its corner), out quicker (167 ms). align left / right picks the corner; with captions on it sits clear above them. Silent. Placed only by the planner's source pass (src/sources.py, ON_SCREEN_SOURCES / SOURCE_TAGS): a source the narration names, or the script's own research for a fact the line states - never invented; a figure with no known source gets no tag.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -116461,7 +116461,7 @@
     }
    },
    "defaults": {
-    "duration": 3.0,
+    "duration": 4.0,
     "entrance": "fade",
     "exit": "none",
     "variant": "src-tag",

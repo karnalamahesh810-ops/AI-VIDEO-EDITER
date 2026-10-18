@@ -6,27 +6,34 @@ import { useK } from "../pro/ProGraphics";
 import { CAPTION_SAFE_ZONE, CaptionsOn } from "../layout";
 
 /**
- * THE SOURCE TAG ("src-tag"): the citation for a fact whose source the
- * narration names - "SOURCE: USBR, 2024" - small and quiet in a low corner
- * for about three seconds (src/sources.py places it, behind
- * config.SOURCE_TAGS; the words come only from the narration, never
- * invented).
+ * THE SOURCE TAG ("src-tag", docs/on-screen-sources.md): the citation for a
+ * fact - "SOURCE: NOAA, 2024" - small and quiet in the low left corner for
+ * 3-5 seconds. src/sources.py places it, behind ON_SCREEN_SOURCES /
+ * SOURCE_TAGS: the words come only from the narration or the script's own
+ * research, never invented.
  *
- * The pack's small-line language (LibPackPlaces): Inter Tight 700 in tracked
- * caps about 17 px tall at 1080p, white on the picture with a soft dark
- * shadow - no box, no band, no stroke - under ONE thin rule in the accent.
- * Frames (30 fps from the look's first frame):
+ * The look (the owner's brief, 2026-10-18): white words on a subtle dark
+ * glass chip, one thin rule in the video's brand accent down the chip's
+ * corner edge. Tracked caps, Inter Tight - "SOURCE:" in a softer white, the
+ * name in full white 700, the year after it - 26 px at 1080p (caps about
+ * 19 px, 2.6 % of the frame's height; about 12 px at a 480p preview, the
+ * chip's dark glass keeping it readable over snow or sky). A long name
+ * shrinks to fit 42 % of the width, never under 20 px at 1080p.
  *
- *    0 ->  9   the rule draws out from the corner
- *    3 -> 12   "SOURCE:" rises out of its mask under the rule
- *    6 -> 16   the name (and the year, when one was said) rises after it
- *   last 9     the words sink back and fade, the rule draws back to the corner
+ * Frames (30 fps, stretched to the composition's rate):
  *
- * overlay.text = the source ("USBR", "PACIFIC INSTITUTE"); overlay.subtitle =
+ *    0 ->  7   in: the chip fades and slides 14 px from its corner on a cubic
+ *              ease-out (233 ms); the accent rule grows down it on frames 0-6
+ *   last 5     out, quicker: fades and slides 8 px back toward the corner on
+ *              a cubic ease-in (167 ms)
+ *
+ * Main.tsx draws it without MotionWrap (whose fades would stretch the entry
+ * and, as an opacity on the chip's parent, stop the glass from blurring).
+ * overlay.text = the source ("NOAA", "PACIFIC INSTITUTE"); overlay.subtitle =
  * the year; overlay.label = the word before the colon ("Source").
  * overlay.align "right" takes the other low corner (the planner moves it off
- * a face). With burned-in captions on, it sits above the caption strip
- * instead of in it. It makes no sound.
+ * a face or the brand watermark). With burned-in captions on, it sits above
+ * the caption strip instead of in it. It makes no sound, loads no picture.
  */
 
 type Look = React.FC<{ overlay: Overlay; accent: string }>;
@@ -64,6 +71,19 @@ const widthEm = (s: string) =>
 const SHADOW = (k: number) => `drop-shadow(0 0 ${px(1.2, k)} rgba(0,0,0,.85)) drop-shadow(0 ${px(1, k)} ${px(2, k)} rgba(0,0,0,.6)) `
   + `drop-shadow(0 ${px(2, k)} ${px(9, k)} rgba(0,0,0,.55))`;
 
+// The chip (px at 1080p; scaled by useK).
+const CHIP = {
+  size: 26, minSize: 20,           // the words' size, and the least a long name shrinks to
+  padY: 11, padIn: 16, padOut: 18, // inside the chip: top / bottom, the rule's side, the far side
+  rule: 3,                         // the accent rule down the chip's corner edge
+  radius: 6,
+  bottom: 88,                      // above the frame's lower edge (captions off)
+  slideIn: 14, slideOut: 8,        // px it travels in from / back toward its corner
+  inFrames: 7, outFrames: 5,       // 233 ms in, 167 ms out at 30 fps
+};
+const GLASS = "rgba(8,10,14,0.70)";
+const HAIRLINE = "rgba(255,255,255,0.10)";
+
 const SourceTag: Look = ({ overlay, accent }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames: dur, width, height } = useVideoConfig();
@@ -71,50 +91,48 @@ const SourceTag: Look = ({ overlay, accent }) => {
   const captions = React.useContext(CaptionsOn);
   const S = fps / 30;
   const right = String(overlay.align || "").toLowerCase() === "right";
-  const ac = overlay.theme && overlay.theme !== "accent" && accent ? accent : AMBER;
+  const ac = accent || AMBER;
 
   const label = clean(overlay.label, 14) || "SOURCE";
   const name = clean(overlay.text, 44);
   const year = clean(overlay.subtitle, 16);
   if (!name) return null;
   const line = `${label}: ${name}${year ? `, ${year}` : ""}`;
-  const size = Math.max(MIN_SIZE * k, Math.min(SIZE * k, (ROOM * width) / Math.max(1, widthEm(line))));
-  const cap = size * SUBLINE_CAP;
+  const room = ROOM * width - (CHIP.padIn + CHIP.padOut + CHIP.rule) * k;
+  const size = Math.max(CHIP.minSize * k, Math.min(CHIP.size * k, room / Math.max(1, widthEm(line))));
 
-  // In, hold, out (frames at 30 fps, stretched to the composition's rate).
-  const exitAt = Math.max(Math.round(16 * S), dur - Math.round(EXIT * S));
-  const q = easeIn(clamp01((frame - exitAt) / (6 * S)));                     // the words leave first
-  const qRule = easeIn(clamp01((frame - exitAt - 2 * S) / (7 * S)));         // then the rule draws back
-  const pRule = easeOut(clamp01(frame / (9 * S))) * (1 - qRule);
-  const pLabel = easeOut(clamp01((frame - 3 * S) / (9 * S)));
-  const pName = easeOut(clamp01((frame - 6 * S) / (10 * S)));
+  // In (cubic ease-out, 233 ms), hold, out quicker (cubic ease-in, 167 ms) - frames at 30 fps, stretched to the rate.
+  const pIn = easeOut(clamp01(frame / (CHIP.inFrames * S)));
+  const pRule = easeOut(clamp01(frame / ((CHIP.inFrames - 1) * S)));
+  const outAt = Math.max(Math.round(CHIP.inFrames * S), dur - Math.round(CHIP.outFrames * S));
+  const q = easeIn(clamp01((frame - outAt) / (CHIP.outFrames * S)));
+  const o = pIn * (1 - q);
+  const toward = right ? 1 : -1;                    // the corner's side
+  const dx = toward * ((1 - pIn) * CHIP.slideIn + q * CHIP.slideOut) * k;
 
   const mx = MARGIN * (width / 1920);
-  const bottom = captions ? height * CAPTION_SAFE_ZONE : MARGIN * (height / 1080);
+  const bottom = captions ? height * CAPTION_SAFE_ZONE : CHIP.bottom * (height / 1080);
   const font: React.CSSProperties = { fontFamily: SUBLINE, fontWeight: 700, fontSize: size, lineHeight: 1,
     letterSpacing: `${TRACK}em`, textTransform: "uppercase", whiteSpace: "pre" };
-  const rise = (p: number): React.CSSProperties => ({ display: "inline-block", opacity: p * (1 - q),
-    transform: `translateY(${((1 - p) * 0.9 + q * 0.45).toFixed(4)}em)` });
+  const blur = `blur(${(12 * k).toFixed(1)}px) saturate(1.25)`;
 
   return (
-    <AbsoluteFill>
-      <div style={{ position: "absolute", bottom, ...(right ? { right: mx } : { left: mx }), display: "flex",
-        flexDirection: "column", alignItems: right ? "flex-end" : "flex-start" }}>
-        <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "stretch" }}>
-          {/* the one thin rule, drawn out from the corner */}
-          <div style={{ height: Math.max(1.5, RULE * k), background: ac, borderRadius: RULE * k,
-            marginBottom: cap * 0.78, transformOrigin: right ? "100% 50%" : "0% 50%",
-            transform: `scaleX(${pRule.toFixed(4)})`, opacity: pRule > 0.001 ? 1 : 0,
-            boxShadow: `0 ${px(1, k)} ${px(3, k)} rgba(0,0,0,.5)` }} />
-          {/* the words rise out of a mask under it */}
-          {/* (the shadow on the wrapper, so the mask never cuts it) */}
-          <div style={{ ...font, filter: SHADOW(k), marginRight: `${-TRACK}em` }}>
-            <div style={{ clipPath: "inset(-0.5em -0.7em -0.14em -0.7em)" }}>
-              <span style={{ ...rise(pLabel), color: "rgba(255,255,255,.72)" }}>{`${label}: `}</span>
-              <span style={{ ...rise(pName), color: WHITE }}>{name}</span>
-              {year ? <span style={{ ...rise(pName), color: "rgba(255,255,255,.86)", fontWeight: 600 }}>{`, ${year}`}</span> : null}
-            </div>
-          </div>
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {/* The chip itself carries the opacity and the slide - no parent with either, so its glass blurs the picture. */}
+      <div style={{ position: "absolute", bottom, ...(right ? { right: mx } : { left: mx }), display: "inline-flex",
+        alignItems: "stretch", opacity: o, transform: `translateX(${dx.toFixed(2)}px)`,
+        flexDirection: right ? "row-reverse" : "row", borderRadius: CHIP.radius * k, overflow: "hidden",
+        background: GLASS, backdropFilter: blur, WebkitBackdropFilter: blur,
+        boxShadow: `inset 0 0 0 ${Math.max(1, k).toFixed(2)}px ${HAIRLINE}, 0 ${px(6, k)} ${px(18, k)} rgba(0,0,0,.28)` }}>
+        {/* the brand accent: one thin rule down the corner edge, grown from the top */}
+        <div style={{ width: Math.max(1.5, CHIP.rule * k), background: ac, flex: "none",
+          transformOrigin: "50% 0%", transform: `scaleY(${pRule.toFixed(4)})` }} />
+        <div style={{ ...font, padding: `${px(CHIP.padY, k)} ${px(right ? CHIP.padIn : CHIP.padOut, k)} `
+          + `${px(CHIP.padY, k)} ${px(right ? CHIP.padOut : CHIP.padIn, k)}`,
+          textShadow: `0 ${px(1, k)} ${px(2, k)} rgba(0,0,0,.45)` }}>
+          <span style={{ color: "rgba(255,255,255,.78)", fontWeight: 600 }}>{`${label}: `}</span>
+          <span style={{ color: WHITE }}>{name}</span>
+          {year ? <span style={{ color: "rgba(255,255,255,.86)", fontWeight: 600 }}>{`, ${year}`}</span> : null}
         </div>
       </div>
     </AbsoluteFill>
