@@ -783,17 +783,39 @@ const PACK2: MxRecipe[] = [
   },
   {
     id: "ml-co-quote", name: "Quote card with portrait", family: "callout",
-    about: "A glass quote card: a portrait ring draws round the speaker's initials, the words arrive as they are said, the name tracks in under them.",
+    about: "An editorial pull quote: a big accent quotation mark, the words set large in italic as they are said, then the speaker's name in tracked caps and their role under a short accent rule.",
     use: "Someone's own words quoted in the narration with the speaker named (sub = speaker, kicker = their role); up to about 20 words.",
     sample: { text: "We did not know the river could rise that fast", sub: "Maria Lopez", kicker: "Resident" },
     build: (p, k, c) => {
-      const size = Math.max(0.04, Math.min(0.054, 2 / Math.max(20, p.text.length))) * c.scale;
-      const times = c.words.map((_, i) => c.wt(i, 0.5, 0.1));
-      return finish([
-        { kind: "card", card: "quote", x: 0.5, y: c.y ?? 0.64, w: 0.62 * c.scale, text: T(p.text), label: p.sub ? T(p.sub) : "", meta: p.kicker ? T(p.kicker) : "",
-          times, mid: (times[times.length - 1] || 0.5) + c.s(0.3), emphColor: k.colors.primary, color: k.colors.text, font: k.fonts.title, font2: k.fonts.label, size,
-          keys: { y: [[0, 0.05], [c.s(0.7), 0, "expoOut"]], opacity: [[0, 0], [c.s(0.3), 1, "out"]], blur: [[0, 8], [c.s(0.5), 0]] } },
-      ], c, "blur", { shade: { kind: "bottom", amount: 0.5 } });
+      // Polished 2026-10-18: the words were 3-5% type in a small glass box at the bottom with a fake initials
+      // avatar; now the quote owns the frame like a magazine pull quote - italic at up to 7% on a side scrim, each
+      // word landing on its spoken time in 0.28 s, the attribution settling once the last word is said.
+      const side = c.side;
+      const pl = placeX(side);
+      const lines = balance(T(p.text), 20, 4);
+      const size = fitSize(lines, "serif-italic", side === "center" ? 0.66 : Math.min(0.5, c.room), c.aspect, 0.085, 0.045) * c.scale;
+      const LH = 1.14;
+      const y = c.y ?? 0.5;
+      const bh = lines.length * size * LH;
+      const times = c.words.map((_, i) => c.wt(i, 0.35, 0.07));
+      const done = (times[times.length - 1] || 0.5) + 0.3;
+      const mk = size * 2.8;
+      // the mark hangs at the block's start edge (centred: over the middle)
+      const qx = pl.anchor === "l" ? pl.x - size * 0.06 : pl.anchor === "r" ? pl.x + size * 0.06 : 0.5;
+      const nameSize = Math.max(0.034, size * 0.42);
+      const ay = y + bh / 2 + Math.max(0.05, size * 0.9);
+      const layers: Lay[] = [
+        text({ lines: ["“"], font: "serif", size: mk, weight: 700, color: k.colors.primary, x: qx, y: y - bh / 2 - mk * 0.12, anchor: pl.anchor, align: pl.align, lineH: 1,
+          extra: { shadow: "none", keys: { opacity: [[0, 0], [c.s(0.25), 1, "out"]], y: [[0, 0.015], [c.s(0.3), 0, "expoOut"]] } } }),
+        text({ lines, font: "serif-italic", size, weight: 500, color: k.colors.text, x: pl.x, y, anchor: pl.anchor, align: pl.align, lineH: LH,
+          animator: { unit: "word", stagger: c.s(0.07), dur: c.s(0.28), ease: "expoOut", from: { opacity: 0, y: 0.22, blur: 3 }, at: times } }),
+      ];
+      if (p.sub) layers.push(text({ lines: [T(p.sub)], font: k.fonts.label, size: nameSize, weight: 800, color: k.colors.primary, upper: true, tracking: 0.14,
+        x: pl.x, y: ay, anchor: pl.anchor, align: pl.align,
+        extra: { deco: { rule: k.colors.primary, at: done - 0.05 },
+          sub: p.kicker ? { text: T(p.kicker), size: Math.max(0.028, nameSize * 0.85), font: k.fonts.body, weight: 500, color: k.colors.muted, tracking: 0.01, upper: false, at: done + 0.12 } : undefined,
+          keys: { opacity: [[0, 0], [done, 0], [done + 0.22, 1, "out"]], y: [[0, 0.012], [done, 0.012], [done + 0.28, 0, "expoOut"]] } } }));
+      return finish(layers, c, "blur", { ...quick("blur"), shade: side === "center" ? { kind: "full", amount: 0.5 } : { kind: side, amount: 0.68 } });
     },
   },
   {
@@ -874,20 +896,24 @@ const PACK2: MxRecipe[] = [
     use: "A short line with a strong final word (\"and it worked\", \"completely free\"); up to six words, any section.",
     sample: { text: "And it actually worked" },
     build: (p, k, c) => {
+      // Polished 2026-10-18: bigger tight caps rising out of their masks in 0.28 s on their words (they drifted up
+      // from a blur over 0.55 s), the stroke snapping on under the last word in 0.32 s, a quicker exit.
+      const TR = -0.02;
       const pl = placeX(c.side);
-      const lines = balance(p.text, 20, 2);
-      const size = fitSize(lines, k.fonts.title, 0.6, c.aspect, 0.1, 0.05, true) * c.scale;
+      const lines = c.room < 0.45 ? balance(p.text, 11, 3) : balance(p.text, 16, 2);
+      const size = fitSize(lines, k.fonts.title, c.side === "center" ? 0.72 : Math.min(0.56, c.room), c.aspect, 0.135, 0.05, true, TR) * c.scale;
+      const LH = 0.94;
       const y = c.y ?? 0.48;
-      const lw = Math.min(0.9, Math.max(...lines.map((l) => widthOf(l, k.fonts.title, size, c.aspect, true))));
-      const last = c.wt(c.words.length - 1, 0.1, 0.1);
+      const lw = Math.min(0.9, Math.max(...lines.map((l) => widthOf(l, k.fonts.title, size, c.aspect, true, TR))));
+      const last = c.wt(c.words.length - 1, 0.1, 0.07);
       const sx = pl.anchor === "l" ? pl.x + lw / 2 : pl.anchor === "r" ? pl.x - lw / 2 : 0.5;
-      const by = y + (lines.length * size * 1.02) / 2 + size * 0.05;
+      const by = y + (lines.length * size * LH) / 2;
       return finish([
-        { kind: "scribble", scribble: "swoosh", x: sx, y: by - size * 0.1, w: lw * 1.06, h: size * 0.8, color: k.colors.primary, seed: 1 + Math.round(c.r(8) * 9),
-          keys: { draw: [[0, 0], [last, 0], [last + c.s(0.5), 1, "expoOut"]] } },
-        text({ lines, font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true, tracking: k.titleTracking, x: pl.x, y, anchor: pl.anchor, align: pl.align,
-          animator: wordAnim(c, { opacity: 0, y: 0.35, blur: 5 }, 0.1, 0.1, 0.55, "expoOut") }),
-      ], c, "blur", { shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.42 } });
+        { kind: "scribble", scribble: "swoosh", x: sx, y: by - size * 0.12, w: lw * 1.04, h: size * 0.72, color: k.colors.primary, seed: 1 + Math.round(c.r(8) * 9),
+          keys: { draw: [[0, 0], [last, 0], [last + c.s(0.32), 1, "expoOut"]] } },
+        text({ lines, font: k.fonts.title, size, weight: Math.max(800, k.titleWeight), color: k.colors.text, upper: true, tracking: TR, lineH: LH,
+          x: pl.x, y, anchor: pl.anchor, align: pl.align, animator: riseIn(c, 0.1, 0.07) }),
+      ], c, "blur", { ...quick("blur"), shade: titleShade(c, 0.5, 0.3) });
     },
   },
   {
@@ -944,30 +970,41 @@ const PACK2: MxRecipe[] = [
   },
   {
     id: "ml-em-stamp", name: "Fact-check stamp", family: "emphasis",
-    about: "The claim sets in as a quote, then a rubber stamp slams onto it with the verdict - red for false, green for true, the accent otherwise.",
+    about: "The claim sets in large as a quote, word by word; on the verdict a solid badge hits beside it - red for false (the claim is struck through and dims), green for true, the accent otherwise.",
     use: "A claim being checked, a myth busted or confirmed (text = the claim as said; kicker = the verdict word said: False, Myth, True...).",
     sample: { text: "You only use ten percent of your brain", kicker: "Myth" },
     build: (p, k, c) => {
-      const lines = balance(`“${T(p.text)}”`, 26, 3);
-      const size = fitSize(lines, "serif-italic", 0.56, c.aspect, 0.065, 0.036) * c.scale;
-      const y = c.y ?? 0.46;
+      // Polished 2026-10-18: a thin outlined stamp blurred in from 2.6x right over the words (they could not be read
+      // under it); now a solid verdict badge that hits in 0.14 s below the claim, the claim struck through when false.
+      const lines = balance(`“${T(p.text)}”`, 24, 3);
+      const size = fitSize(lines, "serif-italic", 0.64, c.aspect, 0.085, 0.045) * c.scale;
+      const LH = 1.15;
+      const bh = lines.length * size * LH;
+      const y = (c.y ?? 0.46) - size * 0.4;
       const hit = c.wt(c.words.length - 1, 0.2, 0.08) + c.s(0.45);
       const label = T(p.kicker || "Fact check").toUpperCase();
       const col = verdictColor(label, k);
-      const ss = Math.min(0.15, fitSize([label], "kinetic", 0.4, c.aspect, 0.15, 0.06, true)) * c.scale;
-      const sw = Math.min(0.8, widthOf(label, "kinetic", ss, c.aspect, true, 0.08) * 1.05 + 0.04);
-      const slam = { scale: [[0, 2.6], [hit, 2.6], [hit + 0.2, 0.96, "expoIn"], [hit + 0.34, 1, "out"]], opacity: [[0, 0], [hit, 0], [hit + 0.08, 0.94]],
-        blur: [[0, 8], [hit, 8], [hit + 0.2, 0]], rot: [[0, -11]] };
       const bad = col === "#e5484d";
-      return finish([
-        text({ lines, font: "serif-italic", size, weight: 500, color: k.colors.text, x: 0.5, y, anchor: "c", align: "center", lineH: 1.18,
-          animator: wordAnim(c, { opacity: 0, y: 0.25, blur: 4 }, 0.2, 0.08, 0.5, "out"),
-          extra: { keys: { x: [[0, 0], [hit + 0.2, 0], [hit + 0.23, 0.006], [hit + 0.27, -0.005], [hit + 0.32, 0.003], [hit + 0.4, 0, "out"]],
-            opacity: bad ? [[0, 1], [hit + 0.3, 1], [hit + 0.8, 0.55, "out"]] : [[0, 1]] } } }),
-        { kind: "rect", x: 0.56, y: y + size * lines.length * 0.35, w: sw, h: ss * 1.45, fill: "rgba(0,0,0,0)", color: col, stroke: 0.012, radius: 0.01, keys: slam },
-        text({ lines: [label], font: "kinetic", size: ss, weight: 900, color: col, upper: true, tracking: 0.08, x: 0.56, y: y + size * lines.length * 0.35, anchor: "c", align: "center",
-          extra: { shadow: "none", keys: slam } }),
-      ], c, "fade", { shade: { kind: "vignette", amount: 0.55 } });
+      const onCol = col === k.colors.primary ? k.colors.pillText : "#ffffff";
+      const ss = Math.min(0.085, fitSize([label], "kinetic", 0.3, c.aspect, 0.085, 0.045, true)) * c.scale;
+      const by = y + bh / 2 + ss * 1.05;
+      const layers: Lay[] = [
+        text({ lines, font: "serif-italic", size, weight: 500, color: k.colors.text, x: 0.5, y, anchor: "c", align: "center", lineH: LH,
+          animator: wordAnim(c, { opacity: 0, y: 0.22, blur: 3 }, 0.2, 0.08, 0.28, "expoOut"),
+          extra: { keys: { y: [[0, 0], [hit + 0.1, 0], [hit + 0.13, 0.004], [hit + 0.3, 0, "out"]],
+            opacity: bad ? [[0, 1], [hit + 0.25, 1], [hit + 0.6, 0.55, "out"]] : [[0, 1]] } } }),
+        text({ lines: [label], font: "kinetic", size: ss, weight: 900, color: onCol, upper: true, tracking: 0.06, x: 0.5, y: by, anchor: "c", align: "center",
+          extra: { shadow: "none", panel: { color: col, opacity: 1, pad: Math.max(0.012, ss * 0.32), padY: Math.max(0.006, ss * 0.12), radius: 0.006, blur: 0 },
+            keys: { scale: [[0, 1.3], [hit, 1.3], [hit + 0.14, 1, "expoOut"]], opacity: [[0, 0], [hit, 0], [hit + 0.05, 1]], blur: [[0, 5], [hit, 5], [hit + 0.12, 0]], rot: [[0, -4]] } } }),
+      ];
+      // False: each line of the claim struck through in the verdict colour, left to right, just after the hit.
+      if (bad) lines.forEach((l, i) => {
+        const lw = Math.min(0.9, widthOf(l, "serif-italic", size, c.aspect));
+        const ly = y - bh / 2 + (i + 0.5) * size * LH + size * 0.06;
+        layers.push({ kind: "rect", x: 0.5 - lw / 2, y: ly, w: lw, h: Math.max(0.004, size * 0.07), anchor: "l", fill: col, color: col,
+          keys: { draw: [[0, 0], [hit + 0.06 + i * 0.06, 0], [hit + 0.3 + i * 0.06, 1, "expoOut"]] } });
+      });
+      return finish(layers, c, "fade", { ...quick("fade"), shade: { kind: "full", amount: 0.45 } });
     },
   },
   {
