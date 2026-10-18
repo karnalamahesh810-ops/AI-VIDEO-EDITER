@@ -16,6 +16,7 @@ pieces that came out wrong are made again together with a new seed.
 """
 from __future__ import annotations
 
+import functools
 import os
 import random
 import time
@@ -33,6 +34,28 @@ WHISPER_DIR = f"{MODELS_DIR}/whisper-large-v3-turbo"
 
 LANG_NAMES = {"en": "English", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "de": "German", "fr": "French",
               "ru": "Russian", "pt": "Portuguese", "es": "Spanish", "it": "Italian"}
+
+# Read-back clips per Whisper call, and pieces per generate call (a longer list runs in slices).
+ASR_BATCH = int(os.environ.get("TTS_ASR_BATCH", "16"))
+# Pieces one generate call may take, by the card's memory when not set (measured 2026-10-19 on an RTX A4000,
+# 16 GB: 93 pieces of a 24 s owner clone peaked at 13.1 GB). An out-of-memory batch is halved and made again.
+MAX_BATCH = int(os.environ.get("TTS_MAX_BATCH", "0"))
+
+
+def auto_max_batch(vram_gb: float) -> int:
+    if MAX_BATCH > 0:
+        return MAX_BATCH
+    if vram_gb <= 0:
+        return 16
+    if vram_gb < 15:
+        return 32
+    if vram_gb < 19:
+        return 96
+    if vram_gb < 30:
+        return 160
+    return 256
+# Pieces per codec-decoder call (its memory grows with the batch; see QwenHost._decode_in_groups).
+DECODE_BATCH = max(1, int(os.environ.get("TTS_DECODE_BATCH", "4")))
 
 DEFAULTS = {"temperature": 0.9, "top_p": 1.0, "top_k": 50, "repetition_penalty": 1.05}
 
@@ -59,6 +82,7 @@ class QwenHost:
         self.asr_tok = None
         self.sr = 24000
         self.load_seconds: Dict[str, float] = {}
+        self._max_batch: Optional[int] = None
 
     def load(self, name: str = "qwen"):
         if self.model is not None:
@@ -70,22 +94,86 @@ class QwenHost:
                                                    attn_implementation="sdpa")
         self.name = "qwen"
         self.load_seconds["qwen"] = round(time.time() - t0, 2)
+        self._decode_in_groups()
+        if os.environ.get("TTS_SLIM_HIDDEN", "1") != "0":
+            self._slim_hidden_states()
         return self.model
 
+    def _slim_hidden_states(self) -> None:
+        """
+        The talker hands every layer's hidden states back at every step, and generate() keeps them all
+        (~85 MB a piece), while Qwen3TTS.generate only reads the last layer's last position and the codec
+        ids. Keeping just those is exact (the same numbers reach the same code) and frees most of the
+        memory a batch needs, so a card holds about twice the pieces.
+        """
+        talker = getattr(getattr(self.model, "model", None), "talker", None)
+        if talker is None or getattr(talker, "_tg_slim", False):
+            return
+        orig = talker.forward
+
+        @functools.wraps(orig)  # generate() reads the signature to check its keyword arguments
+        def forward(*args, **kwargs):
+            out = orig(*args, **kwargs)
+            hs = getattr(out, "hidden_states", None)
+            if isinstance(hs, tuple) and len(hs) == 2 and isinstance(hs[0], (tuple, list)) and hs[0]:
+                out.hidden_states = ((hs[0][-1][:, -1:],), hs[1])
+            return out
+
+        talker.forward = forward
+        talker._tg_slim = True
+
+    def _decode_in_groups(self) -> None:
+        """
+        The codec decoder turns codes into audio for a whole batch at once, and its activations grow with
+        the batch (32 pieces = out of memory on a 16 GB card, while generating them needs far less). Decoding
+        DECODE_BATCH pieces at a time gives each piece the same audio (each one is decoded on its own codes;
+        only the padding to the batch's longest piece changes) and lets far bigger batches generate.
+        """
+        st = getattr(getattr(self.model, "model", None), "speech_tokenizer", None)
+        if st is None or getattr(st, "_tg_grouped", False):
+            return
+        orig = st.decode
+
+        def decode(encoded):
+            if isinstance(encoded, list) and len(encoded) > DECODE_BATCH:
+                wavs, fs = [], None
+                for s in range(0, len(encoded), DECODE_BATCH):
+                    w, fs = orig(encoded[s: s + DECODE_BATCH])
+                    wavs += list(w)
+                return wavs, fs
+            return orig(encoded)
+
+        st.decode = decode
+        st._tg_grouped = True
+
     # -- speech recognition (reference transcripts + read-back check) -------------------------
-    def transcribe(self, wav: np.ndarray, sr: int, lang: str = "en") -> str:
-        import torch
+    def _load_asr(self):
         if self.asr is None:
+            import torch
             from transformers import WhisperFeatureExtractor, WhisperForConditionalGeneration, WhisperTokenizer
             self.asr_fe = WhisperFeatureExtractor.from_pretrained(WHISPER_DIR)
             self.asr_tok = WhisperTokenizer.from_pretrained(WHISPER_DIR)
             self.asr = WhisperForConditionalGeneration.from_pretrained(WHISPER_DIR, torch_dtype=torch.float16).to(self.device).eval()
+
+    def transcribe(self, wav: np.ndarray, sr: int, lang: str = "en") -> str:
+        return self.transcribe_many([wav], sr, lang)[0]
+
+    def transcribe_many(self, wavs: List[np.ndarray], sr: int, lang: str = "en", batch: int = 0) -> List[str]:
+        """Whisper on several clips at once. Whisper pads every clip to its 30 s window anyway, so a batch
+        reads each clip as one at a time would; it only saves the per-call overhead."""
+        import torch
         import librosa
-        y = librosa.resample(np.asarray(wav, np.float32), orig_sr=sr, target_sr=16000)[: 16000 * 30]
-        feats = self.asr_fe(y, sampling_rate=16000, return_tensors="pt").input_features.to(self.device, torch.float16)
-        with torch.inference_mode():
-            ids = self.asr.generate(feats, language=lang or "en", task="transcribe", max_new_tokens=220)
-        return self.asr_tok.batch_decode(ids, skip_special_tokens=True)[0].strip()
+        self._load_asr()
+        batch = max(1, batch or ASR_BATCH)
+        ys = [librosa.resample(np.asarray(w, np.float32), orig_sr=sr, target_sr=16000)[: 16000 * 30] for w in wavs]
+        out: List[str] = []
+        for s in range(0, len(ys), batch):
+            group = ys[s: s + batch]
+            feats = self.asr_fe(group, sampling_rate=16000, return_tensors="pt").input_features.to(self.device, torch.float16)
+            with torch.inference_mode():
+                ids = self.asr.generate(feats, language=lang or "en", task="transcribe", max_new_tokens=220)
+            out += [t.strip() for t in self.asr_tok.batch_decode(ids, skip_special_tokens=True)]
+        return out
 
     def ref_text_for(self, voice_key: str, ref_path: str, given: Optional[str]) -> str:
         if given:
@@ -108,64 +196,163 @@ class QwenHost:
         return p
 
     def check(self, text: str, wav: np.ndarray, lang: str, use_asr: bool) -> dict:
-        dur = len(wav) / self.sr
-        exp = max(0.6, expected_seconds(text))
-        ratio = dur / exp
-        wer = None
-        if use_asr and lang == "en":
-            try:
-                heard = self.transcribe(wav, self.sr, "en")
-                wer = round(word_error_rate(words_for_compare(text), words_for_compare(heard)), 3)
-            except Exception:  # noqa: BLE001 - a broken check never blocks the voice-over
-                wer = None
-        bad = ratio > 1.85 or ratio < 0.5 or (wer is not None and wer > 0.2)
-        score = (wer or 0.0) + max(0.0, ratio - 1.5) + 2 * max(0.0, 0.65 - ratio)
-        return {"seconds": round(dur, 2), "ratio": round(ratio, 2), "wer": wer, "ok": not bad, "score": round(score, 3)}
+        return self.check_many([text], [wav], lang, use_asr)[0]
 
-    # -- a whole part ------------------------------------------------------------------------
+    def check_many(self, texts: List[str], wavs: List[np.ndarray], lang: str, use_asr: bool) -> List[dict]:
+        """Length + Whisper read-back check for each piece (the same rule as before, read back in batches)."""
+        heard: List[Optional[str]] = [None] * len(texts)
+        if use_asr and lang == "en" and texts:
+            try:
+                heard = list(self.transcribe_many(wavs, self.sr, "en"))
+            except Exception:  # noqa: BLE001 - a broken check never blocks the voice-over
+                heard = [None] * len(texts)
+        out = []
+        for text, wav, h in zip(texts, wavs, heard):
+            dur = len(wav) / self.sr
+            exp = max(0.6, expected_seconds(text))
+            ratio = dur / exp
+            wer = None
+            if h is not None:
+                try:
+                    wer = round(word_error_rate(words_for_compare(text), words_for_compare(h)), 3)
+                except Exception:  # noqa: BLE001
+                    wer = None
+            bad = ratio > 1.85 or ratio < 0.5 or (wer is not None and wer > 0.2)
+            score = (wer or 0.0) + max(0.0, ratio - 1.5) + 2 * max(0.0, 0.65 - ratio)
+            out.append({"seconds": round(dur, 2), "ratio": round(ratio, 2), "wer": wer, "ok": not bad, "score": round(score, 3)})
+        return out
+
+    def max_batch(self) -> int:
+        if self._max_batch is None:
+            gb = 0.0
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    gb = torch.cuda.get_device_properties(0).total_memory / 2 ** 30
+            except Exception:  # noqa: BLE001
+                gb = 0.0
+            self._max_batch = auto_max_batch(gb)
+        return self._max_batch
+
+    def _generate(self, texts: List[str], prompts: list, language: str, p: dict):
+        """One generate call; a batch that runs out of GPU memory is halved and made again (smaller from then on)."""
+        try:
+            import torch
+            oom = torch.OutOfMemoryError
+        except Exception:  # noqa: BLE001 - no torch (the unit tests' fake model)
+            torch, oom = None, MemoryError
+        try:
+            return self.model.generate_voice_clone(text=texts, language=[language] * len(texts), voice_clone_prompt=prompts, **p)
+        except oom:
+            if len(texts) <= 1:
+                raise
+        if torch is not None:
+            torch.cuda.empty_cache()
+        half = (len(texts) + 1) // 2
+        self._max_batch = max(1, min(self.max_batch(), half))
+        print(f"[tts] out of GPU memory at {len(texts)} pieces; batches of {self._max_batch} from now on", flush=True)
+        wa, sr = self._generate(texts[:half], prompts[:half], language, p)
+        wb, sr = self._generate(texts[half:], prompts[half:], language, p)
+        return list(wa) + list(wb), sr
+
+    # -- parts -------------------------------------------------------------------------------
     def run_part(self, t: dict) -> dict:
-        self.load()
-        texts: List[str] = t["texts"]
-        # What each piece is checked against: the words as written where the model read a respelling
-        # from the channel's pronunciation list (handler / textnorm.protect_pronunciations).
-        checks: List[str] = t.get("check_texts") or texts
-        if len(checks) != len(texts):
-            checks = texts
-        lang = t.get("lang", "en")
-        language = LANG_NAMES.get(lang, "English")
-        prompt = self.prompt_for(t["voice_key"], t["ref_path"], t.get("ref_text"))
+        return self.run_parts([t])[0]
+
+    @staticmethod
+    def _params(t: dict) -> dict:
         p = dict(DEFAULTS)
         p.update({k: v for k, v in (t.get("params") or {}).items() if k in DEFAULTS})
-        best: List[Optional[tuple]] = [None] * len(texts)
-        todo = list(range(len(texts)))
-        attempts = [0] * len(texts)
+        return p
+
+    @classmethod
+    def group_key(cls, t: dict) -> tuple:
+        """Parts that may share one batch: same language, check and sampling settings (those are per batch)."""
+        return (t.get("lang", "en"), bool(t.get("validate", True)), int(t.get("max_attempts", 3)),
+                tuple(sorted(cls._params(t).items())))
+
+    def run_parts(self, tasks: List[dict]) -> List[dict]:
+        """
+        Several parts as one batch. The parts of a script reach a worker together (handler concurrency);
+        their pieces are generated together, so the GPU makes many pieces in about the time it made a few
+        (a step costs nearly the same for 4 or 40 sequences). Per piece nothing changes: the same model,
+        voice prompt, sampling settings and read-back check, and the same retry rounds (a new seed for the
+        pieces that came out wrong). Parts with different settings never share a batch; different voices
+        may (every piece carries its own voice prompt).
+        """
+        self.load()
+        results: List[Optional[dict]] = [None] * len(tasks)
+        groups: "OrderedDict[tuple, List[int]]" = OrderedDict()
+        for k, t in enumerate(tasks):
+            groups.setdefault(self.group_key(t), []).append(k)
+        for idxs in groups.values():
+            for k, r in zip(idxs, self._run_group([tasks[k] for k in idxs])):
+                results[k] = r
+        return results  # type: ignore[return-value]
+
+    def _run_group(self, tasks: List[dict]) -> List[dict]:
+        t0 = tasks[0]
+        lang = t0.get("lang", "en")
+        language = LANG_NAMES.get(lang, "English")
+        p = self._params(t0)
+        validate = bool(t0.get("validate", True))
+        rounds = max(1, int(t0.get("max_attempts", 3)))
+        owner: List[int] = []  # task index of each piece
+        texts: List[str] = []
+        checks: List[str] = []
+        prompts: list = []
+        for k, t in enumerate(tasks):
+            tx: List[str] = t["texts"]
+            ck: List[str] = t.get("check_texts") or tx
+            if len(ck) != len(tx):
+                ck = tx
+            pr = self.prompt_for(t["voice_key"], t["ref_path"], t.get("ref_text"))
+            pr = pr if isinstance(pr, list) else [pr]
+            for i in range(len(tx)):
+                owner.append(k)
+                texts.append(tx[i])
+                checks.append(ck[i])
+                prompts.append(pr[0])
+        n = len(texts)
+        best: List[Optional[tuple]] = [None] * n
+        attempts = [0] * n
         gen_total = 0.0
-        for rnd in range(max(1, int(t.get("max_attempts", 3)))):
+        todo = list(range(n))
+        cap = max(1, self.max_batch())
+        for rnd in range(rounds):
             if not todo:
                 break
-            seed_all(int(t["seed"]) + rnd * 7919)
-            t0 = time.time()
-            wavs, sr = self.model.generate_voice_clone(text=[texts[i] for i in todo], language=[language] * len(todo),
-                                                       voice_clone_prompt=prompt, **p)
-            gen_total += time.time() - t0
-            self.sr = sr
+            seed_all(int(t0["seed"]) + rnd * 7919)
             still = []
-            for i, w in zip(todo, wavs):
-                attempts[i] += 1
-                w = trim(np.asarray(w, np.float32).reshape(-1), sr)
-                chk = self.check(checks[i], w, lang, bool(t.get("validate", True)))
-                if best[i] is None or chk["score"] < best[i][1]["score"]:
-                    best[i] = (w, chk)
-                if not chk["ok"]:
-                    still.append(i)
+            for s in range(0, len(todo), cap):
+                sub = todo[s: s + cap]
+                ts = time.time()
+                wavs, sr = self._generate([texts[j] for j in sub], [prompts[j] for j in sub], language, p)
+                gen_total += time.time() - ts
+                self.sr = sr
+                ws = [trim(np.asarray(w, np.float32).reshape(-1), sr) for w in wavs]
+                for j, w, chk in zip(sub, ws, self.check_many([checks[j] for j in sub], ws, lang, validate)):
+                    attempts[j] += 1
+                    if best[j] is None or chk["score"] < best[j][1]["score"]:
+                        best[j] = (w, chk)
+                    if not chk["ok"]:
+                        still.append(j)
             todo = still
-        return {"wavs": [b[0] for b in best], "checks": [b[1] for b in best], "attempts": attempts,
-                "gen_seconds": round(gen_total, 2), "sr": self.sr}
+        share = gen_total / max(1, n)
+        out = []
+        for k in range(len(tasks)):
+            js = [j for j in range(n) if owner[j] == k]
+            out.append({"wavs": [best[j][0] for j in js], "checks": [best[j][1] for j in js],
+                        "attempts": [attempts[j] for j in js], "gen_seconds": round(share * len(js), 2), "sr": self.sr,
+                        "batch_pieces": n, "batch_parts": len(tasks)})
+        return out
 
     def handle(self, task: dict) -> dict:
         op = task.get("op", "part")
         if op == "part":
             return self.run_part(task)
+        if op == "parts":
+            return {"results": self.run_parts(task["tasks"])}
         if op == "load":
             self.load()
             return {"loaded": "qwen", "load_seconds": self.load_seconds}

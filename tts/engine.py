@@ -27,6 +27,7 @@ import os
 import queue
 import random
 import subprocess
+import threading
 import time
 import traceback
 from collections import OrderedDict
@@ -259,15 +260,64 @@ def _replica_main(idx: int, tasks, results, device: str, want_asr: bool, preload
     except Exception as e:  # noqa: BLE001
         results.put(("broken", idx, f"{type(e).__name__}: {e}\n{traceback.format_exc()[-2000:]}"))
         return
+    held: List[tuple] = []  # items taken off the queue while gathering parts, run next
     while True:
-        item = tasks.get()
+        item = held.pop(0) if held else tasks.get()
         if item is None:
             break
         tid, task = item
+        if task.get("op") == "part" and hasattr(host, "run_parts"):
+            cap = GATHER_MAX_PIECES or (host.max_batch() if hasattr(host, "max_batch") else 96)
+            batch, held = _gather_parts(tasks, item, held, cap)
+            try:
+                outs = host.run_parts([t for _, t in batch])
+                for (btid, _), out in zip(batch, outs):
+                    results.put(("done", btid, out))
+            except Exception as e:  # noqa: BLE001
+                msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()[-2000:]}"
+                for btid, _ in batch:
+                    results.put(("fail", btid, msg))
+            continue
         try:
             results.put(("done", tid, host.handle(task)))
         except Exception as e:  # noqa: BLE001
             results.put(("fail", tid, f"{type(e).__name__}: {e}\n{traceback.format_exc()[-2000:]}"))
+
+
+GATHER_IDLE_S = float(os.environ.get("TTS_GATHER_IDLE_S", "0.6"))
+GATHER_MAX_S = float(os.environ.get("TTS_GATHER_MAX_S", "3.0"))
+GATHER_MAX_PIECES = int(os.environ.get("TTS_GATHER_MAX_PIECES", "0"))  # 0 = the engine's batch size
+
+
+def _gather_parts(tasks, first: tuple, held: List[tuple], cap: Optional[int] = None):
+    """
+    The 'part' tasks that arrive together (several jobs on this worker at once) as one batch: wait until no
+    new one has come for GATHER_IDLE_S (at most GATHER_MAX_S, at most `cap` pieces). Anything else taken off
+    the queue is handed back to run after the batch, in order.
+    """
+    cap = cap or GATHER_MAX_PIECES or 96
+    batch = [first]
+    pieces = len(first[1].get("texts") or [])
+    rest: List[tuple] = []
+    for it in held:  # already waiting: parts join, the rest keeps its place
+        if it is not None and it[1].get("op") == "part" and pieces < cap:
+            batch.append(it)
+            pieces += len(it[1].get("texts") or [])
+        else:
+            rest.append(it)
+    end = time.time() + GATHER_MAX_S
+    while pieces < cap and time.time() < end:
+        try:
+            it = tasks.get(timeout=max(0.01, min(GATHER_IDLE_S, end - time.time())))
+        except queue.Empty:
+            break
+        if it is not None and it[1].get("op") == "part":
+            batch.append(it)
+            pieces += len(it[1].get("texts") or [])
+        else:
+            rest.append(it)
+            break
+    return batch, rest
 
 
 def gpu_memory_gb() -> float:
@@ -317,6 +367,12 @@ class ReplicaPool:
         self.started_at = time.time()
         self.ready_seconds = None
         self._tid = 0
+        # Several jobs at once (handler concurrency): one thread reads the results queue and hands each
+        # answer to the caller waiting for it.
+        self._lock = threading.Lock()
+        self._heal_lock = threading.Lock()
+        self._waiting: Dict[int, "queue.Queue"] = {}
+        self._router: Optional[threading.Thread] = None
 
     def start(self, wait_s: float = 600.0) -> None:
         if self.n == 0:
@@ -347,25 +403,31 @@ class ReplicaPool:
         """A replica that died (e.g. a CUDA crash) is replaced before the next job. True if any was."""
         if self.n == 0:
             return False
-        dead = [i for i, p in enumerate(self.procs) if not p.is_alive()]
-        for i in dead:
-            p = self.ctx.Process(target=_replica_main, args=(i, self.tasks, self.results, self.device, self.want_asr, self.preload),
-                                 daemon=True)
-            p.start()
-            self.procs[i] = p
-            self.ready.pop(i, None)
-        if dead:
-            end = time.time() + 300
-            waiting = set(dead)
-            while waiting and time.time() < end:
-                try:
-                    kind, idx, info = self.results.get(timeout=5)
-                except queue.Empty:
-                    continue
-                if kind in ("ready", "broken") and idx in waiting:
-                    waiting.discard(idx)
-                    (self.ready if kind == "ready" else self.broken)[idx] = info
-        return bool(dead)
+        with self._heal_lock:  # several jobs at once: one of them replaces the replica, the others wait
+            dead = [i for i, p in enumerate(self.procs) if not p.is_alive()]
+            for i in dead:
+                p = self.ctx.Process(target=_replica_main, args=(i, self.tasks, self.results, self.device, self.want_asr, self.preload),
+                                     daemon=True)
+                p.start()
+                self.procs[i] = p
+                self.ready.pop(i, None)
+                self.broken.pop(i, None)
+            if dead:
+                end = time.time() + 300
+                waiting = set(dead)
+                while waiting and time.time() < end:
+                    if self._router is not None:  # the router thread reads the queue and files ready/broken
+                        waiting = {i for i in waiting if i not in self.ready and i not in self.broken}
+                        time.sleep(1)
+                        continue
+                    try:
+                        kind, idx, info = self.results.get(timeout=5)
+                    except queue.Empty:
+                        continue
+                    if kind in ("ready", "broken") and idx in waiting:
+                        waiting.discard(idx)
+                        (self.ready if kind == "ready" else self.broken)[idx] = info
+            return bool(dead)
 
     def _drain(self) -> None:
         """Pieces of a failed job still waiting are dropped, so the next job does not queue behind them."""
@@ -375,8 +437,25 @@ class ReplicaPool:
             except Exception:  # noqa: BLE001 - queue.Empty (or a closed queue)
                 return
 
+    def _route(self) -> None:
+        while True:
+            try:
+                kind, tid, info = self.results.get(timeout=5)
+            except queue.Empty:
+                continue
+            except (EOFError, OSError):
+                return
+            if kind in ("ready", "broken"):  # a replaced replica (heal)
+                (self.ready if kind == "ready" else self.broken)[tid] = info
+                continue
+            with self._lock:
+                box = self._waiting.get(tid)
+            if box is not None:
+                box.put((kind, tid, info))
+            # else: a stale answer from an earlier, failed job
+
     def run(self, tasks: List[dict], on_done: Optional[Callable[[int, int], None]] = None, timeout_s: float = 900.0) -> List[dict]:
-        """Every task's result, in order. Raises on the first failure."""
+        """Every task's result, in order. Raises on the first failure. Safe to call from several threads."""
         if self.n == 0:
             out = []
             for i, t in enumerate(tasks):
@@ -386,29 +465,40 @@ class ReplicaPool:
             return out
         if not self.alive():
             raise RuntimeError("all model replicas have stopped")
+        box: "queue.Queue" = queue.Queue()
         ids = []
-        for t in tasks:
-            self._tid += 1
-            ids.append(self._tid)
-            self.tasks.put((self._tid, t))
-        got: Dict[int, dict] = {}
-        end = time.time() + timeout_s
-        while len(got) < len(ids):
-            if time.time() > end:
-                raise TimeoutError(f"{len(ids) - len(got)} piece(s) did not finish in time")
-            try:
-                kind, tid, info = self.results.get(timeout=5)
-            except queue.Empty:
-                if any(not p.is_alive() for p in self.procs):
-                    # Its piece will never come back; the app restarts the part once.
-                    raise RuntimeError("a model replica stopped while working")
-                continue
-            if tid not in ids:
-                continue  # a stale answer from an earlier, failed job
-            if kind == "fail":
-                self._drain()
-                raise RuntimeError(info)
-            got[tid] = info
-            if on_done:
-                on_done(len(got), len(ids))
-        return [got[i] for i in ids]
+        with self._lock:
+            if self._router is None:
+                self._router = threading.Thread(target=self._route, daemon=True)
+                self._router.start()
+            for t in tasks:
+                self._tid += 1
+                ids.append(self._tid)
+                self._waiting[self._tid] = box
+        try:
+            for tid, t in zip(ids, tasks):
+                self.tasks.put((tid, t))
+            got: Dict[int, dict] = {}
+            end = time.time() + timeout_s
+            while len(got) < len(ids):
+                if time.time() > end:
+                    raise TimeoutError(f"{len(ids) - len(got)} piece(s) did not finish in time")
+                try:
+                    kind, tid, info = box.get(timeout=5)
+                except queue.Empty:
+                    if any(not p.is_alive() for p in self.procs):
+                        # Its piece will never come back; the app restarts the part once.
+                        raise RuntimeError("a model replica stopped while working")
+                    continue
+                if kind == "fail":
+                    if len(ids) > 1 and int(os.environ.get("TTS_CONCURRENCY", "1")) <= 1:
+                        self._drain()  # one job at a time: its other pieces still queued are dropped
+                    raise RuntimeError(info)
+                got[tid] = info
+                if on_done:
+                    on_done(len(got), len(ids))
+            return [got[i] for i in ids]
+        finally:
+            with self._lock:
+                for tid in ids:
+                    self._waiting.pop(tid, None)

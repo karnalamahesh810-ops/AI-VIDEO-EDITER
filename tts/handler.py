@@ -33,6 +33,7 @@ import hashlib
 import os
 import random
 import re
+import threading
 import time
 import uuid
 
@@ -54,6 +55,23 @@ ENGINE = os.environ.get("TTS_ENGINE", "chatterbox").lower()
 QWEN_LANGS = {"en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"}
 POOL: ReplicaPool = None  # type: ignore
 _voice_info: dict = {}
+_voice_locks: dict = {}
+_voice_locks_guard = threading.Lock()
+# Jobs one worker takes at once. Qwen: the parts of a script that arrive together are voiced as one batch
+# (engine._gather_parts + QwenHost.run_parts), several times the audio per GPU-second of one part at a time.
+def _auto_concurrency() -> int:
+    """Qwen: as many parts (~1,100 characters = ~4.5 pieces each) as the card batches at once: 21 on a 16 GB
+    card (96 pieces), 35 on 24 GB. Chatterbox: one job at a time (its replicas share pieces instead)."""
+    if os.environ.get("TTS_CONCURRENCY"):
+        return int(os.environ["TTS_CONCURRENCY"])
+    if ENGINE != "qwen":
+        return 1
+    from engine_qwen import auto_max_batch
+    return max(1, auto_max_batch(gpu_memory_gb()) * 2 // 9)
+
+
+CONCURRENCY = max(1, _auto_concurrency())
+os.environ["TTS_CONCURRENCY"] = str(CONCURRENCY)
 
 
 def _clamp(v, lo, hi, d):
@@ -104,11 +122,14 @@ def resolve_voice(v: dict):
     key = re.sub(r"[^A-Za-z0-9:_.-]", "", str(v.get("key") or "ref"))[:80] + ":" + sha
     os.makedirs(VOICE_DIR, exist_ok=True)
     path = os.path.join(VOICE_DIR, f"{sha}.wav")
-    if not os.path.exists(path):
-        if ENGINE == "qwen":
-            _voice_info[sha] = audio.clean_reference(data, path, max_seconds=30.0, shorten=False)
-        else:
-            _voice_info[sha] = audio.clean_reference(data, path)
+    with _voice_locks_guard:
+        lock = _voice_locks.setdefault(sha, threading.Lock())
+    with lock:  # the parts of one script arrive together with the same sample: clean it once
+        if not os.path.exists(path):
+            if ENGINE == "qwen":
+                _voice_info[sha] = audio.clean_reference(data, path, max_seconds=30.0, shorten=False)
+            else:
+                _voice_info[sha] = audio.clean_reference(data, path)
     return key, path, _voice_info.get(sha, {})
 
 
@@ -165,6 +186,7 @@ def tts(inp: dict, job_id: str, progress) -> dict:
             pass
 
     POOL.heal()
+    batch_info = {}
     t_gen = time.time()
     sr = SR
     if ENGINE == "qwen":
@@ -179,6 +201,7 @@ def tts(inp: dict, job_id: str, progress) -> dict:
         share = part["gen_seconds"] / max(1, len(chunks))
         results = [{"wav": w, "check": c, "attempts": a, "gen_seconds": share}
                    for w, c, a in zip(part["wavs"], part["checks"], part["attempts"])]
+        batch_info = {"batch_parts": part.get("batch_parts", 1), "batch_pieces": part.get("batch_pieces", len(chunks))}
     else:
         tasks = [{"op": "chunk", "model": model, "voice_key": voice_key, "ref_path": ref_path, "text": t,
                   "params": params, "seed": seed + i * 101, "validate": validate, "max_attempts": attempts, "lang": lang}
@@ -209,6 +232,7 @@ def tts(inp: dict, job_id: str, progress) -> dict:
         "checks": [{"wer": r["check"]["wer"], "ratio": r["check"]["ratio"], "attempts": r["attempts"],
                     "seconds": r["check"]["seconds"]} for r in results],
     }
+    answer.update(batch_info)
     if ref_info:
         answer["sample_seconds"] = ref_info.get("seconds")
     if said:
@@ -269,10 +293,28 @@ def handler(job):
         return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}
 
 
+_executor = None
+
+
+async def handler_async(job):
+    """Several jobs at once (CONCURRENCY): each runs in its own thread (a pool of exactly CONCURRENCY, since
+    asyncio's default pool is sized by the CPU count); the model replica batches their parts."""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    global _executor
+    if _executor is None:
+        _executor = ThreadPoolExecutor(max_workers=CONCURRENCY, thread_name_prefix="tts-job")
+    return await asyncio.get_running_loop().run_in_executor(_executor, handler, job)
+
+
 if __name__ == "__main__":
     import runpod
     n = auto_replicas()
     POOL = ReplicaPool(n, want_asr=os.environ.get("TTS_VALIDATE", "1") != "0", preload=DEFAULT_MODEL)
     POOL.start()
-    print(f"[tts] ready: {n} replica(s), default model {DEFAULT_MODEL}, {POOL.ready_seconds}s", flush=True)
-    runpod.serverless.start({"handler": handler})
+    print(f"[tts] ready: {n} replica(s), default model {DEFAULT_MODEL}, {POOL.ready_seconds}s, "
+          f"{CONCURRENCY} job(s) at once", flush=True)
+    if CONCURRENCY > 1 and n > 0:
+        runpod.serverless.start({"handler": handler_async, "concurrency_modifier": lambda _current: CONCURRENCY})
+    else:
+        runpod.serverless.start({"handler": handler})

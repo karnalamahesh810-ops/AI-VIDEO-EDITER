@@ -216,11 +216,11 @@ class Engines(unittest.TestCase):
         host.prompts["k"] = object()
         seen = []
 
-        def check(text, wav, lang, use_asr):
-            seen.append(text)
-            return {"seconds": 1.0, "ratio": 1.0, "wer": 0.0, "ok": True, "score": 0.0}
+        def check_many(texts, wavs, lang, use_asr):  # the pieces of a batch are read back together
+            seen.extend(texts)
+            return [{"seconds": 1.0, "ratio": 1.0, "wer": 0.0, "ok": True, "score": 0.0} for _ in texts]
 
-        with mock.patch.object(host, "check", side_effect=check), mock.patch("engine_qwen.seed_all"), \
+        with mock.patch.object(host, "check_many", side_effect=check_many), mock.patch("engine_qwen.seed_all"), \
                 mock.patch("engine_qwen.trim", side_effect=lambda w, sr: w):
             host.run_part({"texts": ["lake meed.", "yo-SEM-it-ee."], "check_texts": ["Lake Mead.", "Yosemite."],
                            "voice_key": "k", "ref_path": "/x.wav", "seed": 1})
