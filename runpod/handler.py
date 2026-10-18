@@ -4016,6 +4016,7 @@ def handler(job):
             if project_id:
                 ledger.save(ledger_job, project_id, doc=doc)    # the edited, rendered video's own shots
             costs.measure_end()
+            rendercache.daily_cleanup()   # old re-render cache entries, at most once a day (never raises)
             return {"ok": True, "action": "render", **out,
                     # (With what the editor compares its next timeline against: the one it sent.)
                     "render_manifest": rendercache.manifest_for_app(media.LAST_STATS.get("render_manifest"),

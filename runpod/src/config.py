@@ -1636,6 +1636,10 @@ RENDER_CACHE_PREFIX = os.getenv("RENDER_CACHE_PREFIX", "render-cache/v1/").strip
 # worker's render_cache_cleanup action) or an R2 lifecycle rule on the prefix; a
 # reused entry starts its age again.
 RENDER_CACHE_KEEP_DAYS = float(os.getenv("RENDER_CACHE_KEEP_DAYS", "14"))
+# With the cache on, a worker that just rendered deletes entries older than RENDER_CACHE_KEEP_DAYS at most
+# once a day (rendercache.daily_cleanup: only under RENDER_CACHE_PREFIX; the deleted keys are logged to
+# R2 logs/render-cache-cleanup/). Owner yes 2026-10-18.
+RENDER_CACHE_AUTO_CLEANUP = _flag("RENDER_CACHE_AUTO_CLEANUP", True)
 # With no workers to spread over (no endpoint, POD_RENDER_FANOUT off), a render
 # with nothing cached still renders whole on its machine; on, it renders chunk by
 # chunk there and keeps them (benchmarks; a machine without helpers).

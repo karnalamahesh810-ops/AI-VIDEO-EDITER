@@ -832,7 +832,8 @@ class Cache:
             pass
 
 
-def cleanup(days: float = None, scope: str = "", dry_run: bool = True, now: Optional[float] = None) -> dict:
+def cleanup(days: float = None, scope: str = "", dry_run: bool = True, now: Optional[float] = None,
+            deleted_keys: Optional[List[str]] = None) -> dict:
     """
     Delete cache entries older than `days` (RENDER_CACHE_KEEP_DAYS): every scope, or one. Only keys under
     RENDER_CACHE_PREFIX are ever listed or deleted - never a project's media or a finished video. A dry run
@@ -858,8 +859,48 @@ def cleanup(days: float = None, scope: str = "", dry_run: bool = True, now: Opti
         for key in old:
             if key.startswith(root) and r2.delete(key):
                 deleted += 1
+                if deleted_keys is not None:
+                    deleted_keys.append(key)
     return {"prefix": prefix, "listed": len(listed), "old": len(old), "deleted": deleted, "bytes": total,
             "days": days, "dryRun": bool(dry_run)}
+
+
+# Where the daily clean-up writes what it deleted: OUTSIDE the cache prefix, so the log itself is kept.
+CLEANUP_LOG_PREFIX = "logs/render-cache-cleanup/"
+CLEANUP_MARKER = CLEANUP_LOG_PREFIX + "last.json"
+
+
+def daily_cleanup(now: Optional[float] = None) -> Optional[dict]:
+    """
+    At most once a day (any worker, after a render): delete cache entries older than RENDER_CACHE_KEEP_DAYS
+    - only keys under RENDER_CACHE_PREFIX (cleanup() refuses anything else) - and write the list of deleted
+    keys to logs/render-cache-cleanup/<UTC date>-<time>.json. Off unless RENDER_CACHE and
+    RENDER_CACHE_AUTO_CLEANUP are on. Never raises: a clean-up must never fail a render.
+    """
+    if not (getattr(config, "RENDER_CACHE", False) and getattr(config, "RENDER_CACHE_AUTO_CLEANUP", True)) or not r2.enabled():
+        return None
+    t = now if now is not None else time.time()
+    try:
+        raw = r2.get_bytes(CLEANUP_MARKER, timeout=15)
+        last = float(json.loads(raw.decode("utf-8")).get("at", 0)) if raw else 0.0
+    except Exception:  # noqa: BLE001 - no marker yet, or unreadable: run
+        last = 0.0
+    if t - last < 86400.0:
+        return None
+    try:
+        # The marker first, so workers finishing at the same moment do not all run it.
+        r2.upload_bytes(json.dumps({"at": t}).encode("utf-8"), CLEANUP_MARKER)
+        keys: List[str] = []
+        out = cleanup(dry_run=False, now=t, deleted_keys=keys)
+        stamp = datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%d-%H%M%S")
+        log = {**out, "at": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat(), "keys": keys}
+        r2.upload_bytes(json.dumps(log, indent=1).encode("utf-8"), f"{CLEANUP_LOG_PREFIX}{stamp}.json")
+        print(f"[render-cache] daily clean-up: {out.get('deleted', 0)} of {out.get('old', 0)} old entries deleted "
+              f"({out.get('bytes', 0)} bytes), log {CLEANUP_LOG_PREFIX}{stamp}.json", flush=True)
+        return log
+    except Exception as e:  # noqa: BLE001 - reported, never raised
+        print(f"[render-cache] daily clean-up skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+        return None
 
 
 def _epoch(stamp: Any) -> Optional[float]:
