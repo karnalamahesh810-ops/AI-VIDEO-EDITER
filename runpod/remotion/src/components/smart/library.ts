@@ -1034,14 +1034,14 @@ const PACK2: MxRecipe[] = [
   // ============================== TRANSITIONS (over a cut) ==============================
   {
     id: "ml-tr-ink", name: "Ink bleed", family: "transition",
-    about: "Blots of ink in the kit's deep colour bloom across the shot until it is covered, then the next shot bleeds through from the middle.",
+    about: "Ink in the kit's deep colour blooms in from near one edge, its feathered edge led by a thin accent rim, until the shot is covered; the next shot bleeds through from the other side.",
     use: "A soft, artful change of place or time (a memory, a new chapter of a life story); calm or emotional sections.",
     sample: { text: "" },
     build: (p, k, c) => trans([{ kind: "fx", effect: "ink", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.bg2, color2: k.colors.primary, mid: p.dur / 2, seed: 1 + Math.round(c.r(11) * 90) }]),
   },
   {
     id: "ml-tr-burn", name: "Film burn", family: "transition",
-    about: "Hot orange film-burn blooms flare in from the edges, flicker and white out the cut, then cool away onto the next shot.",
+    about: "A warm light leak: a skewed band of film light sweeps across with a corner glow and gate streaks, flashing warm white for a moment over the cut, then cools away onto the next shot.",
     use: "A jump in time or a flashback (\"years earlier\", \"back in 1985\"), archive and nostalgic footage, emotional peaks.",
     sample: { text: "" },
     build: (p, k, c) => trans([{ kind: "fx", effect: "burn", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.primary, mid: p.dur / 2, seed: 1 + Math.round(c.r(12) * 90) }]),
@@ -1055,14 +1055,14 @@ const PACK2: MxRecipe[] = [
   },
   {
     id: "ml-tr-tear", name: "Paper tear", family: "transition",
-    about: "A sheet in the kit colour with ragged torn edges rips across the frame, covering the cut and tearing away onto the next shot.",
+    about: "A grained sheet in the kit colour, its torn edges ragged with a white fibrous core, slides across at a slight tilt, covering the cut and tearing away onto the next shot.",
     use: "Moving to a new topic or case in an explainer, scrapbook or history piece; playful or documentary.",
     sample: { text: "" },
     build: (p, k, c) => trans([{ kind: "fx", effect: "tear", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.bg, mid: p.dur / 2, seed: 1 + Math.round(c.r(14) * 90) }]),
   },
   {
     id: "ml-tr-blocks", name: "Block dissolve", family: "transition",
-    about: "The frame fills with kit-coloured blocks in a scattered left-to-right wave, then they pop away in a new order onto the next shot.",
+    about: "A directional tile wipe in the kit's ground tones: tiles grow in as the wave reaches them, its front lit in the accent, cover the cut, then shrink away in the same direction onto the next shot.",
     use: "A modern, data or tech change of section (a new list item, a new chapter in an explainer).",
     sample: { text: "" },
     build: (p, k, c) => trans([{ kind: "fx", effect: "blocks", x: 0.5, y: 0.5, w: 1, h: 1, color: k.colors.bg, color2: k.colors.bg2, fill: k.colors.primary, mid: p.dur / 2, seed: 1 + Math.round(c.r(15) * 90) }]),

@@ -37,6 +37,14 @@ const hexA = (c: string, a: number): string => {
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a.toFixed(3)})`;
 };
+/** "#rrggbb" mixed toward white by f (0..1); anything else unchanged. */
+const lift = (c: string, f: number): string => {
+  const m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (!m) return c;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => Math.round(v + (255 - v) * f).toString(16).padStart(2, "0");
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+};
 const shadow = (H: number, k = 1) => `0 ${(0.004 * H * k).toFixed(1)}px ${(0.016 * H * k).toFixed(1)}px rgba(0,0,0,0.55)`;
 const drop = (H: number) => `0 ${(0.012 * H).toFixed(1)}px ${(0.04 * H).toFixed(1)}px rgba(0,0,0,0.5)`;
 /** Arrival of a block: from below, from a blur. */
@@ -565,52 +573,72 @@ export const FxBody: React.FC<{ layer: Layer; ctx: XCtx }> = ({ layer: L, ctx })
   const col = L.color, col2 = L.color2 || "#000000", acc = L.fill || "#f2b630";
   const seed = L.seed || 1;
   const id = `fx${uid}`;
-  const diag = Math.hypot(W, H);
 
   if (L.effect === "ink") {
-    // In: ink blots bloom from three points until they cover the frame at the cut; out: a hole bleeds open from the centre.
-    const pin = easeOf("in")(c01(lt / mid));
-    const pout = easeOf("out")(c01((lt - mid) / Math.max(0.05, D - mid)));
-    const pts = [0, 1, 2].map((k) => [W * (0.15 + 0.7 * rand(seed * 7 + k)), H * (0.15 + 0.7 * rand(seed * 11 + k))]);
+    // Polished 2026-10-18 (it was three lumpy blots of flat colour): ONE bloom from a point near an edge, its edge
+    // finely torn and feathered like ink in water, a thin rim of the accent bleeding ahead of it; it covers the frame
+    // at the cut, then a hole bleeds open from the opposite side with the same rim onto the next shot.
+    const pin = easeOf("inOut")(c01(lt / mid));
+    const pout = easeOf("inOut")(c01((lt - mid) / Math.max(0.05, D - mid)));
+    const left = rand(seed * 7) > 0.5;
+    const ox = (left ? 0.1 : 0.9) * W, oy = (0.25 + 0.5 * rand(seed * 11)) * H;
+    const hx = W - ox, hy = H - oy;
+    const reach = Math.hypot(Math.max(ox, W - ox), Math.max(oy, H - oy)) * 1.18;
+    const r1 = pin * reach, r2 = pout * reach * 1.12;
+    const rim = 1.04;
+    const f = `url(#${id}f)`;
     return (
       <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
         <defs>
-          <filter id={`${id}f`} x="-20%" y="-20%" width="140%" height="140%">
-            <feTurbulence type="fractalNoise" baseFrequency={0.012} numOctaves={3} seed={seed % 97} />
-            <feDisplacementMap in="SourceGraphic" scale={0.12 * H} xChannelSelector="R" yChannelSelector="G" result="d" />
-            <feGaussianBlur in="d" stdDeviation={0.0025 * H} />
+          <filter id={`${id}f`} x="-25%" y="-25%" width="150%" height="150%">
+            <feTurbulence type="fractalNoise" baseFrequency={0.009} numOctaves={4} seed={seed % 97} />
+            <feDisplacementMap in="SourceGraphic" scale={0.075 * H} xChannelSelector="R" yChannelSelector="G" result="d" />
+            <feGaussianBlur in="d" stdDeviation={0.004 * H} />
           </filter>
-          <mask id={`${id}m`}>
-            <rect width={W} height={H} fill="white" />
-            {pout > 0 ? <circle cx={W / 2} cy={H / 2} r={pout * diag * 0.62} fill="black" filter={`url(#${id}f)`} /> : null}
-          </mask>
+          <mask id={`${id}a`}><rect width={W} height={H} fill="white" />{pout > 0 ? <circle cx={hx} cy={hy} r={r2} fill="black" filter={f} /> : null}</mask>
+          <mask id={`${id}b`}><rect width={W} height={H} fill="white" />{pout > 0 ? <circle cx={hx} cy={hy} r={r2 * rim} fill="black" filter={f} /> : null}</mask>
         </defs>
-        <g mask={`url(#${id}m)`}>
-          {lt < mid ? pts.map(([x, y], k) => <circle key={k} cx={x} cy={y} r={Math.max(0, pin * diag * (0.72 - k * 0.08) - k * 0.02 * diag)} fill={col} filter={`url(#${id}f)`} />)
-            : <rect width={W} height={H} fill={col} />}
-        </g>
+        {lt < mid ? (
+          <g>
+            <circle cx={ox} cy={oy} r={r1 * rim} fill={col2} opacity={0.42} filter={f} />
+            <circle cx={ox} cy={oy} r={r1} fill={col} filter={f} />
+            <circle cx={ox + (W / 2 - ox) * 0.5} cy={oy + (H / 2 - oy) * 0.3} r={Math.max(0, (pin - 0.2) / 0.8) * reach * 0.55} fill={col} filter={f} />
+          </g>
+        ) : (
+          <g>
+            <rect width={W} height={H} fill={col2} opacity={0.42} mask={`url(#${id}a)`} />
+            <rect width={W} height={H} fill={col} mask={`url(#${id}b)`} />
+          </g>
+        )}
       </svg>
     );
   }
 
   if (L.effect === "burn") {
-    const peak = 1 - Math.min(1, Math.abs(lt - mid) / (D * 0.5));
-    const flick = 0.85 + 0.15 * Math.sin(lt * 41 + seed) * Math.sin(lt * 17);
-    const blobs = [0, 1, 2, 3].map((k) => {
-      const fromLeft = rand(seed + k * 5) > 0.5;
-      const x = (fromLeft ? -0.2 : 1.2) + (fromLeft ? 1 : -1) * (0.45 + 0.4 * rand(seed + k * 9)) * c01(lt / D) * 1.2;
-      const y = 0.2 + 0.6 * rand(seed + k * 13) + 0.1 * Math.sin(lt * 2 + k);
-      const r = (0.35 + 0.35 * rand(seed + k * 3)) * (0.5 + peak);
-      return { x, y, r, hot: k % 2 === 0 };
-    });
+    // Polished 2026-10-18 (orange blobs washed over everything): a real light leak - a warm, skewed band of light
+    // sweeping across in screen blend with a glow from one corner and two gate streaks, peaking in a warm white
+    // flash that hides the cut, then cooling off.
+    const env = 1 - Math.min(1, Math.abs(lt - mid) / Math.max(0.05, D * 0.5));
+    const e = env * env * (3 - 2 * env);
+    const dir = seed % 2 ? 1 : -1;
+    const sweep = c01(lt / D);
+    const bx = (dir > 0 ? -0.35 + 1.7 * sweep : 1.35 - 1.7 * sweep) * W;
+    const flick = 0.88 + 0.12 * Math.sin(lt * 37 + seed) * Math.sin(lt * 13 + 1);
+    const corner = rand(seed * 5) > 0.5;
+    const streaks = [0, 1].map((k) => (0.15 + 0.7 * rand(seed * 13 + k)) * W + Math.sin(lt * 9 + k * 2) * 0.01 * W);
     return (
-      <div style={{ position: "absolute", inset: 0, mixBlendMode: "screen" }}>
-        {blobs.map((b, k) => (
-          <div key={k} style={{ position: "absolute", left: b.x * W - b.r * H, top: b.y * H - b.r * H, width: b.r * 2 * H, height: b.r * 2 * H, borderRadius: "50%",
-            background: `radial-gradient(circle, ${b.hot ? "rgba(255,244,214,1)" : "rgba(255,170,60,0.95)"} 0%, rgba(255,110,20,0.75) 35%, rgba(200,40,10,0.35) 60%, rgba(0,0,0,0) 72%)`,
-            opacity: c01(peak * 1.6) * flick, filter: `blur(${(0.03 * H).toFixed(1)}px)` }} />
+      <div style={{ position: "absolute", inset: 0, mixBlendMode: "screen", overflow: "hidden" }}>
+        <div style={{ position: "absolute", left: bx - 0.6 * W, top: -0.1 * H, width: 1.2 * W, height: 1.2 * H, transform: `skewX(${-14 * dir}deg)`,
+          background: "linear-gradient(90deg, rgba(255,90,20,0) 0%, rgba(255,96,28,0.75) 30%, rgba(255,196,120,0.95) 48%, rgba(255,236,200,1) 52%, rgba(255,120,40,0.8) 68%, rgba(200,40,10,0) 100%)",
+          opacity: e * flick, filter: `blur(${(0.05 * H).toFixed(1)}px)` }} />
+        <div style={{ position: "absolute", inset: 0, opacity: e,
+          background: `radial-gradient(ellipse 70% 90% at ${corner ? "0% 100%" : "100% 0%"}, rgba(255,70,20,0.85) 0%, rgba(255,70,20,0) 70%)` }} />
+        {streaks.map((x, k) => (
+          <div key={k} style={{ position: "absolute", left: x, top: 0, width: 0.008 * W, height: H, background: "rgba(255,226,180,0.9)",
+            opacity: e * 0.45 * flick, filter: `blur(${(0.004 * H).toFixed(1)}px)` }} />
         ))}
-        <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 50%, rgba(255,250,235,${(0.95 * peak ** 4).toFixed(3)}) 0%, rgba(255,160,60,${(0.85 * peak ** 3).toFixed(3)}) 60%, rgba(120,20,0,${(0.6 * peak ** 2).toFixed(3)}) 100%)` }} />
+        {/* the flash over the cut: ±0.14 s only, so the leak reads as light, not as a white-out */}
+        <div style={{ position: "absolute", inset: 0, background: "rgb(255,242,222)", opacity: 0.95 * c01(1 - Math.abs(lt - mid) / 0.14) ** 1.5 }} />
       </div>
     );
   }
@@ -643,48 +671,71 @@ export const FxBody: React.FC<{ layer: Layer; ctx: XCtx }> = ({ layer: L, ctx })
 
   if (L.effect === "tear") {
     // A sheet of paper with torn edges slides across: its leading edge covers the frame by the cut, its trailing edge reveals the next shot.
+    // Polished 2026-10-18 (a flat sheet with a zigzag edge): a sheet of paper with grain, tilted a touch, its torn
+    // edges finely ragged at two scales with the white fibrous core showing unevenly, a soft shadow on the shot.
     const p = easeOf("inOut")(c01(lt / D));
     const dir = seed % 2 ? -1 : 1;
-    const sheetW = W * 1.5;
+    const sheetW = W * 1.55, top = -0.15 * H, sh = 1.3 * H;
     const x = dir > 0 ? -sheetW + p * (W + sheetW) : W - p * (W + sheetW);
-    const edge = (side: number) => {
-      const pts: string[] = [];
-      const steps = 28;
-      for (let i = 0; i <= steps; i++) {
-        const yy = (i / steps) * H;
-        const j = (rand(seed * 53 + i + side * 999) - 0.5) * 0.045 * W + Math.sin(i * 0.9 + side) * 0.012 * W;
-        pts.push(`${(side > 0 ? sheetW + j : j).toFixed(1)},${yy.toFixed(1)}`);
-      }
-      return pts;
-    };
-    const right = edge(1), left = edge(-1);
-    const poly = [...left, ...right.reverse()].join(" ");
-    const fiber = (pts: string[], off: number) => pts.map((s) => { const [a, b] = s.split(","); return `${(Number(a) + off).toFixed(1)},${b}`; }).join(" ");
+    const STEPS = 64;
+    const jag = (i: number, side: number, fine: number) => (rand(seed * 53 + i + side * 999) - 0.5) * 0.024 * W + Math.sin(i * 0.5 + side * 3 + seed) * 0.016 * W
+      + (rand(seed * 91 + i * 7 + side * 31) - 0.5) * fine * W;
+    const edge = (side: number, inset: number, fine: number) => Array.from({ length: STEPS + 1 }, (_, i) => {
+      const yy = top + (i / STEPS) * sh;
+      const xx = (side > 0 ? sheetW : 0) + jag(i, side, fine) - side * inset;
+      return `${xx.toFixed(1)},${yy.toFixed(1)}`;
+    });
+    const outerL = edge(-1, 0, 0.012), outerR = edge(1, 0, 0.012);
+    const sheet = [...outerL, ...outerR.slice().reverse()].join(" ");
+    // the white core: between the torn edge and a second, independently ragged line just inside it
+    const core = (side: number) => [...edge(side, 0, 0.012), ...edge(side, 0.009 * W, 0.02).reverse()].join(" ");
     return (
       <svg width={W} height={H} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-        <g transform={`translate(${x.toFixed(1)},0)`} style={{ filter: `drop-shadow(0 0 ${(0.02 * H).toFixed(1)}px rgba(0,0,0,0.55))` }}>
-          <polygon points={poly} fill={col} />
-          <polyline points={fiber(edge(1), -0.006 * W)} fill="none" stroke="#f4efe4" strokeWidth={0.008 * W} opacity={0.9} />
-          <polyline points={fiber(edge(-1), 0.006 * W)} fill="none" stroke="#f4efe4" strokeWidth={0.008 * W} opacity={0.9} />
+        <defs>
+          <filter id={`${id}g`} x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency={0.75} numOctaves={2} seed={seed % 89} />
+            <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  3 0 0 0 -1.1" />
+            <feComposite in2="SourceGraphic" operator="in" />
+          </filter>
+          {/* light catching the torn edges: the paper lifts a little where it tore */}
+          <linearGradient id={`${id}s`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor={lift(col, 0.16)} /><stop offset="0.1" stopColor={col} />
+            <stop offset="0.9" stopColor={col} /><stop offset="1" stopColor={lift(col, 0.16)} />
+          </linearGradient>
+        </defs>
+        <g transform={`translate(${x.toFixed(1)},0) rotate(${(1.6 * dir).toFixed(2)} ${(sheetW / 2).toFixed(0)} ${(H / 2).toFixed(0)})`}
+          style={{ filter: `drop-shadow(0 ${(0.006 * H).toFixed(1)}px ${(0.018 * H).toFixed(1)}px rgba(0,0,0,0.5))` }}>
+          <polygon points={sheet} fill={`url(#${id}s)`} />
+          <polygon points={sheet} fill="#000" filter={`url(#${id}g)`} opacity={0.3} />
+          <polygon points={core(-1)} fill="#efe9dd" />
+          <polygon points={core(1)} fill="#efe9dd" />
         </g>
       </svg>
     );
   }
 
   if (L.effect === "blocks") {
-    const cols = 16, rows = 9;
+    // Polished 2026-10-18 (random blue and yellow squares at full strength): a directional tile wipe in the kit's
+    // ground tones - each tile grows from 60% as the wave reaches it, the wavefront lit in the accent, the frame
+    // covered at the cut; the same wave carries on and the tiles shrink away onto the next shot.
+    const cols = 12, rows = 7;
     const cw = W / cols, ch = H / rows;
+    const dir = seed % 2 ? 1 : -1;
+    const inLen = Math.max(0.12, mid * 0.4), outLen = Math.max(0.12, (D - mid) * 0.4);
     const cells: React.ReactNode[] = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       const k = r * cols + c;
-      const a = rand(seed * 7 + k) * 0.7 + (c / cols) * 0.3;
-      const b = rand(seed * 13 + k * 3) * 0.7 + (c / cols) * 0.3;
-      const pin = c01((lt - a * mid * 0.85) / (mid * 0.25));
-      const pout = c01((lt - mid - b * (D - mid) * 0.8) / ((D - mid) * 0.25));
+      const u = (dir > 0 ? c : cols - 1 - c) / (cols - 1), v = r / (rows - 1);
+      const order = c01(u * 0.8 + v * 0.1 + rand(seed * 7 + k) * 0.1);
+      const pin = easeOf("expoOut")((lt - order * (mid - inLen)) / inLen);
+      const pout = easeOf("expoIn")((lt - mid - order * (D - mid - outLen)) / outLen);
       const s = pin * (1 - pout);
       if (s <= 0.001) continue;
-      const fill = rand(seed * 3 + k * 7) > 0.82 ? acc : rand(seed * 5 + k) > 0.5 ? col : col2;
-      cells.push(<div key={k} style={{ position: "absolute", left: c * cw, top: r * ch, width: cw + 1, height: ch + 1, background: fill, transform: `scale(${s.toFixed(3)})` }} />);
+      const ground = rand(seed * 3 + k * 7) > 0.6 ? col2 : col;
+      const front = pin > 0 && pin < 0.8;
+      cells.push(<div key={k} style={{ position: "absolute", left: c * cw, top: r * ch, width: cw + 1, height: ch + 1,
+        background: front ? acc : ground, opacity: c01(s * 1.6), transform: `scale(${(0.6 + 0.4 * s).toFixed(4)})`,
+        boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)" }} />);
     }
     return <div style={{ position: "absolute", inset: 0 }}>{cells}</div>;
   }
