@@ -345,6 +345,38 @@ const chartTitle = (p: MxParams, k: BrandKit, c: Ctx, x: number, y: number, size
       tracking: 0.01, upper: false, at: c.s(0.5) } : undefined } })];
 };
 
+/**
+ * The polished looks' motion grammar (2026-10-18, docs/motion-polish-2026-10-18.md): a unit (word, line, element)
+ * arrives in at most 0.3 s on expo-out, out of its own mask, from a slight blur - never from scale 0, never with an
+ * overshoot - and the graphic leaves faster than it came (0.28 s).
+ */
+const QUICK_EXIT = 0.28;
+const quick = (kind: "fade" | "blur" | "drop" | "scale" | "wipe") => ({ exit: { kind, dur: QUICK_EXIT } });
+/** A word rising out of its own line in 0.28 s, on its spoken time. */
+const riseIn = (c: Ctx, start: number, stagger: number) => wordAnim(c, { y: 1.05, blur: 2 }, start, stagger, 0.28, "expoOut", true);
+/**
+ * The scrim under a polished title: a side gradient when it sits on a side; centred, an even dim (a vignette
+ * leaves the middle - where the words are - untouched, and white type over a bright shot then reads at 480p only
+ * by its shadow).
+ */
+const titleShade = (c: Ctx, side = 0.55, centre = 0.34) =>
+  (c.side === "center" ? { kind: "full", amount: centre } : { kind: c.side, amount: side });
+/** Words in two lines whose longer line is as short as it can be (balance() is greedy and can leave one word alone). */
+const split2 = (words: string[]): string[] => {
+  if (words.length < 2) return [words.join(" ")];
+  let best = 1, bestLen = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const m = Math.max(words.slice(0, i).join(" ").length, words.slice(i).join(" ").length);
+    if (m < bestLen) { bestLen = m; best = i; }
+  }
+  return [words.slice(0, best).join(" "), words.slice(best).join(" ")];
+};
+/** A short accent rule (a share of the frame width) that draws on from its left at `at`. */
+const accentRule = (k: BrandKit, x: number, y: number, anchor: string, at: number, w = 0.045, h = 0.0065): Lay => ({
+  kind: "rect", x, y, w, h, anchor, fill: k.colors.primary, color: k.colors.primary,
+  keys: { draw: [[0, 0], [at, 0], [at + 0.3, 1, "expoOut"]] },
+});
+
 const trans = (layers: Lay[]): Raw => ({ v: 1, persp: 1400, exit: { kind: "fade", dur: 0 }, drift: { x: 0, y: 0, rotY: 0 }, layers });
 const verdictColor = (word: string, k: BrandKit) => (/fact[- ]?check/i.test(word) ? k.colors.primary : /\b(false|fake|myth|wrong|no|misleading|debunked|untrue|lie)\b/i.test(word) ? "#e5484d"
   : /\b(true|real|fact|confirmed|yes|correct|verified|accurate)\b/i.test(word) ? "#2fbf71" : k.colors.primary);
@@ -353,93 +385,124 @@ const PACK2: MxRecipe[] = [
   // ============================== KINETIC TYPE ==============================
   {
     id: "ml-title-stack", name: "Word stack slam", family: "title",
-    about: "A justified block of stacked words, each line sized to the same width and slammed in on its spoken word; the stack jolts as each lands.",
+    about: "A justified block of stacked words, every line set to the same width in tight heavy caps; each line rises out of its own mask on its spoken word and the stack settles a hair as it lands.",
     use: "A punchy hook or a three-to-six word verdict said with force (\"they lost everything\"); the hook and big turns only.",
     sample: { text: "They lost everything overnight" },
     build: (p, k, c) => {
+      // Polished 2026-10-18: no scale slam (it was a 1.9x scale pop from a 14 px blur) - a masked rise per line in
+      // 0.26 s on its word, the stack justified to one width with tight tracking, an accent rule above it.
       const lines = balance(p.text, 9, 5);
-      const block = 0.36;
-      let sizes = lines.map((l) => fitSize([l], k.fonts.title, block, c.aspect, 0.15, 0.05, true));
-      // The whole stack stays within ~62% of the frame's height.
-      const fit = Math.min(1, 0.62 / sizes.reduce((a, b) => a + b * 0.98, 0));
-      sizes = sizes.map((s) => s * fit);
-      const lh = sizes.map((s) => s * 0.98 * c.scale);
+      const TR = -0.025;
+      const block = Math.min(0.4, c.room);
+      let sizes = lines.map((l) => fitSize([l], k.fonts.title, block, c.aspect, 0.17, 0.05, true, TR));
+      // The whole stack stays within ~64% of the frame's height.
+      const fit = Math.min(1, 0.64 / sizes.reduce((a, b) => a + b * 0.9, 0));
+      sizes = sizes.map((s) => s * fit * c.scale);
+      const lh = sizes.map((s) => s * 0.9);
       const total = lh.reduce((a, b) => a + b, 0);
       const pl = placeX(c.side);
-      let y = (c.y ?? 0.5) - total / 2;
+      const top = (c.y ?? 0.5) - total / 2;
+      let y = top;
       let wi = 0;
-      const lands = lines.map((l) => { const at = c.wt(wi, 0.1, 0.24); wi += l.split(/\s+/).length; return at; });
+      const lands = lines.map((l) => { const at = c.wt(wi, 0.1, 0.22); wi += l.split(/\s+/).length; return at; });
       const big = sizes.indexOf(Math.max(...sizes));
-      return finish(lines.map((line, i) => {
+      const weight = Math.max(800, k.titleWeight);
+      const layers: Lay[] = lines.map((line, i) => {
         const yy = y + lh[i] / 2;
         y += lh[i];
-        const t = lands[i];
+        // The lines already up settle 0.3% of the frame as each later line lands (a weight, not a bounce).
         const bump: unknown[] = [[0, 0]];
-        for (let j = i + 1; j < lines.length && bump.length < 14; j++) bump.push([lands[j], 0], [lands[j] + 0.05, 0.007], [lands[j] + 0.24, 0, "out"]);
-        return text({ lines: [line], font: k.fonts.title, size: sizes[i] * c.scale, weight: Math.max(800, k.titleWeight), color: i === big ? k.colors.primary : k.colors.text,
-          upper: true, tracking: -0.01, x: pl.x, y: yy, anchor: pl.anchor, align: pl.align, lineH: 0.92,
-          extra: { mb: 0.7, keys: { scale: [[0, 1.9], [t, 1.9], [t + c.s(0.3), 1, "expoOut"]], opacity: [[0, 0], [t, 0], [t + 0.07, 1]],
-            blur: [[0, 14], [t, 14], [t + c.s(0.26), 0, "out"]], y: bump } } });
-      }), c, "blur", { shade: { kind: c.side === "center" ? "vignette" : c.side, amount: 0.5 } });
+        for (let j = i + 1; j < lines.length && bump.length < 14; j++) bump.push([lands[j], 0], [lands[j] + 0.05, 0.003], [lands[j] + 0.2, 0, "out"]);
+        return text({ lines: [line], font: k.fonts.title, size: sizes[i], weight, color: i === big ? k.colors.primary : k.colors.text,
+          upper: true, tracking: TR, x: pl.x, y: yy, anchor: pl.anchor, align: pl.align, lineH: 0.9,
+          animator: { unit: "line", stagger: 0, dur: c.s(0.26), ease: "expoOut", from: { y: 1.0, blur: 3 }, at: [lands[i]], clip: true },
+          extra: { keys: { y: bump } } });
+      });
+      const rx = pl.anchor === "l" ? pl.x : pl.anchor === "r" ? pl.x - 0.045 : 0.5 - 0.0225;
+      layers.unshift(accentRule(k, rx, top - Math.max(0.025, sizes[0] * 0.28), "l", Math.max(0, lands[0] - 0.05)));
+      return finish(layers, c, "blur", { ...quick("blur"), shade: titleShade(c) });
     },
   },
   {
     id: "ml-title-slice", name: "Split reveal", family: "title",
-    about: "One line cut through the middle: its top half slides in from one side, its bottom half from the other, and they lock together with a bright seam.",
+    about: "One big line cut through the middle: its top half slides in from one side, its bottom half from the other, and they lock together on a bright accent seam.",
     use: "A short line that turns the story (\"everything changed\", a name reveal); one line, at most five words.",
     sample: { text: "Everything changed" },
     build: (p, k, c) => {
-      const line = T(p.text);
-      const size = fitSize([line], k.fonts.title, 0.66, c.aspect, 0.13, 0.035, true) * c.scale;
+      // Polished 2026-10-18: the halves travelled 40% of the frame and the line was unreadable for 0.6 s; now a big
+      // tight line whose halves travel 9% and lock in 0.42 s with motion blur, the seam drawing out from the centre.
+      // A long line becomes two: the cut then falls between them (the first line from one side, the second from
+      // the other), so the words stay big.
+      const lines = T(p.text).length > 15 ? split2(c.words) : [T(p.text)];
+      const TR = -0.02;
+      // 0.7 of the width by the estimate: heavy caps (Archivo 900) run ~15% wider than the face table says
+      const size = fitSize(lines, k.fonts.title, 0.7, c.aspect, 0.17, 0.05, true, TR) * c.scale;
       const y = c.y ?? 0.5;
+      const blockH = lines.length * size * 0.95;
       const dir = c.r(1) > 0.5 ? 1 : -1;
-      const t0 = Math.max(0, c.wt(0, 0.1, 0) - c.s(0.15)), join = t0 + c.s(0.7);
-      const half = (cut: [number, number], d: number) => text({ lines: [line], font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true,
-        tracking: k.titleTracking, x: 0.5, y, anchor: "c", align: "center", emph: c.words.length > 1 ? [c.words.length - 1] : [], emphColor: k.colors.primary,
-        extra: { cut, mb: 1, keys: { x: [[0, 0.4 * d], [t0, 0.4 * d], [join, 0, "expoOut"]], opacity: [[0, 0], [t0, 0], [t0 + 0.12, 1]] } } });
-      const w = Math.min(0.9, widthOf(line, k.fonts.title, size, c.aspect, true) * 1.08);
-      return finish([
+      const t0 = Math.max(0, c.wt(0, 0.1, 0) - c.s(0.1)), join = t0 + c.s(0.42);
+      const half = (cut: [number, number], d: number) => text({ lines, font: k.fonts.title, size, weight: Math.max(800, k.titleWeight), color: k.colors.text,
+        upper: true, tracking: TR, lineH: 0.95, x: 0.5, y, anchor: "c", align: "center", emph: c.words.length > 1 ? [c.words.length - 1] : [], emphColor: k.colors.primary,
+        extra: { cut, mb: 1, keys: { x: [[0, 0.09 * d], [t0, 0.09 * d], [join, 0, "expoOut"]], opacity: [[0, 0], [t0, 0], [t0 + 0.1, 1]] } } });
+      const w = Math.min(0.92, Math.max(...lines.map((l) => widthOf(l, k.fonts.title, size, c.aspect, true, TR))) * 1.06);
+      // A dark band across the frame carries the line on any shot (the VidRush centre band): it draws on from the
+      // left just before the halves arrive.
+      const bandH = blockH + size * (p.sub ? 1.5 : 0.8);
+      const layers: Lay[] = [
+        { kind: "rect", x: 0, y: y + (p.sub ? size * 0.36 : 0), w: 1, h: bandH, anchor: "l", fill: "rgba(6,7,10,0.62)", color: "rgba(6,7,10,0.62)",
+          keys: { draw: [[0, 0], [Math.max(0, t0 - 0.12), 0], [t0 + 0.2, 1, "expoOut"]] } },
         half([0, 0.5], -dir), half([0.5, 0], dir),
-        { kind: "rect", x: 0.5, y: y + size * 0.02, w, h: 0.004, fill: k.colors.primary, color: k.colors.primary, blend: "screen",
-          keys: { sx: [[0, 0], [join - c.s(0.12), 0], [join + c.s(0.3), 1, "expoOut"]], opacity: [[0, 0], [join - c.s(0.12), 1], [join + c.s(0.5), 1], [join + c.s(1.1), 0, "out"]] } },
-      ], c, "blur", { shade: { kind: "vignette", amount: 0.45 } });
+        { kind: "rect", x: 0.5, y: y + size * 0.01, w, h: Math.max(0.003, size * 0.03), fill: k.colors.primary, color: k.colors.primary,
+          keys: { sx: [[0, 0], [join - 0.06, 0], [join + 0.24, 1, "expoOut"]], opacity: [[0, 0], [join - 0.06, 1], [join + 0.35, 1], [join + 0.75, 0, "out"]] } },
+      ];
+      if (p.sub) layers.push(text({ lines: [T(p.sub)], font: k.fonts.label, size: Math.max(0.03, size * 0.22), weight: 700, color: k.colors.muted, upper: true, tracking: 0.14,
+        x: 0.5, y: y + blockH / 2 + size * 0.38, anchor: "c", align: "center", extra: { keys: { opacity: [[0, 0], [join + 0.1, 0], [join + 0.35, 1, "out"]], y: [[0, 0.01], [join + 0.1, 0.01], [join + 0.38, 0, "expoOut"]] } } }));
+      return finish(layers, c, "blur", { ...quick("blur"), shade: { kind: "vignette", amount: 0.55 } });
     },
   },
   {
     id: "ml-title-wipe", name: "Spoken mask wipe", family: "title",
-    about: "A soft mask wipes the words on left to right in step with the voice, a glowing accent edge riding the reveal.",
+    about: "A mask wipes big heavy words on left to right in step with the voice, line by line; an accent rule and an optional sub line settle under the last word.",
     use: "A full sentence worth reading along (a thesis, the stakes); lines up to about 8 words, any section.",
     sample: { text: "The deal that built a city", wordAt: [0.2, 0.5, 0.75, 1.0, 1.2, 1.6] },
     build: (p, k, c) => {
-      const lines = balance(p.text, 22, 2);
-      const size = fitSize(lines, k.fonts.title, 0.66, c.aspect, 0.09, 0.045, true) * c.scale;
-      const y0 = (c.y ?? 0.5) - ((lines.length - 1) * size * 1.15) / 2;
+      // Polished 2026-10-18: the words were thin and small (9% at most) with a full-height bar floating off the line
+      // (its x was an estimate of the type's width); now heavy tight caps up to 12%, no caret, an accent rule to finish.
+      const TR = -0.015;
+      const lines = balance(p.text, 18, 3);
+      const weight = Math.max(800, k.titleWeight);
+      const size = fitSize(lines, k.fonts.title, c.side === "center" ? 0.8 : Math.min(0.58, c.room), c.aspect, 0.13, 0.05, true, TR) * c.scale;
+      const LH = 1.0;
+      const y0 = (c.y ?? 0.5) - ((lines.length - 1) * size * LH) / 2;
       const layers: Lay[] = [];
-      let wi = 0;
+      let wi = 0, last = 0;
+      // Each line is its own layer, anchored to its side (centred: on the middle) so the browser's real widths decide
+      // where it sits; the wipe reveals its own box from the left, word by word, on the voice.
+      const pl = placeX(c.side);
       lines.forEach((line, li) => {
         const words = line.split(/\s+/);
-        const lw = Math.min(0.92, widthOf(line, k.fonts.title, size, c.aspect, true));
-        const left = 0.5 - lw / 2;
-        const keys: unknown[] = [[0, 0]], bar: unknown[] = [[0, 0]];
+        const keys: unknown[] = [[0, 0]];
         let chars = 0;
-        const first = c.wt(wi, 0.15 + li * 0.5, 0.18);
-        keys.push([Math.max(0, first - c.s(0.22)), 0]);
-        bar.push([Math.max(0, first - c.s(0.22)), 0]);
+        const first = c.wt(wi, 0.15 + li * 0.45, 0.16);
+        keys.push([Math.max(0, first - c.s(0.12)), 0]);
         words.forEach((w, j) => {
           chars += w.length + (j < words.length - 1 ? 1 : 0);
           const f = Math.min(1, chars / line.length);
-          const t = c.wt(wi + j, 0.15 + li * 0.5, 0.18) + c.s(0.16);
-          if (keys.length < 15) { keys.push([t, f, "inOut"]); bar.push([t, f * lw, "inOut"]); }
+          const t = c.wt(wi + j, 0.15 + li * 0.45, 0.16) + c.s(0.14);
+          if (keys.length < 15) keys.push([t, f, "out"]);
         });
-        const end = (keys[keys.length - 1] as number[])[0];
+        last = Math.max(last, (keys[keys.length - 1] as number[])[0]);
         wi += words.length;
-        const yy = y0 + li * size * 1.15;
-        layers.push(text({ lines: [line], font: k.fonts.title, size, weight: k.titleWeight, color: k.colors.text, upper: true, tracking: k.titleTracking,
-          x: left, y: yy, anchor: "l", align: "left", extra: { keys: { wipe: keys } } }));
-        layers.push({ kind: "rect", x: left, y: yy, w: 0.0035, h: size * 1.05, fill: k.colors.primary, color: k.colors.primary, mb: 0.6,
-          keys: { x: bar, opacity: [[0, 0], [Math.max(0, first - c.s(0.22)), 1], [end, 1], [end + c.s(0.35), 0, "out"]] } });
+        layers.push(text({ lines: [line], font: k.fonts.title, size, weight, color: k.colors.text, upper: true, tracking: TR, lineH: LH,
+          x: pl.x, y: y0 + li * size * LH, anchor: pl.anchor, align: pl.align, extra: { keys: { wipe: keys } } }));
       });
-      return finish(layers, c, "blur", { shade: { kind: "vignette", amount: 0.45 } });
+      const ry = y0 + (lines.length - 1) * size * LH + size * 0.72;
+      const rw = 0.06;
+      layers.push(accentRule(k, pl.anchor === "l" ? pl.x : pl.anchor === "r" ? pl.x - rw : 0.5 - rw / 2, ry, "l", last + 0.05, rw));
+      if (p.sub) layers.push(text({ lines: [T(p.sub)], font: k.fonts.body, size: Math.max(0.032, size * 0.34), weight: 600, color: k.colors.muted,
+        x: pl.x, y: ry + Math.max(0.045, size * 0.5), anchor: pl.anchor, align: pl.align,
+        extra: { keys: { opacity: [[0, 0], [last + 0.12, 0], [last + 0.4, 1, "out"]], y: [[0, 0.012], [last + 0.12, 0.012], [last + 0.42, 0, "expoOut"]] } } }));
+      return finish(layers, c, "blur", { ...quick("blur"), shade: titleShade(c) });
     },
   },
   {
@@ -469,21 +532,37 @@ const PACK2: MxRecipe[] = [
   },
   {
     id: "ml-title-extrude", name: "Extruded 3D title", family: "title",
-    about: "A heavy title with real depth swings round in perspective and settles, its sides in a deep shade of the kit accent.",
+    about: "A monumental title in tight heavy caps with a shallow, dark extrusion: the words rise on their spoken beats, the block settles from a gentle 3D angle and keeps turning slowly; an accent rule draws out under it.",
     use: "An episode / topic title or a name that deserves a monument (\"Burj Khalifa\", \"The Great Fire\"); one to four words, openings and chapter starts.",
     sample: { text: "The Great Fire" },
     build: (p, k, c) => {
+      // Polished 2026-10-18: it swung 42 degrees in from scale 0.62 with a 12-step extrusion in a muddy accent and
+      // words popping from 1.35x; now a settle from 18 degrees / 0.94 (done by ~1.0 s, the registry's hit), a
+      // 7-step extrusion in a near-black tint of the accent, words rising in 0.3 s, a slow living turn.
+      const TR = -0.03;
       const lines = balance(p.text, 12, 2);
-      const size = fitSize(lines, k.fonts.title, 0.62, c.aspect, 0.17, 0.06, true) * c.scale;
+      const size = fitSize(lines, k.fonts.title, 0.7, c.aspect, 0.19, 0.06, true, TR) * c.scale;
       const dir = c.r(2) > 0.5 ? 1 : -1;
-      return finish([
-        text({ lines, font: k.fonts.title, size, weight: 900, color: k.colors.text, upper: true, tracking: -0.01, x: 0.5, y: c.y ?? 0.48, anchor: "c", align: "center",
-          lineH: 0.95, emph: lines.length > 1 || c.words.length > 2 ? [c.words.length - 1] : [], emphColor: k.colors.primary,
-          animator: wordAnim(c, { opacity: 0, scale: 1.35, blur: 6 }, 0.15, 0.12, 0.6, "expoOut"),
-          extra: { extrude: 12, extrudeColor: mix(k.colors.primary, -0.55), shadow: "none",
-            keys: { rotX: [[0, 38], [c.s(1.2), 9, "expoOut"], [p.dur, 5, "linear"]], rotY: [[0, -42 * dir], [c.s(1.3), -11 * dir, "expoOut"], [p.dur, 7 * dir, "linear"]],
-              scale: [[0, 0.62], [c.s(1.2), 1, "expoOut"], [p.dur, 1.04, "linear"]], blur: [[0, 10], [c.s(0.5), 0, "out"]] } } }),
-      ], c, "scale", { persp: 900, shade: { kind: "vignette", amount: 0.5 } });
+      const y = c.y ?? 0.47;
+      const lastW = c.wt(c.words.length - 1, 0.1, 0.12);
+      const bh = lines.length * size * 0.9;
+      const lw = Math.min(0.9, Math.max(...lines.map((l) => widthOf(l, k.fonts.title, size, c.aspect, true, TR))));
+      const layers: Lay[] = [
+        text({ lines, font: k.fonts.title, size, weight: 900, color: k.colors.text, upper: true, tracking: TR, x: 0.5, y, anchor: "c", align: "center",
+          lineH: 0.9, emph: lines.length > 1 || c.words.length > 2 ? [c.words.length - 1] : [], emphColor: k.colors.primary,
+          animator: wordAnim(c, { opacity: 0, y: 0.3, blur: 4 }, 0.1, 0.12, 0.3, "expoOut"),
+          extra: { extrude: 7, extrudeColor: mix(k.colors.primary, -0.8), shadow: "soft",
+            keys: { rotX: [[0, 18], [c.s(1.0), 6, "expoOut"], [p.dur, 3, "linear"]], rotY: [[0, -18 * dir], [c.s(1.0), -6 * dir, "expoOut"], [p.dur, 4 * dir, "linear"]],
+              scale: [[0, 0.94], [c.s(1.0), 1, "expoOut"], [p.dur, 1.035, "linear"]] } } }),
+        // the rule grows out from the centre (sx), under the block
+        { kind: "rect", x: 0.5, y: y + bh / 2 + size * 0.22, w: Math.min(0.16, lw * 0.35), h: Math.max(0.005, size * 0.045), fill: k.colors.primary, color: k.colors.primary,
+          keys: { sx: [[0, 0], [lastW + 0.15, 0], [lastW + 0.45, 1, "expoOut"]] } },
+      ];
+      if (p.kicker) layers.push(text({ lines: [T(p.kicker)], font: k.fonts.label, size: Math.max(0.03, size * 0.2), weight: 700, color: k.colors.muted, upper: true,
+        tracking: 0.16, x: 0.5, y: y - bh / 2 - size * 0.3, anchor: "c", align: "center", extra: { keys: { opacity: [[0, 0], [c.s(0.2), 1, "out"]], y: [[0, 0.01], [c.s(0.3), 0, "expoOut"]] } } }));
+      if (p.sub) layers.push(text({ lines: [T(p.sub)], font: k.fonts.body, size: Math.max(0.032, size * 0.22), weight: 600, color: k.colors.text,
+        x: 0.5, y: y + bh / 2 + size * 0.55, anchor: "c", align: "center", extra: { keys: { opacity: [[0, 0], [lastW + 0.3, 0], [lastW + 0.55, 1, "out"]] } } }));
+      return finish(layers, c, "scale", { ...quick("scale"), persp: 1100, shade: { kind: "full", amount: 0.34 } });
     },
   },
   {
