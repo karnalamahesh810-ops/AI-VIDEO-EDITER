@@ -224,3 +224,87 @@ class BrandKitTests(unittest.TestCase):
         g = smart_editor.ground_design({"kind": "number", "text": "feet tall", "value": 867}, doc["scenes"], 0)
         self.assertEqual(g["value"], 867)
         self.assertIsNone(smart_editor.ground_design({"kind": "number", "text": "feet", "value": 900}, doc["scenes"], 0))
+
+
+class RestoreTests(unittest.TestCase):
+    def test_figures_and_pictures_come_back_trimmed_where_free(self):
+        doc = _doc()
+        s3 = doc["scenes"][3]                                         # "Go back to September 24th 1906 when ..."
+        yr = {"type": "motion", "variant": "kt-year", "template": "KT_YEAR", "text": "1906",
+              "startFrame": s3["startFrame"], "durationInFrames": 150}
+        dossier = {"type": "motion", "variant": "pf-dossier", "template": "LIB_PF_DOSSIER", "text": "Roosevelt",
+                   "startFrame": doc["scenes"][1]["startFrame"] + 3, "durationInFrames": 120}
+        word = {"type": "motion", "variant": "kt-keyword", "template": "KT_KEYWORD", "text": "layers",
+                "startFrame": doc["scenes"][4]["startFrame"], "durationInFrames": 90}
+        doc["overlays"] = [yr, dossier, word]
+        late = doc["scenes"][3]["words"][-2]                          # "signed": 2.1 s after the year look starts
+
+        def answer(rows, looks, story, recent, hook, budget):
+            return {"graphics": [{"beat": 3, "at": "signed", "kind": "statement", "text": "Roosevelt signed it"},
+                                 {"beat": 1, "at": "summit", "kind": "label", "text": "summit sensor"}],
+                    "keep": [], "transitions": []}
+        with mock.patch.object(smart_editor, "_direct_chunk", side_effect=answer):
+            rep = smart_editor.edit(doc, {"title": "t"}, critic=False)
+        self.assertNotIn("error", rep)
+        ovs = doc["overlays"]
+        back = [o for o in ovs if o.get("variant") == "kt-year"]
+        self.assertEqual(len(back), 1)                                # the year came back, cut before "signed"
+        self.assertLessEqual(back[0]["startFrame"] + back[0]["durationInFrames"],
+                             round((late["start"] - smart_editor.MIN_GAP) * doc["fps"]) + 1)
+        self.assertGreaterEqual(back[0]["durationInFrames"], smart_editor.RESTORE_MIN_S * doc["fps"] - 1)
+        self.assertFalse(any(o.get("variant") == "pf-dossier" for o in ovs))   # its start sits under a design
+        self.assertFalse(any(o.get("variant") == "kt-keyword" for o in ovs))   # words only: replaced
+        self.assertEqual(rep["restoredLooks"], 1)
+        self.assertEqual(rep["trimmedLooks"], 1)
+        ends = sorted((o["startFrame"], o["startFrame"] + o["durationInFrames"]) for o in ovs)
+        for (a0, a1), (b0, b1) in zip(ends, ends[1:]):
+            self.assertLessEqual(a1, b0)                              # still one at a time
+
+
+class PersonMarkTests(unittest.TestCase):
+    """2026-10-18 proof: a circle on "one man carrying tires" in a slum photo was labelled GEORGE OBAMA."""
+    STORY = {"cast": [{"name": "Barack Obama"}, {"name": "George Obama"}, {"name": "Malik Obama"},
+                      {"name": "Barack Obama Sr."}]}
+
+    def _d(self, label, text="GEORGE OBAMA"):
+        return {"kind": "spot", "text": text, "highlight": {"thing": "one man carrying tires", "mark": "circle",
+                                                            "label": label}}
+
+    def test_stranger_is_not_named(self):
+        slum = {"media": {"type": "image", "contentDescription": "A crowd of men walks on a dirt road in a slum, "
+                                                                 "with one man carrying tires and pointing.",
+                          "attribution": "The New Humanitarian"}}
+        self.assertFalse(smart_editor.person_mark_ok(self._d("GEORGE"), slum, self.STORY))
+
+    def test_named_shot_and_things_pass(self):
+        shot = {"media": {"type": "image", "contentDescription": "George Obama stands outside his home in Nairobi"}}
+        self.assertTrue(smart_editor.person_mark_ok(self._d("GEORGE"), shot, self.STORY))
+        thing = {"kind": "spot", "text": "TAX EXEMPT STATUS", "highlight": {"thing": "the letter", "label": "IRS"}}
+        self.assertTrue(smart_editor.person_mark_ok(thing, {"media": {"contentDescription": "a typed letter"}},
+                                                    self.STORY))
+        self.assertTrue(smart_editor.person_mark_ok(self._d("GEORGE"), shot, {}))   # no cast: nothing to check
+
+    def test_edit_drops_the_mark_keeps_the_graphic(self):
+        doc = _doc()
+        doc["scenes"][1]["media"] = {"type": "image", "url": "", "contentDescription": "a man on a dirt road"}
+        doc["scenes"][1]["text"] = "On the summit George sits bolted to the rock."
+        for w, new in zip(doc["scenes"][1]["words"], doc["scenes"][1]["text"].split()):
+            w["text"] = new
+        story = {"title": "t", "cast": [{"name": "George Obama"}, {"name": "Malik Obama"}]}
+
+        def answer(rows, looks, story_, recent, hook, budget):
+            return {"graphics": [{"beat": 1, "at": "George", "kind": "spot", "text": "George",
+                                  "highlight": {"thing": "a man", "mark": "circle", "label": "George"},
+                                  "camera": "push-to-point"}], "keep": [], "transitions": []}
+        anchor = mock.Mock(return_value={"x": 0.5, "y": 0.5, "r": 0.1})
+        with mock.patch.object(smart_editor, "_direct_chunk", side_effect=answer), \
+                mock.patch.object(smart_editor, "_anchor", anchor):
+            rep = smart_editor.edit(doc, story, critic=False)
+        self.assertNotIn("error", rep)
+        self.assertEqual(rep["marks"], 0)
+        anchor.assert_not_called()                                    # no vision call spent on it either
+        self.assertEqual(rep["rejected"].get("mark names a person the shot is not known to show"), 1)
+        smart = [o for o in doc["overlays"] if o.get("variant") == "smart-spec"]
+        self.assertEqual(len(smart), 1)
+        self.assertNotIn("highlight", smart[0]["smart"]["design"])
+        self.assertNotEqual(smart[0]["smart"]["design"].get("camera"), "push-to-point")

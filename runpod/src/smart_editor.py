@@ -60,6 +60,11 @@ TRANSITIONS = ("whip-pan", "zoom-punch", "light-sweep", "soft-whip", "blur-disso
 _TEXT_ONLY = re.compile(r"^(kt-(keyword|chip|statement|year|date|number|percent|quote|question|name|word|phrase|label|"
                         r"stamp|money|price)|pr-number-reveal|ed-|tx-|bt-)")
 
+# Words-only looks that state a figure the narration says (a date, a year, a number): the director's design
+# replaces them where it made one, otherwise they come back where there is room (never dropped for nothing).
+_FIGURES = re.compile(r"^(kt-(year|date|number|percent|money|price)|pr-number-reveal)")
+RESTORE_MIN_S = 2.0         # a planner look comes back only when this much of it fits before the next graphic
+
 _PRICES = {  # USD per token (OpenRouter list prices, 2026-10): only for the pre-call budget estimate
     "google/gemini-3.8-flash": (0.75e-6, 3.75e-6), "openai/gpt-5.4-mini": (0.75e-6, 4.5e-6),
 }
@@ -546,6 +551,44 @@ def _anchor(scene: dict, t_in: float, thing: str, context: str) -> Optional[dict
 
 
 # ------------------------------------------------------------------ the pass
+def _name_tokens(name: str) -> List[str]:
+    return [t for t in (_norm(w) for w in re.split(r"[\s\-]+", str(name or ""))) if len(t) >= 3 and t not in ("sr", "jr")]
+
+
+def person_mark_ok(d: dict, scene: dict, story: dict) -> bool:
+    """False when a mark's label (or the graphic's own words) names a person of the story and the shot's own
+    metadata (what the vision judge saw, its title / attribution) never names that person: the circle would
+    point at a stranger and call him by a real name."""
+    hl = d.get("highlight") if isinstance(d.get("highlight"), dict) else {}
+    said = " ".join(str(v) for v in (hl.get("label"), d.get("text"), d.get("sub")) if v)
+    said_toks = set(_norm(w) for w in re.split(r"[\s\-]+", said))
+    cast = [c for c in (story.get("cast") or []) if isinstance(c, dict) and c.get("name")]
+    if not cast or not said_toks:
+        return True
+    counts: Dict[str, int] = {}
+    for c in cast:
+        for t in set(_name_tokens(c["name"])):
+            counts[t] = counts.get(t, 0) + 1
+    m = scene.get("media") or {}
+    meta = " ".join(str(m.get(k) or "") for k in ("contentDescription", "attribution", "title", "description",
+                                                  "caption", "label"))
+    meta_toks = set(_norm(w) for w in re.split(r"[\s\-]+", meta))
+    for c in cast:
+        toks = _name_tokens(c["name"])
+        if not toks or not (set(toks) & said_toks):
+            continue
+        own = [t for t in toks if counts.get(t, 0) == 1]             # "george", not the family name they share
+        if own and not (set(own) & said_toks):
+            continue                                                  # only a shared name was said
+        if not own:
+            own = toks                                                # Barack Obama vs Barack Obama Sr.:
+            if not set(own) <= said_toks:                             # named only by the whole name
+                continue
+        if not all(t in meta_toks for t in own):
+            return False
+    return True
+
+
 def _overlay_window(ov: dict, fps: float) -> Tuple[float, float]:
     return ov["startFrame"] / fps, (ov["startFrame"] + ov["durationInFrames"]) / fps
 
@@ -677,6 +720,8 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
             words_only = False                  # the job's own title card
         if not in_covered(t) or (not words_only and k in keep):
             kept.append(ov)
+        elif words_only and _FIGURES.match(str(ov.get("variant") or "")):
+            maybe.append(ov)                    # a date / year / figure the narration says: back where there is room
         elif words_only:
             dropped += 1
         else:
@@ -719,12 +764,26 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
         accepted.append(x)
         last_start = t0
 
-    for ov in maybe:
+    # The facts, pictures and figures the director did not redesign come back wherever their own start is free,
+    # cut short before the next graphic when at least RESTORE_MIN_S of them fits (2026-10-18 proof: the
+    # director's graphics had pushed out the "2011" and "1958 / 1960" dates and the who-is file card).
+    taken = [(x["t0"], x["t0"] + x["dur"]) for x in accepted] + list(busy)
+    restored = trimmed = 0
+    for ov in sorted(maybe, key=lambda o: o.get("startFrame", 0)):
         a, b = _overlay_window(ov, fps)
-        if any(x["t0"] - MIN_GAP < b and a < x["t0"] + x["dur"] + MIN_GAP for x in accepted):
+        if any(s - MIN_GAP < a < e + MIN_GAP for s, e in taken):
             dropped += 1
-        else:
-            kept.append(ov)
+            continue
+        end = min([b] + [s - MIN_GAP for s, e in taken if s >= a])
+        if end - a < RESTORE_MIN_S:
+            dropped += 1
+            continue
+        if end < b - 1e-6:
+            ov["durationInFrames"] = int(round((end - a) * fps))
+            trimmed += 1
+        kept.append(ov)
+        taken.append((a, end))
+        restored += 1
     kit_theme = {"royal": "gold", "noir": "gold", "bulletin": "red", "atlas": "teal"}.get(ctx["kit"])
     for ov in kept:
         if kit_theme and ov.get("type") != "title":
@@ -732,6 +791,17 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
 
     # 4. ground the marks (one small vision call each, spaced out)
     marks_wanted = [x for x in accepted if isinstance(x["d"].get("highlight"), dict) and x["d"]["highlight"].get("thing")]
+    for x in list(marks_wanted):
+        sc = next((s for s in scenes if s["startFrame"] <= x["t0"] * fps < s["startFrame"] + s["durationInFrames"]),
+                  scenes[min(x["beat"], n - 1)])
+        if not person_mark_ok(x["d"], sc, story):
+            # A circle on "one man carrying tires" labelled GEORGE OBAMA names a stranger (2026-10-18 proof):
+            # a mark that names a person goes only on a shot whose own metadata names that person.
+            x["d"].pop("highlight", None)
+            if x["d"].get("camera") == "push-to-point":
+                x["d"]["camera"] = "push-in"
+            marks_wanted.remove(x)
+            reject("mark names a person the shot is not known to show")
     max_marks = max(1, int(video_s / max(5.0, config.SMART_EDITOR_MARK_EVERY)) + 1)
     chosen, last_mark = [], -99.0
     for x in marks_wanted:
@@ -824,7 +894,7 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
     doc["overlays"] = sorted(kept + new_ovs, key=lambda o: o["startFrame"])
     doc["sfx"] = sorted(list(doc.get("sfx") or []) + sfx_rows, key=lambda r: r.get("startFrame", 0))
     report = {"model": sorted(m for m in models if m), "designs": len(designs), "graphics": len(new_ovs),
-              "keptLooks": len(kept), "droppedLooks": dropped, "marks": marks, "marksAsked": len(chosen),
+              "keptLooks": len(kept), "droppedLooks": dropped, "restoredLooks": restored, "trimmedLooks": trimmed, "marks": marks, "marksAsked": len(chosen),
               "sounds": len(sfx_rows), "transitions": n_tr, "rejected": rejected,
               "varied": sum(1 for x in accepted if x.get("varied")), "ungrounded": samples[:8]}
 
