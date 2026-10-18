@@ -190,6 +190,11 @@ def _compile_design(d: dict, timing: dict, ctx: dict) -> Optional[dict]:
     layout = _pick(d.get("layout"), _LAYOUT, "left-third")
     typ = d.get("type") if isinstance(d.get("type"), dict) else {}
     font = _pick(typ.get("font"), FONTS, "grotesk")
+    if ctx.get("kit"):
+        # Laid out in the face it will be drawn in: the kit's title face (apply_kit keeps two fonts a video).
+        from . import brandkits
+        kf = (brandkits.get(ctx["kit"]).get("fonts") or {}).get("title")
+        font = kf if kf in FONTS else font
     weight = int(_f(typ.get("weight"), 400, 900, 800) // 100 * 100)
     case = _pick(typ.get("case"), ("upper", "title", "lower", "as-is"), "as-is")
     tracking = {"tight": -0.02, "normal": 0.0, "wide": 0.08}.get(str(typ.get("tracking") or ""), 0.0)
@@ -357,7 +362,8 @@ def _compile_design(d: dict, timing: dict, ctx: dict) -> Optional[dict]:
         if not txt:
             return None
         if kind == "quote":
-            fnt = "serif-italic" if font not in ("serif", "serif-italic") else font
+            if not ctx.get("kit"):
+                fnt = "serif-italic" if font not in ("serif", "serif-italic") else font
             if not txt.startswith("“"):
                 txt = f"“{txt}”"
         L = text_layer(txt, y, size, weight, fnt, anim_, 0.0, emph_=emph)
@@ -523,6 +529,11 @@ def apply_kit(spec: Optional[dict], ctx: dict) -> Optional[dict]:
     spec["kit"] = ctx["kit"]
     accent = ctx.get("_accentHex")
     first_main = True
+    # TWO fonts a video (2026-10-18 proof: six families in 100 s read as random, not branded): the kit's title
+    # face for the headline (and figures, when the kit's number face is one of the two), its label face for
+    # everything else - subs, kickers, pins, second lines. A design's own font choice never adds a third.
+    fonts = kit.get("fonts") or {}
+    number_font = "$number" if fonts.get("number") in (fonts.get("title"), fonts.get("label")) else "$title"
     for L in spec.get("layers") or []:
         for key in ("color", "fill", "emphColor"):
             v = L.get(key)
@@ -534,15 +545,24 @@ def apply_kit(spec: Optional[dict], ctx: dict) -> Optional[dict]:
                 L[key] = "$primary"
         if L["kind"] in ("text", "counter"):
             if L["kind"] == "counter":
-                L["font"] = "$number"
-            elif first_main and not (ctx.get("_kind") == "quote" and L.get("font") in ("serif", "serif-italic")):
+                L["font"] = number_font
+            elif first_main:
                 L["font"] = "$title"
                 L["weight"] = kit.get("titleWeight", 800)
+                L.pop("italic", None)
+            else:
+                L["font"] = "$label"
             first_main = False
             sub = L.get("sub")
             if isinstance(sub, dict):
                 sub["color"] = "$muted" if not sub.get("upper") else "$text"
-                sub["font"] = "$label" if sub.get("upper") else "$body"
+                sub["font"] = "$label"
+        elif "font" in L:
+            L["font"] = "$label"            # pins, tags, list rows ...
+        for key in ("kicker", "label"):
+            if isinstance(L.get(key), dict) and "font" in L[key]:
+                L[key]["font"] = "$label"
+        if L["kind"] in ("text", "counter"):
             k = L.get("kicker")
             if isinstance(k, dict):
                 k.update(color="$pillText", bg="$pillBg")
