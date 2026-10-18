@@ -1361,11 +1361,18 @@ AUTO_MAP_GAP = float(os.getenv("AUTO_MAP_GAP", "15"))
 # list) - never a guessed source, never a guessed year; a figure with no named source gets no tag. Off by default
 # until the owner has approved the look from its stills; a job turns it on with config {"SOURCE_TAGS": true}.
 SOURCE_TAGS = _flag("SOURCE_TAGS", False)
-# At most one source tag per SOURCE_TAG_GAP seconds, none in the first SOURCE_TAG_FIRST_SECONDS of the video,
-# each on screen about SOURCE_TAG_SECONDS.
-SOURCE_TAG_GAP = float(os.getenv("SOURCE_TAG_GAP", "30"))
+# The same switch under the feature's own name (docs/on-screen-sources.md): either one turns the tags on. A job's
+# own field {"on_screen_sources": false} turns them off for that job whatever the flags say (true turns them on).
+ON_SCREEN_SOURCES = _flag("ON_SCREEN_SOURCES", False)
+# At most one source tag per SOURCE_TAG_GAP seconds, none in the first SOURCE_TAG_FIRST_SECONDS of the video (the
+# hook), each on screen about SOURCE_TAG_SECONDS (never under 3 s: treatments.SOURCE_TAG_LEAST).
+SOURCE_TAG_GAP = float(os.getenv("SOURCE_TAG_GAP", "45"))
 SOURCE_TAG_FIRST_SECONDS = float(os.getenv("SOURCE_TAG_FIRST_SECONDS", "5"))
-SOURCE_TAG_SECONDS = float(os.getenv("SOURCE_TAG_SECONDS", "3"))
+SOURCE_TAG_SECONDS = float(os.getenv("SOURCE_TAG_SECONDS", "4"))
+# A fact's graphic (its number or date look) is up when the source is said: the tag lands the moment that graphic
+# leaves - never before its word, never two graphics at once - when that is at most this many seconds after the
+# source (or the figure) was said; later than that it is left out.
+SOURCE_TAG_FOLLOW_SECONDS = float(os.getenv("SOURCE_TAG_FOLLOW_SECONDS", "5"))
 # Real data graphics (src/datagraphics.py, src/realdata.py; the owner, 2026-10-05): a line that states a
 # measurable water or weather fact - a reservoir's level or how full it is, a river's flow, the share of a state in
 # drought, a temperature record - gets a chart of the REAL, current numbers from the official source (USBR, USGS,

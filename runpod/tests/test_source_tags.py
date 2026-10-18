@@ -7,8 +7,9 @@ its source gets "SOURCE: USBR, 2024" in a low corner - and only such a line.
     an agency doing something, a person, a compact, a figure with no source do not; the year only when said of
     the source (or given by the brief's own list); "British Geological Survey" is not the USGS;
   * the planner: flag off changes nothing (and a script that names nothing plans the same with it on); a tag
-    lands on the name as it is said, about 3 s, never in the first 5 s, one per 30 s, never while another graphic
-    is up, never on an animation scene, silent, no treatment of its own, and never changes the other overlays;
+    lands on the name as it is said, about 4 s, never in the first 5 s, one per 45 s, never while another graphic
+    is up (it lands as that graphic leaves, or not at all), never on an animation scene, silent, no treatment of
+    its own, and never changes the other overlays (tests/test_on_screen_sources.py: every niche, the research);
   * the look: registered "autoPick": false, silent, drawn by the renderer;
   * settle: a face under the tag's corner moves it to the other corner or leaves it out; a scene that became a
     full-screen graphic loses its tag; faces are read from media.focus or found in the file.
@@ -268,9 +269,9 @@ class ThePlanner(unittest.TestCase):
         for (_a0, a1), (b0, _b1) in zip(spans, spans[1:]):
             self.assertLess(a1 + treatments.BREATH * FPS - 1, b0 + 1e-6, spans)
 
-    def test_lands_on_the_name_as_said_for_three_seconds_with_the_year_said(self):
+    def test_lands_on_the_name_as_said_for_its_seconds_with_the_year_said(self):
         lines = [PLAIN, PLAIN, PLAIN, PLAIN, PLAIN, USGS, PLAIN, PLAIN, PLAIN, PLAIN, PLAIN, PLAIN, PLAIN, NOAA, PLAIN]
-        with mock.patch.object(config, "SOURCE_TAGS", True):
+        with mock.patch.object(config, "SOURCE_TAGS", True), mock.patch.object(config, "SOURCE_TAG_GAP", 30.0):
             got = tags(_bare(lines))
         self.assertEqual(len(got), 2)
         # "USGS" opens line 5 at 25.0 s: in on the word (PRE_ROLL early at most), about 3 s, low left, no sound
@@ -289,7 +290,7 @@ class ThePlanner(unittest.TestCase):
         word = 13 * SECS + 2 * 0.3
         self.assertGreaterEqual(second["startFrame"] / FPS, word - treatments.PRE_ROLL_FRAMES / FPS - 1e-6)
         self.assertLess(second["startFrame"] / FPS, word + 0.3)
-        with mock.patch.object(config, "SOURCE_TAGS", True):
+        with mock.patch.object(config, "SOURCE_TAGS", True), mock.patch.object(config, "SOURCE_TAG_GAP", 30.0):
             plan = _bare(lines)
         self.assertEqual([r["text"] for r in plan["sources"]], ["SOURCE: USGS", "SOURCE: NOAA, 2024"])
         self.assertEqual((plan["sources"][1]["said"], plan["sources"][1]["line"]), ("NOAA", 13))
@@ -320,19 +321,36 @@ class ThePlanner(unittest.TestCase):
 
     def test_the_tag_waits_for_a_free_screen_and_is_left_out_when_it_cannot_be_read(self):
         lines = [PLAIN, PLAIN, PLAIN, PLAIN, PLAIN, USGS, PLAIN, PLAIN]
+        # "USGS" is said at 25.0 s
         with mock.patch.object(config, "SOURCE_TAGS", True):
-            # the job's title card holds 24.5 - 26.5 s: the tag at 25 s would land on it
+            # a card holds 24.5 - 26.5 s: the tag never lands on it - it lands as the card leaves (a breath after)
             held = _bare(lines, reserved=[(24.5, 26.5)])
-            # a card from 26 s: the tag is cut to the breath before it, so it lasts only 0.7 s: left out
-            short = _bare(lines, reserved=[(26.0, 28.0)])
-            # a card from 27.5 s: the tag gives way to it, 2.2 s on screen
-            cut = _bare(lines, reserved=[(27.5, 29.0)])
-        self.assertEqual(tags(held), [])
-        self.assertEqual(tags(short), [])
+            # a card that lands 1 s after the word: the tag could not be read before it - it follows the card
+            soon = _bare(lines, reserved=[(26.0, 28.0)])
+            # a card until 31 s: the screen clears 6.3 s after the word - too late to belong to it: left out
+            late = _bare(lines, reserved=[(24.5, 31.0)])
+            # two cards with 2.4 s free between them: never squeezed in; after the second is too late: left out
+            squeezed = _bare(lines, reserved=[(24.5, 26.5), (29.5, 31.0)])
+            # two cards with 3.1 s between them: in after the first, cut short a breath before the second
+            cut = _bare(lines, reserved=[(24.5, 26.5), (30.2, 31.0)])
+        got = tags(held)
+        self.assertEqual(len(got), 1)
+        self.assertAlmostEqual(got[0]["startFrame"] / FPS, 26.5 + treatments.BREATH, delta=1.0 / FPS)
+        self.assertAlmostEqual(got[0]["durationInFrames"] / FPS, config.SOURCE_TAG_SECONDS, delta=0.05)
+        self.assertTrue(held["sources"][0]["afterGraphic"])
+        self.assertAlmostEqual(held["sources"][0]["saidAt"], 25.0, delta=0.01)
+        got = tags(soon)
+        self.assertEqual(len(got), 1)
+        self.assertAlmostEqual(got[0]["startFrame"] / FPS, 28.0 + treatments.BREATH, delta=1.0 / FPS)
+        self.assertEqual(tags(late), [])
+        self.assertEqual(tags(squeezed), [])
         got = tags(cut)
         self.assertEqual(len(got), 1)
-        self.assertLessEqual((got[0]["startFrame"] + got[0]["durationInFrames"]) / FPS, 27.5 - treatments.BREATH + 1e-6)
+        self.assertLessEqual((got[0]["startFrame"] + got[0]["durationInFrames"]) / FPS, 30.2 - treatments.BREATH + 1e-6)
         self.assertGreaterEqual(got[0]["durationInFrames"] / FPS, treatments.SOURCE_TAG_LEAST - 0.05)
+        # never before its word, whatever the cards do
+        for plan in (held, soon, cut):
+            self.assertGreaterEqual(tags(plan)[0]["startFrame"] / FPS, 25.0 - treatments.PRE_ROLL_FRAMES / FPS - 1e-6)
 
     def test_the_brand_watermarks_corner_is_left_to_it(self):
         lines = [PLAIN, PLAIN, PLAIN, PLAIN, PLAIN, USGS, PLAIN, PLAIN]
