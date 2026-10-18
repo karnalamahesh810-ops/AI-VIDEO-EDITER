@@ -23,9 +23,14 @@ class _Cut(StorageError):
     """A transfer ended by its own limit (the caller's stop, its time cap): never retried."""
 
 
+class NotAPhoto(StorageError):
+    """The link or the answer is not a photograph (an SVG drawing): final - asking again,
+    with other headers or through another route, returns the same drawing."""
+
+
 def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None, proxy: str = "",
              attempts: int = 3, connect_timeout: float = 20.0, max_seconds: float = 0.0,
-             stop=None, max_bytes: int = 0) -> str:
+             stop=None, max_bytes: int = 0, refuse_types: tuple = ()) -> str:
     """
     Stream any http(s) URL to disk. Returns the local path.
 
@@ -45,6 +50,8 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
     as its host kept the connection alive. Both are read every 64 KB.
     `max_bytes` (0 = none): a file bigger than this is not fetched (its stated
     length) or is cut off when it passes it (an archive's whole film).
+    `refuse_types`: Content-Type prefixes (e.g. "image/svg+xml") that end the
+    download at the headers with NotAPhoto, before any body is read.
     """
     if os.path.isfile(url):
         return url
@@ -70,6 +77,9 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
                 content_type = (r.headers.get("Content-Type") or "").lower()
                 if "text/html" in content_type:
                     raise StorageError(f"download returned an HTML error page ({r.status_code})")
+                if refuse_types and any(content_type.startswith(t) for t in refuse_types):
+                    raise NotAPhoto(f"not a photo (svg): the site sent {content_type.split(';')[0]}"
+                                    if "svg" in content_type else f"not a photo: the site sent {content_type}")
                 if max_bytes and max_bytes > 0 and expected > max_bytes:
                     raise _Cut(f"file too big to fetch whole ({expected // (1 << 20)} MB)")
                 written = 0
@@ -105,6 +115,8 @@ def download(url: str, dest_path: str, timeout: int = 180, headers: dict = None,
                 retryable = False      # a web page where an image was expected
             if isinstance(e, _Cut):
                 retryable = False      # its own time is up: asking again cannot help
+            if isinstance(e, NotAPhoto):
+                raise                  # a drawing, not a photo: final, and said as such
             if attempt == 3 or not retryable:
                 break
             wait = 0.5 * attempt

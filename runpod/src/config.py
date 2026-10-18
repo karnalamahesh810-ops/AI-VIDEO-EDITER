@@ -622,6 +622,32 @@ ALLOW_WEB_IMAGES = _flag("ALLOW_WEB_IMAGES", True)
 # no limit at all: each 20 s read timeout restarts with every byte.
 PICTURE_CONNECT_SECONDS = float(os.getenv("PICTURE_CONNECT_SECONDS", "10"))
 PICTURE_FETCH_SECONDS = float(os.getenv("PICTURE_FETCH_SECONDS", "60"))
+# Picture download yield (docs/sourcing-yield-2026-10-18.md). The owner's three
+# renders of 2026-10-12/13 logged 1,441 picture/clip downloads ok against ~1,000
+# failed; these switch off each fix on its own.
+# PICTURE_SKIP_SVG: a picture whose link says SVG (".svg", "format=svg", an SVG
+# data link) is never downloaded, and a download whose answer says image/svg+xml
+# ends at the headers - 149 "not a photo (svg)" downloads were final anyway.
+# PICTURE_BAD_REQUEST_FINAL: a 400 for both the plain and the browser ask is
+# final like a 404 (no Chrome-fingerprint or residential try), and never counts
+# as the site refusing (Yandex's picture host answered 400 for a link without a
+# valid size and was then skipped for every picture for half an hour).
+# PICTURE_ALTERNATES: when a picture cannot be had, up to PICTURE_ALTERNATES_MAX
+# other copies of the same picture the search gave (Yandex's duplicates, a
+# Yandex link with a valid size) are asked before giving up.
+# PICTURE_SECOND_ROUTE: the residential try that failed on the route itself (a
+# proxy error, a timeout, an HTML page, 407/422/5xx) is made once more through a
+# different route; an origin's 400/403/404/410/429 is not.
+PICTURE_SKIP_SVG = _flag("PICTURE_SKIP_SVG", True)
+PICTURE_BAD_REQUEST_FINAL = _flag("PICTURE_BAD_REQUEST_FINAL", True)
+PICTURE_ALTERNATES = _flag("PICTURE_ALTERNATES", True)
+PICTURE_ALTERNATES_MAX = int(os.getenv("PICTURE_ALTERNATES_MAX", "2"))
+PICTURE_SECOND_ROUTE = _flag("PICTURE_SECOND_ROUTE", True)
+# YANDEX_RESULT_DETAILS: each Yandex result's own record on the results page is
+# read for its size, page, Yandex's thumbnail and its duplicates (other sites'
+# copies of the same picture), not only the original's link; a Yandex-hosted
+# link without a valid size gets one ("orig", n=13). Off: links only, as before.
+YANDEX_RESULT_DETAILS = _flag("YANDEX_RESULT_DETAILS", True)
 # Candidate pictures of one search downloaded at once (media._pick_unused): the
 # next ones arrive while one is checked and judged, in the same order and with
 # the same checks. Downloads were ~70% of a picture search's thread time

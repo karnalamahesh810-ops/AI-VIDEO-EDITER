@@ -105,6 +105,10 @@ class MediaAsset:
     # 403s and HTML pages, 2026-10-02).
     page_url: str = ""
     thumbnail: str = ""
+    # Other links to the very same picture the search gave (Yandex's duplicates on
+    # other sites, biggest first), asked when the picture's own link fails
+    # (imagefix.fetch, PICTURE_ALTERNATES): 216 Yandex originals were a 404 on 2026-10-12/13.
+    alt_urls: List[str] = field(default_factory=list)
     # The combined score that chose this clip over the others that passed
     # (src/candidates.py), its parts, and a summary of the pool it came from.
     final_score: Optional[float] = None
@@ -327,6 +331,9 @@ def search_web_images(query: str, limit: int = 6, full_screen: bool = True) -> L
         thumb = row[5] if len(row) > 5 else ""
         if not url or not url.startswith("http"):
             continue
+        # A drawing (an SVG logo, map or icon) is never a photo: not offered (PICTURE_SKIP_SVG).
+        if config.PICTURE_SKIP_SVG and _imagefix.not_a_photo_url(url):
+            continue
         # A stock agency's preview (Alamy, Getty, iStock, Shutterstock...): its
         # stamp and credit bar, and its licence, never on a timeline (src/stockblock.py).
         why = _stockblock.reason(url, str(page or ""), str(thumb or ""), str(title or ""))
@@ -410,6 +417,110 @@ def _serpapi_images(engine: str, query: str) -> List[tuple]:
         return []
 
 
+def _json_unescape(s: str) -> str:
+    """A link as found inside a JSON string (\\u0026, \\/) as the link itself; unchanged when it has no escapes."""
+    if "\\" not in (s or ""):
+        return s
+    try:
+        return json.loads('"' + s + '"')
+    except ValueError:
+        return s
+
+
+def _object_start(text: str, pos: int, reach: int = 20000) -> int:
+    """Where the innermost JSON object holding text[pos] begins ({), or -1."""
+    depth = 0
+    for i in range(pos - 1, max(-1, pos - reach - 1), -1):
+        c = text[i]
+        if c == "}":
+            depth += 1
+        elif c == "{":
+            if depth == 0:
+                return i
+            depth -= 1
+    return -1
+
+
+_YANDEX_DUP_KEYS = ("dups", "duplicates", "preview", "previews", "sizes")
+_YANDEX_URL_KEYS = ("url", "origUrl", "img_url", "imgUrl", "src")
+
+
+def _yandex_record(obj: dict) -> dict:
+    """What one Yandex result's record says beyond its original's link: its size, its
+    page, Yandex's own thumbnail and its duplicates (other sites' copies, biggest first)."""
+    main = str(obj.get("origUrl") or "")
+    out = {"w": 0, "h": 0, "page": "", "thumb": "", "alts": []}
+    for wk, hk in (("origWidth", "origHeight"), ("width", "height"), ("w", "h")):
+        try:
+            w, h = int(obj.get(wk) or 0), int(obj.get(hk) or 0)
+        except (TypeError, ValueError):
+            w, h = 0, 0
+        if w and h:
+            out["w"], out["h"] = w, h
+            break
+    snippet = obj.get("snippet") if isinstance(obj.get("snippet"), dict) else {}
+    page = snippet.get("url") or obj.get("pageUrl") or obj.get("sourceUrl") or ""
+    out["page"] = page if isinstance(page, str) and page.startswith("http") else ""
+    alts: List[tuple] = []
+
+    def walk(node, under_dups: bool) -> None:
+        if isinstance(node, dict):
+            if under_dups:
+                for k in _YANDEX_URL_KEYS:
+                    u = node.get(k)
+                    if isinstance(u, str):
+                        u = "https:" + u if u.startswith("//") else u
+                        if u.startswith("http") and u != main:
+                            try:
+                                area = int(node.get("w") or node.get("width") or 0) * \
+                                    int(node.get("h") or node.get("height") or 0)
+                            except (TypeError, ValueError):
+                                area = 0
+                            alts.append((area, u))
+                        break
+            for k, v in node.items():
+                if isinstance(v, str) and not out["thumb"] and "avatars.mds.yandex.net/i?" in v:
+                    out["thumb"] = "https:" + v if v.startswith("//") else v
+                elif isinstance(v, (dict, list)):
+                    walk(v, under_dups or k in _YANDEX_DUP_KEYS)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v, under_dups)
+    walk(obj, False)
+    seen = set()
+    for _area, u in sorted(alts, key=lambda a: -a[0]):
+        if u not in seen and not _imagefix.not_a_photo_url(u):
+            seen.add(u)
+            out["alts"].append(u)
+    out["alts"] = out["alts"][:6]
+    if not out["thumb"].startswith("http"):
+        out["thumb"] = ""
+    return out
+
+
+def _yandex_details(text: str) -> Dict[str, dict]:
+    """{original link: its record (_yandex_record)} for every result on a Yandex results
+    page whose record could be read as JSON; results that could not are left out (their
+    link alone is still used). Never raises."""
+    found: Dict[str, dict] = {}
+    dec = json.JSONDecoder()
+    try:
+        for m in re.finditer(r'"origUrl"\s*:\s*"', text):
+            start = _object_start(text, m.start())
+            if start < 0:
+                continue
+            try:
+                obj, _end = dec.raw_decode(text, start)
+            except ValueError:
+                continue
+            url = obj.get("origUrl") if isinstance(obj, dict) else None
+            if isinstance(url, str) and url.startswith("http") and url not in found:
+                found[url] = _yandex_record(obj)
+    except Exception as e:  # noqa: BLE001 - a page laid out otherwise: links only, as before
+        print(f"[media] yandex result details unreadable: {type(e).__name__}", flush=True)
+    return found
+
+
 def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
     """
     Full-size photos from Yandex Images - GoMotion's picture source, strong on
@@ -429,6 +540,8 @@ def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
         w, h = _sharpness.min_size()
         asks.insert(0, {"text": query, "isize": "gt", "iw": str(w), "ih": str(h)})
     found: List[str] = []
+    details: Dict[str, dict] = {}
+    want_details = bool(getattr(config, "YANDEX_RESULT_DETAILS", True))
     proxy = _next_proxy()
     for params in asks:
         got: List[str] = []
@@ -446,6 +559,9 @@ def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
             got = [urllib.parse.unquote(u) for u in re.findall(r"img_url=(https?%3A[^&\"']+)", text)]
             got += re.findall(r'"origUrl":"(https?:[^"]+)"', text)
             if got:
+                if want_details:
+                    for k, v in _yandex_details(text).items():
+                        details.setdefault(k, v)
                 break
         found += [u for u in got if u not in found]
         if len(found) >= limit:
@@ -456,21 +572,30 @@ def search_yandex_images(query: str, limit: int = 8) -> List[MediaAsset]:
     import html as _html
     out, seen = [], set()
     for url in found:
-        url = _html.unescape(url)
+        url = _html.unescape(_json_unescape(url))
         if url in seen or not url.startswith("http"):
             continue
         seen.add(url)
+        # A drawing (an SVG logo, map or icon) is never a photo (PICTURE_SKIP_SVG).
+        if config.PICTURE_SKIP_SVG and _imagefix.not_a_photo_url(url):
+            continue
         # Stock sellers' watermarked comps never make a cut (src/stockblock.py).
         host = urllib.parse.urlparse(url).netloc.lower()
         why = _stockblock.reason(url)
         if why:
             _stockblock.note(why, "search", key=url)
             continue
+        rec = details.get(url) or {}
+        alts = [a for a in rec.get("alts") or [] if not _stockblock.reason(a)]
+        if want_details:
+            url = _imagefix.yandex_sized(url)
         out.append(MediaAsset(
             kind="image", source="yandex_image", url=url,
+            width=int(rec.get("w") or 0), height=int(rec.get("h") or 0),
             attribution=f"Yandex image result — {host}"[:300],
             license="unverified — web image, confirm you hold the rights",
-            query=query, review_required=True, review_reason="Web image: licence unverified"))
+            query=query, review_required=True, review_reason="Web image: licence unverified",
+            page_url=rec.get("page") or "", thumbnail=rec.get("thumb") or "", alt_urls=alts))
         if len(out) >= limit:
             break
     costs.record("yandex.search")
@@ -4163,9 +4288,11 @@ def _download(candidate: MediaAsset, query: str, work_dir: str) -> Optional[Medi
             # The search engine's ~300-500 px thumbnail is never asked for while
             # pictures must be sharp full screen (src/sharpness.py): it could not pass.
             thumb = "" if _sharpness.picture_on() else (getattr(candidate, "thumbnail", "") or "")
+            # Other copies of the same picture (Yandex's duplicates), asked when its own link fails.
+            alts = list(getattr(candidate, "alt_urls", None) or [])
             candidate.local_path = _imagefix.fetch(candidate.url, dest,
                                                    getattr(candidate, "page_url", "") or "",
-                                                   thumbnail=thumb)
+                                                   thumbnail=thumb, **({"alternates": alts} if alts else {}))
         else:
             # An archive's footage is a whole file (archive.org, NASA, Wikimedia Commons video):
             # bounded in size and time (WHOLE_FILE_MAX_MB, WHOLE_FILE_SECONDS) and by the scene's stop.
