@@ -102506,7 +102506,7 @@
    "name": "Document zoom",
    "category": "CALLOUTS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): A typed document page rises into the frame, then the camera pushes in while a marker highlights the line being read. Use: Quoting a report, a letter, a ruling, a contract or a study (the narrator reads its line); kicker = the source, sub = a date.",
+   "description": "Motion library pack 2 (brand-kit aware): A typed page settles into the frame with its quoted line set large in the middle; an accent marker sweeps under each word as it is read while the camera pushes in on the line. Use: Quoting a report, a letter, a ruling, a contract or a study (the narrator reads its line); kicker = the source, sub = a date.",
    "kind": "card",
    "emphasis": "high",
    "props": {
@@ -102868,7 +102868,7 @@
    "name": "Social post",
    "category": "CALLOUTS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): A social post card slides up, its words lighting as they are read; the heart pops (and counts, when the likes are said). Use: A post, tweet or comment the narration quotes (sub = the account's name, kicker = a date, value = likes only when said).",
+   "description": "Motion library pack 2 (brand-kit aware): A clean social post card settles in, its words set large and lighting from a ghost grey as they are read; then the heart fills (and the likes count up, when they are said). Use: A post, tweet or comment the narration quotes (sub = the account's name, kicker = a date, value = likes only when said).",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -103054,7 +103054,7 @@
    "name": "Phone messages",
    "category": "CALLOUTS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): A phone tilts into frame in 3D and a chat plays out on it, typing dots first, each bubble popping in on its time. Use: Texts, DMs or messages the narration reads out (items = the messages in order, sub = the contact's name); one to four short messages.",
+   "description": "Motion library pack 2 (brand-kit aware): A phone settles into frame at a slight 3D angle and a chat plays out on it from the bottom up, typing dots first, each bubble rising in on its time. Use: Texts, DMs or messages the narration reads out (items = the messages in order, sub = the contact's name); one to four short messages.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -104337,7 +104337,7 @@
    "name": "Strike and correct",
    "category": "CALLOUTS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): The wrong words are set, a marker strikes them through, and the correction writes itself in by hand above in the accent. Use: Correcting a belief or a figure (\"not 10 million - 30 million\", \"it wasn't an accident\"); text = the struck words, sub = the correction, both as said.",
+   "description": "Motion library pack 2 (brand-kit aware): The wrong words are set in big heavy caps, a hard marker bar strikes them through and they dim; the correction then rises in above them, just as big, in the accent. Use: Correcting a belief or a figure (\"not 10 million - 30 million\", \"it wasn't an accident\"); text = the struck words, sub = the correction, both as said.",
    "kind": "tag",
    "emphasis": "medium",
    "props": {
@@ -104845,7 +104845,7 @@
    "name": "Glitch slices",
    "category": "TRANSITIONS",
    "component": "motion",
-   "description": "Motion library pack 2 (brand-kit aware): The frame tears into jittering inverted slices and kit-coloured bands with scanlines, peaking on the cut. Use: Tech, hacking, internet, breaking news, a sudden twist or a system failing; energetic sections, never in calm ones.",
+   "description": "Motion library pack 2 (brand-kit aware): A digital signal tear made of the shot itself: torn bands of the picture blow out with red / cyan channel fringes and compression blocks as it builds, a two-frame signal drop with one bright scan line hides the cut, and it clears fast onto the next shot. Use: Tech, hacking, internet, breaking news, a sudden twist or a system failing; energetic sections, never in calm ones.",
    "kind": "card",
    "emphasis": "high",
    "props": {

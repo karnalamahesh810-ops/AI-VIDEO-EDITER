@@ -92,14 +92,14 @@ Proof frames of both: `docs/motion-polish/bar_donut_timeline.jpg`.
 | ml-tr-tear | transition rotation | medium | 4 | A flat teal sheet with a zigzag edge | **yes** |
 | ml-tr-burn | time-jump trigger | medium (history, biography) | 5 | Orange blobs over everything | **yes** |
 | ml-em-stamp | verdict trigger | medium | 4 | Thin outlined stamp blurred over the claim | **yes** |
-| ml-co-document | document trigger | medium | 3 | Plain but legible page; push-in works | no (next) |
-| ml-title-redact | secret trigger | low-medium | 3 | Reads as intended | no |
-| ml-tr-glitch | tech trigger | low-medium | 4 | Crude, but tech-only | no (next) |
-| ml-em-strike | correction trigger | low | 3 | | no |
-| ml-em-countdown | countdown trigger | low | 2 | | no |
+| ml-co-document | document trigger | medium | 3 | Plain but legible page; push-in works | **round 2** |
+| ml-title-redact | secret trigger | low-medium | 3 | Reads as intended | **round 2** |
+| ml-tr-glitch | tech trigger | low-medium | 4 | Crude, but tech-only | **round 2** |
+| ml-em-strike | correction trigger | low | 3 | | **round 2** |
+| ml-em-countdown | countdown trigger | low | 2 | Already near the bar (ring + tabular figure) | no |
 | ml-data-split | then-and-now trigger | low | 2 | | no |
-| ml-co-post | post trigger | low | 3 | | no |
-| ml-co-phone | message trigger | low | 2 | | no |
+| ml-co-post | post trigger | low | 3 | | **round 2** |
+| ml-co-phone | message trigger | low | 2 | Bubbles popped from scale 0 | **round 2** |
 | ml-co-browser | AI director only | low | 3 | | no |
 | ml-data-donut | AI director only | low | **1 (bar)** | | no |
 | ml-data-timeline | AI director only | low | **1 (bar)** | | no |
@@ -171,3 +171,43 @@ The sample text spans finance, sports, history and science, tech, engineering an
 The app's `src/test/motionLibrary.test.ts` should be re-run after the copy.
 
 **Not done yet (next):** ml-co-document and ml-tr-glitch, then the AI-director-only callouts (sticky, browser, cardflip).
+
+## 6. Round 2 (branch feature/motion-polish-2)
+
+Six more looks, by rank: the document zoom and the glitch, then the next four that read below the bar on the
+before stills (`declassified`, `strike`, `post`, `phone`). The countdown and the then-and-now split ranked next
+but already sit near the bar (generic 2), so they wait. The donut and the timeline are untouched.
+
+| Look | Before (measured on the stills) | After |
+|---|---|---|
+| ml-co-document | The quoted line was 3% type in row 7 of a tall page; 0.9 s rise from 28°; the 1.42x push cropped the page off-centre | The line is the page's centre at up to 6%; 0.3 s settle; the marker lands word by word, never before `mid` (the marker sound); a 1.18x push centred on the line; takes the clear side on auto |
+| ml-co-post | 3.4% words, unread words at 15% (unreadable); 0.8 s rise from 20°; a bouncing heart | Up to 5.8% in ~4 lines; unread words at 32% (the timeline's ghost state); 0.3 s settle; the heart fills with one short pulse on `mid` (the pop sound) |
+| ml-co-phone | 3% bubbles popping from scale 0 with an overshoot; the phone flew up half the frame from 34° in 0.9 s | 3.6% bubbles rising 0.4 em in 0.22 s, stacked from the bottom above a reply bar; 0.32 s settle at 16° → 9°; first bubble still ≥ 1.1 s (the buzz) |
+| ml-title-redact | 3-6% type; 0.8 s drift from a 4° tilt; bars easing off over 0.32 s | Up to 7.2%, fitted to the clear side; 0.3 s settle; bars snap away in 0.2 s on their words (first ~0.6 s, the tape-rip); the red tag is the one accent |
+| ml-em-strike | Thin 4-10% caps drifting 0.5 s; a wobbly two-pass scribble; a small handwritten fix | Tight heavy caps up to 12% rising in 0.28 s; one hard marker bar in 0.2 s at the hit (the marker sound), struck words dim to 40%; the correction rises as big, in the accent, from hit + 0.4 s (the second sound) |
+| ml-tr-glitch | Nine full-width bands of flat kit colour and inverted strips for the whole second | A tear built from the shot itself: blown-out / hue-slipped bands with red-cyan fringes, macroblocks near the peak, a 2-frame near-black signal drop with one scan line on the cut, ~0.3 s build (visible from the 0.2 s sound) and a 0.2 s decay |
+
+Rules kept from section 4: same ids, params and layer kinds; exits 0.28 s; no scale-from-0 or back-out on things
+that only appear; one accent; nothing under 3% of the height; scrims (directional when side-placed).
+
+**Sheets** (before row = base 35a180e, after row = this branch, 4 frames through the animation, stills at
+1280x720 over the procedural backdrops; finance, history, sports, science, tech; fictional names):
+
+| Sheet | Contents |
+|---|---|
+| `motion-polish/round2_callouts.jpg` | document (finance; history in noir), social post (sports), phone (science) |
+| `motion-polish/round2_type.jpg` | declassified (tech), strike in royal / noir / bulletin kits (sports, tech, history) |
+| `motion-polish/round2_glitch.jpg` | glitch over two cuts: onset (the sound), build, the signal drop on the cut, the decay |
+| `motion-polish/round2_subject_safe.jpg` | a stand-in face in the middle / on the left: the document and the strike take the clear side |
+
+**Tests.** The offline suite ran 3555 tests; only the 2 known base failures (test_data_graphics chart,
+test_style_match text). `tsc --noEmit` is clean at each commit's index. `build_registry.py` reproduces
+`registry.json` (only the 5 re-synced descriptions differ from base).
+
+**Perf note.** The glitch's bands and macroblocks are backdrop filters: about 20 small ones at the peak, for
+under a second, only around the cut.
+
+**The app's `src/remotion` mirror must copy** `components/smart/library.ts` and `components/smart/SpecPack2.tsx`
+(the app's copies equal the worker's pre-change versions, so a straight copy is safe), plus the 5 description
+strings in `templates/registry.json` (document, post, phone, strike, glitch). The app's registry differs from the
+worker's elsewhere, so copy those strings, not the file. Re-run `src/test/motionLibrary.test.ts` after the copy.
