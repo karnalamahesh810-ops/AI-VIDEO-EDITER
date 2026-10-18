@@ -114,12 +114,19 @@ class ProxyManager:
             order = self._order(time.time())
         return order[0].url if order else ""
 
-    def acquire(self, domain: str = "youtube.com") -> str:
+    def acquire(self, domain: str = "youtube.com", avoid=()) -> str:
+        """Claim the best route. `avoid`: routes a retry has already tried for the same
+        clip - the best route not among them is taken, the best of all only when every
+        usable route was tried (a quarantined route never wins over a tried healthy one)."""
         with self.lock:
             order = self._order(time.time())
             if not order:
                 return ""
             r = order[0]
+            if avoid:
+                fresh = [x for x in order if x.url not in avoid and x.state != QUARANTINED]
+                if fresh:
+                    r = fresh[0]
             r.active += 1
             return r.url
 

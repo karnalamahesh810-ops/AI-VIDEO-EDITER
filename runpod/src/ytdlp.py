@@ -267,9 +267,25 @@ def _next_proxy() -> str:
     return PROXY_MANAGER.peek()
 
 
+# Routes the current clip's retries have already tried (media._yt_fetch_retry):
+# the next try takes another one (YTDLP_RETRY_OTHER_ROUTE). Per thread/context.
+AVOID_ROUTES: contextvars.ContextVar = contextvars.ContextVar("avoid_routes", default=frozenset())
+# The player client(s) the current retry asks YouTube for (YTDLP_RETRY_PLAYER_CLIENT), "" = yt-dlp's own.
+RETRY_CLIENT: contextvars.ContextVar = contextvars.ContextVar("retry_client", default="")
+
+
+def _client_args() -> List[str]:
+    """--extractor-args for the current retry's player client(s), or []."""
+    client = re.sub(r"[^a-z0-9_,\-]", "", str(RETRY_CLIENT.get() or "").lower()).strip(",")
+    return ["--extractor-args", f"youtube:player_client={client}"] if client else []
+
+
 def _acquire_proxy(domain: str = "youtube.com") -> str:
     if not _PROXIES:
         return ""
+    avoid = AVOID_ROUTES.get() if getattr(config, "YTDLP_RETRY_OTHER_ROUTE", True) else frozenset()
+    if avoid:
+        return PROXY_MANAGER.acquire(domain, avoid=avoid)
     return PROXY_MANAGER.acquire(domain)
 
 
@@ -966,6 +982,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
         # After the shared network args: yt-dlp keeps the LAST value of a repeated
         # option, so placed before them these were silently overridden by "2".
         cmd += ["--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3"]
+        cmd += _client_args()
         started = time.time()
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",

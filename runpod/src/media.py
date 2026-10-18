@@ -2778,17 +2778,36 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
     swallowing it. A residential home IP drops or crawls on about a third of
     downloads (measured: 15/24 first tries, 502s from IPs going offline) and
     the same clip succeeds seconds later from another address - three tries
-    on different IPs gets ~95% through."""
+    on different IPs gets ~95% through.
+
+    Each retry goes through a route this clip has not tried yet
+    (YTDLP_RETRY_OTHER_ROUTE: the manager's latency ranking used to hand the
+    retry of a refused stream the same fastest route), and after a refused
+    stream or a bot check it may ask for another player client
+    (YTDLP_RETRY_PLAYER_CLIENT, off by default). YouTube's own "never" (paid,
+    members-only, removed: MEDIA_UNAVAILABLE) is never retried."""
     attempts = 0
+    tried: set = set()
+    client = ""
     while True:
         if _ytdlp.stopped():
             return ""
         t0 = time.time()
-        path = _yt_fetch(video_id, out_dir, start_at, seconds)
+        routes = _ytdlp.AVOID_ROUTES.set(frozenset(tried))
+        chosen = _ytdlp.RETRY_CLIENT.set(client)
+        try:
+            path = _yt_fetch(video_id, out_dir, start_at, seconds)
+        finally:
+            _ytdlp.RETRY_CLIENT.reset(chosen)
+            _ytdlp.AVOID_ROUTES.reset(routes)
         _stage("download:youtube" if path else "download:youtube_failed", time.time() - t0)
         if path:
             return path
         cls, _proxy = _LAST_FAILURE.get() or (FailureClass.UNKNOWN, "")
+        if _proxy is not None:
+            tried.add(_proxy)
+        if cls in (FailureClass.STREAM_REFUSED, FailureClass.BOT_CHECK):
+            client = str(getattr(config, "YTDLP_RETRY_PLAYER_CLIENT", "") or "")
         policy = RETRY.get(cls, RETRY[FailureClass.UNKNOWN])
         attempts += 1
         if cls == FailureClass.MEDIA_UNAVAILABLE:

@@ -1135,6 +1135,17 @@ AI_RESUME = _flag("AI_RESUME", True)
 REQUIRE_YOUTUBE = os.getenv("REQUIRE_YOUTUBE", "1").strip().lower() not in ("0", "false", "no")
 # Include the worker's own IP in the YouTube route rotation (media._PROXIES).
 YTDLP_DIRECT = os.getenv("YTDLP_DIRECT", "0").strip().lower() in ("1", "true", "yes")
+# A clip download retried after a refused stream (403), a bot check or a timeout
+# goes through a route this clip has not tried yet (docs/sourcing-yield-2026-10-18.md).
+# The manager ranks routes by latency, so the retry used to land on the same
+# fastest route that had just been refused. Off: the manager's first pick, as before.
+YTDLP_RETRY_OTHER_ROUTE = _flag("YTDLP_RETRY_OTHER_ROUTE", True)
+# The player client(s) a retry after a refused stream or a bot check asks
+# YouTube for (yt-dlp --extractor-args youtube:player_client=...), e.g.
+# "tv,web_safari": the stream links come from another client's session. Empty
+# (default) = yt-dlp's own clients on every try - not switched on until it is
+# measured on a pod (no offline test can prove a client still serves formats).
+YTDLP_RETRY_PLAYER_CLIENT = os.getenv("YTDLP_RETRY_PLAYER_CLIENT", "").strip()
 
 # YouTube channels searched first, by story kind (media._story_channels).
 # Archive channels hold newsreels and travelogues of every era; the news set
