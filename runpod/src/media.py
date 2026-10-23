@@ -1866,22 +1866,30 @@ def _vision_gate(path: str, intent: str, context: str, label: str, source_url: s
     wide, where a faint stamp is nearly invisible.
     """
     t0 = time.time()
+    kind = "picture" if _is_still(path) else "clip"
     try:
-        why = watermark_reason(path, "gate", stamp=False)
+        why = _timed(f"gate:{kind}:watermark_bar", watermark_reason, path, "gate", stamp=False)
         if why:
             _GATE_SLOP.set(why)
             print(f"[stockblock] REJECT {why}: {label[:60]!r}", flush=True)
             return False, None
         keep, verdict = _judge_gate(path, intent, context, label, source_url)
         if keep:
-            why = watermark_reason(path, "gate", bar=False)
+            why = _timed(f"gate:{kind}:watermark_stamp", watermark_reason, path, "gate", bar=False)
             if why:
                 _GATE_SLOP.set(why)
                 print(f"[stockblock] REJECT {why}: {label[:60]!r}", flush=True)
                 return False, None
+        if verdict is not None:
+            # Clean real footage the judge only found off THIS line: kept for the lines nothing fills (src/spares.py).
+            try:
+                from . import spares
+                spares.record(path, verdict, label, source_url, kept=keep)
+            except Exception as e:  # noqa: BLE001 - the bank never costs a clip
+                print(f"[spares] not kept: {type(e).__name__}: {str(e)[:80]}", flush=True)
         return keep, verdict
     finally:
-        _stage(f"gate:{'picture' if _is_still(path) else 'clip'}", time.time() - t0)
+        _stage(f"gate:{kind}", time.time() - t0)
 
 
 # What in the judge's own description says text may be on screen - a reason for the second look (second_look).
@@ -1973,7 +1981,8 @@ def _no_verdict_no(label: str, why: str) -> tuple:
 
 def _judge_gate(path: str, intent: str, context: str, label: str, source_url: str = "") -> tuple:
     """_vision_gate after the credit bar: the AI-slop filters, the local model, the vision judge."""
-    why = slop_reason(path, label, source_url)
+    kind = "picture" if _is_still(path) else "clip"
+    why = _timed(f"gate:{kind}:slop", slop_reason, path, label, source_url)
     _GATE_SLOP.set(why)
     if why:
         print(f"[slop] REJECT {why}: {label[:60]!r}", flush=True)
@@ -1986,7 +1995,7 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         intent = f"{intent} [The picture's own page: {label[:140]}]"
     # The local CLIP pass first: the wrong KIND of picture (slide, text page,
     # cartoon, logo, a portrait on a place line) never costs a Gemini call.
-    local = _local_check(path, intent)
+    local = _timed(f"gate:{kind}:local", _local_check, path, intent)
     if local is not None and local["reject"]:
         with _CACHE_LOCK:
             LOCAL_REJECTED["n"] += 1
@@ -2013,10 +2022,10 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         intent, scene, event = rung_judging(intent, scene, rung)
     # A line asking for a map or a diagram: the judge is told a real published one is acceptable
     # (real footage or a photo that fits stays just as good - the INTENT decides).
-    verdict = vision.judge(path, intent, context, event=event,
-                           **({"scene": scene} if scene else {}),
-                           **({"wants": wants} if wants in ("map", "chart") else {}),
-                           **({"span": span} if span else {}))
+    verdict = _timed(f"gate:{kind}:judge", vision.judge, path, intent, context, event=event,
+                     **({"scene": scene} if scene else {}),
+                     **({"wants": wants} if wants in ("map", "chart") else {}),
+                     **({"span": span} if span else {}))
     if verdict is None and not config.ACCEPT_UNJUDGED:
         # Every model failed on this clip. Since 2026-10-09 (NO_UNJUDGED_STOCK) that is a no: a clip no judge saw
         # never reaches the timeline, and a lasting outage stops the job (src/aiguard.py) instead of filling it
@@ -2038,7 +2047,7 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
                              min_quality=_quality_floor())
     if keep and verdict is not None:
         # The focused second look at text someone added over a clip (VISION_TEXT_SECOND_LOOK).
-        keep, verdict = second_look(path, verdict, label)
+        keep, verdict = _timed(f"gate:{kind}:second_look", second_look, path, verdict, label)
     if verdict is not None and not allow_vice:
         # A music, club or smoking scene the story is not about: a clear no for the near-miss
         # and opening checks too (a copy - the cached verdict stays as the model answered).
@@ -4145,6 +4154,35 @@ def _stage(name: str, seconds: float) -> None:
         row[1] += max(0.0, float(seconds))
 
 
+def _timed(name: str, fn, *args, **kwargs):
+    """fn(*args, **kwargs), its seconds added to stage `name` (meta.sourcing.stageSeconds: where the gate's time goes)."""
+    t0 = time.time()
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        _stage(name, time.time() - t0)
+
+
+def gate_queue_stats() -> dict:
+    """Where the gate waits rather than works: the vision slots (VISION_CONCURRENCY), the local CLIP slots
+    (LOCAL_VISION_CONCURRENCY) and the shared grey-frame decode (filters.GRAY_STATS)."""
+    out: Dict[str, Any] = {}
+    try:
+        out["vision"] = vision.stats().get("slots") or {}
+    except Exception:  # noqa: BLE001 - stats only
+        pass
+    try:
+        st = dict(_localvision.STATS)
+        out["localVision"] = {k: (round(v, 1) if isinstance(v, float) else v) for k, v in st.items()}
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        out["grayDecode"] = dict(_filters.GRAY_STATS)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def stage_seconds() -> Dict[str, Dict[str, float]]:
     """{stage: {"n": calls, "seconds": thread-seconds, "mean": seconds a call}} of this job so far."""
     with _CACHE_LOCK:
@@ -4169,6 +4207,8 @@ def reset_cache():
         _PHOTOS.update(cap=None, used=0)
     with _MOTION_LOCK:
         _MOTION_CACHE.clear()
+    with _filters._gray_lock():
+        _filters._GRAY_CACHE.clear()        # one decode per clip, per job
     SLOP_REJECTED.clear()
     with _CACHE_LOCK:
         _BAD.clear()                    # what was unusable is decided again per job
@@ -4853,7 +4893,12 @@ def source_for_segment(query: str, seconds: float, work_dir: str, *,
     # and an empty beat goes to the spare moments and the rescue pass.
     allowed = _ENABLED_PROVIDERS.get()
     providers_token = None
-    if visual_type == "footage" and not still_line and not _photos_left():
+    # PHOTO_CAP_SOFT (2026-10-23): a clip-first line asks every clip stage before any picture, so past the cap it
+    # keeps its picture stages - they only run once the clips failed, where the line would otherwise end empty
+    # (155 of the Mount Rainier video's 235 lines did, then became held shots and text cards). The variety pass
+    # still retries footage for a picture past the cap.
+    soft_cap = bool(getattr(config, "PHOTO_CAP_SOFT", False)) and bool(clip_first)
+    if visual_type == "footage" and not still_line and not _photos_left() and not soft_cap:
         only = _footage_providers() if allowed is None else set(allowed) & _footage_providers()
         providers_token = _ENABLED_PROVIDERS.set(only)
     clip_stop = None                                # the clip stages' own, earlier stop (_clip_stage_stop)
@@ -5835,6 +5880,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # Pictures and clips measured for real detail, how many were too soft, the seconds spent.
     LAST_STATS["sharpness"] = _sharpness.stats()
     LAST_STATS["stageSeconds"] = stage_seconds()           # where the sourcing threads' time went
+    LAST_STATS["gateQueues"] = gate_queue_stats()           # ... and where the gate waited for a slot
     if getattr(config, "SOURCE_TRACE", False):
         # A line still running when its pass closed has no entry for that pass (it never finished).
         # Keyed by this pass's own line index (a build's per-scene lines, re-indexed): each with the line it was.
@@ -5950,14 +5996,15 @@ def scene_starts(jobs: List[Dict[str, Any]]) -> Dict[int, float]:
     return out
 
 
-def may_place(prev: List[Optional[float]], at: Optional[float]) -> bool:
+def may_place(prev: List[Optional[float]], at: Optional[float], cap: Optional[int] = None) -> bool:
     """
     May one more scene starting at `at` be cut from a video whose scenes
-    already start at `prev`? At most MAX_MOMENTS_PER_VIDEO scenes per video,
+    already start at `prev`? At most MAX_MOMENTS_PER_VIDEO scenes per video
+    (`cap` instead when given: the fallback ladder's FILL_MAX_MOMENTS_PER_VIDEO),
     each SAME_VIDEO_GAP_SECONDS from the others (0 turns a rule off). An
     unknown start is only counted.
     """
-    cap = config.MAX_MOMENTS_PER_VIDEO
+    cap = config.MAX_MOMENTS_PER_VIDEO if cap is None else int(cap)
     if cap > 0 and len(prev) >= cap:
         return False
     gap = config.SAME_VIDEO_GAP_SECONDS
@@ -6496,7 +6543,8 @@ def rescue_fill(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]],
 
         def picture(job: dict, q: str, intent_text: str) -> Optional[MediaAsset]:
             with lock:
-                if room[0] is not None and room[0] <= 0:
+                # PHOTO_CAP_SOFT: the line is empty here - a held shot or a text card is the alternative.
+                if room[0] is not None and room[0] <= 0 and not getattr(config, "PHOTO_CAP_SOFT", False):
                     return None
             for cand in _cached_search(search_web_images, q)[:5]:
                 if time.time() > until - 10:

@@ -364,7 +364,13 @@ VISION_HEDGE_FROM_SEND = _flag("VISION_HEDGE_FROM_SEND", True)
 VISION_CALL_BUDGET_SECONDS = float(os.getenv("VISION_CALL_BUDGET_SECONDS", "100"))
 # Vision requests in flight per worker. Ten workers each firing 20+ at once
 # drew Kie's "You've hit your attachment limit" (Glen Canyon, 2026-09-29).
-VISION_CONCURRENCY = int(os.getenv("VISION_CONCURRENCY", "8"))
+# Since 2026-10-07 vision is OpenRouter only (Kie off for good), which has no
+# such limit: a one-machine pod runs SOURCE_WORKERS lines at once, each asking
+# storyboard picks, tile rates and judgements (2,288 calls on the 20-minute
+# Mount Rainier video, 2026-10-23), so OpenRouter gets 16 in flight; Kie keeps 8.
+# vision.stats()["slots"] shows how long calls queued for a slot.
+VISION_CONCURRENCY = int(os.getenv("VISION_CONCURRENCY", "0") or 0) or (
+    8 if "kie.ai" in (VISION_API_BASE or "") else 16)
 # Kie's vision channels time out or answer in prose under bursts: with two jobs
 # at VISION_CONCURRENCY 20 each, 123 of 130 calls failed (ReadTimeout) and 278
 # answers on the owner's 12-min job were unparseable (2026-10-01). Requests to
@@ -961,6 +967,34 @@ FALLBACK_STILLS = _flag("FALLBACK_STILLS", True)
 # The ladder's rung before its picture (gapfill._from_moment): another moment of a clip the video already
 # shows, the line's own subject first, judged as "shows that subject" - real footage before a still.
 FALLBACK_MOMENTS = _flag("FALLBACK_MOMENTS", True)
+# The least time the moment rung gets on a line (a proxied download, 10-45 s, then a judgement): its old share of
+# FALLBACK_SCENE_SECONDS (~25 s) let 1 of 145 lines through on the Mount Rainier video (2026-10-23).
+FALLBACK_MOMENT_MIN_SECONDS = float(os.getenv("FALLBACK_MOMENT_MIN_SECONDS", "90"))
+# Scenes one source video may supply when the ladder fills a line nothing else could (another moment, a spare):
+# what it stands in for is a held, stretched or text-card line. SAME_VIDEO_GAP_SECONDS, FALLBACK_MOMENT_GAP_SECONDS
+# and "never on the next scene" still hold. The search itself keeps MAX_MOMENTS_PER_VIDEO.
+FILL_MAX_MOMENTS_PER_VIDEO = int(os.getenv("FILL_MAX_MOMENTS_PER_VIDEO", "3"))
+# The spare bank (src/spares.py): every candidate the paid judge answered for and turned down only for its own line
+# (clean, real, good enough) is kept on disk with what the judge saw; the ladder offers it to the empty lines whose
+# words it shares (SPARE_MIN_MATCH: one place/subject word and one more, or three of the line's words), judged again
+# for that line (SPARE_JUDGES calls a line at most, of SPARE_TRIES offers). SPARE_MAX entries, files under
+# SPARE_MAX_BYTES, quality at least SPARE_MIN_QUALITY. SPARE_DUPLICATE_BITS: a spare or another moment whose middle
+# frame is within this many of 64 dhash bits of a shot beside the line (or of its own video) is the same picture.
+SPARE_BANK = _flag("SPARE_BANK", True)
+SPARE_MAX = int(os.getenv("SPARE_MAX", "600"))
+SPARE_MAX_BYTES = int(os.getenv("SPARE_MAX_BYTES", "80000000"))
+SPARE_MIN_QUALITY = float(os.getenv("SPARE_MIN_QUALITY", "0.45"))
+SPARE_MIN_MATCH = float(os.getenv("SPARE_MIN_MATCH", "3"))
+SPARE_JUDGES = int(os.getenv("SPARE_JUDGES", "3"))
+SPARE_TRIES = int(os.getenv("SPARE_TRIES", "6"))
+SPARE_DUPLICATE_BITS = int(os.getenv("SPARE_DUPLICATE_BITS", "10"))
+# The style's photo cap (PHOTO_MAX_PER_10MIN) only bites where a clip is the alternative (2026-10-23): a clip-first
+# line past the cap still asks for pictures AFTER every clip stage failed (instead of ending empty and becoming a
+# hold, a stretched shot or a text card), and the rescue pass may take a picture past it. The variety pass still
+# retries footage for a picture past the cap and keeps the picture only when none is found. Off = the hard cap.
+PHOTO_CAP_SOFT = _flag("PHOTO_CAP_SOFT", True)
+# One ffmpeg decode for every grey-frame check of a clip (filters._cached_gray: the same frames, ~4x less CPU).
+GRAY_SHARED_DECODE = _flag("GRAY_SHARED_DECODE", True)
 # Never a text card as filler (the owner, 2026-10-06: a text animation on an empty spot is "not great"): an
 # empty line gets, in order, a runner-up, another moment of a clip beside it, the ladder (library, spare
 # pool moments, another moment of any clip the video shows, a picture), a data look for a figure in the

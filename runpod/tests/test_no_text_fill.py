@@ -208,7 +208,8 @@ class TheMomentRung(unittest.TestCase):
         # Its video plays 40 s before this line (under SAME_VIDEO_GAP_SECONDS), or twice already
         # (MAX_MOMENTS_PER_VIDEO): another moment of it would look like the same shot again.
         donors = [{"index": 1, "vid": "AAAAAAAAAAA", "start": 100.0, "subject": "Hoover Dam", "title": "dam"}]
-        with mock.patch.multiple(config, SAME_VIDEO_GAP_SECONDS=120.0, MAX_MOMENTS_PER_VIDEO=2):
+        with mock.patch.multiple(config, SAME_VIDEO_GAP_SECONDS=120.0, MAX_MOMENTS_PER_VIDEO=2,
+                                 FILL_MAX_MOMENTS_PER_VIDEO=2):
             used = gapfill.Used()
             used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=10.0))
             got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
@@ -218,6 +219,20 @@ class TheMomentRung(unittest.TestCase):
             used.add(9, gapfill.Shot(video="yt:AAAAAAAAAAA", start=300.0, at=400.0))
             got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
             self.assertIsNone(got)
+        # The ladder's own cap (FILL_MAX_MOMENTS_PER_VIDEO 3, 2026-10-23): a third moment, far from the other two,
+        # for a line that would otherwise be held or a text card; still never within SAME_VIDEO_GAP_SECONDS.
+        with mock.patch.multiple(config, SAME_VIDEO_GAP_SECONDS=120.0, MAX_MOMENTS_PER_VIDEO=2,
+                                 FILL_MAX_MOMENTS_PER_VIDEO=3):
+            used = gapfill.Used()
+            used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=-400.0))
+            used.add(9, gapfill.Shot(video="yt:AAAAAAAAAAA", start=300.0, at=400.0))
+            got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
+            self.assertIsNotNone(got)
+            used = gapfill.Used()
+            used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=10.0))
+            got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)
+            self.assertIsNone(got)
+        with mock.patch.multiple(config, SAME_VIDEO_GAP_SECONDS=120.0, MAX_MOMENTS_PER_VIDEO=2):
             used = gapfill.Used()
             used.add(1, gapfill.Shot(video="yt:AAAAAAAAAAA", start=100.0, at=-400.0))
             got, _seen = self._run(donors, lambda p: (True, {"score": 0.8}), used=used)

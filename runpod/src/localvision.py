@@ -50,9 +50,28 @@ CLASSES: Dict[str, List[str]] = {
 _BAD_KINDS = ("slide", "text", "render", "logo")
 
 _LOCK = threading.Lock()
+
+
+class _TimedSlots(threading.BoundedSemaphore):
+    """A BoundedSemaphore that adds the seconds its callers waited to STATS["waitSeconds"] (where the clip gate's
+    time goes: the AI-slop CLIP pass, the local check and the stamp check all queue here)."""
+
+    def acquire(self, blocking: bool = True, timeout: Optional[float] = None) -> bool:
+        import time
+        t0 = time.time()
+        got = super().acquire(blocking, timeout) if timeout is not None else super().acquire(blocking)
+        waited = time.time() - t0
+        with _LOCK:
+            STATS["waits"] = STATS.get("waits", 0) + 1
+            STATS["waitSeconds"] = STATS.get("waitSeconds", 0.0) + waited
+        return got
+
+    __enter__ = acquire
+
+
 # Sixteen sourcing threads each running a 4-thread inference would thrash the
 # CPU; a few at a time keeps every check fast.
-_RUN = threading.BoundedSemaphore(max(1, int(os.getenv("LOCAL_VISION_CONCURRENCY", "3"))))
+_RUN = _TimedSlots(max(1, int(os.getenv("LOCAL_VISION_CONCURRENCY", "3"))))
 _STATE: Dict[str, object] = {"loaded": False, "error": ""}
 _TEXT_CACHE: Dict[str, "np.ndarray"] = {}
 STATS = {"checked": 0, "rejected": 0, "decided": 0, "seconds": 0.0}
@@ -132,12 +151,34 @@ def embed_texts(texts: List[str]) -> "np.ndarray":
     return np.stack(out)
 
 
+# Image embeddings by the hash of the model's own input (an exact match only): the AI-slop pass and the local check
+# embed the same three frames of a candidate (vision.sample_frames' cached copies) - each embedded once.
+_IMAGE_CACHE: Dict[str, "np.ndarray"] = {}
+
+
 def embed_images(images: list) -> "np.ndarray":
-    """Unit-length embeddings for PIL images (batched)."""
-    batch = np.stack([_prep(im) for im in images])
-    parts = [_STATE["vision"].run(None, {"pixel_values": batch[i:i + 8]})[0]
-             for i in range(0, len(batch), 8)]
-    return _norm(np.concatenate(parts))
+    """Unit-length embeddings for PIL images (batched; an image already embedded in this job comes from the cache)."""
+    import hashlib
+    preps = [_prep(im) for im in images]
+    keys = [hashlib.md5(a.tobytes()).hexdigest() for a in preps]
+    with _LOCK:
+        known = {k: _IMAGE_CACHE[k] for k in keys if k in _IMAGE_CACHE}
+    todo = [i for i, k in enumerate(keys) if k not in known]
+    if todo:
+        batch = np.stack([preps[i] for i in todo])
+        parts = [_STATE["vision"].run(None, {"pixel_values": batch[j:j + 8]})[0]
+                 for j in range(0, len(batch), 8)]
+        fresh = _norm(np.concatenate(parts))
+        with _LOCK:
+            if len(_IMAGE_CACHE) > 3000:
+                _IMAGE_CACHE.clear()
+            for i, row in zip(todo, fresh):
+                _IMAGE_CACHE[keys[i]] = row
+                known[keys[i]] = row
+            STATS["embedded"] = STATS.get("embedded", 0) + len(todo)
+    with _LOCK:
+        STATS["embedCached"] = STATS.get("embedCached", 0) + (len(keys) - len(todo))
+    return np.stack([known[k] for k in keys])
 
 
 def _class_prompts():

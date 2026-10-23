@@ -345,11 +345,30 @@ class Photos(Styled):
             return None
         media._PHOTOS.update(cap=1, used=1)
         self.addCleanup(lambda: media._PHOTOS.update(cap=None, used=0))
-        with mock.patch.object(media.providers, "source_one", side_effect=source_one):
+        with mock.patch.object(media.providers, "source_one", side_effect=source_one),                 mock.patch.object(config, "PHOTO_CAP_SOFT", False):
             media.source_for_segment("flood", 5, tempfile.gettempdir(), visual_type="footage")
         self.assertTrue(seen and seen[0] is not None)
         self.assertNotIn("web_images", seen[0])
         self.assertIn("youtube", seen[0])
+
+    def test_past_the_cap_a_clip_first_line_still_asks_pictures_after_its_clips(self):
+        # PHOTO_CAP_SOFT (2026-10-23): the cap bites only where a clip is the alternative - a clip-first line asks
+        # every clip stage first, so its picture stages (only reached when the clips failed) stay open.
+        stages = []
+
+        def source_one(ctx):
+            stages.append((getattr(ctx, "stage", None), ctx.enabled_names))
+            return None
+        media._PHOTOS.update(cap=1, used=1)
+        self.addCleanup(lambda: media._PHOTOS.update(cap=None, used=0))
+        with mock.patch.object(media.providers, "source_one", side_effect=source_one),                 mock.patch.object(config, "PHOTO_CAP_SOFT", True),                 mock.patch.object(media, "clips_first_for", return_value=True):
+            media.source_for_segment("flood", 5, tempfile.gettempdir(), visual_type="footage")
+        self.assertTrue(stages)
+        self.assertFalse(any(names is not None and "web_images" not in names and "youtube" in names
+                             for _st, names in stages))
+        kinds = [st for st, _n in stages]
+        if "pictures" in kinds and "youtube" in kinds:
+            self.assertLess(kinds.index("youtube"), kinds.index("pictures"))
 
     def test_photos_past_the_videos_cap_look_for_footage(self):
         jobs = [{"index": i, "seconds": 6.0, "start": i * 6.0} for i in range(20)]      # 2 minutes

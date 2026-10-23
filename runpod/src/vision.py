@@ -488,6 +488,7 @@ def reset() -> None:
         _TILE_MODEL.update(model="", asked=0, answered=0)
         _TEXT_CHECKS.update(n=0, flagged=0)
         _NO_TILE["n"] = 0
+        _SLOT_WAIT.update(n=0, seconds=0.0, max=0.0, busy=0.0)
     # The job's AI stop too: every caller that resets vision mid-job (the footage search's media.reset_cache, a
     # Replace Clip, a re-clip) has raised on a stop before it (aiguard.raise_if_stopped).
     aiguard.reset()
@@ -512,6 +513,13 @@ def stats() -> dict:
         if _TILE_MODEL["asked"]:
             # The cheaper storyboard model (VISION_TILE_MODEL): how many of its calls it answered.
             out["tileModel"] = dict(_TILE_MODEL)
+        if _SLOT_WAIT["n"]:
+            # Calls, seconds queued for a slot (total, mean, longest) and seconds in flight, over this process.
+            out["slots"] = {"size": _SLOTS_SIZE, "calls": int(_SLOT_WAIT["n"]),
+                            "waitSeconds": round(_SLOT_WAIT["seconds"], 1),
+                            "meanWait": round(_SLOT_WAIT["seconds"] / max(1, _SLOT_WAIT["n"]), 2),
+                            "maxWait": round(_SLOT_WAIT["max"], 1),
+                            "meanCall": round(_SLOT_WAIT["busy"] / max(1, _SLOT_WAIT["n"]), 2)}
         if _NO_TILE["n"]:
             # Storyboard answers that said no tile fits (a refusal, a null tile): answers, not failures.
             out["noTile"] = _NO_TILE["n"]
@@ -523,9 +531,10 @@ def stats() -> dict:
 
 # At most VISION_CONCURRENCY requests in flight per worker (see config), and
 # never more than VISION_KIE_MAX_CONCURRENCY against Kie.
-_SLOTS = threading.BoundedSemaphore(max(1, min(config.VISION_CONCURRENCY, config.VISION_KIE_MAX_CONCURRENCY)
-                                             if "kie.ai" in (config.VISION_API_BASE or "")
-                                             else config.VISION_CONCURRENCY))
+_SLOTS_SIZE = max(1, min(config.VISION_CONCURRENCY, config.VISION_KIE_MAX_CONCURRENCY)
+                  if "kie.ai" in (config.VISION_API_BASE or "") else config.VISION_CONCURRENCY)
+_SLOTS = threading.BoundedSemaphore(_SLOTS_SIZE)
+_SLOT_WAIT: Dict[str, float] = {"n": 0, "seconds": 0.0, "max": 0.0, "busy": 0.0}
 
 
 # The gaming essay (config.GAMEPLAY_FOOTAGE, src/styles.py gaming_essay): clean in-game footage of the game the line
@@ -557,10 +566,22 @@ def _ask_once(model: str, messages: list, max_tokens: int, url: str = "",
     box = _SENT.get()
     if box is not None:
         box["queued"] = True            # waiting for one of this worker's slots: not sent yet
+    waited = time.time()
     with _SLOTS:
+        waited = time.time() - waited
+        with _LOCK:
+            # How long calls queued for a slot (stats()["slots"]): VISION_CONCURRENCY too low shows here.
+            _SLOT_WAIT["n"] += 1
+            _SLOT_WAIT["seconds"] += waited
+            _SLOT_WAIT["max"] = max(_SLOT_WAIT["max"], waited)
         if box is not None:
             box.setdefault("at", time.time())
-        return _ask_once_slot(model, messages, max_tokens, url, key, main)
+        t0 = time.time()
+        try:
+            return _ask_once_slot(model, messages, max_tokens, url, key, main)
+        finally:
+            with _LOCK:
+                _SLOT_WAIT["busy"] += time.time() - t0
 
 
 def _extra(model: str, url: str, max_tokens: int) -> tuple:

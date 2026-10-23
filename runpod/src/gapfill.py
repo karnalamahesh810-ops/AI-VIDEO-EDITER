@@ -410,7 +410,7 @@ def _from_reserve(job: dict, used: Used, work: str, stop: float, require_cc: boo
 
     def fits(c: dict, m: dict) -> bool:
         video = shot(c, m).video
-        return not video or media.may_place(used.placed(video), job.get("start"))
+        return not video or media.may_place(used.placed(video), job.get("start"), cap=_fill_cap())
 
     while time.time() < stop:
         pick = pools.take_spare(job, lambda c, m: not used.why_not(i, shot(c, m)), prefer=fits)
@@ -520,7 +520,7 @@ def _from_moment(job: dict, used: Used, work: str, stop: float, donors: Optional
         if vid in seen:
             continue
         seen.add(vid)
-        if judged and not media.may_place(used.placed(f"yt:{vid}", skip=i), job.get("start")):
+        if judged and not media.may_place(used.placed(f"yt:{vid}", skip=i), job.get("start"), cap=_fill_cap()):
             # Its video already plays MAX_MOMENTS_PER_VIDEO times, or within SAME_VIDEO_GAP_SECONDS of this line
             # (the owner's Texas review: other moments of one video still look like the same shot). The last
             # resort (not `judged`) may still take it: what it stands in for is a long hold or a text card.
@@ -551,6 +551,8 @@ def _from_moment(job: dict, used: Used, work: str, stop: float, donors: Optional
                             "cuts": cuts}, judged_by="none")
                 ok = media._asset_ok_for(job, asset)[0] and not media.motion_rejects(path) \
                     and not media.slop_reason(path, title) and not _too_short(asset, job)
+                if ok and _looks_like_neighbour(path, used, i, f"yt:{vid}"):
+                    ok = False                      # another moment, the same picture on screen
                 if ok and judged:
                     if calls >= MOMENT_JUDGES:
                         ok = False
@@ -581,6 +583,124 @@ def _from_moment(job: dict, used: Used, work: str, stop: float, donors: Optional
                                    "line" + ("" if judged else " and nothing checked it against the line")
                                    + " - check it fits")
             return asset
+    return None
+
+
+def _fill_cap() -> int:
+    """Scenes one source video may supply when the ladder fills a line (FILL_MAX_MOMENTS_PER_VIDEO; what it stands
+    in for is a held, stretched or text-card line), never fewer than the sourcing's own MAX_MOMENTS_PER_VIDEO."""
+    own = int(config.MAX_MOMENTS_PER_VIDEO or 0)
+    return max(own, int(getattr(config, "FILL_MAX_MOMENTS_PER_VIDEO", 0) or 0)) if own > 0 else 0
+
+
+def _nearby_files(used: Used, i: int, video: str = "", span: int = 2) -> List[str]:
+    """The local files of the shots within `span` scenes of line i, and of every shot cut from `video`."""
+    out = []
+    with used.lock:
+        for j, shots in list(used.shots.items()):
+            if j == i:
+                continue
+            for sh in shots:
+                if abs(j - i) <= span or (video and sh.video == video):
+                    out += [f for f in sh.files
+                            if f and not f.startswith(("http://", "https://")) and os.path.isfile(f)]
+    return out
+
+
+def _looks_like_neighbour(path: str, used: Used, i: int, video: str = "") -> bool:
+    """The file's middle frame is nearly the same picture as a shot beside line i or of the same source video
+    (src/spares.near_duplicate, SPARE_DUPLICATE_BITS): two moments of one drone pass, one photo re-hosted."""
+    try:
+        from . import spares
+        if spares.near_duplicate(path, _nearby_files(used, i, video)):
+            spares.note("nearDuplicate")
+            return True
+    except Exception:  # noqa: BLE001 - unmeasured is not a duplicate
+        pass
+    return False
+
+
+def _from_spare(job: dict, used: Used, work: str, stop: float, kind: str = "video"):
+    """
+    (spare) Real footage - or a real picture - this job already downloaded and the judge already saw, turned down
+    only for the line it was searched for (src/spares.py): the spares whose description shares the line's words,
+    best first, each through the variety rules (Used; media.may_place at FILL_MAX_MOMENTS_PER_VIDEO), the clip
+    checks, a near-duplicate check against the shots around the line, and the vision judge against THIS line
+    (a clip judged as "shows the subject it names", like the other ladder clips; at most SPARE_JUDGES calls).
+    No search, no download, no proxy.
+    """
+    from . import media, spares
+    if not spares.enabled():
+        return None
+    i = job["index"]
+    tries = int(getattr(config, "SPARE_TRIES", 6) or 6)
+    judges = int(getattr(config, "SPARE_JUDGES", 3) or 3)
+    label = str(job.get("subject") or job.get("place") or "").strip()
+    calls = 0
+    for e in spares.candidates(job, kind, limit=tries):
+        if time.time() > stop or calls >= judges:
+            return None
+        path = e["path"]
+        if not os.path.isfile(path):
+            continue
+        if kind == "video":
+            shot = Shot(files=(path,), video=f"yt:{e['vid']}", start=e.get("start"), at=job.get("start"))
+            if not media.may_place(used.placed(shot.video, skip=i), job.get("start"), cap=_fill_cap()):
+                continue
+        else:
+            shot = Shot(ident=e["url"], files=(path,), at=job.get("start"))
+        if not used.claim(i, shot):
+            continue
+        if not spares.take(e):
+            used.release(i, shot)
+            continue
+        spares.note("offered")
+        if kind == "video":
+            asset = media.MediaAsset(
+                kind="video", source="youtube", url=e["url"], local_path=path,
+                license="unverified — you must hold the rights", attribution=f"YouTube: {e.get('title') or ''}",
+                query=str(job.get("query") or ""),
+                moment_key=f"yt:{e['vid']}@{int(float(e.get('start') or 0) // 10)}",
+                moment={"start": e.get("start"), "spare": True}, judged_by="none")
+        else:
+            asset = media.MediaAsset(kind="image", source=spares.source_name(e["url"]), url=e["url"],
+                                     local_path=path, attribution=str(e.get("title") or ""),
+                                     license="Web image: licence unverified",
+                                     query=str(job.get("query") or ""), judged_by="none")
+        ok = bool(media._asset_ok_for(job, asset)[0])
+        if ok and _too_short(asset, job):
+            spares.note("tooShort")
+            ok = False
+        if ok and _looks_like_neighbour(path, used, i, shot.video):
+            ok = False
+        verdict = None
+        if ok:
+            calls += 1
+            spares.note("judged")
+            token = media._RUNG.set({"label": label}) if (label and kind == "video") else None
+            try:
+                ok, verdict = media.judge_clip(path, job, str(e.get("title") or ""), source_url=e["url"])
+            except Exception:  # noqa: BLE001 - not judged, not placed
+                ok = False
+            finally:
+                if token is not None:
+                    media._RUNG.reset(token)
+            if not ok:
+                spares.note("turnedDown")
+        if not ok:
+            used.release(i, shot)
+            spares.give_back(e, i)
+            continue
+        asset.apply_verdict(verdict, str(job.get("intent") or ""))
+        if kind == "image":
+            media._count_photo(asset)
+        spares.note("filled")
+        asset.review_required = True
+        asset.review_reason = ("Real footage this video downloaded for another line, checked against this one - "
+                               "check it fits" if kind == "video" else
+                               "A real picture this video found for another line, checked against this one - "
+                               "check it fits")
+        return asset
     return None
 
 
@@ -723,8 +843,8 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
     by_index = {j["index"]: j for j in jobs or []}
     want = sorted(by_index) if indices is None else [i for i in indices if i in by_index]
     todo = [i for i in want if _at(results, i) is None]
-    out = {"asked": len(todo), "pack": 0, "library": 0, "reserve": 0, "moment": 0, "still": 0, "generated": 0,
-           "left": 0, "seconds": 0.0}
+    out = {"asked": len(todo), "pack": 0, "spare": 0, "library": 0, "reserve": 0, "moment": 0, "sparePicture": 0,
+           "still": 0, "generated": 0, "left": 0, "seconds": 0.0}
     if not todo or not config.FALLBACK_FILL or not work:
         out["left"] = len(todo)
         return out
@@ -739,25 +859,45 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
     deadline = t0 + total
     allow_generated = not youtube_only and config.IMAGE_MAX_PER_VIDEO > 0
 
+    moment_min = float(getattr(config, "FALLBACK_MOMENT_MIN_SECONDS", 0.0) or 0.0)
+
     def one(job: dict):
-        stop = min(deadline, time.time() + per_scene)
+        box = {"stop": min(deadline, time.time() + per_scene)}
         tokens = _scene_context(job)
+
+        def moment_stop(stills: bool) -> float:
+            # Another moment is a download through a proxy (10-45 s) and a judgement: the step gets at least
+            # FALLBACK_MOMENT_MIN_SECONDS (its share of a 45 s line was ~25 s - 1 of 145 lines filled on the
+            # Mount Rainier video, 2026-10-23), and the steps after it keep the rest of their own share.
+            now = time.time()
+            own = _share_of(box["stop"], MOMENT_SHARE) if stills else box["stop"]
+            if moment_min > 0 and own < now + moment_min:
+                own = min(deadline, now + moment_min)
+                rest = per_scene * (1.0 - MOMENT_SHARE) if stills else 0.0
+                box["stop"] = min(deadline, max(box["stop"], own + rest))
+            return own
+
         try:
             steps: List[Tuple[str, Callable]] = []
-            if packs.usable(job, media.youtube_only()):
-                steps.append(("pack", lambda: _from_pack(job, used, library, work, stop, require_cc)))
-            steps += [
-                ("library", lambda: _from_library(job, used, library, work, stop)),
-                ("reserve", lambda: _from_reserve(job, used, work, stop, require_cc, library)),
-            ]
+            footage_line = job.get("visual_type", "footage") == "footage" and job.get("subject_type") != "document"
             stills = config.FALLBACK_STILLS and job.get("visual_type", "footage") in ("footage", "image")
+            if packs.usable(job, media.youtube_only()):
+                steps.append(("pack", lambda: _from_pack(job, used, library, work, box["stop"], require_cc)))
+            if footage_line:
+                # Real footage already on disk, judged again for this line: before any search or download.
+                steps.append(("spare", lambda: _from_spare(job, used, work, box["stop"], "video")))
+            steps += [
+                ("library", lambda: _from_library(job, used, library, work, box["stop"])),
+                ("reserve", lambda: _from_reserve(job, used, work, box["stop"], require_cc, library)),
+            ]
             if moments_on and donors and job.get("subject_type") != "document":
-                steps.append(("moment", lambda: _from_moment(
-                    job, used, work, _share_of(stop, MOMENT_SHARE) if stills else stop, donors)))
+                steps.append(("moment", lambda: _from_moment(job, used, work, moment_stop(stills), donors)))
+            if stills and not youtube_only:
+                steps.append(("sparePicture", lambda: _from_spare(job, used, work, box["stop"], "image")))
             if stills:
-                steps.append(("still", lambda: _from_still(job, used, work, stop, allow_generated)))
+                steps.append(("still", lambda: _from_still(job, used, work, box["stop"], allow_generated)))
             for name, step in steps:
-                if time.time() > stop:
+                if time.time() > box["stop"]:
                     break
                 try:
                     got = step()
@@ -800,7 +940,8 @@ def fill_empty(jobs: List[dict], results, work: str, *, library=None, require_cc
     out["seconds"] = round(time.time() - t0, 1)
     filled = out["asked"] - out["left"]
     print(f"[fill] {label or 'fallback'}: filled {filled} of {out['asked']} empty scene(s) - "
-          f"{out['pack']} from the niche packs, {out['library']} from the library, "
+          f"{out['pack']} from the niche packs, {out['spare']} spare clips, {out['sparePicture']} spare pictures, "
+          f"{out['library']} from the library, "
           f"{out['reserve']} from spare pool moments, {out['moment']} other moments of the video's clips, "
           f"{out['still']} stills, {out['generated']} generated; {out['left']} left for hold/graphic "
           f"({out['seconds']:.0f}s)", flush=True)
@@ -1650,11 +1791,12 @@ def summary(*parts: Dict[str, int]) -> str:
     """'filled 23 scenes from library/stills/hold' style line for the job's log."""
     c = Counter()
     for p in parts:
-        for k in ("pack", "library", "reserve", "still", "generated", "graphic", "held", "alternative", "moment",
-                  "ladder", "ai", "card"):
+        for k in ("pack", "spare", "sparePicture", "library", "reserve", "still", "generated", "graphic", "held",
+                  "alternative", "moment", "ladder", "ai", "card"):
             c[k] += int((p or {}).get(k) or 0)
     total = sum(c.values())
-    names = {"pack": "packs", "library": "library", "reserve": "spare moments", "still": "stills",
+    names = {"pack": "packs", "spare": "spare clips", "sparePicture": "spare pictures", "library": "library",
+             "reserve": "spare moments", "still": "stills",
              "generated": "generated", "graphic": "graphics", "held": "hold",
              # Instead of a hold past SHOT_MAX_SECONDS (src/shotcap.py).
              "alternative": "runner-ups", "moment": "other moments", "ladder": "ladder",

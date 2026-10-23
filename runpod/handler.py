@@ -100,6 +100,7 @@ from src import ambience, gapfill, grade, packs, quality, review, shotcap, voice
 from src import brandkit, clipfx, stockblock
 from src import recut, reclip, relook, restore
 from src import topics
+from src import spares
 from src import batch, sources
 from src import datagraphics
 from src import tts
@@ -1668,6 +1669,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         except Exception as e:  # noqa: BLE001 - never fail a video over polish
             print(f"[worker] 60 fps step skipped: {type(e).__name__}: {str(e)[:100]}", flush=True)
     media.LAST_STATS["pools"] = pool_stats     # per-scene sourcing resets the stats
+    # The spare bank (src/spares.py): footage kept, offered and placed; the gate's queues and shared decodes.
+    media.LAST_STATS["spares"] = spares.stats()
+    media.LAST_STATS["gateQueues"] = media.gate_queue_stats()
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
     if config.ARCHIVE_RESTORE:
         # What was restored, how, and how long it took (meta.sourcing.archiveRestore).
@@ -3158,6 +3162,10 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       "CLIPS_FIRST", "CLIPS_FIRST_STILLS", "CLIP_WORDINGS", "CLIP_RUNGS", "CLIP_OTHER_WORDINGS",
                       "CLIPS_FIRST_JUDGE_MAX_PER_SCENE", "CLIPS_FIRST_POOL_SCOUT", "CLIP_PREQUALIFY",
                       "HOOK_NO_STILL_SECONDS", "HOOK_MOTION_WEIGHT", "FALLBACK_MOMENTS", "NO_TEXT_FILL",
+                      # The empty-spots fix (2026-10-23): the spare bank, the ladder's per-video cap and moment
+                      # time, the soft photo cap (src/spares.py, src/gapfill.py).
+                      "SPARE_BANK", "SPARE_MIN_MATCH", "SPARE_JUDGES", "SPARE_TRIES", "FILL_MAX_MOMENTS_PER_VIDEO",
+                      "FALLBACK_MOMENT_MIN_SECONDS", "PHOTO_CAP_SOFT",
                       "WHOLE_FILE_MAX_MB", "WHOLE_FILE_SECONDS", "RESCUE_SCENE_SECONDS", "NO_TEXT_HOLD_MAX",
                       "PASS1_BUDGET_SECONDS", "SOURCE_BUDGET_PER_SCENE", "CLIPS_FIRST_CLIP_SHARE",
                       # A past era's broadcast video (off by default; the owner's 720p rule) and a re-clip's
@@ -3540,6 +3548,7 @@ def handler(job):
     report = Reporter(reports_to, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
+    spares.reset()                      # and the footage this job downloaded and kept for its empty lines
     pools.reset()                       # and the spare pool moments it may draw on
     shotcap.reset()                     # and what the shot cap cut and swapped
     hookcheck.reset()                   # and the hook check's vision calls

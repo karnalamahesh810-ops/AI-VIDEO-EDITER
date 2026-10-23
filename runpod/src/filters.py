@@ -45,6 +45,113 @@ def _video_seconds(path: str) -> float:
         return 0.0
 
 
+# One decode for every grey-frame look at a clip (2026-10-23). A downloaded candidate used to be decoded in full
+# once per check - the burned-caption test and the clip check (4 frames, 320x180), the AI-slop still test (one frame
+# a second, 128x72) and its caption test (6, 320x180), the motion measure (5, 160x90), the text signal (3, 640x360):
+# five ffmpeg runs over the same file, ~2 s of CPU for a 10 s 1080p clip on the laptop and much more with sixteen
+# sourcing threads on one pod (gate:clip averaged 46 s on the Mount Rainier video). The first look at a clip now
+# decodes it ONCE with one fps+scale chain per look (ffmpeg split, the same filters as before, so the same
+# frames) and the others come from this cache. GRAY_SHARED_DECODE=0 is the old one-run-per-look.
+_SHARED_SPECS = ((4, 320, 180), (6, 320, 180), (5, 160, 90), (3, 640, 360))
+_STILL_LOOK = (128, 72)                 # slop.STILL_W, STILL_H: its frame count follows the clip's seconds
+_GRAY_CACHE: "dict" = {}
+_GRAY_LOCK = None
+GRAY_STATS = {"shared": 0, "hits": 0, "single": 0}
+
+
+def _gray_lock():
+    global _GRAY_LOCK
+    if _GRAY_LOCK is None:
+        import threading
+        _GRAY_LOCK = threading.Lock()
+    return _GRAY_LOCK
+
+
+def _file_key(path: str):
+    """The file itself (device, inode, size, mtime): a hard link to it (src/spares.py) is the same file."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino, st.st_size, int(st.st_mtime_ns)) if st.st_ino else (path, st.st_size,
+                                                                                       int(st.st_mtime_ns))
+
+
+def _still_count(seconds: float) -> int:
+    """slop.still_verdict's frame count: about one a second, 3-8."""
+    return max(3, min(8, int(seconds) + 1)) if seconds else 5
+
+
+def _rate(count: int, seconds: float) -> str:
+    return f"{count}/{seconds:.3f}" if seconds > count else "1"
+
+
+def _decode_shared(path: str, seconds: float, specs: list) -> Optional[dict]:
+    """{(count, w, h): frames} for every spec from ONE decode of `path`, or None when ffmpeg failed."""
+    import shutil
+    import tempfile
+    try:
+        import numpy as np
+    except ImportError:
+        return None
+    tmp = tempfile.mkdtemp(prefix="gray_")
+    try:
+        chains = [f"[i{k}]fps={_rate(c, seconds)},scale={w}:{h},format=gray[o{k}]" for k, (c, w, h) in enumerate(specs)]
+        graph = f"[0:v]split={len(specs)}" + "".join(f"[i{k}]" for k in range(len(specs))) + ";" + ";".join(chains)
+        cmd = ["ffmpeg", "-v", "error", "-i", path, "-filter_complex", graph]
+        outs = []
+        for k, (c, _w, _h) in enumerate(specs):
+            out = os.path.join(tmp, f"o{k}.raw")
+            outs.append(out)
+            cmd += ["-map", f"[o{k}]", "-frames:v", str(c), "-f", "rawvideo", "-y", out]
+        subprocess.run(cmd, capture_output=True, timeout=120)
+        got = {}
+        for (c, w, h), out in zip(specs, outs):
+            try:
+                with open(out, "rb") as f:
+                    buf = f.read()
+            except OSError:
+                return None
+            n = min(c, len(buf) // (w * h))
+            got[(c, w, h)] = [np.frombuffer(buf[i * w * h:(i + 1) * w * h], dtype="uint8").reshape(h, w)
+                              for i in range(n)]
+        return got
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _cached_gray(path: str, count: int, w: int, h: int):
+    """The frames from the shared decode (decoding the clip once for every look), or None to decode on its own."""
+    if not getattr(config, "GRAY_SHARED_DECODE", True):
+        return None
+    key = _file_key(path)
+    if key is None:
+        return None
+    lock = _gray_lock()
+    with lock:
+        row = _GRAY_CACHE.get(key)
+        if row is not None and (count, w, h) in row:
+            GRAY_STATS["hits"] += 1
+            return list(row[(count, w, h)])
+        seconds = row.get("seconds") if row is not None else None
+    if seconds is None:
+        seconds = _video_seconds(path)
+    specs = list(_SHARED_SPECS) + [(_still_count(seconds), *_STILL_LOOK)]
+    if (count, w, h) not in specs:
+        return None                     # a one-off look (a dhash, a single frame): its own small run
+    got = _decode_shared(path, seconds, specs)
+    if got is None:
+        return None
+    with lock:
+        if len(_GRAY_CACHE) > 256:
+            _GRAY_CACHE.clear()
+        _GRAY_CACHE[key] = dict(got, seconds=seconds)
+        GRAY_STATS["shared"] += 1
+    return list(got[(count, w, h)])
+
+
 def _gray_frames(path: str, count: int = 4, w: int = 320, h: int = 180):
     """
     `count` evenly spaced frames as (h, w) uint8 arrays, [] if unreadable.
@@ -64,9 +171,13 @@ def _gray_frames(path: str, count: int = 4, w: int = 320, h: int = 180):
     if _is_still(path):
         vf, frames = f"scale={w}:{h},format=gray", 1
     else:
+        shared = _cached_gray(path, count, w, h)
+        if shared is not None:
+            return shared
         seconds = _video_seconds(path)
-        rate = f"{count}/{seconds:.3f}" if seconds > count else "1"
+        rate = _rate(count, seconds)
         vf, frames = f"fps={rate},scale={w}:{h},format=gray", count
+        GRAY_STATS["single"] += 1
     p = subprocess.run(
         ["ffmpeg", "-v", "error", "-i", path, "-vf", vf,
          "-frames:v", str(frames), "-f", "rawvideo", "-"],

@@ -76,7 +76,10 @@ STYLES: Dict[str, dict] = {
                    # document's asks for a clip on all its wordings and one more wider rung first, and
                    # real photos stay a few per 10 minutes.
                    "CLIPS_FIRST": True, "CLIPS_FIRST_STILLS": True, "CLIP_RUNGS": 4,
-                   "PHOTO_MAX_PER_10MIN": 8.0},
+                   "PHOTO_MAX_PER_10MIN": 8.0,
+                   # The reference cuts one strong clip into several shots (26% of its shots continue a clip):
+                   # a line nothing else fills may take a 4th moment of a source video, 2+ minutes from the others.
+                   "FILL_MAX_MOMENTS_PER_VIDEO": 4},
     },
     "nature_weather": {
         "label": "Nature & Weather",
