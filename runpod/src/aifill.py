@@ -32,11 +32,19 @@ cheap prompt model (AI_FILL_PROMPT_MODELS, one call a pass, ~$0.002) writes
 each picture's description from the line, the lines beside it and the story
 (an abstract line gets the concrete thing it is about); the rules build it
 from the planner's intent when that call fails. It moves like every still:
-the n-th free camera move, and living-photo parallax (src/living.py). Models in order
-(config.AI_FILL_IMAGE_MODELS): google/gemini-nano-banana-2.1 at 2K (~$0.053),
-google/gemini-3.1-flash-image at 1K (~$0.067), google/gemini-2.5-flash-image
-(~$0.039); clips (AI_FILL_VIDEO_MODELS): bytedance/seedance-1-5-pro 720p
-($0.026/s), google/veo-3.1-lite 720p ($0.03/s). Each one passes the
+the n-th free camera move, and living-photo parallax (src/living.py). Models in order,
+by the block's "quality" (2026-10-25; a block may also name its own
+"image_models" / "video_models"):
+  budget (default)  pictures (config.AI_FILL_IMAGE_MODELS) google/gemini-nano-banana-2.1
+                    at 1K (~$0.034), gemini-3.1-flash-lite-image 1K, gemini-2.5-flash-image
+                    (~$0.039), gemini-3.1-flash-image 1K; clips (AI_FILL_VIDEO_MODELS)
+                    bytedance/seedance-1-5-pro 480p (~$0.0115/s, no audio), then 720p,
+                    google/veo-3.1-lite 720p ($0.03/s), x-ai/grok-imagine-video-1.5-lite 480p
+                    - a clip under 720 lines is sharpened to 1080 (sharpen(): FlashVSR on
+                    the GPU tools endpoint, else the CPU Lanczos pass)
+  standard          the chains before: Nano Banana 2.1 at 2K (~$0.053), 3.1-flash-image
+                    1K, 2.5-flash-image; Seedance 720p ($0.026/s), Veo 3.1 Lite 720p.
+Every clip request asks for no audio (tiers.generate_audio_param). Each one passes the
 presenter style's look check (google/gemini-2.5-flash: real-looking, on its
 line, no garbled text or melted hands), with one retry that asks for exactly
 what the check found; a line nothing passed for keeps the ordinary last
@@ -85,14 +93,20 @@ DEFAULT_MAX_IMAGES = 20
 DEFAULT_MAX_CLIPS = 3
 MAX_IMAGES_LIMIT = 60
 MAX_CLIPS_LIMIT = 10
-# What the app shows and sizes the budget with (docs: the app's ai-fill contract): ~$0.05 a picture,
-# ~$0.13-0.15 a clip; the budget is that with half again on top for retries and checks.
+# What the app shows and sizes the budget with (docs: the app's ai-fill contract), per quality: the standard
+# chains ~$0.05 a picture and ~$0.13-0.15 a clip; budget (the default since 2026-10-25) ~$0.035 a picture (1K) and
+# ~$0.06-0.08 a clip (480p, no audio, sharpened afterwards). The budget is that with half again on top for retries
+# and checks.
 PICTURE_USD = 0.05
 CLIP_USD = 0.14
+QUALITY_USD = {"budget": {"picture": 0.035, "clip": 0.07}, "standard": {"picture": PICTURE_USD, "clip": CLIP_USD}}
+QUALITIES = ("budget", "standard")
 BUDGET_MARGIN = 1.5
 # Prices the budget reserves before a call (the provider's own usage.cost is what is counted after it).
-# Nano Banana 2.1 measured at $0.053 for 2K on 2026-10-07; gemini-2.5-flash-image: 1290 tokens at $30/M.
+# Nano Banana 2.1 measured at $0.053 for 2K on 2026-10-07; Gemini image output is $30/M (flash-lite, nano banana,
+# 2.5 flash) or $60/M (3.1 flash) tokens, 1120 tokens a 1K picture, 1680 a 2K one; gemini-2.5-flash-image: 1290.
 IMAGE_PRICES = {"google/gemini-nano-banana-2.1": {"1K": 0.034, "2K": 0.053},
+                "google/gemini-3.1-flash-lite-image": {"1K": 0.034, "2K": 0.051},
                 "google/gemini-3.1-flash-image": {"1K": 0.067, "2K": 0.101},
                 "google/gemini-2.5-flash-image": {"": 0.039, "1K": 0.039}}
 # A line shorter than this is not worth a picture (a flash between two shots).
@@ -130,9 +144,20 @@ def _int(v: Any, default: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, n))
 
 
-def default_budget(max_images: int, max_clips: int) -> float:
-    """The app's budget for these caps: (pictures x $0.05 + clips x $0.14) x 1.5."""
-    return round((max(0, max_images) * PICTURE_USD + max(0, max_clips) * CLIP_USD) * BUDGET_MARGIN, 2)
+def quality_of(value: Any) -> str:
+    """"budget" / "standard" (anything else: the worker's default, AI_FILL_QUALITY)."""
+    q = str(value or "").strip().lower()
+    if q in QUALITIES:
+        return q
+    q = str(getattr(config, "AI_FILL_QUALITY", "budget") or "budget").strip().lower()
+    return q if q in QUALITIES else "budget"
+
+
+def default_budget(max_images: int, max_clips: int, quality: str = "standard") -> float:
+    """The app's budget for these caps: (pictures x $0.05 + clips x $0.14) x 1.5 at standard quality, (pictures x
+    $0.035 + clips x $0.07) x 1.5 at budget quality."""
+    usd = QUALITY_USD.get(quality, QUALITY_USD["standard"])
+    return round((max(0, max_images) * usd["picture"] + max(0, max_clips) * usd["clip"]) * BUDGET_MARGIN, 2)
 
 
 def block(inp: Optional[dict]) -> Optional[Dict[str, Any]]:
@@ -154,16 +179,41 @@ def block(inp: Optional[dict]) -> Optional[Dict[str, Any]]:
         return None
     max_images = _int(raw.get("max_images"), DEFAULT_MAX_IMAGES, 0, MAX_IMAGES_LIMIT)
     max_clips = min(_int(raw.get("max_clips"), DEFAULT_MAX_CLIPS, 0, MAX_CLIPS_LIMIT), max_images)
+    quality = quality_of(raw.get("quality"))
     try:
         budget = float(raw.get("budget_usd"))
         if not math.isfinite(budget):
             raise ValueError
     except (TypeError, ValueError):
-        budget = default_budget(max_images, max_clips)
+        budget = default_budget(max_images, max_clips, quality)
     budget = round(max(0.0, min(float(config.AI_FILL_MAX_BUDGET), budget)), 2)
     if max_images <= 0 or budget <= 0:
         return None
-    return {"enabled": True, "max_images": max_images, "max_clips": max_clips, "budget_usd": budget}
+    out = {"enabled": True, "max_images": max_images, "max_clips": max_clips, "budget_usd": budget,
+           "quality": quality}
+    # A job's own chains (an A/B, or the bake-off's winner before it becomes a default): [[model, size], ...].
+    for key in ("image_models", "video_models"):
+        got = _model_list(raw.get(key))
+        if got:
+            out[key] = got
+    return out
+
+
+def _model_list(value: Any) -> List[Tuple[str, str]]:
+    """A job's model chain ([[model, size or resolution], "vendor/model", ...]; at most 6) or []."""
+    if not isinstance(value, (list, tuple)):
+        return []
+    out: List[Tuple[str, str]] = []
+    for item in list(value)[:6]:
+        if isinstance(item, (list, tuple)) and item:
+            model, size = str(item[0]).strip(), str(item[1]).strip() if len(item) > 1 else ""
+        elif isinstance(item, str):
+            model, size = item.strip(), ""
+        else:
+            continue
+        if re.fullmatch(r"[\w.-]+/[\w.:-]+", model) and re.fullmatch(r"[\w.]{0,8}", size):
+            out.append((model, size))
+    return out
 
 
 def _models(raw: str, fallback: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
@@ -187,15 +237,37 @@ def _models(raw: str, fallback: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
     return out or list(fallback)
 
 
-def image_models() -> List[Tuple[str, str]]:
-    return _models(config.AI_FILL_IMAGE_MODELS, [("google/gemini-nano-banana-2.1", "2K"),
-                                                 ("google/gemini-3.1-flash-image", "1K"),
-                                                 ("google/gemini-2.5-flash-image", "")])
+_STANDARD_IMAGES = [("google/gemini-nano-banana-2.1", "2K"), ("google/gemini-3.1-flash-image", "1K"),
+                    ("google/gemini-2.5-flash-image", "")]
+_STANDARD_CLIPS = [("bytedance/seedance-1-5-pro", "720p"), ("google/veo-3.1-lite", "720p")]
+_BUDGET_IMAGES = [("google/gemini-nano-banana-2.1", "1K"), ("google/gemini-3.1-flash-lite-image", "1K"),
+                  ("google/gemini-2.5-flash-image", ""), ("google/gemini-3.1-flash-image", "1K")]
+_BUDGET_CLIPS = [("bytedance/seedance-1-5-pro", "480p"), ("bytedance/seedance-1-5-pro", "720p"),
+                 ("google/veo-3.1-lite", "720p"), ("x-ai/grok-imagine-video-1.5-lite", "480p")]
 
 
-def video_models() -> List[Tuple[str, str]]:
-    return _models(config.AI_FILL_VIDEO_MODELS, [("bytedance/seedance-1-5-pro", "720p"),
-                                                 ("google/veo-3.1-lite", "720p")])
+def _quality_now(quality: Optional[str] = None) -> str:
+    return quality_of(quality if quality else (_STATE.get("block") or {}).get("quality"))
+
+
+def image_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
+    """The picture models in the order tried: the job's own chain, else its quality's (budget: 1K pictures)."""
+    own = (_STATE.get("block") or {}).get("image_models") if quality is None else None
+    if own:
+        return list(own)
+    if _quality_now(quality) == "standard":
+        return _models(config.AI_FILL_STANDARD_IMAGE_MODELS, _STANDARD_IMAGES)
+    return _models(config.AI_FILL_IMAGE_MODELS, _BUDGET_IMAGES)
+
+
+def video_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
+    """The clip models in the order tried: the job's own chain, else its quality's (budget: 480p, sharpened)."""
+    own = (_STATE.get("block") or {}).get("video_models") if quality is None else None
+    if own:
+        return list(own)
+    if _quality_now(quality) == "standard":
+        return _models(config.AI_FILL_STANDARD_VIDEO_MODELS, _STANDARD_CLIPS)
+    return _models(config.AI_FILL_VIDEO_MODELS, _BUDGET_CLIPS)
 
 
 def image_usd(model: str, size: str) -> float:
@@ -1045,6 +1117,45 @@ def _clip_len(model: str, seconds: float) -> Optional[int]:
     return None
 
 
+def sharpen(path: str) -> str:
+    """
+    A clip AI fill made under 720 lines (the budget 480p) to 1080 lines, in place, before it goes on the timeline:
+    FlashVSR on the GPU tools endpoint when it is configured (src/gputools.py: the same call as the footage's
+    UPSCALE_LOWRES_CLIPS), else - or when the GPU does not answer in AI_FILL_UPSCALE_SECONDS - the CPU denoise +
+    Lanczos + sharpen pass (src/upscale.py). "gpu" / "cpu" / "" (nothing done: off, already sharp, or failed - the
+    clip stays as it was).
+    """
+    if not getattr(config, "AI_FILL_UPSCALE", True):
+        return ""
+    from . import gputools, upscale
+    try:
+        p = gputools._probe(path)
+    except Exception:  # noqa: BLE001
+        return ""
+    lines = min(p["w"], p["h"]) if p["w"] and p["h"] else 0
+    if not lines or lines >= 720:
+        return ""
+    try:
+        c = gputools.client()
+    except Exception:  # noqa: BLE001
+        c = None
+    if c is not None:
+        try:
+            url = gputools._stage(path)
+            out = c.run({"action": "upscale", "url": url, "lines": 1080},
+                        time.time() + float(getattr(config, "AI_FILL_UPSCALE_SECONDS", 180)))
+            got = gputools._fetch(out["url"], path + ".gpu.mp4")
+            if gputools._replace_checked(path, got, want_lines=1080):
+                return "gpu"
+        except Exception as e:  # noqa: BLE001 - the CPU pass instead
+            print(f"[aifill] GPU sharpening of {os.path.basename(path)} failed: {str(e)[:120]}", flush=True)
+    try:
+        return "cpu" if upscale.upscale_clip(path, 240) else ""
+    except Exception as e:  # noqa: BLE001
+        print(f"[aifill] sharpening {os.path.basename(path)} failed: {type(e).__name__}", flush=True)
+        return ""
+
+
 def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
     """The key line's AI clip from its picture (image-to-video, 4-6 s, no sound); None: the picture stays."""
     from . import costs
@@ -1057,19 +1168,26 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
     sid = re.sub(r"[^A-Za-z0-9_-]+", "", str(line.scene.get("id") or "scene"))
     issues: List[str] = []
     why: List[str] = []
-    for attempt, (model, res) in enumerate(video_models()[:2]):
-        if _STATE.get("stopped"):
+    tries = 0
+    for model, res in video_models():
+        # Two paid tries at most, down the chain (budget: Seedance 480p, then 720p, Veo 3.1 Lite, Grok Lite).
+        if _STATE.get("stopped") or tries >= 2:
             break
+        if model in _STATE["unavailable"]:
+            continue
         seconds = _clip_len(model, line.seconds)
         if seconds is None:
             why.append(f"{model}: no 4-6 s length covers {line.seconds:.1f} s")
             continue
-        info = tiers.model_info(model)
+        attempt = tries
+        tries += 1
         link = still.url if str(still.url or "").startswith("https://") else data_url_for(still.path)
         prompt = f"{motion_prompt(line.motion, line.what)} {fix_text(issues, line.what)}".strip()
         seed = zlib.crc32(f"{line.key}:{attempt}".encode("utf-8")) % 2_000_000_000
+        # Never any sound on b-roll: generate_audio false on every model that takes the flag (Seedance with audio
+        # costs twice as much); a model that makes no sound gets no flag (tiers.generate_audio_param).
         req = VideoRequest(model=model, prompt=prompt, resolution=res, aspect_ratio="16:9", duration=seconds,
-                           first_frame=link, generate_audio=False if info.get("audio_flag") else None, seed=seed)
+                           first_frame=link, generate_audio=tiers.generate_audio_param(model), seed=seed)
         payload = {"kind": "aifill-clip", "model": model, "res": res, "seconds": seconds, "prompt": prompt,
                    "seed": seed}
         key = cache.key(payload, [still.path])
@@ -1115,6 +1233,11 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
             if _out_of_credit(e):
                 _stop("OpenRouter is out of credit")
                 break
+            if _model_gone(e):
+                with _LOCK:
+                    _STATE["unavailable"].add(model)
+                print(f"[aifill] {model} is not available: {str(e)[:120]}", flush=True)
+                tries -= 1                      # nothing was paid: the next model gets the try
             why.append(f"{model}: {str(e)[:140]}")
             continue
         except Exception as e:  # noqa: BLE001 - the next model, then the picture
@@ -1140,9 +1263,12 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
             why.append(f"{model}: the check turned it down ({', '.join(issues)[:80]})")
             continue
         costs.record("aivideo.screen_seconds", min(line.seconds, keep))
+        sharpened = sharpen(clip)
         info = media_io.probe(clip)
         with _LOCK:
             _STATE["models_used"][model] += 1
+            if sharpened:
+                _STATE["sharpened"] = _STATE.get("sharpened", Counter()) + Counter({sharpened: 1})
         return Made(kind="clip", path=clip, model=model, usd=usd, url=url, prompt=prompt, seconds=info["duration"],
                     width=int(info["width"] or 0), height=int(info["height"] or 0), cached=cached,
                     attempts=attempt + 1, checks={"look": verdict, **({"earlier": why} if why else {})})
@@ -1391,9 +1517,13 @@ def cards(doc: dict, scenes: List[dict], out: Dict[str, int], *, fresh: bool = T
 def health() -> Dict[str, Any]:
     """For the health check (no call made): an OpenRouter key AI fill can use, and the models it would ask."""
     from .presenter import providers
-    return {"key": bool(providers.openrouter_key()), "pictures": [m for m, _s in image_models()],
-            "clips": [m for m, _r in video_models()], "prompts": list(config.AI_FILL_PROMPT_MODELS or []),
-            "maxBudget": float(config.AI_FILL_MAX_BUDGET)}
+    q = quality_of(None)
+    return {"key": bool(providers.openrouter_key()), "pictures": [m for m, _s in image_models(q)],
+            "clips": [m for m, _r in video_models(q)], "prompts": list(config.AI_FILL_PROMPT_MODELS or []),
+            "maxBudget": float(config.AI_FILL_MAX_BUDGET), "quality": q,
+            "chains": {name: {"pictures": [list(x) for x in image_models(name)],
+                              "clips": [list(x) for x in video_models(name)]} for name in QUALITIES},
+            "upscale": bool(getattr(config, "AI_FILL_UPSCALE", True))}
 
 
 def report(doc: Optional[dict] = None) -> Dict[str, Any]:
@@ -1410,8 +1540,11 @@ def report(doc: Optional[dict] = None) -> Dict[str, Any]:
             "failed": int(_STATE.get("failed", 0)),
             "scenes": list(_STATE.get("rows") or []),
             "skipped": dict(_STATE.get("skipped") or {}),
+            "quality": b.get("quality") or quality_of(None),
             "models": {"pictures": [m for m, _s in image_models()], "clips": [m for m, _r in video_models()],
-                       "used": dict(_STATE.get("models_used") or {})},
+                       "used": dict(_STATE.get("models_used") or {}),
+                       # Clips sharpened to 1080 lines after a 480p make: {"gpu": n, "cpu": n}.
+                       **({"sharpened": dict(_STATE["sharpened"])} if _STATE.get("sharpened") else {})},
             "passes": list(_STATE.get("passes") or []),
             "disclosure": DISCLOSURE,
         }

@@ -3816,6 +3816,8 @@ def handler(job):
                     "imageCapPerVideo": config.IMAGE_MAX_PER_VIDEO,
                     # AI fill (src/aifill.py): whether a job's ai_fill block can reach OpenRouter, and its models.
                     "aiFill": aifill.health(),
+                    # The Avatar III presenter model (src/presenter/heygen.py): whether HEYGEN_API_KEY is set.
+                    "heygenKey": bool(os.getenv("HEYGEN_API_KEY", "").strip()),
                     "storage": store,
                     "readyToRender": store.get("ok", False),
                     "parallelWorkers": fanout.readiness(config.FANOUT_MIN_SCENES),

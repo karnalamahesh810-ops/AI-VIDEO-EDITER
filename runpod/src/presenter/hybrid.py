@@ -16,6 +16,10 @@ docs/ai-presenter-contract.md section 10):
                                                          # 120, however long the video; split screens count)
                   "budget_usd": 9.0,                     # hard cap on the presenter's paid calls (the app sends
                                                          # min(narration s x share, 120) x $0.05 x 1.5; absent: ours)
+                  "model": "avatar_iv",                  # the presenter model: "avatar_iv" (OpenRouter, $0.05/s)
+                                                         # or "avatar_iii" (HeyGen's API, $0.0165/s; needs
+                                                         # HEYGEN_API_KEY, else Avatar IV + a warning); absent:
+                                                         # the kit's presenter_model, else Avatar IV
                   "set": "auto"}                         # where the presenter is filmed (src/presenter/sets.py):
                                                          # "auto", a set id, "home", or {"id": "custom",
                                                          # "description": ...}; absent: the kit's own set
@@ -180,6 +184,9 @@ def block(inp: Optional[dict]) -> Optional[Dict[str, Any]]:
         out["share_name"] = level                   # the label as the app shows it; the number is what is used
     out["split_screen"] = raw.get("split_screen", raw.get("split", True)) not in (False, 0, "0", "false", "no", "off")
     out["max_seconds"] = max_seconds_of(raw.get("max_seconds"))
+    # The presenter model ("avatar_iv" / "avatar_iii"; "" = the presenter's own, else Avatar IV): src/presenter/tiers.py.
+    from . import tiers as _tiers
+    out["model"] = _tiers.presenter_model_id(raw.get("model") or raw.get("presenter_model"))
     try:
         out["budget_usd"] = max(0.0, float(raw.get("budget_usd"))) if raw.get("budget_usd") not in (None, "") else None
     except (TypeError, ValueError):
@@ -651,12 +658,22 @@ def select(segments: Sequence[Any], shots: Sequence[dict], duration: float, *, f
                     chapters=chapter_lines(brief, len(lines)), max_seconds=max_seconds).plan()
 
 
-def take_usd(seconds: float, appearances: int = 1) -> float:
-    """What takes of this many screen seconds are billed (each 0.9 s over its screen time) plus their face checks."""
-    return (float(seconds) + PAD_SECONDS * appearances) * USD_PER_SECOND + CHECK_USD * appearances
+def take_usd(seconds: float, appearances: int = 1, rate: float = USD_PER_SECOND) -> float:
+    """What takes of this many screen seconds are billed (each 0.9 s over its screen time) plus their face checks;
+    `rate`: the presenter model's $ a second (Avatar IV $0.05, Avatar III $0.0165)."""
+    return (float(seconds) + PAD_SECONDS * appearances) * float(rate) + CHECK_USD * appearances
 
 
-def fit_budget(appearances: List[Appearance], cap: Optional[float]) -> Tuple[List[Appearance], List[Appearance]]:
+def rate_of(model: Any) -> float:
+    """$ a second of a presenter model choice ("avatar_iv" / "avatar_iii" / a model id; unknown: Avatar IV)."""
+    from . import tiers as _tiers
+    mid = _tiers.presenter_model_id(model)
+    name = _tiers.PRESENTER_MODELS[mid]["model"] if mid else str(model or "")
+    return _tiers.usd_per_second(name, "1080p") if _tiers.model_info(name) else USD_PER_SECOND
+
+
+def fit_budget(appearances: List[Appearance], cap: Optional[float],
+               rate: float = USD_PER_SECOND) -> Tuple[List[Appearance], List[Appearance]]:
     """
     (kept, dropped): the plan within the job's cap - every take once, plus
     one retry of the dearest (the other framing, when a take fails its
@@ -671,7 +688,8 @@ def fit_budget(appearances: List[Appearance], cap: Optional[float]) -> Tuple[Lis
         return keep, dropped
 
     def cost(aps: List[Appearance]) -> float:
-        return sum(take_usd(a.seconds) for a in aps) + max((take_usd(a.seconds) for a in aps), default=0.0)
+        return sum(take_usd(a.seconds, rate=rate) for a in aps) + max((take_usd(a.seconds, rate=rate) for a in aps),
+                                                                    default=0.0)
     order = ([a for a in reversed(keep) if a.role not in ("hook", "close")]
              + [a for a in keep if a.role == "close"] + [a for a in keep if a.role == "hook"])
     for a in order:
@@ -684,21 +702,24 @@ def fit_budget(appearances: List[Appearance], cap: Optional[float]) -> Tuple[Lis
 
 # ------------------------------------------------------------------ the estimate
 def estimate(minutes: float, share: Any = DEFAULT_SHARE, *, split_screen: bool = True,
-             max_seconds: Optional[float] = MAX_SECONDS) -> Dict[str, Any]:
+             max_seconds: Optional[float] = MAX_SECONDS, model: Any = None) -> Dict[str, Any]:
     """
     What a hybrid video costs: the normal footage build + presenter seconds
     (share x length, never past max_seconds) x $0.05 (heygen/avatar-iv; each
     appearance is billed 0.9 s over its screen time for the lip-sync lead-in
     and tail, ~10% need a second take) + a face check per take - less the
-    vision of the full-screen presenter lines no one searches.
+    vision of the full-screen presenter lines no one searches. `model`
+    "avatar_iii": $0.0165 a second instead (HeyGen's API; a new presenter
+    picture's photo avatar, $1.32 once, is not in it: "lookSetupUsd").
     """
+    rate = rate_of(model) if model else USD_PER_SECOND
     name, frac = share_of(share)
     m = max(0.0, float(minutes or 0.0))
     asked = m * 60.0 * frac
     seconds = min(asked, float(max_seconds)) if max_seconds and float(max_seconds) > 0 else asked
     appearances = seconds / 5.0
     billed = (seconds + PAD_SECONDS * appearances) * (1.0 + RETRY_SHARE)
-    presenter = billed * USD_PER_SECOND
+    presenter = billed * rate
     checks = appearances * (1.0 + RETRY_SHARE) * CHECK_USD
     normal = NORMAL_PER_MIN * m
     full = seconds * ((1.0 - SPLIT_SHARE * 0.8) if split_screen else 1.0)
@@ -709,7 +730,9 @@ def estimate(minutes: float, share: Any = DEFAULT_SHARE, *, split_screen: bool =
                       "searchSaved": round(-saved, 3)},
             "presenterSeconds": round(seconds), "capped": seconds < asked - 1e-9,
             "billedSeconds": round(billed), "appearances": int(math.ceil(appearances)),
-            "formula": "normal build + presenter seconds (share x length, at most max_seconds) x $0.05 (+0.9 s a "
+            "usdPerPresenterSecond": rate,
+            **({"lookSetupUsd": 1.32} if rate < USD_PER_SECOND else {}),
+            "formula": f"normal build + presenter seconds (share x length, at most max_seconds) x ${rate:g} (+0.9 s a "
                        "take, ~10% retakes) + face checks"}
 
 
@@ -717,7 +740,13 @@ def estimate_table(minutes: Iterable[float] = (10, 15, 20)) -> Dict[str, Any]:
     """presenter_info's "hybrid": $ per 10/15/20-minute video at light and medium."""
     lengths = [float(x) for x in minutes]
     by = {name: {str(int(x) if x.is_integer() else x): estimate(x, name) for x in lengths} for name in SHARES}
+    # The same with the Avatar III presenter model (HeyGen's API: $0.0165 a second; a photo avatar $1.32 once per
+    # new presenter picture, not in these numbers).
+    by_iii = {name: {str(int(x) if x.is_integer() else x): estimate(x, name, model="avatar_iii") for x in lengths}
+              for name in SHARES}
     return {"shares": dict(SHARES), "defaultShare": DEFAULT_SHARE, "usdPerPresenterSecond": USD_PER_SECOND,
+            "byModel": {"avatar_iii": {"usdPerPresenterSecond": rate_of("avatar_iii"), "lookSetupUsd": 1.32,
+                                       "byShare": by_iii}},
             "maxSeconds": MAX_SECONDS, "normalBuildPerMinute": NORMAL_PER_MIN, "byShare": by,
             "note": f"Real footage everywhere else; nothing else generated. The presenter is on screen {MAX_SECONDS:.0f} s "
                     "at most, however long the video (split screens count). The job records what each call really "
@@ -763,6 +792,8 @@ class Hybrid:
         self.log: List[str] = []
         self.texts: Dict[int, str] = {}                 # line -> its words (the take's tone: src/presenter/motion.py)
         self.set_job = None                             # src/presenter/sets.SetJob: where the presenter is filmed
+        self.model_choice = ""                          # the presenter model asked for (begin(): block, kit, default)
+        self.avatar_model = "heygen/avatar-iv"          # the model the takes are made with
 
     # ---- which lines
     def lines_of(self, *, split: Optional[bool] = None) -> Set[int]:
@@ -816,8 +847,16 @@ class Hybrid:
             self.made = {}
             return
         max_s = max_seconds_of(self.blk.get("max_seconds"))
+        # The presenter model: the block's, else the presenter's own (its kit), else Avatar IV. Avatar III runs on
+        # HeyGen's own API (HEYGEN_API_KEY); without the key the takes are Avatar IV and the job says so.
+        from . import heygen
+        self.model_choice = tiers.chosen_presenter_model(self.blk.get("model"), (self.kit or {}).get("presenter_model"))
+        self.avatar_model, avatar_provider, model_warning = heygen.resolve(self.model_choice)
+        if model_warning:
+            self.warnings.append(model_warning)
+        rate = tiers.usd_per_second(self.avatar_model, "1080p")
         self.est = estimate(self.duration / 60.0, self.blk.get("share"), split_screen=bool(self.blk.get("split_screen")),
-                            max_seconds=max_s)
+                            max_seconds=max_s, model=self.avatar_model)
         cap = self.blk.get("budget_usd")
         if cap is None:
             env = os.getenv("PRESENTER_BUDGET_USD", "").strip()
@@ -830,9 +869,9 @@ class Hybrid:
             # The app's own rule (min(narration seconds x share, max_seconds) x $0.05 x 1.5), never under every
             # planned take once more (the other framing) with its checks.
             asked = min(self.duration * float(self.blk.get("share") or 0.0), max_s)
-            cap = max(0.5, round(asked * USD_PER_SECOND * 1.5, 2),
-                      round(take_usd(planned, len(self.appearances)) * 1.6, 2))
-        self.appearances, over = fit_budget(self.appearances, cap)
+            cap = max(0.5, round(asked * rate * 1.5, 2),
+                      round(take_usd(planned, len(self.appearances), rate=rate) * 1.6, 2))
+        self.appearances, over = fit_budget(self.appearances, cap, rate=rate)
         for ap in over:
             self._note(f"{ap.id} ({ap.role}, lines {ap.lines[0]}-{ap.lines[-1]}) left out: the cap ${cap:.2f} "
                        "does not cover it; its lines keep their footage")
@@ -844,6 +883,10 @@ class Hybrid:
         # A set pair that must be made (presenter + set, two pictures, paid once ever) gets its own room on top of
         # the takes' cap: the plan above was fitted to the takes alone.
         extra = self.set_job.extra_budget() if self.set_job is not None and self.set_job.needs_pair() else 0.0
+        if avatar_provider is not None:
+            # Avatar III: room for the two cameras' HeyGen photo avatars (made once per picture, ever; a cached
+            # one costs nothing and this room is never spent).
+            extra += 2 * heygen.LOOK_USD
         self.budget = Budget(cap + extra)
         project_id = str(self.inp.get("project_id") or "")
         self.store = store or Store(project_id, str(self.inp.get("_job_id") or ""))
@@ -853,12 +896,12 @@ class Hybrid:
         if self.set_job is not None:
             self.set_job.provider, self.set_job.budget = provider, self.budget
             self.set_job.checker, self.set_job.work = self.checker, self.work
-        tier = tiers.resolve("budget")
+        tier = dict(tiers.resolve("budget"), presenter_model=[self.avatar_model, "1080p"])
         os.makedirs(self.work, exist_ok=True)
         wav = media_io.to_wav(narration_path, os.path.join(self.work, "presenter_narration_24k.wav"))
         self.gen = Generator(provider=provider, budget=self.budget, tier=tier, kit=self.kit, work=self.work,
                              store=self.store, cache=self.cache, checker=self.checker, narration_wav=wav,
-                             total=self.duration, bible={}, still_fallback=False)
+                             total=self.duration, bible={}, still_fallback=False, avatar_provider=avatar_provider)
         self._note(f"{len(self.appearances)} appearance(s), {planned:.1f} s on camera "
                    f"({planned / max(self.duration, 1e-6):.0%} of {self.duration:.0f} s, at most {max_s:.0f} s), "
                    f"cap ${cap:.2f}" + (f" + ${extra:.2f} for the set" if extra else "") + ": "
@@ -1081,6 +1124,10 @@ class Hybrid:
             "query": getattr(half, "query", "") or "", "relevanceScore": getattr(half, "relevance_score", None),
             "contentDescription": getattr(half, "content_description", "") or "", "real": True}
 
+    def _model_report(self) -> Dict[str, Any]:
+        from .heygen import model_report
+        return model_report(self.model_choice, self.avatar_model, self.gen)
+
     def spans(self, doc: Dict[str, Any]) -> List[Tuple[int, int]]:
         """[start, end) frames of every presenter scene."""
         return [(int(sc["startFrame"]), int(sc["startFrame"]) + int(sc["durationInFrames"]))
@@ -1094,6 +1141,9 @@ class Hybrid:
         on_screen = sum((int(sc["durationInFrames"]) for sc in doc.get("scenes") or [] if is_presenter_scene(sc)))
         splits = sum(1 for sc in doc.get("scenes") or [] if is_presenter_scene(sc) and sc.get("frame") == "split")
         rows = self.budget.rows if self.budget is not None else []
+        for w in (self.gen.warnings if self.gen is not None else []):
+            if w not in self.warnings:
+                self.warnings.append(w)
         by: Dict[str, float] = {}
         for r in rows:
             by[str(r.get("kind") or "other")] = by.get(str(r.get("kind") or "other"), 0.0) + float(r.get("usd") or 0.0)
@@ -1115,7 +1165,11 @@ class Hybrid:
                        "scenes": sum(1 for sc in doc.get("scenes") or [] if is_presenter_scene(sc)),
                        "splitScenes": splits, "appearances": len(made)},
             "costs": {"presenterUsd": round(by.get("presenter", 0.0), 4), "checksUsd": round(by.get("check", 0.0), 4),
-                      "setUsd": round(by.get("set", 0.0), 4), "totalUsd": round(sum(by.values()), 4)},
+                      "setUsd": round(by.get("set", 0.0), 4),
+                      **({"heygenLookUsd": round(by["heygen_look"], 4)} if by.get("heygen_look") else {}),
+                      "totalUsd": round(sum(by.values()), 4)},
+            # The presenter model asked for and the one that made the takes (Avatar III on HeyGen / Avatar IV).
+            **({"model": self._model_report()} if self.model_choice else {}),
             # Where the presenter was filmed (src/presenter/sets.py): asked / chosen / used, the pair and its cost.
             "set": self.set_job.report() if self.set_job is not None else None,
             "budget": self.budget.report() if self.budget is not None else None,

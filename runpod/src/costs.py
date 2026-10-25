@@ -88,7 +88,10 @@ _CATEGORY = {"vision.judge": "vision", "vision.rate_tiles": "vision", "vision.pi
 # call that went to a provider that does not say (the Kie fallback) is still estimated.
 _MEASURED = ("vision", "llm", "image",       # image.usd: an OpenRouter picture (media._openrouter_generate)
              # The AI presenter style (src/presenter): presenter.usd its lip-synced talking clips (heygen/avatar-iv),
-             # aivideo.usd its image-to-video clips - each call at OpenRouter's own usage.cost.
+             # aivideo.usd its image-to-video clips - each call at OpenRouter's own usage.cost. Avatar III takes
+             # (presenter.avatar_iii.usd, HeyGen's own API, which answers no price) are counted at their length x
+             # HeyGen's published $0.0165 a second, and a new picture's photo avatar (presenter.heygen_look.usd) at
+             # its $1.32 (src/presenter/heygen.py).
              "presenter", "aivideo")
 # Counts kept beside those prices, never priced as units: the seconds generated and the seconds on screen.
 _COUNT_ONLY = {"presenter.seconds", "presenter.screen_seconds", "aivideo.seconds", "aivideo.screen_seconds"}

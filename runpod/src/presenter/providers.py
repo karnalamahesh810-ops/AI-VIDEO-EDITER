@@ -9,8 +9,10 @@ touching the pipeline.
     Provider.image(ImageRequest)        -> ImageResult     a still (bytes) and its cost
     Provider.chat(model, messages, ...) -> ChatResult      text (JSON) and its cost
 
-OpenRouter is the only one wired (the owner, 2026-10-07: no Kie anywhere,
-OpenRouter only): /api/v1/videos for the presenter (heygen/avatar-iv: one
+OpenRouter is the main one (the owner, 2026-10-07: no Kie anywhere,
+OpenRouter only); HeyGen's own API (src/presenter/heygen.py) is used only
+for Avatar III takes, when a job picks that presenter model (2026-10-25).
+OpenRouter: /api/v1/videos for the presenter (heygen/avatar-iv: one
 picture + our audio window) and the image-to-video b-roll, chat completions
 with image output for the stills, chat completions for the planner and the
 checks. Its key comes from the worker's existing configuration - the
@@ -56,6 +58,7 @@ class VideoRequest:
     generate_audio: Optional[bool] = None
     options: Dict[str, Any] = field(default_factory=dict)   # provider passthrough ({"heygen": {...}})
     seed: Optional[int] = None
+    audio_file: str = ""                      # the voice window on this disk (HeyGen uploads it; never in body())
 
     def body(self) -> Dict[str, Any]:
         b: Dict[str, Any] = {"model": self.model}

@@ -32,7 +32,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .. import config, storage, timeline, transcribe
 from .. import render as renderer
-from . import assemble, director, estimate, kits, media_io, providers, sets, shotplan, tiers
+from . import assemble, director, estimate, heygen, kits, media_io, providers, sets, shotplan, tiers
 from .budget import Budget
 from .checks import Checker
 from .generate import Generator
@@ -171,6 +171,9 @@ def _costs(budget: Budget) -> Dict[str, Any]:
             "totalUsd": round(sum(by.values()), 4), "calls": n}
 
 
+model_report = heygen.model_report
+
+
 def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = None) -> Dict[str, Any]:
     started = time.time()
     tier = tiers.resolve(inp.get("tier") or inp.get("presenter_tier"), inp.get("presenter_config"))
@@ -178,6 +181,11 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     provider = providers.get()
     if not provider.available():
         raise RuntimeError("The AI presenter style needs the OpenRouter key on this worker (none is configured).")
+    # The presenter model (the owner, 2026-10-25): the job's presenter_model, else the presenter's own (its kit),
+    # else Avatar IV. Avatar III runs on HeyGen's own API and needs HEYGEN_API_KEY; without it: Avatar IV + a warning.
+    model_choice = tiers.chosen_presenter_model(inp.get("presenter_model"), kit.get("presenter_model"))
+    avatar_model, avatar_provider, model_warning = heygen.resolve(model_choice)
+    tier = dict(tier, presenter_model=[avatar_model, "1080p"])
     print(f"[presenter] tier {tier['id']} ({tier['presenter_share']:.0%} presenter, {tier['ai_video_share']:.0%} AI "
           f"video), presenter {kit['id']}", flush=True)
 
@@ -193,6 +201,10 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     cap_seconds = max_seconds_of(inp)
     est = estimate.estimate(duration / 60.0, tier, own_voice=not nar["made"], max_seconds=cap_seconds)
     budget = Budget(budget_cap(inp, est))
+    if avatar_provider is not None:
+        # Room for the HeyGen photo avatars of the two cameras, on top of the video's cap (made once per picture,
+        # ever; a cached one costs nothing and this room is never spent).
+        budget.cap += 2 * heygen.LOOK_USD
     checker = Checker(provider, budget, work)
     title = str(inp.get("title") or inp.get("title_overlay") or "").strip()
 
@@ -229,7 +241,7 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
         start_set()
 
     report("Planning the presenter video", 14)
-    warnings: List[str] = []
+    warnings: List[str] = [model_warning] if model_warning else []
     if set_thread:
         # The planner and every shot read the kit: the presenter is put in the set first.
         report("Putting the presenter in the set", 14)
@@ -266,13 +278,15 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
                done=done, total=total)
 
     gen = Generator(provider=provider, budget=budget, tier=tier, kit=kit, work=work, store=store, cache=cache,
-                    checker=checker, narration_wav=wav, total=duration, bible=notes["bible"], on_progress=progress)
+                    checker=checker, narration_wav=wav, total=duration, bible=notes["bible"], on_progress=progress,
+                    avatar_provider=avatar_provider)
     progress(0, len(shots))
     try:
         assets = gen.run(shots)
     finally:
         removed = store.cleanup()
     report("Designing the edit", 64)
+    warnings.extend(gen.warnings)
     if gen.no_https_audio:
         warnings.append("Presenter shots need R2 (the voice goes to the avatar model by an https link): "
                         "they were drawn as pictures instead.")
@@ -296,6 +310,8 @@ def plan(inp: Dict[str, Any], work: str, report, narrate: Optional[Callable] = N
     meta["story"] = {"kind": "other", "summary": title, "title": title, "bible": notes["bible"]}
     meta["presenter"] = {
         "tier": tiers.summary(tier), "kit": kits.public_summary(kit),
+        # The presenter model asked for and the one that made the takes (Avatar III on HeyGen / Avatar IV).
+        "model": model_report(model_choice, avatar_model, gen),
         "planner": notes["planner"], "plannerErrors": notes["errors"][:3], "bible": notes["bible"],
         # The job's cap on the presenter's whole time (None: none sent) and, when the share asked for more, how
         # much: {askedSeconds, maxSeconds, seconds, appearances}.
@@ -336,6 +352,9 @@ def info() -> Dict[str, Any]:
     return {"style": STYLE, "defaultTier": tiers.DEFAULT_TIER,
             "tiers": {k: tiers.summary(tiers.resolve(k)) for k in tiers.all_tiers()},
             "estimate": estimate.table(), "kits": known, "script": script_preset.PRESET, "disclosure": DISCLOSURE,
+            # The presenter models a job (presenter_model) or a presenter (kit.presenter_model) may pick, each with
+            # its price; Avatar III's "available" says whether this worker has the HeyGen key.
+            "presenterModels": tiers.presenter_models_info(heygen.ready()),
             # Where the presenter is filmed (src/presenter/sets.py): the catalogue the app's Set picker shows, the
             # set "auto" falls back to, and what a new presenter + set pair costs (once, ever).
             "sets": {"catalogue": sets.catalogue(), "groups": [{"id": g, "label": label} for g, label in sets.GROUPS],
