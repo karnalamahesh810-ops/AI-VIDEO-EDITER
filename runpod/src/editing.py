@@ -225,6 +225,16 @@ def shot_stats(doc: dict) -> dict:
     stills_over8 = sum(int(s.get("durationInFrames") or 0) / fps for s in scenes
                        if _mtype(s) == "image" and int(s.get("durationInFrames") or 0) / fps > 8)
     hook = [d for s, d in zip(scenes, durs) if int(s.get("startFrame") or 0) / fps < HOOK_SECONDS]
+    # A cut "on a word": a word starts within 0.35 s after it (or 0.1 s before) - an editor cuts into the word.
+    starts = sorted(_f(w.get("start")) for s in scenes for w in s.get("words") or [] if isinstance(w, dict))
+    cuts = [int(s.get("startFrame") or 0) / fps for s in scenes[1:]]
+    on_word = 0
+    j = 0
+    for c in cuts:
+        while j < len(starts) and starts[j] < c - 0.1:
+            j += 1
+        if j < len(starts) and starts[j] <= c + 0.35:
+            on_word += 1
     ev = events(doc)
     lo, hi = extent(doc)
     quiet = longest_quiet(ev, lo, hi)
@@ -235,7 +245,7 @@ def shot_stats(doc: dict) -> dict:
             "under2_5Share": round(sum(1 for d in durs if d < 2.5) / len(durs), 3),
             "stillsOver8Seconds": round(stills_over8, 1), "hookShots": len(hook),
             "events": len(ev), "eventsPerMinute": round(len(ev) * 60 / total, 1),
-            "longestQuiet": round(quiet, 1),
+            "longestQuiet": round(quiet, 1), "cutsOnWord": round(on_word / max(1, len(cuts)), 3),
             "punches": sum(1 for s in scenes if (s.get("semanticMetadata") or {}).get("punch"))}
 
 
@@ -488,6 +498,10 @@ def _split_scene(scene: dict, cuts: List[float], fps: int, crop_ok: bool) -> Opt
             else:
                 offset += (bounds[i] - bounds[i - 1]) + CLIP_SKIP
                 pm["trimStart"] = round(offset, 3)
+                # A jump forward inside one clip zooms or punches in (as timeline.plan_transitions does for a chained
+                # shot with smooth cuts on); a hard jump inside a moving shot reads as a glitch.
+                if getattr(config, "TRANSITIONS_SMOOTH", True):
+                    p["transition"] = ("zoom-punch", "punch")[(i - 1) % 2]
                 if isinstance(pm.get("reframe"), dict) and "from" in pm["reframe"]:
                     pm.pop("reframe", None)
             prev_id = p["id"]
