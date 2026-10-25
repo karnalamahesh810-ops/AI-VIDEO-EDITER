@@ -61,6 +61,7 @@ PUNCH_MIN_SCORE = 3.0           # the first pass punches only strong words; inte
 PUNCH_MAX_PER_MIN = 2.5
 PUNCH_EDGE = 0.7                # never in a shot's first or last 0.7 s (it would read as a cut)
 GRAPHIC_CLEAR = 1.5             # never within this of a graphic's entrance (the graphic is the emphasis there)
+SAME_WORD_SECONDS = 180.0       # the same word is not punched twice within this
 INTERRUPT_SECONDS = 30.0        # the longest stretch with nothing new (references: 2-8 s; owner's 20-40 s rule)
 REPEAT_SECONDS = 240.0          # a caption repeating one shown this recently is dropped
 REPEAT_SIMILARITY = 0.6
@@ -111,13 +112,16 @@ def word_score(words: List[dict], k: int) -> float:
     w = words[k]
     raw = str(w.get("text") or "")
     n = _norm(raw)
-    if not n:
-        return 0.0
+    if not n or not raw.lstrip("\"'“‘(")[:1].isalnum() and not raw.lstrip("\"'“‘(")[:1] == "$":
+        return 0.0          # ",000" / ".5": the tail of a figure the transcript split; its head takes the hit
+    nxt_raw = str(words[k + 1].get("text") or "") if k + 1 < len(words) else ""
     score = 0.0
     if _DIGIT.search(raw):
-        # "1,000" / "$5" / "40%"; a lone small digit ("1", "2") is weaker
+        # "1,000" / "$5" / "40%"; a lone small digit ("1", "2") is weaker - unless the transcript split the figure
+        # ("150" ",000"): then the head carries the whole figure
         digits = re.sub(r"\D", "", raw)
-        score = 3.5 if ("$" in raw or "%" in raw or len(digits) >= 3) else 2.5
+        big = len(digits) >= 3 or bool(re.match(r"^[,.]\d", nxt_raw))
+        score = 3.5 if ("$" in raw or "%" in raw or big) else 2.5
     elif n in _NUMBER_WORDS:
         score = 3.0
     elif n in _SUPERLATIVE:
@@ -132,11 +136,17 @@ def word_score(words: List[dict], k: int) -> float:
         score = 2.0
     elif n in _STOP or len(n) < 3:
         return 0.0
-    if score <= 0:
-        return 0.0
-    # A word that ends a sentence or is followed by a breath lands harder.
     nxt = words[k + 1] if k + 1 < len(words) else None
     gap = (float(nxt.get("start", 0)) - float(w.get("end", 0))) if nxt else 1.0
+    if score <= 0:
+        # Weak words only a quiet stretch's interrupt takes: a name or place mid-sentence, a long word before a breath.
+        prev_end = k > 0 and _SENT_END.search(str(words[k - 1].get("text") or ""))
+        if raw[:1].isupper() and k > 0 and not prev_end and len(n) >= 4:
+            return 1.2
+        if len(n) >= 6 and gap >= 0.4:
+            return 1.0
+        return 0.0
+    # A word that ends a sentence or is followed by a breath lands harder.
     if gap >= 0.3 or _SENT_END.search(raw):
         score += 0.5
     if raw.rstrip("\"'”’").endswith("!"):
@@ -552,9 +562,19 @@ def split_holds(doc: dict, cfg: Optional[dict], hook_pace: bool, body: bool) -> 
 # ---------------------------------------------------------------------------------------------------------------
 # Punches and interrupts
 # ---------------------------------------------------------------------------------------------------------------
+def _own_framing(s: dict) -> bool:
+    """The scene's keyframes are only the static detail framing this pass gave a split piece (no move yet)."""
+    kf = s.get("keyframes")
+    sem = s.get("semanticMetadata") or {}
+    return (isinstance(kf, dict) and bool(sem.get("editSplit")) and not sem.get("punch")
+            and all(isinstance(v, list) and len(v) == 1 for v in kf.values()))
+
+
 def _punchable(s: dict, crop_ok: bool) -> bool:
-    if not isinstance(s, dict) or s.get("keyframes") or str(s.get("frame") or "full") != "full" or _is_presenter(s):
+    if not isinstance(s, dict) or str(s.get("frame") or "full") != "full" or _is_presenter(s):
         return False
+    if s.get("keyframes") and not _own_framing(s):
+        return False                       # the editor's (or another pass's) own keyframes win
     m = s.get("media") or {}
     mt = _mtype(s)
     if mt == "image":
@@ -596,6 +616,19 @@ _PUNCH_VARY = (0.0, 0.02, -0.01)     # a hand-made feel: never three identical p
 
 def _place_punch(s: dict, at: float, scale: float, word: str, why: str, n: int = 0) -> None:
     scale = scale + _PUNCH_VARY[n % len(_PUNCH_VARY)]
+    if _own_framing(s):
+        # A detail piece of a split still: the punch pushes on from its framing, about the same point.
+        old = s["keyframes"]
+        base = _f(old["scale"][0].get("v"), 1.0) if old.get("scale") else 1.0
+        kf = {k: v for k, v in old.items() if k != "scale"}
+        kf["scale"] = [{"t": round(at, 3), "v": round(base, 3)},
+                       {"t": round(at + PUNCH_IN, 3), "v": round(base * scale, 3), "e": "expoOut"}]
+        s["keyframes"] = kf
+        s["motionBlur"] = 0.5
+        sem = dict(s.get("semanticMetadata") or {})
+        sem["punch"] = {"at": round(at, 3), "scale": round(scale, 3), "word": word[:40], "why": why}
+        s["semanticMetadata"] = sem
+        return
     kf = {"scale": [{"t": round(at, 3), "v": 1.0},
                     {"t": round(at + PUNCH_IN, 3), "v": round(scale, 3), "e": "expoOut"}]}
     m = s.get("media") or {}
@@ -627,9 +660,13 @@ def punches(doc: dict, cfg: Optional[dict], base: bool, interrupts: bool) -> dic
     cap = max(1, int(PUNCH_MAX_PER_MIN * total / 60.0))
     placed: List[float] = []
     used_scenes = set()
+    said: Dict[str, float] = {}         # a word punched lately is not punched again (no five "forever"s)
 
     def free(t: float, i: int, gap: float) -> bool:
         if i in used_scenes:
+            return False
+        w = _norm(word_at(i, t))
+        if w and w in said and abs(t - said[w]) < SAME_WORD_SECONDS:
             return False
         if any(abs(t - g) < GRAPHIC_CLEAR for g in graphic_starts):
             return False
@@ -653,6 +690,7 @@ def punches(doc: dict, cfg: Optional[dict], base: bool, interrupts: bool) -> dic
                 continue
             _place_punch(scenes[i], off, PUNCH_SCALE_HOOK if hook else PUNCH_SCALE, word_at(i, t),
                          "hook" if hook else "emphasis", len(placed))
+            said[_norm(word_at(i, t))] = t
             placed.append(t)
             used_scenes.add(i)
             n_base += 1
@@ -670,6 +708,7 @@ def punches(doc: dict, cfg: Optional[dict], base: bool, interrupts: bool) -> dic
                 mid = (a + b) / 2
                 sc, t, i, off = max(inside, key=lambda c: (c[0] - abs(c[1] - mid) / 30.0))
                 _place_punch(scenes[i], off, PUNCH_SCALE, word_at(i, t), "interrupt", len(placed))
+                said[_norm(word_at(i, t))] = t
                 placed.append(t)
                 used_scenes.add(i)
                 n_int += 1

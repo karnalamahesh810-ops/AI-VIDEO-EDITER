@@ -16,7 +16,9 @@ found) is out of scope here except where it shows up as an editing symptom.
 
 Samples are kept only in the session scratchpad (`ev3/refs/`), never in the repo. The cut detector
 (`ev3/measure_ref.py`: colour-histogram + mean-difference at 10 fps) was calibrated on `6BQN3KQ9v0E`, whose cuts were
-labelled before: 18 of its 20 labelled cuts in the first minute found, no false ones.
+labelled before: 18 of its 20 labelled cuts in the first minute found, no false ones. On two more labelled refs it
+counts 142 vs 104 and 88 vs 110 cuts in 240 s, so treat its counts as +-35 %; the comparisons below use the same
+detector on our videos.
 
 ### Measured numbers (first 240 s)
 
@@ -100,8 +102,10 @@ references above.
    colour consistency and reads as a template.
 6. **Long gaps with nothing new (R9).** No graphic for 78 s (132-210 s) or 93 s (536-629 s), and no other event
    (a move or a picture-type change) in between.
-7. **Sound only on a third of the moments (R8).** The 21 sounds all sit on Smart Editor graphics. Moves and the
-   other looks are silent in the sfx track (the looks' own sounds play inside the renderer).
+7. **Sound design is fine on graphics, absent elsewhere (R8).** Every look carries its own built-in sound
+   (lookSoundPlan) and the 21 sfx rows sit on the Smart Editor graphics, all under the voice at the owner's 0.4. With
+   no moves there is nothing else to hear; a new move needs its own soft sound (the owner's Premiere rule: a whoosh
+   on every zoom).
 8. **Text cards over the empty lines.** 8 red sentence cards (37 s) where sourcing found nothing. That is a
    sourcing outcome (fix/empty-spots, live d99e296), so it is not changed here.
 
