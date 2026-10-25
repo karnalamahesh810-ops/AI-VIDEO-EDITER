@@ -2247,3 +2247,25 @@ SMART_EDITOR_MARK_EVERY = float(os.getenv("SMART_EDITOR_MARK_EVERY", "30"))
 SMART_EDITOR_CRITIC = _flag("SMART_EDITOR_CRITIC", True)
 SMART_EDITOR_CRITIC_MAX = int(os.getenv("SMART_EDITOR_CRITIC_MAX", "8"))
 SMART_EDITOR_CRITIC_MODEL = os.getenv("SMART_EDITOR_CRITIC_MODEL", "google/gemini-3.8-flash").strip()
+
+# --- editing v3 (src/editing.py; docs/editing-v3/audit.md) ------------------------------------------------------
+# The finishing pass after the graphics, grade and reframing are placed: no network, no AI call. Measured against
+# SunnyV2 / MagnatesMedia / LEMMiNO and the owner's references: something new on the spoken word every few seconds,
+# a denser hook, no still held 15 s, one figure drawn once. EDITING_V3=0 (env, job config, or job "editing_v3":
+# false) leaves every plan exactly as before; each step has its own flag (all on).
+EDITING_V3 = _flag("EDITING_V3", True)
+# A still held past max(7.5 s, SHOT_MAX_SECONDS + 0.5) becomes 2-3 shots of the photo (detail framings on its
+# subject) cut on word boundaries; a long clip continues forward in its own file when the file holds the footage.
+EDIT_V3_SPLIT_HOLDS = _flag("EDIT_V3_SPLIT_HOLDS", True)
+# The same in the first 30 s with a 5 s limit: the hook cuts faster than the body (references: 1.3-1.6x).
+EDIT_V3_HOOK_PACE = _flag("EDIT_V3_HOOK_PACE", True)
+# A punch-in (to ~1.08x in 0.28 s, held to the cut) on a line's strongest word: a figure, a superlative, a turn.
+EDIT_V3_PUNCHES = _flag("EDIT_V3_PUNCHES", True)
+# No stretch over 30 s with nothing new: the best word in it gets a punch.
+EDIT_V3_INTERRUPTS = _flag("EDIT_V3_INTERRUPTS", True)
+# A soft whoosh under each punch, levelled against the voice (the SFX master scales it).
+EDIT_V3_PUNCH_SOUND = _flag("EDIT_V3_PUNCH_SOUND", True)
+# A graphic over a full-screen graphic scene, and a caption repeating one from the last 4 minutes, are dropped.
+EDIT_V3_HYGIENE = _flag("EDIT_V3_HYGIENE", True)
+# No colour-shift / light leak / flicker / dust on a clip unless the scene is treated as film, vintage or archival.
+EDIT_V3_CLEAN_EFFECTS = _flag("EDIT_V3_CLEAN_EFFECTS", True)

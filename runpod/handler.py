@@ -102,6 +102,7 @@ from src import recut, reclip, relook, restore
 from src import topics
 from src import spares
 from src import batch, sources
+from src import editing
 from src import datagraphics
 from src import tts
 from src import sharpness
@@ -1852,6 +1853,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     kit = brandkit.from_input(inp)
     if kit is not None:
         doc["meta"]["brandKitApplied"] = brandkit.enforce(doc, kit)
+    # Editing v3 (src/editing.py, docs/editing-v3/audit.md): long stills broken into detail shots on word
+    # boundaries, a faster hook, punch-ins on the words that matter, no 30 s without something new, no figure drawn
+    # twice, no random per-clip texture. No network, no AI; EDITING_V3=0 / job "editing_v3": false = as before.
+    if editing.enabled(inp):
+        report("Finishing the edit")
+        editing.apply(doc, inp)
     # The air under the scenes (wind, water, rain, city...) and a soft swell
     # into the biggest reveals, against the measured voice (src/ambience.py).
     doc["meta"]["ambience"] = ambience.apply(doc)
@@ -3093,6 +3100,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       "MIN_SCENE_SECONDS", "TARGET_SCENE_SECONDS", "MAX_SCENE_SECONDS",
                       "ALLOW_VERTICAL", "VERTICAL_BAND_ASPECT", "NEWS_FOOTAGE", "GRAPHICS_DENSITY",
                       "TRANSITION_STYLE", "TRANSITION_PACK", "TRANSITIONS_SMOOTH", "UPSCALE_ENABLED",
+                      # Editing v3 (src/editing.py): A/B one job without a redeploy.
+                      "EDITING_V3", "EDIT_V3_SPLIT_HOLDS", "EDIT_V3_HOOK_PACE", "EDIT_V3_PUNCHES", "EDIT_V3_INTERRUPTS",
+                      "EDIT_V3_PUNCH_SOUND", "EDIT_V3_HYGIENE", "EDIT_V3_CLEAN_EFFECTS",
                       "LOCAL_VISION_ENABLED",
                       # The news styles turn AI images off (the owner's review,
                       # 2026-09-30), and any style may tune the variety rules.
