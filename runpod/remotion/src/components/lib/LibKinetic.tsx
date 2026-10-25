@@ -188,8 +188,13 @@ const Figure: React.FC<{ fg: Fig; size: number; font: string; weight: number; co
         gap: 14 * k, opacity: o * (1 - out),
         transform: `translateY(${((1 - o) * 0.12 * size - out * 0.08 * size).toFixed(2)}px) scale(${st.toFixed(4)})`,
         transformOrigin: align === "right" ? "right bottom" : "left bottom" }}>
-        <div style={{ position: "relative", width: finalW, textAlign: align }}>
-          <div style={{ ...style, textShadow: softShadow(k, 0.55), filter: blur ? `blur(${blur.toFixed(2)}px)` : undefined }}>{shown}</div>
+        <div style={{ position: "relative", minWidth: finalW, textAlign: align }}>
+          {/* The box takes the final figure's width as the browser draws it (editing v3, 2026-10-25): the width table
+              under-measures heavy faces, and a box sized by the estimate let the unit overlap the last digit
+              ("14,410FT"). The counting digits ride on top of this invisible copy. */}
+          <div aria-hidden style={{ ...style, visibility: "hidden" }}>{figFinal(fg)}</div>
+          <div style={{ ...style, position: "absolute", top: 0, [align === "right" ? "right" : "left"]: 0,
+            textShadow: softShadow(k, 0.55), filter: blur ? `blur(${blur.toFixed(2)}px)` : undefined }}>{shown}</div>
           {/* one light sweep across the digits as the figure lands */}
           <div style={{ ...style, position: "absolute", inset: 0, color: "transparent", WebkitBackgroundClip: "text", backgroundClip: "text",
             backgroundImage: `linear-gradient(105deg, transparent 30%, ${rgba("#ffffff", 0.95)} 46%, ${rgba(hot, 0.9)} 52%, transparent 66%)`,
