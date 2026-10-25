@@ -53,6 +53,14 @@ def _plan(style, **kw):
     return segs, shots, bounds, picks
 
 
+def _old_cuts(test):
+    """The old cut vocabulary, the overlay pack and their sounds (TRANSITIONS_SMOOTH=0): still there behind the
+    flag, and what these tests measure. The smooth default: tests/test_smooth_cuts.py."""
+    p = mock.patch.object(config, "TRANSITIONS_SMOOTH", False)
+    p.start()
+    test.addCleanup(p.stop)
+
+
 class Meta(unittest.TestCase):
     def test_every_clip_is_measured_and_ships(self):
         meta = timeline.pack_meta()
@@ -193,6 +201,9 @@ def _build(n=40, style="news", video_style="", sfx=True, pack=True):
 
 
 class Build(unittest.TestCase):
+    def setUp(self):
+        _old_cuts(self)
+
     def test_a_build_lays_pack_transitions_without_their_own_timeline_sound(self):
         doc = _build()
         packs = [s for s in doc["scenes"] if timeline.pack_name(s["transition"])]

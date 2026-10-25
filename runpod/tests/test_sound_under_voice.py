@@ -80,6 +80,14 @@ def planned_sounds(doc: dict) -> list:
     return out
 
 
+def _old_cuts(test):
+    """The old cut vocabulary, the overlay pack and their sounds (TRANSITIONS_SMOOTH=0): still there behind the
+    flag, and what these tests measure. The smooth default: tests/test_smooth_cuts.py."""
+    p = mock.patch.object(config, "TRANSITIONS_SMOOTH", False)
+    p.start()
+    test.addCleanup(p.stop)
+
+
 class Rule(unittest.TestCase):
     def assertUnderTheVoice(self, sounds, voice, where=""):
         self.assertTrue(sounds, where)
@@ -93,6 +101,9 @@ class Rule(unittest.TestCase):
 
 # --------------------------------------------------------------------------- a whole document
 class SampleDocument(Rule):
+    def setUp(self):
+        _old_cuts(self)
+
     def test_every_planned_sound_sits_6_db_under_the_voice_and_a_glitch_9(self):
         kinds = set()
         for voice in VOICES:
@@ -128,6 +139,9 @@ class SampleDocument(Rule):
 
 # --------------------------------------------------------------------------- every sound on its own
 class EverySound(Rule):
+    def setUp(self):
+        _old_cuts(self)
+
     def test_every_transition_sound_at_any_intensity(self):
         for t in sorted(timeline._TRANSITION_SFX):
             scenes = [{"startFrame": 0, "durationInFrames": 90, "transition": "none"},

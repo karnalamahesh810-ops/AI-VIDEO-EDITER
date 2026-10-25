@@ -25,6 +25,13 @@
   "intensity": 0.8
  },
  "meta": {
+  "cuts": {
+   "cuts": 17,
+   "flashy": 0,
+   "smooth": 3,
+   "sounds": 0,
+   "transitions": 3
+  },
   "cutsPerMinute": 11.4,
   "dataLooks": {
    "addedByLook": {
@@ -59,6 +66,7 @@
   "scenesNeedingReview": 6,
   "scenesWithoutMedia": 6,
   "schemaVersion": 2,
+  "smoothCuts": true,
   "sourcePolicy": "no_stock",
   "sources": [
    "wikimedia",
@@ -447,8 +455,7 @@
    },
    "startFrame": 260,
    "text": "it stretches under eight states. Farmers pump it up through center pivots to grow corn, cotton and wheat. Ranchers pump it for their cattle, from windmills beside the stock tanks.",
-   "transition": "pack:mlt13",
-   "transitionGain": 1.0,
+   "transition": "none",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -466,7 +473,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "pack:mlt13",
+    "transitionIn": "none",
     "transitionOut": "none",
     "variant": null
    },
@@ -1069,7 +1076,7 @@
    },
    "startFrame": 1094,
    "text": "When I started cooking for ranch crews, the windmills never stopped turning. Today a lot of those windmills stand still, and the wells under them are dry.",
-   "transition": "light-sweep",
+   "transition": "soft-whip",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -1087,7 +1094,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "light-sweep",
+    "transitionIn": "soft-whip",
     "transitionOut": "none",
     "variant": null
    },
@@ -1272,8 +1279,7 @@
    },
    "startFrame": 1421,
    "text": "The drought of 2011 was the worst one-year drought Texas ever recorded.",
-   "transition": "pack:mlt3",
-   "transitionGain": 1.0,
+   "transition": "none",
    "treatment": "film",
    "visualTreatment": {
     "animation": "fade",
@@ -1298,7 +1304,7 @@
     },
     "template": "LIB_VR_YEAR_LINE",
     "text": "",
-    "transitionIn": "pack:mlt3",
+    "transitionIn": "none",
     "transitionOut": "none",
     "variant": "vr-year-line"
    },
@@ -2069,7 +2075,7 @@
    },
    "startFrame": 2347,
    "text": "Some farms have gone back to dryland crops that live on rain alone. So the next time you see a windmill standing still,",
-   "transition": "blur-dissolve",
+   "transition": "crossfade",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -2087,7 +2093,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "blur-dissolve",
+    "transitionIn": "crossfade",
     "transitionOut": "none",
     "variant": null
    },
@@ -2373,22 +2379,7 @@
   }
  ],
  "schemaVersion": 2,
- "sfx": [
-  {
-   "durationFrames": 34,
-   "kind": "transition",
-   "name": "light-shimmer",
-   "startFrame": 178,
-   "volume": 0.357
-  },
-  {
-   "durationFrames": 34,
-   "kind": "transition",
-   "name": "light-shimmer",
-   "startFrame": 1228,
-   "volume": 0.337
-  }
- ],
+ "sfx": [],
  "sfxEnabled": true,
  "sfxVolume": 0.4,
  "width": 1920

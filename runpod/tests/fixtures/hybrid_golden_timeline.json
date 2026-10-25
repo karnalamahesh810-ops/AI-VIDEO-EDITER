@@ -25,6 +25,13 @@
   "intensity": 0.8
  },
  "meta": {
+  "cuts": {
+   "cuts": 17,
+   "flashy": 0,
+   "smooth": 3,
+   "sounds": 0,
+   "transitions": 3
+  },
   "cutsPerMinute": 11.4,
   "dataLooks": {
    "addedByLook": {
@@ -50,6 +57,7 @@
   "scenesNeedingReview": 0,
   "scenesWithoutMedia": 0,
   "schemaVersion": 2,
+  "smoothCuts": true,
   "sourcePolicy": "no_stock",
   "sources": [
    "wikimedia",
@@ -396,7 +404,7 @@
    },
    "startFrame": 191,
    "text": "It is called the Ogallala Aquifer, and it stretches under eight states.",
-   "transition": "light-leak",
+   "transition": "blur-dissolve",
    "treatment": "film",
    "visualTreatment": {
     "animation": "fade",
@@ -419,7 +427,7 @@
     },
     "template": "KT_TERM",
     "text": "Ogallala Aquifer",
-    "transitionIn": "light-leak",
+    "transitionIn": "blur-dissolve",
     "transitionOut": "none",
     "variant": "kt-term"
    },
@@ -661,8 +669,7 @@
    },
    "startFrame": 496,
    "text": "Ranchers pump it for their cattle, from windmills beside the stock tanks.",
-   "transition": "pack:mlt13",
-   "transitionGain": 1.0,
+   "transition": "none",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -680,7 +687,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "pack:mlt13",
+    "transitionIn": "none",
     "transitionOut": "none",
     "variant": null
    },
@@ -1314,7 +1321,7 @@
    },
    "startFrame": 1241,
    "text": "Today a lot of those windmills stand still, and the wells under them are dry.",
-   "transition": "light-sweep",
+   "transition": "soft-whip",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -1332,7 +1339,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "light-sweep",
+    "transitionIn": "soft-whip",
     "transitionOut": "none",
     "variant": null
    },
@@ -1719,8 +1726,7 @@
    },
    "startFrame": 1715,
    "text": "Ranchers hauled water in trucks, or sold off half the herd before summer.",
-   "transition": "pack:mlt12",
-   "transitionGain": 1.0,
+   "transition": "none",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -1738,7 +1744,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "pack:mlt12",
+    "transitionIn": "none",
     "transitionOut": "none",
     "variant": null
    },
@@ -2251,7 +2257,7 @@
    },
    "startFrame": 2347,
    "text": "Some farms have gone back to dryland crops that live on rain alone.",
-   "transition": "blur-dissolve",
+   "transition": "crossfade",
    "treatment": "film",
    "visualTreatment": {
     "animation": null,
@@ -2269,7 +2275,7 @@
     "sfx": null,
     "template": null,
     "text": "",
-    "transitionIn": "blur-dissolve",
+    "transitionIn": "crossfade",
     "transitionOut": "none",
     "variant": null
    },
@@ -2620,22 +2626,7 @@
   }
  ],
  "schemaVersion": 2,
- "sfx": [
-  {
-   "durationFrames": 34,
-   "kind": "transition",
-   "name": "light-shimmer",
-   "startFrame": 178,
-   "volume": 0.357
-  },
-  {
-   "durationFrames": 34,
-   "kind": "transition",
-   "name": "light-shimmer",
-   "startFrame": 1228,
-   "volume": 0.337
-  }
- ],
+ "sfx": [],
  "sfxEnabled": true,
  "sfxVolume": 0.4,
  "width": 1920

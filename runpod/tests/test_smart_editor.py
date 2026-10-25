@@ -6,7 +6,7 @@ import re
 import unittest
 from unittest import mock
 
-from src import motionspec, smart_editor
+from src import config, motionspec, smart_editor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -114,7 +114,8 @@ def _director_answer(*_a, **_k):
         {"beat": 3, "at": "1906", "kind": "date", "value": 1906, "text": "Roosevelt signed it", "layout": "right-third"},
         {"beat": 5, "at": "thing", "kind": "statement", "text": "Proclamation 658 signed into law"},
         {"beat": 4, "at": "elephant", "text": "explain the layers"},                              # not spoken: out
-    ], "keep": [], "transitions": [{"beat": 3, "t": "light-sweep"}, {"beat": 4, "t": "nonsense"}]}
+    ], "keep": [], "transitions": [{"beat": 3, "t": "light-sweep"}, {"beat": 4, "t": "nonsense"},
+                                     {"beat": 5, "t": "soft-whip"}]}
 
 
 class EditTests(unittest.TestCase):
@@ -141,9 +142,17 @@ class EditTests(unittest.TestCase):
         # the repeated text animation was varied
         anims = [o["smart"]["sig"]["anim"] for o in smart]
         self.assertEqual(len(anims), len(set(anims)))
-        self.assertEqual(doc["scenes"][3]["transition"], "light-sweep")
+        # Smooth cuts (TRANSITIONS_SMOOTH, the default): the light sweep is not in the smooth set, the soft whip is.
+        self.assertIn(doc["scenes"][3].get("transition"), (None, "none"))
+        self.assertEqual(doc["scenes"][5]["transition"], "soft-whip")
         self.assertTrue(any(r["kind"] == "smart" and r["name"] == "whoosh-soft" for r in doc["sfx"]))
         self.assertIn("camera", smart[0]["spec"])
+
+    def test_with_the_old_cuts_the_director_may_pick_a_light_sweep(self):
+        doc = _doc()
+        with mock.patch.object(config, "TRANSITIONS_SMOOTH", False),                 mock.patch.object(smart_editor, "_direct_chunk", side_effect=_director_answer),                 mock.patch.object(smart_editor, "_anchor", return_value={"x": 0.6, "y": 0.4, "r": 0.1, "w": 0.2, "h": 0.3}):
+            smart_editor.edit(doc, {"title": "t"}, critic=False)
+        self.assertEqual(doc["scenes"][3]["transition"], "light-sweep")
 
     def test_failure_keeps_the_plan(self):
         doc = _doc()

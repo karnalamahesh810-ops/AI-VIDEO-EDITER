@@ -1545,7 +1545,14 @@ TRANSITION_STYLE = os.getenv("TRANSITION_STYLE", "").strip().lower()
 # a few chosen cuts get a screen-blended film burn / leak / flash / glitch with
 # its own sound (timeline.plan_pack_transitions; per-style rhythm in
 # styles.PACK_TRANSITIONS). Off: the planned cuts stay as they were.
+# With TRANSITIONS_SMOOTH on, the pack plays only when a job asks for it ("transition_pack": true).
 TRANSITION_PACK = _flag("TRANSITION_PACK", True)
+# Smooth cuts (the owner, 2026-10-18 and after: no white flash + whoosh between shots). On: every style cuts from
+# the smooth set (zoom blur, punch-in, crossfade, blur dissolve, soft whip, whip pan, slide, card zoom; mirrors the
+# editor's app src/lib/transitionSets.ts), never a flash, film burn, light leak, glitch or overlay-pack clip by
+# default; smooth cuts make no sound; a jump inside one clip takes a zoom-blur or punch-in (timeline.plan_transitions).
+# A job's "transitions_smooth" wins. 0 = the old per-style cycles, the pack and their transition sounds.
+TRANSITIONS_SMOOTH = _flag("TRANSITIONS_SMOOTH", True)
 VERTICAL_BAND_ASPECT = float(os.getenv("VERTICAL_BAND_ASPECT", "0.8"))
 ANIMATION_OVER_FOOTAGE_BELOW = float(os.getenv("ANIMATION_OVER_FOOTAGE_BELOW", "0.6"))
 CLIP_LIBRARY_MIN_SCORE = float(os.getenv("CLIP_LIBRARY_MIN_SCORE", "0.8"))

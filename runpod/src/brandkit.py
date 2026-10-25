@@ -407,23 +407,32 @@ NEAREST = {
 }
 
 
-def nearest_transition(value: str, allowed: Optional[Iterable[str]]) -> str:
-    """`value` when allowed, else the nearest allowed transition, else a hard cut ("none")."""
+def nearest_transition(value: str, allowed: Optional[Iterable[str]], smooth: bool = False) -> str:
+    """`value` when allowed, else the nearest allowed transition, else a hard cut ("none").
+    `smooth` (timeline smooth cuts): a stand-in is never a flash, burn, leak or glitch - unless the kit allows
+    nothing else (it chose its flashy ones on purpose)."""
     if not value or value == "none" or allowed is None:
         return value or "none"
     allowed = set(allowed)
     if value in allowed:
         return value
-    return next((alt for alt in NEAREST.get(value, ()) if alt in allowed), "none")
+    alts = [alt for alt in NEAREST.get(value, ()) if alt in allowed]
+    if smooth:
+        from . import timeline
+        calm = [alt for alt in alts if not timeline.is_flashy(alt)]
+        if calm or any(not timeline.is_flashy(a) and a in timeline.TRANSITIONS for a in allowed):
+            alts = calm
+    return alts[0] if alts else "none"
 
 
-def limit_transitions(entrances: List[str], kit: Optional[dict]) -> List[str]:
+def limit_transitions(entrances: List[str], kit: Optional[dict], smooth: bool = False) -> List[str]:
     """The planned scene entrances kept to the kit's transitions (pack clips are planned separately)."""
     allowed = allowed_transitions(kit)
     if allowed is None:
         return list(entrances)
     from . import timeline
-    return [e if str(e).startswith(timeline.PACK_PREFIX) else nearest_transition(e, allowed) for e in entrances]
+    return [e if str(e).startswith(timeline.PACK_PREFIX) else nearest_transition(e, allowed, smooth)
+            for e in entrances]
 
 
 # Genres nearest each other: suspense and crime are both tense, the

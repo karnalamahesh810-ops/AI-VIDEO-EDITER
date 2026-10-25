@@ -60,6 +60,14 @@ def _build(n=24, style="news", kinds=None, subjects=None, sfx=True):
                               audio_duration=n * 3.0, inp={"style": style, "sfx": sfx})
 
 
+def _old_cuts(test):
+    """The old cut vocabulary, the overlay pack and their sounds (TRANSITIONS_SMOOTH=0): still there behind the
+    flag, and what these tests measure. The smooth default: tests/test_smooth_cuts.py."""
+    p = mock.patch.object(config, "TRANSITIONS_SMOOTH", False)
+    p.start()
+    test.addCleanup(p.stop)
+
+
 class Density(unittest.TestCase):
     def test_calm_styles_mostly_hard_cut(self):
         for style in CALM:
@@ -97,6 +105,9 @@ class Density(unittest.TestCase):
 
 
 class Rhythm(unittest.TestCase):
+    def setUp(self):
+        _old_cuts(self)
+
     def test_never_on_consecutive_cuts_and_never_the_same_twice_in_a_row(self):
         shots = [{"subject": f"s{i // 2}", "overlay": {"type": "chapter"} if i % 9 == 0 else None}
                  for i in range(80)]
@@ -151,6 +162,9 @@ class Style(unittest.TestCase):
 
 
 class Sounds(unittest.TestCase):
+    def setUp(self):
+        _old_cuts(self)
+
     def _scenes(self, transitions, length=90):
         return [{"startFrame": i * length, "durationInFrames": length, "transition": t}
                 for i, t in enumerate(transitions)]

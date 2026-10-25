@@ -98,6 +98,76 @@ _STYLE_TRANSITIONS = {
                            "shake-cut", "flash", "glitch"],
                  "chapter": "chromatic-flash", "gap": 3, "force": 4},
 }
+
+# Smooth cuts (TRANSITIONS_SMOOTH, on by default; a job's "transitions_smooth": false or the env 0 = the tables
+# above). The owner has said again and again that he does not want the white flash + whoosh between shots
+# (2026-10-18: "smooth jump / zoom transitions"); a test video still had 37 flashy cuts of 48. The sets mirror
+# the editor's (app src/lib/transitionSets.ts, editor round 2): the smooth set is what the picker leads with;
+# flashes, burns, leaks, glitches and the overlay pack ("pack:<clip>", each with its own whoosh / hit) are flashy.
+SMOOTH_TRANSITIONS = ("zoom-punch", "punch", "crossfade", "blur-dissolve", "soft-whip", "whip-pan", "slide",
+                      "card-zoom")
+FLASHY_TRANSITIONS = frozenset({"flash", "chromatic-flash", "light-leak", "film-burn", "glitch", "vhs-glitch",
+                                "color-wash", "mosaic", "shake-cut"})
+# A jump inside one subject (the next moment of the same clip, or the subject held through a forced cut) is a
+# zoom-blur or a punch-in, in turn - never a whip or a slide, which say "somewhere else".
+JUMP_TRANSITIONS = ("zoom-punch", "punch")
+# Each style's rhythm (gap / force) as above, its vocabulary from the smooth set only: the calm styles dissolve
+# and drift, the moving ones whip, slide and card-zoom. A chapter gets a dissolve or a card zoom.
+_SMOOTH_STYLE_TRANSITIONS = {
+    "documentary": {"cycle": ["blur-dissolve", "soft-whip", "crossfade", "card-zoom"],
+                    "chapter": "blur-dissolve", "gap": 6, "force": 0},
+    "history": {"cycle": ["crossfade", "blur-dissolve", "card-zoom", "soft-whip"],
+                "chapter": "crossfade", "gap": 6, "force": 0},
+    "story": {"cycle": ["blur-dissolve", "crossfade", "soft-whip", "card-zoom"],
+              "chapter": "crossfade", "gap": 6, "force": 0},
+    "explainer": {"cycle": ["soft-whip", "blur-dissolve", "card-zoom", "slide", "whip-pan", "crossfade"],
+                  "chapter": "card-zoom", "gap": 5, "force": 0},
+    "weather": {"cycle": ["soft-whip", "blur-dissolve", "whip-pan", "crossfade", "card-zoom"],
+                "chapter": "blur-dissolve", "gap": 4, "force": 6},
+    "news": {"cycle": ["whip-pan", "soft-whip", "card-zoom", "slide", "blur-dissolve"],
+             "chapter": "card-zoom", "gap": 3, "force": 4},
+    "compilation": {"cycle": ["whip-pan", "card-zoom", "soft-whip", "slide", "blur-dissolve"],
+                    "chapter": "card-zoom", "gap": 3, "force": 4},
+    "trending": {"cycle": ["whip-pan", "soft-whip", "slide", "card-zoom", "blur-dissolve"],
+                 "chapter": "card-zoom", "gap": 3, "force": 4},
+}
+
+
+def is_flashy(value: Optional[str]) -> bool:
+    """A flash, burn, leak or glitch, or one of the overlay pack's clips (transitionSets.ts isFlashy)."""
+    return bool(value) and (value in FLASHY_TRANSITIONS or str(value).startswith("pack:"))
+
+
+def is_smooth(value: Optional[str]) -> bool:
+    """One of the smooth set (transitionSets.ts isSmooth)."""
+    return bool(value) and value in SMOOTH_TRANSITIONS
+
+
+def smooth_cuts(inp: Optional[Dict[str, Any]] = None) -> bool:
+    """Whether this job cuts with the smooth set: its own "transitions_smooth", else TRANSITIONS_SMOOTH."""
+    v = (inp or {}).get("transitions_smooth")
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str) and v.strip():
+        return v.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(getattr(config, "TRANSITIONS_SMOOTH", True))
+
+
+def transition_counts(scenes: List[dict]) -> Dict[str, int]:
+    """How a video's cuts look: cuts, cuts with a transition, how many flashy, how many smooth
+    (transitionSets.ts transitionCounts)."""
+    out = {"cuts": max(0, len(scenes) - 1), "transitions": 0, "flashy": 0, "smooth": 0}
+    for sc in scenes[1:]:
+        t = str((sc or {}).get("transition") or "none")
+        if t in ("none", "cut", ""):
+            continue
+        out["transitions"] += 1
+        out["flashy"] += is_flashy(t)
+        out["smooth"] += is_smooth(t)
+    return out
+
 # The style a style pack or a story kind implies when the job names none.
 _PACK_STYLE = {"documentary": "documentary", "history": "history", "news": "news", "weather": "weather",
                "tech": "explainer", "cinematic": "story", "minimal": "documentary",
@@ -751,7 +821,8 @@ def _pack_transitions(entrances: List[str], pack: dict) -> List[str]:
 
 
 def plan_transitions(shots: List[dict], style: str = "documentary",
-                     durations: Optional[List[int]] = None) -> List[str]:
+                     durations: Optional[List[int]] = None, smooth: Optional[bool] = None,
+                     same_source: Optional[List[bool]] = None) -> List[str]:
     """
     Entrance per scene: hard cuts by default, a real transition where the
     story changes section, in the style's own vocabulary and rhythm.
@@ -763,18 +834,29 @@ def plan_transitions(shots: List[dict], style: str = "documentary",
     they land near one cut in three or four. Never on consecutive cuts, never
     the same transition twice in a row. `durations` (frames per scene), when
     given, keeps transitions off cuts too short to carry one.
+
+    `smooth` (default: TRANSITIONS_SMOOTH) plans from the smooth set only
+    (_SMOOTH_STYLE_TRANSITIONS, no flash, burn, leak or glitch): a subject
+    change takes the style's next smooth transition, a jump within one subject
+    a zoom-blur or punch-in (JUMP_TRANSITIONS). `same_source[i]` marks a scene
+    that plays the next moment of the previous scene's own clip - a jump cut,
+    which in smooth mode takes a zoom-blur or punch-in whenever the rhythm has
+    room, in every style.
     """
     if style == "crossfade":
         return _plan_crossfades(shots, durations)
-    spec = _STYLE_TRANSITIONS.get(style) or _STYLE_TRANSITIONS["documentary"]
+    if smooth is None:
+        smooth = bool(getattr(config, "TRANSITIONS_SMOOTH", True))
+    table = _SMOOTH_STYLE_TRANSITIONS if smooth else _STYLE_TRANSITIONS
+    spec = table.get(style) or table["documentary"]
     cycle, gap, force = spec["cycle"], max(_MIN_TRANSITION_GAP, int(spec["gap"])), int(spec["force"])
-    out, last, used = [], -99, 0
+    out, last, used, jumps = [], -99, 0, 0
     prev_subject, prev_choice = None, None
     for i, shot in enumerate(shots):
         shot = shot or {}
         subject = (shot.get("subject") or "").strip().lower()
         overlay = shot.get("overlay") or {}
-        choice = "none"
+        choice, from_jump = "none", False
         roomy = durations is None or (
             i < len(durations) and durations[i] >= _MIN_IN_FRAMES
             and durations[i - 1] >= _MIN_OUT_FRAMES)
@@ -787,15 +869,40 @@ def plan_transitions(shots: List[dict], style: str = "documentary",
             chapter = overlay.get("type") in ("chapter", "title")
             moved_on = bool(subject and prev_subject and subject != prev_subject)
             due = force > 0 and i - (last if last >= 0 else 0) >= force
-            if chapter:
-                choice = spec["chapter"]
-            elif moved_on or due:
-                choice = cycle[used % len(cycle)]
-            if choice != "none" and choice == prev_choice:
-                # A chapter pick that repeats the last transition takes the next in turn.
-                choice = cycle[(cycle.index(choice) + 1) % len(cycle)] if choice in cycle else cycle[0]
+            if not smooth:
+                if chapter:
+                    choice = spec["chapter"]
+                elif moved_on or due:
+                    choice = cycle[used % len(cycle)]
+                if choice != "none" and choice == prev_choice:
+                    # A chapter pick that repeats the last transition takes the next in turn.
+                    choice = cycle[(cycle.index(choice) + 1) % len(cycle)] if choice in cycle else cycle[0]
+            else:
+                jump = bool(same_source and i < len(same_source) and same_source[i])
+                same_subject = bool(subject and prev_subject and subject == prev_subject)
+                # A cross-dissolve needs both shots long enough to overlap (as _plan_crossfades).
+                xf_ok = durations is None or (i < len(durations) and durations[i] >= CROSSFADE_FRAMES * 2
+                                              and durations[i - 1] >= CROSSFADE_FRAMES * 2)
+                if chapter:
+                    picks = [spec["chapter"]] + [c for c in cycle if c != spec["chapter"]]
+                elif jump or (due and same_subject and not moved_on and prev_choice not in JUMP_TRANSITIONS):
+                    # A real jump inside one clip always zooms or punches in; a forced cut inside one subject
+                    # does too, unless the last transition already did (variety: a whip or a slide this time).
+                    picks = [JUMP_TRANSITIONS[(jumps + k) % len(JUMP_TRANSITIONS)]
+                             for k in range(len(JUMP_TRANSITIONS))]
+                elif moved_on or due:
+                    picks = [cycle[(used + k) % len(cycle)] for k in range(len(cycle))]
+                else:
+                    picks = []
+                # Never the same transition twice in a row; a dissolve only where it fits.
+                choice = next((p for p in picks if p != prev_choice and (p != "crossfade" or xf_ok)), "none")
+                from_jump = bool(picks) and picks[0] in JUMP_TRANSITIONS and not chapter
         if choice != "none":
-            last, used, prev_choice = i, used + 1, choice
+            last, prev_choice = i, choice
+            if from_jump:
+                jumps += 1                  # the jump pair alternates on its own count
+            else:
+                used += 1
         out.append(choice)
         if subject:
             prev_subject = subject
@@ -807,6 +914,14 @@ def plan_transitions(shots: List[dict], style: str = "documentary",
 # rest hard cuts; no effects, no sounds.
 CROSSFADE_SHARE = 0.8
 CROSSFADE_FRAMES = 15
+
+
+def _same_source(assets: List[Optional[MediaAsset]], n: int) -> List[bool]:
+    """Per scene: it plays the same clip (or picture) as the scene before - a jump cut (a chained shot)."""
+    def key(a) -> str:
+        return str(getattr(a, "local_path", "") or getattr(a, "url", "") or "") if a is not None else ""
+    keys = [key(assets[i]) if i < len(assets) else "" for i in range(n)]
+    return [i > 0 and bool(keys[i]) and keys[i] == keys[i - 1] for i in range(n)]
 
 
 def _plan_crossfades(shots: List[dict], durations: Optional[List[int]] = None) -> List[str]:
@@ -1164,7 +1279,7 @@ def apply_pack_transitions(scenes: List[dict], picks: Dict[int, str], fps: int, 
 
 def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
                         intensity: float = 1.0, voice_lufs: Optional[float] = None,
-                        soft: Optional[Dict[int, str]] = None) -> List[dict]:
+                        soft: Optional[Dict[int, str]] = None, smooth: Optional[bool] = None) -> List[dict]:
     """
     A sound for each transition, placed so its loudest point lands on the
     cut, set against the voice (`voice_lufs`, see _TRANSITION_SFX) at the
@@ -1176,7 +1291,12 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
     the hook booster's first cuts, src/hookboost.py) gives a cut the sound of
     that transition although the scene itself enters with a hard cut; it goes
     through every rule above, so it is never louder than any transition sound.
+    `smooth` (default: TRANSITIONS_SMOOTH): a smooth cut (SMOOTH_TRANSITIONS)
+    is silent - no whoosh, no shimmer; the hook booster's soft cut sounds on
+    its hard cuts stay (the owner's level, SFX_VOLUME).
     """
+    if smooth is None:
+        smooth = bool(getattr(config, "TRANSITIONS_SMOOTH", True))
     meta = sfx_meta()
     have = templates.sfx_files()
     near = int(round(_TRANSITION_SFX_CLEARANCE * fps))
@@ -1197,6 +1317,8 @@ def plan_transition_sfx(scenes: List[dict], fps: int, others: List[dict],
     picks = []
     for idx, sc in enumerate(scenes):
         t = sc.get("transition") or "none"
+        if smooth and is_smooth(t):
+            continue                    # a smooth cut makes no sound of its own
         if t not in _TRANSITION_SFX and soft and idx in soft and not pack_name(t):
             t = soft[idx]
         if t not in _TRANSITION_SFX:
@@ -1472,13 +1594,17 @@ def _build(segments: List[Segment], shots: List[dict],
     # Transitions follow the cutting style (a documentary mostly hard-cuts, a
     # news edit punctuates); a job can still pin the allowed set.
     style = transition_style(inp, pack, brief)
+    # Smooth cuts by default (TRANSITIONS_SMOOTH / the job's "transitions_smooth"): no flash, burn, leak or
+    # glitch, no overlay-pack clip, no whoosh on a smooth cut; a jump inside one clip zooms or punches in.
+    smooth = smooth_cuts(inp)
     entrances = plan_transitions(list(shots) + [{}] * max(0, len(segments) - len(shots)), style,
-                                 durations=[bounds[i + 1] - bounds[i] for i in range(len(segments))])
+                                 durations=[bounds[i + 1] - bounds[i] for i in range(len(segments))],
+                                 smooth=smooth, same_source=_same_source(assets, len(segments)))
     if isinstance(inp.get("transitions"), list) and inp["transitions"]:
         entrances = _pack_transitions(entrances, {"transitions": inp["transitions"]})
     # Only the kit's transitions: each other one becomes the nearest the kit
     # allows, or a hard cut.
-    entrances = brandkit.limit_transitions(entrances, kit)
+    entrances = brandkit.limit_transitions(entrances, kit, smooth=smooth)
     if teaser_info and teaser_info.get("flashes"):
         # A flash and the shot after the last one are hard cuts.
         for i in range(len(entrances)):
@@ -1692,7 +1818,9 @@ def _build(segments: List[Segment], shots: List[dict],
     pinned = inp.get("transitions") if isinstance(inp.get("transitions"), list) else []
     # The brand kit's pack clips only (none allowed: no pack transitions).
     clips = brandkit.pack_clips(kit)
-    if (want_pack if isinstance(want_pack, bool) else config.TRANSITION_PACK) and (
+    # Smooth cuts: the pack (film burns, leaks, flashes, glitches, each with its whoosh / hit) only when the
+    # job itself asks for it.
+    if (want_pack if isinstance(want_pack, bool) else (config.TRANSITION_PACK and not smooth)) and (
             not pinned or any(str(t).startswith("pack") for t in pinned)) and (clips is None or clips):
         from . import styles as video_styles
         rhythm = video_styles.pack_rhythm(str(inp.get("video_style") or ""), style)
@@ -1705,7 +1833,7 @@ def _build(segments: List[Segment], shots: List[dict],
     soft_cuts = hookboost.cut_sounds(scenes, fps) if hookboost.enabled() else {}
     sfx_list = sorted(list(sfx_list) + plan_transition_sfx(
                           scenes, fps, busy, (pack or {}).get("sfxIntensity", 1.0), voice_lufs=voice_lufs,
-                          soft=soft_cuts or None),
+                          soft=soft_cuts or None, smooth=smooth),
                       key=lambda s: int(s.get("startFrame", 0)))
     for fx in sfx_list:
         top = sfxplan.cap(voice_lufs, str(fx.get("name") or ""))
@@ -1795,6 +1923,8 @@ def _build(segments: List[Segment], shots: List[dict],
             "voiceLufs": round(float(voice_lufs), 1),
             "voiceLufsSource": voice_how,
             "warnings": warnings,
+            # Smooth cuts (TRANSITIONS_SMOOTH): later steps (the Smart Editor) keep to the smooth set too.
+            "smoothCuts": bool(smooth),
             **({"hookBoost": hook_boost} if hook_boost else {}),
             # On-screen sources: each tag with the narration's words that named its source (never invented).
             **({"sourceTags": {"placed": source_tags}} if source_tags else {}),
@@ -1856,6 +1986,11 @@ def _build(segments: List[Segment], shots: List[dict],
         doc["meta"]["overlayCount"] = len(doc["overlays"])
         print(f"[timeline] smart editor: {json.dumps({k: rep.get(k) for k in ('graphics', 'droppedLooks', 'marks', 'usd', 'error', 'skipped')})}",
               flush=True)
+    # How the cuts came out (the editor's transitionCounts): flashy vs smooth, and the transition sounds kept.
+    cuts = transition_counts(doc.get("scenes") or [])
+    cuts["sounds"] = sum(1 for s in doc.get("sfx") or [] if s.get("kind") == "transition")
+    doc["meta"]["cuts"] = cuts
+    print(f"[timeline] cuts: {json.dumps(cuts)} (smooth={bool(smooth)})", flush=True)
     return doc
 
 

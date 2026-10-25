@@ -36,6 +36,9 @@ from typing import Dict
 # transitions: the cutting style src/timeline.py plans (timeline.STYLES:
 # documentary/history/story soft and rare, trending/compilation/explainer
 # energetic flashes, glitches and whips, crossfade = soft 0.5 s dissolves).
+# With smooth cuts (config.TRANSITIONS_SMOOTH, the default) every style keeps
+# its rhythm but cuts from the smooth set only (timeline._SMOOTH_STYLE_TRANSITIONS)
+# and the overlay pack below plays only when a job asks for it.
 # graphics: how busy the overlay planner is ("minimal", "normal", "rich").
 # Every style has music (the owner, 2026-09-30); only the job's own
 # "bgm": false turns it off.

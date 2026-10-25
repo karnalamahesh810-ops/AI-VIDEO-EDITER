@@ -76,6 +76,18 @@ _PRICES = {  # USD per token (OpenRouter list prices, 2026-10): only for the pre
 _SFX_NAMES: Optional[set] = None
 
 
+def transition_list(doc: Optional[dict] = None) -> tuple:
+    """The cut transitions the director may pick: with smooth cuts (the plan's meta.smoothCuts, else
+    TRANSITIONS_SMOOTH) only the smooth set (timeline.SMOOTH_TRANSITIONS) - no flash, no light sweep."""
+    smooth = ((doc or {}).get("meta") or {}).get("smoothCuts")
+    if not isinstance(smooth, bool):
+        smooth = bool(getattr(config, "TRANSITIONS_SMOOTH", True))
+    if not smooth:
+        return TRANSITIONS
+    from . import timeline
+    return tuple(t for t in TRANSITIONS if timeline.is_smooth(t))
+
+
 def enabled(inp: Optional[dict] = None) -> bool:
     v = (inp or {}).get("smart_editor")
     return v if isinstance(v, bool) else bool(config.SMART_EDITOR)
@@ -291,7 +303,7 @@ def _direct_chunk(rows: List[dict], looks: List[dict], story: dict, recent: List
                      if story.get("_kit") == "gaming" else
                      "DOCUMENTARY: graphics ride on the footage; a kit card only for the one biggest moment"),
         "SFX_LIST": sorted(n for n in _sfx_names() if not n.startswith("amb-") and " " not in n),
-        "TRANSITION_LIST": list(TRANSITIONS),
+        "TRANSITION_LIST": list(story.get("_transitions") or TRANSITIONS),
         "RECENT_DESIGNS_TO_AVOID": recent[-6:],
         "PLANNER_LOOKS": looks,
         "BEATS": rows,
@@ -646,6 +658,8 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
     if not story:
         story = {"title": (doc.get("meta") or {}).get("story", {}).get("title", "")
                  if isinstance((doc.get("meta") or {}).get("story"), dict) else ""}
+    allowed_tr = transition_list(doc)
+    story = dict(story, _transitions=list(allowed_tr))
 
     # 1. direct, chunk by chunk, in parallel
     n = len(scenes)
@@ -887,7 +901,7 @@ def _edit(doc: dict, story: dict, budget: Budget, render_stills, critic: bool, l
     n_tr, last_t = 0, ""
     for t in sorted(transitions, key=lambda r: r.get("beat", 0)):
         b, name = t.get("beat"), t.get("t")
-        if not isinstance(b, int) or not (0 < b < n) or name not in TRANSITIONS or name == last_t:
+        if not isinstance(b, int) or not (0 < b < n) or name not in allowed_tr or name == last_t:
             continue
         cur = str(scenes[b].get("transition") or "none")
         if cur.startswith("pack:"):
