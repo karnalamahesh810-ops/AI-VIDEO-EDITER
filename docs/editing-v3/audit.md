@@ -126,4 +126,68 @@ leaves the plan exactly as before.
 | `EDIT_V3_CLEAN_EFFECTS` | 5 | No colour-shift, light leak, flicker or dust on a clip unless the scene is treated as film / vintage / archival. |
 | (renderer fix) | 3 | kt-number sizes its digit box from the real rendered text, so a unit never overlaps the last digit. |
 
-Results, judge scores and the demo are in section 5 (filled in after the build).
+## 5. Results
+
+### Replay on the two real timelines (the pass on the saved plans, offline; each style's own config)
+
+| | Mount Rainier (news_compilation) before | after | Documentary 4a94f419 before | after |
+|---|---|---|---|---|
+| shots / min | 8.3 | 12.6 | 12.9 | 13.2 |
+| shot p10 / median / p90 / max | 4.3 / 6.1 / 12.4 / 18.0 s | 2.8 / 4.8 / 6.7 / 8.1 s | 3.0 / 4.4 / 6.6 / 8.8 s | 2.9 / 4.3 / 6.5 / 7.0 s |
+| time in shots over 8 s | 41.5 % | 0.7 % | 1.9 % | 0 % |
+| stills held over 8 s | 501 s | 0 | 17.5 s | 0 |
+| shots in the first 30 s | 6 | 10 | 7 | 9 |
+| punch-ins on emphasis words | 0 | 23 (19 emphasis + 4 interrupts) | 0 | 25 |
+| longest stretch with nothing new | 73.8 s | 37.7 s | 22.8 s | 21.6 s |
+| cuts landing on a word start | 94 % | 96 % | 100 % | 100 % |
+| figures drawn twice / repeated captions dropped | - | 6 / 1 | - | 2 / 1 |
+| random texture effects removed | - | 45 | - | 45 |
+
+The pass adapts to the plan: the Rainier video (long stills from a sourcing shortfall) gets 47 holds broken up; the
+documentary, already cut at 4.4 s, gets 5 splits and mostly punches. Punched words (Rainier): first, nobody,
+forever, six, dozens, never, nothing, hundreds, record, ever, 500... The same word is never punched twice within 3 min.
+In news_compilation clips are never cropped (the style's REFRAME_CLIPS off), so its 37.7 s quiet stretch sits on
+clips that may not be punched.
+
+### Demo and blind judge
+
+`C:\ThumGenius\editing_v3_demo.mp4` (64 s side by side: the hook 0:00-0:30 plus 9:15-9:49, same narration and
+footage; before = the saved live plan, after = this pass; sound = the final video's own mix plus the punch whooshes),
+`editing_v3_before.mp4` / `editing_v3_after.mp4` full frame, contact sheet `C:\ThumGenius\editing_v3_sheet.jpg`
+(copy here: editing_v3_sheet.jpg). Rendered on the laptop in Chrome (frames recipe), no RunPod.
+
+A blind Claude judge (contact sheets, shot lists and two graphics stills, labelled X/Y only) scored:
+
+| | R1 pacing | R2 hook | R3 cuts on words | R5 graphics | R6 emphasis | R9 interrupts | R10 colour | overall |
+|---|---|---|---|---|---|---|---|---|
+| before | 2 | 4 | 2 | 3 | 1 | 3 | 7 | **2.5** |
+| after | 5 | 6 | 4 | 7 | 6 | 5 | 8 | **5.5** |
+
+It would publish the after. Its main remaining criticism: in the middle section the after is still only two
+source pictures, and the 1.16-1.36x detail framings are "fake variety". That is the next lever (see below).
+
+### Cost and render time
+
+- AI / network: none. The pass takes about 0.1 s on a 20-minute plan (1.45 s with Python start-up), on the worker
+  that plans. Per 15-minute video: $0.
+- Render: the 64 s demo segment drew in 214 s before and 142-177 s after on the laptop (same renderer settings, run
+  one after the other). Within the noise, no slowdown. Punches add a motion-blur filter for 0.28 s each; split
+  pieces reuse the same file (one download). Expect no measurable change on RunPod (more scenes means more scene
+  signatures in the render cache, which are cheap).
+
+### Next levers (not built)
+
+1. **Real pictures instead of detail crops.** Feed split pieces from the judged spare bank (src/spares.py, live since
+   d99e296) or a library picture of the same subject before falling back to a crop. This is the judge's top ask.
+2. **Punch clips in no-crop styles** only where vision says there is no burned-in text or logo (media.focus), so
+   news compilations get emphasis too.
+3. **Cut on the word that names the next shot**, not only on pauses, once the planner records which word a shot
+   proves.
+
+### App editor mirror (C:\ThumGenius-app src/remotion), not done
+
+- `components/lib/LibKinetic.tsx`: copy the kt-number Figure change (the unit spacing fix). App main's copy is
+  byte-identical to the worker's base, so a straight copy works.
+- Nothing else. The pass writes only fields the editor already reads and edits: scene.keyframes (scale /
+  anchorX / anchorY with expoOut), scene.motionBlur, media.trimStart, scene.splitFrom and plain sfx rows
+  (kind "punch"). No migration, no edge function change.

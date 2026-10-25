@@ -48,8 +48,10 @@ HOOK_SECONDS = 30.0             # the references' first 30 s run at 18-20 change
 HOLD_LIMIT_HOOK = 5.0           # a shot in the hook longer than this is split
 HOLD_LIMIT_MIN = 7.5            # ... and in the body (or the style's SHOT_MAX_SECONDS + 0.5, whichever is longer)
 PIECE_MIN = 2.2                 # no piece of a split shot shorter than this
-DETAIL_SCALE = 1.2              # a detail framing of a still (the renderer's cover fit is the 1.0)
-DETAIL_SCALE_SMALL = 1.12       # ... of a still whose file is small
+# A detail framing of a still (the renderer's cover fit is the 1.0): tight, then a medium on the other side, so each
+# piece reads as a new shot over the still's own slow move (1.2 everywhere read as the same shot in the first proof).
+DETAIL_SCALES = (1.36, 1.16)
+DETAIL_SCALE_SMALL = 1.14       # ... of a still whose file is small (upscaled or under 1600 px wide)
 CLIP_SKIP = 0.8                 # a chained clip piece jumps this far forward in its file
 PUNCH_SCALE = 1.08              # the owner's Premiere rules: same-shot punch 12 %, emphasis zooms held, no boomerang
 PUNCH_SCALE_HOOK = 1.1
@@ -434,8 +436,9 @@ def _detail_anchor(scene: dict, k: int) -> Tuple[float, float]:
         cx = _f(box.get("x")) + _f(box.get("w")) / 2
         cy = _f(box.get("y")) + _f(box.get("h")) / 2
         return max(-0.4, min(0.4, cx - 0.5)), max(-0.4, min(0.4, cy - 0.5))
-    side = -0.16 if k % 2 else 0.16
-    return side, -0.06
+    tight = k % 2 == 1
+    side = (-0.24 if (k // 2) % 2 == 0 else 0.24) if tight else (0.2 if (k // 2) % 2 == 0 else -0.2)
+    return side, (-0.1 if tight else 0.05)
 
 
 def _split_scene(scene: dict, cuts: List[float], fps: int, crop_ok: bool) -> Optional[List[dict]]:
@@ -492,7 +495,7 @@ def _split_scene(scene: dict, cuts: List[float], fps: int, crop_ok: bool) -> Opt
             if still:
                 ax, ay = _detail_anchor(scene, i)
                 small = bool(m.get("upscaled")) or (0 < _f(m.get("width"), 0) < 1600)
-                sc = DETAIL_SCALE_SMALL if small else DETAIL_SCALE
+                sc = DETAIL_SCALE_SMALL if small else DETAIL_SCALES[(i - 1) % len(DETAIL_SCALES)]
                 p["keyframes"] = {"scale": [{"t": 0, "v": sc}], "anchorX": [{"t": 0, "v": round(ax, 3)}],
                                   "anchorY": [{"t": 0, "v": round(ay, 3)}]}
                 # A different hand move from the piece before (never the same move twice running).
