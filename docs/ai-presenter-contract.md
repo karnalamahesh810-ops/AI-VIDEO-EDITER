@@ -303,3 +303,22 @@ Plus `custom` ("Describe a set"): the description (3-200 characters; the app ref
 - A kit's own `avatar.prompt` / `avatar.motion_prompt` replace the defaults (tone lines are still added).
 
 **Any voice, exact lip-sync**: the narration is the only sound of the video. Each take's window is cut from it frame-exact; the copy sent to the avatar only gets one steady gain to about -18 LUFS (never past -1 dBFS peak; measured once on the whole narration) and a 70 Hz high-pass, so a quiet phone recording, a hot one or our TTS all reach the lip-sync model alike. The returned clip's own audio is cross-correlated with that window (`lag`), the clip trimmed frame-exact and muted.
+
+## 12. Presenter model: Avatar IV or Avatar III (worker branch `feature/ai-models`, 2026-10-25)
+
+| id | where | $ a second | $ a minute | notes |
+|---|---|---|---|---|
+| `avatar_iv` (default) | OpenRouter `heygen/avatar-iv` | 0.05 | 3.00 | motion prompt + expressiveness |
+| `avatar_iii` | HeyGen's own API v3, engine `avatar_iii`, photo avatar | 0.0165 | 0.99 | no motion prompt / expressiveness; a new presenter picture is first made into a HeyGen photo avatar ($1.32 once, cached per picture on R2 `heygen/looks/<account>/<hash>.json`) |
+
+Prices: help.heygen.com "HeyGen API pricing explained" (updated 2026-10-19): Avatar III photo avatar 20 credits/min, 1 credit = $0.05, billed by the second, 720p and 1080p the same; photo avatar creation $1.32 a call.
+
+**Job fields**: the style's `presenter_model`; the hybrid block's `model`; a kit's `presenter_model` is the presenter's own default. Precedence: job > kit > `PRESENTER_MODEL_DEFAULT` (avatar_iv). Aliases: `avatar-iii`, `heygen/avatar-iii`, `iii`, `3` (and the same for IV).
+
+**Fallback**: Avatar III needs `HEYGEN_API_KEY` on the worker. Without it, the takes are Avatar IV and `meta.warnings` says so. If HeyGen refuses mid-job in a way no retry fixes (401/402/403, insufficient balance, a look that does not support `avatar_iii`), the rest of the job also goes to Avatar IV (the same framing is retaken there) with a warning. A passing error (5xx) is retried on HeyGen and never silently moved to the dearer model.
+
+**Budget**: takes reserve length x $0.0165; each photo avatar reserves $1.32 (room for two cameras is added on top of the job's cap; a cached look costs nothing). The app's hybrid `budget_usd` = seconds x the model's rate x 1.5.
+
+**Report**: `meta.presenter.model` / `meta.presenterHybrid.model` = `{asked, used, model, provider, usdPerSecond, fallback, looksMade}`; costs `presenter.avatar_iii.usd` (length x rate, HeyGen answers no price) and `presenter.heygen_look.usd`. `presenter_info.presenterModels` lists both with `available` (the key is set); `health.heygenKey`.
+
+**HeyGen calls** (`src/presenter/heygen.py`, header `x-api-key`): `POST /v3/assets` (multipart `file`), `POST /v3/avatars` `{type:"photo", name, file:{type:"asset_id", asset_id}}` -> `avatar_item.id`, poll `GET /v3/avatars/looks/{id}` until `completed` (check `supported_api_engines`), `POST /v3/videos` `{type:"avatar", avatar_id, audio_url | audio_asset_id, engine:{type:"avatar_iii"}, resolution:"1080p", aspect_ratio:"16:9", fit:"cover"}`, poll `GET /v3/videos/{id}` (`video_url` is a signed link that expires: downloaded at once). The v1/v2 endpoints retire on 2026-11-01.

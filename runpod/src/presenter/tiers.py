@@ -30,16 +30,35 @@ MODELS: Dict[str, Dict[str, Any]] = {
     # The presenter: HeyGen Avatar IV through OpenRouter, $0.05 a second at 720p or 1080p.
     # Measured 2026-10-07 (prototype): 6.7-8.9 s clips in 67-83 s, $0.34-0.44, 25 fps, length = the audio's.
     "heygen/avatar-iv": {"kind": "avatar", "usd_per_second": {"720p": 0.05, "1080p": 0.05}},
+    # The cheaper presenter: HeyGen Avatar III on HeyGen's OWN API (OpenRouter has no Avatar III), photo avatar,
+    # $0.99 a minute at 720p or 1080p (help.heygen.com "HeyGen API pricing explained", updated 2026-10-19: 20
+    # credits/min at $0.05 a credit, billed by the second). Each new presenter picture is first made into a HeyGen
+    # photo avatar ($1.32 once, cached per picture: src/presenter/heygen.py). A bit less expressive (no motion
+    # prompt, no expressiveness). Only with HEYGEN_API_KEY on the worker; without it a job falls back to Avatar IV.
+    "heygen/avatar-iii": {"kind": "avatar", "provider": "heygen", "usd_per_second": {"720p": 0.0165, "1080p": 0.0165}},
     # Image-to-video b-roll. "durations": the clip lengths the model accepts (seconds).
-    # "audio_flag": the request takes generate_audio (sent false: the narration is the only sound).
+    # "audio_flag": True - the request takes generate_audio and it is always sent false (b-roll needs no sound; on
+    # Seedance a clip with audio costs twice as much); False - the model makes no sound and takes no such flag.
+    # Prices are WITHOUT audio (OpenRouter /api/v1/videos/models, read 2026-10-25). Seedance 1.5 Pro bills
+    # $0.0000012 a video token without audio, tokens = width x height x 24 fps x seconds / 1024: 480p (854x480)
+    # ~$0.0115/s, 720p ~$0.026/s, 1080p ~$0.058/s.
     "bytedance/seedance-1-5-pro": {"kind": "i2v", "usd_per_second": {"480p": 0.012, "720p": 0.026, "1080p": 0.059},
                                    "durations": list(range(4, 13)), "audio_flag": True},
     "google/veo-3.1-lite": {"kind": "i2v", "usd_per_second": {"720p": 0.03, "1080p": 0.05},
                             "durations": [4, 6, 8], "audio_flag": True},
     "google/veo-3.1-fast": {"kind": "i2v", "usd_per_second": {"720p": 0.08, "1080p": 0.10},
                             "durations": [4, 6, 8], "audio_flag": True},
+    # Grok Imagine 1.5 Lite: 2 c/s at 480p, 3 c/s at 720p, plus 1 c for the start picture (folded in: +$0.002/s
+    # for a 5 s clip). Makes no sound.
+    "x-ai/grok-imagine-video-1.5-lite": {"kind": "i2v", "usd_per_second": {"480p": 0.022, "720p": 0.032},
+                                         "durations": list(range(1, 16)), "audio_flag": False},
+    # HeyGen Video 1 (through OpenRouter): 480p $0.02/s, 5-15 s, no sound.
+    "heygen/heygen-video-1": {"kind": "i2v", "usd_per_second": {"480p": 0.02, "768p": 0.036, "2K": 0.10},
+                              "durations": list(range(5, 16)), "audio_flag": False},
+    "bytedance/seedance-2.0-mini": {"kind": "i2v", "usd_per_second": {"480p": 0.034, "720p": 0.076},
+                                    "durations": list(range(4, 16)), "audio_flag": True},
     "minimax/hailuo-3-max": {"kind": "i2v", "usd_per_second": {"480p": 0.05, "768p": 0.08},
-                             "durations": list(range(5, 16))},
+                             "durations": list(range(5, 16)), "audio_flag": False},
     "minimax/hailuo-3": {"kind": "i2v", "usd_per_second": {"2K": 0.13}, "durations": list(range(5, 16)),
                          "audio_flag": True},
     "alibaba/wan-3.0": {"kind": "i2v", "usd_per_second": {"720p": 0.10, "1080p": 0.20},
@@ -48,7 +67,15 @@ MODELS: Dict[str, Dict[str, Any]] = {
                                "audio_flag": True},
     # Stills. usd: per picture at that size (OpenRouter / Google price pages; Nano Banana 2.1 measured at
     # $0.053 for 2K on 2026-10-07).
+    # Gemini image output is billed per token: 1K = 1120 tokens, 2K = 1680 (Google's price pages), so at $30/M
+    # output a 1K picture is ~$0.034 and a 2K one ~$0.050 (+ a little text).
     "google/gemini-nano-banana-2.1": {"kind": "image", "usd": {"1K": 0.034, "2K": 0.053}},
+    "google/gemini-3.1-flash-lite-image": {"kind": "image", "usd": {"1K": 0.034, "2K": 0.051}},
+    "google/gemini-2.5-flash-image": {"kind": "image", "usd": {"": 0.039, "1K": 0.039}},   # 1290 tokens x $30/M
+    # gpt-5-image-mini: $8/M image output tokens; OpenAI's 1536x1024 picture is 400 (low), 1568 (medium) or 6208
+    # (high) tokens - $0.003 / $0.013 / $0.050 - plus GPT-5 mini's own text tokens. Unmeasured: the bake-off
+    # (scripts/ai_models_bakeoff.py) prices it before it goes into any default chain.
+    "openai/gpt-5-image-mini": {"kind": "image", "usd": {"": 0.02, "1K": 0.02}},
     "google/gemini-3.1-flash-image": {"kind": "image", "usd": {"1K": 0.067, "2K": 0.101}},
     "google/gemini-3-pro-image": {"kind": "image", "usd": {"1K": 0.134, "2K": 0.140}},
 }
@@ -186,6 +213,61 @@ def image_usd(model: str, size: str) -> float:
     if size in prices:
         return float(prices[size])
     return float(max(prices.values())) if prices else 0.14
+
+
+def generate_audio_param(model: str) -> Optional[bool]:
+    """
+    What an image-to-video b-roll request sends as generate_audio: always False (no sound - the narration is the
+    only sound, and on Seedance audio doubles the price), except for a model known to make no sound and take no
+    such flag (audio_flag False), which gets nothing. A model we do not know is asked for no audio too.
+    """
+    return None if model_info(model).get("audio_flag") is False else False
+
+
+# ------------------------------------------------------------------ the presenter's model (Avatar IV / III)
+# The owner's choice per video and per presenter (2026-10-25): Avatar IV through OpenRouter (the default, most
+# expressive) or Avatar III on HeyGen's own API (about a third of the price, a bit less expressive).
+AVATAR_IV, AVATAR_III = "avatar_iv", "avatar_iii"
+PRESENTER_MODELS: Dict[str, Dict[str, Any]] = {
+    AVATAR_IV: {"model": "heygen/avatar-iv", "label": "Avatar IV", "provider": "openrouter",
+                "blurb": "Most expressive (motion prompt, expressiveness)"},
+    AVATAR_III: {"model": "heygen/avatar-iii", "label": "Avatar III", "provider": "heygen",
+                 "blurb": "About a third of the price, a bit less expressive", "look_setup_usd": 1.32},
+}
+_MODEL_ALIASES = {"avatar_iv": AVATAR_IV, "avatar-iv": AVATAR_IV, "heygen/avatar-iv": AVATAR_IV, "iv": AVATAR_IV,
+                  "4": AVATAR_IV, "avatariv": AVATAR_IV, "avatar iv": AVATAR_IV,
+                  "avatar_iii": AVATAR_III, "avatar-iii": AVATAR_III, "heygen/avatar-iii": AVATAR_III,
+                  "iii": AVATAR_III, "3": AVATAR_III, "avatariii": AVATAR_III, "avatar iii": AVATAR_III}
+
+
+def presenter_model_id(value: Any) -> str:
+    """A presenter model choice ("avatar_iv" / "avatar_iii", or one of their aliases) as its id; "" if not one."""
+    return _MODEL_ALIASES.get(str(value if value is not None else "").strip().lower(), "")
+
+
+def default_presenter_model() -> str:
+    return presenter_model_id(os.getenv("PRESENTER_MODEL_DEFAULT", "")) or AVATAR_IV
+
+
+def chosen_presenter_model(*values: Any) -> str:
+    """The first real choice among `values` (the job's, then the kit's), else the default (Avatar IV)."""
+    for v in values:
+        got = presenter_model_id(v)
+        if got:
+            return got
+    return default_presenter_model()
+
+
+def presenter_models_info(heygen_ready: bool) -> List[Dict[str, Any]]:
+    """What presenter_info shows the app: each model's price a second and a minute, and whether it can run."""
+    out = []
+    for mid, spec in PRESENTER_MODELS.items():
+        rate = usd_per_second(spec["model"], "1080p")
+        out.append({"id": mid, "label": spec["label"], "model": spec["model"], "provider": spec["provider"],
+                    "blurb": spec["blurb"], "usdPerSecond": rate, "usdPerMinute": round(rate * 60, 2),
+                    "lookSetupUsd": spec.get("look_setup_usd", 0.0), "default": mid == default_presenter_model(),
+                    "available": True if spec["provider"] == "openrouter" else bool(heygen_ready)})
+    return out
 
 
 def clip_seconds_for(model: str, wanted: float) -> int:

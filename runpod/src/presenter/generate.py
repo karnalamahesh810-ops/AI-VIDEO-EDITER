@@ -14,6 +14,12 @@ with a free fallback so the video always finishes.
              Checks: length, frozen, black, the face against the master.
              Retry: the other framing. Fallback: a still for the line (the
              b-roll path), then the kit's empty set.
+             With the Avatar III presenter model (avatar_provider: HeyGen's
+             own API, src/presenter/heygen.py) the take goes there instead:
+             the framing is made into a HeyGen photo avatar once (cached per
+             picture), then animated with the same voice window. A HeyGen
+             refusal no retry fixes (key, wallet) moves the job to Avatar IV
+             with a warning (Generator.warnings).
   still      the line's picture from the style bible (or, for the
              presenter-in-action share, a picture of the presenter doing it,
              drawn from the master portrait). Checks: decodes, 16:9, the
@@ -169,8 +175,17 @@ class Generator:
     def __init__(self, *, provider: Provider, budget: Budget, tier: Dict[str, Any], kit: dict, work: str,
                  store: Store, cache: Cache, checker: _checks.Checker, narration_wav: str, total: float,
                  bible: Dict[str, str], on_progress: Optional[Callable[[int, int], None]] = None,
-                 still_fallback: bool = True):
+                 still_fallback: bool = True, avatar_provider: Optional[Provider] = None):
         self.provider, self.budget, self.tier, self.kit = provider, budget, tier, kit
+        # Avatar III (src/presenter/heygen.py): the presenter's takes go to HeyGen's own API; everything else stays
+        # on `provider`. None: Avatar IV through OpenRouter, as always. A HeyGen answer no retry can fix (the key,
+        # the wallet) turns it off for the rest of the job: the takes go on with Avatar IV, with a warning.
+        self.heygen = avatar_provider
+        self.heygen_off = ""
+        self.warnings: List[str] = []
+        self._look_lock = threading.Lock()
+        self.looks: Dict[str, str] = {}              # framing id -> HeyGen look id (photo avatar)
+        self.looks_made = 0
         # False (the hybrid mode, src/presenter/hybrid.py): a presenter shot that fails is no shot at all - its
         # line goes back to the footage search, never to an AI still or the kit's set.
         self.still_fallback = bool(still_fallback)
@@ -268,8 +283,10 @@ class Generator:
 
     # ------------------------------------------------------------------ one video call
     def _video_call(self, req: VideoRequest, projected: float, label: str, out_path: str,
-                    cache_payload: Dict[str, Any], cache_files: List[str], kind: str) -> Dict[str, Any]:
+                    cache_payload: Dict[str, Any], cache_files: List[str], kind: str,
+                    provider: Optional[Provider] = None) -> Dict[str, Any]:
         """Submit, poll, download one clip (or take it from the cache). Returns {"path", "usd", "cached", "url"}."""
+        provider = provider or self.provider
         key = self.cache.key(cache_payload, cache_files)
         hit = self.cache.get(key, out_path)
         if hit:
@@ -277,13 +294,13 @@ class Generator:
             return {"path": out_path, "usd": 0.0, "cached": hit.get("cached", "disk"), "url": hit.get("url", "")}
         ticket = self.budget.reserve(projected, label)
         try:
-            job = self.provider.submit_video(req)
+            job = provider.submit_video(req)
         except ProviderError as e:
             self.budget.release(ticket, str(e))
             raise
         self._note(f"{label}: submitted {req.model} ({job.id[-8:]})")
         try:
-            res = self.provider.wait_video(job, timeout=WAIT_SECONDS, poll=POLL_SECONDS)
+            res = provider.wait_video(job, timeout=WAIT_SECONDS, poll=POLL_SECONDS)
         except ProviderError as e:
             # Still running or lost: what it may cost stays counted (projected), never released.
             self.budget.settle(ticket, None, model=req.model, kind=kind, job=job.id, error=str(e)[:120])
@@ -294,15 +311,15 @@ class Generator:
             self._record(kind, usd, 0.0)
             raise ProviderError(f"{req.model} {res.status}: {res.error[:200]}")
         usd = self.budget.settle(ticket, res.cost, model=req.model, kind=kind, job=job.id, seconds=res.seconds)
-        self.provider.download_video(job, res, out_path)
+        provider.download_video(job, res, out_path)
         url = self.store.put(out_path, os.path.basename(out_path))
         self.cache.put(key, out_path, {"usd": usd, "model": req.model, "url": url, "job": job.id})
         self._note(f"{label}: done in {res.seconds:.0f} s, ${usd:.3f}")
         return {"path": out_path, "usd": usd, "cached": "", "url": url}
 
     @staticmethod
-    def _record(kind: str, usd: float, seconds: float) -> None:
-        cat, sub = ("presenter", "avatar") if kind == "presenter" else ("aivideo", "clip")
+    def _record(kind: str, usd: float, seconds: float, sub: str = "") -> None:
+        cat, sub = ("presenter", sub or "avatar") if kind == "presenter" else ("aivideo", sub or "clip")
         if usd > 0:
             costs.record(f"{cat}.usd", usd)
             costs.record(f"{cat}.{sub}.usd", usd)
@@ -311,12 +328,25 @@ class Generator:
             costs.record(f"{cat}.seconds", seconds)
 
     # ------------------------------------------------------------------ presenter shots
+    def _heygen_disable(self, why: str) -> None:
+        """HeyGen refused in a way no retry fixes: Avatar IV for the rest of the job, and the job says so."""
+        with self._lock:
+            if self.heygen_off:
+                return
+            self.heygen_off = why[:200]
+            self.warnings.append("Avatar III (HeyGen) stopped working during this video "
+                                 f"({why[:140]}): the rest of the presenter was made with Avatar IV ($0.05 a second).")
+        self._note(f"Avatar III off for this job: {why[:200]}")
+
     def presenter(self, shot: Shot) -> Optional[Asset]:
         tries: List[str] = [shot.framing or self.kit["framings"][0]["id"]]
         other = _kits.other_framing(self.kit, tries[0])
         tries.append(other["id"] if other else tries[0])
         why = []
-        for attempt, framing_id in enumerate(tries):
+        attempt = 0
+        while attempt < len(tries):
+            framing_id = tries[attempt]
+            on_heygen = self.heygen is not None and not self.heygen_off
             try:
                 asset = self._presenter_once(shot, framing_id, attempt)
             except BudgetExceeded as e:
@@ -325,9 +355,17 @@ class Generator:
             except Exception as e:  # noqa: BLE001 - the next try, then the fallback
                 why.append(f"{type(e).__name__}: {str(e)[:160]}")
                 self._note(f"{shot.id}: presenter try {attempt + 1} failed: {why[-1]}")
+                if on_heygen:
+                    from . import heygen as _heygen
+                    if _heygen.account_problem(e):
+                        # The same framing once more, now on Avatar IV (the job's other takes follow).
+                        self._heygen_disable(str(e))
+                        tries.insert(attempt + 1, framing_id)
+                attempt += 1
                 continue
+            attempt += 1
             if asset is not None:
-                asset.attempts = attempt + 1
+                asset.attempts = attempt
                 if why:
                     asset.checks["earlier"] = why
                 return asset
@@ -341,14 +379,52 @@ class Generator:
             still.fallback = "presenter -> still: " + "; ".join(why)[:300]
         return still
 
+    def _heygen_look(self, framing_id: str, frame_local: str) -> str:
+        """The HeyGen photo avatar (look id) of this framing's exact 16:9 picture: cached (free), else made once
+        (heygen.LOOK_USD, through the job's budget). One at a time: parallel takes of one framing share it."""
+        from . import heygen as _heygen
+        with self._look_lock:
+            if framing_id in self.looks:
+                return self.looks[framing_id]
+            look = self.heygen.cached_look(frame_local)
+            if not look:
+                ticket = self.budget.reserve(_heygen.LOOK_USD, f"HeyGen photo avatar ({framing_id})")
+                try:
+                    look, _made = self.heygen.ensure_look(frame_local, name=f"{self.kit.get('name') or self.kit.get('id') or 'presenter'} {framing_id}")
+                except ProviderError as e:
+                    if e.billed:
+                        self.budget.settle(ticket, None, model=_heygen.MODEL, kind="heygen_look", error=str(e)[:120])
+                        costs.record("presenter.usd", _heygen.LOOK_USD)
+                        costs.record("presenter.heygen_look.usd", _heygen.LOOK_USD)
+                    else:
+                        self.budget.release(ticket, str(e))
+                    raise
+                usd = self.budget.settle(ticket, _heygen.LOOK_USD, model=_heygen.MODEL, kind="heygen_look")
+                costs.record("presenter.usd", usd)
+                costs.record("presenter.heygen_look.usd", usd)
+                costs.record("presenter.heygen_look.calls")
+                self.looks_made += 1
+                self._note(f"HeyGen photo avatar made for the {framing_id} framing (${usd:.2f}, once: cached)")
+            self.looks[framing_id] = look
+            return look
+
     def _presenter_once(self, shot: Shot, framing_id: str, attempt: int) -> Optional[Asset]:
-        model, res = (list(self.tier.get("presenter_model") or ["heygen/avatar-iv", "1080p"]) + ["1080p"])[:2]
+        on_heygen = self.heygen is not None and not self.heygen_off
+        if on_heygen:
+            from . import heygen as _heygen
+            model, res = _heygen.MODEL, "1080p"
+        else:
+            model, res = (list(self.tier.get("presenter_model") or ["heygen/avatar-iv", "1080p"]) + ["1080p"])[:2]
+            if tiers.model_info(model).get("provider") == "heygen":
+                model = "heygen/avatar-iv"           # Avatar III without HeyGen: the OpenRouter model
         stem = f"{shot.id}_{framing_id}_{attempt}"
         win = media_io.cut_window(self.narration, shot.start, shot.end, os.path.join(self.dir, f"{stem}.wav"),
                                   pad_before=PAD_BEFORE, pad_after=PAD_AFTER, total=self.total,
                                   gain_db=self.voice_gain(), highpass=AVATAR_HIGHPASS)
         frame_local, frame_link = self._framing(framing_id)
         audio_url = self.store.put(win["path"], f"{stem}.wav", temp=True, content_type="audio/wav")
+        if on_heygen:
+            return self._heygen_take(shot, framing_id, stem, win, frame_local, audio_url, model, res)
         # How the presenter moves on this take: the framing (a close-up keeps the hands below the frame) and the
         # line's tone (src/presenter/motion.py).
         plan = motion.for_shot(self.kit, text=shot.text, role=shot.role, framing=_kits.framing(self.kit, framing_id),
@@ -377,6 +453,42 @@ class Generator:
             raise
         if not got["cached"]:
             self._record("presenter", got["usd"], win["seconds"])
+        return self._finish_take(shot, framing_id, stem, win, raw, got, model, req.prompt,
+                                 {"tone": plan["tone"], "role": plan["role"],
+                                  "expressiveness": opts.get("expressiveness", ""), "close": plan["close"]})
+
+    def _heygen_take(self, shot: Shot, framing_id: str, stem: str, win: Dict[str, Any], frame_local: str,
+                     audio_url: str, model: str, res: str) -> Optional[Asset]:
+        """One Avatar III take on HeyGen's API: the framing's photo avatar (made once) + the voice window (an https
+        link, else uploaded as a file - no R2 needed). Avatar III takes no prompt, motion prompt or expressiveness."""
+        payload = {"kind": "presenter", "model": model, "res": res}
+        files = [frame_local, win["path"]]
+        raw = os.path.join(self.dir, f"{stem}_raw.mp4")
+        key = self.cache.key(payload, files)
+        look = "" if self.cache.get(key, raw) else self._heygen_look(framing_id, frame_local)
+        req = VideoRequest(model=model, resolution=res, aspect_ratio="16:9", audio_url=audio_url,
+                           audio_file=win["path"], options={"heygen_direct": {"avatar_id": look}})
+        projected = round(win["seconds"] * tiers.usd_per_second(model, res) * 1.05 + 0.01, 4)
+        try:
+            got = self._video_call(req, projected, f"{shot.id} presenter ({framing_id}, Avatar III)", raw, payload,
+                                   files, "presenter", provider=self.heygen)
+        except ProviderError as e:
+            text = str(e).lower()
+            if look and e.status in (400, 404) and ("avatar" in text or "look" in text) and "not found" in text:
+                # A cached look HeyGen no longer has (deleted in its dashboard): made again on the next try.
+                self.heygen.forget_look(frame_local)
+                with self._look_lock:
+                    self.looks.pop(framing_id, None)
+            raise
+        if not got["cached"]:
+            self._record("presenter", got["usd"], win["seconds"], sub="avatar_iii")
+        return self._finish_take(shot, framing_id, stem, win, raw, got, model, "",
+                                 {"tone": "", "role": shot.role, "expressiveness": "", "close": False,
+                                  "engine": "avatar_iii"})
+
+    def _finish_take(self, shot: Shot, framing_id: str, stem: str, win: Dict[str, Any], raw: str,
+                     got: Dict[str, Any], model: str, prompt: str, motion_info: Dict[str, Any]) -> Optional[Asset]:
+        """A take as the scene's clip: lined up with the voice, trimmed frame-exact, muted, checked."""
         info = media_io.probe(raw)
         lag = media_io.audio_lag(raw, win["path"]) if info["audio"] else None
         offset = win["lead"] + (lag if lag is not None and abs(lag) <= 0.5 else 0.0)
@@ -398,10 +510,8 @@ class Generator:
         out = media_io.probe(clip)
         return Asset(shot_id=shot.id, kind="video", path=clip, source="ai-presenter", model=model, usd=got["usd"],
                      url=got["url"], width=int(out["width"]), height=int(out["height"]), seconds=out["duration"],
-                     prompt=req.prompt, framing=framing_id, lag=lag,
-                     checks={"face": verdict, "window": win,
-                             "motion": {"tone": plan["tone"], "role": plan["role"],
-                                        "expressiveness": opts.get("expressiveness", ""), "close": plan["close"]}},
+                     prompt=prompt, framing=framing_id, lag=lag,
+                     checks={"face": verdict, "window": win, "motion": motion_info},
                      cached=got["cached"])
 
     # ------------------------------------------------------------------ stills
@@ -543,7 +653,6 @@ class Generator:
     def _video_once(self, shot: Shot, start: Asset, model: str, res: str, attempt: int,
                     extra: str = "") -> Optional[Asset]:
         stem = f"{shot.id}_clip_{attempt}"
-        info = tiers.model_info(model)
         seconds = tiers.clip_seconds_for(model, shot.seconds + CLIP_HANDLE)
         link = start.url if start.url.startswith("https://") else ""
         if not link:
@@ -551,7 +660,7 @@ class Generator:
         prompt = f"{motion_prompt(shot.motion, shot.still or shot.text)} {extra}".strip()
         seed = zlib.crc32(f"{shot.id}:{attempt}".encode("utf-8")) % 2_000_000_000
         req = VideoRequest(model=model, prompt=prompt, resolution=res, aspect_ratio="16:9", duration=seconds,
-                           first_frame=link, generate_audio=False if info.get("audio_flag") else None, seed=seed)
+                           first_frame=link, generate_audio=tiers.generate_audio_param(model), seed=seed)
         payload = {"kind": "clip", "model": model, "res": res, "seconds": seconds, "prompt": prompt, "seed": seed}
         projected = round(seconds * tiers.usd_per_second(model, res) * 1.05 + 0.02, 4)
         raw = os.path.join(self.dir, f"{stem}_raw.mp4")

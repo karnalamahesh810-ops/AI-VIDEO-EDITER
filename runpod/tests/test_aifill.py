@@ -79,8 +79,12 @@ class Block(unittest.TestCase):
         self.assertFalse(aifill.enabled())
 
     def test_defaults_and_clamps(self):
+        # Budget quality by default (2026-10-25): (20 x $0.035 + 3 x $0.07) x 1.5; standard keeps the old $2.13.
         self.assertEqual(aifill.block({"ai_fill": {"enabled": True}}),
-                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 2.13})
+                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 1.37, "quality": "budget"})
+        self.assertEqual(aifill.block({"ai_fill": {"enabled": True, "quality": "standard"}}),
+                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 2.13, "quality": "standard"})
+        self.assertEqual(aifill.block({"ai_fill": {"enabled": True, "quality": "ultra"}})["quality"], "budget")
         b = aifill.block({"ai_fill": {"enabled": True, "max_images": 500, "max_clips": 99, "budget_usd": "50"}})
         self.assertEqual((b["max_images"], b["max_clips"], b["budget_usd"]),
                          (aifill.MAX_IMAGES_LIMIT, aifill.MAX_CLIPS_LIMIT, config.AI_FILL_MAX_BUDGET))
@@ -102,8 +106,42 @@ class Block(unittest.TestCase):
             self.assertEqual(aifill.image_models(), [("a/b", ""), ("c/d-1.5", "")])
         for bad in ("[not json", "not a model", "[]", ""):
             with mock.patch.object(config, "AI_FILL_IMAGE_MODELS", bad):
-                self.assertEqual(aifill.image_models()[0], ("google/gemini-nano-banana-2.1", "2K"), bad)
-        self.assertEqual([m for m, _ in aifill.video_models()], ["bytedance/seedance-1-5-pro", "google/veo-3.1-lite"])
+                self.assertEqual(aifill.image_models()[0], ("google/gemini-nano-banana-2.1", "1K"), bad)
+        # Budget (the default): 480p Seedance first, the 720p and the Veo / Grok lite models behind it.
+        self.assertEqual(aifill.video_models(), [("bytedance/seedance-1-5-pro", "480p"),
+                                                 ("bytedance/seedance-1-5-pro", "720p"),
+                                                 ("google/veo-3.1-lite", "720p"),
+                                                 ("x-ai/grok-imagine-video-1.5-lite", "480p")])
+        # Standard: the chains used before 2026-10-25.
+        self.assertEqual(aifill.image_models("standard")[0], ("google/gemini-nano-banana-2.1", "2K"))
+        self.assertEqual(aifill.video_models("standard"), [("bytedance/seedance-1-5-pro", "720p"),
+                                                           ("google/veo-3.1-lite", "720p")])
+
+    def test_a_jobs_own_chains_and_quality(self):
+        b = aifill.block({"ai_fill": {"enabled": True, "image_models": [["openai/gpt-5-image-mini", ""], "bad id",
+                                                                         ["x/y", "1K; rm"]],
+                                      "video_models": [["heygen/heygen-video-1", "480p"]]}})
+        self.assertEqual(b["image_models"], [("openai/gpt-5-image-mini", "")])
+        self.assertEqual(b["video_models"], [("heygen/heygen-video-1", "480p")])
+        aifill.start({"ai_fill": {"enabled": True, "quality": "standard",
+                                  "image_models": [["openai/gpt-5-image-mini", ""]]}}, work=tempfile.gettempdir(),
+                     provider=FakeProvider(), store=FakeStore())
+        try:
+            self.assertEqual(aifill.image_models(), [("openai/gpt-5-image-mini", "")])      # the job's own
+            self.assertEqual(aifill.video_models()[0], ("bytedance/seedance-1-5-pro", "720p"))   # its quality's
+            self.assertEqual(aifill.report()["quality"], "standard")
+        finally:
+            aifill.reset()
+
+    def test_no_audio_on_any_b_roll_clip(self):
+        from src.presenter import tiers
+        for q in aifill.QUALITIES:
+            for model, _res in aifill.video_models(q):
+                want = None if tiers.model_info(model).get("audio_flag") is False else False
+                self.assertIs(tiers.generate_audio_param(model), want, model)
+        self.assertIs(tiers.generate_audio_param("bytedance/seedance-1-5-pro"), False)
+        self.assertIs(tiers.generate_audio_param("some/unknown-model"), False)        # unknown: asked for none
+        self.assertIsNone(tiers.generate_audio_param("x-ai/grok-imagine-video-1.5-lite"))   # makes no sound
 
 
 # ------------------------------------------------------------------ the prompts
@@ -215,7 +253,7 @@ class Plan(_Fresh):
         self.assertFalse([o for o in doc.get("overlays") or [] if o.get("type") == "highlight"])
         self.assertEqual(len(prov.images), 6)
         self.assertEqual(prov.images[0].model, "google/gemini-nano-banana-2.1")
-        self.assertEqual((prov.images[0].size, prov.images[0].aspect_ratio), ("2K", "16:9"))
+        self.assertEqual((prov.images[0].size, prov.images[0].aspect_ratio), ("1K", "16:9"))   # budget quality
         rep = doc["meta"]["aiFill"]
         self.assertEqual((rep["images"], rep["clips"], rep["inTimeline"]["images"]), (6, 0, 6))
         self.assertGreater(rep["spentUsd"], 0)
@@ -241,13 +279,21 @@ class Plan(_Fresh):
         self.assertGreater(s["media"]["clipSeconds"], s["durationInFrames"] / doc["fps"] - 0.05)
         self.assertEqual(len(prov.videos), 1)
         req = prov.videos[0]
-        self.assertEqual((req.model, req.resolution, req.generate_audio), ("bytedance/seedance-1-5-pro", "720p", False))
+        # Budget quality: 480p with no audio (sharpened to 1080 lines afterwards).
+        self.assertEqual((req.model, req.resolution, req.generate_audio), ("bytedance/seedance-1-5-pro", "480p", False))
         self.assertIn(req.duration, (4, 5, 6))
         self.assertTrue(req.first_frame.startswith("https://") or req.first_frame.startswith("data:image"))
         self.assertEqual(doc["meta"]["aiFill"]["clips"], 1)
 
+    def test_standard_quality_clips_are_720p(self):
+        doc, prov = self.plan({"max_images": 20, "max_clips": 1, "quality": "standard"})
+        self.assertEqual(len(prov.videos), 1)
+        req = prov.videos[0]
+        self.assertEqual((req.model, req.resolution, req.generate_audio), ("bytedance/seedance-1-5-pro", "720p", False))
+        self.assertEqual(prov.images[0].size, "2K")
+
     def test_the_budget_is_a_hard_cap(self):
-        doc, prov = self.plan({"max_images": 20, "max_clips": 0, "budget_usd": 0.15})
+        doc, prov = self.plan({"max_images": 20, "max_clips": 0, "budget_usd": 0.15, "quality": "standard"})
         # $0.053 a picture reserved at 1.25x plus its check: two fit, the third does not.
         self.assertLessEqual(len(ai_scenes(doc)), 2)
         self.assertLessEqual(doc["meta"]["aiFill"]["spentUsd"], 0.15)
@@ -315,7 +361,7 @@ class Models(_Fresh):
         doc, gap = self.doc_with_one_gap()
         aifill.fill_doc(doc, work=self.work)
         self.assertTrue(aifill.is_ai_scene(gap))
-        self.assertEqual(gap["semanticMetadata"]["aiFill"]["model"], "google/gemini-3.1-flash-image")
+        self.assertEqual(gap["semanticMetadata"]["aiFill"]["model"], "google/gemini-3.1-flash-lite-image")
         self.assertEqual(prov.images[-1].size, "1K")
 
     def test_a_turned_down_picture_is_asked_again_with_the_fix(self):
@@ -525,6 +571,41 @@ class Handler(unittest.TestCase):
         with mock.patch.object(handler, "_plan_document", side_effect=plan_document):
             handler.handler({"id": "t-aifill2", "input": {"action": "plan", "audio_url": "x", "allow_youtube": False}})
         self.assertFalse(seen["enabled"])
+
+
+class Sharpen(unittest.TestCase):
+    """A 480p AI clip is sharpened to 1080 lines: the GPU endpoint when configured, else the CPU pass."""
+
+    def test_routes(self):
+        from src import gputools, upscale
+        low = {"w": 854, "h": 480, "fps": 24.0, "seconds": 5.0}
+        with mock.patch.object(gputools, "_probe", return_value=low), \
+                mock.patch.object(gputools, "client", return_value=None), \
+                mock.patch.object(upscale, "upscale_clip", return_value=True) as cpu:
+            self.assertEqual(aifill.sharpen("x.mp4"), "cpu")
+            cpu.assert_called_once()
+
+        class Client:
+            def run(self, payload, deadline):
+                self.payload = payload
+                return {"ok": True, "url": "https://r2/out.mp4"}
+        c = Client()
+        with mock.patch.object(gputools, "_probe", return_value=low), \
+                mock.patch.object(gputools, "client", return_value=c), \
+                mock.patch.object(gputools, "_stage", return_value="https://r2/in.mp4"), \
+                mock.patch.object(gputools, "_fetch", return_value="x.mp4.gpu.mp4"), \
+                mock.patch.object(gputools, "_replace_checked", return_value=True), \
+                mock.patch.object(upscale, "upscale_clip") as cpu:
+            self.assertEqual(aifill.sharpen("x.mp4"), "gpu")
+            self.assertEqual(c.payload, {"action": "upscale", "url": "https://r2/in.mp4", "lines": 1080})
+            cpu.assert_not_called()
+        with mock.patch.object(gputools, "_probe", return_value={"w": 1280, "h": 720, "fps": 24.0, "seconds": 5.0}), \
+                mock.patch.object(upscale, "upscale_clip") as cpu:
+            self.assertEqual(aifill.sharpen("x.mp4"), "")          # 720 lines and up: left alone
+            cpu.assert_not_called()
+        with mock.patch.object(config, "AI_FILL_UPSCALE", False), mock.patch.object(gputools, "_probe") as probe:
+            self.assertEqual(aifill.sharpen("x.mp4"), "")
+            probe.assert_not_called()
 
 
 if __name__ == "__main__":

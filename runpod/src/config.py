@@ -170,12 +170,33 @@ IMAGE_MAX_PER_VIDEO = int(os.getenv("IMAGE_MAX_PER_VIDEO", "80"))
 # into AI clips - only on the lines nothing real was found for. The block carries the per-job switch and caps
 # (max_images, max_clips, budget_usd); these are the machinery's own settings. Models in the order tried, as
 # JSON [[model, size or resolution], ...] (OpenRouter ids; "" size = the model's own).
+#
+# Two qualities (the owner, 2026-10-25: b-roll fill does not need top quality - the cheapest that still looks right;
+# a job's block picks one with "quality", and may name its own chains with "image_models" / "video_models"):
+#   budget (the default)  pictures at 1K (~$0.034: Gemini image output is $30/M tokens, 1120 tokens a 1K picture),
+#                         clips at 480p with no audio (Seedance 1.5 Pro ~$0.0115/s, a 5 s clip ~$0.06), sharpened to
+#                         1080 lines afterwards (AI_FILL_UPSCALE: FlashVSR on the GPU tools endpoint when configured,
+#                         else the CPU Lanczos + sharpen pass)
+#   standard              the chains used before (Nano Banana 2.1 at 2K ~$0.053; Seedance 720p ~$0.026/s)
+AI_FILL_QUALITY = (os.getenv("AI_FILL_QUALITY", "budget").strip().lower() or "budget")
 AI_FILL_IMAGE_MODELS = os.getenv(
     "AI_FILL_IMAGE_MODELS",
+    '[["google/gemini-nano-banana-2.1", "1K"], ["google/gemini-3.1-flash-lite-image", "1K"], '
+    '["google/gemini-2.5-flash-image", ""], ["google/gemini-3.1-flash-image", "1K"]]')
+AI_FILL_VIDEO_MODELS = os.getenv(
+    "AI_FILL_VIDEO_MODELS",
+    '[["bytedance/seedance-1-5-pro", "480p"], ["bytedance/seedance-1-5-pro", "720p"], ["google/veo-3.1-lite", "720p"], '
+    '["x-ai/grok-imagine-video-1.5-lite", "480p"]]')
+AI_FILL_STANDARD_IMAGE_MODELS = os.getenv(
+    "AI_FILL_STANDARD_IMAGE_MODELS",
     '[["google/gemini-nano-banana-2.1", "2K"], ["google/gemini-3.1-flash-image", "1K"], '
     '["google/gemini-2.5-flash-image", ""]]')
-AI_FILL_VIDEO_MODELS = os.getenv(
-    "AI_FILL_VIDEO_MODELS", '[["bytedance/seedance-1-5-pro", "720p"], ["google/veo-3.1-lite", "720p"]]')
+AI_FILL_STANDARD_VIDEO_MODELS = os.getenv(
+    "AI_FILL_STANDARD_VIDEO_MODELS", '[["bytedance/seedance-1-5-pro", "720p"], ["google/veo-3.1-lite", "720p"]]')
+# A clip AI fill made under 720 lines (the budget 480p) is sharpened to 1080 lines before it goes on the timeline,
+# within this many seconds a clip (GPU first when GPU_TOOLS_ENDPOINT_ID is set, else the CPU pass).
+AI_FILL_UPSCALE = _flag("AI_FILL_UPSCALE", True)
+AI_FILL_UPSCALE_SECONDS = float(os.getenv("AI_FILL_UPSCALE_SECONDS", "180"))
 # The text model that writes each picture's description from its line, the lines beside it and the story (one
 # call per pass, ~$0.002 for 20 lines); the rule-built prompt stands in when it fails. "" = rules only.
 AI_FILL_PROMPT_MODELS = [m.strip() for m in os.getenv(
