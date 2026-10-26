@@ -135,7 +135,11 @@ STYLES: Dict[str, dict] = {
                    "PHOTO_MAX_PER_10MIN": 10.0, "STILL_MOTION": "none", "REFRAME_CLIPS": False,
                    # Nothing drawn on top but the forecast map and the watermark (src/severe.py keeps those).
                    "MARKS_ENABLED": False, "DATA_GRAPHICS": False, "TRANSITION_PACK": False,
-                   "HOOK_BOOST": False, "AMBIENCE": False, "RISERS": False},
+                   "HOOK_BOOST": False, "AMBIENCE": False, "RISERS": False,
+                   # A line with no footage holds real footage beside it, never a full-screen number graphic (the
+                   # reference has none; the owner: number animations too big, 2026-10-26; the Lake Mead laptop
+                   # build had 8 of them).
+                   "ANIMATION_FILL": False},
     },
     "trending_news": {
         "label": "Trending news",

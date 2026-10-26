@@ -47,6 +47,12 @@ class StyleTests(unittest.TestCase):
         self.assertLessEqual(cfg["SHOT_MAX_SECONDS"], 12.0)                  # the shot cap's ceiling
         self.assertFalse(cfg["MARKS_ENABLED"])
         self.assertEqual(cfg["IMAGE_MAX_PER_VIDEO"], 0)
+        self.assertFalse(cfg["ANIMATION_FILL"])
+
+    def test_every_style_setting_is_overridable_per_job(self):
+        import handler
+        missing = [k for k in styles.STYLES["severe_weather"]["config"] if k not in handler.CONFIG_OVERRIDABLE]
+        self.assertEqual(missing, [])
 
     def test_apply_sets_crossfades_no_sfx_and_no_editing_v3(self):
         inp = {"video_style": "severe_weather"}
