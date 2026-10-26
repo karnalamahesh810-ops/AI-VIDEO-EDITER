@@ -95,7 +95,19 @@ const useMap = (overlay: Overlay, width: number, height: number) =>
     const locs = (overlay.locations || []) as MapLocation[];
     const first = locs.find((l) => Number.isFinite(l?.lat) && Number.isFinite(l?.lon));
     const lat = first ? first.lat : 39.5, lon = first ? first.lon : -74.5;
-    const proj = geoMercator().center([lon, lat]).scale(width * 2.2).translate([width * 0.46, height * 0.5]);
+    // Two or more places: the map fits them (a region of at least ~7 x 4.5 degrees) in the middle of the frame, so
+    // nearby towns spread out instead of piling up; one place: centred at the old regional zoom.
+    const pts = locs.filter((l) => Number.isFinite(l?.lat) && Number.isFinite(l?.lon));
+    let proj = geoMercator().center([lon, lat]).scale(width * 2.2).translate([width * 0.46, height * 0.5]);
+    if (pts.length >= 2) {
+      let w = Math.min(...pts.map((l) => l.lon)), e = Math.max(...pts.map((l) => l.lon));
+      let s = Math.min(...pts.map((l) => l.lat)), n = Math.max(...pts.map((l) => l.lat));
+      const cx = (w + e) / 2, cy = (s + n) / 2;
+      const hw = Math.max(3.5, (e - w) / 2 * 1.35), hh = Math.max(2.25, (n - s) / 2 * 1.35);
+      w = cx - hw; e = cx + hw; s = cy - hh; n = cy + hh;
+      proj = geoMercator().fitExtent([[width * 0.12, height * 0.14], [width * 0.88, height * 0.86]],
+        { type: "MultiPoint", coordinates: [[w, s], [e, n]] } as never);
+    }
     const path = geoPath(proj);
     const land = path(WORLD) || "";
     const states = path(STATES) || "";
@@ -104,7 +116,20 @@ const useMap = (overlay: Overlay, width: number, height: number) =>
       .slice(0, 6)
       .map((l) => ({ name: str(l.label || (l as any).name).split(",")[0].toUpperCase(), p: proj([l.lon, l.lat]) as Pt }))
       .filter((c) => c.p && c.p[0] > 40 && c.p[0] < width - 40 && c.p[1] > 40 && c.p[1] < height - 40);
-    return { land, states, cities };
+    // Labels never sit on each other: a label that would overlap one already placed steps down a line.
+    const k = width / 1920, placed: { x: number; y: number; w: number }[] = [];
+    const labelled = cities.map((c) => {
+      const w = (c.name.length * 15 + 30) * k;
+      let dy = 0;
+      for (let tries = 0; tries < 6; tries++) {
+        const y = c.p[1] + dy;
+        if (!placed.some((q) => Math.abs(q.y - y) < 64 * k && c.p[0] < q.x + q.w && q.x < c.p[0] + w)) break;
+        dy += 64 * k;
+      }
+      placed.push({ x: c.p[0], y: c.p[1] + dy, w });
+      return { ...c, dy };
+    });
+    return { land, states, cities: labelled };
   }, [overlay.locations, width, height]);
 
 type Mode = "wind" | "rain" | "temp";
@@ -131,7 +156,7 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: Mode }> = ({ overlay, mode 
     }
     return out;
   }, [overlay.items]);
-  const pins = map.cities.filter((c) => Number.isFinite(temps[c.name]));
+  const pins = useMemo(() => map.cities.filter((c) => Number.isFinite(temps[c.name])), [map.cities, temps]);
 
   // The colour field: a coarse grid, blurred into a smooth wash. Static per
   // video except for a slow rotation of the rain bands.
@@ -152,9 +177,13 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: Mode }> = ({ overlay, mode 
             num += w * temps[c.name];
             den += w;
           }
-          const base = 52 + 22 * (p[1] / height) - 6 * (p[0] / width);
-          const f = den > 0 ? (num / den) * 0.85 + base * 0.15 : base;
-          t = tempT(f + 3 * (rnd(i, j) - 0.5));
+          // Around the cities' own figures: cooler to the north, a few degrees of smooth "terrain" variation.
+          const mean = pins.length ? pins.reduce((a, c) => a + temps[c.name], 0) / pins.length : 60;
+          const terrain = 5 * Math.sin(p[0] / (210 * k) + 1.3) * Math.cos(p[1] / (170 * k) - 0.7)
+            + 3 * Math.sin((p[0] + p[1]) / (95 * k));
+          const base = mean + 14 * (p[1] / height - 0.5) + terrain;
+          const f = den > 0 ? (num / den) * 0.6 + base * 0.4 : base;
+          t = tempT(f + 2 * (rnd(i, j) - 0.5));
         } else {
           const dx = p[0] - centre[0], dy = p[1] - centre[1];
           const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
@@ -227,11 +256,11 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: Mode }> = ({ overlay, mode 
             return (
               <g key={c.name + i} opacity={a}>
                 <circle cx={c.p[0]} cy={c.p[1]} r={6 * k} fill="#fff" stroke="rgba(0,0,0,0.5)" strokeWidth={2 * k} />
-                <text x={c.p[0] + 12 * k} y={c.p[1] + 7 * k} fill="#fff"
+                <text x={c.p[0] + 12 * k} y={c.p[1] + 7 * k + c.dy} fill="#fff"
                       style={{ font: `700 ${24 * k}px ${INTER}`, paintOrder: "stroke" }}
                       stroke="rgba(0,0,0,0.65)" strokeWidth={4 * k}>{c.name}</text>
                 {mode === "temp" && Number.isFinite(temps[c.name]) && (
-                  <text x={c.p[0] + 12 * k} y={c.p[1] + 36 * k} fill="#fff"
+                  <text x={c.p[0] + 12 * k} y={c.p[1] + 36 * k + c.dy} fill="#fff"
                         style={{ font: `800 ${26 * k}px ${INTER}`, paintOrder: "stroke" }}
                         stroke="rgba(0,0,0,0.65)" strokeWidth={4 * k}>{`${Math.round(temps[c.name])}°`}</text>
                 )}
