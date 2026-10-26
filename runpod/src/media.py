@@ -1656,6 +1656,53 @@ def _rescue_local_ok(path: str, intent_text: str) -> bool:
 # Candidates the AI-slop / not-footage filters turned down, by reason (job stats).
 SLOP_REJECTED: Dict[str, int] = {}
 
+# Channels that upload slop (config.SLOP_CHANNEL_MEMORY). The Hoover Dam video (2026-10-26): 309 of 540 gated
+# clips were AI-painted (119), slideshows of stills (82) or stills with a slow pan (56), each found only after a
+# ~26 s download; the channels that make them post many uploads on a trending story. A channel's upload turned down
+# as AI-made or painted counts 2 strikes, a slideshow / slow-pan still / frozen shot 1; at SLOP_CHANNEL_STRIKES its
+# other uploads leave the ranking before any storyboard pick or download, for the rest of the job. The story's own
+# news / archive channels (_story_channels) are never struck.
+_SLOP_CHANNELS: Dict[str, int] = {}
+SLOP_CHANNEL_STATS: Dict[str, int] = {"struck": 0, "skipped": 0}
+_AI_SLOP = ("an ai-generated or painted picture", "ai-made", "ai generated", "ai-generated")
+_STILL_SLOP = ("a slideshow of stills", "a still with a slow pan", "a frozen")
+
+
+def _channel_key(channel: str) -> str:
+    return re.sub(r"\s+", " ", str(channel or "")).strip().lower()
+
+
+def note_slop_channel(channel: str, why: str = "", verdict: Optional[dict] = None) -> int:
+    """Record one slop finding against an upload's channel; returns its strikes (0 = not counted)."""
+    if not getattr(config, "SLOP_CHANNEL_MEMORY", True):
+        return 0
+    key = _channel_key(channel)
+    if not key or key in {_channel_key(c) for c in (_story_channels() or [])}:
+        return 0
+    w = str(why or "").lower()
+    pts = 2 if (any(s in w for s in _AI_SLOP) or bool((verdict or {}).get("ai_generated"))) else \
+        1 if any(s in w for s in _STILL_SLOP) else 0
+    if not pts:
+        return 0
+    with _CACHE_LOCK:
+        before = _SLOP_CHANNELS.get(key, 0)
+        _SLOP_CHANNELS[key] = before + pts
+        limit = int(getattr(config, "SLOP_CHANNEL_STRIKES", 2) or 2)
+        if before < limit <= before + pts:
+            SLOP_CHANNEL_STATS["struck"] += 1
+            print(f"[slop] channel {channel[:40]!r} makes slop ({why[:50] or 'judge: AI-made'}): "
+                  "its other uploads are skipped", flush=True)
+        return _SLOP_CHANNELS[key]
+
+
+def slop_channel(channel: str) -> bool:
+    """True when this channel's uploads are skipped for the rest of the job (note_slop_channel)."""
+    if not getattr(config, "SLOP_CHANNEL_MEMORY", True):
+        return False
+    key = _channel_key(channel)
+    with _CACHE_LOCK:
+        return bool(key) and _SLOP_CHANNELS.get(key, 0) >= int(getattr(config, "SLOP_CHANNEL_STRIKES", 2) or 2)
+
 # Candidates found unusable for a reason that holds for every line - generated
 # or painted, a slideshow or a held still, another creator's captions, burned-in
 # text, a download that will not play - by source video ("yt:<id>", "dm:<id>"),
@@ -3647,6 +3694,12 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
               if c.id not in tried and _usable_title(c.title, c.channel, c.aspect, f"{intent_text} {context}")
               and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")
               and not _video_unavailable(c.id)]
+    # A channel this job already caught making AI slideshows: its other uploads take no scout or download.
+    slop_skipped = [c for c in ranked if slop_channel(c.channel)]
+    if slop_skipped:
+        with _CACHE_LOCK:
+            SLOP_CHANNEL_STATS["skipped"] += len(slop_skipped)
+        ranked = [c for c in ranked if c not in slop_skipped]
     if ranked:
         # The weak signs among the ones that could be scouted ("Episode 4", "| Trailer |", "showcase", a streaming
         # network's channel): one cheap text call for the search, cached by video (src/offtopic.py). A clear case
@@ -3741,6 +3794,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             print(f"[media] {why if why != 'burned-in text or UI' else 'hardsubs'}, skipping: {c.title[:60]}",
                   flush=True)
             _trace(step="filter", video=c.id, title=c.title[:60], why=str(why)[:90])
+            note_slop_channel(c.channel, str(why))
             _mark_bad(f"yt:{c.id}", mkey, why)
             try:
                 os.remove(path)
@@ -3751,6 +3805,8 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
         _GATE_SLOP.set("")
         keep, verdict = _vision_gate(path, intent_text, context, c.title)
         slop_why = _GATE_SLOP.get()
+        if not keep:
+            note_slop_channel(c.channel, slop_why, verdict)
         _trace(step="judge", video=c.id, title=c.title[:60], keep=bool(keep),
                score=(verdict or {}).get("score"), quality=(verdict or {}).get("quality"),
                why=slop_why[:90] or _flags_of(verdict),
@@ -4220,6 +4276,9 @@ def reset_cache():
     with _filters._gray_lock():
         _filters._GRAY_CACHE.clear()        # one decode per clip, per job
     SLOP_REJECTED.clear()
+    with _CACHE_LOCK:
+        _SLOP_CHANNELS.clear()          # a channel is judged again per job
+        SLOP_CHANNEL_STATS.update(struck=0, skipped=0)
     with _CACHE_LOCK:
         _BAD.clear()                    # what was unusable is decided again per job
         _STRIKES.clear()
@@ -5913,6 +5972,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     with _CACHE_LOCK:
         LAST_STATS["photos"] = {"cap": _PHOTOS["cap"], "used": _PHOTOS["used"]}
         LAST_STATS["slop_rejected"] = dict(SLOP_REJECTED)
+        # Channels caught making slop, and the uploads of theirs skipped before any scout or download.
+        LAST_STATS["slopChannels"] = dict(SLOP_CHANNEL_STATS, channels=sum(
+            1 for v in _SLOP_CHANNELS.values() if v >= int(getattr(config, "SLOP_CHANNEL_STRIKES", 2) or 2)))
     LAST_STATS["stockBlocked"] = _stockblock.stats()        # the handler refreshes it after the rescue pass
     # Pictures and clips measured for real detail, how many were too soft, the seconds spent.
     LAST_STATS["sharpness"] = _sharpness.stats()

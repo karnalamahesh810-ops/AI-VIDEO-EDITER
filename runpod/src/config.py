@@ -1996,6 +1996,12 @@ CUT_LEAD_SECONDS = float(os.getenv("CUT_LEAD_SECONDS", "0"))
 # creator's burned-in captions, a TV studio, presenter, streamer or TV weather
 # map. 0 = off (A/B only).
 AI_SLOP_FILTER = _flag("AI_SLOP_FILTER", True)
+# A channel caught making slop (media.note_slop_channel: an AI-made or painted upload counts 2 strikes, a slideshow,
+# slow-pan still or frozen shot 1) loses its other uploads from the ranking at SLOP_CHANNEL_STRIKES, before any
+# storyboard pick or download, for the rest of the job (Hoover Dam 2026-10-26: 309 of 540 gated clips were slop,
+# each after a ~26 s download). The story's own news / archive channels are never struck. 0 = off.
+SLOP_CHANNEL_MEMORY = _flag("SLOP_CHANNEL_MEMORY", True)
+SLOP_CHANNEL_STRIKES = int(os.getenv("SLOP_CHANNEL_STRIKES", "2"))
 
 # --- stock-agency and watermarked pictures (src/stockblock.py, the owner 2026-10-04) ---
 # "the images it is using are sometimes watermarked images, like Getty ...

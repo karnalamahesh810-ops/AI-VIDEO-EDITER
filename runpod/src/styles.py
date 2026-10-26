@@ -79,6 +79,10 @@ STYLES: Dict[str, dict] = {
                    # document's asks for a clip on all its wordings and one more wider rung first, and
                    # real photos stay a few per 10 minutes.
                    "CLIPS_FIRST": True, "CLIPS_FIRST_STILLS": True, "CLIP_RUNGS": 4,
+                   # The clip stages keep 80 % of a line's time (default 65 %): a picture is found in seconds,
+                   # a clip try costs ~20-30 s, and the Hoover Dam video (2026-10-26) ran out of clip tries at ~3.7
+                   # a line with 1 in 9 usable.
+                   "CLIPS_FIRST_CLIP_SHARE": 0.8,
                    "PHOTO_MAX_PER_10MIN": 8.0,
                    # The reference cuts one strong clip into several shots (26% of its shots continue a clip):
                    # a line nothing else fills may take a 4th moment of a source video, 2+ minutes from the others.
