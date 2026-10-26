@@ -747,6 +747,31 @@ def _story(doc: dict, story: Optional[dict]) -> dict:
     return meta.get("story") if isinstance(meta.get("story"), dict) else {}
 
 
+# A line that reports a real news moment (2026-10-26, the Hoover Dam video: an AI "swift water rescue on Charleston
+# Boulevard" stood in for the real video the narration described): a date or day said, "video / footage / photos
+# showed", a rescue, an evacuation, a collapse, a record, "this week" / "last night"... In a news story such a line
+# never gets an AI picture (AI_FILL_NEWS_EVENTS off): it keeps the ordinary last resort (the shot beside it held over).
+_NEWS_MOMENT = re.compile(
+    r"\b(?:january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|"
+    r"wednesday|thursday|friday|saturday|sunday|today|tonight|yesterday|this (?:week|morning|evening|weekend)|"
+    r"last (?:night|week|weekend)|video|footage|photos?|pictures?|images?|showed|shows|filmed|captured|rescue[sd]?|"
+    r"rescuers|evacuat\w*|collaps\w*|stranded|swept|killed|died|dead|missing|injured|broke|record|"
+    r"\d{1,2}(?:st|nd|rd|th))\b", re.I)
+
+
+def news_event_line(job: dict, text: str, story: Optional[dict]) -> bool:
+    """A line of a news story that reports a real moment (_NEWS_MOMENT) - never an AI picture's place."""
+    if getattr(config, "AI_FILL_NEWS_EVENTS", False):
+        return False
+    from . import vision
+    news = vision.news_story(story or None)
+    if news is None:
+        news = bool(getattr(config, "NEWS_FOOTAGE", False))
+    if not news:
+        return False
+    return bool(_NEWS_MOMENT.search(" ".join([str(text or ""), str(job.get("context") or "")])))
+
+
 def _lines(doc: dict, only: Optional[Sequence[dict]], story: dict, why: str) -> List[Line]:
     """The empty lines to picture, the most needed first: the opening, then long runs of empty lines, then the
     rest spread over the video (gapfill.spread)."""
@@ -787,6 +812,9 @@ def _lines(doc: dict, only: Optional[Sequence[dict]], story: dict, why: str) -> 
         job = gapfill.job_for(s, i, fps, known)
         if str(job.get("subject_type") or "") == "document":
             skip("a document line (never a made-up record)")
+            continue
+        if news_event_line(job, str(s.get("text") or ""), story):
+            skip("a real news moment (never a made-up picture of one)")
             continue
         if ((s.get("semanticMetadata") or {}).get("plannedBy") == "rules"):
             job["_rules"] = True        # the model never planned it: its intent and "person" tag are the title's
@@ -1563,12 +1591,46 @@ def report(doc: Optional[dict] = None) -> Dict[str, Any]:
     return rep
 
 
+LABEL_TEXT = "AI ILLUSTRATION"
+
+
+def label_scenes(doc: dict) -> int:
+    """A small "AI: ILLUSTRATION" tag (the source tag look, LIB_SRC_TAG) over every AI-made scene that has none
+    (AI_FILL_LABEL; the owner, 2026-10-26: AI pictures must be labelled, never pass for real footage). Returns the
+    tags added."""
+    if not getattr(config, "AI_FILL_LABEL", True) or not isinstance(doc, dict):
+        return 0
+    from . import sources, templates
+    overlays = doc.setdefault("overlays", [])
+    have = {(int(o.get("startFrame") or 0)) for o in overlays
+            if isinstance(o, dict) and o.get("template") == sources.LOOK and str(o.get("label") or "").upper() == "AI"}
+    added = 0
+    for s in doc.get("scenes") or []:
+        if not is_ai_scene(s):
+            continue
+        start = int(s.get("startFrame") or 0)
+        if start in have:
+            continue
+        resolved = templates.resolve(sources.LOOK, props={"text": LABEL_TEXT, "label": "AI"})
+        if not resolved:
+            return added
+        resolved.pop("seconds", None)
+        resolved.pop("sfx", None)
+        overlays.append({**resolved, "startFrame": start, "durationInFrames": max(1, int(s.get("durationInFrames") or 1)),
+                         "align": "right", "emphasis": "low", "aiLabel": True})
+        added += 1
+    return added
+
+
 def annotate(doc: dict) -> None:
     """doc.meta.aiFill and, once anything was made, the YouTube disclosure line first in meta.warnings."""
     if not enabled() or not isinstance(doc, dict):
         return
     meta = doc.setdefault("meta", {})
+    labelled = label_scenes(doc)
     rep = report(doc)
+    if labelled:
+        rep["labelled"] = labelled
     meta["aiFill"] = rep
     made = rep.get("images", 0) + rep.get("clips", 0) + sum((rep.get("inTimeline") or {}).values())
     if made:

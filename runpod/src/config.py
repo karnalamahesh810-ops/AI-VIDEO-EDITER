@@ -179,6 +179,12 @@ IMAGE_MAX_PER_VIDEO = int(os.getenv("IMAGE_MAX_PER_VIDEO", "80"))
 #                         else the CPU Lanczos + sharpen pass)
 #   standard              the chains used before (Nano Banana 2.1 at 2K ~$0.053; Seedance 720p ~$0.026/s)
 AI_FILL_QUALITY = (os.getenv("AI_FILL_QUALITY", "budget").strip().lower() or "budget")
+# AI fill on a news story (2026-10-26, the Hoover Dam video's AI "swift water rescue on Charleston Boulevard"): a line
+# that reports a real moment (a date, "video showed", a rescue, an evacuation...) never gets an AI picture - it keeps
+# the ordinary last resort (aifill.news_event_line). On = the old behaviour (any empty line).
+AI_FILL_NEWS_EVENTS = _flag("AI_FILL_NEWS_EVENTS", False)
+# Every AI-made scene carries a small "AI: ILLUSTRATION" tag (the source tag look, aifill.label_scenes).
+AI_FILL_LABEL = _flag("AI_FILL_LABEL", True)
 AI_FILL_IMAGE_MODELS = os.getenv(
     "AI_FILL_IMAGE_MODELS",
     '[["google/gemini-nano-banana-2.1", "1K"], ["google/gemini-3.1-flash-lite-image", "1K"], '
@@ -999,6 +1005,8 @@ PICTURE_COPY_CHECK = _flag("PICTURE_COPY_CHECK", True)
 PICTURE_COPY_BITS = int(os.getenv("PICTURE_COPY_BITS", "6"))
 # The build places each kinetic look on the calm side of its picture (src/lookplace.py; before, only a relook did).
 LOOK_PLACE_ON_BUILD = _flag("LOOK_PLACE_ON_BUILD", True)
+# Every date look (cards, lines, years, badges) top left, never moved off a busy corner (src/lookplace.py).
+DATES_ONE_PLACE = _flag("DATES_ONE_PLACE", True)
 # One wall-clock budget for all footage finding, across every worker: a
 # real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
 # and searches stop at once and the beats still without footage become
@@ -2380,3 +2388,6 @@ EDIT_V3_PUNCH_SOUND = _flag("EDIT_V3_PUNCH_SOUND", True)
 EDIT_V3_HYGIENE = _flag("EDIT_V3_HYGIENE", True)
 # No colour-shift / light leak / flicker / dust on a clip unless the scene is treated as film, vintage or archival.
 EDIT_V3_CLEAN_EFFECTS = _flag("EDIT_V3_CLEAN_EFFECTS", True)
+# A kinetic number, date or word ends at the next real cut when it has had 2.5 s by then (editing.end_at_cuts,
+# 2026-10-26: 44 of the Hoover Dam video's ~60 looks ran on over a cut).
+LOOKS_END_AT_CUTS = _flag("LOOKS_END_AT_CUTS", True)

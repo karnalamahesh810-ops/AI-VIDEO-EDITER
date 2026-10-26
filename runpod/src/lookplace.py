@@ -19,6 +19,8 @@ import io
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
+from . import config
+
 KT_UPPER = {"KT_DATE", "KT_YEAR", "KT_TIME", "KT_DATE_CARD", "KT_DATE_LINE", "KT_TIME_CLOCK"}
 KT_FIXED_LOWER = {"KT_LOWER_THIRD", "KT_CHIP", "KT_DATE_BADGE"}
 # The date family draws its own frosted glass (remotion LibKtDates.tsx): never the side panel, but it still
@@ -194,10 +196,17 @@ def place(overlays: List[dict], scenes: List[dict], *, fetch: Optional[Callable[
         with ThreadPoolExecutor(max_workers=8) as pool:
             for url, data in zip(urls, pool.map(fetch, urls)):
                 maps[url] = edge_map(data) if data else None
-    out = {"looks": len(todo), "panel": 0, "flipped": 0, "measured": 0, "unmeasured": 0}
+    out = {"looks": len(todo), "panel": 0, "flipped": 0, "measured": 0, "unmeasured": 0, "datesTopLeft": 0}
     for ov, sc in todo:
         media = sc.get("media") or {}
         tid = str(ov["template"])
+        if tid in KT_SELF_BACKED and getattr(config, "DATES_ONE_PLACE", True):
+            # Every date in one place, top left (the owner's rule, 2026-10-01: the same look in the same place; the
+            # Hoover Dam video, 2026-10-26, put its date cards top left and its date badges bottom left). The date
+            # family brings its own glass, so a busy corner never moves it.
+            ov["zone"] = "upper-left"
+            out["datesTopLeft"] += 1
+            continue
         busy = _focus_busy(media)
         edges = maps.get(_picture_url(media))
         if edges is None and busy is None:

@@ -790,6 +790,42 @@ def punch_sounds(doc: dict) -> int:
 # ---------------------------------------------------------------------------------------------------------------
 # The pass
 # ---------------------------------------------------------------------------------------------------------------
+LOOK_MIN_SECONDS = 2.5     # a figure or a word needs this on screen (typeScale numberSeconds.landedHold) before a cut
+
+
+def end_at_cuts(doc: dict) -> Dict[str, int]:
+    """
+    A kinetic number, date or word that would run on over the next cut ends at it when it has had LOOK_MIN_SECONDS
+    by then (the owner, 2026-10-26: numbers running past the cut look sloppy; the Hoover Dam video had 44 of its ~60
+    looks crossing a cut). A cut inside one shot (a split still's detail piece, a chain shot of one clip) is no cut; a
+    look whose cut comes sooner keeps its length (ended there it would flash). Its own exit plays before its new end.
+    """
+    fps = max(1, int(doc.get("fps") or 30))
+    scenes = [s for s in doc.get("scenes") or [] if isinstance(s, dict)]
+    cuts = sorted(int(s.get("startFrame") or 0) for s in scenes[1:] if not s.get("splitFrom")
+                  and not ((s.get("semanticMetadata") or {}).get("moment") or {}).get("chain"))
+    out = {"crossing": 0, "ended": 0, "kept": 0}
+    least = int(round(LOOK_MIN_SECONDS * fps))
+    for o in doc.get("overlays") or []:
+        if not isinstance(o, dict):
+            continue
+        tid = str(o.get("template") or "")
+        if not (tid.startswith("KT_") or tid == "SMART_SPEC"):
+            continue
+        a = int(o.get("startFrame") or 0)
+        b = a + int(o.get("durationInFrames") or 0)
+        cut = next((c for c in cuts if a < c < b), None)
+        if cut is None:
+            continue
+        out["crossing"] += 1
+        if cut - a >= least:
+            o["durationInFrames"] = cut - a
+            out["ended"] += 1
+        else:
+            out["kept"] += 1
+    return out
+
+
 def apply(doc: dict, inp: Optional[dict] = None) -> dict:
     """Run every enabled step on `doc` in place; returns the report (also stored in doc.meta.editingV3)."""
     inp = inp or {}
@@ -814,6 +850,8 @@ def apply(doc: dict, inp: Optional[dict] = None) -> dict:
             report.update(punches(doc, cfg, flags["EDIT_V3_PUNCHES"], flags["EDIT_V3_INTERRUPTS"]))
         if flags["EDIT_V3_PUNCH_SOUND"]:
             report["sounds"] = punch_sounds(doc)
+        if _flag("LOOKS_END_AT_CUTS", cfg, True):
+            report["lookEnds"] = end_at_cuts(doc)
         report["after"] = shot_stats(doc)
     except Exception as e:  # noqa: BLE001 - a finishing pass never fails a video
         for k, v in snapshot.items():

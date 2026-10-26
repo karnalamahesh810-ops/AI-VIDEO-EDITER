@@ -112,5 +112,45 @@ class WhoseLogo(unittest.TestCase):
             self.assertEqual(vision.text_check_decision(look("logo", "LEVEL"), "news"), "")
 
 
+class AiFillOnNews(unittest.TestCase):
+    def test_a_real_news_moment_never_gets_an_ai_picture(self):
+        from src import aifill
+        story = {"kind": "news"}
+        for line in ("Video showed what appeared to be swift water rescues on the 2.15 at Charleston Boulevard.",
+                     "And then came this week.", "Friday, October 23rd, in farming to New Mexico."):
+            self.assertTrue(aifill.news_event_line({}, line, story), line)
+        self.assertFalse(aifill.news_event_line({}, "When rain does the watering, farms order less.", story))
+        self.assertFalse(aifill.news_event_line({}, "Video showed the rescue.", {"kind": "history"}))
+        with mock.patch.object(config, "AI_FILL_NEWS_EVENTS", True):
+            self.assertFalse(aifill.news_event_line({}, "And then came this week.", story))
+
+    def test_every_ai_scene_is_labelled_once(self):
+        from src import aifill
+        doc = {"fps": 60, "overlays": [], "scenes": [
+            {"id": "s0", "startFrame": 0, "durationInFrames": 300, "media": {"type": "image", "source": "web_image"}},
+            {"id": "s1", "startFrame": 300, "durationInFrames": 240, "media": {"type": "image", "source": aifill.AI_SOURCE}}]}
+        self.assertEqual(aifill.label_scenes(doc), 1)
+        self.assertEqual(aifill.label_scenes(doc), 0)
+        tag = doc["overlays"][0]
+        self.assertEqual((tag["template"], tag["label"], tag["startFrame"], tag["durationInFrames"]),
+                         ("LIB_SRC_TAG", "AI", 300, 240))
+        self.assertIn("ILLUSTRATION", tag["text"])
+
+
+class LooksEndAtCuts(unittest.TestCase):
+    def test_a_number_ends_at_the_cut_when_it_has_had_time(self):
+        from src import editing
+        doc = {"fps": 60, "scenes": [{"startFrame": 0, "durationInFrames": 240}, {"startFrame": 240, "durationInFrames": 300},
+                                     {"startFrame": 540, "durationInFrames": 300, "splitFrom": "s1"},
+                                     {"startFrame": 840, "durationInFrames": 300}],
+               "overlays": [{"template": "KT_NUMBER", "startFrame": 0, "durationInFrames": 270},      # cut at 4.0 s
+                            {"template": "KT_DATE", "startFrame": 180, "durationInFrames": 300},      # cut after 1 s
+                            {"template": "SMART_SPEC", "startFrame": 300, "durationInFrames": 300},   # a split: no cut
+                            {"template": "LIB_SRC_TAG", "startFrame": 0, "durationInFrames": 600}]}
+        got = editing.end_at_cuts(doc)
+        self.assertEqual([o["durationInFrames"] for o in doc["overlays"]], [240, 300, 300, 600])
+        self.assertEqual(got, {"crossing": 2, "ended": 1, "kept": 1})
+
+
 if __name__ == "__main__":
     unittest.main()

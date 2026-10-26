@@ -2,10 +2,11 @@
 import io
 import random
 import unittest
+from unittest import mock
 
 from PIL import Image, ImageDraw
 
-from src import lookplace
+from src import config, lookplace
 
 
 def _jpeg(busy_left: bool, busy_right: bool) -> bytes:
@@ -36,14 +37,21 @@ class Place(unittest.TestCase):
         rep = lookplace.place(ovs, scenes, fetch=pics.get)
         self.assertEqual(ovs[0].get("backing"), "panel")
         self.assertEqual(ovs[0].get("zone"), "right-panel")
-        self.assertEqual(ovs[1].get("zone"), "upper-right")
-        self.assertEqual(rep["measured"], 2)
+        # every date top left whatever the corner (DATES_ONE_PLACE, 2026-10-26); off: the calmer side as before
+        self.assertEqual(ovs[1].get("zone"), "upper-left")
+        self.assertEqual(rep["measured"], 1)
+        with mock.patch.object(config, "DATES_ONE_PLACE", False):
+            ovs, scenes = _doc({"type": "image", "url": "https://x/busy-left.jpg"})
+            rep = lookplace.place(ovs, scenes, fetch=pics.get)
+            self.assertEqual(ovs[1].get("zone"), "upper-right")
+            self.assertEqual(rep["measured"], 2)
 
     def test_a_calm_picture_keeps_the_home_place(self):
         pics = {"https://x/calm.jpg": _jpeg(False, False)}
         ovs, scenes = _doc({"type": "image", "url": "https://x/calm.jpg"})
         lookplace.place(ovs, scenes, fetch=pics.get)
-        self.assertFalse([o for o in ovs if o.get("backing") or o.get("zone")])
+        self.assertFalse([o for o in ovs if o.get("backing") or (o.get("zone") and o["template"] != "KT_DATE")])
+        self.assertEqual(ovs[1].get("zone"), "upper-left")
 
     def test_busy_everywhere_is_a_panel_at_home(self):
         pics = {"https://x/busy.jpg": _jpeg(True, True)}
