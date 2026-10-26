@@ -67,13 +67,46 @@ def facts(path: str) -> Optional[dict]:
             ah = max(64, int(round(aw * h / float(w))))
             rgb = np.asarray(im.resize((aw, ah), Image.BILINEAR))
             gray = np.asarray(im.convert("L"))
-        lines = int(reframe.effective_lines(gray) or 0) or min(w, h)
+        # The calibrated round-trip measure first (src/sharpness.py: a search thumbnail, a page's upscaled copy and
+        # a Real-ESRGAN pass all make big files of small pictures); the spectrum estimate only without it.
+        lines = 0
+        try:
+            from . import sharpness
+            ew, eh = sharpness.real_detail(path)
+            if ew and eh:
+                lines = int(round(min(ew, eh)))
+        except Exception:  # noqa: BLE001 - the spectrum estimate below
+            lines = 0
+        lines = lines or int(reframe.effective_lines(gray) or 0) or min(w, h)
         faces = reframe.find_faces(rgb) if reframe.faces_available() else []
         return {"w": int(w), "h": int(h), "lines": min(lines, min(w, h)),
                 "faces": [list(map(float, f[:6])) for f in faces if f[3] >= 0.035]}
     except Exception as e:  # noqa: BLE001 - an unreadable picture keeps its framing
         print(f"[stillframe] {os.path.basename(str(path))}: {type(e).__name__}: {str(e)[:80]}", flush=True)
         return None
+
+
+def with_known_detail(f: dict, magnification: Optional[float]) -> dict:
+    """`f` with its real detail from the magnification sourcing measured on the ORIGINAL download
+    (semanticMetadata.scoreParts.magnification, at the planner's typical move) when that says less detail than
+    the file does - the file may be an upscaled copy (UPSCALE_ENABLED) that looks sharp to any measure."""
+    try:
+        mag = float(magnification or 0)
+    except (TypeError, ValueError):
+        return f
+    if mag <= 0:
+        return f
+    try:
+        from . import sharpness
+        zoom = float(sharpness.planned_zoom() or 1.16)
+    except Exception:  # noqa: BLE001
+        zoom = 1.16
+    m0 = mag / max(1.0, zoom)
+    w, h = float(f["w"]), float(f["h"])
+    aspect = w / max(1.0, h)
+    eh = OUT_H / m0 if aspect >= FRAME_ASPECT else (OUT_W / m0) / aspect
+    lines = int(round(min(eh * aspect, eh)))
+    return dict(f, lines=min(int(f.get("lines") or lines), lines)) if lines > 0 else f
 
 
 def detail_size(f: dict) -> Tuple[float, float]:
@@ -229,6 +262,7 @@ def place(doc: dict, seconds: Optional[float] = None, facts_fn=None) -> Dict[str
             stats["calmed"] += 1
         if not f:
             continue
+        f = with_known_detail(f, ((s.get("semanticMetadata") or {}).get("scoreParts") or {}).get("magnification"))
         stats["measured"] += 1
         mag = cover_magnification(f)
         mags.append(mag)
