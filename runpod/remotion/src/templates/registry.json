@@ -66256,6 +66256,171 @@
    ]
   },
   {
+   "id": "LIB_WX_TEMP",
+   "name": "Forecast Temperature",
+   "category": "MAPS",
+   "component": "motion",
+   "description": "The forecast-model temperature view: a smooth colour field (blue, green, yellow, orange, red) through the named cities' own forecast highs, each city pinned with its figure, faint flow streaks, a degree legend and a model-time chip; the camera drifts in slowly.",
+   "kind": "card",
+   "emphasis": "high",
+   "props": {
+    "text": {
+     "type": "string",
+     "label": "Text",
+     "max": 240
+    },
+    "label": {
+     "type": "string",
+     "label": "Label",
+     "max": 120
+    },
+    "locations": {
+     "type": "places",
+     "label": "Places"
+    },
+    "items": {
+     "type": "list",
+     "label": "Items",
+     "item": {
+      "label": "string",
+      "value": "number"
+     }
+    },
+    "position": {
+     "type": "enum",
+     "label": "Position",
+     "options": [
+      "auto",
+      "top-left",
+      "top",
+      "top-right",
+      "center",
+      "bottom-left",
+      "bottom",
+      "bottom-right"
+     ],
+     "default": "auto"
+    },
+    "scale": {
+     "type": "number",
+     "label": "Scale",
+     "min": 0.5,
+     "max": 1.6,
+     "default": 1.0
+    },
+    "opacity": {
+     "type": "number",
+     "label": "Opacity",
+     "min": 0.2,
+     "max": 1.0,
+     "default": 1.0
+    },
+    "duration": {
+     "type": "number",
+     "label": "Duration (s)",
+     "min": 1.5,
+     "max": 15
+    },
+    "speed": {
+     "type": "number",
+     "label": "Animation speed",
+     "min": 0.5,
+     "max": 2.0,
+     "default": 1.0
+    },
+    "theme": {
+     "type": "enum",
+     "label": "Colour",
+     "options": [
+      "accent",
+      "gold",
+      "red",
+      "teal",
+      "blue",
+      "white",
+      "amber"
+     ],
+     "default": "accent"
+    },
+    "sfx": {
+     "type": "enum",
+     "label": "Sound",
+     "options": [
+      "default",
+      "none"
+     ],
+     "default": "default"
+    },
+    "soundGain": {
+     "type": "number",
+     "label": "Sound level",
+     "min": 0.0,
+     "max": 1.5,
+     "default": 1.0
+    }
+   },
+   "defaults": {
+    "duration": 6.0,
+    "entrance": "fade",
+    "exit": "fade",
+    "variant": "wx-temp",
+    "sfx": {
+     "name": "whoosh-soft-v2",
+     "volume": 0.3
+    },
+    "sfxAt": 10,
+    "types": false,
+    "sounds": [
+     {
+      "name": "whoosh-soft-v2",
+      "at": 10,
+      "alt": [
+       "whoosh-soft"
+      ]
+     }
+    ]
+   },
+   "variants": {
+    "style": [
+     "documentary",
+     "news",
+     "minimal",
+     "bold",
+     "cinematic",
+     "history"
+    ],
+    "entrance": [
+     "fade",
+     "rise",
+     "drop",
+     "slide-left",
+     "slide-right",
+     "zoom-in",
+     "zoom-out",
+     "blur",
+     "wipe",
+     "wipe-up",
+     "flip",
+     "glitch"
+    ],
+    "exit": [
+     "fade",
+     "slide",
+     "scale",
+     "none"
+    ]
+   },
+   "cues": [
+    "forecast-temp"
+   ],
+   "tags": [
+    "lib",
+    "wx",
+    "own-backdrop"
+   ],
+   "autoPick": false
+  },
+  {
    "id": "LIB_VM_ARROW",
    "name": "Red Arrow on Video",
    "category": "CALLOUTS",

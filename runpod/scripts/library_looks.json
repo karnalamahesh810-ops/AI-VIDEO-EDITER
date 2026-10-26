@@ -11004,6 +11004,66 @@
   "file": "LibWeatherMaps"
  },
  {
+  "id": "wx-temp",
+  "name": "Forecast Temperature",
+  "category": "MAPS",
+  "description": "The forecast-model temperature view: a smooth colour field (blue, green, yellow, orange, red) through the named cities' own forecast highs, each city pinned with its figure, faint flow streaks, a degree legend and a model-time chip; the camera drifts in slowly.",
+  "kind": "card",
+  "own_backdrop": true,
+  "needs_media": 0,
+  "props": [
+   "text",
+   "label",
+   "locations",
+   "items"
+  ],
+  "cues": [
+   "forecast-temp"
+  ],
+  "duration": 6.0,
+  "sfx": "whoosh-soft",
+  "sfx_at": 10,
+  "types": false,
+  "sample": {
+   "text": "Temperature",
+   "label": "MON 26 OCT · 12:00",
+   "locations": [
+    {
+     "label": "Farmington, NM",
+     "lat": 36.73,
+     "lon": -108.22
+    },
+    {
+     "label": "Albuquerque, NM",
+     "lat": 35.08,
+     "lon": -106.65
+    },
+    {
+     "label": "Santa Fe, NM",
+     "lat": 35.69,
+     "lon": -105.94
+    }
+   ],
+   "items": [
+    {
+     "label": "Farmington",
+     "value": 64
+    },
+    {
+     "label": "Albuquerque",
+     "value": 68
+    },
+    {
+     "label": "Santa Fe",
+     "value": 62
+    }
+   ]
+  },
+  "family": "wx",
+  "file": "LibWeatherMaps",
+  "autoPick": false
+ },
+ {
   "id": "vm-arrow",
   "name": "Red Arrow on Video",
   "category": "CALLOUTS",

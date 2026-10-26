@@ -111,6 +111,32 @@ STYLES: Dict[str, dict] = {
                    # and its eyewitness/news clips as shot (src/reframe.py).
                    "STILL_MOTION": "none", "REFRAME_CLIPS": False},
     },
+    # Severe Weather USA (2026-10-26; docs/style-refs/severe-weather-usa-STYLE.md): the same daily weather-news
+    # channel re-measured on 8 recent videos (cut detection that sees their dissolves, 4 fps over every frame).
+    # Shots are long - median 6.2-9.6 s, mean 8.6-15.8 s, 4-7 cuts a minute, the hook no faster than the rest -
+    # and almost every cut is a ~0.6 s cross-dissolve. Eyewitness clips of the named towns (a quarter to a third of
+    # the time vertical, on a blurred copy of itself), news photos held still for 2-6 s, the NWS office's own
+    # graphics, and a Windy-style forecast map under the forecast (src/severe.py). No text of its own but the
+    # channel's name as a faint centred watermark; no sound effects; no punch-ins. Longest shot 12 s (the
+    # ceiling every style keeps, src/shotcap.py): their 20-100 s holds become one clip continued forward.
+    "severe_weather": {
+        "label": "Severe weather update",
+        "transitions": "crossfade", "graphics": "minimal",
+        "inputs": {"sfx": False, "editing_v3": False},
+        "config": {"MIN_SCENE_SECONDS": 3.0, "TARGET_SCENE_SECONDS": 7.5, "MAX_SCENE_SECONDS": 12.0,
+                   "CUT_FAST_SECONDS": 7.5, "CUT_SLOW_SECONDS": 9.0, "CUT_HOOK_FACTOR": 1.0,
+                   "CUT_LEAD_SECONDS": 0.14, "HUMAN_CUTS": True, "SHOT_MAX_SECONDS": 12.0,
+                   "ALLOW_VERTICAL": True, "NEWS_FOOTAGE": True, "RECENT_FOOTAGE_FIRST": True,
+                   "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False, "GENERATED_IMAGES_IN_HOOK": False,
+                   "EYEWITNESS_SEARCHES": True, "REGION_BLOCKS": True, "CHAIN_SHOTS": True, "CHAIN_MAX": 4,
+                   "COMING_SHOTS": True, "HOOK_INTENSITY": True, "MOTION_PREFERENCE": 0.08,
+                   "POOL_JUDGE_CLIPS": True, "CLIPS_FIRST": True, "CLIPS_FIRST_STILLS": True, "CLIP_RUNGS": 4,
+                   # Real photos a minority, held still (their photos never zoom); never AI.
+                   "PHOTO_MAX_PER_10MIN": 10.0, "STILL_MOTION": "none", "REFRAME_CLIPS": False,
+                   # Nothing drawn on top but the forecast map and the watermark (src/severe.py keeps those).
+                   "MARKS_ENABLED": False, "DATA_GRAPHICS": False, "TRANSITION_PACK": False,
+                   "HOOK_BOOST": False, "AMBIENCE": False, "RISERS": False},
+    },
     "trending_news": {
         "label": "Trending news",
         "transitions": "trending", "graphics": "normal",
@@ -256,6 +282,8 @@ _ALIASES = {"news": "trending_news", "news-compilation": "news_compilation", "co
             "news_compilation", "top": "compilation", "top_list": "compilation", "documentary_story": "story",
             "nature": "nature_weather", "weather": "nature_weather", "nature_&_weather": "nature_weather",
             "nature_and_weather": "nature_weather", "nature-weather": "nature_weather",
+            "severe": "severe_weather", "severe-weather": "severe_weather", "severe_weather_usa": "severe_weather",
+            "weather_update": "severe_weather", "weather_alert": "severe_weather", "weather-update": "severe_weather",
             "nature/weather": "nature_weather", "nature_/_weather": "nature_weather",
             "presenter": "ai_presenter", "ai-presenter": "ai_presenter", "ai_avatar": "ai_presenter",
             "ai-avatar": "ai_presenter", "avatar": "ai_presenter",

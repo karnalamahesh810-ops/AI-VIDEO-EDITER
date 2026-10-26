@@ -43,7 +43,8 @@ KITS = {
                "titleWeight": 700, "titleTracking": -0.01, "ease": "expoOut", "easeSoft": "out", "tempo": 0.9},
 }
 DEFAULT = "noir"
-_BY_STYLE = {"documentary": "noir", "news": "bulletin", "news_compilation": "bulletin", "explainer": "royal",
+_BY_STYLE = {"documentary": "noir", "news": "bulletin", "news_compilation": "bulletin", "severe_weather": "bulletin",
+             "explainer": "royal",
              "educational": "atlas", "science": "atlas",
              "gaming_essay": "gaming", "gaming": "gaming"}
 

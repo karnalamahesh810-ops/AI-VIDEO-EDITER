@@ -616,8 +616,24 @@ export interface MusicSection {
   kind?: string;
 }
 
+/**
+ * The channel's name as a faint centred watermark over the whole video (src/severe.py; components/brand/
+ * ChannelMark.tsx): text, opacity 0.1-0.6 (default 0.28), size = font size as a share of the frame's height
+ * (default 0.075), x / y its centre as frame shares (default 0.5 / 0.5), font a brand font name (Oswald).
+ */
+export interface ChannelMarkDoc {
+  text: string;
+  opacity?: number;
+  size?: number;
+  x?: number;
+  y?: number;
+  font?: string;
+}
+
 export interface TimelineProps {
   schemaVersion?: number;
+  /** The channel's watermark (ChannelMarkDoc); absent = none. */
+  channelMark?: ChannelMarkDoc | null;
   fps: number;
   width: number;
   height: number;

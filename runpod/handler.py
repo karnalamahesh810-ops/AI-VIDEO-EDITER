@@ -101,6 +101,7 @@ from src import brandkit, clipfx, stockblock
 from src import recut, reclip, relook, restore
 from src import topics
 from src import spares
+from src import severe
 from src import machine
 from src import batch, sources
 from src import editing
@@ -1884,6 +1885,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if editing.enabled(inp):
         report("Finishing the edit")
         editing.apply(doc, inp)
+    # The severe weather update style (src/severe.py): only its forecast maps on screen, the forecast lines over
+    # the forecast-model views, the channel's name as a faint watermark, no sound effects.
+    if severe.is_style(inp):
+        doc["meta"]["severeWeather"] = severe.finish(doc, inp, brief)
     # The air under the scenes (wind, water, rain, city...) and a soft swell
     # into the biggest reveals, against the measured voice (src/ambience.py).
     doc["meta"]["ambience"] = ambience.apply(doc)

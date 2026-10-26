@@ -260,7 +260,7 @@ NICHES: Dict[str, Niche] = {n.name: n for n in (
 )}
 
 # A video style that is about a niche whatever its title says.
-STYLE_NICHES = {"nature_weather": ("weather", "nature")}
+STYLE_NICHES = {"nature_weather": ("weather", "nature"), "severe_weather": ("weather",)}
 
 _STOP = {"the", "a", "an", "of", "in", "on", "at", "and", "or", "to", "for", "with", "from", "by", "is", "are", "was",
          "were", "it", "its", "this", "that", "as", "be", "has", "have", "had", "more", "than", "into", "over"}

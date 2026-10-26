@@ -19,11 +19,18 @@ import type { MapLocation, Overlay } from "../../types";
  *                  model-time chip; the camera drifts in slowly
  *   wx-rain-bands  the same engine as a precipitation view: rain bands
  *                  (green -> yellow -> red) wrapping around the low
+ *   wx-temp        a temperature view: a smooth field (blue -> green ->
+ *                  yellow -> orange -> red) through the named cities' own
+ *                  forecast highs (overlay.items: {label, value} in °F, the
+ *                  NWS forecast src/severe.py fetched), each city with its
+ *                  figure; without figures, a gentle south-warm gradient
  *
  * Props: overlay.locations (the region; the first place centres the map),
  * overlay.anchor {x, y} 0..1 = storm centre on screen (default offshore
  * right of centre), overlay.text = title ("WIND GUSTS"), overlay.label =
- * time chip ("SAT 26 SEP · 18:00"). Everything is a pure function of the
+ * time chip ("SAT 26 SEP · 18:00"), overlay.plain = no title (the
+ * forecast block of the severe weather style: a screen-recorded model view
+ * carries no headline). Everything is a pure function of the
  * frame (no Math.random / Date); nothing throws on missing props.
  */
 
@@ -48,6 +55,14 @@ const RAIN_STOPS: [number, [number, number, number]][] = [
   [0.0, [20, 30, 45]], [0.25, [40, 120, 70]], [0.45, [70, 190, 70]], [0.62, [230, 220, 60]],
   [0.78, [240, 140, 40]], [0.9, [220, 40, 40]], [1.0, [190, 60, 200]],
 ];
+// Temperature (°F): cold blue through green and yellow to hot red, the forecast-model look.
+const TEMP_STOPS: [number, [number, number, number]][] = [
+  [0.0, [70, 60, 160]], [0.2, [60, 130, 200]], [0.38, [80, 170, 120]], [0.52, [150, 190, 70]],
+  [0.64, [225, 200, 60]], [0.76, [235, 150, 45]], [0.88, [215, 80, 40]], [1.0, [170, 30, 50]],
+];
+const TEMP_LO = 10, TEMP_HI = 105;
+const tempT = (f: number) => (f - TEMP_LO) / (TEMP_HI - TEMP_LO);
+
 const colour = (stops: typeof WIND_STOPS, t: number, a = 1) => {
   const v = Math.max(0, Math.min(1, t));
   for (let i = 1; i < stops.length; i++) {
@@ -92,7 +107,9 @@ const useMap = (overlay: Overlay, width: number, height: number) =>
     return { land, states, cities };
   }, [overlay.locations, width, height]);
 
-const WeatherMap: React.FC<{ overlay: Overlay; mode: "wind" | "rain" }> = ({ overlay, mode }) => {
+type Mode = "wind" | "rain" | "temp";
+
+const WeatherMap: React.FC<{ overlay: Overlay; mode: Mode }> = ({ overlay, mode }) => {
   const frame = useCurrentFrame();
   const { width, height, durationInFrames, fps } = useVideoConfig();
   const k = width / 1920;
@@ -103,7 +120,18 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: "wind" | "rain" }> = ({ ove
     height * (Number.isFinite(anchor.y) ? anchor.y : 0.47),
   ];
   const R = 190 * k;
-  const stops = mode === "wind" ? WIND_STOPS : RAIN_STOPS;
+  const stops = mode === "wind" ? WIND_STOPS : mode === "temp" ? TEMP_STOPS : RAIN_STOPS;
+  const plain = (overlay as { plain?: boolean }).plain === true;
+  // The temperature view's figures: each named city's forecast high, matched to its pin by name.
+  const temps = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const it of (overlay.items || []) as { label?: string; value?: number }[]) {
+      const v = Number(it?.value);
+      if (it?.label && Number.isFinite(v)) out[str(it.label).split(",")[0].toUpperCase()] = v;
+    }
+    return out;
+  }, [overlay.items]);
+  const pins = map.cities.filter((c) => Number.isFinite(temps[c.name]));
 
   // The colour field: a coarse grid, blurred into a smooth wash. Static per
   // video except for a slow rotation of the rain bands.
@@ -116,21 +144,32 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: "wind" | "rain" }> = ({ ove
         let t: number;
         if (mode === "wind") {
           t = field(p, centre, R).speed * 0.88 + 0.07 * rnd(i, j);
+        } else if (mode === "temp") {
+          // Inverse-distance weighting through the cities' highs; a south-warm gradient without them.
+          let num = 0, den = 0;
+          for (const c of pins) {
+            const w = 1 / Math.pow(Math.hypot(p[0] - c.p[0], p[1] - c.p[1]) + 60 * k, 2);
+            num += w * temps[c.name];
+            den += w;
+          }
+          const base = 52 + 22 * (p[1] / height) - 6 * (p[0] / width);
+          const f = den > 0 ? (num / den) * 0.85 + base * 0.15 : base;
+          t = tempT(f + 3 * (rnd(i, j) - 0.5));
         } else {
           const dx = p[0] - centre[0], dy = p[1] - centre[1];
           const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
           const arm = 0.5 + 0.5 * Math.sin(a * 2 + r / (70 * k));        // two spiral arms
           t = Math.max(0, arm * Math.exp(-r / (520 * k)) * 1.25 - 0.12 + 0.12 * rnd(i, j));
         }
-        out.push({ x: i * cw, y: j * ch, w: cw + 1, h: ch + 1, c: colour(stops, t, mode === "wind" ? 0.9 : 0.8) });
+        out.push({ x: i * cw, y: j * ch, w: cw + 1, h: ch + 1, c: colour(stops, t, mode === "rain" ? 0.8 : 0.9) });
       }
     }
     return out;
-  }, [width, height, mode, centre[0], centre[1], R]);
+  }, [width, height, mode, centre[0], centre[1], R, pins, temps, k]);
 
   // Streaks: each particle is born at a hashed point, lives LIFE frames and
   // is integrated through the field from birth, so frame N is reproducible.
-  const N = mode === "wind" ? 1400 : 420, LIFE = 60, STEP = 2.6 * k, TRAIL = 11;
+  const N = mode === "wind" ? 1400 : mode === "temp" ? 260 : 420, LIFE = 60, STEP = 2.6 * k, TRAIL = 11;
   const streaks = useMemo(() => {
     const out: { d: string; o: number; w: number }[] = [];
     for (let i = 0; i < N; i++) {
@@ -148,7 +187,7 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: "wind" | "rain" }> = ({ ove
       if (tail.length < 2) continue;
       const fade = Math.min(1, age / 8, (LIFE - age) / 10);
       out.push({ d: "M" + tail.map((q) => `${q[0].toFixed(1)},${q[1].toFixed(1)}`).join("L"),
-                 o: 0.7 * fade, w: (mode === "wind" ? 1.5 : 1.1) * k });
+                 o: (mode === "temp" ? 0.35 : 0.7) * fade, w: (mode === "wind" ? 1.5 : 1.1) * k });
     }
     return out;
   }, [frame, width, height, N, mode, centre[0], centre[1], R, k]);
@@ -156,7 +195,7 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: "wind" | "rain" }> = ({ ove
   const intro = interpolate(frame, [0, 14], [0, 1], { ...clamp, easing: ease });
   const outro = interpolate(frame, [durationInFrames - 12, durationInFrames], [1, 0], clamp);
   const zoom = interpolate(frame, [0, durationInFrames], [1.0, 1.07], clamp);
-  const title = str(overlay.text).toUpperCase() || (mode === "wind" ? "WIND GUSTS" : "RAIN & SNOW");
+  const title = str(overlay.text).toUpperCase() || (mode === "wind" ? "WIND GUSTS" : mode === "temp" ? "TEMPERATURE" : "RAIN & SNOW");
   const chip = str(overlay.label).toUpperCase();
   const spin = (frame / fps) * (mode === "rain" ? 6 : 0);
 
@@ -191,6 +230,11 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: "wind" | "rain" }> = ({ ove
                 <text x={c.p[0] + 12 * k} y={c.p[1] + 7 * k} fill="#fff"
                       style={{ font: `700 ${24 * k}px ${INTER}`, paintOrder: "stroke" }}
                       stroke="rgba(0,0,0,0.65)" strokeWidth={4 * k}>{c.name}</text>
+                {mode === "temp" && Number.isFinite(temps[c.name]) && (
+                  <text x={c.p[0] + 12 * k} y={c.p[1] + 36 * k} fill="#fff"
+                        style={{ font: `800 ${26 * k}px ${INTER}`, paintOrder: "stroke" }}
+                        stroke="rgba(0,0,0,0.65)" strokeWidth={4 * k}>{`${Math.round(temps[c.name])}°`}</text>
+                )}
               </g>
             );
           })}
@@ -198,20 +242,22 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: "wind" | "rain" }> = ({ ove
       </AbsoluteFill>
 
       {/* Title, legend and model-time chip: small, clean, out of the way. */}
-      <div style={{ position: "absolute", left: 96 * k, top: 88 * k,
+      {!plain && <div style={{ position: "absolute", left: 96 * k, top: 88 * k,
                     transform: `translateY(${(1 - intro) * -16 * k}px)` }}>
         <div style={{ font: `800 ${46 * k}px ${LABEL}`, color: "#fff", letterSpacing: 1.5 * k,
                       textShadow: "0 2px 12px rgba(0,0,0,0.55)" }}>{title}</div>
         <div style={{ font: `600 ${22 * k}px ${INTER}`, color: "rgba(255,255,255,0.8)", marginTop: 4 * k }}>
-          {mode === "wind" ? "Forecast model · surface wind" : "Forecast model · precipitation"}
+          {mode === "wind" ? "Forecast model · surface wind" : mode === "temp" ? "Forecast highs · °F"
+            : "Forecast model · precipitation"}
         </div>
-      </div>
+      </div>}
       <div style={{ position: "absolute", right: 96 * k, bottom: 84 * k, width: 380 * k }}>
         <div style={{ height: 12 * k, borderRadius: 6 * k,
                       background: `linear-gradient(90deg, ${stops.map(([t]) => colour(stops, t)).join(",")})` }} />
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 * k,
                       font: `600 ${18 * k}px ${INTER}`, color: "rgba(255,255,255,0.85)" }}>
-          {(mode === "wind" ? ["0", "20", "40", "60", "80 mph"] : ["light", "", "moderate", "", "heavy"])
+          {(mode === "wind" ? ["0", "20", "40", "60", "80 mph"] : mode === "temp" ? ["10°", "35°", "55°", "80°", "105°F"]
+            : ["light", "", "moderate", "", "heavy"])
             .map((t, i) => <span key={i}>{t}</span>)}
         </div>
       </div>
@@ -226,8 +272,10 @@ const WeatherMap: React.FC<{ overlay: Overlay; mode: "wind" | "rain" }> = ({ ove
 
 const WindFlow: Look = ({ overlay }) => <WeatherMap overlay={overlay} mode="wind" />;
 const RainBands: Look = ({ overlay }) => <WeatherMap overlay={overlay} mode="rain" />;
+const Temperature: Look = ({ overlay }) => <WeatherMap overlay={overlay} mode="temp" />;
 
 export const LOOKS: Record<string, Look> = {
   "wx-wind-flow": WindFlow,
   "wx-rain-bands": RainBands,
+  "wx-temp": Temperature,
 };

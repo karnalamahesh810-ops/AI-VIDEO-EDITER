@@ -27,6 +27,7 @@ import { FilmLook } from "./components/FilmLook";
 import { ambienceSettings, bedPasses, bedVolume, passGain, speechCurve, type Ambience, type Bed }
   from "./components/ambienceMix";
 import { BrandVideo, EndCard, Watermark } from "./components/brand/BrandLayers";
+import { ChannelMark } from "./components/brand/ChannelMark";
 import { brandFrames, brandOf } from "./components/brand/brandLayout";
 import { musicPasses, musicVolume as makeMusicVolume, trackSeconds } from "./components/musicMix";
 import { keepRanges, narrationPieces } from "./edit/narration";
@@ -591,6 +592,9 @@ const Body: React.FC<TimelineProps> = (props) => {
       <CaptionsOn.Provider value={Boolean(captions.enabled)}>
       {showOverlays ? <Windowed items={overlayItems} lead={premount + fps} bucket={fps * 2} /> : null}
       </CaptionsOn.Provider>
+
+      {/* The channel's name as a faint centred stamp over everything but the captions (src/severe.py). */}
+      {props.channelMark?.text ? <ChannelMark mark={props.channelMark} /> : null}
 
       {/* Caption track, burned in on top, as a player draws subtitles: one track over the whole
           narration, so a phrase cue is never cut at a scene's edge, each cue placed clear of the
