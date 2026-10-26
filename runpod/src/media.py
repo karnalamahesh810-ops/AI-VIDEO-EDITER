@@ -1664,7 +1664,8 @@ SLOP_REJECTED: Dict[str, int] = {}
 # news / archive channels (_story_channels) are never struck.
 _SLOP_CHANNELS: Dict[str, int] = {}
 SLOP_CHANNEL_STATS: Dict[str, int] = {"struck": 0, "skipped": 0}
-_AI_SLOP = ("an ai-generated or painted picture", "ai-made", "ai generated", "ai-generated")
+_AI_SLOP = ("an ai-generated or painted picture", "ai-made", "ai generated", "ai-generated", "an animation or render",
+            "a hypothetical or cgi explainer")
 _STILL_SLOP = ("a slideshow of stills", "a still with a slow pan", "a frozen")
 
 
@@ -1728,6 +1729,9 @@ _VIDEO_WIDE = ("an AI-generated", "AI-made or a game", "an AI picture site", "a 
                "low detail")
 # The AI-slop filter's reason for the gate's last rejection on this thread ("" = not slop).
 _GATE_SLOP: contextvars.ContextVar = contextvars.ContextVar("gate_slop", default="")
+# The channel that uploaded the candidate being judged ("" = unknown): whose logo may stay on a news clip
+# (vision.text_check_decision, src/slipcheck.py broadcaster).
+_UPLOADER: contextvars.ContextVar = contextvars.ContextVar("uploader", default="")
 
 
 def _is_bad(*keys: str) -> str:
@@ -1945,6 +1949,9 @@ _TEXT_WORDS = re.compile(
     r"banners?|chyrons?|tickers?|overlays?|overlaid|graphics?|charts?|maps?|diagrams?|documents?|dates?|dated|"
     r"timestamps?|time stamps?|watermarks?|credits?|lettering|headlines?|split[- ]screen|inset|on[- ]screen|"
     r"lower[- ]third)\b", re.I)
+# What in the judge's description says another creator's graphics may be on a news clip (second_look, 2026-10-26).
+_CREATOR_WORDS = re.compile(r"\b(?:overlay|overlaid|logo|watermark|graphic|infographic|title card|banner [\"“']|"
+                            r"caption [\"“']|text [\"“']|label|subscribe|channel name)\b", re.I)
 # What in the judge's description says subtitles may be on screen (a news line's second look: second_look).
 _SUBTITLE_WORDS = re.compile(
     r"\b(?:subtitles?|subtitled|captions?|captioned|closed[- ]captions?|lyrics|words? (?:on|at|across) the "
@@ -1977,6 +1984,17 @@ def second_look(path: str, verdict: dict, label: str = "") -> tuple:
         if not why:
             from . import slop
             why = "caption band" if slop.subtitle_signal(path) else ""
+        if not why and getattr(config, "VISION_NEWS_CREATOR_MARKS", True):
+            # Another creator's logo, title or panel (2026-10-26: "LEVEL", "window to the world", "The Hoover Dam
+            # underground tour", "Operating Elevations" all passed a news line): the judge naming an overlay, a logo
+            # or quoted on-screen words, or a mark that holds still while the picture moves (filters.text_signal).
+            if _CREATOR_WORDS.search(str(verdict.get("description") or "")):
+                why = "creator words"
+            else:
+                try:
+                    why = "pixels" if _filters.text_signal(path).get("marks", 0) >= 1 else ""
+                except Exception:  # noqa: BLE001 - a failed signal is no reason to look
+                    why = ""
         if not why:
             return True, verdict
     else:
@@ -1993,6 +2011,9 @@ def second_look(path: str, verdict: dict, label: str = "") -> tuple:
     got = vision.text_check(path, mode, described=str(verdict.get("description") or ""))
     if not got:
         return True, verdict
+    if mode == "news":
+        # the cached look's decision, again with whose upload it is (a station's bug stays, a creator's logo goes)
+        got = dict(got, reject=vision.text_check_decision(got, mode, uploader=_UPLOADER.get() or None))
     seen = {"why": why, "added": bool(got.get("added")), "reject": got.get("reject") or "",
             "items": list(got.get("items") or [])[:4]}
     if not got.get("reject"):
@@ -2030,6 +2051,11 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
     """_vision_gate after the credit bar: the AI-slop filters, the local model, the vision judge."""
     kind = "picture" if _is_still(path) else "clip"
     why = _timed(f"gate:{kind}:slop", slop_reason, path, label, source_url)
+    if not why and kind == "clip":
+        from . import slipcheck
+        why = slipcheck.title_flaw(label, f"{intent} {context}")
+        if why:
+            slipcheck.note("titles")
     _GATE_SLOP.set(why)
     if why:
         print(f"[slop] REJECT {why}: {label[:60]!r}", flush=True)
@@ -2093,6 +2119,23 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
     keep = vision.acceptable(verdict, allow_people=_SUBJECT_TYPE.get() == "person", allow_vice=allow_vice,
                              min_quality=_quality_floor())
     if keep and verdict is not None:
+        # What the judge itself said it saw, and the words of a banner on the clip (src/slipcheck.py, 2026-10-26).
+        from . import slipcheck
+        mode = str(verdict.get("text_mode") or vision.TEXT_MODE.get() or vision.text_mode(scene))
+        flaw = slipcheck.description_flaw(str(verdict.get("description") or ""), kind, wants,
+                                          _SUBJECT_TYPE.get(), news=mode == "news")
+        if flaw:
+            slipcheck.note("descriptions")
+        else:
+            flaw = slipcheck.screen_text_conflict(str(verdict.get("screen_text") or ""), line)
+            if flaw:
+                slipcheck.note("screenText")
+        if flaw:
+            keep = False
+            verdict = dict(verdict, off_topic=True) if "banner" in flaw else verdict
+            _GATE_SLOP.set(flaw)
+            print(f"[vision] REJECT {flaw}: {label[:60]!r}", flush=True)
+    if keep and verdict is not None:
         # The focused second look at text someone added over a clip (VISION_TEXT_SECOND_LOOK).
         keep, verdict = _timed(f"gate:{kind}:second_look", second_look, path, verdict, label)
     if verdict is not None and not allow_vice:
@@ -2100,7 +2143,7 @@ def _judge_gate(path: str, intent: str, context: str, label: str, source_url: st
         # and opening checks too (a copy - the cached verdict stays as the model answered).
         verdict = dict(verdict, off_topic=True)
         print(f"[vision] REJECT a music, club or smoking scene off the story: {label[:60]!r}", flush=True)
-    if not keep and verdict is not None and config.JUDGE_MEMORY:
+    if not keep and verdict is not None and config.JUDGE_MEMORY and not _GATE_SLOP.get():
         # Turned down for a reason no other line can change: every caller remembers it
         # (_mark_bad with the gate's reason), so no other scene pays for this answer again.
         why = judged_line_free(verdict, allow_vice=allow_vice)
@@ -3694,6 +3737,12 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
               if c.id not in tried and _usable_title(c.title, c.channel, c.aspect, f"{intent_text} {context}")
               and not title_conflict(c.title, context) and not _is_bad(f"yt:{c.id}")
               and not _video_unavailable(c.id)]
+    # A hypothetical or CGI explainer by its title (src/slipcheck.py): no scout, no download; its channel is struck.
+    from . import slipcheck
+    for c in [c for c in ranked if slipcheck.title_flaw(c.title, f"{intent_text} {context}")]:
+        slipcheck.note("titles")
+        note_slop_channel(c.channel, "a hypothetical or CGI explainer upload")
+        ranked.remove(c)
     # A channel this job already caught making AI slideshows: its other uploads take no scout or download.
     slop_skipped = [c for c in ranked if slop_channel(c.channel)]
     if slop_skipped:
@@ -3803,7 +3852,11 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             return {"c": c}
         _count_judged()
         _GATE_SLOP.set("")
-        keep, verdict = _vision_gate(path, intent_text, context, c.title)
+        up = _UPLOADER.set(c.channel or "")
+        try:
+            keep, verdict = _vision_gate(path, intent_text, context, c.title)
+        finally:
+            _UPLOADER.reset(up)
         slop_why = _GATE_SLOP.get()
         if not keep:
             note_slop_channel(c.channel, slop_why, verdict)
@@ -4276,6 +4329,8 @@ def reset_cache():
     with _filters._gray_lock():
         _filters._GRAY_CACHE.clear()        # one decode per clip, per job
     SLOP_REJECTED.clear()
+    from . import slipcheck
+    slipcheck.reset()
     with _CACHE_LOCK:
         _SLOP_CHANNELS.clear()          # a channel is judged again per job
         SLOP_CHANNEL_STATS.update(struck=0, skipped=0)
@@ -5977,6 +6032,8 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
         LAST_STATS["photos"] = {"cap": _PHOTOS["cap"], "used": _PHOTOS["used"]}
         LAST_STATS["slop_rejected"] = dict(SLOP_REJECTED)
         # Channels caught making slop, and the uploads of theirs skipped before any scout or download.
+        from . import slipcheck
+        LAST_STATS["slipcheck"] = slipcheck.stats()
         LAST_STATS["slopChannels"] = dict(SLOP_CHANNEL_STATS, channels=sum(
             1 for v in _SLOP_CHANNELS.values() if v >= int(getattr(config, "SLOP_CHANNEL_STRIKES", 2) or 2)))
     LAST_STATS["stockBlocked"] = _stockblock.stats()        # the handler refreshes it after the rescue pass

@@ -3266,7 +3266,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       # portraits, moves held to the pictures' detail - each A/B'd on one job.
                       "SLOP_CHANNEL_MEMORY", "SLOP_CHANNEL_STRIKES", "STILLS_TO_CLIPS", "STILLS_TO_CLIPS_SECONDS",
                       "PERSON_CLIPS_FIRST", "STILL_FRAME", "STILL_CARD_UPSCALE", "STILL_PEAK_MAGNIFICATION",
-                      "STILL_MOTION_MAX_ZOOM", "PICTURE_COPY_CHECK", "PICTURE_COPY_BITS", "LOOK_PLACE_ON_BUILD")
+                      "STILL_MOTION_MAX_ZOOM", "PICTURE_COPY_CHECK", "PICTURE_COPY_BITS", "LOOK_PLACE_ON_BUILD",
+                      "STILLS_TO_CLIPS_MAX_RUN", "VISION_NEWS_CREATOR_MARKS", "SLIP_CHECKS", "AI_FILL_NEWS_EVENTS",
+                      "AI_FILL_LABEL", "LOOKS_END_AT_CUTS")
 
 
 def _apply_config(overrides) -> dict:

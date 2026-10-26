@@ -427,6 +427,16 @@ VISION_TEXT_SECOND_LOOK = _flag("VISION_TEXT_SECOND_LOOK", True)
 # only. Off = the news rule as before (subtitles welcome on a news line, no second look there).
 VISION_NEWS_SUBTITLES = _flag("VISION_NEWS_SUBTITLES", True)
 TEXT_SECOND_LOOK_MAX = int(os.getenv("TEXT_SECOND_LOOK_MAX", "120"))
+# A news line keeps a station's bug, banners and tickers - but not another creator's furniture (2026-10-26, the Hoover
+# Dam video: "LEVEL", "window to the world", "BE" and "CH" logos, "The Hoover Dam underground tour" caption, an
+# explainer's "Operating Elevations" panel): the second look also runs on a still mark or the judge naming an overlay
+# or a logo, and turns down typed titles, labels, overlays, timecodes and a logo no TV station, outlet or agency owns
+# (vision.text_check_decision, src/slipcheck.py broadcaster). Within TEXT_SECOND_LOOK_MAX. 0 = subtitles only.
+VISION_NEWS_CREATOR_MARKS = _flag("VISION_NEWS_CREATOR_MARKS", True)
+# The cheap checks on what slipped past the slop filter and the judge (src/slipcheck.py): hypothetical / CGI explainer
+# titles, the judge's own words (an animation, another creator's overlay; for a picture a TV screen grab, a collage, a
+# stock mock-up), a banner naming another place. 0 = off.
+SLIP_CHECKS = _flag("SLIP_CHECKS", True)
 TEXT_SECOND_LOOK_WIDTH = int(os.getenv("TEXT_SECOND_LOOK_WIDTH", "768"))
 # Candidates judged per search before giving up on that query. Each judged
 # candidate costs one model call, so this bounds spend per scene.

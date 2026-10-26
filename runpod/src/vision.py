@@ -140,12 +140,13 @@ _SYSTEM = (
     "a wildfire or a volcano is false (\"none\"), and so is someone drinking water, tea or a soft "
     "drink. A political rally, convention, debate, speech, hearing, "
     "ceremony, wedding or state dinner is false.\n"
-    "Keep the description to one plain sentence of at most 25 words.\n"
+    "Keep the description to one plain sentence of at most 25 words. In screen_text copy the words of any "
+    "headline banner, chyron, caption or title laid over the picture (at most 12 words), else \"\".\n"
     "Reply with one valid JSON object only. Do not wrap it in JSON.stringify(), "
     "JavaScript, markdown, or commentary: {\"description\": str, \"score\": number, \"quality\": number, "
     "\"has_text_or_watermark\": bool, \"is_talking_head\": bool, \"ai_generated\": bool, \"studio\": bool, "
     "\"music_or_vice\": bool, \"vice\": \"music\"|\"club\"|\"smoking\"|\"drugs\"|\"alcohol\"|\"none\", "
-    "\"specificity\": \"event\"|\"location\"|\"generic\"}"
+    "\"specificity\": \"event\"|\"location\"|\"generic\", \"screen_text\": str}"
 )
 
 # News footage the GoMotion way (config.NEWS_FOOTAGE): the same judge, with the
@@ -1275,6 +1276,9 @@ def _parse(text: str) -> Optional[dict]:
         "vice": vice,
         "specificity": (data.get("specificity")
                         if data.get("specificity") in scene_intent.SPECIFICITY else ""),
+        # The words of a banner, chyron or caption over the picture (2026-10-26): a banner naming another place than
+        # the line's turns the clip down (src/slipcheck.py screen_text_conflict).
+        "screen_text": " ".join(str(data.get("screen_text") or "").split())[:120],
         # Only the opening check asks it (judge with `span`): whether the clip's
         # first frame itself fits the line. None = not asked, or no answer.
         "opening": _maybe(data.get("opening")),
@@ -1540,18 +1544,38 @@ def _parse_text_check(text: str) -> Optional[dict]:
     return {"added": _truthy(data.get("added")) or bool(items), "items": items}
 
 
-def text_check_decision(got: Optional[dict], mode: str) -> str:
+def text_check_decision(got: Optional[dict], mode: str, uploader: Optional[str] = None) -> str:
     """Why the second look turns a clip down under the line's text rule ("" = it does not): the strict rule any
     added text or mark; the event rule anything but a broadcaster's logo or TV graphics; the news rule subtitles
-    only (the owner, 2026-10-09: a broadcaster's banners, chyrons, tickers and logos are fine on a news line,
-    burned-in subtitles never are - VISION_NEWS_SUBTITLES)."""
+    (the owner, 2026-10-09: a broadcaster's banners, chyrons, tickers and logos are fine on a news line,
+    burned-in subtitles never are - VISION_NEWS_SUBTITLES) and, since 2026-10-26 (VISION_NEWS_CREATOR_MARKS: the
+    Hoover Dam video kept "LEVEL", "window to the world", "BE" and "CH" logos, a vlogger's "The Hoover Dam
+    underground tour" caption and an explainer's "Operating Elevations" panel), another creator's furniture: typed
+    titles, labels, overlays, timecodes - and a logo unless the uploader (`uploader`, the channel's name) or the
+    logo's own words name a TV station, a news outlet or an agency (src/slipcheck.py broadcaster)."""
     if not got or not got.get("added"):
         return ""
     items = got.get("items") or [{"kind": "other", "where": "", "text": ""}]
     if mode == "news":
         if not getattr(config, "VISION_NEWS_SUBTITLES", True):
             return ""
-        bad = [it for it in items if it["kind"] == "subtitles" and not _COURTESY.match(str(it.get("text") or ""))]
+        creator = getattr(config, "VISION_NEWS_CREATOR_MARKS", True)
+        from . import slipcheck
+
+        def bad_news(it: dict) -> bool:
+            text = str(it.get("text") or "")
+            if _COURTESY.match(text):
+                return False
+            if it["kind"] == "subtitles":
+                return True
+            if not creator:
+                return False
+            if it["kind"] in ("typed_text", "label", "overlay", "timecode"):
+                return True
+            if it["kind"] == "logo":
+                return slipcheck.broadcaster(uploader or "", text) is False
+            return False
+        bad = [it for it in items if bad_news(it)]
     else:
         bad = [it for it in items if mode == "strict" or not (
             it["kind"] in _EVENT_OK_KINDS or _COURTESY.match(str(it.get("text") or "")))]
