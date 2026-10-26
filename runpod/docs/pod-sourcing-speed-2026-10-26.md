@@ -102,3 +102,19 @@ Worker side is ready (`fast_sourcing` in the job input). The app needs:
    (parts, children seconds, remote spares) is in the timeline for the owner's cost page.
 6. **Deploy.** video-v2 only (and the UI). No migration (render_settings is JSON). The worker image must be this
    branch or later before the switch is shown, or the input is ignored (one machine, as today).
+
+## Verification
+
+- Offline suite (`SKIP_DOTENV=1 python -m unittest discover -s tests -t .`): 3655 tests, only the two known
+  failures (the chart test and the style_match text test). New: `tests/test_machine_sizing.py` (core count,
+  sampler, network-queue waits, the tidy intermediate only where a cut follows, fast-sourcing fold / deadline /
+  part count, remote spares).
+- Encode and quality measurements: two throwaway 16-vCPU cpu3c pods (live image, no secrets), deleted after.
+- Live check of this branch on a throwaway 16-vCPU cpu3c pod (live image + this branch's files, the app's pod env,
+  bench narration `lake_mead`, plan only, no project): 15 scenes, 0 empty (12 clips, 3 pictures), footage search
+  471 s; 80 YouTube sections with the ultrafast intermediate, 16.6 s each on average (download incl. encode);
+  the sampler and the network-queue waits came back in `meta.sourcing` (CPU 24% mean, p90 58%, 17 ffmpeg at
+  peak; searches waited 2.5 s on average for one of the 16 network slots). Cost $0.28 (RunPod $0.10, AI $0.18).
+  The "medium" half of the A/B was stopped to stay under the $0.30 AI cap; the medium encode alone takes
+  7.3-11.1 s of wall time per 12 s section on an idle pod of this type (quality pod, above), which every section
+  paid on top.
