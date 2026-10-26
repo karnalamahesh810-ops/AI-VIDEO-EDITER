@@ -117,6 +117,48 @@ class OneRefusalDoesNotSideline(unittest.TestCase):
         self.assertEqual(pm.by_url["http://b"].state, HEALTHY)
 
 
+class EarlyBotCheckDoesNotSideline(unittest.TestCase):
+    """The Hoover Dam pod (2026-10-26): 10 of 13 proxies degraded by one early bot check (4-13 requests,
+    62-87% success) were never asked again while 3 carried every section."""
+
+    def _pm(self):
+        urls = [f"http://p{i}" for i in range(13)]
+        pm = ProxyManager(urls, direct=False)
+        for u in urls[:3]:
+            for _ in range(40):
+                pm.release(u, True, None, 12000)
+        for u in urls[3:]:
+            for _ in range(4):
+                pm.release(u, True, None, 2000)
+            pm.release(u, False, FailureClass.BOT_CHECK, 2000)
+        return pm, urls
+
+    def test_sixteen_requests_spread_over_the_pool(self):
+        pm, urls = self._pm()
+        self.assertTrue(all(pm.by_url[u].state == DEGRADED for u in urls[3:]))
+        picks = [pm.acquire() for _ in range(16)]
+        per = {u: picks.count(u) for u in urls}
+        self.assertTrue(all(per[u] <= 3 for u in urls[:3]), per)      # not five or six on each healthy route
+        self.assertGreaterEqual(sum(per[u] for u in urls[3:]), 7, per)
+        self.assertEqual(picks[0] in urls[:3], True)                   # an idle healthy route still goes first
+
+    def test_a_second_refusal_still_quarantines(self):
+        pm, urls = self._pm()
+        pm.release(urls[5], False, FailureClass.BOT_CHECK, 2000)
+        self.assertEqual(pm.by_url[urls[5]].state, QUARANTINED)
+
+    def test_a_mostly_failing_route_stays_out(self):
+        pm = ProxyManager(["http://good", "http://bad"], direct=False)
+        for _ in range(5):
+            pm.release("http://good", True, None, 1000)
+        pm.release("http://bad", True, None, 1000)
+        pm.release("http://bad", False, FailureClass.PROXY_FAILURE, 1000)
+        pm.release("http://bad", True, None, 1000)
+        pm.release("http://bad", False, FailureClass.BOT_CHECK, 1000)      # 2 of 4: under the floor
+        self.assertEqual(pm.by_url["http://bad"].state, DEGRADED)
+        self.assertNotIn("http://bad", [pm.acquire() for _ in range(4)])
+
+
 class RetryPolicy(unittest.TestCase):
     def _run(self, outcomes, video="VID00000001"):
         calls = []

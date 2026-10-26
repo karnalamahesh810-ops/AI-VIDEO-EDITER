@@ -64,6 +64,16 @@ def _clean_record(r: ProxyRecord) -> bool:
     return r.consecutive_failures <= 1 and r.successes >= 10 and r.success_rate >= 0.9
 
 
+# A degraded route with a short record that still mostly works (one failure in a row, at least
+# _DEGRADED_MIN_RATE of its requests through): kept in the rotation behind the healthy routes.
+_DEGRADED_MIN_RATE = 0.6
+_DEGRADED_PENALTY = 2
+
+
+def _usable_record(r: ProxyRecord) -> bool:
+    return r.consecutive_failures <= 1 and r.successes >= 2 and r.success_rate >= _DEGRADED_MIN_RATE
+
+
 class ProxyManager:
     def __init__(self, urls: List[str], direct: bool = False,
                  quarantine_base: float = 300.0, quarantine_max: float = 1800.0):
@@ -103,6 +113,14 @@ class ProxyManager:
                 # (2026-10-01) 11 of 17 proxies sat degraded at 97-99% success
                 # (one at 138 of 139) while 4 carried all of YouTube.
                 state, busy = rank[HEALTHY], busy + 1
+            elif r.state == DEGRADED and _usable_record(r):
+                # Degraded by one refusal early in the job, before it could build a long record: it takes
+                # traffic once the healthy routes each carry _DEGRADED_PENALTY more requests than it does, and
+                # earns its way back with _RESTORE_AFTER successes (a second refusal in a row still quarantines
+                # it). The Hoover Dam pod (2026-10-26): 10 of 13 proxies were degraded by one bot check in the
+                # first minutes (4-13 requests each, 62-87% success) and never asked again, while 3 carried all
+                # 730 sections at ~12 s a request - five yt-dlp processes on each address.
+                state, busy = rank[HEALTHY], busy + _DEGRADED_PENALTY
             fair = (r.index - self._rr) % max(1, n)          # round-robin among equals
             due = r.quarantined_until if r.state == QUARANTINED else 0.0
             return (state, due, busy, r.latency_ms, fair)

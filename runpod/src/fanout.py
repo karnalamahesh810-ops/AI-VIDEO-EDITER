@@ -120,6 +120,9 @@ def fold_fast_sourcing(inp: dict) -> int:
         return 0
     cfg = dict(inp["config"]) if isinstance(inp.get("config"), dict) else {}
     cfg.update({"BUILD_FANOUT": "1", "SOURCE_PARTS": str(n), "SOURCE_PART_ROUNDS": "1"})
+    # Each part's pass 1 as long as the deadline allows (run_part cuts it there), so its lines get the same time
+    # each as on one pod (SCENE_SECONDS_MAX) - a serverless worker's own 540 s box would cut a 50-line part short.
+    cfg.setdefault("PASS1_BUDGET_SECONDS", str(int(getattr(config, "FAST_SOURCING_PASS1_SECONDS", 1800) or 1800)))
     inp["config"] = cfg
     print(f"[worker] fast sourcing: the footage search is split over {n} machines (this one included)", flush=True)
     return n

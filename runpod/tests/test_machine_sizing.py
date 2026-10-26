@@ -124,6 +124,7 @@ class FastSourcing(unittest.TestCase):
         self.assertEqual(inp["config"]["BUILD_FANOUT"], "1")
         self.assertEqual(inp["config"]["SOURCE_PARTS"], "4")
         self.assertEqual(inp["config"]["SOURCE_PART_ROUNDS"], "1")
+        self.assertEqual(inp["config"]["PASS1_BUDGET_SECONDS"], "1800")     # parts not cut at a worker's 540 s
         self.assertEqual(inp["config"]["CLIPS_FIRST"], 1)          # the job's own overrides kept
 
     def test_number_capped_and_switch_off(self):
@@ -261,3 +262,41 @@ class RemoteSpares(unittest.TestCase):
         with mock.patch.object(config, "SPARE_BANK", True):
             self.assertEqual(self.spares.add_remote([{"key": "x", "kind": "video"}, "junk", {"kind": "image"}]), 0)
             self.assertEqual(self.spares.add_remote(None), 0)
+
+
+class PassTwoSkipsExhaustedLines(unittest.TestCase):
+    """Pass 2 found 0 of 36 empty lines on the Hoover Dam pod: a line whose whole search ran is not asked again."""
+
+    JOBS = [{"index": 0, "query": "ran out", "seconds": 4.0, "context": "a", "visual_type": "footage"},
+            {"index": 1, "query": "cut short", "seconds": 4.0, "context": "b", "visual_type": "footage"}]
+
+    def _run(self, skip: bool):
+        from src import media
+        calls = []
+
+        def fake(query, seconds, work_dir, **kw):
+            calls.append((query, kw.get("nth", 0)))
+            if query == "ran out" and kw.get("nth", 0) == 0:
+                with media._CACHE_LOCK:
+                    media._CLIP_SEARCHED.add(media._searched_key(query, kw.get("subject") or ""))
+            return None
+        with mock.patch.object(ytdlp, "DEADLINE", [0.0]), \
+                mock.patch.multiple(config, PASS1_BUDGET_SECONDS=30, REPLACE_BUDGET_SECONDS=30, FRESH_MOMENTS=False,
+                                    CLIPS_FIRST=True, PASS2_SKIP_EXHAUSTED=skip), \
+                mock.patch.object(media, "source_for_segment", side_effect=fake), \
+                mock.patch.object(media, "generate_image", return_value=None):
+            media.reset_cache()
+            media.source_many([dict(j) for j in self.JOBS], "/tmp", workers=2)
+        return calls, dict(media.LAST_STATS)
+
+    def test_exhausted_line_skips_pass_two(self):
+        calls, stats = self._run(True)
+        self.assertNotIn(("ran out", 1), calls)          # its whole search ran: not again one result down
+        self.assertIn(("cut short", 1), calls)           # its clip search never finished: pass 2 as before
+        self.assertEqual(stats.get("pass2_skipped_exhausted"), 1)
+        self.assertEqual(stats.get("pass1_empty"), 2)
+
+    def test_off_every_empty_line_gets_pass_two(self):
+        calls, stats = self._run(False)
+        self.assertIn(("ran out", 1), calls)
+        self.assertEqual(stats.get("pass2_skipped_exhausted"), 0)

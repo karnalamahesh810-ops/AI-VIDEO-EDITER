@@ -3234,7 +3234,7 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       # Fast sourcing (2026-10-26; fanout.fold_fast_sourcing): a job's search split over parts,
                       # one round; the machine sizing (src/machine.py) - each A/B'd on one job.
                       "SOURCE_PARTS", "SOURCE_PART_ROUNDS", "DOWNLOAD_THREADS", "SOURCE_WORKERS_PER_CPU",
-                      "MACHINE_SAMPLE", "PASS1_SETTLED_EXIT",
+                      "MACHINE_SAMPLE", "PASS2_SKIP_EXHAUSTED",
                       "DOWNLOAD_TIDY_FAST", "DOWNLOAD_TIDY_PRESET", "DOWNLOAD_TIDY_CRF")
 
 

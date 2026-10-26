@@ -5342,6 +5342,16 @@ def _until(futures, deadline: float):
         yield from finished
 
 
+def _search_ran_out(job: dict) -> bool:
+    """A line's pass-1 search ran its whole plan: a clip-first line only when its clip stages ran to their end too
+    (_CLIP_SEARCHED - not cut by their share of the line's time), any other line when it was not stopped."""
+    if not clips_first_for(job.get("visual_type", "footage"), job.get("subject_type") or "",
+                           job.get("scene_intent") if isinstance(job.get("scene_intent"), dict) else None):
+        return True
+    with _CACHE_LOCK:
+        return _searched_key(job.get("query") or "", job.get("subject") or "") in _CLIP_SEARCHED
+
+
 def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
                 workers: int = 6, on_done=None, on_review=None, rescue=None,
                 on_recheck=None, sequences: Optional[List[dict]] = None,
@@ -5515,6 +5525,11 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # own share of it when more scenes wait than threads run (scene_seconds).
     box = _ytdlp.Box()
     share = [0.0]
+    # Lines whose pass-1 search ran its whole plan - every wording, rung and picture step - inside their own time
+    # and found nothing usable: pass 2 asks the same searches one result further down (nth + 1..3), which found
+    # nothing for them on the Hoover Dam pod (2026-10-26: 0 of 36 lines in 141 s). PASS2_SKIP_EXHAUSTED leaves them
+    # to the AI recheck, the rescue pass and the ladder that follow; a line cut short by its time still gets pass 2.
+    exhausted: set = set()
 
     def fetch(job, nth):
         # A hook line's own time is its share x HOOK_TIME_FACTOR (hook_factor); every other line keeps its share.
@@ -5526,6 +5541,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             except Exception as e:  # noqa: BLE001
                 print(f"[media] '{job['query']}' failed: {e}", flush=True)
                 return None
+            if got is None and not _ytdlp.stopped() and _search_ran_out(job):
+                with lock:
+                    exhausted.add(job["index"])
             if got:
                 with lock:
                     live_used.add(got.identity)
@@ -5647,6 +5665,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     # side by side first, and the scenes are then decided in story order as before.
     verdicts = _verdicts({job["index"]: results[job["index"]] for job, _nth in plan}, workers,
                          jobs={job["index"]: job for job, _nth in plan})
+    skipped_exhausted = 0
     for job, nth in plan:
         i = job["index"]
         asset = results[i]
@@ -5654,6 +5673,9 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
             if i in chained:
                 continue                    # filled from the line before's clip later
             empty += 1
+            if i in exhausted and getattr(config, "PASS2_SKIP_EXHAUSTED", True):
+                skipped_exhausted += 1      # its whole search already ran: the recheck and the ladder take it
+                continue
             todo.append((job, nth, "", False))
             continue
         ok, why = verdicts[i] if i in verdicts else _asset_ok_for(job, asset)
@@ -5764,6 +5786,7 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
               f"({empty} empty, {duplicates} repeats, {rejected} unusable)", flush=True)
     LAST_STATS.update(pass1_seconds=round(t_pass2 - t_start, 1),
                       pass2_seconds=round(time.time() - t_pass2, 1),
+                      pass2_skipped_exhausted=skipped_exhausted,
                       pass1_empty=empty, pass1_repeats=duplicates,
                       pass1_unusable=rejected, pass2_replaced=replaced[0])
 

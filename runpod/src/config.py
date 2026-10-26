@@ -544,6 +544,10 @@ FINAL_WEIGHTS = _json_env("FINAL_WEIGHTS")
 # Per-scene judging is capped at 12 model calls, a 0.85 clip ends a search,
 # and the repair passes are half as long; animation scenes cover the rest.
 REPLACE_BUDGET_SECONDS = int(os.getenv("REPLACE_BUDGET_SECONDS", "120"))
+# Pass 2 skips an empty line whose pass-1 search ran its whole plan inside its own time (media.source_many): the
+# same searches one result further down found 0 of 36 such lines on the Hoover Dam pod (2026-10-26, 141 s). The AI
+# recheck, the rescue pass and the ladder still take it. 0 = pass 2 for every empty line, as before.
+PASS2_SKIP_EXHAUSTED = _flag("PASS2_SKIP_EXHAUSTED", True)
 # Wall-clock cap on the AI-rescue pass for scenes still empty after pass 2.
 RESCUE_BUDGET_SECONDS = int(os.getenv("RESCUE_BUDGET_SECONDS", "60"))
 # Last resort for a scene nothing could fill: reuse a real shot of the same
@@ -805,6 +809,9 @@ FAST_SOURCING = _flag("FAST_SOURCING", True)
 FAST_SOURCING_PARTS = int(os.getenv("FAST_SOURCING_PARTS", "4"))
 FAST_SOURCING_MAX_PARTS = int(os.getenv("FAST_SOURCING_MAX_PARTS", "6"))
 FAST_SOURCING_MIN_SECONDS = float(os.getenv("FAST_SOURCING_MIN_SECONDS", "900"))
+# A fast-sourcing job's pass-1 box (parts and this machine alike; the deadline still cuts it): its lines get the
+# same time each as on one pod instead of a serverless worker's 540 s box.
+FAST_SOURCING_PASS1_SECONDS = float(os.getenv("FAST_SOURCING_PASS1_SECONDS", "1800"))
 # The machines a build's sourcing is split over when BUILD_FANOUT is on (0 = FANOUT_PARTS, which also caps a
 # serverless parent's render chunks), and how many rounds of parts (2 = the empties go out once more).
 SOURCE_PARTS = int(os.getenv("SOURCE_PARTS", "0") or 0)
