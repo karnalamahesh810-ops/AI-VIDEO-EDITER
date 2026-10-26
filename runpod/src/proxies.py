@@ -121,6 +121,14 @@ class ProxyManager:
                 # first minutes (4-13 requests each, 62-87% success) and never asked again, while 3 carried all
                 # 730 sections at ~12 s a request - five yt-dlp processes on each address.
                 state, busy = rank[HEALTHY], busy + _DEGRADED_PENALTY
+            elif r.state == RECOVERING and r.active == 0:
+                # Back from quarantine: its one trial request goes out once the healthy routes each carry
+                # _DEGRADED_PENALTY more than it does. Ranked after every healthy route it never got the trial
+                # and stayed out for the whole job: on the Hoover Dam pod (2026-10-26) proxies 3, 4, 7, 9 and 10
+                # took two bot checks in the job's first 9 seconds, served their 5 minutes and sat "recovering"
+                # for the next 40 while 3 routes carried all 730 sections. A trial already out keeps the rest
+                # off it (one at a time); a failed trial quarantines it again, longer.
+                state, busy = rank[HEALTHY], _DEGRADED_PENALTY
             fair = (r.index - self._rr) % max(1, n)          # round-robin among equals
             due = r.quarantined_until if r.state == QUARANTINED else 0.0
             return (state, due, busy, r.latency_ms, fair)

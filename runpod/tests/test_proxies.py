@@ -147,6 +147,32 @@ class EarlyBotCheckDoesNotSideline(unittest.TestCase):
         pm.release(urls[5], False, FailureClass.BOT_CHECK, 2000)
         self.assertEqual(pm.by_url[urls[5]].state, QUARANTINED)
 
+    def test_a_route_back_from_quarantine_gets_its_trial(self):
+        # Hoover Dam (2026-10-26): proxies 3, 4, 7, 9, 10 took two bot checks in the first 9 s, served their
+        # quarantine and sat "recovering" for 40 minutes without a single trial request.
+        pm, urls = self._pm()
+        bad = urls[5]
+        pm.release(bad, False, FailureClass.BOT_CHECK, 2000)              # second refusal: quarantined
+        rec = pm.by_url[bad]
+        self.assertEqual(rec.state, QUARANTINED)
+        rec.quarantined_until = 0.0                                       # its time served
+        picks = [pm.acquire() for _ in range(16)]
+        self.assertEqual(rec.state, RECOVERING)
+        self.assertEqual(picks.count(bad), 1, picks)                      # one trial at a time, not zero
+        pm.release(bad, True, None, 2000)
+        self.assertEqual(rec.state, HEALTHY)                              # a good trial puts it back
+
+    def test_a_failed_trial_goes_back_to_quarantine(self):
+        pm, urls = self._pm()
+        bad = urls[6]
+        pm.release(bad, False, FailureClass.BOT_CHECK, 2000)
+        pm.by_url[bad].quarantined_until = 0.0
+        while pm.acquire() != bad:
+            pass
+        pm.release(bad, False, FailureClass.BOT_CHECK, 2000)
+        self.assertEqual(pm.by_url[bad].state, QUARANTINED)
+        self.assertGreater(pm.by_url[bad].quarantines, 1)
+
     def test_a_mostly_failing_route_stays_out(self):
         pm = ProxyManager(["http://good", "http://bad"], direct=False)
         for _ in range(5):
