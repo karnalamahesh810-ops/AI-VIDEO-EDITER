@@ -139,6 +139,13 @@ def after(doc: dict) -> dict:
                 L["size"] = TEXT_SIZE.get(round(sz, 3), round(min(sz, 0.075), 4))
             resized += 1
     report["layersResized"] = resized
+    # round 2: every date top left, looks end at their cut, AI scenes labelled
+    from src import aifill, lookplace  # noqa: E402
+    for o in doc.get("overlays") or []:
+        if str(o.get("template") or "") in lookplace.KT_SELF_BACKED:
+            o["zone"] = "upper-left"
+    report["lookEnds"] = editing.end_at_cuts(doc)
+    report["aiLabels"] = aifill.label_scenes(doc)
     doc["meta"]["vidfix"] = report
     return doc
 
