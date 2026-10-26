@@ -516,6 +516,8 @@ CLIPS_FIRST_CLIP_SHARE = float(os.getenv("CLIPS_FIRST_CLIP_SHARE", "0.65"))
 STILLS_TO_CLIPS = _flag("STILLS_TO_CLIPS", True)
 STILLS_TO_CLIPS_SECONDS = float(os.getenv("STILLS_TO_CLIPS_SECONDS", "180"))
 STILLS_TO_CLIPS_PARALLEL = int(os.getenv("STILLS_TO_CLIPS_PARALLEL", "6"))
+# At most this many scenes of one source video in a row (the clip and its continuations; the reference: runs of 2-7).
+STILLS_TO_CLIPS_MAX_RUN = int(os.getenv("STILLS_TO_CLIPS_MAX_RUN", "3"))
 # A named person's line asks for a clip of the person first (an interview, a talk, a press conference: the
 # person's own rung, talking heads allowed) before any portrait (the owner, 2026-10-26: "prefer real video of
 # the person"). 0 = a person's portrait first, as before.

@@ -272,11 +272,21 @@ class Used:
                 near = abs(i - j) <= 1
                 if near and (shot.chain or o.chain):
                     continue            # a planned chain: the next moment of the clip before it
+                if (shot.chain or o.chain) and self._one_run(i, j, shot.video):
+                    # Chains of chains: one strong clip played on over a few shots in a row, each a later moment
+                    # (the reference news channel: 26 % of its shots continue the clip before, runs of 2-7).
+                    continue
                 if near:
                     return "the same source video on the next scene"
                 if shot.start is None or o.start is None or abs(shot.start - o.start) < self.gap:
                     return "the same moment of its source video"
         return ""
+
+    def _one_run(self, i: int, j: int, video: str) -> bool:
+        """Every scene between i and j shows the same source video (one continuous run of it)."""
+        lo, hi = sorted((i, j))
+        return bool(video) and all(any(x.video == video for x in list(self.shots.get(k) or []))
+                                   for k in range(lo + 1, hi))
 
     def claim(self, i: int, shot: Shot) -> bool:
         with self.lock:

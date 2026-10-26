@@ -88,8 +88,9 @@ class StillsToChains(unittest.TestCase):
         jobs = [_job(i) for i in range(5)]
         results = [_clip("AAAAAAAAAAA"), _still(1), _still(2), _still(3), _clip("BBBBBBBBBBB", 100.0)]
         out, fetched = self._run(jobs, results)
-        self.assertEqual((out["forward"], out["backward"]), (1, 1))
-        self.assertEqual([r.kind for r in results], ["video", "video", "image", "video", "video"])
+        # the clip before plays on over two more shots (3 in a row at most), the last takes the moment before the next
+        self.assertEqual((out["forward"], out["backward"]), (2, 1))
+        self.assertEqual([r.kind for r in results], ["video"] * 5)
         self.assertEqual(fetched[0], ("AAAAAAAAAAA", round(60 + 5.5 + media.CHAIN_SKIP_SECONDS, 1)))
         self.assertLess(fetched[1][1], 100.0)                        # the moment before the next clip
         self.assertTrue(results[1].moment["chain"] and results[1].judged_by == "chain")
@@ -120,6 +121,22 @@ class StillsToChains(unittest.TestCase):
         self.assertEqual(out["spare"], 1)
         self.assertEqual(results[1].kind, "video")
         self.assertIn(1, calls)
+
+    def test_a_still_cut_off_by_a_portrait_takes_another_moment_of_a_nearby_clip(self):
+        # the clip's scene is far enough (SAME_VIDEO_GAP_SECONDS) for another of its moments to come back
+        jobs = [_job(0), _job(1, "person", start=190.0), _job(2, start=200.0), _job(3, start=205.0)]
+        results = [_clip("AAAAAAAAAAA", 60.0), _still(1), _still(2), _still(3)]
+        out, fetched = self._run(jobs, results)
+        self.assertEqual(out["fresh"], 1)
+        self.assertEqual([r.kind for r in results], ["video", "image", "video", "image"])
+        self.assertEqual(results[2].moment["start"], 90.0)                 # 30 s from the clip's shown moment
+        self.assertEqual(fetched, [("AAAAAAAAAAA", 90.0)])
+
+    def test_never_another_moment_of_a_clip_shown_moments_ago(self):
+        jobs = [_job(0), _job(1, "person"), _job(2), _job(3)]          # 10 s apart: the variety rule says no
+        results = [_clip("AAAAAAAAAAA", 60.0), _still(1), _still(2), _still(3)]
+        out, fetched = self._run(jobs, results)
+        self.assertEqual((out["fresh"], fetched), (0, []))
 
     def test_off_switch(self):
         jobs = [_job(0), _job(1)]
@@ -241,6 +258,24 @@ class CopiesAndPlacement(unittest.TestCase):
         self.assertIn("copy", found[0][1])
         with mock.patch.object(config, "PICTURE_COPY_CHECK", False):
             self.assertEqual(gapfill.find_repeats(doc), [])
+
+    def test_a_run_of_chains_is_not_a_repeat_but_a_gap_in_it_is(self):
+        from src import gapfill
+
+        def clip(i, start, chain=False):
+            return {"id": f"s{i}", "startFrame": i * 300, "durationInFrames": 300,
+                    "media": {"type": "video", "url": f"https://r2/x{i}.mp4", "source": "youtube"},
+                    "semanticMetadata": {"assetId": f"yt:AAAAAAAAAAA@{int(start // 10)}",
+                                         "sourceUrl": f"https://www.youtube.com/watch?v=AAAAAAAAAAA&t={int(start)}",
+                                         "moment": {"start": start, "chain": chain}}}
+        other = {"id": "o", "startFrame": 0, "durationInFrames": 300,
+                 "media": {"type": "video", "url": "https://r2/o.mp4", "source": "youtube"},
+                 "semanticMetadata": {"assetId": "yt:BBBBBBBBBBB@1", "sourceUrl": "https://www.youtube.com/watch?v=BBBBBBBBBBB&t=10",
+                                      "moment": {"start": 10}}}
+        run = {"fps": 60, "scenes": [clip(0, 60), clip(1, 66.3, True), clip(2, 72.6, True)]}
+        self.assertEqual(gapfill.find_repeats(run), [])
+        broken = {"fps": 60, "scenes": [clip(0, 60), dict(other, id="o1"), clip(2, 72.6, True)]}
+        self.assertEqual([i for i, _w in gapfill.find_repeats(broken)], [2])
 
     def test_the_build_measures_a_local_picture(self):
         import tempfile
