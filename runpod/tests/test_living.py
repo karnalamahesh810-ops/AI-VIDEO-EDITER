@@ -539,7 +539,9 @@ class Gate(unittest.TestCase):
                 fh.write(b"RIFF" + bytes(2000))
             scenes = []
             for i in range(2):
-                p = _picture(os.path.join(d, f"s{i}.jpg"), w=640, h=400, square=(200, 150, 400, 350))
+                # two different pictures (the same one twice is a repeat since 2026-10-26: gapfill.find_repeats)
+                p = _picture(os.path.join(d, f"s{i}.jpg"), w=640, h=400,
+                             square=(200, 150, 400, 350) if i == 0 else (20, 20, 160, 380))
                 s = _still_scene(i, p)
                 s["media"]["living"] = living.block(s["media"], _fake_build(d)(p, "zoom-in", 1920, 1080))
                 scenes.append(s)
