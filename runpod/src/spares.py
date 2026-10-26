@@ -260,6 +260,101 @@ def note(what: str, n: int = 1) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Spares of a part on another machine (fast sourcing, src/fanout.py)
+# --------------------------------------------------------------------------- #
+#
+# A part's spares are judged footage on ITS disk. Handing the files over would cost every part its upload time;
+# instead a part returns what it knows of its best spares (export: the moment, its length, what the judge saw)
+# and the parent banks them without a file (add_remote). The ladder fetches a remote spare only when it is
+# about to try it for a line (gapfill._from_spare -> fetch_remote): one section download, no search, no
+# second judge of the moment for the line it was found for - and it is judged against the new line as usual.
+
+
+def export(limit: Optional[int] = None) -> List[dict]:
+    """This machine's untaken spares, best judged first, without their files (a part's result: fanout.run_part)."""
+    if not enabled():
+        return []
+    n = int(getattr(config, "SPARE_EXPORT_MAX", 60) if limit is None else limit)
+    if n <= 0:
+        return []
+    with _LOCK:
+        pool = [dict(e) for k, e in _BANK.items() if k not in _TAKEN and not e.get("remote")]
+    pool.sort(key=lambda e: (-(e.get("score") or 0.0), -(e.get("quality") or 0.0)))
+    out = []
+    for e in pool[:n]:
+        seconds = None
+        if e.get("kind") == "video" and e.get("path"):
+            try:
+                from .filters import _video_seconds
+                seconds = round(float(_video_seconds(e["path"]) or 0.0), 2) or None
+            except Exception:  # noqa: BLE001 - its length unknown: the parent asks for a default
+                seconds = None
+        out.append({k: e.get(k) for k in ("key", "kind", "vid", "start", "url", "title", "description", "quality",
+                                          "score")} | {"seconds": seconds, "words": sorted(e.get("words") or [])})
+    return out
+
+
+def add_remote(entries: Optional[Iterable[dict]]) -> int:
+    """Bank a part's exported spares without a file (fetched when the ladder tries one). Returns how many."""
+    if not enabled() or not entries:
+        return 0
+    cap = int(getattr(config, "SPARE_MAX", 600) or 0)
+    n = 0
+    with _LOCK:
+        for d in entries:
+            if not isinstance(d, dict) or not d.get("key") or d["key"] in _BANK:
+                continue
+            if d.get("kind") not in ("video", "image"):
+                continue
+            if d["kind"] == "video" and not d.get("vid"):
+                continue
+            if cap and len(_BANK) >= cap:
+                break
+            _BANK[d["key"]] = {"key": d["key"], "kind": d["kind"], "path": "", "remote": True,
+                               "vid": str(d.get("vid") or ""), "start": d.get("start"),
+                               "seconds": d.get("seconds"), "url": str(d.get("url") or ""),
+                               "title": str(d.get("title") or "")[:200],
+                               "description": str(d.get("description") or "")[:400],
+                               "words": set(d.get("words") or []) or words(d.get("description") or "",
+                                                                         d.get("title") or ""),
+                               "quality": d.get("quality"), "score": d.get("score"), "kept": False}
+            n += 1
+        STATS["remote"] = STATS.get("remote", 0) + n
+    return n
+
+
+def fetch_remote(entry: dict, work: str) -> str:
+    """The file of a remote spare, downloaded now (a YouTube section cut clean, or the picture); "" on failure.
+    The bank keeps the path, so a second line asking for it does not fetch it again."""
+    if entry.get("path") and os.path.isfile(entry["path"]):
+        return entry["path"]
+    path = ""
+    try:
+        from . import media
+        if entry.get("kind") == "video" and entry.get("vid"):
+            seconds = float(entry.get("seconds") or 0.0) or 6.0
+            path = media.fetch_clean_clip(entry["vid"], work, float(entry.get("start") or 0.0),
+                                          max(2.5, min(15.0, seconds)), str(entry.get("title") or "")[:60])[0]
+        elif entry.get("kind") == "image" and str(entry.get("url") or "").startswith("http"):
+            from . import imagefix
+            ext = os.path.splitext(urllib.parse.urlparse(entry["url"]).path)[1].lower()
+            ext = ext if ext in (".jpg", ".jpeg", ".png", ".webp") else ".jpg"
+            dest = os.path.join(work, f"remote_spare_{abs(hash(entry['key'])) % 999999}{ext}")
+            path = imagefix.fetch(entry["url"], dest, "")
+    except Exception:  # noqa: BLE001 - this spare is passed over
+        path = ""
+    if path and os.path.isfile(path):
+        with _LOCK:
+            if entry["key"] in _BANK:
+                _BANK[entry["key"]]["path"] = path
+            STATS["remoteFetched"] = STATS.get("remoteFetched", 0) + 1
+        return path
+    with _LOCK:
+        STATS["remoteFailed"] = STATS.get("remoteFailed", 0) + 1
+    return ""
+
+
+# --------------------------------------------------------------------------- #
 # Near-duplicate frames
 # --------------------------------------------------------------------------- #
 

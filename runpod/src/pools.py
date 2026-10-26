@@ -52,6 +52,7 @@ import datetime
 import os
 import re
 import threading
+import time
 import urllib.parse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -882,6 +883,7 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
     done = [0]
     stats = {"subjects": len(todo), "lines": sum(len(v) for v in todo.values()), "covered": 0,
              "news_videos": 0}
+    t_pools = time.time()
 
     def claim(key: str) -> bool:
         with lock:
@@ -936,6 +938,7 @@ def source_by_subject(jobs: List[dict], work: str, *, require_cc: bool = False,
 
     with ThreadPoolExecutor(max_workers=max(1, config.POOL_PARALLEL_SUBJECTS)) as ex:
         list(ex.map(one, sorted(todo, key=lambda k: -len(todo[k]))))
+    stats["seconds"] = round(time.time() - t_pools, 1)     # the pools run before pass 1: their wall time
     media.LAST_STATS["pools"] = stats
     return results
 

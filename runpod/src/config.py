@@ -1016,6 +1016,9 @@ FILL_MAX_MOMENTS_PER_VIDEO = int(os.getenv("FILL_MAX_MOMENTS_PER_VIDEO", "3"))
 # frame is within this many of 64 dhash bits of a shot beside the line (or of its own video) is the same picture.
 SPARE_BANK = _flag("SPARE_BANK", True)
 SPARE_MAX = int(os.getenv("SPARE_MAX", "600"))
+# A part on another machine (fast sourcing) returns its best SPARE_EXPORT_MAX spares without their files; the
+# parent banks them and its ladder fetches one only when it tries it for a line (spares.export / add_remote).
+SPARE_EXPORT_MAX = int(os.getenv("SPARE_EXPORT_MAX", "60"))
 SPARE_MAX_BYTES = int(os.getenv("SPARE_MAX_BYTES", "80000000"))
 SPARE_MIN_QUALITY = float(os.getenv("SPARE_MIN_QUALITY", "0.45"))
 SPARE_MIN_MATCH = float(os.getenv("SPARE_MIN_MATCH", "3"))

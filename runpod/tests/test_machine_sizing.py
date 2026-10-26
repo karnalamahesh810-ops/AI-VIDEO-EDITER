@@ -207,3 +207,57 @@ class TidyIntermediate(unittest.TestCase):
             media.fetch_clean_clip("abcdefghijk", ".", 10.0, 5.0)
         self.assertEqual(seen, [True, False])            # no cut after it: the medium encode
         self.assertFalse(ytdlp.TIDY_INTERMEDIATE.get())  # put back
+
+
+class RemoteSpares(unittest.TestCase):
+    """A part's spares reach the parent's bank without their files and are fetched only when tried."""
+
+    def setUp(self):
+        from src import spares
+        self.spares = spares
+        spares.reset()
+
+    def tearDown(self):
+        self.spares.reset()
+
+    def test_export_add_and_lazy_fetch(self):
+        import tempfile
+        sp = self.spares
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "yt_abcdefghijk_12000_9000_ff00aa.mp4")
+            with open(src, "wb") as fh:
+                fh.write(b"x" * 2000)
+            verdict = {"description": "Hoover Dam spillway water rushing", "quality": 0.8, "score": 0.7}
+            with mock.patch.object(config, "SPARE_BANK", True):
+                self.assertTrue(sp.record(src, verdict, label="YouTube: Hoover Dam flood"))
+                with mock.patch("src.filters._video_seconds", return_value=8.5):
+                    out = sp.export()
+            self.assertEqual(len(out), 1)
+            self.assertEqual(out[0]["vid"], "abcdefghijk")
+            self.assertEqual(out[0]["seconds"], 8.5)
+            self.assertNotIn("path", out[0])
+            sp.reset()
+            with mock.patch.object(config, "SPARE_BANK", True):
+                self.assertEqual(sp.add_remote(out), 1)
+                self.assertEqual(sp.add_remote(out), 0)            # once
+                job = {"index": 3, "context": "the Hoover Dam spillway", "subject": "Hoover Dam", "place": ""}
+                got = sp.candidates(job)
+            self.assertEqual(len(got), 1)
+            self.assertTrue(got[0]["remote"])
+            self.assertEqual(got[0]["path"], "")
+            fetched = os.path.join(d, "f.mp4")
+            with open(fetched, "wb") as fh:
+                fh.write(b"y")
+            from src import media
+            with mock.patch.object(media, "fetch_clean_clip", return_value=(fetched, True, 0)) as fc:
+                self.assertEqual(sp.fetch_remote(got[0], d), fetched)
+                fc.assert_called_once()
+                self.assertEqual(fc.call_args[0][0], "abcdefghijk")
+                self.assertEqual(fc.call_args[0][3], 8.5)
+                self.assertEqual(sp.fetch_remote(dict(got[0], path=fetched), d), fetched)   # not again
+            self.assertEqual(sp.stats().get("remoteFetched"), 1)
+
+    def test_bad_entries_ignored(self):
+        with mock.patch.object(config, "SPARE_BANK", True):
+            self.assertEqual(self.spares.add_remote([{"key": "x", "kind": "video"}, "junk", {"kind": "image"}]), 0)
+            self.assertEqual(self.spares.add_remote(None), 0)

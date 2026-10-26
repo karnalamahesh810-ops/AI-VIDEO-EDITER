@@ -641,7 +641,10 @@ def _from_spare(job: dict, used: Used, work: str, stop: float, kind: str = "vide
         if time.time() > stop or calls >= judges:
             return None
         path = e["path"]
-        if not os.path.isfile(path):
+        if not path and e.get("remote"):
+            # A spare a part on another machine judged (fast sourcing): its file is fetched now.
+            path = spares.fetch_remote(e, work)
+        if not path or not os.path.isfile(path):
             continue
         if kind == "video":
             shot = Shot(files=(path,), video=f"yt:{e['vid']}", start=e.get("start"), at=job.get("start"))

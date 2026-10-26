@@ -465,6 +465,8 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
             return False
         from . import stockblock
         stockblock.merge(out.get("stockBlocked"))       # the part's stock-agency pictures kept out
+        from . import spares
+        stats["remote_spares"] = stats.get("remote_spares", 0) + spares.add_remote(out.get("spares"))
         for key, d in assets.items():
             i = int(key)
             if d.get("refetch") or not d.get("remote_url"):
@@ -922,7 +924,10 @@ def run_part(inp: dict, work: str, source_many: Callable, set_story: Callable) -
             if got:
                 out[got[0]] = got[1]
     delivered = sum(1 for d in out.values() if not d.get("refetch"))
+    # The part's best spares without their files: the parent's ladder fetches one only when it tries it.
+    from . import spares
     return {"assets": out, "delivered": delivered, "refetch": len(out) - delivered, "asked": len(jobs),
+            "spares": spares.export(),
             "stageSeconds": media.stage_seconds(),
             "partSeconds": {"finding": round(t_found - t0, 1), "uploading": round(time.time() - t_found, 1)}}
 
