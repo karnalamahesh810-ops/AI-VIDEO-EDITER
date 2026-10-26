@@ -5,8 +5,8 @@ How each still picture sits in the frame and how far it may move (the owner, 202
 
 At 05:07 a web photo of Jack Schmidt (a portrait) filled the 16:9 frame: the cover fit kept the middle band of the
 portrait - his chin, mouth and shirt - blown up and pushed in further by a zoom, for 4.4 s. Measured over the video:
-86 of 118 stills were shown above 1.3x their real detail before any move, the moves went up to 1.38x (pull-back,
-reveal), and editing v3 added a 1.08x punch and 1.36x detail framings on top - on pictures already upscaled.
+of the 87 stills sourcing measured, 61 were shown past their real detail before any move (36 past 1.3x), the moves
+went up to 1.38x (pull-back, reveal), and editing v3 added a 1.08x punch and 1.36x detail framings on top.
 
 One pass over the built document while the files are still local (no network, no AI; time-boxed):
 
