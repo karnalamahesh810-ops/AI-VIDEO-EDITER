@@ -970,6 +970,17 @@ MARKS_GAP_SECONDS = float(os.getenv("MARKS_GAP_SECONDS", "60"))
 # drift...); "none" holds them still (the reference weather channel's ~150
 # photos have no zoom or pan; nature_weather sets it).
 STILL_MOTION = os.getenv("STILL_MOTION", "").strip().lower()
+# Still framing (src/stillframe.py, the owner 2026-10-26: a portrait filled the frame as chin and shirt; moves and
+# zooms past the pictures' detail). A portrait (a person's line, a tall or near-square picture, a face the 16:9 crop
+# would cut) is a framed card no taller than its real detail x STILL_CARD_UPSCALE; every other still's move, punch
+# and detail framing stays under STILL_PEAK_MAGNIFICATION of its real detail (media.maxZoom), and a style may hold
+# the moves smaller still (STILL_MOTION_MAX_ZOOM, media.moveMax; 0 = the moves' own size).
+STILL_FRAME = _flag("STILL_FRAME", True)
+STILL_FRAME_SECONDS = float(os.getenv("STILL_FRAME_SECONDS", "60"))
+STILL_FRAME_PARALLEL = int(os.getenv("STILL_FRAME_PARALLEL", "4"))
+STILL_CARD_UPSCALE = float(os.getenv("STILL_CARD_UPSCALE", "1.15"))
+STILL_PEAK_MAGNIFICATION = float(os.getenv("STILL_PEAK_MAGNIFICATION", "1.3"))
+STILL_MOTION_MAX_ZOOM = float(os.getenv("STILL_MOTION_MAX_ZOOM", "0"))
 # One wall-clock budget for all footage finding, across every worker: a
 # real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
 # and searches stop at once and the beats still without footage become

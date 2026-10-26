@@ -223,8 +223,9 @@ const NumberLook: Look = ({ overlay, accent }) => {
   const under = fg.unit && !beside ? fg.unit : "";
   const figure: Fig = beside ? fg : { ...fg, unit: "" };
   const least = (scale.hero.least * H * ks) / dir.cap;
-  const floor = (0.09 * H * ks) / dir.cap;
-  const maxW = 0.52 * W;
+  // (2026-10-26: the hero is 8 % of the height now; a long figure narrows to 5.5 % before it may pass 40 % of the width)
+  const floor = (0.055 * H * ks) / dir.cap;
+  const maxW = 0.4 * W;
   const wOf = (s: number) => widthOf(finalText, dir.font, s, 800, -0.01)
     + (beside ? 14 * k + widthOf(fg.unit, GROTESK, s * scale.unit.ofHero, 700, 0.08) : 0);
   while (size > least && wOf(size) > maxW) size *= 0.97;

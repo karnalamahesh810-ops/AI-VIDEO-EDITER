@@ -246,6 +246,16 @@ export interface SceneMedia {
    */
   fallbackStill?: string;
   /**
+   * A still's framing (src/stillframe.py, 2026-10-26). `card`: a portrait drawn whole as a framed card over a
+   * blurred copy of itself (motion "parallax"), `max` its height as a share of the frame (never past its real
+   * detail), `x` its centre. `maxZoom`: the most the picture may be scaled in all (its real detail); `moveMax`: the
+   * style's ceiling on its move. The move is scaled down to fit (transitions/stillMotion.tsx). `pixels`: its size.
+   */
+  card?: { max?: number; x?: number };
+  maxZoom?: number;
+  moveMax?: number;
+  pixels?: { w: number; h: number; lines?: number };
+  /**
    * The AI presenter style's split screen (scene.frame "split", src/presenter/assemble.py): this scene's clip
    * (the presenter) fills the left half, cropped so the face sits at `focusX` (object-position x, %), and this
    * picture - the line's own - the right half, with its slow move. Both halves full height, no border.

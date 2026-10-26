@@ -9,6 +9,7 @@ import { AnimationScene } from "./AnimationScene";
 import { useSceneGrade } from "./Grade";
 import { PlayerWindow } from "./pro/ProCase";
 import { LivingPicture, StillPicture, TransitionFrame, resolveLiving } from "../transitions";
+import { MOVE_PEAK, zoomCap } from "../transitions/stillMotion";
 import { reframeStyle, resolveAim, resolveMove } from "./reframe";
 import { BlurredHold, SafeImg } from "./motion/safePicture";
 import type { Motion, Scene, SceneMedia, SceneTransition } from "../types";
@@ -261,7 +262,12 @@ export const SceneClip: React.FC<{
   const moved = move ? reframeStyle(move, frame, scene.durationInFrames, fps) : null;
   // A still with depth layers (living photos, src/living.py): its own move, with parallax.
   // Held still, or framed by hand in the editor: drawn flat as before.
-  const living = media.type === "image" && !move && stillMotion ? resolveLiving(scene) : null;
+  // How far the still may be scaled (src/stillframe.py: its real detail, the style's ceiling): its move fits under
+  // it; a move held down that way, and a portrait card, are drawn flat (no depth layers).
+  const cap = media.type === "image" ? zoomCap(media.maxZoom, media.moveMax) : undefined;
+  const capped = cap !== undefined && cap < (MOVE_PEAK[String(stillMotion || "none")] ?? 1.15) - 0.001;
+  const card = media.type === "image" && media.card && stillMotion === "parallax" ? media.card : undefined;
+  const living = media.type === "image" && !move && stillMotion && !capped && !card ? resolveLiving(scene) : null;
 
   return (
     <TransitionFrame id={scene.id} inT={transition} outT={nextTransition}>
@@ -299,7 +305,7 @@ export const SceneClip: React.FC<{
           ) : (
             <StillPicture src={media.url} motion={stillMotion} frame={frame} durationInFrames={durationInFrames}
               fps={fps} width={width} filter={filters || undefined} subject={aim} fallbackStill={holdStill}
-              seed={scene.id} />
+              seed={scene.id} cap={cap} card={card} />
           )}
         </AbsoluteFill>
         </ClipFx>

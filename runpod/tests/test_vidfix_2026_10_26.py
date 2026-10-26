@@ -130,5 +130,84 @@ class StillsToChains(unittest.TestCase):
         self.assertEqual(out["eligible"], 0)
 
 
+class StillFrame(unittest.TestCase):
+    def setUp(self):
+        from src import stillframe
+        self.sf = stillframe
+
+    def test_a_portrait_is_a_card_never_a_crop(self):
+        tall = {"w": 600, "h": 800, "lines": 600, "faces": [[0.35, 0.2, 0.3, 0.3, 0.9, 0.3]]}
+        self.assertTrue(self.sf.is_portrait({"semanticMetadata": {"subjectType": "person"}}, tall))
+        self.assertTrue(self.sf.is_portrait({"semanticMetadata": {"subjectType": "event"}}, tall))   # tall: a card
+        wide = {"w": 1920, "h": 1080, "lines": 1080, "faces": [[0.45, 0.35, 0.1, 0.18, 0.9, 0.4]]}
+        self.assertFalse(self.sf.is_portrait({"semanticMetadata": {"subjectType": "event"}}, wide))
+        # 4:3 with the face near the top: the 16:9 crop takes its forehead off
+        top = {"w": 1600, "h": 1200, "lines": 1200, "faces": [[0.42, 0.06, 0.16, 0.2, 0.9, 0.12]]}
+        self.assertTrue(self.sf.crop_cuts_face(top))
+        self.assertTrue(self.sf.is_portrait({"semanticMetadata": {}}, top))
+
+    def test_the_card_never_outgrows_its_detail(self):
+        small = {"w": 400, "h": 500, "lines": 400, "faces": []}
+        c = self.sf.card_for(small, beside_name=True)
+        self.assertAlmostEqual(c["max"], round(500 * 1.15 / 1080, 3), places=3)
+        self.assertEqual(c["x"], self.sf.CARD_X_BESIDE_NAME)
+        big = {"w": 3000, "h": 4000, "lines": 3000, "faces": []}
+        self.assertEqual(self.sf.card_for(big, beside_name=False), {"max": 0.84, "x": 0.5})
+
+    def test_moves_are_held_to_real_detail(self):
+        sharp = {"w": 3840, "h": 2160, "lines": 2160, "faces": []}
+        soft = {"w": 1920, "h": 1280, "lines": 800, "faces": []}      # an upscaled web picture
+        self.assertEqual(self.sf.max_zoom(sharp), 1.6)
+        self.assertEqual(self.sf.max_zoom(soft), 1.02)
+
+    def test_place_writes_cards_caps_aims_and_calms(self):
+        import os
+        import tempfile
+        d = tempfile.mkdtemp()
+        paths = []
+        for n in range(3):
+            p = os.path.join(d, f"p{n}.jpg")
+            with open(p, "wb") as fh:
+                fh.write(b"x")
+            paths.append(p)
+        facts = {paths[0]: {"w": 500, "h": 700, "lines": 500, "faces": [[0.3, 0.2, 0.35, 0.3, 0.9, 0.3]]},
+                 paths[1]: {"w": 1920, "h": 1280, "lines": 800, "faces": []},
+                 paths[2]: {"w": 3840, "h": 2160, "lines": 2160, "faces": [[0.45, 0.3, 0.08, 0.15, 0.9, 0.35]]}}
+        doc = {"fps": 60, "scenes": [
+            {"id": "s0", "startFrame": 0, "durationInFrames": 300, "motion": "zoom-in", "frame": "full",
+             "media": {"type": "image", "url": paths[0], "source": "web_image"},
+             "semanticMetadata": {"subjectType": "person"}},
+            {"id": "s1", "startFrame": 300, "durationInFrames": 300, "motion": "pull-back", "frame": "full",
+             "media": {"type": "image", "url": paths[1], "source": "web_image"}, "semanticMetadata": {}},
+            {"id": "s2", "startFrame": 600, "durationInFrames": 300, "motion": "reveal-left", "frame": "full",
+             "media": {"type": "image", "url": paths[2], "source": "wikimedia"}, "semanticMetadata": {}}],
+            "overlays": [{"startFrame": 10, "durationInFrames": 200, "template": "SMART_SPEC",
+                          "smart": {"design": {"kind": "label"}}}]}
+        with mock.patch.object(config, "STILL_MOTION_MAX_ZOOM", 1.06):
+            st = self.sf.place(doc, facts_fn=facts.get)
+        s0, s1, s2 = doc["scenes"]
+        self.assertEqual((s0["motion"], s0["media"]["card"]["x"]), ("parallax", self.sf.CARD_X_BESIDE_NAME))
+        self.assertEqual((s1["motion"], s1["media"]["maxZoom"], s1["media"]["moveMax"]), ("zoom-out", 1.02, 1.06))
+        self.assertEqual(s2["motion"], "push-offcenter")                  # a reveal calmed
+        self.assertEqual(s2["media"]["reframe"]["kind"], "face")
+        self.assertEqual((st["cards"], st["aimed"], st["calmed"]), (1, 1, 2))
+
+
+class EditingOnStills(unittest.TestCase):
+    def test_no_punch_on_a_low_res_still_or_a_card(self):
+        from src import editing
+        low = {"frame": "full", "motion": "zoom-in", "media": {"type": "image", "maxZoom": 1.02}}
+        sharp = {"frame": "full", "motion": "zoom-in", "media": {"type": "image", "maxZoom": 1.6}}
+        card = {"frame": "full", "motion": "parallax", "media": {"type": "image", "card": {"max": 0.6}}}
+        old_soft = {"frame": "full", "motion": "zoom-in", "media": {"type": "image"},
+                    "semanticMetadata": {"scoreParts": {"magnification": 1.7}}}
+        self.assertFalse(editing._punchable(low, True))
+        self.assertTrue(editing._punchable(sharp, True))
+        self.assertFalse(editing._punchable(card, True))
+        self.assertFalse(editing._punchable(old_soft, True))
+        self.assertEqual(editing.still_room(card), 1.0)
+        self.assertAlmostEqual(editing.still_room(sharp), 1.6 / 1.15, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()

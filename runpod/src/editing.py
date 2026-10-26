@@ -52,6 +52,7 @@ PIECE_MIN = 2.2                 # no piece of a split shot shorter than this
 # piece reads as a new shot over the still's own slow move (1.2 everywhere read as the same shot in the first proof).
 DETAIL_SCALES = (1.36, 1.16)
 DETAIL_SCALE_SMALL = 1.14       # ... of a still whose file is small (upscaled or under 1600 px wide)
+DETAIL_MIN_SCALE = 1.12         # a detail framing tighter than the picture's detail allows is no detail: not split
 CLIP_SKIP = 0.8                 # a chained clip piece jumps this far forward in its file
 PUNCH_SCALE = 1.08              # the owner's Premiere rules: same-shot punch 12 %, emphasis zooms held, no boomerang
 PUNCH_SCALE_HOOK = 1.1
@@ -73,8 +74,7 @@ PUNCH_SOUND_UNDER_DB = 13.0     # softer than any transition sound (theirs 9.5-1
 TEXTURE_EFFECTS = {"color-shift", "light-leaks", "film-flicker", "dust"}
 FILM_TREATMENTS = {"film", "vintage", "archival"}
 KEEP_OVER_SCENE = {"LIB_SRC_TAG"}   # the source tag is settled by sources.settle, never over a graphic anyway
-STILL_MOTIONS = ["push-offcenter", "reveal-left", "drift-diagonal", "pull-back", "parallax", "zoom-in",
-                 "rotate-settle", "reveal-right", "pan-left", "push-rotate", "zoom-out", "pan-right"]
+STILL_MOTIONS = ["push-offcenter", "drift-diagonal", "zoom-in", "pan-left", "zoom-out", "pan-right"]   # timeline's calm set
 
 # ---------------------------------------------------------------------------------------------------------------
 # Emphasis: the words an editor hits (any niche)
@@ -496,6 +496,10 @@ def _split_scene(scene: dict, cuts: List[float], fps: int, crop_ok: bool) -> Opt
                 ax, ay = _detail_anchor(scene, i)
                 small = bool(m.get("upscaled")) or (0 < _f(m.get("width"), 0) < 1600)
                 sc = DETAIL_SCALE_SMALL if small else DETAIL_SCALES[(i - 1) % len(DETAIL_SCALES)]
+                # Never past the picture's real detail (still_room); too little room and the still is not split.
+                sc = min(sc, still_room(scene))
+                if sc < DETAIL_MIN_SCALE:
+                    return None
                 p["keyframes"] = {"scale": [{"t": 0, "v": sc}], "anchorX": [{"t": 0, "v": round(ax, 3)}],
                                   "anchorY": [{"t": 0, "v": round(ay, 3)}]}
                 # A different hand move from the piece before (never the same move twice running).
@@ -573,6 +577,27 @@ def _own_framing(s: dict) -> bool:
             and all(isinstance(v, list) and len(v) == 1 for v in kf.values()))
 
 
+def still_room(s: dict) -> float:
+    """How much more a still may be scaled than its own move takes it (1.0 = none): media.maxZoom from
+    src/stillframe.py over the move's peak, else - an older document - the magnification sourcing measured
+    (semanticMetadata.scoreParts.magnification, at the planner's ~1.16 move) against STILL_PEAK_MAGNIFICATION.
+    A portrait card (media.card) is never scaled. (The owner, 2026-10-26: punches and 1.36x detail framings on
+    upscaled web pictures read as blur and bad zooms.)"""
+    m = s.get("media") or {}
+    if isinstance(m.get("card"), dict) or str(s.get("motion") or "") == "parallax":
+        return 1.0
+    peak = float(getattr(config, "STILL_PEAK_MAGNIFICATION", 1.3) or 1.3)
+    if m.get("maxZoom"):
+        from .stillframe import MOVE_PEAK
+        room = _f(m.get("maxZoom"), 1.0)
+        move = min(MOVE_PEAK.get(str(s.get("motion") or "none"), 1.15), room, _f(m.get("moveMax"), 9.0) or 9.0)
+        return max(1.0, room / max(1.0, move))
+    mag = _f(((s.get("semanticMetadata") or {}).get("scoreParts") or {}).get("magnification"), 0.0)
+    if mag <= 0:
+        return 1.0                          # unmeasured: no extra scaling
+    return max(1.0, peak / mag)
+
+
 def _punchable(s: dict, crop_ok: bool) -> bool:
     if not isinstance(s, dict) or str(s.get("frame") or "full") != "full" or _is_presenter(s):
         return False
@@ -581,7 +606,8 @@ def _punchable(s: dict, crop_ok: bool) -> bool:
     m = s.get("media") or {}
     mt = _mtype(s)
     if mt == "image":
-        return True
+        # Only a still with the detail for it: never a punch-in on a low-res or upscaled picture, or a card.
+        return still_room(s) >= PUNCH_SCALE_HOOK + 0.02
     if mt != "video" or not crop_ok:
         return False
     focus = m.get("focus") or {}

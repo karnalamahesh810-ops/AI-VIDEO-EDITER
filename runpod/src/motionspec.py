@@ -55,7 +55,16 @@ _LAYOUT = {
     "lower-center": ("c", 0.5, 0.76, "center", "bottom", 0.7),
     "corner": ("l", 0.06, 0.12, "left", None, 0.4),
 }
-_SIZES = {"s": 0.048, "m": 0.068, "l": 0.095, "xl": 0.13}
+# Font size as a share of the frame height. Scaled down 2026-10-26 (the owner, the Hoover Dam video: "text animations
+# bad and number animations too big"): "xl" was 0.13 (a 140 px font, a statement filling half the width) and a figure
+# never under 0.095; the documentary references set their figures and statements at about half that (MagnatesMedia's
+# year card: capitals ~10 % of the height; our kt-number's were 13-14 %). The same steps, about 0.6-0.75 of before.
+_SIZES = {"s": 0.04, "m": 0.05, "l": 0.062, "xl": 0.075}
+# A figure's own size (a counter): capitals ~7 % of the height, as the kinetic number (typeScale.json hero).
+COUNTER_SIZE = 0.1
+COUNTER_SIZE_SMALL = 0.06
+# A name, a place or a spot label: a small clean lower third (a name never in a big dark box).
+LABEL_SIZE = 0.038
 MIN_TEXT = 0.034        # main text, share of the frame height (~37 px at 1080p: readable on a phone)
 MIN_SUB = 0.026
 SAFE_X = (0.05, 0.95)
@@ -232,10 +241,15 @@ def _compile_design(d: dict, timing: dict, ctx: dict) -> Optional[dict]:
     anchor, x, y, align, scrim, max_w = _LAYOUT[layout]
     small = layout == "corner"
 
-    size = _SIZES.get(str(typ.get("size") or ""), 0.075)
+    size = _SIZES.get(str(typ.get("size") or ""), 0.055)
     n_chars = len(text)
     if kind in ("label", "spot", "place") or small:
-        size = min(size, 0.05)
+        size = min(size, LABEL_SIZE)
+    if kind in ("label", "place"):
+        # A clean lower third: white type on a soft shade with a thin accent bar, never a dark glass panel.
+        accents = [a for a in accents if a != "panel-glass"]
+        if "bar-left" not in accents and anchor != "c":
+            accents = (accents + ["bar-left"])[-3:]
     # Long words are set smaller so the block stays in its column (a phone still reads them).
     while size > MIN_TEXT and text_width(max(text.split(" "), key=len, default=""), size, font, aspect, tracking) > max_w:
         size -= 0.004
@@ -315,7 +329,7 @@ def _compile_design(d: dict, timing: dict, ctx: dict) -> Optional[dict]:
         is_year = kind == "date" or (1000 <= abs(val) <= 2100 and float(val).is_integer() and not d.get("suffix"))
         dec = int(_f(d.get("decimals"), 0, 3, 0))
         start_val = (val - min(40, abs(val) * 0.02)) if is_year else (0.0 if abs(val) < 1e9 else val * 0.5)
-        num_size = round(max(size, _SIZES["l"] if not small else 0.06), 4)
+        num_size = round(COUNTER_SIZE if not small else COUNTER_SIZE_SMALL, 4)
         label_txt = text if text and not re.fullmatch(r"[\d,.\s%$]+", text) else ""
         count_for = min(1.3, max(0.5, dur * 0.4))
         L = {"kind": "counter", "x": x, "y": round(y, 4), "anchor": anchor, "align": align,

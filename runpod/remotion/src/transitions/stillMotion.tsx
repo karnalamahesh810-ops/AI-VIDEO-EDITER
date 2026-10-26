@@ -39,6 +39,22 @@ const FOCUS = [
   [34, 36], [66, 36], [38, 58], [62, 58], [50, 34], [30, 48], [70, 48],
 ];
 
+/** The largest scale each move reaches (its peak), for the zoom cap below. */
+export const MOVE_PEAK: Record<string, number> = {
+  "zoom-in": 1.15, "zoom-out": 1.16, "pan-left": 1.15, "pan-right": 1.15, "reveal-left": 1.38, "reveal-right": 1.38,
+  "push-rotate": 1.18, "push-offcenter": 1.22, "pull-back": 1.38, "drift-diagonal": 1.16, "rotate-settle": 1.22,
+  parallax: 1.28, none: 1.06,
+};
+
+/**
+ * The most a still may be scaled (src/stillframe.py, 2026-10-26: media.maxZoom = its real detail, media.moveMax =
+ * the style's ceiling), or undefined when nothing holds it. Never under 1.0.
+ */
+export const zoomCap = (maxZoom?: number, moveMax?: number): number | undefined => {
+  const vals = [maxZoom, moveMax].filter((v): v is number => typeof v === "number" && isFinite(v) && v > 0);
+  return vals.length ? Math.max(1, Math.min(...vals)) : undefined;
+};
+
 export const stillTransform = (
   motion: Motion | undefined,
   frame: number,
@@ -46,8 +62,24 @@ export const stillTransform = (
   fps: number,
   seedKey: string,
   subject?: Box,
+  cap?: number,
 ): { transform: string; transformOrigin?: string } => {
   const dur = Math.max(1, durationInFrames);
+  const peak = MOVE_PEAK[String(motion || "none")] ?? 1.15;
+  if (cap !== undefined && cap < peak - 0.001 && motion !== "parallax") {
+    // Held to the picture's detail (or the style's ceiling): the move becomes a calm push - or pull, for the moves
+    // that open wide - from 1.0 to the cap, aimed at the subject, eased in and out over the whole shot. Never a
+    // slide, a turn or a reveal on a picture that cannot take the zoom they start from.
+    const sp0 = Easing.bezier(0.45, 0.05, 0.55, 0.95)(interpolate(frame, [0, dur], [0, 1], clamp));
+    const outward = motion === "zoom-out" || motion === "pull-back";
+    const s = 1 + (cap - 1) * (outward ? 1 - sp0 : sp0);
+    let origin: string | undefined;
+    if (subject) {
+      const [ox, oy] = aimOrigin(subject, Math.max(1.001, cap));
+      origin = `${(ox * 100).toFixed(2)}% ${(oy * 100).toFixed(2)}%`;
+    }
+    return { transform: `scale(${s.toFixed(4)})`, transformOrigin: origin };
+  }
   const p = interpolate(frame, [0, dur], [0, 1], clamp);
   const sp = smooth(p);
   const h = hashStr(seedKey || "still");
@@ -164,11 +196,41 @@ export const StillPicture: React.FC<{
    * picture's move changed with every render and every machine, and the editor showed another one.
    */
   seed?: string;
-}> = ({ src, motion, frame, durationInFrames, fps, width, filter, subject, fallbackStill, seed }) => {
+  /** The most the picture may be scaled (media.maxZoom / media.moveMax through zoomCap): the move fits under it. */
+  cap?: number;
+  /** A portrait card (media.card, src/stillframe.py): the whole picture, framed, over a blurred copy of itself. */
+  card?: { max?: number; x?: number };
+}> = ({ src, motion, frame, durationInFrames, fps, width, filter, subject, fallbackStill, seed, cap, card }) => {
   const k = width / 1920;
   const key = seed || src;
-  const move = stillTransform(motion, frame, durationInFrames, fps, key, subject);
+  const move = stillTransform(motion, frame, durationInFrames, fps, key, subject, cap);
   const hold = <BlurredHold still={fallbackStill} />;
+  if (card && motion === "parallax") {
+    // The portrait card (the owner, 2026-10-26: a portrait cut to chin and shirt to fill the frame): the whole
+    // picture, sharp, never taller than its real detail allows (card.max of the frame height), framed with a thin
+    // light edge and a soft shadow over a dark blurred copy of itself; it settles in over 0.5 s and then breathes
+    // (1.0 -> 1.02) - no slide, no turn. A name lower third sits low left, so the card may sit right of centre.
+    const p = interpolate(frame, [0, Math.max(1, durationInFrames)], [0, 1], clamp);
+    const sp = smooth(p);
+    const inP = interpolate(frame, [0, Math.max(2, Math.round(fps * 0.5))], [0, 1], { ...clamp, easing: settle });
+    const hPct = Math.max(30, Math.min(84, (card.max ?? 0.84) * 100));
+    const cx = Math.max(0.3, Math.min(0.7, card.x ?? 0.5));
+    return (
+      <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#07080a" }}>
+        <SafeImg src={src} fallback={hold} style={{ width: "100%", height: "100%", objectFit: "cover",
+          transform: `scale(${(1.12 + sp * 0.03).toFixed(4)})`,
+          filter: [filter, `blur(${(30 * k).toFixed(1)}px) brightness(0.5) saturate(1.05)`].filter(Boolean).join(" ") }} />
+        <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.45) 100%)" }} />
+        <div style={{ position: "absolute", top: "50%", left: `${(cx * 100).toFixed(2)}%`, height: `${hPct.toFixed(2)}%`,
+          maxWidth: "84%", transform: `translate(-50%, -50%) scale(${(0.97 + 0.03 * inP + 0.02 * sp).toFixed(4)})`,
+          opacity: inP, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <SafeImg src={src} fallback={null} style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain",
+            borderRadius: 6 * k, border: `${Math.max(1, 2 * k).toFixed(1)}px solid rgba(255,255,255,0.85)`,
+            boxShadow: `0 ${(22 * k).toFixed(1)}px ${(54 * k).toFixed(1)}px rgba(0,0,0,0.6)`, filter: filter || undefined }} />
+        </div>
+      </AbsoluteFill>
+    );
+  }
   if (motion === "parallax") {
     const p = interpolate(frame, [0, Math.max(1, durationInFrames)], [0, 1], clamp);
     const sp = smooth(p);

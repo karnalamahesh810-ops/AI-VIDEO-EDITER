@@ -410,8 +410,11 @@ _UNITS = [
     (r"gallons?", "GALLONS"), (r"dollars?", "$"), (r"years?", "YEARS"), (r"months?", "MONTHS"), (r"days?", "DAYS"),
     (r"inches|inch", "IN"), (r"degrees", "°"), (r"jobs", "JOBS"), (r"farms?", "FARMS"), (r"acres?", "ACRES"),
     (r"tons?", "TONS"), (r"kilometers?|kilometres?|km", "KM"), (r"meters?|metres?", "M"), (r"deaths|dead", "DEAD"),
-    (r"cubic\s+feet\s+per\s+second|cfs", "CFS"), (r"households|families", "FAMILIES"),
+    (r"cubic\s+f(?:ee|oo)t(?:\s+of\s+water)?\s+(?:per|a|each)\s+second|cfs", "CFS"), (r"households|families", "FAMILIES"),
 ]
+# A figure followed by its own words (a noun phrase, not the end of the clause): it never borrows another's unit.
+_OWN_WORDS_AFTER = re.compile(r"\s+(?!(?:and|or|against|versus|vs|to|than|in|on|at|by|for|from|this|that|last|next|a|the)\b)"
+                              r"[a-z]{3,}", re.I)
 _UNIT_RX = re.compile(r"\s*(?:of\s+)?(" + "|".join(u for u, _ in _UNITS) + r")\b", re.I)
 _SCALE = {"thousand": 1e3, "million": 1e6, "billion": 1e9, "trillion": 1e12}
 _SPELL_UNITS = {w: i for i, w in enumerate(
@@ -803,7 +806,11 @@ def moments(nar: Narration) -> List[dict]:
             continue
         if m.get("unit"):
             last_unit = (m["at"], m["unit"])
-        elif m["at"] - last_unit[0] <= 12.0 and last_unit[1] and last_unit[1] != "$":
+        elif m["at"] - last_unit[0] <= 12.0 and last_unit[1] and last_unit[1] != "$" \
+                and not _OWN_WORDS_AFTER.match(text, int(m.get("b") or 0)):
+            # Only a bare figure takes the unit said with the one before ("4.4 million against Nevada's 300,000");
+            # one followed by its own words keeps none of another's (Hoover Dam 2026-10-26: "300 miles upstream ...
+            # 63368 cubic feet of water per second" drew "63,368 MILES").
             m["unit"] = last_unit[1]
             m["inherited"] = True
     return out

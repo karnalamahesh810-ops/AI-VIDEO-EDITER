@@ -1,9 +1,10 @@
 {
   "_about": "The one size rule for on-screen type (the owner, 2026-10-05: numbers 'the perfect size - not big, not small'; text bold and clean). Each share is the height of the CAPITALS (= the digits) as a share of the FRAME HEIGHT; the font size is share x height / the face's cap height. Read by components/lib/typeKit.tsx and by the worker's tests (tests/test_type_system.py), so the rule has one home.",
-  "hero": { "share": 0.14, "least": 0.12, "most": 0.16 },
+  "_hero": "2026-10-26 (the owner, the Hoover Dam video: 'number animations too big'): the figure's capitals were 13-14 % of the height and a figure like 760,000 took half the width; the documentary references' figures (MagnatesMedia's year card) sit near 10 %, their usual on-screen figures far smaller. Now 8 % (7-9.5 %), its kicker and unit kept readable beside it.",
+  "hero": { "share": 0.08, "least": 0.07, "most": 0.095 },
   "ring": { "share": 0.07, "least": 0.06, "most": 0.08 },
   "year": { "share": 0.09, "least": 0.08, "most": 0.11 },
-  "unit": { "ofHero": 0.36 },
+  "unit": { "ofHero": 0.42 },
   "context": { "share": 0.023 },
   "kicker": { "share": 0.0175 },
   "keyword": { "share": 0.05, "least": 0.036, "most": 0.058 },

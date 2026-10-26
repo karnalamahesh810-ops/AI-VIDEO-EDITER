@@ -34,9 +34,12 @@ SCHEMA_VERSION = 2
 # stills in a row never move alike; neighbours in the list also differ in
 # kind (a push is followed by a slide, a drift, a turn - never another push).
 # The moves are drawn by remotion/src/transitions/stillMotion.tsx.
-_IMAGE_MOTIONS = ["push-offcenter", "reveal-left", "drift-diagonal", "pull-back", "parallax",
-                  "zoom-in", "rotate-settle", "reveal-right", "pan-left", "push-rotate",
-                  "zoom-out", "pan-right"]
+# Calm moves only since 2026-10-26 (the owner, the Hoover Dam video: "images movements and zooms worst"): the reveals
+# (a 12 % slide from 1.32x), the turns (rotate-settle, push-rotate) and the 1.38x pull-back left the rotation; the
+# renderer still draws them for old documents and the editor (src/stillframe.py calms them). "parallax" is the
+# portrait card (src/stillframe.py), never a landscape's move. How far each still moves is held to its real detail
+# (media.maxZoom, src/stillframe.py).
+_IMAGE_MOTIONS = ["push-offcenter", "drift-diagonal", "zoom-in", "pan-left", "zoom-out", "pan-right"]
 
 # Scene entrances and per-clip effects. Both lists are a contract with
 # remotion/src/types.ts (SceneTransition / SceneEffect) and SceneEffects.tsx;

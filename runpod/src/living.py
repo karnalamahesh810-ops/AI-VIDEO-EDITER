@@ -748,6 +748,8 @@ def scene_reason(scene: dict, fps: float, anchored: List[Tuple[int, int]] = ()) 
         return "off for this scene"
     if (scene.get("frame") or "full") != "full":
         return "inset or window frame"
+    if isinstance(m.get("card"), dict):
+        return "a portrait card"            # src/stillframe.py: the whole picture as a framed card, never layered
     if isinstance(scene.get("reframe"), dict) or scene.get("reframe") in ("off", False):
         return "the editor's own framing"
     motion = str(scene.get("motion") or "none")

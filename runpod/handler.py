@@ -95,7 +95,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
                  render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
 from src import templates
-from src import ledger, localvision, marks, r2, reframe, styles, upscale
+from src import ledger, localvision, marks, r2, reframe, stillframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
 from src import brandkit, clipfx, stockblock
 from src import recut, reclip, relook, restore
@@ -1797,6 +1797,14 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # theirs (src/reframe.py): the scenes' final lengths are known and the
     # files are still local. Time-boxed; written into the document, so every
     # machine of a split render draws the same move.
+    # Each still in its frame (src/stillframe.py, the owner 2026-10-26): a portrait as a framed card, never cropped
+    # to chin and shirt; every other still's move held to its real detail and aimed at its face.
+    if stillframe.enabled():
+        report("Framing the still pictures")
+        try:
+            doc["meta"]["stillFrame"] = stillframe.place(doc)
+        except Exception as e:  # noqa: BLE001 - the stills keep their framing
+            print(f"[worker] still framing skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
     if config.REFRAME_ENABLED:
         report("Framing shots on their subjects")
         doc["meta"]["reframe"] = reframe.place(doc)
