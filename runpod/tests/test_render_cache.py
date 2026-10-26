@@ -1282,7 +1282,7 @@ class SameMoveOnEveryMachine(unittest.TestCase):
         self.assertIn("seed={`${scene.id}:split`}", clip)
         still = self._src("transitions", "stillMotion.tsx")
         self.assertIn("const key = seed || src;", still)
-        self.assertIn("stillTransform(motion, frame, durationInFrames, fps, key, subject)", still)
+        self.assertIn("stillTransform(motion, frame, durationInFrames, fps, key, subject, cap)", still)
         self.assertNotIn("hashStr(src)", still)
         living = self._src("transitions", "livingPhoto.tsx")
         self.assertIn("const key = seed || src;", living)

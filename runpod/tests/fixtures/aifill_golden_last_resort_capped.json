@@ -1584,7 +1584,7 @@
     "type": "image",
     "url": "https://upload.wikimedia.org/fixture/picture_11.jpg"
    },
-   "motion": "reveal-left",
+   "motion": "drift-diagonal",
    "query": "cattle water truck footage",
    "reviewReason": "",
    "reviewRequired": false,
@@ -2115,7 +2115,7 @@
     "type": "image",
     "url": "https://upload.wikimedia.org/fixture/picture_15.jpg"
    },
-   "motion": "drift-diagonal",
+   "motion": "zoom-in",
    "query": "dryland farming footage",
    "reviewReason": "Held over the next line past 7 s (never past 12 s, never slowed): nothing new was found for it in time - replace or keep",
    "reviewRequired": true,

@@ -37,9 +37,10 @@ class PromoteStills(unittest.TestCase):
         self.assertLessEqual(kinds.count("image"), int(director.MAX_STILL_SHARE * 12))
 
     def test_photos_cycle_through_the_new_moves(self):
-        self.assertIn("reveal-left", timeline._IMAGE_MOTIONS)
-        self.assertIn("reveal-right", timeline._IMAGE_MOTIONS)
-        self.assertIn("push-rotate", timeline._IMAGE_MOTIONS)
+        # Calm moves only since 2026-10-26 (the owner: "images movements and zooms worst"): no reveal or turn.
+        for m in ("reveal-left", "reveal-right", "push-rotate", "rotate-settle", "pull-back", "parallax"):
+            self.assertNotIn(m, timeline._IMAGE_MOTIONS)
+        self.assertGreaterEqual(len(timeline._IMAGE_MOTIONS), 6)
         with open("remotion/src/types.ts", encoding="utf-8") as fh:
             src = fh.read()
         for m in timeline._IMAGE_MOTIONS:

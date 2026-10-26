@@ -274,7 +274,7 @@ class Stills(unittest.TestCase):
         moves = [s["motion"] for s in doc["scenes"] if s["media"]["type"] == "image"]
         self.assertTrue(all(a != b for a, b in zip(moves, moves[1:])), moves)
         self.assertEqual({s["motion"] for s in doc["scenes"] if s["media"]["type"] == "video"}, {"none"})
-        self.assertGreaterEqual(len(set(moves)), 8)
+        self.assertGreaterEqual(len(set(moves)), 6)              # the calm set (2026-10-26): every one of its moves
 
     def test_every_move_is_drawn_by_the_renderer(self):
         with open(os.path.join(REMOTION, "transitions", "stillMotion.tsx"), encoding="utf-8") as fh:

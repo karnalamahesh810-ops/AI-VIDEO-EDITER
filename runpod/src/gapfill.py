@@ -1643,6 +1643,7 @@ def find_repeats(doc: dict) -> List[Tuple[int, str]]:
     used = Used()
     out = []
     scenes = doc.get("scenes") or []
+    seen_pictures: List[str] = []           # local still files already shown (the near-copy check below)
     for i, s in enumerate(scenes):
         shot = Shot.of_scene(s, fps)
         if shot is None:
@@ -1650,6 +1651,17 @@ def find_repeats(doc: dict) -> List[Tuple[int, str]]:
         if editor_split(scenes, i):
             continue                # the editor cut one shot in two (src/cliptime.py splitFrom): it continues
         why = used.why_not(i, shot)
+        m = s.get("media") or {}
+        path = str(m.get("url") or "")
+        if not why and m.get("type") == "image" and path and not path.startswith(("http://", "https://")) \
+                and os.path.isfile(path) and getattr(config, "PICTURE_COPY_CHECK", True):
+            # One photo from two sites (other links, other crops): the Hoover Dam video showed the same press photo
+            # at 9:58 and 11:24 and one chart at 16:35 and 17:05 (2026-10-26). Middle-frame hashes, local files only.
+            from . import spares
+            if spares.near_duplicate(path, seen_pictures, int(getattr(config, "PICTURE_COPY_BITS", 6))):
+                why = "the same picture as an earlier scene (a copy from another site)"
+            else:
+                seen_pictures.append(path)
         if why and not is_presenter_scene(s):
             out.append((i, why))
         else:

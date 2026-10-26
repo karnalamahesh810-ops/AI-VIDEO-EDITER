@@ -18,7 +18,9 @@ def _words(text, start, end):
 
 def _scene(i, start, dur, text, mtype="image", fps=30, **kw):
     s = {"id": f"s{i:04d}", "startFrame": int(start * fps), "durationInFrames": int(dur * fps), "text": text,
-         "media": {"type": mtype, "url": f"https://x/{i}.{'mp4' if mtype == 'video' else 'jpg'}", "source": "web"},
+         "media": {"type": mtype, "url": f"https://x/{i}.{'mp4' if mtype == 'video' else 'jpg'}", "source": "web",
+                   # a sharp picture (src/stillframe.py maxZoom, 2026-10-26): room for its detail framings and punches
+                   **({"maxZoom": 1.8} if mtype == "image" else {})},
          "motion": "push-offcenter" if mtype == "image" else "none", "transition": "none",
          "effect": "ken-burns" if mtype == "image" else "none", "frame": "full",
          "words": _words(text, start, start + dur - 0.3)}

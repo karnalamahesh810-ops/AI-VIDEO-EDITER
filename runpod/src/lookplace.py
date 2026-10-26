@@ -111,12 +111,46 @@ def _home(tid: str, panel: bool) -> str:
     return "left-panel" if panel else "lower-left"
 
 
+def _is_local(path: str) -> bool:
+    import os
+    return bool(path) and not str(path).startswith(("http://", "https://")) and os.path.isfile(str(path))
+
+
 def _picture_url(media: dict) -> str:
     if not isinstance(media, dict):
         return ""
     if media.get("type") == "image":
         return str(media.get("thumbnail") or media.get("url") or "")
+    # A clip still on this machine (the build, before publishing): a frame of its own file (fetch_local).
+    if not media.get("thumbnail") and _is_local(str(media.get("url") or "")):
+        return str(media.get("url"))
     return str(media.get("thumbnail") or "")
+
+
+def fetch_local(url: str) -> Optional[bytes]:
+    """The picture to measure: a local picture's bytes, one JPEG frame a third into a local clip (one small ffmpeg
+    call), else the link fetched (_default_fetch). The build's own placement (2026-10-26: the Hoover Dam video's
+    looks sat on burned-in chyrons and station bugs - this pass only ever ran on a relook)."""
+    if not _is_local(url):
+        return _default_fetch(url)
+    import os
+    import subprocess
+    if os.path.splitext(url)[1].lower() in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"):
+        try:
+            with open(url, "rb") as fh:
+                return fh.read()
+        except OSError:
+            return None
+    try:
+        p = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", url],
+                           capture_output=True, text=True, timeout=15)
+        at = max(0.0, float((p.stdout or "0").strip() or 0) / 3.0)
+        p = subprocess.run(["ffmpeg", "-v", "error", "-threads", "1", "-ss", f"{at:.2f}", "-i", url, "-frames:v", "1",
+                            "-vf", "scale=384:-2", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+                           capture_output=True, timeout=20)
+        return p.stdout or None
+    except Exception:  # noqa: BLE001 - unmeasured: the look keeps its home place
+        return None
 
 
 def _default_fetch(url: str) -> Optional[bytes]:

@@ -1897,6 +1897,16 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Editing v3 (src/editing.py, docs/editing-v3/audit.md): long stills broken into detail shots on word
     # boundaries, a faster hook, punch-ins on the words that matter, no 30 s without something new, no figure drawn
     # twice, no random per-clip texture. No network, no AI; EDITING_V3=0 / job "editing_v3": false = as before.
+    # Each kinetic look on the calm side of its picture, on a soft panel over a busy one (src/lookplace.py): it
+    # only ran on a relook, so a build's numbers and dates sat on burned-in chyrons, station bugs and map labels
+    # (the Hoover Dam video, 2026-10-26). The files are still local: a picture's own bytes, a clip's frame.
+    if getattr(config, "LOOK_PLACE_ON_BUILD", True):
+        try:
+            from src import lookplace
+            doc["meta"]["lookPlace"] = lookplace.place(doc.get("overlays") or [], doc.get("scenes") or [],
+                                                       fetch=lookplace.fetch_local)
+        except Exception as e:  # noqa: BLE001 - the looks keep their home places
+            print(f"[worker] look placement skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
     if editing.enabled(inp):
         report("Finishing the edit")
         editing.apply(doc, inp)
@@ -3251,7 +3261,12 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       # one round; the machine sizing (src/machine.py) - each A/B'd on one job.
                       "SOURCE_PARTS", "SOURCE_PART_ROUNDS", "DOWNLOAD_THREADS", "SOURCE_WORKERS_PER_CPU",
                       "MACHINE_SAMPLE", "PASS2_SKIP_EXHAUSTED",
-                      "DOWNLOAD_TIDY_FAST", "DOWNLOAD_TIDY_PRESET", "DOWNLOAD_TIDY_CRF")
+                      "DOWNLOAD_TIDY_FAST", "DOWNLOAD_TIDY_PRESET", "DOWNLOAD_TIDY_CRF",
+                      # The Hoover Dam fixes (2026-10-26, docs/vidfix-2026-10-26.md): clips over stills, framed
+                      # portraits, moves held to the pictures' detail - each A/B'd on one job.
+                      "SLOP_CHANNEL_MEMORY", "SLOP_CHANNEL_STRIKES", "STILLS_TO_CLIPS", "STILLS_TO_CLIPS_SECONDS",
+                      "PERSON_CLIPS_FIRST", "STILL_FRAME", "STILL_CARD_UPSCALE", "STILL_PEAK_MAGNIFICATION",
+                      "STILL_MOTION_MAX_ZOOM", "PICTURE_COPY_CHECK", "PICTURE_COPY_BITS", "LOOK_PLACE_ON_BUILD")
 
 
 def _apply_config(overrides) -> dict:

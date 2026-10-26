@@ -981,6 +981,12 @@ STILL_FRAME_PARALLEL = int(os.getenv("STILL_FRAME_PARALLEL", "4"))
 STILL_CARD_UPSCALE = float(os.getenv("STILL_CARD_UPSCALE", "1.15"))
 STILL_PEAK_MAGNIFICATION = float(os.getenv("STILL_PEAK_MAGNIFICATION", "1.3"))
 STILL_MOTION_MAX_ZOOM = float(os.getenv("STILL_MOTION_MAX_ZOOM", "0"))
+# The same photo from two sites (other links, other crops) is a repeat (gapfill.find_repeats: middle-frame hashes
+# within PICTURE_COPY_BITS of 64; different photos of one dam measured 27-35 apart). 0 = off.
+PICTURE_COPY_CHECK = _flag("PICTURE_COPY_CHECK", True)
+PICTURE_COPY_BITS = int(os.getenv("PICTURE_COPY_BITS", "6"))
+# The build places each kinetic look on the calm side of its picture (src/lookplace.py; before, only a relook did).
+LOOK_PLACE_ON_BUILD = _flag("LOOK_PLACE_ON_BUILD", True)
 # One wall-clock budget for all footage finding, across every worker: a
 # real 3-minute job spent 107 minutes sourcing. When it runs out, downloads
 # and searches stop at once and the beats still without footage become

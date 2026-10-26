@@ -209,5 +209,48 @@ class EditingOnStills(unittest.TestCase):
         self.assertAlmostEqual(editing.still_room(sharp), 1.6 / 1.15, places=3)
 
 
+class CopiesAndPlacement(unittest.TestCase):
+    def _pic(self, d, name, seed):
+        import os
+        from PIL import Image, ImageDraw
+        im = Image.new("RGB", (640, 360), (20 + seed * 30 % 200, 60, 90))
+        dr = ImageDraw.Draw(im)
+        for k in range(8):
+            dr.rectangle([k * 80, (seed * 37 + k * 53) % 300, k * 80 + 40, 360], fill=((seed * 71 + k * 29) % 255, 200, 40))
+        p = os.path.join(d, name)
+        im.save(p, quality=90)
+        return p
+
+    def test_the_same_photo_from_another_site_is_a_repeat(self):
+        import shutil
+        import tempfile
+        from src import gapfill
+        d = tempfile.mkdtemp()
+        a = self._pic(d, "a.jpg", 1)
+        b = shutil.copy(a, d + "/b_other_site.jpg")
+        c = self._pic(d, "c.jpg", 5)
+
+        def sc(i, path, src):
+            return {"id": f"s{i}", "startFrame": i * 300, "durationInFrames": 300,
+                    "media": {"type": "image", "url": path, "source": "web_image"},
+                    "semanticMetadata": {"assetId": f"web_image:{src}", "sourceUrl": src}}
+        doc = {"fps": 60, "scenes": [sc(0, a, "https://one/a.jpg"), sc(1, c, "https://two/c.jpg"),
+                                     sc(2, b, "https://three/a-copy.jpg")]}
+        found = gapfill.find_repeats(doc)
+        self.assertEqual([i for i, _w in found], [2])
+        self.assertIn("copy", found[0][1])
+        with mock.patch.object(config, "PICTURE_COPY_CHECK", False):
+            self.assertEqual(gapfill.find_repeats(doc), [])
+
+    def test_the_build_measures_a_local_picture(self):
+        import tempfile
+        from src import lookplace
+        d = tempfile.mkdtemp()
+        p = self._pic(d, "p.jpg", 2)
+        self.assertTrue(lookplace.fetch_local(p).startswith(b"\xff\xd8"))
+        self.assertEqual(lookplace._picture_url({"type": "video", "url": p}), p)      # a local file: its own frame
+        self.assertEqual(lookplace._picture_url({"type": "video", "url": "https://x/a.mp4"}), "")
+
+
 if __name__ == "__main__":
     unittest.main()

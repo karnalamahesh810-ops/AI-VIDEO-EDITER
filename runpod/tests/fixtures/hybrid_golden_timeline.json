@@ -1167,7 +1167,7 @@
     "type": "image",
     "url": "https://upload.wikimedia.org/fixture/picture_07.jpg"
    },
-   "motion": "reveal-left",
+   "motion": "drift-diagonal",
    "query": "windmill footage",
    "reviewReason": "",
    "reviewRequired": false,
@@ -1700,7 +1700,7 @@
     "type": "image",
     "url": "https://upload.wikimedia.org/fixture/picture_11.jpg"
    },
-   "motion": "drift-diagonal",
+   "motion": "zoom-in",
    "query": "cattle water truck footage",
    "reviewReason": "",
    "reviewRequired": false,
@@ -2231,7 +2231,7 @@
     "type": "image",
     "url": "https://upload.wikimedia.org/fixture/picture_15.jpg"
    },
-   "motion": "pull-back",
+   "motion": "pan-left",
    "query": "dryland farming footage",
    "reviewReason": "",
    "reviewRequired": false,
