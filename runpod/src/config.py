@@ -508,6 +508,18 @@ CLIP_PREQUALIFY = int(os.getenv("CLIP_PREQUALIFY", "8"))
 # going empty (the review of 2026-10-06). A line with no picture stage (the opening seconds, the rescue
 # pass, reclip) gives its clips all of it. 1.0 = no reserve.
 CLIPS_FIRST_CLIP_SHARE = float(os.getenv("CLIPS_FIRST_CLIP_SHARE", "0.65"))
+# Stills to clips (media.stills_to_chains, the owner 2026-10-26: the Hoover Dam video was 57 % stills, 32 runs
+# of 2+ stills in a row): after the ladder, a still on a clip-first line that is not a document, a person's
+# portrait, a map / chart line, an AI picture or a past era takes the next moment of the clip before it, the
+# moment before the clip after it (both when the lines name the same places or things; no model call), or a
+# spare clip judged for its line - so a still never follows a still where a clip is at hand. Its own time box.
+STILLS_TO_CLIPS = _flag("STILLS_TO_CLIPS", True)
+STILLS_TO_CLIPS_SECONDS = float(os.getenv("STILLS_TO_CLIPS_SECONDS", "180"))
+STILLS_TO_CLIPS_PARALLEL = int(os.getenv("STILLS_TO_CLIPS_PARALLEL", "6"))
+# A named person's line asks for a clip of the person first (an interview, a talk, a press conference: the
+# person's own rung, talking heads allowed) before any portrait (the owner, 2026-10-26: "prefer real video of
+# the person"). 0 = a person's portrait first, as before.
+PERSON_CLIPS_FIRST = _flag("PERSON_CLIPS_FIRST", True)
 
 
 def _json_env(name: str):

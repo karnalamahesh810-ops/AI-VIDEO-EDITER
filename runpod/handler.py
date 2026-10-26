@@ -1663,6 +1663,14 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         elif config.REUSE_SHOTS_TO_FILL and config.RESCUE_BEFORE_REUSE:
             # The old rule (NO_REUSE=0): a shot reused at most REUSE_MAX_USES times.
             rescued["reused"] = media.fill_from_story(fill_jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
+    # Stills to clips (the owner, 2026-10-26: the Hoover Dam video was 57 % stills, up to 8 in a row): a still a
+    # clip may replace takes another moment of the clip beside it, or a spare clip judged for its line.
+    if config.STILLS_TO_CLIPS and any(r is not None and r.kind == "image" for r in results_by_index):
+        report("Swapping still pictures for clips", 63)
+        try:
+            pool_stats["stillClips"] = media.stills_to_chains(fill_jobs, results_by_index, work)
+        except Exception as e:  # noqa: BLE001 - the stills stay
+            print(f"[worker] stills to clips skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
     for j in jobs:
         assets[j["index"]] = results_by_index[j["index"]]
     if rescued:

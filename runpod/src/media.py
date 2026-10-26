@@ -4666,6 +4666,10 @@ def clips_first_for(visual_type: str, subject_type: str = "", scene_intent: Opti
         return False
     if config.PREFER_GENERATED_IMAGES:
         return False                    # an illustrated style: its stills are its illustrations
+    if (subject_type or "") == "person" and getattr(config, "PERSON_CLIPS_FIRST", False):
+        # A named person: their interview or talk first (the person's own rung), the portrait after it (the
+        # owner, 2026-10-26: a web photo of the person cropped to fill the frame was all the line got).
+        return True
     if (subject_type or "") in ("document", "person"):
         return False
     return wanted_kind(scene_intent if isinstance(scene_intent, dict) else {}) not in ("map", "chart", "document")
@@ -6286,6 +6290,203 @@ def fill_chains(jobs: List[Dict[str, Any]], results, work_dir: str = "") -> int:
             total += got
     print(f"[media] clip chains: {total}/{len(todo)} line(s) continue the clip before them", flush=True)
     return total
+
+
+# --------------------------------------------------------------------------- #
+# Stills to clips (the owner, 2026-10-26, the Hoover Dam video: "my video maker not using more videos"): 57 % of
+# its screen time was stills, 32 runs of 2+ stills in a row, the longest 8 stills / 38.8 s.
+# --------------------------------------------------------------------------- #
+
+# Generic words that never make two lines "about the same thing" (stills_to_chains' relevance guard).
+_STORY_GENERIC = frozenset("""footage video videos news report flood floods flooding river rivers lake water dam dams
+storm storms rain the and with from that this over under after before into near city county state national park
+aerial drone shot shots image images photo photos picture pictures""".split())
+
+
+def _story_words(job: Optional[Dict[str, Any]]) -> set:
+    """The places, entities and subject a line names (4+ letters, generic words left out)."""
+    job = job or {}
+    si = job.get("scene_intent") if isinstance(job.get("scene_intent"), dict) else {}
+    vals = list(si.get("locations") or []) + list(si.get("entities") or []) + [job.get("subject") or ""]
+    out = set()
+    for v in vals:
+        for w in re.findall(r"[a-z]{4,}", str(v or "").lower()):
+            if w not in _STORY_GENERIC:
+                out.add(w)
+    return out
+
+
+def still_may_be_clip(job: Optional[Dict[str, Any]], asset: Optional[MediaAsset]) -> bool:
+    """A still that a clip may replace: a picture on a clip-first line (clips_first_for) that is not a document,
+    a named person's portrait, a map / chart / document line, an AI picture, or a line about the past (a
+    continued modern clip would show the wrong era)."""
+    if asset is None or asset.kind != "image" or not job:
+        return False
+    if str(job.get("subject_type") or "") in ("document", "person"):
+        return False                    # the document itself; a person's portrait (never another clip's face)
+    if str(asset.source or "").startswith(("ai", "generated")):
+        return False
+    si = job.get("scene_intent") if isinstance(job.get("scene_intent"), dict) else None
+    if not clips_first_for(str(job.get("visual_type") or "footage"), str(job.get("subject_type") or ""), si):
+        return False
+    try:
+        if si and intent.SceneIntent.from_dict(si).is_historical():
+            return False
+    except Exception:  # noqa: BLE001 - an odd intent: treated as not historical
+        pass
+    return True
+
+
+def _continue_clip(job: Dict[str, Any], donor: MediaAsset, forward: bool, work_dir: str,
+                   placed: List[Optional[float]]) -> Optional[MediaAsset]:
+    """The next (forward) or the previous (backward) moment of a neighbour's YouTube clip for `job`'s line,
+    checked like a chain (quality, the AI-slop and still filters, the cross-video ledger); None when it cannot."""
+    vid, start = _yt_origin(donor)
+    if not vid:
+        return None
+    cap = max(3, int(getattr(config, "FILL_MAX_MOMENTS_PER_VIDEO", 0) or 0), int(config.MAX_MOMENTS_PER_VIDEO or 0))
+    if len(placed) >= cap:
+        return None
+    need = max(2.0, float(job.get("seconds") or 5.0)) + SEQ_SHOT_PAD
+    shown = float(donor.duration or 5.0)
+    at = start + shown + CHAIN_SKIP_SECONDS if forward else start - CHAIN_SKIP_SECONDS - need
+    if at < 0 or ledger.moment_used(vid, at, at + need):
+        return None
+    path, clean, cuts = fetch_clean_clip(vid, work_dir, at, need, donor.attribution or "")
+    if not path:
+        return None
+    if not _asset_ok(MediaAsset(kind="video", source="youtube", url="", local_path=path))[0] \
+            or motion_rejects(path) or slop_reason(path, donor.attribution or ""):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return None
+    return _dc_replace(donor, local_path=path, url=f"https://www.youtube.com/watch?v={vid}&t={int(at)}",
+                       duration=need, moment_key=f"yt:{vid}@{int(at // max(1.0, float(config.POOL_MIN_GAP_SECONDS)))}",
+                       moment={"start": round(at, 1), "chain": True, "chain_of": donor.identity, "clean": clean,
+                               "cuts": cuts, "stillToClip": "forward" if forward else "backward"},
+                       alternatives=[], intent=job.get("intent") or donor.intent, judged_by="chain", cut_check={},
+                       review_required=True,
+                       review_reason="Another moment of the clip beside it, in place of a still picture - check it fits")
+
+
+def stills_to_chains(jobs: List[Dict[str, Any]], results, work_dir: str = "",
+                     seconds: Optional[float] = None) -> Dict[str, int]:
+    """
+    After the search, the pools, the rescue pass and the ladder: every still a clip may replace
+    (still_may_be_clip) gets a clip if one is at hand, so stills stop following stills - the reference news
+    channel continues one strong clip over several shots (26 % of its shots). In order of preference:
+
+    1. the next moment of the clip on the line before (a chain: no search, no model call), when that line names
+       the same places or things (_story_words) and is not itself a continuation;
+    2. the moment just before the clip on the line after, the same way;
+    3. a clip from the spare bank judged against this line (src/gapfill._from_spare: one vision call).
+
+    Runs of stills go in order on one thread each, so a still between two continued clips keeps its picture (it
+    is no longer chained) rather than a third moment of the same video (the repeat check would refuse it).
+    Time-boxed (STILLS_TO_CLIPS_SECONDS). Returns the counts for meta.sourcing.pools.stillClips.
+    """
+    out = {"stills": 0, "eligible": 0, "forward": 0, "backward": 0, "spare": 0, "kept": 0, "seconds": 0.0}
+    work_dir = work_dir or _WORK["dir"]
+    if not getattr(config, "STILLS_TO_CLIPS", True) or not work_dir:
+        return out
+    t0 = time.time()
+    stop = t0 + float(getattr(config, "STILLS_TO_CLIPS_SECONDS", 180) if seconds is None else seconds)
+    by_index = {j["index"]: j for j in jobs or []}
+    idx = sorted(by_index)
+    out["stills"] = sum(1 for i in idx if (_asset_at(results, i) is not None and _asset_at(results, i).kind == "image"))
+    todo = [i for i in idx if still_may_be_clip(by_index[i], _asset_at(results, i))]
+    out["eligible"] = len(todo)
+    if not todo:
+        return out
+    from . import gapfill
+    starts = scene_starts(jobs)
+    used = gapfill.Used.of_results(results, starts)
+    lock = threading.Lock()
+    runs: List[List[int]] = []
+    for i in todo:
+        if runs and runs[-1][-1] == i - 1:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+
+    def yt_clip(a: Optional[MediaAsset]) -> bool:
+        return a is not None and a.kind == "video" and bool(_yt_origin(a)[0])
+
+    def related(i: int, j: int) -> bool:
+        a, b = by_index.get(i), by_index.get(j)
+        if not a or not b:
+            return False
+        return bool(_story_words(a) & _story_words(b)) or same_subject(str(a.get("subject") or ""),
+                                                                       str(b.get("subject") or ""))
+
+    def placed(vid_key: str, skip: int) -> List[Optional[float]]:
+        return used.placed(vid_key, skip=skip)
+
+    def put(i: int, asset: MediaAsset, how: str) -> None:
+        with lock:
+            old = _asset_at(results, i)
+            if old is not None:
+                used.release(i, gapfill.Shot.of_asset(old, starts.get(i)))
+            used.add(i, gapfill.Shot.of_asset(asset, starts.get(i)))
+            results[i] = asset
+            out[how] += 1
+
+    def one(run: List[int]) -> None:
+        for k, i in enumerate(run):
+            if time.time() > stop:
+                return
+            job = by_index[i]
+            prev, nxt = _asset_at(results, i - 1), _asset_at(results, i + 1)
+            got, how = None, ""
+            # (1) forward from the clip before - never from a continuation (a third moment of one video in a row).
+            if yt_clip(prev) and not (isinstance(prev.moment, dict) and prev.moment.get("stillToClip")) \
+                    and related(i, i - 1):
+                got = _continue_clip(job, prev, True, work_dir, placed(f"yt:{_yt_origin(prev)[0]}", i))
+                how = "forward"
+            # (2) backward from the clip after (the run's last still only: the next line is a clip).
+            if got is None and k == len(run) - 1 and yt_clip(nxt) and related(i, i + 1) \
+                    and time.time() < stop:
+                got = _continue_clip(job, nxt, False, work_dir, placed(f"yt:{_yt_origin(nxt)[0]}", i))
+                how = "backward"
+            # (3) a spare clip judged for this line, where the still would otherwise follow a still.
+            prev_still = prev is not None and prev.kind == "image"
+            if got is None and (prev_still or k < len(run) - 1) and time.time() < stop:
+                try:
+                    tokens = gapfill._scene_context(job)
+                    try:
+                        got = gapfill._from_spare(job, used, work_dir, stop, "video")
+                    finally:
+                        for var, tok in reversed(tokens):
+                            var.reset(tok)
+                except Exception as e:  # noqa: BLE001 - the still stays
+                    print(f"[stills] spare for scene {i + 1} skipped: {type(e).__name__}: {str(e)[:80]}", flush=True)
+                    got = None
+                how = "spare"
+                if got is not None:
+                    with lock:
+                        results[i] = got        # _from_spare already claimed it in `used`
+                        out["spare"] += 1
+                    continue
+            if got is not None:
+                put(i, got, how)
+            else:
+                out["kept"] += 1
+
+    old = _ytdlp.DEADLINE[0]
+    _ytdlp.set_deadline(stop)               # a download window of its own (the search's deadline is long past)
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, min(int(getattr(config, "STILLS_TO_CLIPS_PARALLEL", 6) or 6),
+                                                       len(runs)))) as ex:
+            list(ex.map(lambda r: contextvars.copy_context().run(one, r), runs))
+    finally:
+        _ytdlp.set_deadline(old)
+    out["seconds"] = round(time.time() - t0, 1)
+    print(f"[stills] {out['forward'] + out['backward'] + out['spare']} of {out['eligible']} replaceable still(s) "
+          f"now clips ({out['forward']} forward, {out['backward']} backward, {out['spare']} spare), "
+          f"{out['kept']} kept, {out['seconds']} s", flush=True)
+    return out
 
 
 def hold_violations(jobs: List[Dict[str, Any]], results: List[Optional[MediaAsset]]) -> Dict[int, tuple]:

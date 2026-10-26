@@ -40,9 +40,13 @@ class WhichLines(unittest.TestCase):
             self.assertTrue(media.clips_first_for("image", "place"))
             self.assertTrue(media.clips_first_for("image", "object"))
             self.assertFalse(media.clips_first_for("image", "document"))
-            self.assertFalse(media.clips_first_for("image", "person"))
             self.assertFalse(media.clips_first_for("image", "place", {"desired_shots": ["map of the basin"]}))
             self.assertFalse(media.clips_first_for("animation", "event"))
+        # A named person: their interview or talk first since 2026-10-26 (PERSON_CLIPS_FIRST), the portrait after.
+        with mock.patch.multiple(config, **dict(ON, PERSON_CLIPS_FIRST=True)):
+            self.assertTrue(media.clips_first_for("image", "person"))
+        with mock.patch.multiple(config, **dict(ON, PERSON_CLIPS_FIRST=False)):
+            self.assertFalse(media.clips_first_for("image", "person"))
         with mock.patch.multiple(config, **dict(ON, PREFER_GENERATED_IMAGES=True)):
             self.assertFalse(media.clips_first_for("image", "place"))      # an illustrated style
             self.assertTrue(media.clips_first_for("footage", "place"))
